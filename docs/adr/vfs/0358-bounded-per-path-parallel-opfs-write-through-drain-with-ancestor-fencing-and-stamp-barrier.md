@@ -50,7 +50,11 @@ layers to share the smallest part of the mechanism; (4)
 page-realm tail-promise serializer writing OPFS DIRECTLY through `OpfsVfs`,
 physically outside the worker-realm `OpfsFsSync` queue (cross-realm class
 captured in `vfs/opfs-sync-cross-realm-mirror-coherence`); cannot share the
-in-worker scheduler. The lane scheduler therefore stays INSIDE `OpfsFsSync`
+in-worker scheduler; (5) `FifoPackageAcquisitionAuthority`
+(`packages/workbench/src/workers/package-acquisition-authority.ts`) —
+serializes install/edit COMMAND admission per project, a logical authority
+whose separate ownership ADR-0261 already establishes; it schedules
+commands, not persist ops — no consolidation with an I/O drain scheduler. The lane scheduler therefore stays INSIDE `OpfsFsSync`
 — the single sync-mirror write-through owner — the one new mechanism the
 epic Budget sanctions; no second OPFS-write-through owner is created.
 Whether the stamp full fence belongs to the trusted-state authority

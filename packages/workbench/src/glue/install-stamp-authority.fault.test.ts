@@ -1,6 +1,7 @@
 import { OpfsFsSync } from '@riftydev/vfs';
 import { resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it, vi } from 'vitest';
+import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import { SyncMirrorVfs } from './sync-mirror-vfs.ts';
@@ -162,5 +163,97 @@ it('a trusted stamp never becomes durable while an earlier-enqueued persist op i
   });
   const report = await fsSync.flush();
   expect(report.total).toBe(0);
+  expect(trustedStampWrites()).toHaveLength(1);
+});
+
+it('the stamp full fence holds through the production claimIo composition — a trusted stamp write via installStampClaims never becomes durable while an earlier-enqueued persist op is unsettled (ADR-0358)', async () => {
+  // ADR-0358 stamp full fence, sibling sweep over BOTH writeRawStampSync
+  // branches: the previous pin fences the raw-fsSync writer; this pin fences
+  // the claimIo writer through the PRODUCTION composition (workbench-owner
+  // runtime: createOwnerVfsAuthorityComposition → owner-package-state wires
+  // createInstallStampAuthority({ vfs, fsSync: authority, claimIo:
+  // installStampClaims })). The claim write reaches the SAME OPFS write-through
+  // FIFO via #writeInstallStampClaim → fs.writeFileSync, so the fence
+  // obligation is identical: the trusted stamp must stay off OPFS while an
+  // earlier-enqueued op is physically in flight.
+  vi.useFakeTimers();
+  vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true);
+  const STAMP_PATH = `${ROOT}/node_modules/.rifty-install-stamp.json`;
+  const APP_TS = `${ROOT}/src/app.ts`;
+  const textOf = new TextDecoder();
+  const wedge = deferred();
+  const stampDurable = deferred();
+  const completed: Array<{ readonly path: string; readonly text: string }> = [];
+  const trustedStampWrites = () =>
+    completed.filter(
+      (write) => write.path === STAMP_PATH && !write.text.includes('"durability": "pending"'),
+    );
+  const fsSync = new OpfsFsSync(fakeOpfsRoot(), {
+    readFile: async () => new Uint8Array(),
+    writeFile: async (path, data) => {
+      if (path === APP_TS) await wedge.promise;
+      const text = textOf.decode(data);
+      completed.push({ path, text });
+      if (path === STAMP_PATH && !text.includes('"durability": "pending"')) stampDurable.resolve();
+    },
+    rm: async () => {},
+  });
+  // Production shape (workbench-owner-runtime.ts): composition over the raw
+  // sync mirror, then the authority becomes the sole owner-realm FsSync.
+  const composition = createOwnerVfsAuthorityComposition(fsSync, {
+    initialRoots: ['/', '/.rifty'],
+  });
+  const { authority, installStampClaims } = composition;
+  const vfs = new SyncMirrorVfs();
+  setSyncMirror(authority, { async: vfs });
+  authority.mkdirSync(`${ROOT}/node_modules/vite`, { recursive: true });
+  authority.mkdirSync(`${ROOT}/src`, { recursive: true });
+  authority.writeFileSync(`${ROOT}/package.json`, new TextEncoder().encode(PACKAGE_JSON));
+  authority.writeFileSync(
+    `${ROOT}/node_modules/vite/package.json`,
+    new TextEncoder().encode('{}\n'),
+  );
+  await authority.flush();
+
+  // EXACT production triple (owner-package-state.ts createOwnerPackageState).
+  const stamps = createInstallStampAuthority({
+    vfs,
+    fsSync: authority,
+    claimIo: installStampClaims,
+  });
+  const project = {
+    projectId: 'app',
+    root: ROOT,
+    slug: 'app',
+    identity: installArtifactIdentity,
+  };
+  const claim = await stamps.demote(project);
+  await authority.flush();
+
+  // Wedge: unresolved persist op enqueued BEFORE the trusted-stamp claim
+  // write, outside the guarded scope and off the claim path.
+  authority.writeFileSync(APP_TS, new TextEncoder().encode('export {};\n'));
+
+  const promotion = stamps.promote(
+    { ...project, packageJsonText: PACKAGE_JSON },
+    { epoch: claim.epoch, packages: 1, flush: () => authority.flush() },
+  );
+  await Promise.resolve();
+  await vi.advanceTimersByTimeAsync(WATCHDOG_MS);
+
+  // Watchdog released the bounded proof, yet the wedged op is still physically
+  // in flight: the trusted stamp routed through installStampClaims must NOT
+  // have completed at the OPFS surface.
+  expect(completed.map((write) => write.path)).not.toContain(APP_TS);
+  expect(trustedStampWrites()).toHaveLength(0);
+
+  wedge.resolve();
+  await stampDurable.promise;
+  await expect(promotion).resolves.toMatchObject({
+    status: 'trusted',
+    stamp: expect.objectContaining({ slug: 'app', packages: 1 }),
+  });
+  const report = await authority.flush();
+  expect(report?.total).toBe(0);
   expect(trustedStampWrites()).toHaveLength(1);
 });

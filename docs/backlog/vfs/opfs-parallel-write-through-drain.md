@@ -50,7 +50,10 @@ share the smallest part; (4)
 page-realm tail serializer writing OPFS DIRECTLY through `OpfsVfs`,
 physically outside the worker-realm `OpfsFsSync` queue (cross-realm class:
 `vfs/opfs-sync-cross-realm-mirror-coherence`); cannot share an in-worker
-scheduler. The lane scheduler stays INSIDE `OpfsFsSync` — the single
+scheduler; (5) `FifoPackageAcquisitionAuthority`
+(`package-acquisition-authority.ts`) — per-project install/edit COMMAND
+admission, a logical authority whose separate ownership ADR-0261 already
+establishes; it schedules commands, not persist ops. The lane scheduler stays INSIDE `OpfsFsSync` — the single
 sync-mirror write-through owner, the one new mechanism the epic Budget
 sanctions; no second OPFS write-through owner is created. Whether the stamp
 full fence belongs to the trusted-state authority primitive instead of
@@ -101,8 +104,12 @@ executable carrier `tests/browser-unit/opfs-parallel-drain.spec.ts` +
 Mid-drain kill e2e (tier obligation, epic Decisions "Preserved constraint"),
 committed carrier `tests/browser-unit/opfs-parallel-drain-kill.spec.ts` +
 worker — GREEN on main, must survive the parallel drain: real OPFS project,
-real install-stamp authority (`setSyncMirror` + `SyncMirrorVfs` +
-`createInstallStampAuthority`), demote → tree write → promote() with the
+real install-stamp authority wired as the PRODUCTION claimIo composition
+(`createOwnerVfsAuthorityComposition(fsSync, {initialRoots: ['/','/.rifty']})`
+→ authority as sync mirror + `createInstallStampAuthority({vfs, fsSync:
+authority, claimIo: composition.installStampClaims})` + `flush: () =>
+authority.flush()` — mirrors `workbench-owner-runtime.ts:244-294` /
+`owner-package-state.ts:230-234`), demote → tree write → promote() with the
 real flush seam; worker TERMINATED on a DISCRIMINATED mid-drain ack
 (`0 < completed < total` durably-closed writes); fresh realm proves the
 stamp is NOT trusted via the boot path's own check
@@ -127,6 +134,12 @@ pins"):
   kinds (writes + mkdirs + rm), in-flight counted at the persist boundary:
   `1 < peak <= 16`. On main serial peak === 1 (RED on the `> 1` half); the
   `<= 16` half makes unbounded fan-out unable to ever pass;
+- RED R5 — R4×R2 composition: a never-settling wedge PLUS a sustained
+  mixed-kind backlog held ACROSS the 30s watchdog transition (19 held ops,
+  advance 30 000 ms — wedge ledgered — then 10 more), releases entry-order:
+  `1 < peak <= 16` over the WHOLE run — a cap that frees the timed-out
+  op's slot admits a 17th physical persist and fails the `<= 16` half; all
+  29 non-wedge ops complete; final bounded ledger EXACTLY '/wedged';
 - GREEN P1 — same-path ops complete in call order under inverted latencies;
 - GREEN P2 — ancestor mkdir persist completes before its child write
   persist;
@@ -144,11 +157,19 @@ pins"):
   resolution and the recreated write carries the new bytes (row e — a
   drain-scoped dir-handle cache can never serve a pre-rm handle).
 
-Stamp-fence pin (install-stamp-authority.fault.test.ts, committed, GREEN):
-a trusted stamp never becomes durable at the OPFS surface while an
-earlier-enqueued persist op is unsettled — pinned with a wedged
-out-of-guarded-scope op held past the 30s report bound; on main FIFO
-delivers it, ADR-0358's explicit fence must preserve it (P4).
+Stamp-fence pins (install-stamp-authority.fault.test.ts, committed, GREEN —
+sibling sweep over BOTH production writer branches): a trusted stamp never
+becomes durable at the OPFS surface while an earlier-enqueued persist op is
+unsettled — pinned with a wedged out-of-guarded-scope op held past the 30s
+report bound, once through the raw-fsSync writer and once through the
+PRODUCTION claimIo composition (`createOwnerVfsAuthorityComposition` →
+`installStampClaims.write` → `#writeInstallStampClaim` →
+`authority.#fs.writeFileSync` → the same write-through queue; wiring
+mirrors `workbench-owner-runtime.ts:244-294`). On main FIFO delivers the
+fence, ADR-0358's explicit fence must preserve it (P4). Kill-power proven:
+a transient no-FIFO-admission mutant (parallel lanes at
+`opfs-sync.ts:774`) fails BOTH pins at the fence assertion; file restored
+byte-exact.
 
 Implementation obligations landing in the implementation commit (named here
 so the carriers above stay honest): delete the FIFO pin (R1 replaces it);
@@ -178,9 +199,11 @@ must not move:
 
 New RED targets (failing-test-first, all committed with this contract):
 R1 cross-path parallel completion, R2 per-lane watchdog liberation,
-R3 browser acceptance `speedupRaw >= 2.625`, R4 admission ceiling. GREEN
-preservation carriers committed alongside: P1-P4, the row a/b/e carriers,
-kill e2e.
+R3 browser acceptance `speedupRaw >= 2.625`, R4 admission ceiling, R5
+wedge×saturation ceiling across the watchdog transition. GREEN
+preservation carriers committed alongside: P1-P4 (P4 = both stamp-fence
+writer branches), the row a/b/e carriers, kill e2e (production claimIo
+composition).
 
 ## Fault matrix
 
@@ -192,7 +215,7 @@ Canonical axes per fault-classes §Axes.
 | a | quota-perm-fail × one lane mid-drain | one path's persist rejected while sibling ops are in flight | ledger records EXACTLY the failed path (op 'write', message preserved); `flush().total === 1`, `anyFailure` covers it → stamp refused (guarded scope); both siblings complete; later same-path success heals → total 0 — carrier: committed GREEN pin (concurrent quota rejection), schedule-agnostic |
 | b | quota-perm-fail × ledger heal ordering | ancestor mkdir slow-REJECTS while child write fast-succeeds; same-path slow-reject vs later fast success | heal is SEQUENCE-ordered, not completion-ordered: end ledger clean (`total 0`) in both — a naive parallel drain's heal-then-record inversion leaves a stale entry and fails the pin — carrier: committed GREEN pins (sequence-ordered heal ×2) |
 | c | torn-state × mid-drain realm death with pending stamp | worker killed while promote()'s drain is in flight | fresh realm: stamp NOT trusted (boot-path check); full re-run → trusted, clean ledger, FULL-TREE byte-exact — carrier: kill e2e (committed, GREEN on main, tier obligation) |
-| d | unbounded-read × wedged persist op | one op held past the 30s report bound | bounded `flush()` ledgers ONLY the wedged path; unrelated lanes complete un-ledgered (R2 RED pin); the trusted-stamp write stays un-durable while the wedge is in flight (P4 fence pin); admission fan-out is capped — `1 < peak <= 16` (R4 RED pin) |
+| d | unbounded-read × wedged persist op | one op held past the 30s report bound; sustained backlog across the timeout | bounded `flush()` ledgers ONLY the wedged path; unrelated lanes complete un-ledgered (R2 RED pin); the trusted-stamp write stays un-durable while the wedge is in flight (P4 fence pins, both writer branches); admission fan-out is capped — `1 < peak <= 16` cold (R4) AND across the watchdog transition with the wedge still occupying its physical lane (R5) |
 | e | poisoned-cache × drain-scoped dir handles | subtree removed+recreated while dir handles could be cached | FRESH parent resolution observed strictly after removeEntry; final surface write carries the post-recreate bytes — carrier: committed GREEN pin (fresh parent resolution); the cache's internal stale-handle test extends it in the implementation commit |
 | f | concurrent-same-key × foreign realm rm | foreign realm removes persisted subtree mid-drain | not quieter than main on the same schedule — carrier: existing row (f) differential pins in workspace-archive.fault.test.ts stay green (P7); class owned by the cross-realm intake item |
 | g | lossy-aggregate × acceptance oracle | dropped/truncated non-tail op; ratio rounded up at the gate | WHOLE-TREE path+size equality (all 26 811) + sampled byte-exact reads; UNROUNDED `speedupRaw` at the gate — carrier: the hardened acceptance spec itself (kill e2e: all 600 files byte-exact) |
@@ -254,19 +277,29 @@ Canonical axes per fault-classes §Axes.
   (unrounded ratio, whole-tree proof, calibrated denominator — rows g/h);
   kill e2e verify widened to the full 600-file tree; rename pin extended
   to both-side fencing.
-- RED evidence (pre-implementation runs on this branch, 2026-08-15, darwin
-  arm64, node v24.16.0, vitest 2.1.9, Playwright 1.60.0 Chromium):
-  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `3 failed | 75
-    passed | 1 skipped (79)`: exactly R1, R2, R4 FAIL as designed (R1:
+- Contract+RED attempt 2 (2026-08-15, blockers ANSWERED by re-cut, count
+  carries): stamp-fence carrier swept over BOTH production writer branches
+  — the new claimIo-composition pin wires the exact production triple
+  (`workbench-owner-runtime.ts:244-294`, `owner-package-state.ts:230-234`)
+  and the kill e2e now drives that composition end-to-end; R5 composes R4
+  with R2 (wedge retains its physical lane across the watchdog transition
+  under sustained saturation); the Class-kill inventory names
+  `FifoPackageAcquisitionAuthority` — per-project COMMAND admission whose
+  separate logical authority ADR-0261 already establishes (no
+  consolidation with an I/O drain scheduler).
+- RED evidence (pre-implementation runs on this branch, 2026-08-15/16,
+  darwin arm64, node v24.16.0, vitest 2.1.9, Playwright 1.60.0 Chromium):
+  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 75
+    passed | 1 skipped (80)`: exactly R1, R2, R4, R5 FAIL as designed (R1:
     `expected [ '/slow', '/fast' ] to deeply equal [ '/fast', '/slow' ]`;
     R2: `expected [] to deeply equal [ '/other' ]` — '/other' never
-    reaches the surface behind the wedged FIFO head; R4:
+    reaches the surface behind the wedged FIFO head; R4 and R5:
     `expected 1 to be greater than 1` — serial peak is 1), all GREEN pins
     + every pre-existing suite (incl. the still-present FIFO pin) PASS.
   - `npx vitest run packages/workbench/src/glue/install-stamp-authority.fault.test.ts`
-    → `2 passed` incl. the P4 fence pin; pin's kill-power proven against a
-    transient no-FIFO-admission mutant during authoring (fence assertion
-    fails on it), file restored byte-exact.
+    → `3 passed` incl. BOTH P4 fence pins (raw fsSync + production claimIo
+    composition); kill-power proven against a transient no-FIFO-admission
+    mutant (both fence pins fail on it), file restored byte-exact.
   - `PD256_CALIBRATE=1 RIFTY_PLAYGROUND_PORT=5299 npx playwright test
     --config playwright.browser-unit.config.ts -g "calibration"` →
     `PD256-CALIBRATION: {"files":26811,"perOpFlushMs":41423,
@@ -276,9 +309,9 @@ Canonical axes per fault-classes §Axes.
     tests/browser-unit/opfs-parallel-drain.spec.ts
     tests/browser-unit/opfs-parallel-drain-kill.spec.ts` → `1 failed, 1
     passed (1.6m)`: acceptance FAILS ONLY the I3 gate — `Expected: >=
-    2.625, Received: 1.3753391253881082`, faithfulMs 41 055 / productMs
-    29 851, both ledgers 0, BOTH whole-tree proofs verified
+    2.625, Received: 1.3979309001108522`, faithfulMs 41 505 / productMs
+    29 690, both ledgers 0, BOTH whole-tree proofs verified
     (26 811/26 811, mismatch null) — the failure is the ratio, nothing
-    else; kill e2e PASSES (discriminated mid-drain kill, fresh realm
-    refuses the stamp, retry ends trusted + clean ledger + full-tree
-    600/600 byte-exact).
+    else; kill e2e PASSES through the production claimIo composition
+    (discriminated mid-drain kill, fresh realm refuses the stamp, retry
+    ends trusted + clean ledger + full-tree 600/600 byte-exact).

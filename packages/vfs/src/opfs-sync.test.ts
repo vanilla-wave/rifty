@@ -2119,4 +2119,130 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
     expect(report.total).toBe(1);
     expect(report.failures).toEqual([expect.objectContaining({ path: '/wedged', op: 'write' })]);
   });
+
+  // RED on main BY DESIGN (composition kill, #256 slice 2): the ceiling pin
+  // above releases every held boundary BEFORE any watchdog fires, and the
+  // watchdog pin above has a single successor — so an implementation that
+  // FREES a timed-out op's capacity slot (admitting a 17th physical persist
+  // while the uncancellable wedge is still running) passes both. This pin
+  // composes them: the in-flight ceiling is measured ACROSS the 30s watchdog
+  // transition with the wedge's boundary still held. It lives in THIS block
+  // (not the parallel-drain one) because it pins the watchdog transition's
+  // capacity semantics and needs this block's fake-timer teardown. On main
+  // the serial FIFO admits one persist at a time and the wedged head admits
+  // nothing after it, so peak === 1 and the `> 1` half fails.
+  it('a timed-out wedge still occupies a physical lane — sustained mixed-kind backlog across the 30s timeout never exceeds the ~16 ceiling', async () => {
+    const NON_WEDGE_TOTAL = 29; // 19 held across the timeout + 10 enqueued after it
+    let inFlight = 0;
+    let peak = 0;
+    const completedAtBoundary: string[] = [];
+    const releases: Array<() => void> = [];
+    // Boundary instrumentation (same shape as the ceiling pin): inc when a
+    // persist task ENTERS its surface/root call, dec + completion log when it
+    // settles; the call stays HELD by a deferred until this test releases it.
+    const enterBoundary = (): void => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+    };
+    const heldBoundary = (label: string): Promise<void> => {
+      enterBoundary();
+      return new Promise<void>((release) => {
+        releases.push(release);
+      }).finally(() => {
+        inFlight -= 1;
+        completedAtBoundary.push(label);
+      });
+    };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path: string) => {
+        if (path === '/wedged') {
+          // The wedge ENTERS its boundary (occupies a physical lane) and
+          // never settles — uncancellable browser I/O. It never decrements
+          // inFlight: after its watchdog fires, the slot must still count.
+          enterBoundary();
+          return new Promise<void>(() => {});
+        }
+        return heldBoundary(path);
+      },
+      rm: () => Promise.resolve(),
+    };
+    // mkdir targets + the rm target pre-exist in the FAKE so every inner call
+    // resolves once released; refreshIndex runs BEFORE fake timers and the
+    // held wrappers go in, and puts '/rm-target' in the mirror so rmSync
+    // accepts it.
+    const root = buildFakeRoot({
+      files: new Map([['/rm-target', { bytes: new Uint8Array([1]) }]]),
+      dirs: new Set(['/', '/d0', '/d1', '/d2', '/d3', '/d4', '/d5', '/d6', '/d7', '/d8', '/d9']),
+    });
+    const fs = new OpfsFsSync(root, surface);
+    await fs.refreshIndex();
+    vi.useFakeTimers();
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
+      (name, options) => heldBoundary(`mkdir /${name}`).then(() => innerGetDir(name, options));
+    const innerRemove = root.removeEntry.bind(root);
+    (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = (
+      name,
+      options,
+    ) => heldBoundary(`rm /${name}`).then(() => innerRemove(name, options));
+
+    // Phase 1 — the wedge + 19 held ops on UNRELATED paths, MIXED kinds:
+    // 10 surface writes + 8 mkdirs (root getDirectoryHandle) + 1 rm (root
+    // removeEntry). Every admitted boundary stays held across the transition.
+    fs.writeFileSync('/wedged', new Uint8Array([0]));
+    for (let i = 0; i < 10; i++) fs.writeFileSync(`/w${i}`, new Uint8Array([i]));
+    for (let i = 0; i < 8; i++) fs.mkdirSync(`/d${i}`, { recursive: true });
+    fs.rmSync('/rm-target');
+
+    await Promise.resolve(); // admitted lanes enter their boundaries
+    // Watchdog transition: the wedge times out and is ledgered while every
+    // held boundary — its own included — is still physically in flight.
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    // Phase 2 — the backlog stays non-empty PAST the transition: 10 more held
+    // ops (8 writes + 2 mkdirs) enqueued after the wedge was ledgered. A cap
+    // that freed the wedge's slot back-fills from this backlog and overshoots.
+    for (let i = 10; i < 18; i++) fs.writeFileSync(`/w${i}`, new Uint8Array([i]));
+    fs.mkdirSync('/d8', { recursive: true });
+    fs.mkdirSync('/d9', { recursive: true });
+
+    // Macrotask-based wait under fake timers: each tick advances the fake
+    // clock 1ms (nowhere near another watchdog) and drains the full microtask
+    // chain between a release and the next boundary entry — the ceiling pin's
+    // schedule-agnostic idiom, fake-timer edition. Returns false instead of
+    // throwing so main (wedged FIFO head admits nothing — `releases` stays
+    // empty) falls through to the peak assert, the designed RED diff.
+    const waitForBoundary = async (count: number): Promise<boolean> => {
+      for (let tick = 0; tick < 50; tick++) {
+        if (releases.length >= count) return true;
+        await vi.advanceTimersByTimeAsync(1);
+      }
+      return false;
+    };
+    // Release every NON-wedge deferred in boundary-entry order; the wedge
+    // stays held to the very end.
+    for (let i = 0; i < NON_WEDGE_TOTAL; i++) {
+      if (!(await waitForBoundary(i + 1))) break;
+      releases[i]?.();
+    }
+    const report = await fs.flush();
+
+    expect(peak).toBeGreaterThan(1); // RED on main: serial FIFO peak === 1
+    // Whole-run ceiling, INCLUDING after the timeout transition: the wedge
+    // never decrements, so a cap that frees the timed-out op's capacity slot
+    // admits a 17th in-flight persist and fails here.
+    expect(peak).toBeLessThanOrEqual(16);
+    // Every non-wedge op completed at its own boundary…
+    expect(releases.length).toBe(NON_WEDGE_TOTAL);
+    const expectedBoundaries = [
+      ...Array.from({ length: 18 }, (_, i) => `/w${i}`),
+      ...Array.from({ length: 10 }, (_, i) => `mkdir /d${i}`),
+      'rm /rm-target',
+    ];
+    expect([...completedAtBoundary].sort()).toEqual([...expectedBoundaries].sort());
+    // …and the final bounded flush ledgers EXACTLY the wedge.
+    expect(report.total).toBe(1);
+    expect(report.failures).toEqual([expect.objectContaining({ path: '/wedged', op: 'write' })]);
+  });
 });

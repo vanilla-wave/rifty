@@ -15,7 +15,11 @@
  * check refuses the stamp, then re-runs the full sequence to a trusted
  * stamp, clean ledger, and a FULL-TREE byte-exact verify (all 600 files vs
  * the regenerated procedural spec — a spot check could bless a partial
- * tree). See fixtures/opfs-parallel-drain-kill-worker.ts.
+ * tree). The worker drives the PRODUCTION claimIo composition —
+ * `createOwnerVfsAuthorityComposition` → `installStampClaims` →
+ * `createInstallStampAuthority` (workbench-owner-runtime.ts:244 /
+ * owner-package-state.ts:230) — the reviewer-demanded sibling of the
+ * raw-fsSync unit pins. See fixtures/opfs-parallel-drain-kill-worker.ts.
  */
 import { expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';

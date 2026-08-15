@@ -7,13 +7,17 @@
  * boot-path check refuses reuse, and only a full re-run (demote → tree →
  * promote with the real flush seam) ends trusted over a clean ledger.
  *
- * Real OPFS, real `OpfsFsSync`, real install-stamp authority wired exactly
- * like the owner glue (`setSyncMirror` + `SyncMirrorVfs` +
- * `createInstallStampAuthority` — workbench-owner-runtime.ts:249 /
- * install-stamp-authority.fault.test.ts). The ONLY test double is the
- * completed-write counter subclass below.
+ * Real OPFS, real `OpfsFsSync`, and the PRODUCTION install-stamp composition
+ * (reviewer-demanded sibling of the raw-fsSync unit pins):
+ * `createOwnerVfsAuthorityComposition` wraps the raw `OpfsFsSync`, the owner
+ * authority becomes the sync mirror (`setSyncMirror` + `SyncMirrorVfs`), and
+ * `createInstallStampAuthority` gets the PRIVILEGED `claimIo` writer — exactly
+ * workbench-owner-runtime.ts:244-249 → owner-package-state.ts:230-234. All
+ * owner-realm mutations (tree, package.json, flush) route through the
+ * authority like production; the ONLY test double is the completed-write
+ * counter subclass below.
  */
-import { OpfsFsSync, OpfsVfs } from '@riftydev/vfs';
+import { type FsSync, OpfsFsSync, OpfsVfs } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { installArtifactIdentity } from '../../../packages/workbench/src/glue/install-artifact-identity.ts';
 import {
@@ -22,6 +26,10 @@ import {
 } from '../../../packages/workbench/src/glue/install-stamp-authority.ts';
 import { installStampPath } from '../../../packages/workbench/src/glue/install-stamp.ts';
 import { SyncMirrorVfs } from '../../../packages/workbench/src/glue/sync-mirror-vfs.ts';
+import {
+  type OwnerVfsAuthority,
+  createOwnerVfsAuthorityComposition,
+} from '../../../packages/workbench/src/workers/owner-vfs-authority.ts';
 
 const scope = globalThis as unknown as DedicatedWorkerGlobalScope;
 const enc = new TextEncoder();
@@ -41,13 +49,27 @@ class CountingOpfsVfs extends OpfsVfs {
   }
 }
 
-/** Exactly the owner glue wiring: the real `OpfsFsSync` becomes the sync
- * mirror, `SyncMirrorVfs` its paired async view, and the authority reads and
- * writes claims through both surfaces. */
-function wireAuthority(fsSync: OpfsFsSync): InstallStampAuthority {
+/** Exactly the owner boot wiring (workbench-owner-runtime.ts:244-249 →
+ * owner-package-state.ts:230-234): the owner VFS authority composition wraps
+ * the raw `OpfsFsSync` (same `initialRoots` as production), the AUTHORITY —
+ * not the raw fsSync — becomes the sync mirror with `SyncMirrorVfs` as its
+ * paired async view, and the install-stamp authority reads/writes claims
+ * through the privileged `claimIo` composition capability. */
+function wireAuthority(fsSync: OpfsFsSync): {
+  readonly stamps: InstallStampAuthority;
+  readonly authority: OwnerVfsAuthority;
+} {
+  const composition = createOwnerVfsAuthorityComposition(fsSync, {
+    initialRoots: ['/', '/.rifty'],
+  });
   const vfs = new SyncMirrorVfs();
-  setSyncMirror(fsSync, { async: vfs });
-  return createInstallStampAuthority({ vfs, fsSync });
+  setSyncMirror(composition.authority, { async: vfs });
+  const stamps = createInstallStampAuthority({
+    vfs,
+    fsSync: composition.authority,
+    claimIo: composition.installStampClaims,
+  });
+  return { stamps, authority: composition.authority };
 }
 
 function pkgName(p: number): string {
@@ -69,7 +91,7 @@ function pkgJsonBytes(p: number): Uint8Array {
  * over 81 dirs (node_modules + pkg + lib each), ~850 KB total — enough queued
  * write ops that the page's terminate() provably lands with hundreds of OPFS
  * writes still in flight. */
-function writeInstallTree(fs: OpfsFsSync, root: string): number {
+function writeInstallTree(fs: FsSync, root: string): number {
   let fileCount = 0;
   for (let p = 0; p < PKG_COUNT; p++) {
     const pkgDir = `${root}/node_modules/${pkgName(p)}`;
@@ -187,20 +209,20 @@ async function runKillRun(ns: string): Promise<{
     navigator as unknown as { storage: { getDirectory(): Promise<FileSystemDirectoryHandle> } }
   ).storage;
   const fs = new OpfsFsSync(await storage.getDirectory(), surface);
-  const stamps = wireAuthority(fs);
+  const { stamps, authority } = wireAuthority(fs);
 
-  fs.mkdirSync(`${root}/node_modules`, { recursive: true });
-  fs.writeFileSync(`${root}/package.json`, enc.encode(PACKAGE_JSON));
+  authority.mkdirSync(`${root}/node_modules`, { recursive: true });
+  authority.writeFileSync(`${root}/package.json`, enc.encode(PACKAGE_JSON));
   // node_modules exists → demote materializes the PENDING claim on disk.
   const claim = await stamps.demote({ root, slug: SLUG });
-  if (!fs.existsSync(installStampPath(root))) {
+  if (!authority.existsSync(installStampPath(root))) {
     throw new Error('demote did not materialize the pending stamp (write accounting broken)');
   }
-  const fileCount = writeInstallTree(fs, root);
+  const fileCount = writeInstallTree(authority, root);
 
   const promotion = stamps.promote(
     { root, slug: SLUG, packageJsonText: PACKAGE_JSON },
-    { epoch: claim.epoch, packages: PKG_COUNT, flush: () => fs.flush() },
+    { epoch: claim.epoch, packages: PKG_COUNT, flush: () => authority.flush() },
   );
   // Realm dies mid-drain by design; the promotion can never conclude here.
   void promotion.catch(() => {});
@@ -235,21 +257,27 @@ async function runVerifyRetry(ns: string): Promise<{
   const surface = new OpfsVfs();
   await surface.init();
   const fs = await OpfsFsSync.init(surface);
-  const stamps = wireAuthority(fs);
+  // Production boot order: the composition is constructed over the FRESHLY
+  // booted fsSync (torn durable state already hydrated), so the claimIo stamp
+  // read below is the boot path's honest view of disk.
+  const { stamps, authority } = wireAuthority(fs);
 
   // ADR-0358 reload honesty: never trust a stamp over an unproven tree.
   const pre = await bootPathTrusts(stamps, root);
 
   const claim = await stamps.demote({ root, slug: SLUG });
-  fs.mkdirSync(`${root}/node_modules`, { recursive: true });
-  fs.writeFileSync(`${root}/package.json`, enc.encode(PACKAGE_JSON));
-  writeInstallTree(fs, root);
+  authority.mkdirSync(`${root}/node_modules`, { recursive: true });
+  authority.writeFileSync(`${root}/package.json`, enc.encode(PACKAGE_JSON));
+  writeInstallTree(authority, root);
   const promotion = await stamps.promote(
     { root, slug: SLUG, packageJsonText: PACKAGE_JSON },
-    { epoch: claim.epoch, packages: PKG_COUNT, flush: () => fs.flush() },
+    { epoch: claim.epoch, packages: PKG_COUNT, flush: () => authority.flush() },
   );
   const post = await bootPathTrusts(stamps, root);
-  const report = await fs.flush();
+  const report = await authority.flush();
+  if (report === undefined) {
+    throw new Error('owner authority flush returned no durability report');
+  }
 
   // Durability proven through a FRESH surface, never the writing one.
   const reopened = new OpfsVfs();
