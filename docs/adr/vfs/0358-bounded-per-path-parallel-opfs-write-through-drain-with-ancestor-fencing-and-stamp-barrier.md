@@ -33,14 +33,29 @@ naively." This ADR takes it (decision-workflow §Reconsidering); driving item
 `vfs/opfs-parallel-write-through-drain`, epic invariant I3 (≥2.5x in the
 headless browser-unit lane, clean ledger, reload e2e green).
 
-Class-kill inventory (no new cross-module mechanism): serialization owners
-nearby are (1) this FIFO; (2) install-stamp authority per-root serialized
-slots (`install-stamp-authority.ts` `enqueue`); (3) epic
-`trusted-state-authority` consolidating ~7 hand-rolled coordination mechanisms
-into one trust-claim authority. The lane scheduler stays INSIDE `OpfsFsSync` —
-the single OPFS write-through owner — the one new mechanism the epic Budget
-sanctions. Whether the stamp full fence belongs to the trusted-state authority
-primitive instead of `promote()` is a Contract+RED question against that epic.
+Class-kill inventory (repo-wide, fault-classes §Class-kill; grep sweep
+2026-08-15 over packages/ + apps/ for semaphore/tail/queue/concurrency
+owners): (1) this FIFO — the mechanism being replaced; (2) install-stamp
+authority per-root serialized slots (`install-stamp-authority.ts` `enqueue`)
+— serializes trust CLAIMS by root, not I/O ops; consolidation owned by epic
+`trusted-state-authority` (~7 mechanisms → one trust-claim authority);
+(3) `packages/npm-client/src/utils/semaphore.ts` — FIFO counting semaphore
+capping tarball fetches (network boundary, npm-client-internal). Reuse
+REJECTED: npm-client sits above vfs (layer rules — reverse import
+forbidden), and a counting cap is the trivial ~10 lines of the scheduler;
+its correctness lives in per-path lane routing + fences, which no counting
+semaphore provides. Moving a shared primitive down to vfs would couple
+layers to share the smallest part of the mechanism; (4)
+`apps/playground/src/glue/terminal-persistence.ts` `createWriteQueue` —
+page-realm tail-promise serializer writing OPFS DIRECTLY through `OpfsVfs`,
+physically outside the worker-realm `OpfsFsSync` queue (cross-realm class
+captured in `vfs/opfs-sync-cross-realm-mirror-coherence`); cannot share the
+in-worker scheduler. The lane scheduler therefore stays INSIDE `OpfsFsSync`
+— the single sync-mirror write-through owner — the one new mechanism the
+epic Budget sanctions; no second OPFS-write-through owner is created.
+Whether the stamp full fence belongs to the trusted-state authority
+primitive instead of `promote()` is a Contract+RED question against that
+epic.
 
 ## Decision
 
@@ -66,7 +81,9 @@ primitive instead of `promote()` is a Contract+RED question against that epic.
   wedged op reports itself and blocks only its own lane/fences.
 - **Replacement pins.** The RED-on-parallelize FIFO pin in `opfs-sync.test.ts`
   is REPLACED by pins for: same-path order, ancestor-before-child, rm/rename
-  fences, stamp full-fence.
+  fences (no straddle either side), stamp full-fence, and the admission
+  ceiling (mixed-kind held ops: `1 < peak concurrency <= 16` — unbounded
+  fan-out can never pass).
 - **Dir-handle cache: ship it, drain-scoped.** Dir-handle reuse ships, scoped
   to a drain and structurally invalidated on rm/rename of any cached path — a
   cached handle never survives a structural op. Why: epic I3 demands ≥2.5x in

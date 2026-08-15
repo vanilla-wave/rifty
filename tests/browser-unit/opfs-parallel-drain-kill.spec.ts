@@ -13,8 +13,9 @@
  * the real flush seam) and is terminated on a DISCRIMINATED mid-drain ack;
  * worker 2 boots fresh over the torn OPFS, proves the boot path's own
  * check refuses the stamp, then re-runs the full sequence to a trusted
- * stamp, clean ledger, and byte-exact spot verify. See
- * fixtures/opfs-parallel-drain-kill-worker.ts.
+ * stamp, clean ledger, and a FULL-TREE byte-exact verify (all 600 files vs
+ * the regenerated procedural spec — a spot check could bless a partial
+ * tree). See fixtures/opfs-parallel-drain-kill-worker.ts.
  */
 import { expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';
@@ -34,7 +35,9 @@ interface RetryResult {
   readonly promoteStatus: string;
   readonly postTrusted: boolean;
   readonly reportTotal: number;
-  readonly spotByteVerified: boolean;
+  readonly treeVerified: boolean;
+  readonly treeFiles: number;
+  readonly treeFirstMismatch: string | null;
 }
 
 test('a realm KILLED mid-promote-drain never leaves a trusted stamp: the fresh realm refuses reuse, then a full re-run ends trusted (#256 fault row c)', async ({
@@ -92,7 +95,7 @@ test('a realm KILLED mid-promote-drain never leaves a trusted stamp: the fresh r
 
   console.log(
     `[pd256-kill] completed=${ack.completed}/${ack.total} preCheck=${retry.preCheckStatus} ` +
-      `promote=${retry.promoteStatus}`,
+      `promote=${retry.promoteStatus} tree=${retry.treeFiles}/600`,
   );
 
   // Kill really landed mid-drain: past the first durable byte, far from done.
@@ -109,5 +112,10 @@ test('a realm KILLED mid-promote-drain never leaves a trusted stamp: the fresh r
   expect(retry.promoteStatus).toBe('trusted');
   expect(retry.postTrusted).toBe(true);
   expect(retry.reportTotal).toBe(0);
-  expect(retry.spotByteVerified).toBe(true);
+  // Full-tree proof through a fresh OpfsVfs: EXACTLY the 600-file spec —
+  // every path, every size, every byte. First mismatch asserted first so a
+  // failure names the offending path.
+  expect(retry.treeFirstMismatch).toBeNull();
+  expect(retry.treeVerified).toBe(true);
+  expect(retry.treeFiles).toBe(600);
 });

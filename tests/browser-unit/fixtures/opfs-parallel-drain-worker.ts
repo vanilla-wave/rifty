@@ -8,7 +8,9 @@
  * the same machine. The baseline is serial BY CONSTRUCTION — per-op awaited
  * flush ⇒ completion order == call order (the superseded FIFO contract)
  * whatever the drain internals — so it stays a valid same-run serial
- * baseline after parallelization. Every byte of I/O is real OPFS.
+ * baseline after parallelization; its per-op-flush inflation is bounded by
+ * the manual 'calibrate' phase (see {@link runCalibration}). Every byte of
+ * I/O is real OPFS; durability is proven WHOLE-TREE through a fresh OpfsVfs.
  */
 import { OpfsFsSync, OpfsVfs, type PersistFailureReport } from '@riftydev/vfs';
 
@@ -24,6 +26,15 @@ interface RealTreeManifest {
   readonly files: ReadonlyArray<readonly [string, number]>;
 }
 
+/** Fresh-surface whole-tree durability proof for one variant namespace. */
+interface TreeProof {
+  readonly treeVerified: boolean;
+  /** Files actually enumerated under the namespace on the fresh surface. */
+  readonly treeFiles: number;
+  /** First mismatch (path + expected/actual), null when the tree is clean. */
+  readonly treeMismatch: string | null;
+}
+
 interface AcceptanceResult {
   readonly files: number;
   readonly totalBytes: number;
@@ -33,11 +44,28 @@ interface AcceptanceResult {
   readonly statsTotalBytes: number;
   readonly faithfulMs: number;
   readonly productMs: number;
+  /** RAW unrounded faithful/product ratio — the asserted I3 gate. */
+  readonly speedupRaw: number;
+  /** Log convenience only (2-decimal rounding of speedupRaw) — never asserted. */
   readonly speedup: number;
   readonly faithfulReportTotal: number;
   readonly productReportTotal: number;
-  readonly faithfulTailVerified: boolean;
-  readonly productTailVerified: boolean;
+  readonly faithfulTreeVerified: boolean;
+  readonly faithfulTreeFiles: number;
+  readonly faithfulTreeMismatch: string | null;
+  readonly productTreeVerified: boolean;
+  readonly productTreeFiles: number;
+  readonly productTreeMismatch: string | null;
+}
+
+interface CalibrationResult {
+  readonly files: number;
+  /** Wall time of (a) faithful-per-op — acceptance-baseline shape. */
+  readonly perOpFlushMs: number;
+  /** Wall time of (b) faithful-one-flush — pre-epic FIFO drain shape. */
+  readonly oneFlushMs: number;
+  /** RAW unrounded a/b — its measured ceiling seeds SERIAL_OVERHEAD_BOUND. */
+  readonly rawRatio: number;
 }
 
 interface FileSpec {
@@ -49,6 +77,10 @@ interface FileSpec {
  * cheap to build (~167 MB total across 26 811 arrays), byte-checkable on
  * re-read (fill positions, zeros between them, and length). */
 const FILL_STRIDE = 251;
+
+/** Byte-exact re-read sample: every 97th manifest index + the last file —
+ * ~280 fresh-surface reads, deterministic, spread across the whole tree. */
+const SAMPLE_STRIDE = 97;
 
 function buildBytes(fileIndex: number, size: number): Uint8Array {
   const bytes = new Uint8Array(size);
@@ -75,15 +107,121 @@ function distinctDirs(files: ReadonlyArray<readonly [string, number]>): string[]
   return [...dirs].sort();
 }
 
-interface VariantOutcome {
-  readonly ms: number;
-  readonly reportTotal: number;
-  readonly tailVerified: boolean;
+/** Fetch + validate the manifest, build the byte specs ONCE (~167 MB). */
+async function loadSpecs(
+  manifestUrl: string,
+): Promise<{ manifest: RealTreeManifest; specs: FileSpec[]; totalBytes: number }> {
+  const response = await fetch(manifestUrl);
+  if (!response.ok) throw new Error(`manifest fetch failed: ${response.status}`);
+  const manifest = (await response.json()) as RealTreeManifest;
+  if (typeof manifest?.stats?.files !== 'number' || !manifest.files?.length) {
+    throw new Error('manifest missing stats/files');
+  }
+  let totalBytes = 0;
+  const specs: FileSpec[] = manifest.files.map(([rel, size], index) => {
+    totalBytes += size;
+    return { rel, bytes: buildBytes(index, size) };
+  });
+  return { manifest, specs, totalBytes };
 }
 
-/** One variant on a fresh OPFS namespace: build the tree, time it, prove tail
- * durability through a FRESH OpfsVfs, then clean the namespace (AFTER the
- * verify, best-effort). Bytes are shared with the other variant — never copy. */
+async function removeNamespace(ns: string): Promise<void> {
+  const storage = (
+    navigator as unknown as { storage: { getDirectory(): Promise<FileSystemDirectoryHandle> } }
+  ).storage;
+  const realRoot = await storage.getDirectory();
+  await realRoot.removeEntry(ns.slice(1), { recursive: true }).catch(() => {});
+}
+
+/** WHOLE-TREE fresh-surface proof: enumerate EVERYTHING persisted under `ns`
+ * through a FRESH OpfsVfs and demand exact equality with the manifest walk —
+ * file count, every path, every size (equal count + every expected path/size
+ * present ⇒ no extras, pigeonhole) — plus byte-exact re-reads of the
+ * SAMPLE_STRIDE sample vs the in-memory source bytes. OpfsVfs exports no
+ * tree walk (walkOpfsTree in packages/vfs/src/opfs-sync.ts:157 is
+ * module-internal, absent from the package surface) and readdir dirents
+ * carry no size (packages/vfs/src/opfs.ts:123), so sizes come from per-file
+ * stat — chunked Promise.all because each stat re-walks handles from the
+ * OPFS root (packages/vfs/src/opfs.ts:216). One readdir per dir + one stat
+ * per file + ~280 sampled reads — never 26k full reads. */
+async function verifyTree(ns: string, specs: ReadonlyArray<FileSpec>): Promise<TreeProof> {
+  const surface = new OpfsVfs();
+  await surface.init();
+
+  const filePaths: string[] = [];
+  const queue: string[] = [ns];
+  while (queue.length > 0) {
+    const dir = queue.pop() as string;
+    for (const entry of await surface.readdir(dir)) {
+      const abs = `${dir}/${entry.name}`;
+      if (entry.isDirectory) queue.push(abs);
+      else filePaths.push(abs);
+    }
+  }
+
+  const prefix = `${ns}/`;
+  const actualSizes = new Map<string, number>();
+  const STAT_CHUNK = 64;
+  for (let i = 0; i < filePaths.length; i += STAT_CHUNK) {
+    const chunk = filePaths.slice(i, i + STAT_CHUNK);
+    const sized = await Promise.all(
+      chunk.map(async (abs) => [abs, (await surface.stat(abs)).size] as const),
+    );
+    for (const [abs, size] of sized) actualSizes.set(abs.slice(prefix.length), size);
+  }
+
+  const fail = (treeMismatch: string): TreeProof => ({
+    treeVerified: false,
+    treeFiles: actualSizes.size,
+    treeMismatch,
+  });
+
+  if (actualSizes.size !== specs.length) {
+    return fail(`file count: persisted ${actualSizes.size} !== manifest ${specs.length}`);
+  }
+  for (const spec of specs) {
+    const size = actualSizes.get(spec.rel);
+    if (size === undefined) return fail(`missing file: ${spec.rel}`);
+    if (size !== spec.bytes.byteLength) {
+      return fail(`size at ${spec.rel}: persisted ${size} !== source ${spec.bytes.byteLength}`);
+    }
+  }
+
+  const sample = new Set<number>();
+  for (let i = 0; i < specs.length; i += SAMPLE_STRIDE) sample.add(i);
+  sample.add(specs.length - 1);
+  for (const index of sample) {
+    const spec = specs[index] as FileSpec;
+    const readBack = await surface.readFile(`${ns}/${spec.rel}`).catch(() => null);
+    if (readBack === null) return fail(`sample read failed: ${spec.rel}`);
+    if (readBack.byteLength !== spec.bytes.byteLength) {
+      return fail(
+        `sample length at ${spec.rel}: ${readBack.byteLength} !== ${spec.bytes.byteLength}`,
+      );
+    }
+    for (let i = 0; i < readBack.length; i++) {
+      if (readBack[i] !== spec.bytes[i]) {
+        return fail(
+          `sample byte at ${spec.rel}[${i}]: ${String(readBack[i])} !== ${String(spec.bytes[i])}`,
+        );
+      }
+    }
+  }
+
+  return { treeVerified: true, treeFiles: actualSizes.size, treeMismatch: null };
+}
+
+interface VariantOutcome {
+  /** Raw, unrounded — speedupRaw divides these; rounding is report-only. */
+  readonly ms: number;
+  readonly reportTotal: number;
+  readonly tree: TreeProof;
+}
+
+/** One variant on a fresh OPFS namespace: build the tree, time it, prove
+ * whole-tree durability through a FRESH OpfsVfs, then clean the namespace
+ * (AFTER the verify, best-effort). Bytes are shared with the other variant —
+ * never copy. */
 async function runVariant(
   label: 'faithful' | 'product',
   specs: ReadonlyArray<FileSpec>,
@@ -130,45 +268,22 @@ async function runVariant(
     ms = performance.now() - t0;
   }
 
-  // Tail durability proven through a FRESH surface, never the writing one —
-  // byte-exact vs the in-memory source (sparse fills, zeros, length).
-  const tail = specs[specs.length - 1];
-  if (!tail) throw new Error('empty spec set');
-  const reopened = new OpfsVfs();
-  await reopened.init();
-  const readBack = await reopened.readFile(`${ns}/${tail.rel}`).catch(() => null);
-  const tailVerified =
-    readBack !== null &&
-    readBack.byteLength === tail.bytes.byteLength &&
-    readBack.every((byte, i) => byte === tail.bytes[i]);
+  // Whole-tree durability proven through a FRESH surface, never the writing
+  // one — outside the timed window.
+  const tree = await verifyTree(ns, specs);
+  await removeNamespace(ns);
 
-  const storage = (
-    navigator as unknown as { storage: { getDirectory(): Promise<FileSystemDirectoryHandle> } }
-  ).storage;
-  const realRoot = await storage.getDirectory();
-  await realRoot.removeEntry(ns.slice(1), { recursive: true }).catch(() => {});
-
-  return { ms: Math.round(ms), reportTotal: report.total, tailVerified };
+  return { ms, reportTotal: report.total, tree };
 }
 
 async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
-  const response = await fetch(manifestUrl);
-  if (!response.ok) throw new Error(`manifest fetch failed: ${response.status}`);
-  const manifest = (await response.json()) as RealTreeManifest;
-  if (typeof manifest?.stats?.files !== 'number' || !manifest.files?.length) {
-    throw new Error('manifest missing stats/files');
-  }
-
   // Bytes built ONCE (~167 MB) and shared by both variants — no copies held.
-  let totalBytes = 0;
-  const specs: FileSpec[] = manifest.files.map(([rel, size], index) => {
-    totalBytes += size;
-    return { rel, bytes: buildBytes(index, size) };
-  });
+  const { manifest, specs, totalBytes } = await loadSpecs(manifestUrl);
   const sortedDirs = distinctDirs(manifest.files);
 
   const faithful = await runVariant('faithful', specs, sortedDirs);
   const product = await runVariant('product', specs, sortedDirs);
+  const speedupRaw = faithful.ms / product.ms;
 
   return {
     files: specs.length,
@@ -176,13 +291,88 @@ async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
     dirCount: sortedDirs.length,
     statsFiles: manifest.stats.files,
     statsTotalBytes: manifest.stats.totalBytes,
-    faithfulMs: faithful.ms,
-    productMs: product.ms,
-    speedup: Math.round((faithful.ms / product.ms) * 100) / 100,
+    faithfulMs: Math.round(faithful.ms),
+    productMs: Math.round(product.ms),
+    speedupRaw,
+    speedup: Math.round(speedupRaw * 100) / 100,
     faithfulReportTotal: faithful.reportTotal,
     productReportTotal: product.reportTotal,
-    faithfulTailVerified: faithful.tailVerified,
-    productTailVerified: product.tailVerified,
+    faithfulTreeVerified: faithful.tree.treeVerified,
+    faithfulTreeFiles: faithful.tree.treeFiles,
+    faithfulTreeMismatch: faithful.tree.treeMismatch,
+    productTreeVerified: product.tree.treeVerified,
+    productTreeFiles: product.tree.treeFiles,
+    productTreeMismatch: product.tree.treeMismatch,
+  };
+}
+
+/** One calibration variant on a fresh namespace — same tree, timed, then
+ * cleaned. Both variants mkdir before EVERY write (never deduped): the ONLY
+ * difference is flush placement. */
+async function runCalibrationVariant(
+  label: 'per-op' | 'one-flush',
+  specs: ReadonlyArray<FileSpec>,
+): Promise<number> {
+  const ns = `/pd256-cal-${label}-${crypto.randomUUID()}`;
+  const surface = new OpfsVfs();
+  await surface.init();
+  await surface.mkdir(ns);
+  const fs = await OpfsFsSync.init(surface);
+
+  let ms: number;
+  let report: PersistFailureReport;
+  if (label === 'per-op') {
+    // (a) faithful-per-op — IDENTICAL shape to the acceptance baseline.
+    const t0 = performance.now();
+    let last: PersistFailureReport | null = null;
+    for (const spec of specs) {
+      const abs = `${ns}/${spec.rel}`;
+      fs.mkdirSync(abs.slice(0, abs.lastIndexOf('/')), { recursive: true });
+      await fs.flush();
+      fs.writeFileSync(abs, spec.bytes);
+      last = await fs.flush();
+    }
+    ms = performance.now() - t0;
+    if (last === null) throw new Error('per-op calibration drained no files');
+    report = last;
+  } else {
+    // (b) faithful-one-flush — the pre-epic FIFO drain shape: same per-file
+    // mkdir-before-every-write op stream, ONE final awaited flush.
+    const t0 = performance.now();
+    for (const spec of specs) {
+      const abs = `${ns}/${spec.rel}`;
+      fs.mkdirSync(abs.slice(0, abs.lastIndexOf('/')), { recursive: true });
+      fs.writeFileSync(abs, spec.bytes);
+    }
+    report = await fs.flush();
+    ms = performance.now() - t0;
+  }
+  if (report.total !== 0) {
+    throw new Error(`calibration ${label} flush ledger dirty: total=${report.total}`);
+  }
+
+  await removeNamespace(ns);
+  return ms;
+}
+
+/** Calibration harness for the acceptance baseline's denominator (manual,
+ * run ONCE pre-implementation): rawRatio = (a) faithful-per-op wall time /
+ * (b) faithful-one-flush wall time bounds how much the per-op awaited flush
+ * inflates the serial baseline vs the one-final-flush serial regime. ONLY
+ * meaningful pre-implementation: on main BOTH variants drain the serial
+ * FIFO, so a/b isolates pure flush-placement overhead; after ADR-0358
+ * parallelization (b) stops being serial and the ratio no longer measures
+ * serial overhead. The measured ceiling seeds SERIAL_OVERHEAD_BOUND in
+ * opfs-parallel-drain.spec.ts. */
+async function runCalibration(manifestUrl: string): Promise<CalibrationResult> {
+  const { specs } = await loadSpecs(manifestUrl);
+  const perOpFlushMs = await runCalibrationVariant('per-op', specs);
+  const oneFlushMs = await runCalibrationVariant('one-flush', specs);
+  return {
+    files: specs.length,
+    perOpFlushMs: Math.round(perOpFlushMs),
+    oneFlushMs: Math.round(oneFlushMs),
+    rawRatio: perOpFlushMs / oneFlushMs,
   };
 }
 
@@ -193,7 +383,9 @@ scope.addEventListener(
     const run =
       phase === 'acceptance' && manifestUrl
         ? runAcceptance(manifestUrl)
-        : Promise.reject(new Error(`unknown phase: ${String(phase)}`));
+        : phase === 'calibrate' && manifestUrl
+          ? runCalibration(manifestUrl)
+          : Promise.reject(new Error(`unknown phase: ${String(phase)}`));
     void run
       .then((result) => scope.postMessage({ ok: true, result }))
       .catch((err: unknown) => {

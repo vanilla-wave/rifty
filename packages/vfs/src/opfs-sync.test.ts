@@ -1802,9 +1802,10 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
   // GREEN preservation pin: rename fence — persistRenameAsync's observable
   // legs (destination dir create via root getDirectoryHandle, file move via
   // surface.writeFile, source removal via surface.rm) all complete AFTER an
-  // earlier write persist inside the moved subtree: the rename neither
-  // overtakes nor straddles it.
-  it('rename persist completes after an earlier write persist inside the moved subtree', async () => {
+  // earlier write persist inside the moved subtree AND all complete BEFORE a
+  // later write into the destination: no straddle on either side, and the
+  // successor never interleaves between the rename's own legs.
+  it('rename persist is fenced on both sides — after the source-subtree write, before the destination successor', async () => {
     const events: string[] = [];
     const delays: Record<string, number> = { '/a/f': 30 };
     const surface: PairedAsyncSurface = {
@@ -1832,6 +1833,7 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     fs.mkdirSync('/a', { recursive: true });
     fs.writeFileSync('/a/f', new Uint8Array([1])); // slow write INSIDE the soon-moved subtree
     fs.renameSync('/a', '/b');
+    fs.writeFileSync('/b/g', new Uint8Array([3])); // fast successor INTO the destination
     await fs.flush();
     const writeIdx = events.indexOf('write /a/f');
     expect(writeIdx).toBeGreaterThanOrEqual(0);
@@ -1839,6 +1841,241 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     for (const renameEvent of ['dir /b', 'write /b/f', 'rm /a'] as const) {
       expect(events.indexOf(renameEvent)).toBeGreaterThan(writeIdx);
     }
+    // After-fence: the successor write into the destination completes only
+    // after EVERY rename leg — no overtake into '/b', and no interleaving of
+    // the '/b/g' write between the rename's dir-create/file-move/rm-source
+    // steps.
+    const afterIdx = events.indexOf('write /b/g');
+    expect(afterIdx).toBeGreaterThanOrEqual(0);
+    for (const renameEvent of ['dir /b', 'write /b/f', 'rm /a'] as const) {
+      expect(events.indexOf(renameEvent)).toBeLessThan(afterIdx);
+    }
+  });
+
+  // RED on main BY DESIGN (frozen-assumption kill): main's serial FIFO admits
+  // ONE persist at a time, so with every boundary held open the in-flight
+  // peak is exactly 1 and the `> 1` half fails. Turns green when bounded
+  // parallel lanes admit unrelated ops concurrently. The `<= 16` half pins
+  // ADR-0358's ~16-lane admission ceiling FOREVER: an unbounded fan-out (one
+  // in-flight boundary per path — 24 here) can never pass this pin. Releases
+  // are schedule-agnostic: every held boundary settles only after ALL 24 ops
+  // are enqueued (macrotask, then release in entry order), so serial and
+  // parallel drains both observe fully-held boundaries deterministically.
+  it('>16 held persists on unrelated paths fan out beyond one lane but never beyond the ~16-lane ceiling', async () => {
+    const TOTAL = 24;
+    let inFlight = 0;
+    let peak = 0;
+    const releases: Array<() => void> = [];
+    // Boundary instrumentation: inc when a persist task ENTERS its
+    // surface/root call, dec when that call settles; the call itself stays
+    // HELD by a deferred until this test releases it.
+    const heldBoundary = (): Promise<void> => {
+      inFlight += 1;
+      peak = Math.max(peak, inFlight);
+      return new Promise<void>((release) => {
+        releases.push(release);
+      }).finally(() => {
+        inFlight -= 1;
+      });
+    };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => heldBoundary(),
+      rm: () => Promise.resolve(),
+    };
+    // mkdir targets + the rm target pre-exist in the FAKE so every inner call
+    // resolves once released; refreshIndex runs BEFORE the held wrappers go
+    // in and puts '/rm-target' in the mirror so rmSync accepts it.
+    const root = buildFakeRoot({
+      files: new Map([['/rm-target', { bytes: new Uint8Array([1]) }]]),
+      dirs: new Set(['/', '/d0', '/d1', '/d2', '/d3', '/d4', '/d5', '/d6', '/d7']),
+    });
+    const fs = new OpfsFsSync(root, surface);
+    await fs.refreshIndex();
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
+      (name, options) => heldBoundary().then(() => innerGetDir(name, options));
+    const innerRemove = root.removeEntry.bind(root);
+    (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = (
+      name,
+      options,
+    ) => heldBoundary().then(() => innerRemove(name, options));
+
+    // 24 ops on UNRELATED paths, MIXED kinds: 15 surface writes + 8 mkdirs
+    // (root getDirectoryHandle) + 1 rm (root removeEntry).
+    for (let i = 0; i < 8; i++) fs.writeFileSync(`/w${i}`, new Uint8Array([i]));
+    for (let i = 0; i < 8; i++) fs.mkdirSync(`/d${i}`, { recursive: true });
+    fs.rmSync('/rm-target');
+    for (let i = 8; i < 15; i++) fs.writeFileSync(`/w${i}`, new Uint8Array([i]));
+
+    // All 24 enqueued; admitted lanes now hold their boundaries open.
+    await new Promise<void>((r) => setTimeout(r, 0));
+    // Macrotask-based wait: one tick drains the full microtask chain between
+    // a release and the next boundary entry — schedule-agnostic under both a
+    // serial drain (boundaries appear one by one) and parallel lanes (up to
+    // 16 appear at once, the rest after earlier releases).
+    const waitForBoundary = async (count: number): Promise<void> => {
+      for (let tick = 0; tick < 50; tick++) {
+        if (releases.length >= count) return;
+        await new Promise<void>((r) => setTimeout(r, 0));
+      }
+      throw new Error(`Timed out waiting for persist boundary ${count}`);
+    };
+    for (let i = 0; i < TOTAL; i++) {
+      await waitForBoundary(i + 1);
+      releases[i]?.();
+    }
+    const report = await fs.flush();
+
+    expect(peak).toBeGreaterThan(1); // RED on main: serial FIFO peak === 1
+    expect(peak).toBeLessThanOrEqual(16); // ADR-0358 ceiling — unbounded fan-out can never pass
+    expect(releases.length).toBe(TOTAL);
+    expect(report.total).toBe(0);
+  });
+
+  // GREEN preservation pin (fault row a, quota-perm-fail): a quota-style
+  // per-op REJECTION stays confined to its own op — concurrent sibling
+  // persists complete at the surface, the ledger records exactly the failed
+  // path, and a later successful re-write heals it. End-state asserts only:
+  // schedule-agnostic (serial FIFO today, overlapping lanes later).
+  it("a quota-rejected write leaves both concurrent siblings to complete and heals on a later '/fail' success", async () => {
+    const completedAtSurface: string[] = [];
+    let quotaFails = true;
+    const delays: Record<string, number> = { '/fail': 10, '/sib-fast': 0, '/sib-slow': 20 };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async (path: string) => {
+        await new Promise((r) => setTimeout(r, delays[path] ?? 0));
+        if (quotaFails && path === '/fail') throw new DomError('QuotaExceededError');
+        completedAtSurface.push(path);
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/fail', new Uint8Array([1])); // rejects at ~10ms
+    fs.writeFileSync('/sib-fast', new Uint8Array([2])); // resolves ~0ms
+    fs.writeFileSync('/sib-slow', new Uint8Array([3])); // resolves ~20ms
+    const report = await fs.flush();
+    expect(completedAtSurface).toContain('/sib-fast');
+    expect(completedAtSurface).toContain('/sib-slow');
+    expect(report.total).toBe(1);
+    expect(report.failures).toEqual([
+      { path: '/fail', op: 'write', message: 'QuotaExceededError' },
+    ]);
+    expect(report.anyFailure?.((path) => path === '/fail')).toBe(true);
+
+    // Freed quota: a later successful '/fail' write heals the entry.
+    quotaFails = false;
+    fs.writeFileSync('/fail', new Uint8Array([4]));
+    expect((await fs.flush()).total).toBe(0);
+  });
+
+  // GREEN preservation pin (fault row b, quota-perm-fail heal leg) — the
+  // sequence-aware-ledger pin (opfs-sync.ts healAncestorPersistFailures /
+  // operationSequence): the '/a/f' write persist SUCCEEDS fast while the
+  // earlier '/a' mkdir persist REJECTS slowly. The child write's success
+  // proves '/a' exists on disk, so the stale ancestor mkdir failure must not
+  // survive REGARDLESS of which persist settles first. On main's FIFO
+  // (record-then-heal) this passes; a naive parallel drain that inverts to
+  // heal-then-record would leave '/a' ledgered forever.
+  it('ledger heal is sequence-ordered, not completion-ordered — a fast child write success clears a slow ancestor mkdir rejection', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
+      async (name, options) => {
+        if (name === 'a') {
+          await new Promise<void>((r) => setTimeout(r, 20));
+          throw new DomError('QuotaExceededError'); // '/a' mkdir persist: slow REJECT
+        }
+        return innerGetDir(name, options);
+      };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => Promise.resolve(), // '/a/f' write persist: resolves ~0ms
+      rm: () => Promise.resolve(),
+    };
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/a', { recursive: true });
+    fs.writeFileSync('/a/f', new Uint8Array([1]));
+    expect((await fs.flush()).total).toBe(0);
+  });
+
+  // GREEN preservation pin (fault row b, same-path leg): the LATER same-path
+  // op owns the ledger entry — write1 slow-REJECTS, write2 fast-resolves;
+  // the operationSequence guard keeps write2's success authoritative over
+  // write1's stale failure whichever settles first.
+  it('a later same-path write success owns the ledger entry over an earlier slow rejection', async () => {
+    let calls = 0;
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: async () => {
+        if (++calls === 1) {
+          await new Promise<void>((r) => setTimeout(r, 20));
+          throw new DomError('QuotaExceededError'); // write1: slow REJECT
+        }
+        // write2: resolves ~0ms
+      },
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/x', new Uint8Array([1]));
+    fs.writeFileSync('/x', new Uint8Array([2]));
+    expect((await fs.flush()).total).toBe(0);
+  });
+
+  // GREEN preservation pin (fault row e, poisoned-cache): a structural rm
+  // INVALIDATES any drain-scoped parent-dir-handle cache — the post-rm
+  // recreate must resolve '/a' FRESH from the root (a cached pre-rm handle
+  // would resurrect the deleted incarnation) and the final '/a/f' persist
+  // must carry the v2 bytes. Guards ADR-0358's structurally-invalidated
+  // cache.
+  it('a structural rm forces fresh parent resolution — recreate resolves after removeEntry and the last write carries v2', async () => {
+    const events: string[] = [];
+    const afWrites: number[][] = [];
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path: string, data: Uint8Array) => {
+        if (path === '/a/f') afWrites.push([...data]);
+        events.push(`write ${path}`);
+        return Promise.resolve();
+      },
+      rm: () => Promise.resolve(),
+    };
+    // '/a' pre-exists in the FAKE so both mkdir persists resolve; the base
+    // root's permissive removeEntry resolves fast (buildFakeRoot untouched —
+    // local delegating wrappers only log).
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a']) });
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }).getDirectoryHandle =
+      async (name, options) => {
+        const handle = await innerGetDir(name, options);
+        events.push(`dir-resolved /${name}`);
+        return handle;
+      };
+    const innerRemove = root.removeEntry.bind(root);
+    (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = async (
+      name,
+      options,
+    ) => {
+      await innerRemove(name, options);
+      events.push(`removeEntry /${name}`);
+    };
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/a', { recursive: true });
+    fs.writeFileSync('/a/f', new Uint8Array([1])); // v1
+    fs.rmSync('/a', { recursive: true });
+    fs.mkdirSync('/a', { recursive: true }); // recreate…
+    fs.writeFileSync('/a/f', new Uint8Array([2])); // …v2
+    await fs.flush();
+
+    const rmIdx = events.indexOf('removeEntry /a');
+    expect(rmIdx).toBeGreaterThanOrEqual(0);
+    // At least one '/a' dir resolution happens AFTER the removeEntry — the
+    // recreate resolved FRESH, never a served pre-rm handle.
+    expect(events.some((event, i) => event === 'dir-resolved /a' && i > rmIdx)).toBe(true);
+    expect(afWrites[afWrites.length - 1]).toEqual([2]);
   });
 });
 

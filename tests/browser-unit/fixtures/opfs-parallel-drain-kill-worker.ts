@@ -55,34 +55,100 @@ function pkgName(p: number): string {
 }
 
 /** Procedural, byte-reproducible content (~1.4 KB) — the same (p, f) always
- * yields the same bytes, so both phases and the spot verify agree exactly. */
+ * yields the same bytes, so both phases and the full-tree verify agree
+ * exactly. */
 function fileBytes(p: number, f: number): Uint8Array {
   return enc.encode(`// pd256 pkg=${p} file=${f}\n${'0123456789abcdef'.repeat(4)}\n`.repeat(16));
+}
+
+function pkgJsonBytes(p: number): Uint8Array {
+  return enc.encode(`{"name":"${pkgName(p)}","version":"1.0.0"}\n`);
 }
 
 /** Install-shaped tree: 40 pkgs × (package.json + 14 lib files) = 600 files
  * over 81 dirs (node_modules + pkg + lib each), ~850 KB total — enough queued
  * write ops that the page's terminate() provably lands with hundreds of OPFS
  * writes still in flight. */
-function writeInstallTree(fs: OpfsFsSync, root: string): { fileCount: number; spotPath: string } {
+function writeInstallTree(fs: OpfsFsSync, root: string): number {
   let fileCount = 0;
   for (let p = 0; p < PKG_COUNT; p++) {
     const pkgDir = `${root}/node_modules/${pkgName(p)}`;
     fs.mkdirSync(`${pkgDir}/lib`, { recursive: true });
-    fs.writeFileSync(
-      `${pkgDir}/package.json`,
-      enc.encode(`{"name":"${pkgName(p)}","version":"1.0.0"}\n`),
-    );
+    fs.writeFileSync(`${pkgDir}/package.json`, pkgJsonBytes(p));
     fileCount += 1;
     for (let f = 1; f < FILES_PER_PKG; f++) {
       fs.writeFileSync(`${pkgDir}/lib/f${String(f).padStart(3, '0')}.js`, fileBytes(p, f));
       fileCount += 1;
     }
   }
-  const spotPath = `${root}/node_modules/${pkgName(PKG_COUNT - 1)}/lib/f${String(
-    FILES_PER_PKG - 1,
-  ).padStart(3, '0')}.js`;
-  return { fileCount, spotPath };
+  return fileCount;
+}
+
+/** The 600-file tree SPEC, regenerated procedurally: every expected path
+ * under node_modules → exact bytes. Verification holds OPFS against THIS,
+ * never against what the writer happened to produce. */
+function expectedTree(root: string): Map<string, Uint8Array> {
+  const spec = new Map<string, Uint8Array>();
+  for (let p = 0; p < PKG_COUNT; p++) {
+    const pkgDir = `${root}/node_modules/${pkgName(p)}`;
+    spec.set(`${pkgDir}/package.json`, pkgJsonBytes(p));
+    for (let f = 1; f < FILES_PER_PKG; f++) {
+      spec.set(`${pkgDir}/lib/f${String(f).padStart(3, '0')}.js`, fileBytes(p, f));
+    }
+  }
+  return spec;
+}
+
+/** Every FILE path under `dir`, recursively, through the given surface. */
+async function listFiles(vfs: OpfsVfs, dir: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await vfs.readdir(dir)) {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory) files.push(...(await listFiles(vfs, path)));
+    else files.push(path);
+  }
+  return files;
+}
+
+/** FULL-TREE proof (#256 fault row c): a spot check could bless a partially
+ * drained tree, so the whole node_modules namespace is enumerated and held
+ * against the regenerated spec — exact path set, exact size, exact bytes,
+ * all 600 files. The trusted stamp is the authority's own artifact inside
+ * the tree dir, not tree content (install-stamp.ts isStampedTreeDamage) —
+ * it is excluded from the path set. */
+async function verifyFullTree(
+  vfs: OpfsVfs,
+  root: string,
+): Promise<{ verified: boolean; files: number; firstMismatch: string | null }> {
+  const spec = expectedTree(root);
+  const stampPath = installStampPath(root);
+  const found = (await listFiles(vfs, `${root}/node_modules`)).filter(
+    (path) => path !== stampPath,
+  );
+  const foundSet = new Set(found);
+  let firstMismatch: string | null = null;
+  for (const path of found) {
+    if (!spec.has(path)) {
+      firstMismatch = `unexpected: ${path}`;
+      break;
+    }
+  }
+  for (const path of spec.keys()) {
+    if (firstMismatch) break;
+    if (!foundSet.has(path)) firstMismatch = `missing: ${path}`;
+  }
+  for (const [path, expected] of spec) {
+    if (firstMismatch) break;
+    const actual = await vfs.readFile(path).catch(() => null);
+    if (actual === null) firstMismatch = `unreadable: ${path}`;
+    else if (actual.byteLength !== expected.byteLength)
+      firstMismatch = `size: ${path} got=${actual.byteLength} want=${expected.byteLength}`;
+    else {
+      const at = actual.findIndex((byte, index) => byte !== expected[index]);
+      if (at !== -1) firstMismatch = `bytes: ${path} @${at}`;
+    }
+  }
+  return { verified: firstMismatch === null, files: found.length, firstMismatch };
 }
 
 /** The boot path's OWN reuse gate, verbatim predicate from
@@ -130,7 +196,7 @@ async function runKillRun(ns: string): Promise<{
   if (!fs.existsSync(installStampPath(root))) {
     throw new Error('demote did not materialize the pending stamp (write accounting broken)');
   }
-  const { fileCount } = writeInstallTree(fs, root);
+  const fileCount = writeInstallTree(fs, root);
 
   const promotion = stamps.promote(
     { root, slug: SLUG, packageJsonText: PACKAGE_JSON },
@@ -153,14 +219,17 @@ async function runKillRun(ns: string): Promise<{
 /** Phase 2: a FRESH realm over the torn OPFS. FIRST the boot path's own
  * check must refuse the stamp (pending or torn — never trusted); then the
  * FULL install sequence re-runs to conclusion and must end trusted with a
- * clean ledger and a byte-exact deep file through a fresh OpfsVfs. */
+ * clean ledger and a FULL-TREE byte-exact verify through a fresh OpfsVfs
+ * (every path, every size, every byte vs the regenerated spec). */
 async function runVerifyRetry(ns: string): Promise<{
   readonly preTrusted: boolean;
   readonly preCheckStatus: string;
   readonly promoteStatus: string;
   readonly postTrusted: boolean;
   readonly reportTotal: number;
-  readonly spotByteVerified: boolean;
+  readonly treeVerified: boolean;
+  readonly treeFiles: number;
+  readonly treeFirstMismatch: string | null;
 }> {
   const root = `${ns}/project`;
   const surface = new OpfsVfs();
@@ -174,7 +243,7 @@ async function runVerifyRetry(ns: string): Promise<{
   const claim = await stamps.demote({ root, slug: SLUG });
   fs.mkdirSync(`${root}/node_modules`, { recursive: true });
   fs.writeFileSync(`${root}/package.json`, enc.encode(PACKAGE_JSON));
-  const { spotPath } = writeInstallTree(fs, root);
+  writeInstallTree(fs, root);
   const promotion = await stamps.promote(
     { root, slug: SLUG, packageJsonText: PACKAGE_JSON },
     { epoch: claim.epoch, packages: PKG_COUNT, flush: () => fs.flush() },
@@ -185,12 +254,7 @@ async function runVerifyRetry(ns: string): Promise<{
   // Durability proven through a FRESH surface, never the writing one.
   const reopened = new OpfsVfs();
   await reopened.init();
-  const bytes = await reopened.readFile(spotPath).catch(() => null);
-  const expected = fileBytes(PKG_COUNT - 1, FILES_PER_PKG - 1);
-  const spotByteVerified =
-    bytes !== null &&
-    bytes.byteLength === expected.byteLength &&
-    bytes.every((byte, index) => byte === expected[index]);
+  const tree = await verifyFullTree(reopened, root);
 
   const storage = (
     navigator as unknown as { storage: { getDirectory(): Promise<FileSystemDirectoryHandle> } }
@@ -204,7 +268,9 @@ async function runVerifyRetry(ns: string): Promise<{
     promoteStatus: promotion.status,
     postTrusted: post.trusted,
     reportTotal: report.total,
-    spotByteVerified,
+    treeVerified: tree.verified,
+    treeFiles: tree.files,
+    treeFirstMismatch: tree.firstMismatch,
   };
 }
 
