@@ -44,6 +44,11 @@
 import { NotImplementedError, VfsError } from './errors.ts';
 import type { FsSync } from './fs-sync.ts';
 import {
+  OpfsDrainScheduler,
+  PERSIST_OPERATION_REPORT_TIMEOUT_MS,
+  type PersistOperation,
+} from './opfs-drain-scheduler.ts';
+import {
   basename,
   basenameNormalized,
   dirname,
@@ -96,7 +101,7 @@ export interface PersistFailure {
   readonly message: string;
 }
 
-/** {@link OpfsFsSync.flush} result (ADR-0187 Corrected): the still-unhealed
+/** {@link OpfsFsSync.flush} result (ADR-0358, carried from ADR-0187): the still-unhealed
  * persist failures. `failures` is a SAMPLE (first {@link
  * PERSIST_REPORT_SAMPLE} by ledger order); `total` is the full count —
  * `total === 0` ⇔ everything drained IS durable. Every counted path stays
@@ -121,28 +126,6 @@ export interface PersistFailureReport {
  * report) would make over-cap failures unhealable — `total` could then never
  * return to 0 after a big quota event. */
 const PERSIST_REPORT_SAMPLE = 20;
-
-/**
- * Reporting bound for one active OPFS side effect. FIFO queue wait is not I/O
- * time. The browser operation itself cannot be cancelled and remains on the
- * FIFO tail; only `flush()` reporting is released so durability callers fail
- * loudly instead of hanging.
- */
-const PERSIST_OPERATION_REPORT_TIMEOUT_MS = 30_000;
-
-interface PersistOperation {
-  readonly paths: readonly string[];
-  readonly op: PersistFailure['op'];
-  readonly sequence: number;
-}
-
-interface PendingPersistOperation {
-  readonly operation: PersistOperation;
-  phase: 'queued' | 'active';
-  reporting: Promise<void>;
-  reportingSettled: boolean;
-  settleReporting: () => void;
-}
 
 interface TrackedPersistFailure {
   readonly failure: PersistFailure;
@@ -205,14 +188,30 @@ export class OpfsFsSync implements FsSync {
    * async write-through.
    */
   private readonly content = new Map<string, Uint8Array>();
-  /** Queued/active OPFS side effects, keyed by FIFO sequence for flush watermarks. */
-  private readonly pending = new Map<number, PendingPersistOperation>();
-  /** Serialises OPFS side effects so durable state follows sync call order. */
-  private pendingTail: Promise<void> = Promise.resolve();
-  /** Real FIFO tail ownership; independent of bounded reporting entries. */
-  private pendingTailActive = false;
-  /** Active uncancellable operation whose watchdog already released reporting. */
-  private timedOutHead: PersistOperation | null = null;
+  /**
+   * ADR-0358 bounded per-path parallel drain: lane scheduler (same-path
+   * order, ancestor gating, structural subtree fences, per-lane watchdog) +
+   * its drain-scoped dir-handle cache. The ledger stays HERE (single ledger
+   * owner); the scheduler reports timeouts/blocked fences via these hooks.
+   */
+  private readonly scheduler = new OpfsDrainScheduler({
+    onReportTimeout: (operation) => {
+      this.recordOperationFailure(
+        operation,
+        new Error(
+          `OPFS ${operation.op} did not settle within ${PERSIST_OPERATION_REPORT_TIMEOUT_MS}ms`,
+        ),
+      );
+    },
+    onBlockedBehindTimeout: (operation, blocker) => {
+      this.recordOperationFailure(
+        operation,
+        new Error(
+          `OPFS ${operation.op} blocked behind timed out ${blocker.op} ${blocker.paths[0] ?? '/'}`,
+        ),
+      );
+    },
+  });
   /**
    * Paired async OPFS surface used for content write-through, content
    * preload, and durable file-bearing structural moves/deletes. `null` when
@@ -340,15 +339,23 @@ export class OpfsFsSync implements FsSync {
     return dir;
   }
 
+  /** Drain-task sibling of {@link resolveParent} through the drain-scoped
+   * dir-handle cache (ADR-0358). Persist tasks only — `ensureHandle`'s
+   * pre-warm path stays uncached (it runs outside any drain lifetime). */
+  private resolveParentCached(path: string): Promise<FileSystemDirectoryHandle> {
+    return this.scheduler.dirHandles.resolveDir(this.root, segments(dirname(path)), () => false);
+  }
+
   private async persistDirectoryPath(path: string, recursive: boolean): Promise<void> {
     const parts = segments(path);
-    let dir: FileSystemDirectoryHandle = this.root;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i] as string;
-      dir = await dir.getDirectoryHandle(part, {
-        create: recursive || i === parts.length - 1,
-      });
-    }
+    // reuse:false — a create-chain must hit the live tree like main's fresh
+    // walk (row-f differential); it still re-populates the cache.
+    await this.scheduler.dirHandles.resolveDir(
+      this.root,
+      parts,
+      (index) => recursive || index === parts.length - 1,
+      false,
+    );
   }
 
   /**
@@ -460,7 +467,25 @@ export class OpfsFsSync implements FsSync {
    * ({@link flush} reports them); the next `refreshIndex` reconciles disk.
    */
   private persistMkdirAsync(path: string, recursive: boolean): void {
-    this.enqueuePending({ paths: [path], op: 'mkdir' }, async (operation) => {
+    // Scope = the WHOLE chain this persist may create ('/a','/a/b','/a/b/c'
+    // for a recursive mkdir), never just the leaf: a later '/a/f' write's
+    // ancestor walk must find '/a' in the scheduler registry or it races the
+    // chain create — OpfsVfs.writeFile resolves parents with create:false →
+    // NotFoundError → torn tree (ADR-0358 ancestor gating). Non-recursive
+    // creates only the leaf (parents pre-exist), so its scope stays the leaf.
+    let paths: readonly string[];
+    if (recursive) {
+      const chain: string[] = [];
+      let prefix = '';
+      for (const part of segments(path)) {
+        prefix = `${prefix}/${part}`;
+        chain.push(prefix);
+      }
+      paths = chain;
+    } else {
+      paths = [path];
+    }
+    this.enqueuePending({ paths, op: 'mkdir' }, async (operation) => {
       try {
         await this.persistDirectoryPath(path, recursive);
         this.healPersistFailure(path, operation.sequence);
@@ -485,7 +510,7 @@ export class OpfsFsSync implements FsSync {
   private persistRmAsync(path: string, recursive: boolean): void {
     this.enqueuePending({ paths: [path], op: 'rm' }, async (operation) => {
       try {
-        const parent = await this.resolveParent(path);
+        const parent = await this.resolveParentCached(path);
         await parent.removeEntry(basename(path), { recursive });
         // A durably-removed subtree heals EVERY ledger entry under it: disk
         // and mirror now agree the paths are gone, so an unhealed child write
@@ -651,7 +676,6 @@ export class OpfsFsSync implements FsSync {
    * a big quota event); only the REPORT is sampled.
    */
   private readonly persistFailures = new Map<string, TrackedPersistFailure>();
-  private persistOperationSequence = 0;
 
   private recordPersistFailure(
     path: string,
@@ -675,109 +699,24 @@ export class OpfsFsSync implements FsSync {
     }
   }
 
-  private resetPendingReporting(pending: PendingPersistOperation): void {
-    pending.reportingSettled = false;
-    pending.reporting = new Promise<void>((resolve) => {
-      pending.settleReporting = () => {
-        if (pending.reportingSettled) return;
-        pending.reportingSettled = true;
-        resolve();
-      };
-    });
-  }
-
   private recordOperationFailure(operation: PersistOperation, err: unknown): void {
     for (const path of operation.paths) {
       this.recordPersistFailure(path, operation.op, err, operation.sequence);
     }
   }
 
-  private reportBlockedPending(pending: PendingPersistOperation, blocker: PersistOperation): void {
-    if (pending.phase !== 'queued') return;
-    const blockerPath = blocker.paths[0] ?? '/';
-    this.recordOperationFailure(
-      pending.operation,
-      new Error(
-        `OPFS ${pending.operation.op} blocked behind timed out FIFO predecessor ` +
-          `${blocker.op} ${blockerPath}`,
-      ),
-    );
-    pending.settleReporting();
-  }
-
-  private async runPending(
-    pending: PendingPersistOperation,
-    task: (operation: PersistOperation) => Promise<void>,
-  ): Promise<void> {
-    // A predecessor timeout may already have released this queued operation's
-    // reporting promise. Once it becomes active, future flushes receive a new
-    // active-I/O barrier; earlier flushes keep their bounded dirty result.
-    if (pending.reportingSettled) this.resetPendingReporting(pending);
-    pending.phase = 'active';
-    const { operation } = pending;
-    const timer = setTimeout(() => {
-      this.recordOperationFailure(
-        operation,
-        new Error(
-          `OPFS ${operation.op} did not settle within ${PERSIST_OPERATION_REPORT_TIMEOUT_MS}ms`,
-        ),
-      );
-      this.timedOutHead = operation;
-      pending.settleReporting();
-      for (const queued of this.pending.values()) {
-        if (queued.operation.sequence > operation.sequence) {
-          this.reportBlockedPending(queued, operation);
-        }
-      }
-    }, PERSIST_OPERATION_REPORT_TIMEOUT_MS);
-
-    try {
-      await task(operation);
-    } finally {
-      clearTimeout(timer);
-      pending.settleReporting();
-      this.pending.delete(operation.sequence);
-      if (this.timedOutHead?.sequence === operation.sequence) this.timedOutHead = null;
-    }
-  }
-
   private enqueuePending(
-    operation: Omit<PersistOperation, 'sequence'>,
+    operation: { readonly paths: readonly string[]; readonly op: PersistFailure['op'] },
     task: (operation: PersistOperation) => Promise<void>,
   ): void {
-    // FIFO is load-bearing (ADR-0187 Corrected): the install stamp's "durable
-    // stamp implies durable tree" is delivered by write-through ORDER plus the
-    // persist-failure ledger gate (order alone can't survive a swallowed
-    // per-op failure). Parallelizing this queue requires per-path ordering +
-    // an explicit stamp barrier (tripwire: the FIFO pin in opfs-sync.test.ts).
-    // Chain from the REAL operation tail. The first task still starts
-    // synchronously so it captures its already-defensively-copied bytes before
-    // the caller can reuse a buffer. Timed-out records stay tracked until the
-    // real operation settles; `pendingTailActive`, not reporting state,
-    // therefore owns FIFO admission.
-    const sequenced: PersistOperation = {
-      ...operation,
-      sequence: ++this.persistOperationSequence,
-    };
-    const pending: PendingPersistOperation = {
-      operation: sequenced,
-      phase: 'queued',
-      reporting: Promise.resolve(),
-      reportingSettled: true,
-      settleReporting: () => {},
-    };
-    this.resetPendingReporting(pending);
-    this.pending.set(sequenced.sequence, pending);
-    if (this.timedOutHead) this.reportBlockedPending(pending, this.timedOutHead);
-
-    const run = () => this.runPending(pending, task);
-    const p = this.pendingTailActive ? this.pendingTail.then(run, run) : run();
-    this.pendingTailActive = true;
-    const tail = p.catch(() => {});
-    this.pendingTail = tail;
-    void tail.finally(() => {
-      if (this.pendingTail === tail) this.pendingTailActive = false;
-    });
+    // ADR-0358: bounded per-path parallel lanes replace the ADR-0187 global
+    // FIFO. Same-path order, ancestor-chain gating and rm/rename subtree
+    // fences live in the scheduler; "durable stamp implies durable tree" is
+    // delivered by the install stamp's explicit full {@link fence} plus the
+    // persist-failure ledger gate. A ready op still starts SYNCHRONOUSLY so
+    // it captures its already-defensively-copied bytes before the caller can
+    // reuse a buffer.
+    this.scheduler.enqueue(operation.op, operation.paths, task);
   }
 
   /**
@@ -785,17 +724,17 @@ export class OpfsFsSync implements FsSync {
    * (ADR-0072). Callers invoke this before a deterministic boundary —
    * e.g. the runtime worker awaits it before resolving an `eval` result so
    * persistence completes before any page reload. Never rejects — instead it
-   * RETURNS the persist-failure ledger (ADR-0187 Corrected): paths where OPFS
-   * still lags the mirror because their last persist attempt failed. Callers
-   * that only order writes ignore the result; callers that PROMISE durability
-   * (the install stamp) gate on `report.total === 0`.
+   * RETURNS the persist-failure ledger (ADR-0358, carried from ADR-0187):
+   * paths where OPFS still lags the mirror because their last persist attempt
+   * failed. Callers that only order writes ignore the result; callers that
+   * PROMISE durability (the install stamp) gate on `report.total === 0`.
+   * Bounded: a timed-out lane releases its own reporting without settling,
+   * AND once any lane holder times out, capacity-starved queued ops get
+   * bounded blocked reporting too (healed on later success) — so flush()
+   * resolves even when every lane is wedged.
    */
   async flush(): Promise<PersistFailureReport> {
-    const watermark = this.persistOperationSequence;
-    const reporting = [...this.pending.values()]
-      .filter(({ operation }) => operation.sequence <= watermark)
-      .map((pending) => pending.reporting);
-    await Promise.allSettled(reporting);
+    await this.scheduler.reportingBarrier();
     const failures: PersistFailure[] = [];
     for (const tracked of this.persistFailures.values()) {
       if (failures.length >= PERSIST_REPORT_SAMPLE) break;
@@ -813,6 +752,17 @@ export class OpfsFsSync implements FsSync {
         return false;
       },
     };
+  }
+
+  /**
+   * ADR-0358 stamp full fence: resolves once EVERY persist op enqueued before
+   * this call has REALLY settled (success or failure) — cap-queued ops and
+   * ops past their report timeout included. {@link flush}'s bounded reporting
+   * is NOT this barrier. Never rejects. Caller: install-stamp `promote()`,
+   * immediately before its trusted-stamp write (one per transition).
+   */
+  fence(): Promise<void> {
+    return this.scheduler.settledBarrier();
   }
 
   /**
@@ -1185,7 +1135,7 @@ export class OpfsFsSync implements FsSync {
             if (surface) {
               await surface.rm(srcRoot, { recursive: true });
             } else {
-              const parent = await this.resolveParent(srcRoot);
+              const parent = await this.resolveParentCached(srcRoot);
               await parent.removeEntry(basename(srcRoot), { recursive: true });
             }
           } catch (err) {

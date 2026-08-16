@@ -77,6 +77,8 @@ export interface OwnerVfsAuthority extends FsSync {
   /** Preflight actual absolute ingress targets before any batch mutation. */
   assertPortablePaths(paths: readonly string[]): void;
   flush(): Promise<PersistFailureReport | undefined>;
+  /** ADR-0358 stamp full fence — delegates to the sync mirror when it has one. */
+  fence?(): Promise<void>;
 }
 
 export interface OwnerVfsAuthorityComposition {
@@ -92,6 +94,7 @@ interface OwnerVfsCompositionCapabilities {
 
 interface FlushableFsSync extends FsSync {
   flush?: () => Promise<PersistFailureReport | undefined>;
+  fence?: () => Promise<void>;
 }
 
 function normalizeOwnerPath(path: string): string {
@@ -214,6 +217,11 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   async flush(): Promise<PersistFailureReport | undefined> {
     const flush = (this.#fs as FlushableFsSync).flush;
     return typeof flush === 'function' ? await flush.call(this.#fs) : undefined;
+  }
+
+  async fence(): Promise<void> {
+    const fence = (this.#fs as FlushableFsSync).fence;
+    if (typeof fence === 'function') await fence.call(this.#fs);
   }
 
   writeFileSync(path: string, data: Uint8Array): void {

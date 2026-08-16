@@ -123,20 +123,15 @@ export type InstallStampAuthoritySyncFs = Pick<
   'existsSync' | 'readFileBytesSync' | 'writeFileSync' | 'mkdirSync' | 'rmSync'
 >;
 
-export class InstallStampAuthorityError extends Error {
-  readonly code:
-    | 'INSTALL_STAMP_DEMOTE_UNPROVEN'
-    | 'INSTALL_STAMP_MUTATION_CLAIM_STALE'
-    | 'INSTALL_STAMP_REVOKE_UNPROVEN';
+type InstallStampAuthorityErrorCode =
+  | 'INSTALL_STAMP_DEMOTE_UNPROVEN'
+  | 'INSTALL_STAMP_MUTATION_CLAIM_STALE'
+  | 'INSTALL_STAMP_REVOKE_UNPROVEN';
 
-  constructor(
-    code:
-      | 'INSTALL_STAMP_DEMOTE_UNPROVEN'
-      | 'INSTALL_STAMP_MUTATION_CLAIM_STALE'
-      | 'INSTALL_STAMP_REVOKE_UNPROVEN',
-    message: string,
-    options?: ErrorOptions,
-  ) {
+export class InstallStampAuthorityError extends Error {
+  readonly code: InstallStampAuthorityErrorCode;
+
+  constructor(code: InstallStampAuthorityErrorCode, message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'InstallStampAuthorityError';
     this.code = code;
@@ -771,6 +766,11 @@ export function createInstallStampAuthority(options: {
         packages,
         lockfileBytes === null ? undefined : sha256Hex(lockfileBytes),
       );
+      // ADR-0358 stamp full fence (one per trusted transition): all earlier
+      // persists REALLY settle. Fence→write microtask window: guarded scope
+      // demotes the epoch; closure = trusted-state-authority Contract+RED.
+      const fence = (io.fsSync as { fence?: () => Promise<void> } | undefined)?.fence;
+      if (typeof fence === 'function') await fence.call(io.fsSync);
       try {
         await writeRawStamp(io, identity.root, stamp, false);
       } catch (error) {

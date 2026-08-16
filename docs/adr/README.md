@@ -17,6 +17,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0090 | VFS sync `copyFileSync`/`cpSync`/`renameSync` primitives for shell `cp`/`mv` |
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
 | 0276 | Semantic VFS replacements use applied owner evidence |
+| 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
 
 ### kernel
 
@@ -180,7 +181,6 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0174 | Run vite through installed bin |
 | 0184 | Hoist commit-refusal classifier to git facade |
 | 0185 | Owner-backed SCM and file-manager bridges |
-| 0187 | Install-stamp durability via write-through FIFO order plus verified stamps |
 | 0243 | Visible Vite config ownership via durable root-local seed claim |
 | 0261 | Root-bound serialized install trust claims and non-transferable claim ingress |
 | 0281 | Cmd+S is a workspace durability barrier |
@@ -326,6 +326,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0332 | 0340 | output admission/drain retained; authenticated cross-port write order added |
 | 0337 | 0338 | raw trace retained; permissive comparator replaced by exact one-axis native resize steps |
 | 0310 | 0344 | Pattern-1 carrier retained; impossible generic unproven-surface gap replaced by finite positive claims and RED-first specific gaps |
+| 0187 | 0358 | FIFO-order write-through contract falls to per-path lanes + ancestor fencing + explicit stamp fence; pending boot stamps, checked drains, persist-failure ledger, background command site (per 0216/0261) grafted |
 
 ## Corrections (active)
 
@@ -410,10 +411,10 @@ superseded.
 | 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
 | 0090 H1/checklist drift | 0185 / note 2026-06-29 | filename/index `0090` is authoritative despite the body H1 typo; VFS primitives shipped earlier, and playground rename now uses `renameSync` instead of `copyTree`+`rm`; `vfs/native-renamesync` backlog item removed |
-| 0187 "durable stamp implies durable tree by FIFO order alone" clause | 0187 note 2026-07-04 | per-op persist failures were swallowed; `OpfsFsSync.flush()` now returns a persist-failure ledger report; the visible `npm install` gates the stamp on a clean drain, the boot/restore stamp stays non-blocking by writing an untrusted pending stamp and promoting it only after a clean deferred drain |
 | 0195 rejected "client-persisted dep-set→hash map" | 0194 §8 | learned pins implement it — a new project in the same profile has no stamp (measured 2026-07-02: full origin POST vs ~0 browser-cache GET); TTL + the same verification gates keep staleness safe |
 | 0182 launch speed quote | 0182 note 2026-07-07 | production `auto` browser benchmark is 1.88x; the older ~6x remains only the Node/sandbox model, and h2/h3 claims stay gated by the transport-matrix item |
-| 0187 command-site "returns only when durable" clause | 0261 | `npm install` exit no longer awaits the drain; one stamp authority fences mutation and promotes in background (every other 0187 clause stands) |
+| 0261 "0187 persist-ledger/checked-drain/FIFO/pending-boot rules stand" scope note | 0358 / note 2026-08-15 | ADR-0187 fully superseded; the FIFO clause falls to per-path lanes + explicit stamp fence; ledger, checked-drain, and pending-boot rules continue in 0358 |
+| 0261 whole-tree-rename "removal-before-rename via write-through FIFO" proof | 0358 / note 2026-08-16 | the ordering proof now rides ADR-0358's structural subtree fences (rm/rename fence pins); the removal-before-rename conclusion stands, only its mechanism changed |
 | 0194 §8 learned-pin 30-min hard-TTL clause | 0261 | freshness is SWR: fresh <1800s, stale from 1800s to <24h, dropped at 24h |
 | 0261 every copied project reinstalls consequence | 0329 | ordinary copies stay untrusted; authority-mediated destructive Save rebinds exact trust after destination proof |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |
