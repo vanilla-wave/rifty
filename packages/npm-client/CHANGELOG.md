@@ -96,6 +96,10 @@
 
 ### Fixed
 
+- npm-authored lockfile replay now traverses entry `optionalDependencies` and
+  lock-pinned `peerDependencies`, applies the shared CPU admission gate, and
+  rejects unreached lock entries before publishing install success.
+
 - Registry-backed shadow recipes now reject dependency/bundle projection drift
   before acquisition and validate bundled manifests at the shared fresh,
   replay, and Eddy extraction ingress.

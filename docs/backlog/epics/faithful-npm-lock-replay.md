@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Faithful npm-authored lockfile replay
 created: 2026-08-16
 value: A host seeding a package-lock.json written by real npm gets the same node_modules tree npm would build (minus loud cpu-gated natives) — never a silently thinner one discovered at first build or first page load
@@ -52,8 +52,7 @@ sandbox — GitHub issues #254, #261 (repro commands + observed outputs in both)
 
 ## Invariants
 
-<!-- Drafted at fit time from #254/#261 evidence; user signoff pending
-     (`invariants-signoff:` in §Decisions). Each checked false on main
+<!-- Drafted at fit time from #254/#261 evidence; each checked false on main
      2026-08-16: #254 repro → tree has rolldown + @rolldown/pluginutils only,
      build dies "Cannot find native binding"; #261 repro → 1 of 6 lock packages
      materializes, page load dies on bare specifier; unreached entries today
@@ -97,3 +96,10 @@ sandbox — GitHub issues #254, #261 (repro commands + observed outputs in both)
 | optional-replay | 30–120 |
 | peer-replay | 40–150 |
 | unreached-gate | 20–80 |
+
+## Decisions
+
+- invariants-signoff: 2026-08-17 — user
+- The loopback-registry oracle in
+  `npm-client/reference/npm-11-lockfile-replay-probe.md` pins npm 11.17.0 on
+  Node 24.16.0 and confirms the entry-level optional/peer carriers.

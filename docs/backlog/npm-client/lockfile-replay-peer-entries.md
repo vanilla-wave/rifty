@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Lockfile replay traverses peerDependencies when the lock pins the entry
 created: 2026-08-16
 why: npm ≥7 auto-installs peers and records them as root lock entries reachable only via peerDependencies; the replay walk never reads that map, so entries present in the lock silently never reach the tree (issue #261)
@@ -87,10 +87,9 @@ disappear, the SDK module loads.
 
 ## Reference contract
 
-- Oracle: npm 11.x on Node 24.x — pinned by a committed loopback-registry
-  probe at pickup (pattern:
-  `docs/backlog/npm-client/reference/npm-11-peer-placement-probe.md`); #261
-  outputs above are observed evidence, not yet version-pinned.
+- Oracle: npm 11.17.0 on Node 24.16.0 — pinned by the committed loopback-
+  registry probe `docs/backlog/npm-client/reference/npm-11-lockfile-replay-probe.md`;
+  #261 outputs above remain the real-package motivation.
 - Mechanism: npm arborist — peers are physical lock entries; replay installs
   them like any entry.
 
@@ -133,6 +132,7 @@ disappear, the SDK module loads.
 
 ## Decisions
 
+- ready-verdict: 2026-08-17 — Contract+RED @ 1ce0fd6cc97a8543c880db3fb77eacabd74e5866
 - Presence-in-lock is the sole trigger: replay makes no version/placement
   decisions, so this item cannot conflict with the future live peer authority —
   when that lands, its locks replay through this same path.

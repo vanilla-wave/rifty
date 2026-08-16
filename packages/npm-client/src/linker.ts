@@ -308,6 +308,8 @@ export interface LockfileEntry {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  cpu?: string[];
+  os?: string[];
   bundleDependencies?: string[];
   inBundle?: boolean;
   bin?: string | Record<string, string>;
@@ -326,6 +328,9 @@ type LockfilePackage = ResolvedPackage & {
   resolved?: string;
   integrity?: string;
   peerDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  cpu?: string[];
+  os?: string[];
 };
 
 export interface RootLockfileDependencyMaps {
@@ -395,9 +400,14 @@ function buildPreparedLockfile(
     if (p.resolved) entry.resolved = p.resolved;
     if (p.integrity) entry.integrity = p.integrity;
     if (p.bin) entry.bin = p.bin;
+    if (p.optionalDependencies && Object.keys(p.optionalDependencies).length > 0) {
+      entry.optionalDependencies = p.optionalDependencies;
+    }
     if (p.peerDependencies && Object.keys(p.peerDependencies).length > 0) {
       entry.peerDependencies = p.peerDependencies;
     }
+    if (p.cpu !== undefined) entry.cpu = p.cpu;
+    if (p.os !== undefined) entry.os = p.os;
     // Key by installPath so npm's resolver (and the lockfile fast-path)
     // can distinguish a nested copy from its flat counterpart.
     lf.packages[relativePath] = entry;

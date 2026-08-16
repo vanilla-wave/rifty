@@ -45,6 +45,7 @@ async function makeEntry(
   name: string,
   version: string,
   dependencies: Record<string, string> = {},
+  extra: Partial<VersionManifest> = {},
 ): Promise<FakeRegistryEntry> {
   return {
     manifest: {
@@ -52,6 +53,7 @@ async function makeEntry(
       version,
       dependencies,
       dist: { tarball: `fake://${name}/${version}` },
+      ...extra,
     },
     tarball: await makePackageTarball(name, version),
   };
@@ -1042,5 +1044,172 @@ describe('install — lockfile fast path rejects malformed entries (EBROKENLOCK)
     expect(err.code).toBe('EBROKENLOCK');
     expect(err.reason).toBe('malformed-entry');
     expect(err.message).toContain('resolved');
+  });
+});
+
+describe('install — npm-authored lockfile replay', () => {
+  it('replays entry optionalDependencies, applies the shared cpu gate, and preserves skipped pins', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'app',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'app',
+            '1.0.0',
+            {},
+            {
+              optionalDependencies: { wasm: '1.0.0', native: '1.0.0' },
+            },
+          ),
+        ],
+      ]),
+    );
+    db.set('wasm', new Map([['1.0.0', await makeEntry('wasm', '1.0.0', {}, { cpu: ['wasm32'] })]]));
+    db.set('native', new Map([['1.0.0', await makeEntry('native', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { app: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    );
+
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
+      packages: Record<string, Record<string, unknown>>;
+    };
+    lock.packages['node_modules/app']!.optionalDependencies = {
+      wasm: '1.0.0',
+      native: '1.0.0',
+    };
+    lock.packages['node_modules/wasm']!.cpu = ['wasm32'];
+    lock.packages['node_modules/native']!.cpu = ['x64'];
+    await vfs.writeFile(lockPath, JSON.stringify(lock));
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const replay = await install(
+        'root',
+        '1.0.0',
+        { app: '1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry: new CountingFakeRegistry(db),
+        },
+      );
+
+      expect(replay.packages.map(({ name }) => name).sort()).toEqual(['app', 'wasm']);
+      expect(replay.lockfile.packages['node_modules/app']?.optionalDependencies).toEqual({
+        wasm: '1.0.0',
+        native: '1.0.0',
+      });
+      expect(replay.lockfile.packages['node_modules/native']?.cpu).toEqual(['x64']);
+      expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+        expect.stringContaining('skipped optional native dependency native@1.0.0'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('traverses a peer only when the lockfile pins the peer entry', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'plugin',
+      new Map([
+        ['1.0.0', await makeEntry('plugin', '1.0.0', {}, { peerDependencies: { host: '1.0.0' } })],
+      ]),
+    );
+    db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { plugin: '1.0.0', host: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    );
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
+      packages: Record<string, { dependencies?: Record<string, string> }>;
+    };
+    lock.packages['']!.dependencies = { plugin: '1.0.0' };
+    await vfs.writeFile(lockPath, JSON.stringify(lock));
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const replay = await install(
+        'root',
+        '1.0.0',
+        { plugin: '1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry: new CountingFakeRegistry(db),
+        },
+      );
+
+      expect(replay.packages.map(({ name }) => name).sort()).toEqual(['host', 'plugin']);
+      expect(warn.mock.calls.map(([message]) => String(message))).not.toContainEqual(
+        expect.stringContaining('peer dependency host@1.0.0 required but not installed'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('fails before lockfile rewrite when a lock entry is unreachable', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('app', new Map([['1.0.0', await makeEntry('app', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install(
+      'root',
+      '1.0.0',
+      { app: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    );
+
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const before = await vfs.readFileText(lockPath);
+    const lock = JSON.parse(before) as {
+      packages: Record<string, Record<string, unknown>>;
+    };
+    lock.packages['node_modules/orphan'] = { ...lock.packages['node_modules/app'] };
+    await vfs.writeFile(lockPath, JSON.stringify(lock));
+    const mutated = await vfs.readFileText(lockPath);
+
+    const err = await install(
+      'root',
+      '1.0.0',
+      { app: '1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new CountingFakeRegistry(db),
+      },
+    ).catch((error: unknown) => error as Error & { code?: string; reason?: string });
+
+    expect(err).toMatchObject({ code: 'EBROKENLOCK', reason: 'unreached-entries' });
+    expect((err as Error).message).toContain('node_modules/orphan');
+    expect(await vfs.readFileText(lockPath)).toBe(mutated);
   });
 });

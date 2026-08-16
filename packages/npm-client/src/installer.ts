@@ -67,6 +67,20 @@ import {
   readExistingLockfile,
   writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
+import {
+  type LockfileReplayAccounting,
+  assertLockfileReplayCoverage,
+  assertNativeSupported,
+  createLockfileReplayAccounting,
+  lockfileRootMatchesRequest,
+  lockfileStringArray,
+  lockfileStringMap,
+  preserveSkippedLockfileEntries,
+  recordReplayReached,
+  recordReplaySkippedError,
+  recordReplaySkippedPin,
+  warnOptional,
+} from './installer-lockfile-replay.ts';
 import { assertShadowRecipeAdmission } from './internal/shadow/admission.ts';
 import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
 import {
@@ -288,12 +302,16 @@ type PinnedPackage = ResolvedPackage & {
   resolved?: string;
   integrity?: string;
   peerDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  cpu?: string[];
+  os?: string[];
   installPath: string;
 };
 
 interface WalkAndPinResult {
   readonly packages: Map<string, PinnedPackage>;
   readonly companionOnlyBinInstallPaths: ReadonlySet<string>;
+  readonly replayAccounting: LockfileReplayAccounting;
 }
 
 interface PinnedShadowState {
@@ -361,10 +379,10 @@ interface ResolvedPin {
   readonly dependencies: Record<string, string>;
   readonly bin?: string | Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
-  /** Live-resolve only. The lockfile source returns `{}`: at write time,
-   * succeeding optionals were folded into `dependencies` and failures dropped,
-   * so there's nothing to re-traverse. */
+  /** Optional dependency edges. Lockfile replay reads npm-authored entries. */
   readonly optionalDependencies: Record<string, string>;
+  readonly cpu?: string[];
+  readonly os?: string[];
   /** Preferred recorded install path (lockfile-source only). The mixed walk
    *  may relocate it when another identity owns that path. */
   readonly installPath?: string;
@@ -432,6 +450,7 @@ interface ResolveContext {
 interface ResolutionSource {
   resolve(name: string, range: string | null, ctx: ResolveContext): Promise<ResolvedPin>;
   prefetch?(name: string, range: string | null, ctx: ResolveContext): void;
+  hasLockEntry?(name: string, ctx: ResolveContext): boolean;
 }
 
 export async function install(opts: InstallOptions): Promise<InstallResult>;
@@ -576,6 +595,18 @@ export async function install(
     throw error;
   }
   throwIfAborted(opts.signal);
+  const fullLockfileReplay =
+    existingLockfile !== null &&
+    plan.resolution() === 'lockfile' &&
+    lockfileRootMatchesRequest(existingLockfile, rootLockfileDependencyMaps);
+  if (fullLockfileReplay) {
+    assertLockfileReplayCoverage(
+      existingLockfile!,
+      resolved.replayAccounting.reachedLockfilePaths,
+      resolved.replayAccounting.skippedLockfilePaths,
+      existingShadowPlan!,
+    );
+  }
   const packages = [...resolved.packages.values()];
   const provenancePackages: InstallPackageProvenance[] = [];
   const seenProvenance = new Set<string>();
@@ -666,6 +697,13 @@ export async function install(
     embeddedSources,
     rootLockfileDependencyMaps,
   );
+  if (fullLockfileReplay) {
+    preserveSkippedLockfileEntries(
+      lockfile,
+      existingLockfile!,
+      resolved.replayAccounting.skippedLockfilePaths,
+    );
+  }
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
   throwIfAborted(opts.signal);
@@ -1968,6 +2006,9 @@ function createIncrementalSource(
 
   return {
     source: {
+      hasLockEntry(name, ctx): boolean {
+        return locked.hasLockEntry?.(name, ctx) ?? false;
+      },
       prefetch(name, range, ctx): void {
         if (!useRegistry(name, range, ctx)) return;
         metadataUsed = true;
@@ -2030,27 +2071,7 @@ async function readRegistryShadowReplayCache(
   return { bytes, cacheHit: true, integrity };
 }
 
-/**
- * Single traversal driver: for each node, ask `source` for its pin, decide
- * placement, fetch the tarball, record it, recurse into `dependencies` and
- * `optionalDependencies` (registry-source only).
- *
- * Placement rule (M11 + direct-root tier):
- *   0. Surviving direct identities reserve their root-visible slots.
- *   1. Reuse a recorded path when free; relocate it on a mixed-source conflict.
- *   2. Descendants use first-wins-flat + nest-on-conflict.
- *
- * Intentionally simpler than npm v3 hoisting: a conflict always nests under its
- * immediate parent even when a sibling-ancestor has a reusable nested copy.
- * Correct in all cases; costs a few duplicated nested copies (disk, never
- * resolution). Full "hoist as high as possible" is a follow-on.
- *
- * Full replay reproduces recorded paths. Mixed replay preserves free recorded
- * paths and rebases descendants when a retained parent moves.
- *
- * Keyed by **install path**, not name: post-M11 one name can sit at several
- * paths (one flat + nested copies).
- */
+/** Unified lockfile/live walk; placement and acquisition are keyed by install path. */
 async function walkAndPin(
   source: ResolutionSource,
   topLevelDependencies: Record<string, string>,
@@ -2059,16 +2080,8 @@ async function walkAndPin(
   fetchCtx: FetchAndUnpackCtx,
   onPackage?: (event: InstallProgressEvent) => void,
 ): Promise<WalkAndPinResult> {
-  // Direct roots resolve first and surviving identities reserve flat slots
-  // before descendant DFS. Descendant placement stays serial/request-ordered;
-  // packument prefetch and tarball acquisition may overlap without owning paths.
-  // Tarball fetch is parallelized (bounded
-  // semaphore): tarball bytes feed extractTarGz/files alone, never the dep walk
-  // (pin.dependencies comes from the packument/lockfile, not the tarball), so
-  // fetch order cannot perturb layout. Concurrent same-(name,version) fetches
-  // dedupe to one network call via `inFlight`. ONE exception to the deferred
-  // fetch: an OPTIONAL-boundary node awaits acquisition + materialization
-  // before recursing, so its own failure skips the subtree before it is walked.
+  // Root reservation is ordered; acquisition is bounded/deduped. Optional
+  // boundaries await before recursion so failures cannot orphan descendants.
   const FETCH_CONCURRENCY = 8; // perf knob only; any value yields the identical tree.
   const sem = new Semaphore(FETCH_CONCURRENCY);
 
@@ -2076,6 +2089,7 @@ async function walkAndPin(
   const flatByName = new Map<string, Readonly<{ version: string; identity: string }>>();
   /** Every installed copy, keyed by install path. */
   const pinned = new Map<string, PinnedPackage>();
+  const replayAccounting = createLockfileReplayAccounting();
   /** Install paths already scheduled this walk (synchronous path-level dedup,
    * replaces `pinned.has` since `pinned` is now populated at the await site). */
   const scheduled = new Map<string, { readonly identity: string; ordinaryBinDemand: boolean }>();
@@ -2172,23 +2186,15 @@ async function walkAndPin(
     name: string,
     range: string | null,
     ctx: ResolveContext,
-    // When set, this node (and its subtree) is reached via an optional dep; a
-    // fetch failure warns-and-skips instead of aborting, with this descriptor.
+    // Optional subtree descriptor; failures warn-and-skip.
     optional: { depName: string; depRange: string; parentName: string } | null,
     ordinaryBinDemand = true,
     preparedPin?: ResolvedPin,
   ): Promise<void> {
     return (async () => {
       const pin = preparedPin ?? (await source.resolve(name, range, ctx));
-      // ADR-0188: a shimmed package outside its shim's proven range must fail
-      // loudly BEFORE anything installs — never a stale shim silently applied.
       assertShimSupported(pin.name, pin.version);
 
-      // Did THIS visit newly claim the flat slot? (Either `choosePlacement`'s
-      // first-wins set, or the block below.) Needed so an optional-boundary
-      // fetch failure rolls back ONLY a claim it owns — never a slot a prior
-      // visit already won. Captured pre-placement because `choosePlacement`
-      // mutates `flatByName` as a side effect.
       const flatSlotFreeBefore = !flatByName.has(pin.name);
       const key = resolvedPinIdentity(pin);
       let installPath =
@@ -2208,7 +2214,6 @@ async function walkAndPin(
           installPath = choosePlacement(pin, ctx.parentInstallPath, flatByName);
         }
       }
-      // Record the flat slot so a later live-source visit honours first-wins.
       if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
         flatByName.set(pin.name, { version: pin.version, identity: key });
       }
@@ -2254,9 +2259,11 @@ async function walkAndPin(
               preparedOptionalPackages.get(preparedKey) ??
               (await pinToPackage(pin, result, installPath));
             pinned.set(installPath, pkg);
+            recordReplayReached(replayAccounting, pin);
           }
         } catch (err) {
           throwIfAborted(fetchCtx.signal);
+          recordReplaySkippedPin(replayAccounting, pin);
           // Roll back the synchronous claims THIS visit made before re-throwing
           // to the parent's optional catch (#24 dedup-gate bug): `scheduled` was
           // added pre-fetch, so without this a later REQUIRED visit of the SAME
@@ -2270,13 +2277,8 @@ async function walkAndPin(
         fetchTasks.push({ promise: p, pin, installPath, optional });
       }
 
-      // Recurse: deps are known from the resolved pin, not the tarball bytes, so
-      // traversal order / placement is unchanged. For the optional boundary the
-      // fetch above already settled, so a failed optional never reaches here.
-      // Required children of an optional boundary INHERIT `optional`, so a later
-      // failed grandchild is warned-and-skipped while surviving siblings still
-      // pin — rifty SALVAGES the optional subtree's survivors rather than doing
-      // npm's atomic-rollback. Characterization-pinned; see Q-2026-06-07-324.
+      // Required children inherit the optional descriptor; placement uses pin
+      // metadata, never tarball bytes.
       const childContext: ResolveContext = {
         parentName: pin.name,
         parentInstallPath: installPath,
@@ -2310,7 +2312,15 @@ async function walkAndPin(
           await visit(depName, depRange, childContext, desc);
         } catch (err) {
           throwIfAborted(fetchCtx.signal);
+          recordReplaySkippedError(replayAccounting, err);
           warnOptional(desc, err);
+        }
+      }
+      if (pin.origin === 'lockfile' && source.hasLockEntry) {
+        for (const [peerName, peerRange] of Object.entries(pin.peerDependencies ?? {})) {
+          if (source.hasLockEntry(peerName, childContext)) {
+            await visit(peerName, peerRange, childContext, optional);
+          }
         }
       }
       // ADR-0188: same-version companion pins for shadow internals shims
@@ -2364,6 +2374,7 @@ async function walkAndPin(
         optionalRoots.push({ name, range, pin, optional: desc });
       } catch (error) {
         throwIfAborted(fetchCtx.signal);
+        recordReplaySkippedError(replayAccounting, error);
         warnOptional(desc, error);
       }
     }
@@ -2411,6 +2422,7 @@ async function walkAndPin(
     if (outcome.status === 'rejected') {
       throwIfAborted(fetchCtx.signal);
       if (optionalFailure !== null) {
+        recordReplaySkippedPin(replayAccounting, task.pin);
         warnOptional(optionalFailure, outcome.reason);
         continue;
       }
@@ -2419,9 +2431,11 @@ async function walkAndPin(
     if (pinned.has(task.installPath)) continue;
     try {
       pinned.set(task.installPath, await pinToPackage(task.pin, outcome.value, task.installPath));
+      recordReplayReached(replayAccounting, task.pin);
     } catch (error) {
       throwIfAborted(fetchCtx.signal);
       if (optionalFailure === null) throw error;
+      recordReplaySkippedPin(replayAccounting, task.pin);
       warnOptional(optionalFailure, error);
     }
   }
@@ -2431,33 +2445,11 @@ async function walkAndPin(
       companionOnlyBinInstallPaths.add(installPath);
     }
   }
-  return { packages: pinned, companionOnlyBinInstallPaths };
-}
-
-/** Emit the existing optional-dependency warn message verbatim. */
-function warnOptional(
-  desc: { depName: string; depRange: string; parentName: string },
-  err: unknown,
-): void {
-  const code = (err as { code?: unknown })?.code;
-  if (code === 'EBROKENLOCK' || code === 'EINSTALLPATHCONFLICT' || code === 'EINVALIDPACKAGETAR') {
-    throw err;
-  }
-  // A platform-native optional sibling (e.g. one of Rolldown's
-  // `@rolldown/binding-<platform>` packages) is EXPECTED to be skipped — rifty's
-  // JS+WASI runtime can never run a native binary (ADR-0051), and the matching
-  // wasm/WASI sibling is the one that installs. Phrase it as an expected skip so a
-  // pack of these does not read as a wall of install errors (it is not a failure).
-  if (code === 'ENATIVEUNSUPPORTED') {
-    console.warn(
-      `npm: skipped optional native dependency ${desc.depName}@${desc.depRange} (expected — rifty runs JS+WASI only, ADR-0051)`,
-    );
-    return;
-  }
-  const reason = err instanceof Error ? err.message : String(err);
-  console.warn(
-    `optional dependency ${desc.depName}@${desc.depRange} of ${desc.parentName} could not be installed: ${reason}`,
-  );
+  return {
+    packages: pinned,
+    companionOnlyBinInstallPaths,
+    replayAccounting,
+  };
 }
 
 /** Descendant placement: first-wins-flat + nest-on-conflict. */
@@ -2532,6 +2524,11 @@ async function pinToPackage(
     resolved: pin.resolved,
     installPath,
     ...(acquisition.kind === 'tarball' ? { integrity: acquisition.result.integrity } : {}),
+    ...(pin.origin === 'lockfile' && Object.keys(pin.optionalDependencies).length > 0
+      ? { optionalDependencies: pin.optionalDependencies }
+      : {}),
+    ...(pin.origin === 'lockfile' && pin.cpu !== undefined ? { cpu: pin.cpu } : {}),
+    ...(pin.origin === 'lockfile' && pin.os !== undefined ? { os: pin.os } : {}),
   };
   if (pin.peerDependencies && Object.keys(pin.peerDependencies).length > 0) {
     pkg.peerDependencies = pin.peerDependencies;
@@ -2670,6 +2667,9 @@ function createLockfileSource(
 ): ResolutionSource {
   const embeddedSources = registryShadowEmbeddedSourcesFromLockfile(lockfile, shadowPlan);
   return {
+    hasLockEntry(name, ctx): boolean {
+      return pinnedEntryForParent(lockfile, name, ctx.parentLockfilePath) !== undefined;
+    },
     async resolve(name, range, ctx): Promise<ResolvedPin> {
       const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
       const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
@@ -2706,6 +2706,27 @@ function createLockfileSource(
           },
         );
       }
+      const dependencies = lockfileStringMap(
+        entry.dependencies,
+        'dependencies',
+        effectiveName,
+        installPath,
+      );
+      const peerDependencies = lockfileStringMap(
+        entry.peerDependencies,
+        'peerDependencies',
+        effectiveName,
+        installPath,
+      );
+      const optionalDependencies = lockfileStringMap(
+        entry.optionalDependencies,
+        'optionalDependencies',
+        effectiveName,
+        installPath,
+      );
+      const cpu = lockfileStringArray(entry.cpu, 'cpu', effectiveName, installPath);
+      const os = lockfileStringArray(entry.os, 'os', effectiveName, installPath);
+      if (!override) assertNativeSupported(effectiveName, entry.version, { cpu, os }, installPath);
       // Override redirected to a target NAME the lockfile pins, but a moved
       // override RANGE (e.g. the baked table bumps, or a user edits `overrides`)
       // can leave the locked version stale. The live-resolve source would pick a
@@ -2768,11 +2789,12 @@ function createLockfileSource(
         version: entry.version,
         resolved: entry.resolved ?? syntheticResolvedIdentity(synthetic!),
         integrity: entry.integrity,
-        dependencies: entry.dependencies ?? {},
+        dependencies,
         bin: entry.bin,
-        peerDependencies: entry.peerDependencies,
-        // Optionals already filtered at lockfile-write time.
-        optionalDependencies: {},
+        peerDependencies,
+        optionalDependencies,
+        ...(cpu === undefined ? {} : { cpu }),
+        ...(os === undefined ? {} : { os }),
         installPath,
         ...(shadowRecipe
           ? {
@@ -2802,33 +2824,6 @@ function createLockfileSource(
       };
     },
   };
-}
-
-/**
- * Native-dependency gate (ADR-0051, D-005 source #6). rifty runs JS + WASI WASM
- * only — never `.node` addons or native binaries. A manifest pinning `cpu` to a
- * non-empty set that excludes WASI/WebAssembly targets (and isn't a `!`-negation admitting
- * everything else) is a compiled artifact (`better-sqlite3`, esbuild's
- * `@esbuild/*` platform packages). `cpu` (not `os`) is the signal: pure-JS rarely
- * pins it, every real native does; `os`-only is a soft warning many JS packages
- * use.
- */
-function assertNativeSupported(name: string, version: string, manifest: VersionManifest): void {
-  const cpu = manifest.cpu;
-  if (!Array.isArray(cpu) || cpu.length === 0) return;
-  if (cpu.includes('wasm') || cpu.includes('wasm32') || cpu.some((c) => c.startsWith('!'))) return;
-  throw Object.assign(
-    new Error(
-      `ENATIVEUNSUPPORTED: '${name}@${version}' ships a native binary (cpu: ${JSON.stringify(cpu)}, os: ${JSON.stringify(manifest.os ?? null)}) that cannot run in rifty's JS+WASI runtime, and no shadow-registry substitution is registered for it. See docs/public/compat/incompatible-packages.md.`,
-    ),
-    {
-      code: 'ENATIVEUNSUPPORTED',
-      packageName: name,
-      version,
-      reason: 'cpu-constraint',
-      platform: { os: manifest.os ?? null, cpu },
-    },
-  );
 }
 
 /**

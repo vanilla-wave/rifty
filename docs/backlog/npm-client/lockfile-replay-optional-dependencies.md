@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Lockfile replay traverses entry optionalDependencies with the live cpu gate
 created: 2026-08-16
 why: npm-authored locks keep platform siblings under entry optionalDependencies; the lockfile source hardcodes `{}`, so replay silently drops every wasm/WASI binding and the failure surfaces at first build blaming npm (issue #254)
@@ -84,10 +84,9 @@ bindings are skipped with a warning each, `vite build` completes.
 
 ## Reference contract
 
-- Oracle: npm 11.x on Node 24.x — exact versions pinned by a committed
-  loopback-registry probe at pickup (pattern:
-  `docs/backlog/npm-client/reference/npm-11-peer-placement-probe.md`); the
-  issue-#254 outputs above are observed evidence, not yet version-pinned.
+- Oracle: npm 11.17.0 on Node 24.16.0 — pinned by the committed loopback-
+  registry probe `docs/backlog/npm-client/reference/npm-11-lockfile-replay-probe.md`;
+  the issue-#254 outputs above remain observed real-package evidence.
 - Mechanism: npm arborist lock replay — entries install verbatim; platform
   filtering by `cpu`/`os` at reify.
 
@@ -131,6 +130,7 @@ bindings are skipped with a warning each, `vite build` completes.
 
 ## Decisions
 
+- ready-verdict: 2026-08-17 — Contract+RED @ 1ce0fd6cc97a8543c880db3fb77eacabd74e5866
 - Traverse-on-replay chosen over materialize-lock-verbatim: the D-F unified
   walk (one pipeline for replay + live, `installer.ts:16-19`) is a recorded
   decision; a second install path duplicates placement/bin/shadow/progress

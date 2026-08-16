@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Replay refuses locks with entries no traversal edge reaches
 created: 2026-08-16
 why: class-kill chokepoint for the frozen-assumption family behind #254/#261 — any future lock edge type the walk does not read must fail loudly at install, never silently thin the tree
@@ -96,6 +96,7 @@ success; deleting the lockfile and re-installing succeeds via live resolve.
 
 ## Decisions
 
+- ready-verdict: 2026-08-17 — Contract+RED @ 1ce0fd6cc97a8543c880db3fb77eacabd74e5866
 - Loud throw chosen over warning: a warning line is exactly the drowned-out
   channel #261 documents (15 benign peer warnings hiding the fatal one); the
   mission bans silent thinning, and delete-lockfile is a always-available
