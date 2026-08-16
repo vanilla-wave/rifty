@@ -27,6 +27,7 @@ import {
   readActiveProjectText,
   runTerminalLineSettled,
   terminalBuffer,
+  terminalHistoryExitCode,
 } from './helpers/playground.ts';
 
 // A taller viewport centers the launcher modal BELOW the top-right toast, so the
@@ -193,6 +194,50 @@ test.describe('starter git baseline', () => {
     expect(statusBlock).toContain('STATUS_DONE');
     expect(statusBlock).not.toContain('package-lock.json');
     expect(statusBlock).not.toContain('??');
+  });
+
+  test('reopen without .gitignore excludes the materialized dependency tree from HEAD', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(300_000);
+
+    const tag = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const projectName = `No-ignore-baseline-${tag}`;
+    await bootScratch(page);
+    await newShell(page);
+
+    expect(
+      await readActiveProjectText(page, 'node_modules/vite/package.json', OWNER_TIMEOUT),
+    ).toMatchObject({
+      exists: true,
+    });
+    const wipeLine = 'rm -rf .git .gitignore';
+    await runTerminalLineSettled(page, wipeLine, 60_000);
+    expect(await terminalHistoryExitCode(page, wipeLine)).toBe(0);
+    expect(await readActiveProjectText(page, '.gitignore')).toEqual({ exists: false, text: '' });
+    // The baseline under test must be created at REOPEN, never inherited: the
+    // pre-existing Starter HEAD is provably gone before the save.
+    expect(await readActiveProjectText(page, '.git/HEAD')).toEqual({ exists: false, text: '' });
+
+    // Save keeps the owner tree. Opening it again is the public boundary that
+    // creates the unborn Starter baseline over materialized dependencies.
+    await saveScratchAs(page, projectName);
+    await pickStarter(page, 'node-worker');
+    await switchToSavedProject(page, projectName);
+    await newShell(page);
+
+    expect(await readActiveProjectText(page, '.gitignore')).toEqual({ exists: false, text: '' });
+    expect(await readActiveProjectText(page, 'node_modules/vite/package.json')).toMatchObject({
+      exists: true,
+    });
+    const sourceProbe = 'git show HEAD:src/main.js';
+    const dependencyProbe = 'git show HEAD:node_modules/vite/package.json';
+    await runTerminalLineSettled(page, sourceProbe, 60_000);
+    await runTerminalLineSettled(page, dependencyProbe, 60_000);
+    expect(await terminalHistoryExitCode(page, sourceProbe)).toBe(0);
+    expect(await terminalHistoryExitCode(page, dependencyProbe)).not.toBe(0);
   });
 });
 

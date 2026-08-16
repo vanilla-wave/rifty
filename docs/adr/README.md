@@ -260,6 +260,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0256 | Owned abort settlement and asynchronous shell disposal |
 | 0257 | Exact process exit through shell command results |
 | 0330 | Lifecycle failures remain exceptional through Shell |
+| 0357 | Git facade carries exact storage read failures; absence is proven, never inferred |
 
 ### terminal
 

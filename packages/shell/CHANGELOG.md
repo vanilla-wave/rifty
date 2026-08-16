@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- `git` command probes no longer re-collapse facade-surfaced storage failures
+  into native-looking diagnostics: the amend prior-read, revision-existence
+  probes, the unborn-log branch lookup, and every status/log/diff/reset/
+  checkout/switch catch boundary classify absence TYPE-first (a `VfsError` is
+  never absence even when its message mimics "could not find") and rethrow the
+  exact failure with repository state untouched (ADR-0357).
+
 - `ShellCommandLifecycleError`, including inside `AggregateError`, now
   preserves host process-control failure instead of inventing a command exit
   after Worker peer death (ADR-0326).

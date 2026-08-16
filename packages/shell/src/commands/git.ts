@@ -42,6 +42,7 @@ import {
   revisionExists,
 } from './_git-checkout.ts';
 import { doConfig } from './_git-config.ts';
+import { isNotFound, storageFailureOr, throwIfStorageFailure } from './_git-errors.ts';
 import { type PreparedRestorePlan, doRestore, prepareRestore } from './_git-restore.ts';
 import { doSwitch } from './_git-switch.ts';
 import { hasGlobMeta } from './_glob.ts';
@@ -119,7 +120,7 @@ function short(oid: string): string {
   return oid.slice(0, 7);
 }
 
-/** Render `git status --porcelain` v1: one `XY filepath` line per changed file. */
+/** Porcelain v1 per-file rows. TODO(backlog: shell/git-status-porcelain-untracked-dir-collapse) — native -unormal collapses untracked dirs. */
 function renderPorcelain(entries: readonly SupportedStatusEntry[]): string {
   let out = '';
   for (const e of entries) {
@@ -323,12 +324,6 @@ async function doStatus(g: Git, args: string[], ctx: CommandContext): Promise<nu
   }
 }
 
-/** True when an iso-git error is a "not found" plumbing error (vs a real bug). */
-function isNotFound(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e);
-  return (e as { name?: string })?.name === 'NotFoundError' || /could not find/i.test(msg);
-}
-
 type PathspecMapper = (pathspec: string) => string;
 
 const identityPathspec: PathspecMapper = (pathspec) => pathspec;
@@ -394,6 +389,7 @@ async function tokenIsRevision(g: Git, token: string): Promise<boolean> {
     return await revisionExists(g, token);
   } catch (e) {
     if (e instanceof NotImplementedError) throw e;
+    throwIfStorageFailure(e);
     return false;
   }
 }
@@ -570,7 +566,7 @@ async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<nu
     // `--amend` reads the prior commit defensively: an UNBORN HEAD (fresh repo,
     // no commit) makes g.log() throw "Could not find HEAD" → real git's
     // "fatal: You have nothing to amend." (exit 128), never a leaked exit-1.
-    const prior = (await g.log().catch(() => []))[0];
+    const prior = (await g.log().catch(storageFailureOr([])))[0];
     if (prior === undefined) {
       ctx.stderr.write('fatal: You have nothing to amend.\n');
       return 128;
@@ -727,10 +723,11 @@ async function doLog(
     // '<b>' does not have any commits yet` (exit 128) — never the leaked iso-git
     // "Could not find refs/heads/<b>." exit-1.
     if (isNotFound(e)) {
-      const branch = (await g.currentBranch().catch(() => undefined)) ?? 'main';
+      const branch = (await g.currentBranch().catch(storageFailureOr(undefined))) ?? 'main';
       ctx.stderr.write(`fatal: your current branch '${branch}' does not have any commits yet\n`);
       return 128;
     }
+    throwIfStorageFailure(e);
     ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
     return 128;
   }
@@ -1090,6 +1087,7 @@ async function doReset(
     }
     return 0;
   } catch (e) {
+    throwIfStorageFailure(e);
     ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
     return 128;
   }
@@ -2959,6 +2957,7 @@ async function runGit(
       case 'diff':
         return doDiff(g, args, ctx, mapPathspec);
       case 'branch':
+        // TODO(backlog: shell/git-branch-create-silently-ignored) — positional name dropped, lists instead of creating.
         return doBranch(g, ctx);
       case 'checkout':
         if (prepared?.kind === 'checkout-error') {
