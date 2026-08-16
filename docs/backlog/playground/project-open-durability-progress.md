@@ -27,15 +27,15 @@ channel worker→page already exists — `owner-vfs-ipc.ts` durability
 request/ack frames ride `workbench:project-vfs` (controller :295 ↔
 browser-owner :520-525), and `onDurabilityState` →
 `publishHealth({kind:'persistence',…})` at `workbench-browser-owner.ts:774-785`.
-The #256 drain call is `install-stamp-authority.ts:716-726` `proofReport =
-await flush()` threaded from `workbench-owner-runtime.ts:294`
+The #256 drain call is `glue/install-stamp-authority.ts:716-726` `proofReport =
+await flush()` threaded from `workers/workbench-owner-runtime.ts:294`
 (`flush: () => authority.flush()`) via `owner-package-state.ts:328/653` and
 `package-acquisition-authority.ts:1522`. Minimal seam set (no new
 coordination mechanism, epic Budget 0):
 
 1. vfs: `OpfsFsSync.flush(options?: { onProgress })` — events-out observer on
    the existing settle path (`opfs-drain-scheduler.ts` per-op settle);
-2. authority passthrough (`owner-vfs-authority.ts:217`);
+2. authority passthrough (`workers/owner-vfs-authority.ts:217`);
 3. worker forwarding: coalesced `rifty:owner-vfs-durability-progress` frames
    over the active project's vfs emit (late-bound emit hook — packageState
    composes before the controller/project exists; the playground npm-install
@@ -72,7 +72,14 @@ on main via structural casts):
     progress);
   - R3 wedge: one op held past the 30 s report bound (fake timers) →
     snapshots STOP advancing, NO terminal `persisted === total`, while the
-    bounded flush report carries the wedge (stall ≠ progress ≠ completion).
+    bounded flush report carries the wedge; EXTENDED past report
+    resolution — the wedge released as success AFTER the dirty report must
+    not advance `persisted` nor mint a terminal (watchdog-released ops
+    never advance);
+  - R4 failure-settle: one op REJECTS among N-1 successes → dirty report,
+    `persisted` excludes the failed op (final N-1 of N), NO snapshot ever
+    reaches `persisted === total` (kills advance-on-any-settle — the
+    scheduler's `settled` resolves on success AND failure).
 - workbench owner pin (workbench-browser-owner.test.ts): a
   `rifty:owner-vfs-durability-progress` frame over the real open handshake
   (fake owner worker, existing harness) → health listener receives
@@ -126,9 +133,9 @@ Reporting-only surface over the storage boundary; tier production (epic).
 | # | axis × operation | injected fault | honest outcome (fault-test target) |
 |---|---|---|---|
 | a | frozen-assumption × progress source | synthetic/timed/eased counts | impossible by carrier: R2 pins every snapshot's `persisted` to the REAL surface-settled count at emission |
-| b | unbounded-read × wedged op mid-drain | op held past the 30 s bound | counts stop advancing, NO terminal event; flush's bounded dirty report unchanged — stall distinguishable from progress AND from completion (R3) |
+| b | unbounded-read × wedged op mid-drain | op held past the 30 s bound | counts stop advancing, NO terminal event; flush's bounded dirty report unchanged — stall distinguishable from progress AND from completion; post-report late success never advances (R3 extended) |
 | c | observable-order × event stream | out-of-order/regressing counts | monotone non-decreasing pinned (R1, acceptance); frame order preserved page-side (owner pin) |
-| d | quota-perm-fail × failing drain | ops settle as failures | failure-settles never advance `persisted` → no false terminal; ledger report stays the truth (R3 + P3) |
+| d | quota-perm-fail × failing drain | ops settle as failures | failure-settles never advance `persisted` → no false terminal; ledger report stays the truth (R4 + R3 extended + P3) |
 | e | corrupt-input × protocol frame | malformed progress frame | frame inspection at the existing protocol boundary rejects it like any other malformed vfs frame (existing protocol suites own the boundary; the new frame joins `inspectOwnerProjectVfsFrame`) |
 
 ## Out of scope
@@ -157,13 +164,22 @@ Reporting-only surface over the storage boundary; tier production (epic).
   the forwarder coalesces on the existing channel).
 - Budget: slice **drain-progress** band 80-250 source insertions
   (`check:budget` — tests excluded).
+- Contract+RED attempt 1 (2026-08-16, blocker ANSWERED by re-cut, count
+  carries): false-terminal progress killed — R4 (failure-settle never
+  advances `persisted`, no terminal on an unclean drain) + R3 extended past
+  report resolution (watchdog-released late success never advances);
+  rows b/d re-carried accordingly; Context paths made package-exact.
+  Final+GREEN obligations recorded from reviewer concerns: worker-forwarder
+  emission proof + transport-live evidence for the npm-install restore
+  scenario; coalescing inspection; row-e inspect case in the owning
+  protocol suite.
 - RED evidence (pre-implementation, this branch, 2026-08-16, darwin arm64,
   node v24.16.0, vitest 2.1.9, Playwright 1.60.0 Chromium):
-  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `3 failed | 87
-    passed | 1 skipped (91)` — exactly R1/R2/R3, each on its designed
-    assert (R1/R2: `expected 0 to be greater than 0` — no observer
-    callback on main; R3 same, while its bounded-report half already
-    holds).
+  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 87
+    passed | 1 skipped (92)` — exactly R1/R2/R3(extended)/R4, each on its
+    designed assert (`expected 0 to be greater than 0` — no observer
+    callback on main; R3's bounded-report half and R4's dirty-report half
+    already hold).
   - `npx vitest run packages/workbench/src/workbench/workbench-browser-owner.test.ts`
     → `1 failed | 17 passed (18)` — the owner frame pin: `expected [] to
     deeply equal [{kind:'durability-progress',persisted:3,total:10},
