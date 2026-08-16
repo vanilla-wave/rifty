@@ -33,6 +33,7 @@ interface ObserveResult {
   readonly completeBytesOk: boolean;
   readonly victimEmptyVisible: boolean;
   readonly reserveVfsWrite: string;
+  readonly reserveVfsMkdir: string;
   readonly reserveSyncWrite: string;
   readonly reserveSyncMkdir: string;
   readonly reserveSyncRename: string;
@@ -113,6 +114,7 @@ test("a killed writer's .crswap temp is invisible to the rifty OPFS surface (tor
   // (platformCrswapCreate above stays a recorded fact, not an assumption),
   // so the filter is honest only if every rifty create op refuses loudly.
   expect(observed.reserveVfsWrite).toBe('EINVAL');
+  expect(observed.reserveVfsMkdir).toBe('EINVAL');
   expect(observed.reserveSyncWrite).toBe('EINVAL');
   expect(observed.reserveSyncMkdir).toBe('EINVAL');
   expect(observed.reserveSyncRename).toBe('EINVAL');

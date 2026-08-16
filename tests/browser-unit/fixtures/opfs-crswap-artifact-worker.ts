@@ -80,6 +80,7 @@ interface ObserveResult {
   readonly victimEmptyVisible: boolean;
   /** Reservation pins: error CODE per rifty create op targeting `*.crswap`. */
   readonly reserveVfsWrite: string;
+  readonly reserveVfsMkdir: string;
   readonly reserveSyncWrite: string;
   readonly reserveSyncMkdir: string;
   readonly reserveSyncRename: string;
@@ -136,6 +137,9 @@ async function observe(ns: string): Promise<ObserveResult> {
   const reserveVfsWrite = await vfs
     .writeFile(`${ns}/dir/user.crswap`, 'x')
     .then(() => 'no-throw', code);
+  const reserveVfsMkdir = await vfs
+    .mkdir(`${ns}/dir/deep.crswap`, { recursive: true })
+    .then(() => 'no-throw', code);
   const attempt = (op: () => void): string => {
     try {
       op();
@@ -160,6 +164,7 @@ async function observe(ns: string): Promise<ObserveResult> {
     completeBytesOk,
     victimEmptyVisible,
     reserveVfsWrite,
+    reserveVfsMkdir,
     reserveSyncWrite,
     reserveSyncMkdir,
     reserveSyncRename,
