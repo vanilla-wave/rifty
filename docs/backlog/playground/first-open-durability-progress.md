@@ -157,6 +157,10 @@ Reporting-only surface over the owner protocol; tier production (epic).
 
 ## Decisions
 
+- ready-verdict: 2026-08-16 — Contract+RED @ 63fa4773726f59e4e128c4f5eed887fbd766cf61
+  (attempt 1 pass, own-subagent reviewer; concerns folded: verdict line here;
+  stale slice-3 fixture prose updated at implementation; seam-1 wording is
+  owner→page only).
 - Channel altitude resolved from code as carrier decision (agent-owned; not
   user-observable — same public stream/shape/reach): owner-level control
   message replacing the per-project vfs frame hop; ADR-0359 corrected in
