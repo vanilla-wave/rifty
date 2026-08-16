@@ -11,7 +11,8 @@
  * baseline after parallelization; its per-op-flush inflation is bounded by
  * the manual 'calibrate' phase (see {@link runCalibration}). Every byte of
  * I/O is real OPFS; durability is proven WHOLE-TREE through a fresh OpfsVfs
- * with a BYTE-EXACT read of every file (fault-classes.md exact-bytes rule).
+ * with a BYTE-EXACT read of every file (fault-classes.md exact-bytes rule)
+ * and an EXACT-ENTRY dir-set match (stray empty dirs fail).
  */
 import { OpfsFsSync, OpfsVfs, type PersistFailureReport } from '@riftydev/vfs';
 
@@ -32,6 +33,8 @@ interface TreeProof {
   readonly treeVerified: boolean;
   /** Files actually enumerated under the namespace on the fresh surface. */
   readonly treeFiles: number;
+  /** Directories actually enumerated under the namespace on the fresh surface. */
+  readonly treeDirs: number;
   /** First mismatch (path + expected/actual), null when the tree is clean. */
   readonly treeMismatch: string | null;
 }
@@ -45,6 +48,11 @@ interface AcceptanceResult {
   readonly statsTotalBytes: number;
   readonly faithfulMs: number;
   readonly productMs: number;
+  /** Faithful flush-op count (mkdir+write ⇒ 2×files) — probe-gate multiplier. */
+  readonly faithfulOpCount: number;
+  /** Same-run probe: mean ms of EMPTY_FLUSH_PROBE_N empty awaited flush()
+   * calls on the drained faithful instance. RAW unrounded. */
+  readonly emptyFlushMeanMs: number;
   /** RAW unrounded faithful/product ratio — the asserted I3 gate. */
   readonly speedupRaw: number;
   /** Log convenience only (2-decimal rounding of speedupRaw) — never asserted. */
@@ -53,9 +61,11 @@ interface AcceptanceResult {
   readonly productReportTotal: number;
   readonly faithfulTreeVerified: boolean;
   readonly faithfulTreeFiles: number;
+  readonly faithfulTreeDirs: number;
   readonly faithfulTreeMismatch: string | null;
   readonly productTreeVerified: boolean;
   readonly productTreeFiles: number;
+  readonly productTreeDirs: number;
   readonly productTreeMismatch: string | null;
 }
 
@@ -78,6 +88,15 @@ interface FileSpec {
  * cheap to build (~167 MB total across 26 811 arrays), byte-checkable on
  * re-read (fill positions, zeros between them, and length). */
 const FILL_STRIDE = 251;
+
+/** Same-run flush-overhead probe size — frozen-assumption closure: the fixed
+ * SERIAL_OVERHEAD_BOUND calibration measured the OLD (pre-ADR-0358) drain and
+ * cannot constrain the IMPLEMENTED one — a flush() whose own call cost grew
+ * would inflate faithfulMs (~2×files awaited flushes) and manufacture speedup.
+ * After the faithful variant fully drains, N empty awaited flush() calls on
+ * the SAME instance measure the SHIPPED per-flush overhead every run; the
+ * spec gates emptyFlushMeanMs × faithfulOpCount ≤ 0.1 × faithfulMs. */
+const EMPTY_FLUSH_PROBE_N = 2000;
 
 function buildBytes(fileIndex: number, size: number): Uint8Array {
   const bytes = new Uint8Array(size);
@@ -133,8 +152,9 @@ async function removeNamespace(ns: string): Promise<void> {
 /** WHOLE-TREE fresh-surface proof, BYTE-EXACT for ALL files: fault-classes.md
  * demands exact bytes/digest, and review rejected a sampled oracle —
  * same-length corruption in an unsampled file must fail. Two passes through a
- * FRESH OpfsVfs: (1) readdir walk enumerates EVERYTHING persisted under `ns`
- * — any path outside the manifest is `unexpected:`; (2) chunked concurrent
+ * FRESH OpfsVfs: (1) readdir walk enumerates EVERYTHING persisted under `ns`,
+ * files AND directories — any file outside the manifest is `unexpected:`, any
+ * dir outside the derived ancestor set is `unexpected dir:`; (2) chunked concurrent
  * readFile (Promise.all × 64 — each read re-walks handles from the OPFS root,
  * packages/vfs/src/opfs.ts:216) of EVERY manifest file, comparing byteLength
  * to the source size and EVERY byte to the in-memory source array. readFile
@@ -142,24 +162,32 @@ async function removeNamespace(ns: string): Promise<void> {
  * separate stat pass. Walk-no-extras + every manifest read succeeding ⇒ the
  * trees are identical. Read buffers are compared and released per chunk —
  * never accumulated (26 811 reads would otherwise hold ~167 MB). */
-async function verifyTree(ns: string, specs: ReadonlyArray<FileSpec>): Promise<TreeProof> {
+async function verifyTree(
+  ns: string,
+  specs: ReadonlyArray<FileSpec>,
+  sortedDirs: ReadonlyArray<string>,
+): Promise<TreeProof> {
   const surface = new OpfsVfs();
   await surface.init();
 
   const filePaths: string[] = [];
+  const dirPaths: string[] = [];
   const queue: string[] = [ns];
   while (queue.length > 0) {
     const dir = queue.pop() as string;
     for (const entry of await surface.readdir(dir)) {
       const abs = `${dir}/${entry.name}`;
-      if (entry.isDirectory) queue.push(abs);
-      else filePaths.push(abs);
+      if (entry.isDirectory) {
+        dirPaths.push(abs);
+        queue.push(abs);
+      } else filePaths.push(abs);
     }
   }
 
   const fail = (treeMismatch: string): TreeProof => ({
     treeVerified: false,
     treeFiles: filePaths.length,
+    treeDirs: dirPaths.length,
     treeMismatch,
   });
 
@@ -171,6 +199,23 @@ async function verifyTree(ns: string, specs: ReadonlyArray<FileSpec>): Promise<T
   }
   if (filePaths.length !== specs.length) {
     return fail(`file count: persisted ${filePaths.length} !== manifest ${specs.length}`);
+  }
+
+  // Exact-entry DIR oracle (lossy-aggregate closure): a files-only walk passes
+  // with a stray EMPTY directory. Compare the walked dir set against the
+  // manifest-derived expectation (every cumulative ancestor of every file's
+  // dirname, ns-relative) — unexpected dirs (incl. empty) and missing dirs are
+  // mismatches, same first-mismatch reporting as files.
+  const expectedDirs = new Set(sortedDirs);
+  const walkedDirs = new Set<string>();
+  for (const abs of dirPaths) {
+    const rel = abs.slice(prefix.length);
+    if (!expectedDirs.has(rel)) return fail(`unexpected dir: ${rel}`);
+    walkedDirs.add(rel);
+  }
+  if (walkedDirs.size !== expectedDirs.size) {
+    const missing = sortedDirs.find((dir) => !walkedDirs.has(dir));
+    return fail(`missing dir: ${missing ?? `count ${walkedDirs.size} !== ${expectedDirs.size}`}`);
   }
 
   const READ_CHUNK = 64;
@@ -197,13 +242,21 @@ async function verifyTree(ns: string, specs: ReadonlyArray<FileSpec>): Promise<T
     // Chunk's read buffers drop here — compare-and-release, no accumulation.
   }
 
-  return { treeVerified: true, treeFiles: filePaths.length, treeMismatch: null };
+  return {
+    treeVerified: true,
+    treeFiles: filePaths.length,
+    treeDirs: dirPaths.length,
+    treeMismatch: null,
+  };
 }
 
 interface VariantOutcome {
   /** Raw, unrounded — speedupRaw divides these; rounding is report-only. */
   readonly ms: number;
   readonly reportTotal: number;
+  /** Faithful only (null on product): same-run empty-flush probe mean, see
+   * EMPTY_FLUSH_PROBE_N. */
+  readonly emptyFlushMeanMs: number | null;
   readonly tree: TreeProof;
 }
 
@@ -224,6 +277,7 @@ async function runVariant(
 
   let ms: number;
   let report: PersistFailureReport;
+  let emptyFlushMeanMs: number | null = null;
   if (label === 'faithful') {
     // Faithful serial — the epic's baseline, the pre-dedup #256 regime
     // (mkdir before EVERY write, ~2 persist ops/file), serialized by the
@@ -240,6 +294,12 @@ async function runVariant(
     ms = performance.now() - t0;
     if (last === null) throw new Error('faithful variant drained no files');
     report = last;
+    // Same-run flush-overhead probe (see EMPTY_FLUSH_PROBE_N): on the fully
+    // drained instance, OUTSIDE the timed window — times the SHIPPED empty
+    // flush() call itself.
+    const p0 = performance.now();
+    for (let i = 0; i < EMPTY_FLUSH_PROBE_N; i++) await fs.flush();
+    emptyFlushMeanMs = (performance.now() - p0) / EMPTY_FLUSH_PROBE_N;
   } else {
     // Product drain — the CURRENT landed caller shape (slice-1 deduped):
     // one mkdir per distinct dir (sorted, recursive), one write per file,
@@ -259,10 +319,10 @@ async function runVariant(
 
   // Whole-tree durability proven through a FRESH surface, never the writing
   // one — outside the timed window.
-  const tree = await verifyTree(ns, specs);
+  const tree = await verifyTree(ns, specs, sortedDirs);
   await removeNamespace(ns);
 
-  return { ms, reportTotal: report.total, tree };
+  return { ms, reportTotal: report.total, emptyFlushMeanMs, tree };
 }
 
 async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
@@ -273,6 +333,9 @@ async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
   const faithful = await runVariant('faithful', specs, sortedDirs);
   const product = await runVariant('product', specs, sortedDirs);
   const speedupRaw = faithful.ms / product.ms;
+  if (faithful.emptyFlushMeanMs === null) {
+    throw new Error('faithful variant returned no empty-flush probe');
+  }
 
   return {
     files: specs.length,
@@ -282,15 +345,20 @@ async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
     statsTotalBytes: manifest.stats.totalBytes,
     faithfulMs: Math.round(faithful.ms),
     productMs: Math.round(product.ms),
+    // Flushes actually awaited by the faithful loop: mkdir+write per file.
+    faithfulOpCount: 2 * specs.length,
+    emptyFlushMeanMs: faithful.emptyFlushMeanMs,
     speedupRaw,
     speedup: Math.round(speedupRaw * 100) / 100,
     faithfulReportTotal: faithful.reportTotal,
     productReportTotal: product.reportTotal,
     faithfulTreeVerified: faithful.tree.treeVerified,
     faithfulTreeFiles: faithful.tree.treeFiles,
+    faithfulTreeDirs: faithful.tree.treeDirs,
     faithfulTreeMismatch: faithful.tree.treeMismatch,
     productTreeVerified: product.tree.treeVerified,
     productTreeFiles: product.tree.treeFiles,
+    productTreeDirs: product.tree.treeDirs,
     productTreeMismatch: product.tree.treeMismatch,
   };
 }

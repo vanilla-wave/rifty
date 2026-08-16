@@ -5,9 +5,10 @@
  * paths+sizes, procedural bytes) the durability drain completes ≥2.5x faster
  * than the faithful serial baseline measured in the SAME run — asserted on
  * the RAW unrounded ratio, scaled by the calibrated per-op-flush inflation
- * bound — with a clean flush ledger and a fresh-surface WHOLE-TREE
- * durability proof (exact path equality with the manifest walk + BYTE-EXACT
- * reads of ALL files, per fault-classes.md exact-bytes) on both variants.
+ * bound and guarded by a same-run empty-flush probe — with a clean flush
+ * ledger and a fresh-surface WHOLE-TREE durability proof (exact ENTRY
+ * equality, files + dirs, with the manifest walk + BYTE-EXACT reads of ALL
+ * files, per fault-classes.md exact-bytes) on both variants.
  *
  * DESIGNED RED on main: enqueuePending chains every op behind pendingTail —
  * the drain is globally serial — so the deduped product drain lands at only
@@ -30,7 +31,9 @@ const manifestUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/real-tree-
  * oneFlushMs 41141 → rawRatio 1.0069 on the full 26 811-file manifest.
  * Bound 1.05 gives ~7x headroom over the measured inflation. The I3 gate
  * multiplies by it so an inflated per-op-flush denominator cannot
- * manufacture speedup.
+ * manufacture speedup. This calibration bounded the OLD (pre-ADR-0358)
+ * drain only; the SHIPPED flush() is bounded every run by the same-run
+ * emptyFlushMeanMs probe gate below.
  */
 const SERIAL_OVERHEAD_BOUND = 1.05;
 
@@ -42,6 +45,11 @@ interface AcceptanceResult {
   readonly statsTotalBytes: number;
   readonly faithfulMs: number;
   readonly productMs: number;
+  /** Faithful flush-op count (mkdir+write ⇒ 2×files) — probe-gate multiplier. */
+  readonly faithfulOpCount: number;
+  /** Same-run probe: mean ms of 2000 empty awaited flush() calls on the
+   * drained faithful instance — the SHIPPED per-flush overhead. */
+  readonly emptyFlushMeanMs: number;
   /** RAW unrounded faithful/product ratio — the asserted I3 gate. */
   readonly speedupRaw: number;
   /** Log convenience only (2-decimal rounding) — never asserted. */
@@ -50,9 +58,11 @@ interface AcceptanceResult {
   readonly productReportTotal: number;
   readonly faithfulTreeVerified: boolean;
   readonly faithfulTreeFiles: number;
+  readonly faithfulTreeDirs: number;
   readonly faithfulTreeMismatch: string | null;
   readonly productTreeVerified: boolean;
   readonly productTreeFiles: number;
+  readonly productTreeDirs: number;
   readonly productTreeMismatch: string | null;
 }
 
@@ -120,12 +130,28 @@ test('durability drain on a real 26k-file node_modules tree beats the same-run s
   // Clean flush ledger on BOTH variants.
   expect(result.faithfulReportTotal).toBe(0);
   expect(result.productReportTotal).toBe(0);
-  // Fresh-surface WHOLE-TREE durability on BOTH variants: exact path
-  // equality with the manifest walk + byte-exact reads of ALL files.
+  // Fresh-surface WHOLE-TREE durability on BOTH variants: exact ENTRY
+  // (files + dirs) equality with the manifest walk + byte-exact reads of
+  // ALL files. Dir oracle closes the lossy-aggregate hole: correct files
+  // plus a stray EMPTY directory (or a missing dir) now fails. 2 314 =
+  // every cumulative ancestor of every manifest dirname, ns-relative.
   expect(result.faithfulTreeVerified, result.faithfulTreeMismatch ?? 'tree clean').toBe(true);
   expect(result.faithfulTreeFiles).toBe(result.files);
+  expect(result.faithfulTreeDirs).toBe(2_314);
   expect(result.productTreeVerified, result.productTreeMismatch ?? 'tree clean').toBe(true);
   expect(result.productTreeFiles).toBe(result.files);
+  expect(result.productTreeDirs).toBe(2_314);
+  expect(result.dirCount).toBe(2_314);
+  // Frozen-assumption closure: SERIAL_OVERHEAD_BOUND's calibration measured
+  // the OLD (pre-implementation) drain and cannot constrain the SHIPPED one.
+  // This same-run probe bounds the shipped flush(): its empty-call mean,
+  // multiplied across every flush the faithful loop awaited (2×files), must
+  // stay ≤10% of the measured baseline — a flush()-got-expensive mutant
+  // cannot inflate faithfulMs into manufactured speedup.
+  expect(result.faithfulOpCount).toBe(2 * result.files);
+  expect(result.emptyFlushMeanMs * result.faithfulOpCount).toBeLessThanOrEqual(
+    0.1 * result.faithfulMs,
+  );
   // THE I3 gate — RED on main (serial drain ⇒ ~1.3x), GREEN post-ADR-0358.
   // RAW unrounded ratio (`speedup` is log-only rounding), scaled by the
   // calibrated ceiling of the baseline's per-op-flush inflation.

@@ -94,10 +94,15 @@ executable carrier `tests/browser-unit/opfs-parallel-drain.spec.ts` +
 - Gates: UNROUNDED `speedupRaw >= 2.5 * SERIAL_OVERHEAD_BOUND` (= 2.625; I3
   with the calibration bound; RED on main — measured raw 1.375); both
   `flush().total === 0`; WHOLE-TREE fresh-surface proof per variant: exact
-  path equality with the manifest walk (unexpected/missing named) plus
-  BYTE-EXACT reads of ALL 26 811 files vs in-memory source bytes
-  (fault-classes exact-bytes — chunked ×64, compare-and-release, outside
-  the timed window; same-length corruption anywhere fails); wall-clock
+  ENTRY equality (files AND dirs — 26 811 + 2 314; a stray empty dir or a
+  missing dir fails) with the manifest walk plus BYTE-EXACT reads of ALL
+  files vs in-memory source bytes (fault-classes exact-bytes — chunked
+  ×64, compare-and-release, outside the timed window; same-length
+  corruption anywhere fails); same-run EMPTY-FLUSH PROBE on the drained
+  faithful instance (mean of 2 000 awaited flush() calls × the 2N flushes
+  the baseline awaited must stay ≤10% of faithfulMs — bounds the SHIPPED
+  flush() so a per-flush-overhead mutant cannot manufacture speedup;
+  closes the only-old-drain reach of the one-time calibration); wall-clock
   logged (`PD256-ACCEPTANCE` JSON) for the PR record, no absolute-time CI
   assert (variance).
 
@@ -115,8 +120,14 @@ real flush seam; worker TERMINATED on a PATH-AWARE discriminated mid-drain ack
 content + package.json closed + `0 < treeCompleted < 600` tree-only
 writes — aggregate counting was a FIFO-shaped assumption); fresh realm
 proves the surviving stamp is EXACTLY the durable pending claim
-(`preStampDurability === 'pending'`, absent no longer satisfies) and NOT
-trusted via the boot path's own check
+(`preStampDurability === 'pending'`, absent no longer satisfies), NOT
+trusted via the boot path's own check, and — BEFORE any mutation —
+enumerates the torn tree through its own surface: `0 < tornComplete <
+600`, every survivor either byte-exact COMPLETE or an EMPTY
+created-not-swapped entry — the honest OPFS atomic-swap torn model
+(writeFile materializes the handle before close() swaps bytes); any
+partial/wrong-byte state is corruption and fails (dying-realm ack counts
+are not evidence of what survived; all-600-settled fails loudly)
 (`stamps.check(...)` + `installArtifactIdentity`, the
 owner-package-state transition predicate), then a full re-run ends trusted
 with a clean ledger and a FULL-TREE byte-exact proof (all 600 files:
@@ -145,7 +156,7 @@ pins"):
   three legs), releases entry-order:
   `1 < peak <= 16` over the WHOLE run — a cap that frees the timed-out
   op's slot admits a 17th physical persist and fails the `<= 16` half; all
-  29 non-wedge ops complete; final bounded ledger EXACTLY '/wedged';
+  30 non-wedge ops (32 physical boundaries) complete; final bounded ledger EXACTLY '/wedged';
 - GREEN P1 — same-path ops complete in call order under inverted latencies;
 - GREEN P2 — ancestor mkdir persist completes before its child write
   persist;
@@ -153,6 +164,12 @@ pins"):
   completion order; rename fenced before (source-subtree write precedes all
   rename legs) AND after (destination successor write follows every rename
   leg — no overtake, no straddle);
+- GREEN P8 — timeout × routing-fence composition (three pins): a TIMED-OUT
+  wedged op RETAINS its fences — a child write behind a timed-out mkdir, an
+  rm behind a timed-out subtree write, and every rename leg behind a
+  timed-out source write all complete only after the wedge settles (kills
+  the fence-cancelling-on-timeout approximation; wedge released as success
+  → equal-sequence heal → clean ledger);
 - GREEN fault-row carriers (schedule-agnostic end-state asserts, hold under
   serial today and overlapping lanes later): quota-rejected write with two
   concurrent surviving siblings + exact single-path ledger + later heal
@@ -170,11 +187,15 @@ pins"):
   handle on either side).
 
 Stamp-fence pins (install-stamp-authority.fault.test.ts, committed, GREEN —
-sibling sweep over BOTH production writer branches): a trusted stamp never
-becomes durable at the OPFS surface while an earlier-enqueued persist op is
-unsettled — pinned with a wedged out-of-guarded-scope op held past the 30s
-report bound, once through the raw-fsSync writer and once through the
-PRODUCTION claimIo composition (`createOwnerVfsAuthorityComposition` →
+7 tests, every family swept over BOTH production writer branches): a trusted
+stamp never becomes durable at the OPFS surface while an earlier-enqueued
+persist op is unsettled — three families: (i) pre-proof wedge held past the
+30s report bound; (ii) POST-PROOF window — an op enqueued after the
+durability proof resolves but before publication still fences the stamp (a
+fence frozen to the proof watermark fails); (iii) a SETTLED out-of-scope
+rejection stays ledgered while promotion still trusts (kills the
+global-ledger-cleanliness approximation of the fence). Wirings: raw-fsSync
+writer and the PRODUCTION claimIo composition (`createOwnerVfsAuthorityComposition` →
 `installStampClaims.write` → `#writeInstallStampClaim` →
 `authority.#fs.writeFileSync` → the same write-through queue; wiring
 mirrors `workbench-owner-runtime.ts:244-294`). On main FIFO delivers the
@@ -323,18 +344,33 @@ Canonical axes per fault-classes §Axes.
   removal-before-rename proof corrected in place to ride ADR-0358's
   structural subtree fences (dated note + README Corrections row) —
   active-ADR internal consistency restored.
+- Contract+RED attempt 5 (2026-08-16, blockers ANSWERED by re-cut, count
+  carries): stamp-fence family extended to the POST-PROOF window (late op
+  enqueued via the flush seam after proof, before publication) and to the
+  settled-foreign-failure-stays-ledgered-while-trusted differential — both
+  swept over both writers (7 authority pins total); timeout × routing-fence
+  composition pins added (P8 — ancestor/rm/rename fences survive a
+  watchdog timeout); acceptance oracle: exact files+dirs entry equality
+  (stray empty dir fails) + same-run empty-flush probe gating the SHIPPED
+  flush() against per-flush-overhead mutants; kill e2e: fresh-realm torn
+  proof before mutation (0<tornComplete<600; survivors classified by the
+  OPFS atomic-swap torn model — byte-exact complete or empty
+  created-not-swapped, discovered by this carrier's own first run: a
+  zero-size survivor is a legitimate torn state, not corruption); R5
+  counts corrected (30 ops / 32 boundaries).
 - RED evidence (pre-implementation runs on this branch, 2026-08-15/16,
   darwin arm64, node v24.16.0, vitest 2.1.9, Playwright 1.60.0 Chromium):
-  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 76
-    passed | 1 skipped (81)`: exactly R1, R2, R4, R5 FAIL as designed (R1:
+  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 79
+    passed | 1 skipped (84)`: exactly R1, R2, R4, R5 FAIL as designed (R1:
     `expected [ '/slow', '/fast' ] to deeply equal [ '/fast', '/slow' ]`;
     R2: `expected [] to deeply equal [ '/other' ]` — '/other' never
     reaches the surface behind the wedged FIFO head; R4 and R5:
     `expected 1 to be greater than 1` — serial peak is 1), all GREEN pins
     + every pre-existing suite (incl. the still-present FIFO pin) PASS.
   - `npx vitest run packages/workbench/src/glue/install-stamp-authority.fault.test.ts`
-    → `3 passed` incl. BOTH P4 fence pins (raw fsSync + production claimIo
-    composition); kill-power proven against a transient no-FIFO-admission
+    → `7 passed` — all three fence families over both writers (pre-proof
+    wedge, post-proof window, settled-foreign-stays-ledgered);
+    kill-power proven against a transient no-FIFO-admission
     mutant (both fence pins fail on it), file restored byte-exact.
   - `PD256_CALIBRATE=1 RIFTY_PLAYGROUND_PORT=5299 npx playwright test
     --config playwright.browser-unit.config.ts -g "calibration"` →
@@ -345,10 +381,12 @@ Canonical axes per fault-classes §Axes.
     tests/browser-unit/opfs-parallel-drain.spec.ts
     tests/browser-unit/opfs-parallel-drain-kill.spec.ts` → `1 failed, 1
     passed (1.6m)`: acceptance FAILS ONLY the I3 gate — `Expected: >=
-    2.625, Received: 1.4078375114565986`, faithfulMs 41 399 / productMs
-    29 406, both ledgers 0, BOTH whole-tree FULL-BYTE proofs verified
-    (26 811/26 811, mismatch null) — the failure is the ratio, nothing
+    2.625, Received: 1.3915150721342735`, faithfulMs 41 328 / productMs
+    29 700, both ledgers 0, empty-flush probe 0.00019 ms (gate margin
+    ~400x), BOTH whole-tree FULL-ENTRY (26 811 files + 2 314 dirs)
+    FULL-BYTE proofs verified (mismatch null) — the failure is the ratio, nothing
     else; kill e2e PASSES through the production claimIo composition
     (path-aware mid-drain kill — durable pending claim + torn tree; fresh
-    realm reads `durability:"pending"` exactly and refuses trust; retry
-    ends trusted + clean ledger + full-tree 600/600 byte-exact).
+    realm reads `durability:"pending"` exactly, refuses trust, and proves
+    the torn tree pre-mutation: 1 complete + 1 empty of 600; retry ends
+    trusted + clean ledger + full-tree 600/600 byte-exact).

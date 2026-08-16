@@ -2422,4 +2422,215 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
     expect(report.total).toBe(1);
     expect(report.failures).toEqual([expect.objectContaining({ path: '/wedged', op: 'write' })]);
   });
+
+  // -------------------------------------------------------------------------
+  // GREEN preservation pins — composition gap (#256 slice 2): timeout ×
+  // ancestor/rm/rename fences. The two RED pins above prove a timed-out op
+  // FREES unrelated work; nothing above proves it RETAINS its routing fences
+  // — an implementation that CANCELS a timed-out op's ancestor/subtree
+  // fences (freeing dependents to run against the still-in-flight,
+  // uncancellable wedge) passes both. ADR-0358 per-lane watchdog clause: a
+  // wedged op "blocks only its own lane/fences" — its OWN fences (ancestor
+  // gating, rm/rename subtree fences) SURVIVE the 30s report timeout, which
+  // releases reporting only, never the physical op. Each pin: wedge one
+  // boundary → 30s watchdog ledgers it → enqueue a fence DEPENDENT + one
+  // UNRELATED op → grace ticks → the dependent has NOT completed its
+  // boundary; then the wedge is RELEASED AS SUCCESS → everything drains, the
+  // dependent completes strictly after the wedged boundary, the unrelated op
+  // completes (on main only post-release — FIFO parks it too; post-ADR-0358
+  // it flows mid-wedge — the pin asserts it only after the drain), and the
+  // wedge's own timeout ledger entry HEALS on its late success → final
+  // report total 0. GREEN on main (FIFO parks every successor behind the
+  // wedge); kills the fence-cancelling-on-timeout approximation. In THIS
+  // block for its fake-timer teardown.
+  // -------------------------------------------------------------------------
+
+  it('a timed-out mkdir keeps its ancestor fence — a child write enqueued after the timeout completes only after the wedged mkdir settles', async () => {
+    vi.useFakeTimers();
+    const events: string[] = [];
+    let releaseMkdir: () => void = () => {};
+    const wedge = new Promise<void>((release) => {
+      releaseMkdir = release;
+    });
+    // '/p' pre-exists in the FAKE (not the mirror — no refreshIndex) so the
+    // inner getDirectoryHandle resolves once released; the wrapper wedges
+    // ONLY the '/p' persist boundary and logs its completion.
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/p']) });
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = (name, options) => {
+      if (name !== 'p') return innerGetDir(name, options);
+      return wedge.then(async () => {
+        const handle = await innerGetDir(name, options);
+        events.push('mkdir /p');
+        return handle;
+      });
+    };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path: string) => {
+        events.push(`write ${path}`);
+        return Promise.resolve();
+      },
+      rm: () => Promise.resolve(),
+    };
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/p', { recursive: true }); // wedged at the root boundary
+
+    await Promise.resolve(); // wedge enters its boundary
+    await vi.advanceTimersByTimeAsync(30_000); // watchdog ledgers '/p'
+
+    fs.writeFileSync('/p/f', new Uint8Array([1])); // fence DEPENDENT (child of '/p')
+    fs.writeFileSync('/u', new Uint8Array([2])); // UNRELATED — asserted post-drain
+
+    // Grace ticks (R5 idiom): each advances the fake clock 1ms (nowhere near
+    // another watchdog) and drains the microtask chain — room for a
+    // fence-cancelling implementation to run the wrongly-freed dependent.
+    for (let tick = 0; tick < 10; tick++) await vi.advanceTimersByTimeAsync(1);
+    expect(events).not.toContain('write /p/f'); // ancestor gating survived the timeout
+    expect(events).not.toContain('mkdir /p'); // wedge still physically in flight
+
+    releaseMkdir(); // wedge settles as SUCCESS → its timeout ledger entry heals
+    const done = () =>
+      ['mkdir /p', 'write /p/f', 'write /u'].every((event) => events.includes(event));
+    for (let tick = 0; tick < 50 && !done(); tick++) await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1); // residual heal/settle hops
+    const report = await fs.flush();
+    expect(events).toContain('mkdir /p');
+    expect(events.indexOf('write /p/f')).toBeGreaterThan(events.indexOf('mkdir /p'));
+    expect(events).toContain('write /u');
+    expect(report.total).toBe(0);
+  });
+
+  it('a timed-out write keeps the rm subtree fence — a recursive rm enqueued after the timeout completes its removeEntry only after the wedged write settles', async () => {
+    const events: string[] = [];
+    let releaseWrite: () => void = () => {};
+    const wedge = new Promise<void>((release) => {
+      releaseWrite = release;
+    });
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path: string) => {
+        if (path === '/q/f') {
+          return wedge.then(() => {
+            events.push('write /q/f');
+          });
+        }
+        events.push(`write ${path}`);
+        return Promise.resolve();
+      },
+      rm: () => Promise.resolve(),
+    };
+    // '/q' pre-exists in the FAKE and enters the mirror via refreshIndex
+    // (BEFORE fake timers — R5 idiom) so writeFileSync('/q/f') and the
+    // recursive rmSync('/q') are accepted. rmSync persists via root
+    // removeEntry (never surface.rm); the wrapper logs its COMPLETION.
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/q']) });
+    const fs = new OpfsFsSync(root, surface);
+    await fs.refreshIndex();
+    vi.useFakeTimers();
+    const innerRemove = root.removeEntry.bind(root);
+    (root as { removeEntry: FileSystemDirectoryHandle['removeEntry'] }).removeEntry = async (
+      name,
+      options,
+    ) => {
+      await innerRemove(name, options);
+      events.push(`removeEntry /${name}`);
+    };
+    fs.writeFileSync('/q/f', new Uint8Array([1])); // wedged at the surface boundary
+
+    await Promise.resolve(); // wedge enters its boundary
+    await vi.advanceTimersByTimeAsync(30_000); // watchdog ledgers '/q/f'
+
+    fs.rmSync('/q', { recursive: true }); // fence DEPENDENT (subtree rm over '/q/f')
+    fs.writeFileSync('/u', new Uint8Array([2])); // UNRELATED — asserted post-drain
+
+    for (let tick = 0; tick < 10; tick++) await vi.advanceTimersByTimeAsync(1);
+    expect(events).not.toContain('removeEntry /q'); // subtree fence survived the timeout
+    expect(events).not.toContain('write /q/f'); // wedge still physically in flight
+
+    releaseWrite(); // wedge settles as SUCCESS → its timeout ledger entry heals
+    const done = () => ['removeEntry /q', 'write /u'].every((event) => events.includes(event));
+    for (let tick = 0; tick < 50 && !done(); tick++) await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1); // residual heal/settle hops
+    const report = await fs.flush();
+    expect(events).toContain('write /q/f');
+    expect(events.indexOf('removeEntry /q')).toBeGreaterThan(events.indexOf('write /q/f'));
+    expect(events).toContain('write /u');
+    expect(report.total).toBe(0);
+  });
+
+  it('a timed-out write keeps the rename fences — no rename leg completes until the wedged source-subtree write settles', async () => {
+    const events: string[] = [];
+    let releaseWrite: () => void = () => {};
+    const wedge = new Promise<void>((release) => {
+      releaseWrite = release;
+    });
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path: string) => {
+        if (path === '/r/f') {
+          return wedge.then(() => {
+            events.push('write /r/f');
+          });
+        }
+        events.push(`write ${path}`);
+        return Promise.resolve();
+      },
+      rm: (path: string) => {
+        events.push(`rm ${path}`);
+        return Promise.resolve();
+      },
+    };
+    // '/r' pre-exists in the FAKE and enters the mirror via refreshIndex;
+    // '/s' becomes resolvable in the FAKE only after refreshIndex (R4/R5
+    // idiom) so the mirror never sees it pre-rename while the rename's dest
+    // dir create still resolves at the root once admitted. Legs logged at
+    // COMPLETION — the both-side rename-fence pin's instrumentation.
+    const fakeDirs = new Set(['/', '/r']);
+    const root = buildFakeRoot({ files: new Map(), dirs: fakeDirs });
+    const fs = new OpfsFsSync(root, surface);
+    await fs.refreshIndex();
+    fakeDirs.add('/s');
+    vi.useFakeTimers();
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = async (name, options) => {
+      const handle = await innerGetDir(name, options);
+      events.push(`dir /${name}`);
+      return handle;
+    };
+    fs.writeFileSync('/r/f', new Uint8Array([1])); // wedged at the surface boundary
+
+    await Promise.resolve(); // wedge enters its boundary
+    await vi.advanceTimersByTimeAsync(30_000); // watchdog ledgers '/r/f'
+
+    fs.renameSync('/r', '/s'); // fence DEPENDENT (source-subtree + dest fences)
+    fs.writeFileSync('/u', new Uint8Array([2])); // UNRELATED — asserted post-drain
+
+    for (let tick = 0; tick < 10; tick++) await vi.advanceTimersByTimeAsync(1);
+    // persistRenameAsync's three legs — dest dir create (root
+    // getDirectoryHandle), file move (surface.writeFile), source rm
+    // (surface.rm) — NONE completes against the in-flight wedge.
+    for (const leg of ['dir /s', 'write /s/f', 'rm /r'] as const) {
+      expect(events).not.toContain(leg);
+    }
+    expect(events).not.toContain('write /r/f'); // wedge still physically in flight
+
+    releaseWrite(); // wedge settles as SUCCESS → its timeout ledger entry heals
+    const done = () =>
+      ['dir /s', 'write /s/f', 'rm /r', 'write /u'].every((event) => events.includes(event));
+    for (let tick = 0; tick < 50 && !done(); tick++) await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(1); // residual heal/settle hops
+    const report = await fs.flush();
+    const wedgeIdx = events.indexOf('write /r/f');
+    expect(wedgeIdx).toBeGreaterThanOrEqual(0);
+    for (const leg of ['dir /s', 'write /s/f', 'rm /r'] as const) {
+      expect(events.indexOf(leg)).toBeGreaterThan(wedgeIdx);
+    }
+    expect(events).toContain('write /u');
+    expect(report.total).toBe(0);
+  });
 });

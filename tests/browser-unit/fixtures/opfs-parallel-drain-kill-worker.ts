@@ -15,6 +15,14 @@
  * PATH plus a strictly partial tree, so the realm provably dies with a
  * durable pending claim on disk and phase 2 can pin its durability EXACTLY.
  *
+ * Attempt-5 (torn-state): dying-realm ack counts are NOT evidence of what
+ * SURVIVED — writes can settle between the ack and terminate(). Phase 2
+ * therefore enumerates the torn node_modules through the FRESH surface
+ * BEFORE any mutation (surveyTornTree): completed-survivor count strictly
+ * partial; every survivor either byte-exact COMPLETE or EMPTY
+ * created-not-swapped (OPFS atomic-swap torn model) — any third state is
+ * corruption.
+ *
  * Real OPFS, real `OpfsFsSync`, and the PRODUCTION install-stamp composition
  * (reviewer-demanded sibling of the raw-fsSync unit pins — BOTH stamp
  * writers are swept: the raw-fsSync pins and the claimIo composition here):
@@ -184,6 +192,60 @@ async function verifyFullTree(
   return { verified: firstMismatch === null, files: found.length, firstMismatch };
 }
 
+/** FRESH-REALM torn observation (#256 fault row c, attempt-5 reviewer
+ * finding): the dying realm's ack counts are not evidence of what survived —
+ * writes can settle between the ack and terminate(). Phase 2 runs THIS before
+ * any mutation: every surviving node_modules file (stamp excluded) held
+ * byte-exact against the regenerated spec — a survivor with wrong bytes is
+ * corruption, not tearing — plus the survivor count the spec pins strictly
+ * partial (0 < n < 600). If post-ack settlement completed all 600 before
+ * death the spec fails loudly on n === 600: the honest outcome — the ack
+ * window must then be re-tuned, never the assert. */
+/** Honest torn model for OPFS atomic-swap writes: `OpfsVfs.writeFile` first
+ * materializes the entry (`getFileHandle(create:true)` — an EMPTY file
+ * exists immediately), then `createWritable`→`close()` atomically swaps the
+ * bytes in. A realm killed mid-drain therefore leaves every survivor in one
+ * of exactly two states: byte-exact COMPLETE, or EMPTY created-not-swapped.
+ * Any third state (partial/wrong bytes, wrong non-zero size) is corruption. */
+async function surveyTornTree(
+  vfs: OpfsVfs,
+  root: string,
+): Promise<{ tornComplete: number; tornEmpty: number; tornMismatch: string | null }> {
+  const spec = expectedTree(root);
+  const stampPath = installStampPath(root);
+  const found = (await listFiles(vfs, `${root}/node_modules`)).filter((path) => path !== stampPath);
+  let tornComplete = 0;
+  let tornEmpty = 0;
+  let tornMismatch: string | null = null;
+  for (const path of found) {
+    const expected = spec.get(path);
+    if (expected === undefined) {
+      tornMismatch = `unexpected: ${path}`;
+      break;
+    }
+    const actual = await vfs.readFile(path).catch(() => null);
+    if (actual === null) {
+      tornMismatch = `unreadable: ${path}`;
+      break;
+    }
+    if (actual.byteLength === 0 && expected.byteLength > 0) {
+      tornEmpty += 1; // created-not-swapped — legitimate torn state
+      continue;
+    }
+    if (actual.byteLength !== expected.byteLength) {
+      tornMismatch = `size: ${path} got=${actual.byteLength} want=${expected.byteLength}`;
+      break;
+    }
+    const at = actual.findIndex((byte, index) => byte !== expected[index]);
+    if (at !== -1) {
+      tornMismatch = `bytes: ${path} @${at}`;
+      break;
+    }
+    tornComplete += 1;
+  }
+  return { tornComplete, tornEmpty, tornMismatch };
+}
+
 /** The boot path's OWN reuse gate, verbatim predicate from
  * owner-package-state.ts `transition()` (stamps.check + identity equality):
  * only this decides whether a re-open would skip the install. */
@@ -304,16 +366,22 @@ async function readStampDurability(vfs: OpfsVfs, root: string): Promise<string> 
   }
 }
 
-/** Phase 2: a FRESH realm over the torn OPFS. FIRST the on-disk stamp must
- * still be the durable PENDING claim and the boot path's own check must
- * refuse it (never trusted); then the FULL install sequence re-runs to
- * conclusion and must end trusted with a clean ledger and a FULL-TREE
- * byte-exact verify through a fresh OpfsVfs (every path, every size, every
- * byte vs the regenerated spec). */
+/** Phase 2: a FRESH realm over the torn OPFS. FIRST — before ANY mutation —
+ * the on-disk stamp must still be the durable PENDING claim, the boot path's
+ * own check must refuse it (never trusted), and the torn node_modules is
+ * enumerated + byte-verified through this realm's own surface (fresh-realm
+ * torn proof; attempt-5: dying-realm ack counts are not evidence of what
+ * survived); then the FULL install sequence re-runs to conclusion and must
+ * end trusted with a clean ledger and a FULL-TREE byte-exact verify through
+ * a fresh OpfsVfs (every path, every size, every byte vs the regenerated
+ * spec). */
 async function runVerifyRetry(ns: string): Promise<{
   readonly preTrusted: boolean;
   readonly preCheckStatus: string;
   readonly preStampDurability: string;
+  readonly tornComplete: number;
+  readonly tornEmpty: number;
+  readonly tornMismatch: string | null;
   readonly promoteStatus: string;
   readonly postTrusted: boolean;
   readonly reportTotal: number;
@@ -335,6 +403,10 @@ async function runVerifyRetry(ns: string): Promise<{
   const preStampDurability = await readStampDurability(surface, root);
   // ADR-0358 reload honesty: never trust a stamp over an unproven tree.
   const pre = await bootPathTrusts(stamps, root);
+  // FRESH-REALM torn proof BEFORE any mutation (attempt-5 reviewer finding):
+  // the surviving tree is enumerated + byte-verified through this realm's own
+  // surface — only this proves what actually survived the kill.
+  const torn = await surveyTornTree(surface, root);
 
   const claim = await stamps.demote({ root, slug: SLUG });
   authority.mkdirSync(`${root}/node_modules`, { recursive: true });
@@ -365,6 +437,9 @@ async function runVerifyRetry(ns: string): Promise<{
     preTrusted: pre.trusted,
     preCheckStatus: pre.status,
     preStampDurability,
+    tornComplete: torn.tornComplete,
+    tornEmpty: torn.tornEmpty,
+    tornMismatch: torn.tornMismatch,
     promoteStatus: promotion.status,
     postTrusted: post.trusted,
     reportTotal: report.total,

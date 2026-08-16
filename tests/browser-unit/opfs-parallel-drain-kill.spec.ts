@@ -11,9 +11,13 @@
  * (restore-mkdir-dedup.spec.ts row c) explicitly excluded: worker 1 runs
  * the REAL install sequence (demote → tree write → unawaited promote with
  * the real flush seam) and is terminated on a PATH-AWARE mid-drain ack;
- * worker 2 boots fresh over the torn OPFS, proves the surviving on-disk
- * stamp is EXACTLY the durable pending claim and the boot path's own
- * check refuses it, then re-runs the full sequence to a trusted stamp,
+ * worker 2 boots fresh over the torn OPFS and — BEFORE any mutation —
+ * enumerates the torn tree through its own surface (strictly partial,
+ * every survivor byte-exact; attempt-5 reviewer finding: dying-realm ack
+ * counts are not evidence of what survived, writes can settle between
+ * ack and terminate), proves the surviving on-disk stamp is EXACTLY the
+ * durable pending claim and the boot path's own check refuses it, then
+ * re-runs the full sequence to a trusted stamp,
  * clean ledger, and a FULL-TREE byte-exact verify (all 600 files vs the
  * regenerated procedural spec — a spot check could bless a partial tree).
  *
@@ -51,6 +55,9 @@ interface RetryResult {
   readonly preTrusted: boolean;
   readonly preCheckStatus: string;
   readonly preStampDurability: string;
+  readonly tornComplete: number;
+  readonly tornEmpty: number;
+  readonly tornMismatch: string | null;
   readonly promoteStatus: string;
   readonly postTrusted: boolean;
   readonly reportTotal: number;
@@ -115,7 +122,7 @@ test('a realm KILLED mid-promote-drain never leaves a trusted stamp: the fresh r
 
   console.log(
     `[pd256-kill] tree=${ack.treeCompleted}/${ack.treeTotal} stampDurable=${ack.stampDurable} ` +
-      `preStamp=${retry.preStampDurability} preCheck=${retry.preCheckStatus} ` +
+      `torn=${retry.tornComplete}+${retry.tornEmpty}e/600 preStamp=${retry.preStampDurability} preCheck=${retry.preCheckStatus} ` +
       `promote=${retry.promoteStatus} verified=${retry.treeFiles}/600`,
   );
 
@@ -129,6 +136,20 @@ test('a realm KILLED mid-promote-drain never leaves a trusted stamp: the fresh r
   expect(ack.treeTotal).toBe(600);
   expect(ack.treeCompleted).toBeGreaterThan(0);
   expect(ack.treeCompleted).toBeLessThan(600);
+  // FRESH-REALM torn proof (attempt-5): the ack only bounds what had settled
+  // in the DYING realm at ack time — writes can settle between ack and
+  // terminate(), so phase 2 enumerates the surviving node_modules through the
+  // fresh surface BEFORE any retry mutation. Every survivor is byte-exact
+  // (torn, never corrupt) and the tree is strictly partial. If post-ack
+  // settlement completed all 600 files before death, tornComplete === 600
+  // fails LOUDLY — the honest outcome: re-tune the ack window, not the assert.
+  // Honest OPFS torn model: every survivor is byte-exact COMPLETE or an
+  // EMPTY created-not-swapped entry (writeFile materializes the handle
+  // first; bytes land via createWritable close()'s atomic swap) — any
+  // partial/wrong-byte state is corruption (tornMismatch).
+  expect(retry.tornMismatch).toBeNull();
+  expect(retry.tornComplete).toBeGreaterThan(0);
+  expect(retry.tornComplete).toBeLessThan(600);
   // ADR-0358 reload honesty, strong half: the DURABLE pending claim survived
   // the kill — exactly 'pending' on disk; 'absent' no longer satisfies…
   expect(retry.preStampDurability).toBe('pending');
