@@ -5,9 +5,9 @@
  * paths+sizes, procedural bytes) the durability drain completes ≥2.5x faster
  * than the faithful serial baseline measured in the SAME run — asserted on
  * the RAW unrounded ratio, scaled by the calibrated per-op-flush inflation
- * bound and guarded by same-run empty-flush + single-pending delta probes
- * (together they sweep the empty and single-pending flush shapes the
- * faithful loop awaits; the batched shape is the product's own) — with a
+ * bound and guarded by same-run empty-flush + single-pending write + mkdir
+ * delta probes (three shapes sweep the faithful loop's flush population:
+ * empty, pending-write, pending-mkdir; batched = the product's own) — with a
  * clean flush ledger and a fresh-surface WHOLE-TREE durability proof (exact ENTRY
  * equality, files + dirs, with the manifest walk + BYTE-EXACT reads of ALL
  * files, per fault-classes.md exact-bytes) on both variants.
@@ -60,6 +60,17 @@ interface AcceptanceResult {
    * by ONE awaited flush — raw per-op OPFS cost, flush machinery amortized
    * (the product's own shape). RAW unrounded. */
   readonly batchedPerOpMeanMs: number;
+  /** Faithful mkdir-flush count (one mkdir flush per file ⇒ files) —
+   * mkdir-probe-gate multiplier. */
+  readonly faithfulMkdirCount: number;
+  /** Same-run probe (c): mean ms of 200 × { mkdirSync(fresh scratch dir);
+   * await flush() } on the drained faithful instance — the faithful loop's
+   * exact per-mkdir shape (ONE pending mkdir per flush). RAW unrounded. */
+  readonly singlePendingMkdirFlushMeanMs: number;
+  /** Same-run probe (d): per-op mean ms of 200 fresh-dir mkdirs drained by
+   * ONE awaited flush — raw per-op OPFS mkdir cost, flush machinery
+   * amortized (the product's own shape). RAW unrounded. */
+  readonly batchedMkdirPerOpMeanMs: number;
   /** RAW unrounded faithful/product ratio — the asserted I3 gate. */
   readonly speedupRaw: number;
   /** Log convenience only (2-decimal rounding) — never asserted. */
@@ -170,14 +181,32 @@ test('durability drain on a real 26k-file node_modules tree beats the same-run s
   // loop's exact per-op shape (one pending op per awaited flush); (b)
   // batchedPerOpMeanMs amortizes flush machinery to one call (the product's
   // own shape) — max(0, a−b) is the per-nonempty-flush overhead, and scaled
-  // across every faithful flush it must stay ≤10% of the baseline. Together
-  // the empty + single-pending probes sweep both flush shapes the faithful
-  // loop awaits.
+  // across every faithful flush it must stay ≤10% of the baseline; the
+  // pending-MKDIR sibling probe below completes the sweep.
   expect(result.singlePendingFlushMeanMs).toBeGreaterThan(0);
   expect(result.batchedPerOpMeanMs).toBeGreaterThan(0);
   expect(
     Math.max(0, result.singlePendingFlushMeanMs - result.batchedPerOpMeanMs) *
       result.faithfulOpCount,
+  ).toBeLessThanOrEqual(0.1 * result.faithfulMs);
+  // MKDIR-SHAPE closure: the write-shape probe cannot see overhead that
+  // manifests only on pending-MKDIR flushes — the faithful loop awaits
+  // ~files = 26 811 mkdir flushes (one per file) vs the product's 2 315
+  // mkdir ops (11.6:1 asymmetry), so mkdir-persist-only overhead could
+  // inflate the baseline unswept. Same-run delta probe on the SAME drained
+  // faithful instance, scratch outside the verified tree: (c)
+  // singlePendingMkdirFlushMeanMs repeats the faithful loop's per-mkdir
+  // shape (one pending mkdir per awaited flush); (d) batchedMkdirPerOpMeanMs
+  // amortizes flush machinery to one call (the product's own shape) —
+  // max(0, c−d) scaled across every faithful mkdir flush must stay ≤10% of
+  // the baseline. Three probe shapes now sweep the faithful loop's entire
+  // flush population: empty, pending-write, pending-mkdir.
+  expect(result.faithfulMkdirCount).toBe(result.files);
+  expect(result.singlePendingMkdirFlushMeanMs).toBeGreaterThan(0);
+  expect(result.batchedMkdirPerOpMeanMs).toBeGreaterThan(0);
+  expect(
+    Math.max(0, result.singlePendingMkdirFlushMeanMs - result.batchedMkdirPerOpMeanMs) *
+      result.faithfulMkdirCount,
   ).toBeLessThanOrEqual(0.1 * result.faithfulMs);
   // THE I3 gate — RED on main (serial drain ⇒ ~1.3x), GREEN post-ADR-0358.
   // RAW unrounded ratio (`speedup` is log-only rounding), scaled by the

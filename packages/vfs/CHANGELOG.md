@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **OPFS write-through drain goes bounded-parallel (#256, epic
+  project-open-drain-latency slice 2, ADR-0358 — supersedes ADR-0187's
+  global FIFO).** `OpfsFsSync` persists through a per-path lane scheduler
+  (`opfs-drain-scheduler.ts`, ≤16 active lanes): same-path order, ancestor
+  gating, rm/rename subtree fences, same-dir sibling order, per-lane
+  watchdog (30 s bounds ACTIVE I/O; capacity/fence wait never counts),
+  drain-scoped structurally-invalidated dir-handle cache. New
+  `OpfsFsSync.fence()` — real-settle barrier over everything enqueued
+  (cap-queued and past-report-timeout included). `flush()` ledger/report
+  contract unchanged. Real-browser acceptance: 26 811-file real
+  node_modules manifest drains 3.3x faster than the same-run faithful
+  serial baseline headless (41.4 s → 12.6 s), whole-tree byte-exact,
+  mid-drain kill never trusts a pending stamp.
+
 ### Added
 
 - Shared non-empty `VfsMutationIntent` batches and generic

@@ -4,6 +4,13 @@
 
 ### Changed
 
+- **Trusted install-stamp writes carry an explicit full fence (#256,
+  ADR-0358).** `promote()` awaits the drain's real-settle fence immediately
+  before publishing a trusted stamp — under the parallel OPFS drain a
+  trusted stamp still implies every earlier-enqueued persist settled
+  (FIFO admission no longer provides this implicitly); pending/demote
+  writes are unfenced (one fence per transition).
+
 - **Snapshot-restore mkdir dedup (#256, epic project-open-drain-latency
   slice 1).** `prepareWorkspaceArchiveImport().apply()` issues one `mkdirSync`
   per distinct file dirname instead of one before every write — on OpfsFsSync

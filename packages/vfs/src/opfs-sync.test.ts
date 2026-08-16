@@ -1048,40 +1048,6 @@ describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0090)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Write-through FIFO ordering (ADR-0187 Corrected): completion order == call
-// order even when a LATER write could finish faster. Load-bearing: the install
-// stamp is enqueued after the tree's writes, so it can never land BEFORE them
-// — order plus the persist-failure ledger (below) delivers "durable stamp
-// implies durable tree". Parallelizing this queue requires per-path ordering +
-// an explicit stamp barrier — this pin is the tripwire.
-// ---------------------------------------------------------------------------
-
-describe('OpfsFsSync write-through — FIFO completion order (ADR-0187 stamp durability)', () => {
-  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
-  afterEach(() => vi.restoreAllMocks());
-
-  it('completes write-throughs in call order under inverted per-write latencies', async () => {
-    const completed: string[] = [];
-    const delays: Record<string, number> = { '/a': 30, '/b': 15, '/c': 0 };
-    const surface: PairedAsyncSurface = {
-      readFile: () => Promise.resolve(new Uint8Array()),
-      writeFile: async (path: string) => {
-        await new Promise((r) => setTimeout(r, delays[path] ?? 0));
-        completed.push(path);
-      },
-      rm: () => Promise.resolve(),
-    };
-    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
-    const fs = new OpfsFsSync(root, surface);
-    fs.writeFileSync('/a', new Uint8Array([1])); // slowest first…
-    fs.writeFileSync('/b', new Uint8Array([2]));
-    fs.writeFileSync('/c', new Uint8Array([3])); // …fastest last
-    await fs.flush();
-    expect(completed).toEqual(['/a', '/b', '/c']);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Persist-failure ledger (ADR-0187 Corrected): FIFO order alone can't deliver
 // "durable stamp implies durable tree" when a per-op quota/perm failure is
 // swallowed — flush() must REPORT the divergence so a durability-gated caller
@@ -1164,49 +1130,6 @@ describe('OpfsFsSync persist-failure ledger (ADR-0187 Corrected durability gate)
 
     later.resolve();
     await expect(fs.flush()).resolves.toMatchObject({ total: 0 });
-  });
-
-  it('reports every queued operation blocked behind a genuinely hung FIFO head', async () => {
-    vi.useFakeTimers();
-    const head = deferredPersist();
-    const started: string[] = [];
-    const surface: PairedAsyncSurface = {
-      readFile: () => Promise.resolve(new Uint8Array()),
-      writeFile: (path) => {
-        started.push(path);
-        return path === '/hung.txt' ? head.promise : Promise.resolve();
-      },
-      rm: () => Promise.resolve(),
-    };
-    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
-    const fs = new OpfsFsSync(root, surface);
-    fs.writeFileSync('/hung.txt', new Uint8Array([1]));
-    fs.writeFileSync('/other-root.txt', new Uint8Array([2]));
-
-    const flush = fs.flush();
-    try {
-      const report = await advanceToWatchdog(flush);
-
-      expect(started).toEqual(['/hung.txt']);
-      expect(report).not.toBeNull();
-      expect(report).toMatchObject({ total: 2 });
-      expect(report?.anyFailure?.((path) => path === '/hung.txt')).toBe(true);
-      expect(report?.anyFailure?.((path) => path === '/other-root.txt')).toBe(true);
-      expect(report?.failures.find(({ path }) => path === '/other-root.txt')?.message).toMatch(
-        /blocked behind.*timed out/i,
-      );
-
-      head.resolve();
-      await waitForMicrotaskCondition(
-        () => started.includes('/other-root.txt'),
-        'blocked write-through after late head success',
-      );
-      await expect(fs.flush()).resolves.toMatchObject({ total: 0, failures: [] });
-    } finally {
-      head.resolve();
-      await flush;
-      await Promise.resolve();
-    }
   });
 
   it('bounds a hung persist, keeps the mirror live, and heals when the operation finishes late', async () => {
