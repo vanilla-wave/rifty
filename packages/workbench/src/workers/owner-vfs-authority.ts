@@ -1,4 +1,5 @@
 import {
+  type FlushOptions,
   type FsSync,
   type PersistFailureReport,
   VfsError,
@@ -76,7 +77,9 @@ export interface OwnerVfsAuthority extends FsSync {
   ): Promise<OwnerVfsCommitTerminal>;
   /** Preflight actual absolute ingress targets before any batch mutation. */
   assertPortablePaths(paths: readonly string[]): void;
-  flush(): Promise<PersistFailureReport | undefined>;
+  /** `options.onProgress` (ADR-0359) forwards to the drain owner when the
+   * backend supports it; the memory backend simply never emits. */
+  flush(options?: FlushOptions): Promise<PersistFailureReport | undefined>;
   /** ADR-0358 stamp full fence — delegates to the sync mirror when it has one. */
   fence?(): Promise<void>;
 }
@@ -93,7 +96,7 @@ interface OwnerVfsCompositionCapabilities {
 }
 
 interface FlushableFsSync extends FsSync {
-  flush?: () => Promise<PersistFailureReport | undefined>;
+  flush?: (options?: FlushOptions) => Promise<PersistFailureReport | undefined>;
   fence?: () => Promise<void>;
 }
 
@@ -214,9 +217,9 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     return this.#fs.statSyncOrNull(path);
   }
 
-  async flush(): Promise<PersistFailureReport | undefined> {
+  async flush(options?: FlushOptions): Promise<PersistFailureReport | undefined> {
     const flush = (this.#fs as FlushableFsSync).flush;
-    return typeof flush === 'function' ? await flush.call(this.#fs) : undefined;
+    return typeof flush === 'function' ? await flush.call(this.#fs, options) : undefined;
   }
 
   async fence(): Promise<void> {

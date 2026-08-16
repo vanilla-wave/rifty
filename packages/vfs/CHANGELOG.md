@@ -20,6 +20,17 @@
 
 ### Added
 
+- **`OpfsFsSync.flush({ onProgress })` — real drain-progress observer (#256,
+  epic project-open-drain-latency slice 3, ADR-0359).** Events-out only,
+  never a scheduling input: `total` fixed at the flush call =
+  |pending watermark|, `persisted` = watermark ops since settled
+  SUCCESSFULLY — failure-settled and watchdog-released (timed-out) ops never
+  advance it, so an unclean drain never emits a terminal
+  `persisted === total`. One synchronous snapshot per qualifying settle.
+  Internally, persist tasks now rethrow after recording their ledger failure
+  (the scheduler's failure-settle signal); nothing escapes the scheduler and
+  the `flush()` report/ledger contract is unchanged.
+
 - Shared non-empty `VfsMutationIntent` batches and generic
   `VfsMutationGuard`/`guardVfsMutations` contract let host policy fence the
   exact real mutation without owning VFS behavior (ADR-0276).

@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Durability-drain progress on the owner port (#256, epic
+  project-open-drain-latency slice 3, ADR-0359).** New
+  `{ kind: 'durability-progress', persisted, total }` member of
+  `WorkbenchOwnerHealthEvent`: REAL drain-owner counts, arrival doubles as
+  the heartbeat, terminal `persisted === total` only for a clean drain.
+  Worker forwards coalesced `rifty:owner-vfs-durability-progress` frames
+  (O(progress): first + terminal + at most one per 200 ms) over the active
+  project's vfs channel; the page republishes them token-gated in frame
+  order. BREAKING (accepted loud migration, ADR-0359): embedders with
+  exhaustive switches over health-event kinds must handle or default-case
+  the new kind.
+
 ### Changed
 
 - **Trusted install-stamp writes carry an explicit full fence (#256,

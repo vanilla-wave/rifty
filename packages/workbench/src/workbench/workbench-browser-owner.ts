@@ -776,12 +776,12 @@ export function startBrowserWorkspaceOwner(
         publishHealth(
           state.status === 'proved'
             ? Object.freeze({ kind: 'persistence', status: 'healthy' })
-            : Object.freeze({
-                kind: 'persistence',
-                status: 'degraded',
-                recover: state.recover,
-              }),
+            : Object.freeze({ kind: 'persistence', status: 'degraded', recover: state.recover }),
         );
+      },
+      onDurabilityProgress({ persisted, total }) {
+        if (disconnected || exited || activeProject?.token !== opened.projectToken) return;
+        publishHealth(Object.freeze({ kind: 'durability-progress', persisted, total }));
       },
     });
 

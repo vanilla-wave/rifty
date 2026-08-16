@@ -32,6 +32,11 @@
  * - Drain-scoped dir-handle cache: cleared when the drain goes idle and on
  *   every structural REGISTRATION; generation-guarded so an in-flight walk
  *   never re-inserts a pre-clear handle.
+ * - Flush progress observers (ADR-0359): events-out only, never a scheduling
+ *   input. `total` is fixed at registration = |pending| (the reporting-barrier
+ *   watermark universe); `persisted` counts watermark ops settled
+ *   SUCCESSFULLY — failure-settles and timed-out (watchdog-released) ops never
+ *   advance it, so an unclean drain never mints `persisted === total`.
  */
 
 import { dirnameNormalized } from './path.ts';
@@ -42,6 +47,20 @@ export interface PersistOperation {
   readonly paths: readonly string[];
   readonly op: PersistOperationKind;
   readonly sequence: number;
+}
+
+/** One REAL progress snapshot of an observed flush watermark (ADR-0359). */
+export interface FlushProgressSnapshot {
+  readonly persisted: number;
+  readonly total: number;
+}
+
+interface WatermarkProgressObserver {
+  /** Sequences still unsettled from the registration-time pending universe. */
+  readonly watermark: Set<number>;
+  readonly total: number;
+  persisted: number;
+  readonly onProgress: (snapshot: FlushProgressSnapshot) => void;
 }
 
 export interface DrainSchedulerHooks {
@@ -203,6 +222,8 @@ export class OpfsDrainScheduler {
    * cannot be cancelled). Non-empty + full window ⇒ capacity-starved READY
    * ops need bounded blocked reporting or flush() parks forever. */
   private readonly timedOutHolders = new Set<ScheduledOp>();
+  /** Live flush-progress observers (ADR-0359); each dies with its watermark. */
+  private readonly progressObservers = new Set<WatermarkProgressObserver>();
   private readonly hooks: DrainSchedulerHooks;
   readonly dirHandles = new DrainDirHandleCache();
 
@@ -282,6 +303,20 @@ export class OpfsDrainScheduler {
     return Promise.allSettled(barriers).then(() => undefined);
   }
 
+  /** Observes flush progress over the CURRENT pending watermark (ADR-0359).
+   * `onProgress` fires synchronously per watermark op that REALLY settles
+   * successfully; the observer unregisters itself once every watermark op has
+   * settled (success or failure). No pending ops → nothing to observe. */
+  observeFlushProgress(onProgress: (snapshot: FlushProgressSnapshot) => void): void {
+    if (this.pending.size === 0) return;
+    this.progressObservers.add({
+      watermark: new Set(this.pending.keys()),
+      total: this.pending.size,
+      persisted: 0,
+      onProgress,
+    });
+  }
+
   /** REAL-settle barrier over every op enqueued so far (ADR-0358 stamp full
    * fence): resolves only when each has settled at the OPFS surface —
    * cap-queued and past-report-timeout ops included. Never rejects. */
@@ -346,21 +381,27 @@ export class OpfsDrainScheduler {
       this.reportBlockedDependents(op);
       this.reportCapacityStarved();
     }, PERSIST_OPERATION_REPORT_TIMEOUT_MS);
-    const finish = (): void => {
+    const finish = (succeeded: boolean): void => {
       clearTimeout(timer);
-      this.settle(op);
+      this.settle(op, succeeded);
     };
     let outcome: Promise<void>;
     try {
       outcome = op.run(op.operation);
-    } catch {
-      // Tasks record their own failures; a synchronous throw still settles.
-      outcome = Promise.resolve();
+    } catch (error) {
+      // Tasks record their own failures in the ledger; a synchronous throw
+      // still settles — as a failure-settle (never advances progress).
+      outcome = Promise.reject(error);
     }
-    outcome.then(finish, finish);
+    // Task rejection = failure-settle signal (ADR-0359): tasks record their
+    // ledger failure, then rethrow; it never escapes the scheduler.
+    outcome.then(
+      () => finish(true),
+      () => finish(false),
+    );
   }
 
-  private settle(op: ScheduledOp): void {
+  private settle(op: ScheduledOp, succeeded: boolean): void {
     op.settleReporting();
     op.settleOp();
     this.timedOutHolders.delete(op);
@@ -378,7 +419,22 @@ export class OpfsDrainScheduler {
     op.dependents.clear();
     // Drain idle — the dir-handle cache dies with its drain (ADR-0358).
     if (this.pending.size === 0) this.dirHandles.clear();
+    this.notifyProgress(op, succeeded);
     this.admit();
+  }
+
+  /** One synchronous snapshot per qualifying settle: watermark member,
+   * task success, never timed out (a watchdog-released op's reporting is
+   * already a dirty-report fact — its late success must not mint progress). */
+  private notifyProgress(op: ScheduledOp, succeeded: boolean): void {
+    for (const observer of this.progressObservers) {
+      if (!observer.watermark.delete(op.operation.sequence)) continue;
+      if (succeeded && !op.timedOut) {
+        observer.persisted += 1;
+        observer.onProgress({ persisted: observer.persisted, total: observer.total });
+      }
+      if (observer.watermark.size === 0) this.progressObservers.delete(observer);
+    }
   }
 
   /** A timed-out op RETAINS its fences; its transitively-fenced QUEUED

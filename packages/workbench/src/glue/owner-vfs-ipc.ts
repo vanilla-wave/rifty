@@ -89,6 +89,14 @@ export type OwnerVfsDurabilityAckMessage =
       readonly error: OwnerVfsErrorFrame;
     };
 
+/** ADR-0359: coalesced REAL drain-progress counts, owner→page, advisory.
+ * `total` is fixed per drain; `persisted` counts SUCCESSFUL settles only. */
+export interface OwnerVfsDurabilityProgressMessage {
+  readonly type: 'rifty:owner-vfs-durability-progress';
+  readonly persisted: number;
+  readonly total: number;
+}
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return value !== null && typeof value === 'object';
 }
@@ -307,6 +315,18 @@ function isOwnerVfsDurabilityReceipt(value: unknown): value is OwnerVfsDurabilit
     isNonemptyString(value.ownerEpoch) &&
     isNonnegativeSafeInteger(value.treeRevision) &&
     (value.durability === 'durable' || value.durability === 'ephemeral')
+  );
+}
+
+export function isOwnerVfsDurabilityProgressMessage(
+  message: unknown,
+): message is OwnerVfsDurabilityProgressMessage {
+  return (
+    isRecord(message) &&
+    message.type === 'rifty:owner-vfs-durability-progress' &&
+    isNonnegativeSafeInteger(message.persisted) &&
+    isNonnegativeSafeInteger(message.total) &&
+    message.persisted <= message.total
   );
 }
 
