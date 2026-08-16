@@ -44,6 +44,7 @@
 import { NotImplementedError, VfsError } from './errors.ts';
 import type { FsSync } from './fs-sync.ts';
 import {
+  type FlushProgressSnapshot,
   OpfsDrainScheduler,
   PERSIST_OPERATION_REPORT_TIMEOUT_MS,
   type PersistOperation,
@@ -119,6 +120,14 @@ export interface PersistFailureReport {
    * (there the sample IS the full set), where callers fall back to `failures`.
    */
   readonly anyFailure?: (predicate: (path: string) => boolean) => boolean;
+}
+
+/** {@link OpfsFsSync.flush} options (ADR-0359): `onProgress` observes REAL
+ * settled counts over the flush-time watermark — `total` = ops pending at the
+ * call, `persisted` = the subset since settled successfully. Events-out only;
+ * never changes the drain. */
+export interface FlushOptions {
+  readonly onProgress?: (snapshot: FlushProgressSnapshot) => void;
 }
 
 /** Report-sample size: consumers read `failures[0]` + `total`; shipping the
@@ -496,7 +505,10 @@ export class OpfsFsSync implements FsSync {
         // Mirror already reflects intent; a failed persist (quota, perm)
         // reconciles on next refresh — but the divergence is RECORDED so a
         // durability-gated caller (install stamp) can refuse to trust it.
+        // Rethrow = the scheduler's failure-settle signal (ADR-0359); it
+        // never escapes the scheduler.
         this.recordPersistFailure(path, 'mkdir', err, operation.sequence);
+        throw err;
       }
     });
   }
@@ -524,7 +536,9 @@ export class OpfsFsSync implements FsSync {
           this.clearPersistFailuresUnder(path, operation.sequence);
           return;
         }
+        // Rethrow = failure-settle signal (see persistMkdirAsync).
         this.recordPersistFailure(path, 'rm', err, operation.sequence);
+        throw err;
       }
     });
   }
@@ -660,7 +674,9 @@ export class OpfsFsSync implements FsSync {
         // refreshIndex/preload reconciles. Cache stays correct for sync
         // callers in this realm — but the divergence is RECORDED: a caller
         // that promises durability (install stamp) must be able to see it.
+        // Rethrow = failure-settle signal (see persistMkdirAsync).
         this.recordPersistFailure(normalized, 'write', err, operation.sequence);
+        throw err;
       }
     });
   }
@@ -732,8 +748,14 @@ export class OpfsFsSync implements FsSync {
    * AND once any lane holder times out, capacity-starved queued ops get
    * bounded blocked reporting too (healed on later success) — so flush()
    * resolves even when every lane is wedged.
+   *
+   * `options.onProgress` (ADR-0359) observes the drain: one synchronous REAL
+   * snapshot per watermark op that settles successfully. Counts can stop
+   * short of `total` (wedge/failure) even though the bounded report resolves.
    */
-  async flush(): Promise<PersistFailureReport> {
+  async flush(options?: FlushOptions): Promise<PersistFailureReport> {
+    const onProgress = options?.onProgress;
+    if (onProgress !== undefined) this.scheduler.observeFlushProgress(onProgress);
     await this.scheduler.reportingBarrier();
     const failures: PersistFailure[] = [];
     for (const tracked of this.persistFailures.values()) {
@@ -1156,7 +1178,9 @@ export class OpfsFsSync implements FsSync {
           // Any source/destination can now differ from the atomic sync view.
           // Record the full move footprint so a root-scoped durability gate
           // cannot miss a cross-root rename; a later successful move heals it.
+          // Rethrow = failure-settle signal (see persistMkdirAsync).
           this.recordOperationFailure(operation, err);
+          throw err;
         }
       },
     );

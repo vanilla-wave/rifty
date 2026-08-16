@@ -196,6 +196,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0329 | Authority-owned project Save rebinds exact installed-tree trust |
 | 0336 | Exact Vite 8 projects pin the proven Rolldown WASI runtime |
 | 0346 | Baked dependency snapshots carry replay tarball cache |
+| 0359 | Durability-drain progress as a health-event kind on the workbench owner port |
 
 ### toolchain-build
 

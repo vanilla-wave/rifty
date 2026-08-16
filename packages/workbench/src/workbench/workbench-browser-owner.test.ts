@@ -1899,4 +1899,86 @@ describe('browser Workbench owner transport', () => {
       await raw.closed;
     }
   });
+
+  // ADR-0359 (#256 drain-progress, epic project-open-drain-latency I1) —
+  // committed RED-first carrier. Worker-realm drain counts ride the EXISTING
+  // owner→page durability channel (the workbench:project-vfs frame family
+  // that already feeds onDurabilityState → publishHealth); the page publishes
+  // them as a new `{ kind: 'durability-progress', persisted, total }` member
+  // of WorkbenchOwnerHealthEvent. Neither the owner frame nor the health kind
+  // exists on main — the assertion fails at runtime (no compile error: events
+  // are matched via structural casts). Monotonicity/coalescing is owned by
+  // the WORKER-side emitter (ADR-0359 Consequences: O(progress) at the
+  // emitter); the page hop pinned here forwards exact frames in order.
+  it('publishes owner drain-progress frames as durability-progress health events (ADR-0359 — DESIGNED RED on main)', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    void raw.closed.catch(() => {});
+    const health: WorkbenchOwnerHealthEvent[] = [];
+    raw.subscribeHealth?.((event) => health.push(event));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    const root = '/owner-born/project-a';
+    const opening = raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/src/main.ts': 'initial' } }),
+      ),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', root, [
+      { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v1' },
+      {
+        path: `${root}/src/main.ts`,
+        kind: 'file',
+        size: 7,
+        content: encoder.encode('initial'),
+        version: 'file-v1',
+      },
+    ]);
+    await opening;
+
+    // Designed owner→page frame (absent on main): coalesced REAL counts from
+    // the drain owner, one mid-drain snapshot then the terminal completion.
+    for (const counts of [
+      { persisted: 3, total: 10 },
+      { persisted: 10, total: 10 },
+    ]) {
+      worker.emit('message', {
+        type: 'workbench:project-vfs',
+        projectToken: 'owner-token-a',
+        frame: { type: 'rifty:owner-vfs-durability-progress', ...counts },
+      });
+    }
+    await settleMicrotasks();
+
+    const progress = health
+      .filter((event) => (event as { readonly kind: string }).kind === 'durability-progress')
+      .map((event) => {
+        const shaped = event as unknown as {
+          readonly kind: string;
+          readonly persisted: number;
+          readonly total: number;
+        };
+        return { kind: shaped.kind, persisted: shaped.persisted, total: shaped.total };
+      });
+    // DESIGNED RED on main: no durability-progress handling exists anywhere in
+    // packages/workbench — the unknown frame trips the protocol inspector into
+    // fatal-invariant instead and the listener sees no progress event.
+    expect(progress).toEqual([
+      { kind: 'durability-progress', persisted: 3, total: 10 },
+      { kind: 'durability-progress', persisted: 10, total: 10 },
+    ]);
+    // Progress is health, never failure: the owner stays alive and unkilled.
+    expect(health.some((event) => event.kind === 'fatal-invariant')).toBe(false);
+    expect(worker.killedWith).toBeNull();
+
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
+  });
 });

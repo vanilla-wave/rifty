@@ -19,7 +19,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotImplementedError, VfsError } from './errors.ts';
-import { OpfsFsSync, type PairedAsyncSurface, walkOpfsTree } from './opfs-sync.ts';
+import {
+  OpfsFsSync,
+  type PairedAsyncSurface,
+  type PersistFailureReport,
+  walkOpfsTree,
+} from './opfs-sync.ts';
 
 describe('OpfsFsSync (Node test env)', () => {
   it('isSupported() is false outside a Worker realm with createSyncAccessHandle', () => {
@@ -2945,5 +2950,256 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
     // entry (the ledger is per-path; both reportings settled boundedly).
     expect(report.total).toBe(17);
     expect(report.anyFailure?.((path) => path === '/x')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADR-0359 durability-drain progress observer — committed RED-first carriers
+// (#256 slice drain-progress, epic project-open-drain-latency I1). Designed
+// vfs seam: `flush({ onProgress })` — an events-out callback on the flush
+// path (never a scheduler change) emitting REAL settled counts up to the
+// flush watermark: `total` = ops unsettled at flush() call (exactly the
+// reportingBarrier universe — opfs-drain-scheduler `pending`), `persisted` =
+// the subset since REALLY settled successfully. Snapshot ARRIVAL doubles as
+// the heartbeat; a wedged op is distinguishable because counts stop
+// advancing while flush's bounded report shows unhealed ops; the terminal
+// `persisted === total` shape is emitted ONLY for a drain that completed
+// cleanly. The seam does not exist on main — each pin fails on its designed
+// runtime assert (marked DESIGNED RED), never a compile error: the option
+// rides a structural cast.
+// ---------------------------------------------------------------------------
+
+interface FlushProgressSnapshot {
+  readonly persisted: number;
+  readonly total: number;
+}
+
+/** Structural view of the designed ADR-0359 flush seam; cast-invoked so the
+ * carrier compiles on main, where the option does not exist yet. */
+interface FlushWithProgress {
+  flush(options?: {
+    readonly onProgress?: (snapshot: FlushProgressSnapshot) => void;
+  }): Promise<PersistFailureReport>;
+}
+
+describe('OpfsFsSync flush progress observer (ADR-0359)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  interface GatedSurface extends PairedAsyncSurface {
+    release(path: string): void;
+    /** Writes REALLY completed at the surface — incremented BEFORE OpfsFsSync
+     * can observe the settlement, so it is the honesty oracle a snapshot's
+     * `persisted` must equal at emission time. */
+    settled(): number;
+  }
+
+  function gatedSurface(): GatedSurface {
+    const gates = new Map<string, () => void>();
+    let settled = 0;
+    return {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path) =>
+        new Promise<void>((resolve) => {
+          gates.set(path, resolve);
+        }).then(() => {
+          settled += 1;
+        }),
+      rm: () => Promise.resolve(),
+      release(path) {
+        const gate = gates.get(path);
+        if (!gate) throw new Error(`no gated write for ${path}`);
+        gates.delete(path);
+        gate();
+      },
+      settled: () => settled,
+    };
+  }
+
+  async function drainMicrotasks(): Promise<void> {
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+  }
+
+  it('emits real monotone {persisted,total} snapshots over a gated drain, culminating at persisted===total===N (DESIGNED RED on main)', async () => {
+    const N = 5;
+    const surface = gatedSurface();
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    const paths: string[] = [];
+    for (let i = 0; i < N; i++) {
+      const path = `/progress-${String(i)}.txt`;
+      paths.push(path);
+      fs.writeFileSync(path, new Uint8Array([i]));
+    }
+
+    const snapshots: FlushProgressSnapshot[] = [];
+    const flushing = (fs as unknown as FlushWithProgress).flush({
+      onProgress: (snapshot) => {
+        snapshots.push({ persisted: snapshot.persisted, total: snapshot.total });
+      },
+    });
+    for (const path of paths) {
+      surface.release(path);
+      await drainMicrotasks();
+    }
+    await expect(flushing).resolves.toMatchObject({ total: 0 });
+
+    // DESIGNED RED on main: no observer seam exists — no snapshot ever fires.
+    expect(snapshots.length).toBeGreaterThan(0);
+    for (const snapshot of snapshots) {
+      // Watermark is FIXED at flush() call — later enqueues never grow it.
+      expect(snapshot.total).toBe(N);
+      expect(snapshot.persisted).toBeGreaterThanOrEqual(0);
+      expect(snapshot.persisted).toBeLessThanOrEqual(snapshot.total);
+    }
+    for (let i = 1; i < snapshots.length; i++) {
+      expect((snapshots[i] as FlushProgressSnapshot).persisted).toBeGreaterThanOrEqual(
+        (snapshots[i - 1] as FlushProgressSnapshot).persisted,
+      );
+    }
+    expect(snapshots.at(-1)).toEqual({ persisted: N, total: N });
+  });
+
+  it('honesty: every snapshot persisted EQUALS the surface-settled count at emission — no synthetic increments, no eased values (DESIGNED RED on main)', async () => {
+    const N = 4;
+    const surface = gatedSurface();
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    const paths: string[] = [];
+    for (let i = 0; i < N; i++) {
+      const path = `/honest-${String(i)}.txt`;
+      paths.push(path);
+      fs.writeFileSync(path, new Uint8Array([i]));
+    }
+
+    const emissions: Array<{
+      readonly snapshot: FlushProgressSnapshot;
+      readonly settledAtEmission: number;
+    }> = [];
+    const flushing = (fs as unknown as FlushWithProgress).flush({
+      onProgress: (snapshot) => {
+        emissions.push({
+          snapshot: { persisted: snapshot.persisted, total: snapshot.total },
+          settledAtEmission: surface.settled(),
+        });
+      },
+    });
+    // Release ops ONE at a time with quiescence between: at any emission the
+    // only honest `persisted` is the exact surface-settled count.
+    for (const path of paths) {
+      surface.release(path);
+      await drainMicrotasks();
+    }
+    await expect(flushing).resolves.toMatchObject({ total: 0 });
+
+    // DESIGNED RED on main: no observer seam — zero emissions arrive.
+    expect(emissions.length).toBeGreaterThan(0);
+    for (const emission of emissions) {
+      expect(emission.snapshot.persisted).toBe(emission.settledAtEmission);
+    }
+    expect(emissions.at(-1)?.snapshot).toEqual({ persisted: N, total: N });
+  });
+
+  it('wedge: counts STOP advancing with no terminal persisted===total while the bounded report shows the wedge (DESIGNED RED on main)', async () => {
+    vi.useFakeTimers();
+    const surface = gatedSurface();
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    fs.writeFileSync('/settles.txt', new Uint8Array([1]));
+    fs.writeFileSync('/wedged.txt', new Uint8Array([2]));
+
+    const snapshots: FlushProgressSnapshot[] = [];
+    const flushing = (fs as unknown as FlushWithProgress).flush({
+      onProgress: (snapshot) => {
+        snapshots.push({ persisted: snapshot.persisted, total: snapshot.total });
+      },
+    });
+    surface.release('/settles.txt');
+    await drainMicrotasks();
+    // Past the 30s report bound: flush's REPORTING is released (bounded dirty
+    // result); the wedged op keeps its lane — the drain did NOT complete.
+    await vi.runAllTimersAsync();
+    const report = await flushing;
+    expect(report).toMatchObject({
+      total: 1,
+      failures: [expect.objectContaining({ path: '/wedged.txt' })],
+    });
+
+    // DESIGNED RED on main (no observer at all). Designed semantics: snapshot
+    // arrival is the heartbeat — the settled op emitted, then counts STALLED
+    // at 1/2 (stall ≠ terminal)…
+    expect(snapshots.length).toBeGreaterThan(0);
+    expect(snapshots.at(-1)).toEqual({ persisted: 1, total: 2 });
+    // …and a drain that did not complete cleanly NEVER emits the terminal
+    // persisted===total completion shape.
+    expect(snapshots.some((snapshot) => snapshot.persisted === snapshot.total)).toBe(false);
+
+    // The wedged op now settles LATE as a SUCCESS — after the watchdog
+    // already released its reporting into the dirty report. Contract:
+    // watchdog-released ops never advance `persisted` — a late success must
+    // not mint a terminal persisted===total for a flush that reported dirty.
+    // (This release doubles as hygiene: the browser op settles before the
+    // test realm exits.)
+    const preReleaseCount = snapshots.length;
+    const preReleasePersisted = (snapshots.at(-1) as FlushProgressSnapshot).persisted;
+    surface.release('/wedged.txt');
+    await drainMicrotasks();
+    for (let tick = 0; tick < 5; tick++) await vi.advanceTimersByTimeAsync(1);
+    for (const snapshot of snapshots.slice(preReleaseCount)) {
+      expect(snapshot.persisted).toBeLessThanOrEqual(preReleasePersisted);
+    }
+    expect(snapshots.some((snapshot) => snapshot.persisted === snapshot.total)).toBe(false);
+  });
+
+  it('a failure-settled op never advances persisted — an unclean drain never reaches a terminal snapshot (DESIGNED RED on main)', async () => {
+    const N = 4; // 3 gated deferred successes + 1 immediately-rejecting op
+    const gated = gatedSurface();
+    const surface: PairedAsyncSurface = {
+      readFile: gated.readFile,
+      writeFile: (path, data) =>
+        path === '/fail'
+          ? Promise.reject(new Error('surface write blew up'))
+          : gated.writeFile(path, data),
+      rm: gated.rm,
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    const successes: string[] = [];
+    for (let i = 0; i < N - 1; i++) {
+      const path = `/ok-${String(i)}.txt`;
+      successes.push(path);
+      fs.writeFileSync(path, new Uint8Array([i]));
+    }
+    fs.writeFileSync('/fail', new Uint8Array([9])); // settles as FAILURE
+
+    const snapshots: FlushProgressSnapshot[] = [];
+    const flushing = (fs as unknown as FlushWithProgress).flush({
+      onProgress: (snapshot) => {
+        snapshots.push({ persisted: snapshot.persisted, total: snapshot.total });
+      },
+    });
+    for (const path of successes) {
+      gated.release(path);
+      await drainMicrotasks();
+    }
+    // The failure-settled op makes this a DIRTY drain: flush reports it.
+    await expect(flushing).resolves.toMatchObject({
+      total: 1,
+      failures: [expect.objectContaining({ path: '/fail', op: 'write' })],
+    });
+
+    // DESIGNED RED on main: no observer seam exists — no snapshot ever fires.
+    expect(snapshots.length).toBeGreaterThan(0);
+    // `persisted` counts watermark ops settled SUCCESSFULLY: the scheduler's
+    // `settled` resolves on failure too, but a failure-settled op must never
+    // advance the count — an unclean drain never reaches persisted===total.
+    for (const snapshot of snapshots) {
+      expect(snapshot.persisted).toBeLessThanOrEqual(N - 1);
+      expect(snapshot.persisted).not.toBe(snapshot.total);
+    }
+    expect(snapshots.at(-1)).toEqual({ persisted: N - 1, total: N });
   });
 });

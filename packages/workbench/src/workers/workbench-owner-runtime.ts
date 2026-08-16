@@ -9,6 +9,7 @@ import {
   ensureStarterInitialCommit,
 } from '../glue/git-initial-baseline.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
+import type { OwnerVfsDurabilityProgressMessage } from '../glue/owner-vfs-ipc.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
@@ -105,6 +106,48 @@ function assertCleanDurability(report: Awaited<ReturnType<OwnerVfsAuthority['flu
   throw new Error(
     `${String(report.total)} unhealed persistence failure(s)${detail ? `: ${detail}` : ''}`,
   );
+}
+
+/** Coalescing floor for owner→page durability-progress frames (ADR-0359). */
+const DURABILITY_PROGRESS_MIN_INTERVAL_MS = 200;
+
+/**
+ * Per-flush O(progress) coalescer (ADR-0359 Consequences): the drain owner
+ * emits one snapshot per settled op; this forwards a frame only for (a) a
+ * CHANGED `persisted` that is (b) the first of the flush, the terminal
+ * `persisted === total`, or ≥{@link DURABILITY_PROGRESS_MIN_INTERVAL_MS}
+ * after the last forwarded frame — so frames scale with drain wall-clock,
+ * never op count. Dropped/undeliverable frames are honest: progress is
+ * advisory; the flush report stays the durability truth.
+ */
+function createDurabilityProgressForwarder(
+  emitter: () => ((frame: OwnerVfsDurabilityProgressMessage) => void) | null,
+): (snapshot: { readonly persisted: number; readonly total: number }) => void {
+  let lastForwardedAt = 0;
+  let lastPersisted = -1;
+  return (snapshot) => {
+    const now = Date.now();
+    if (snapshot.persisted === lastPersisted) return;
+    if (
+      snapshot.persisted !== snapshot.total &&
+      now - lastForwardedAt < DURABILITY_PROGRESS_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+    const emit = emitter();
+    if (emit === null) return;
+    lastForwardedAt = now;
+    lastPersisted = snapshot.persisted;
+    try {
+      emit({
+        type: 'rifty:owner-vfs-durability-progress',
+        persisted: snapshot.persisted,
+        total: snapshot.total,
+      });
+    } catch {
+      // Project channel fenced/closed mid-drain — drop; never fail the drain.
+    }
+  };
 }
 
 function playgroundTypeScriptWorkerUrl(config: WorkbenchOwnerBootConfig): string {
@@ -287,11 +330,18 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           }),
     })
   ).manager;
+  // ADR-0359 late-bound durability-progress emitter: packageState composes
+  // before any project/controller exists, so drain snapshots route through
+  // this slot — bound by the active project below, null → frames drop.
+  let emitDurabilityProgress: ((frame: OwnerVfsDurabilityProgressMessage) => void) | null = null;
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
     installStampClaims,
-    flush: () => authority.flush(),
+    flush: () =>
+      authority.flush({
+        onProgress: createDurabilityProgressForwarder(() => emitDurabilityProgress),
+      }),
     amendGeneratedBaseline,
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
@@ -528,6 +578,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         }
       }
       activeProjectVfs = projectVfs;
+      emitDurabilityProgress = (frame) => input.emit({ type: 'vfs', frame });
       return Object.freeze({
         ...(playgroundTools === undefined
           ? {}
@@ -562,7 +613,10 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           } catch (error) {
             failures.push(error);
           } finally {
-            if (activeProjectVfs === projectVfs) activeProjectVfs = null;
+            if (activeProjectVfs === projectVfs) {
+              activeProjectVfs = null;
+              emitDurabilityProgress = null;
+            }
             if (activeProjectRoot === projectRoot) activeProjectRoot = null;
           }
           if (failures.length === 1) throw failures[0];

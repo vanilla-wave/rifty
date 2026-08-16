@@ -3,12 +3,14 @@ import type {
   OwnerVfsCommitTerminal,
   OwnerVfsDurabilityAckMessage,
   OwnerVfsDurabilityIpcMessage,
+  OwnerVfsDurabilityProgressMessage,
   OwnerVfsErrorFrame,
 } from '../glue/owner-vfs-ipc.ts';
 import {
   isOwnerVfsCommitIpcMessage,
   isOwnerVfsDurabilityAckMessage,
   isOwnerVfsDurabilityIpcMessage,
+  isOwnerVfsDurabilityProgressMessage,
   validateOwnerVfsCommitTerminal,
 } from '../glue/owner-vfs-ipc.ts';
 import type {
@@ -124,6 +126,7 @@ export type PageProjectVfsFrame =
 export type OwnerProjectVfsFrame =
   | OwnerVfsCommitTerminal
   | OwnerVfsDurabilityAckMessage
+  | OwnerVfsDurabilityProgressMessage
   | ProjectVfsSnapshotMessage
   | ProjectVfsStateMessage
   | ProjectVfsFatalMessage
@@ -176,6 +179,14 @@ export function inspectOwnerProjectVfsFrame(value: unknown): OwnerProjectVfsFram
       inspectDurabilityAck(frame);
       if (!isOwnerVfsDurabilityAckMessage(frame)) {
         throw invalid('owner project VFS durability result');
+      }
+      return frame;
+    case 'rifty:owner-vfs-durability-progress':
+      exact(frame, ['type', 'persisted', 'total'], 'owner project VFS durability progress');
+      nonNegativeInteger(frame.persisted, 'owner project VFS durability progress persisted');
+      nonNegativeInteger(frame.total, 'owner project VFS durability progress total');
+      if (!isOwnerVfsDurabilityProgressMessage(frame)) {
+        throw invalid('owner project VFS durability progress');
       }
       return frame;
     case 'workbench:project-vfs-snapshot':
