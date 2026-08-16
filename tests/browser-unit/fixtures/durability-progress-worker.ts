@@ -14,8 +14,10 @@
  * which has no browser-unit driver), so I1's "workbench owner health stream"
  * is carried by two committed hops: (a) THIS fixture proves REAL monotone
  * counts at the drain owner at scale, and (b) the workbench-browser-owner
- * unit pin proves the page hop (owner `rifty:owner-vfs-durability-progress`
- * frame → `{kind:'durability-progress'}` health event on subscribeHealth).
+ * unit pin proves the page hop (owner-level `workbench:durability-progress`
+ * message → `{kind:'durability-progress'}` health event on subscribeHealth;
+ * channel corrected 2026-08-16 by the first-open unit — the original
+ * per-project vfs frame hop was mute for the first-open drain).
  *
  * The op stream below is apply()'s exact post-mkdir-dedup restore shape
  * (workspace-archive.ts): one ns-root mkdir, one mkdir per distinct dir

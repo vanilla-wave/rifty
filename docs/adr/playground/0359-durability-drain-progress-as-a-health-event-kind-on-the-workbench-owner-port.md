@@ -44,6 +44,16 @@ big trees, and timeouts still cannot distinguish slow from stuck. Epic
   that feeds `onDurabilityState` → `publishHealth`) — no new coordination
   mechanism, no reverse imports; the vfs seam is a progress observer on the
   flush path (an events-out callback, not a scheduler change).
+  > Corrected (2026-08-16, #256 first-open unit): the "existing owner→page
+  > durability channel" clause is superseded — that channel is per-project
+  > token-gated (`workbench:project-vfs`), so the FIRST-OPEN materialization
+  > drain (I1's central case) could never deliver on it: the emit slot binds
+  > only at project-runtime creation, after the promote proof-flush
+  > completes. Progress now rides an owner-LEVEL control message
+  > `workbench:durability-progress` on the same owner→page ipc (health
+  > listeners are owner-level and precede any open); the per-project vfs
+  > frame hop is removed. Shape, surface, reach, honesty, and coalescing
+  > clauses stand unchanged.
 
 ## Consequences
 

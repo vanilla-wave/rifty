@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **First-open materialization drain now emits `durability-progress` (#256,
+  epic project-open-drain-latency final slice; ADR-0359 corrected
+  2026-08-16).** Progress rides a new owner-LEVEL `workbench:durability-
+  progress` control message on the existing owner→page ipc — durability is
+  owner-scoped and the first-open promote proof-flush completes before any
+  project runtime exists, so the slice-3 per-project vfs frame hop (late-
+  bound emit slot, token-gated republish) was mute for the epic's central
+  case and is removed; one channel now carries ALL drains. Coalescing,
+  counts honesty, reach, and the `WorkbenchOwnerHealthEvent` surface are
+  unchanged.
+
 ### Added
 
 - **Durability-drain progress on the owner port (#256, epic

@@ -40,11 +40,6 @@ export interface ProjectContentTransportOptions {
   readonly timers?: OwnerVfsClientTimers;
   readonly reportProtocolError?: (error: VfsCommitProtocolError) => void;
   readonly onDurabilityState?: (state: VfsCommitDurabilityState) => void;
-  /** ADR-0359: owner drain-progress counts, delivered in frame order. */
-  readonly onDurabilityProgress?: (progress: {
-    readonly persisted: number;
-    readonly total: number;
-  }) => void;
 }
 
 export interface ProjectContentTransport {
@@ -491,9 +486,6 @@ export function createProjectContentTransport(
     }
     if (client.accept(frame)) return;
     switch (frame.type) {
-      case 'rifty:owner-vfs-durability-progress':
-        options.onDurabilityProgress?.({ persisted: frame.persisted, total: frame.total });
-        return;
       case 'workbench:project-vfs-snapshot': {
         try {
           acceptSnapshot(frame);
