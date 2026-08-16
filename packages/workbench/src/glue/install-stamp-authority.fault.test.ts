@@ -413,3 +413,102 @@ for (const wiring of STAMP_WRITER_WIRINGS) {
     });
   });
 }
+
+// One MORE held op than ADR-0358's ~16-lane admission cap: under any bounded
+// scheduler at least one of them is CAP-QUEUED (unadmitted), not in a lane.
+const SATURATION_OPS = 17;
+const heldPath = (n: number) => `${ROOT}/src/held-${String(n).padStart(2, '0')}.ts`;
+
+for (const wiring of STAMP_WRITER_WIRINGS) {
+  it(`a saturated post-proof backlog still fences the trusted stamp: publication waits for cap-QUEUED work, not just admitted lanes — ${wiring} writer (ADR-0358 stamp full fence)`, async () => {
+    // ADR-0358 full fence over a SATURATED backlog: the post-proof pin above
+    // holds ONE wedge, so a fence that waits only for ADMITTED lanes (a
+    // snapshot of active ops) passes it while a 17th op sits CAP-QUEUED
+    // unadmitted — trusted publication over earlier cap-queued work. Here the
+    // flush seam enqueues 17 held writes on DISTINCT paths (one more than the
+    // ~16-lane cap), so when the stamp fence is taken at most 16 are admitted
+    // and at least one — the last-enqueued — is cap-queued. Release 16 and
+    // drain: a naive admitted-lanes-only fence has nothing left in its
+    // snapshot and publishes — it fails at the 17th-held assert below. GREEN
+    // on main by FIFO: the stamp write physically queues behind all 17.
+    vi.useFakeTimers();
+    vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true);
+    const STAMP_PATH = `${ROOT}/node_modules/.rifty-install-stamp.json`;
+    const heldPaths = Array.from({ length: SATURATION_OPS }, (_, index) => heldPath(index + 1));
+    const lastHeld = heldPath(SATURATION_OPS);
+    const gates = new Map(heldPaths.map((path) => [path, deferred()]));
+    const textOf = new TextDecoder();
+    const stampDurable = deferred();
+    const completed: Array<{ readonly path: string; readonly text: string }> = [];
+    const completedPaths = () => completed.map((write) => write.path);
+    const trustedStampWrites = () =>
+      completed.filter(
+        (write) => write.path === STAMP_PATH && !write.text.includes('"durability": "pending"'),
+      );
+    // Chain drain WITHOUT reaching another watchdog deadline: a 1ms virtual
+    // tick (real event-loop yield under fake timers) plus enough microtask
+    // hops for each released op's continuation chain to settle.
+    const drainReleased = async () => {
+      await vi.advanceTimersByTimeAsync(1);
+      for (let hop = 0; hop < 64; hop += 1) await Promise.resolve();
+    };
+    const { fs, stamps, claim } = await wireInstalledProject(wiring, async (path, data) => {
+      await gates.get(path)?.promise;
+      const text = textOf.decode(data);
+      completed.push({ path, text });
+      if (path === STAMP_PATH && !text.includes('"durability": "pending"')) stampDurable.resolve();
+    });
+
+    const promotion = stamps.promote(
+      { ...PROJECT, packageJsonText: PACKAGE_JSON },
+      {
+        epoch: claim.epoch,
+        packages: 1,
+        // Saturating post-proof backlog: 17 held out-of-guarded-scope writes
+        // enqueued AFTER the proof flush resolved, BEFORE promote proceeds to
+        // the conclusion-slot stamp write.
+        flush: async () => {
+          const report = await fs.flush();
+          for (const path of heldPaths) fs.writeFileSync(path, utf8.encode('export {};\n'));
+          return report;
+        },
+      },
+    );
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(WATCHDOG_MS);
+
+    // All 17 unsettled (in flight or unadmitted): no trusted-stamp write may
+    // have completed at the OPFS surface.
+    expect(completedPaths().filter((path) => gates.has(path))).toEqual([]);
+    expect(trustedStampWrites()).toHaveLength(0);
+
+    // Incremental release, one held op per step; the last-enqueued 17th stays
+    // held. While ANY backlog op is unsettled the stamp must stay off OPFS.
+    for (const path of heldPaths.slice(0, -1)) {
+      gates.get(path)?.resolve();
+      await drainReleased();
+      expect(trustedStampWrites()).toHaveLength(0);
+    }
+    // 16 of 17 settled as success; ONLY the cap-queued 17th is outstanding.
+    for (const path of heldPaths.slice(0, -1)) expect(completedPaths()).toContain(path);
+    expect(completedPaths()).not.toContain(lastHeld);
+    // THE discriminating assert: every op an admitted-lanes-only fence
+    // snapshotted has settled, so the naive fence publishes the trusted stamp
+    // right here — over the still-held 17th. The full fence must not.
+    expect(trustedStampWrites()).toHaveLength(0);
+
+    // Release the last → drain → the stamp becomes durable, promotion trusts,
+    // and every ledger entry (watchdog noise included) heals on the
+    // successful settles: final ledger 0.
+    gates.get(lastHeld)?.resolve();
+    await stampDurable.promise;
+    await expect(promotion).resolves.toMatchObject({
+      status: 'trusted',
+      stamp: expect.objectContaining({ slug: 'app', packages: 1 }),
+    });
+    expect(completedPaths()).toEqual(expect.arrayContaining(heldPaths));
+    const report = await fs.flush();
+    expect(report?.total).toBe(0);
+    expect(trustedStampWrites()).toHaveLength(1);
+  });
+}

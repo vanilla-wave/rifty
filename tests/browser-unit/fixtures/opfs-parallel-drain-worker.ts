@@ -53,6 +53,14 @@ interface AcceptanceResult {
   /** Same-run probe: mean ms of EMPTY_FLUSH_PROBE_N empty awaited flush()
    * calls on the drained faithful instance. RAW unrounded. */
   readonly emptyFlushMeanMs: number;
+  /** Same-run probe (a): mean ms of SINGLE_PENDING_PROBE_K iterations of
+   * { writeFileSync(tiny); await flush() } — the faithful loop's exact
+   * per-op shape, ONE pending op per flush. RAW unrounded. */
+  readonly singlePendingFlushMeanMs: number;
+  /** Same-run probe (b): per-op mean ms of SINGLE_PENDING_PROBE_K tiny
+   * fresh-path writes drained by ONE awaited flush — raw per-op OPFS cost,
+   * flush machinery amortized (the product's own shape). RAW unrounded. */
+  readonly batchedPerOpMeanMs: number;
   /** RAW unrounded faithful/product ratio — the asserted I3 gate. */
   readonly speedupRaw: number;
   /** Log convenience only (2-decimal rounding of speedupRaw) — never asserted. */
@@ -95,8 +103,30 @@ const FILL_STRIDE = 251;
  * would inflate faithfulMs (~2×files awaited flushes) and manufacture speedup.
  * After the faithful variant fully drains, N empty awaited flush() calls on
  * the SAME instance measure the SHIPPED per-flush overhead every run; the
- * spec gates emptyFlushMeanMs × faithfulOpCount ≤ 0.1 × faithfulMs. */
+ * spec gates emptyFlushMeanMs × faithfulOpCount ≤ 0.1 × faithfulMs. This
+ * probe bounds the EMPTY shape ONLY — pending-only overhead is closed by the
+ * SINGLE_PENDING_PROBE_K delta probe below; together the two sweep both flush
+ * shapes the faithful loop awaits, and the batched shape is the product's own. */
 const EMPTY_FLUSH_PROBE_N = 2000;
+
+/** Single-pending delta probe size — closes the PENDING-ONLY overhead hole
+ * the empty probe cannot see: flush() overhead that manifests only when ops
+ * are pending (~0.7ms/call scale) would inflate the faithful baseline's
+ * 2×files NONEMPTY flushes while the empty probe and the product's ONE flush
+ * stay cheap. On the drained faithful instance, outside all timed windows:
+ * (a) K iterations of { writeFileSync(tiny fresh path); await flush() } —
+ * EXACTLY the faithful loop's per-op shape, one pending op per flush →
+ * singlePendingFlushMeanMs; (b) K tiny fresh-path writes then ONE awaited
+ * flush → batchedPerOpMeanMs — the raw per-op OPFS cost with flush machinery
+ * amortized to one call (the product's own shape). max(0, a−b) is the
+ * per-nonempty-flush overhead; the spec gates it × faithfulOpCount ≤ 0.1 ×
+ * faithfulMs, so a pending-only mutant inflates (a) but not (b) and fails in
+ * the same run, on the SHIPPED code. */
+const SINGLE_PENDING_PROBE_K = 200;
+
+/** Tiny payload for the single-pending probe — probe cost must be flush
+ * machinery, not bytes. */
+const PROBE_BYTES = new Uint8Array([0x50, 0x44, 0x32, 0x35, 0x36]); // 'PD256'
 
 function buildBytes(fileIndex: number, size: number): Uint8Array {
   const bytes = new Uint8Array(size);
@@ -257,6 +287,10 @@ interface VariantOutcome {
   /** Faithful only (null on product): same-run empty-flush probe mean, see
    * EMPTY_FLUSH_PROBE_N. */
   readonly emptyFlushMeanMs: number | null;
+  /** Faithful only (null on product): single-pending delta probe means, see
+   * SINGLE_PENDING_PROBE_K. */
+  readonly singlePendingFlushMeanMs: number | null;
+  readonly batchedPerOpMeanMs: number | null;
   readonly tree: TreeProof;
 }
 
@@ -278,6 +312,8 @@ async function runVariant(
   let ms: number;
   let report: PersistFailureReport;
   let emptyFlushMeanMs: number | null = null;
+  let singlePendingFlushMeanMs: number | null = null;
+  let batchedPerOpMeanMs: number | null = null;
   if (label === 'faithful') {
     // Faithful serial — the epic's baseline, the pre-dedup #256 regime
     // (mkdir before EVERY write, ~2 persist ops/file), serialized by the
@@ -300,6 +336,40 @@ async function runVariant(
     const p0 = performance.now();
     for (let i = 0; i < EMPTY_FLUSH_PROBE_N; i++) await fs.flush();
     emptyFlushMeanMs = (performance.now() - p0) / EMPTY_FLUSH_PROBE_N;
+
+    // Single-pending delta probe (see SINGLE_PENDING_PROBE_K): SAME drained
+    // fs instance, outside all timed windows. Scratch lives OUTSIDE the
+    // verified namespace (root-level sibling): verifyTree walks ONLY `ns`, so
+    // the exact-entry oracle stays unaffected BY CONSTRUCTION — cleaning a
+    // scratch inside `ns` would need rm+flush machinery mutating the verified
+    // tree between drain and proof.
+    const probeNs = `/pd256-probe-${crypto.randomUUID()}`;
+    fs.mkdirSync(probeNs, { recursive: true });
+    await fs.flush();
+    // (a) single-pending shape — the faithful loop's exact per-op shape:
+    // ONE pending op per awaited flush, fresh path each iteration.
+    let lastProbe: PersistFailureReport | null = null;
+    const a0 = performance.now();
+    for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
+      fs.writeFileSync(`${probeNs}/sp-${i}`, PROBE_BYTES);
+      lastProbe = await fs.flush();
+    }
+    singlePendingFlushMeanMs = (performance.now() - a0) / SINGLE_PENDING_PROBE_K;
+    // (b) batched shape — K fresh-path writes, ONE awaited flush: raw per-op
+    // OPFS cost with flush machinery amortized to one call (the product's
+    // own shape).
+    const b0 = performance.now();
+    for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
+      fs.writeFileSync(`${probeNs}/bp-${i}`, PROBE_BYTES);
+    }
+    const batchedReport = await fs.flush();
+    batchedPerOpMeanMs = (performance.now() - b0) / SINGLE_PENDING_PROBE_K;
+    // Ledger `total` is the WHOLE cumulative unhealed set — dirty here means
+    // the probes timed error paths, not flush machinery: fail loudly.
+    if (lastProbe === null || lastProbe.total !== 0 || batchedReport.total !== 0) {
+      throw new Error('single-pending probe flush ledger dirty');
+    }
+    await removeNamespace(probeNs);
   } else {
     // Product drain — the CURRENT landed caller shape (slice-1 deduped):
     // one mkdir per distinct dir (sorted, recursive), one write per file,
@@ -322,7 +392,14 @@ async function runVariant(
   const tree = await verifyTree(ns, specs, sortedDirs);
   await removeNamespace(ns);
 
-  return { ms, reportTotal: report.total, emptyFlushMeanMs, tree };
+  return {
+    ms,
+    reportTotal: report.total,
+    emptyFlushMeanMs,
+    singlePendingFlushMeanMs,
+    batchedPerOpMeanMs,
+    tree,
+  };
 }
 
 async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
@@ -336,6 +413,9 @@ async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
   if (faithful.emptyFlushMeanMs === null) {
     throw new Error('faithful variant returned no empty-flush probe');
   }
+  if (faithful.singlePendingFlushMeanMs === null || faithful.batchedPerOpMeanMs === null) {
+    throw new Error('faithful variant returned no single-pending delta probe');
+  }
 
   return {
     files: specs.length,
@@ -348,6 +428,8 @@ async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
     // Flushes actually awaited by the faithful loop: mkdir+write per file.
     faithfulOpCount: 2 * specs.length,
     emptyFlushMeanMs: faithful.emptyFlushMeanMs,
+    singlePendingFlushMeanMs: faithful.singlePendingFlushMeanMs,
+    batchedPerOpMeanMs: faithful.batchedPerOpMeanMs,
     speedupRaw,
     speedup: Math.round(speedupRaw * 100) / 100,
     faithfulReportTotal: faithful.reportTotal,

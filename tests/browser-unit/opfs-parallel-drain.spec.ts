@@ -5,8 +5,10 @@
  * paths+sizes, procedural bytes) the durability drain completes ≥2.5x faster
  * than the faithful serial baseline measured in the SAME run — asserted on
  * the RAW unrounded ratio, scaled by the calibrated per-op-flush inflation
- * bound and guarded by a same-run empty-flush probe — with a clean flush
- * ledger and a fresh-surface WHOLE-TREE durability proof (exact ENTRY
+ * bound and guarded by same-run empty-flush + single-pending delta probes
+ * (together they sweep the empty and single-pending flush shapes the
+ * faithful loop awaits; the batched shape is the product's own) — with a
+ * clean flush ledger and a fresh-surface WHOLE-TREE durability proof (exact ENTRY
  * equality, files + dirs, with the manifest walk + BYTE-EXACT reads of ALL
  * files, per fault-classes.md exact-bytes) on both variants.
  *
@@ -50,6 +52,14 @@ interface AcceptanceResult {
   /** Same-run probe: mean ms of 2000 empty awaited flush() calls on the
    * drained faithful instance — the SHIPPED per-flush overhead. */
   readonly emptyFlushMeanMs: number;
+  /** Same-run probe (a): mean ms of 200 × { tiny fresh-path writeFileSync;
+   * await flush() } on the drained faithful instance — the faithful loop's
+   * exact per-op shape (ONE pending op per flush). RAW unrounded. */
+  readonly singlePendingFlushMeanMs: number;
+  /** Same-run probe (b): per-op mean ms of 200 tiny fresh-path writes drained
+   * by ONE awaited flush — raw per-op OPFS cost, flush machinery amortized
+   * (the product's own shape). RAW unrounded. */
+  readonly batchedPerOpMeanMs: number;
   /** RAW unrounded faithful/product ratio — the asserted I3 gate. */
   readonly speedupRaw: number;
   /** Log convenience only (2-decimal rounding) — never asserted. */
@@ -144,14 +154,31 @@ test('durability drain on a real 26k-file node_modules tree beats the same-run s
   expect(result.dirCount).toBe(2_314);
   // Frozen-assumption closure: SERIAL_OVERHEAD_BOUND's calibration measured
   // the OLD (pre-implementation) drain and cannot constrain the SHIPPED one.
-  // This same-run probe bounds the shipped flush(): its empty-call mean,
-  // multiplied across every flush the faithful loop awaited (2×files), must
-  // stay ≤10% of the measured baseline — a flush()-got-expensive mutant
-  // cannot inflate faithfulMs into manufactured speedup.
+  // This same-run probe bounds the shipped flush()'s EMPTY shape: its
+  // empty-call mean, multiplied across every flush the faithful loop awaited
+  // (2×files), must stay ≤10% of the measured baseline — a flush()-got-
+  // expensive mutant cannot inflate faithfulMs into manufactured speedup.
   expect(result.faithfulOpCount).toBe(2 * result.files);
   expect(result.emptyFlushMeanMs * result.faithfulOpCount).toBeLessThanOrEqual(
     0.1 * result.faithfulMs,
   );
+  // PENDING-ONLY closure: the empty probe cannot see overhead that manifests
+  // only when ops are pending — such a mutant inflates the faithful
+  // baseline's 2×files NONEMPTY flushes while the empty probe and the
+  // product's ONE flush stay cheap. Same-run delta probe on the drained
+  // faithful instance: (a) singlePendingFlushMeanMs repeats the faithful
+  // loop's exact per-op shape (one pending op per awaited flush); (b)
+  // batchedPerOpMeanMs amortizes flush machinery to one call (the product's
+  // own shape) — max(0, a−b) is the per-nonempty-flush overhead, and scaled
+  // across every faithful flush it must stay ≤10% of the baseline. Together
+  // the empty + single-pending probes sweep both flush shapes the faithful
+  // loop awaits.
+  expect(result.singlePendingFlushMeanMs).toBeGreaterThan(0);
+  expect(result.batchedPerOpMeanMs).toBeGreaterThan(0);
+  expect(
+    Math.max(0, result.singlePendingFlushMeanMs - result.batchedPerOpMeanMs) *
+      result.faithfulOpCount,
+  ).toBeLessThanOrEqual(0.1 * result.faithfulMs);
   // THE I3 gate — RED on main (serial drain ⇒ ~1.3x), GREEN post-ADR-0358.
   // RAW unrounded ratio (`speedup` is log-only rounding), scaled by the
   // calibrated ceiling of the baseline's per-op-flush inflation.

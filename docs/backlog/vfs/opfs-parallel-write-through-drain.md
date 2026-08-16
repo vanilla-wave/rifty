@@ -98,11 +98,16 @@ executable carrier `tests/browser-unit/opfs-parallel-drain.spec.ts` +
   missing dir fails) with the manifest walk plus BYTE-EXACT reads of ALL
   files vs in-memory source bytes (fault-classes exact-bytes — chunked
   ×64, compare-and-release, outside the timed window; same-length
-  corruption anywhere fails); same-run EMPTY-FLUSH PROBE on the drained
-  faithful instance (mean of 2 000 awaited flush() calls × the 2N flushes
-  the baseline awaited must stay ≤10% of faithfulMs — bounds the SHIPPED
-  flush() so a per-flush-overhead mutant cannot manufacture speedup;
-  closes the only-old-drain reach of the one-time calibration); wall-clock
+  corruption anywhere fails); same-run FLUSH-OVERHEAD PROBES on the drained
+  faithful instance, sweeping both baseline flush shapes: EMPTY (mean of
+  2 000 awaited empty flushes) and SINGLE-PENDING delta (200 iterations
+  of write+flush minus the batched per-op cost of 200 writes + one
+  flush — the product's own shape); each extrapolated across the 2N
+  flushes the baseline awaited must stay ≤10% of faithfulMs — bounds the
+  SHIPPED flush() so neither an empty- nor a pending-only
+  per-flush-overhead mutant can manufacture speedup (closes the
+  only-old-drain reach of the one-time calibration); probes run on a
+  scratch namespace outside the verified tree; wall-clock
   logged (`PD256-ACCEPTANCE` JSON) for the PR record, no absolute-time CI
   assert (variance).
 
@@ -142,9 +147,11 @@ pins"):
   latencies (parallel lanes); replaces the FIFO pin, whose deletion is part
   of the implementation commit (it inverts from GREEN to RED the moment
   lanes land — leaving it would make the suite self-contradictory);
-- RED R2 — an op on an unrelated path behind a 30s-timed-out head is
-  neither blocked nor ledgered (per-lane watchdog; on main FIFO admission
-  wedges it and `reportBlockedPending` ledgers it);
+- RED R2 — an op on an unrelated path behind a wedged head completes
+  BEFORE the 30s timeout even fires (pre-timeout liberation — kills a
+  release-on-timeout scheduler) and is never ledgered after it (per-lane
+  watchdog; on main FIFO admission wedges it and `reportBlockedPending`
+  ledgers it);
 - RED R4 — admission ceiling: HELD persists on unrelated paths, MIXED
   kinds (writes + mkdirs + rm + a held RENAME — its three physical legs
   counted at their boundaries), in-flight counted at the persist boundary:
@@ -164,12 +171,23 @@ pins"):
   completion order; rename fenced before (source-subtree write precedes all
   rename legs) AND after (destination successor write follows every rename
   leg — no overtake, no straddle);
-- GREEN P8 — timeout × routing-fence composition (three pins): a TIMED-OUT
-  wedged op RETAINS its fences — a child write behind a timed-out mkdir, an
-  rm behind a timed-out subtree write, and every rename leg behind a
-  timed-out source write all complete only after the wedge settles (kills
-  the fence-cancelling-on-timeout approximation; wedge released as success
-  → equal-sequence heal → clean ledger);
+- GREEN P8 — timeout × routing-fence composition (four pins): a TIMED-OUT
+  wedged op RETAINS its fences for dependents queued BEFORE the timeout
+  fires (across-transition waiters) AND enqueued after — a child write
+  behind a timed-out mkdir, an rm behind a timed-out subtree write, every
+  rename leg behind a timed-out source write, and (structural-wedge
+  sibling) recreates/writes behind a timed-out rm itself, all complete
+  only after the wedge settles (kills the fence-cancelling-on-timeout
+  approximation; wedge released as success → equal-sequence heal → clean
+  ledger);
+- GREEN P9 — capacity wait is not I/O time: a healthy op queued behind a
+  full ~16-lane window for ~29 s completes with an EMPTY ledger (its own
+  30 s I/O budget starts at admission, not enqueue — kills the
+  timer-start-at-enqueue mutant; opfs-sync.ts:126-131 semantics);
+- GREEN P10 — drain-scoped cache lifetime: two drains split by flush();
+  drain 2's rm+recreate resolves the parent FRESH and its write carries
+  the new bytes (kills a cache-outlives-its-drain incarnation-replacement
+  mutant);
 - GREEN fault-row carriers (schedule-agnostic end-state asserts, hold under
   serial today and overlapping lanes later): quota-rejected write with two
   concurrent surviving siblings + exact single-path ledger + later heal
@@ -189,12 +207,16 @@ pins"):
 Stamp-fence pins (install-stamp-authority.fault.test.ts, committed, GREEN —
 7 tests, every family swept over BOTH production writer branches): a trusted
 stamp never becomes durable at the OPFS surface while an earlier-enqueued
-persist op is unsettled — three families: (i) pre-proof wedge held past the
+persist op is unsettled — four families: (i) pre-proof wedge held past the
 30s report bound; (ii) POST-PROOF window — an op enqueued after the
 durability proof resolves but before publication still fences the stamp (a
 fence frozen to the proof watermark fails); (iii) a SETTLED out-of-scope
 rejection stays ledgered while promotion still trusts (kills the
-global-ledger-cleanliness approximation of the fence). Wirings: raw-fsSync
+global-ledger-cleanliness approximation of the fence); (iv) SATURATED
+post-proof backlog — 17 held ops (> the ~16 cap, so ≥1 is cap-QUEUED, not
+admitted), released one-by-one with zero trusted-stamp writes asserted
+after every release until the last settles (kills an
+admitted-lanes-only fence snapshot). Wirings: raw-fsSync
 writer and the PRODUCTION claimIo composition (`createOwnerVfsAuthorityComposition` →
 `installStampClaims.write` → `#writeInstallStampClaim` →
 `authority.#fs.writeFileSync` → the same write-through queue; wiring
@@ -358,18 +380,28 @@ Canonical axes per fault-classes §Axes.
   created-not-swapped, discovered by this carrier's own first run: a
   zero-size survivor is a legitimate torn state, not corruption); R5
   counts corrected (30 ops / 32 boundaries).
+- Contract+RED attempt 6 (2026-08-16, blockers ANSWERED by re-cut, count
+  carries): R2 strengthened to PRE-timeout liberation; capacity-queue
+  watchdog pin added (P9 — queue wait never ledgered, timer starts at
+  admission); P8 extended to across-transition waiters + a timed-out
+  STRUCTURAL rm wedge; drain-scoped cache lifetime pinned across two
+  drains (P10); stamp fence extended to the SATURATED post-proof backlog
+  (family iv, both writers — publication waits for cap-queued work);
+  flush-overhead probe extended with the single-pending DELTA shape
+  (pending-only overhead mutant closed).
 - RED evidence (pre-implementation runs on this branch, 2026-08-15/16,
   darwin arm64, node v24.16.0, vitest 2.1.9, Playwright 1.60.0 Chromium):
-  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 79
-    passed | 1 skipped (84)`: exactly R1, R2, R4, R5 FAIL as designed (R1:
+  - `npx vitest run packages/vfs/src/opfs-sync.test.ts` → `4 failed | 82
+    passed | 1 skipped (87)`: exactly R1, R2, R4, R5 FAIL as designed (R1:
     `expected [ '/slow', '/fast' ] to deeply equal [ '/fast', '/slow' ]`;
     R2: `expected [] to deeply equal [ '/other' ]` — '/other' never
     reaches the surface behind the wedged FIFO head; R4 and R5:
     `expected 1 to be greater than 1` — serial peak is 1), all GREEN pins
     + every pre-existing suite (incl. the still-present FIFO pin) PASS.
   - `npx vitest run packages/workbench/src/glue/install-stamp-authority.fault.test.ts`
-    → `7 passed` — all three fence families over both writers (pre-proof
-    wedge, post-proof window, settled-foreign-stays-ledgered);
+    → `9 passed` — all four fence families over both writers (pre-proof
+    wedge, post-proof window, settled-foreign-stays-ledgered, saturated
+    post-proof backlog);
     kill-power proven against a transient no-FIFO-admission
     mutant (both fence pins fail on it), file restored byte-exact.
   - `PD256_CALIBRATE=1 RIFTY_PLAYGROUND_PORT=5299 npx playwright test
@@ -381,12 +413,16 @@ Canonical axes per fault-classes §Axes.
     tests/browser-unit/opfs-parallel-drain.spec.ts
     tests/browser-unit/opfs-parallel-drain-kill.spec.ts` → `1 failed, 1
     passed (1.6m)`: acceptance FAILS ONLY the I3 gate — `Expected: >=
-    2.625, Received: 1.3915150721342735`, faithfulMs 41 328 / productMs
-    29 700, both ledgers 0, empty-flush probe 0.00019 ms (gate margin
-    ~400x), BOTH whole-tree FULL-ENTRY (26 811 files + 2 314 dirs)
-    FULL-BYTE proofs verified (mismatch null) — the failure is the ratio, nothing
+    2.625, Received: 1.4103325750072615`, faithfulMs 39 564 / productMs
+    28 053, both ledgers 0, empty-flush probe 0.00019 ms (margin ~400x),
+    single-pending delta probe 0.5817 vs batched 0.5893 ms/op (delta
+    clamps to 0 — shipped flush overhead nil), BOTH whole-tree FULL-ENTRY
+    (26 811 files + 2 314 dirs) FULL-BYTE proofs verified (mismatch
+    null) — the failure is the ratio, nothing
     else; kill e2e PASSES through the production claimIo composition
     (path-aware mid-drain kill — durable pending claim + torn tree; fresh
     realm reads `durability:"pending"` exactly, refuses trust, and proves
-    the torn tree pre-mutation: 1 complete + 1 empty of 600; retry ends
-    trusted + clean ledger + full-tree 600/600 byte-exact).
+    the torn tree pre-mutation (run 7: 2 complete + 0 empty of 600; an
+    earlier run observed 1+1e — both legitimate under the atomic-swap
+    torn model); retry ends trusted + clean ledger + full-tree 600/600
+    byte-exact).
