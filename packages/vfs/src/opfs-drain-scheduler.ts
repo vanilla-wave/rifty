@@ -383,12 +383,15 @@ export class OpfsDrainScheduler {
 
   /** A timed-out op RETAINS its fences; its transitively-fenced QUEUED
    * dependents get blocked reporting so flush() stays bounded. Active
-   * dependents run under their own watchdog and are never touched. */
-  private reportBlockedDependents(from: ScheduledOp): void {
+   * dependents run under their own watchdog and are never touched.
+   * `blocker` defaults to `from` itself (watchdog path); the starvation
+   * cascade passes the WEDGE — the honest root cause. */
+  private reportBlockedDependents(from: ScheduledOp, blocker?: PersistOperation): void {
+    const rootBlocker = blocker ?? from.operation;
     const queue = [...from.dependents];
     for (let next = queue.pop(); next !== undefined; next = queue.pop()) {
       if (next.phase !== 'queued' || next.blockedBehind !== null) continue;
-      this.reportBlocked(next, from.operation);
+      this.reportBlocked(next, rootBlocker);
       queue.push(...next.dependents);
     }
   }
@@ -396,15 +399,19 @@ export class OpfsDrainScheduler {
   /** Full-wedge starvation bound: a READY op behind a full lane window whose
    * holders include a TIMED-OUT wedge has no fence blocker and no watchdog of
    * its own — without this its reporting never settles and flush() parks
-   * forever. Reporting only (heals on later success, like fence dependents);
-   * scheduling is untouched — the op still admits when a lane REALLY frees.
-   * Healthy saturation never sweeps: capacity wait is not I/O time. */
+   * forever. Cascades transitively: ops FENCED behind a starved ready op
+   * (same-path successors, sibling chains, child writes) are just as starved
+   * and must report boundedly too. Reporting only (heals on later success,
+   * like fence dependents); scheduling is untouched — the op still admits
+   * when a lane REALLY frees. Healthy saturation never sweeps: capacity wait
+   * is not I/O time. */
   private reportCapacityStarved(): void {
     if (this.activeCount < MAX_ACTIVE_PERSIST_LANES) return;
     const wedge: ScheduledOp | undefined = this.timedOutHolders.values().next().value;
     if (!wedge) return;
     for (const op of this.ready) {
       if (op.blockedBehind === null) this.reportBlocked(op, wedge.operation);
+      this.reportBlockedDependents(op, wedge.operation);
     }
   }
 

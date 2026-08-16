@@ -2910,4 +2910,40 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
     );
     expect(report.anyFailure?.((path) => path === '/starved')).toBe(true);
   });
+
+  it('flush() stays bounded for ops FENCED BEHIND a capacity-starved head — the starvation sweep cascades transitively', async () => {
+    // Final+GREEN attempt-2 blocker (unbounded-read): the sweep bounded only
+    // READY ops; a same-path successor (or sibling-chain member) fenced
+    // behind a starved head is neither in ready nor a dependent of any
+    // timed-out HOLDER — its reporting never settled and flush() parked
+    // forever one fence hop deep. In a real big-tree wedge most queued ops
+    // sit at depth ≥2 in sibling chains, so this was the norm, not an edge.
+    vi.useFakeTimers();
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: () => new Promise<void>(() => {}), // every admitted write wedges
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    for (let i = 0; i < 16; i++) fs.writeFileSync(`/h${i}`, new Uint8Array([i])); // full window
+    fs.writeFileSync('/x', new Uint8Array([1])); // starved READY head
+    fs.writeFileSync('/x', new Uint8Array([2])); // same-path successor — fenced at depth 2
+    let flushSettled = false;
+    const flushPromise = fs.flush().then((report) => {
+      flushSettled = true;
+      return report;
+    });
+
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(30_000);
+    for (let tick = 0; tick < 10; tick++) await vi.advanceTimersByTimeAsync(1);
+
+    expect(flushSettled).toBe(true);
+    const report = await flushPromise;
+    // 16 wedges + the starved head + its fenced successor — ONE '/x' ledger
+    // entry (the ledger is per-path; both reportings settled boundedly).
+    expect(report.total).toBe(17);
+    expect(report.anyFailure?.((path) => path === '/x')).toBe(true);
+  });
 });
