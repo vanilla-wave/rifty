@@ -49,6 +49,7 @@ import {
   PERSIST_OPERATION_REPORT_TIMEOUT_MS,
   type PersistOperation,
 } from './opfs-drain-scheduler.ts';
+import { assertNotCrswapReserved, isCrswapArtifactName } from './opfs-errors.ts';
 import {
   basename,
   basenameNormalized,
@@ -159,6 +160,8 @@ export async function walkOpfsTree(
     for await (const [name, handle] of dir as unknown as AsyncIterable<
       [string, FileSystemHandle]
     >) {
+      // Platform atomic-swap temps are not tree content (see opfs-errors.ts).
+      if (handle.kind === 'file' && isCrswapArtifactName(name)) continue;
       const childPath = prefix === '/' ? `/${name}` : `${prefix}/${name}`;
       parentChildren?.add(name);
       if (handle.kind === 'file') {
@@ -401,6 +404,7 @@ export class OpfsFsSync implements FsSync {
    * set ahead of time should warm it once at bootstrap.
    */
   async openSync(path: string, create = false): Promise<void> {
+    if (create) assertNotCrswapReserved(normalizeAbsolute(path));
     await this.ensureHandle(path, create);
   }
 
@@ -611,6 +615,7 @@ export class OpfsFsSync implements FsSync {
 
   writeFileSync(path: string, data: Uint8Array): void {
     const normalized = normalizeAbsolute(path);
+    assertNotCrswapReserved(normalized);
     // `normalized` (#10) — skip dirname's redundant normalize.
     const parent = dirnameNormalized(normalized);
     const parentEntry = this.index.get(parent);
@@ -891,6 +896,7 @@ export class OpfsFsSync implements FsSync {
   mkdirSync(path: string, options: { recursive?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
     const normalized = normalizeAbsolute(path);
+    assertNotCrswapReserved(normalized);
     const parts = segments(normalized);
     if (parts.length === 0) {
       // mkdir('/'): root always exists.
@@ -1027,6 +1033,7 @@ export class OpfsFsSync implements FsSync {
   renameSync(src: string, dst: string): void {
     const s = normalizeAbsolute(src);
     const d = normalizeAbsolute(dst);
+    assertNotCrswapReserved(d);
     if (s === d) return;
     if (s === '/') throw new VfsError('EINVAL', src);
     const srcEntry = this.index.get(s);

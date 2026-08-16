@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chromium `.crswap` atomic-swap temps no longer leak through the OPFS
+  read surface (torn-state × Storage; born as the opfs-parallel-drain-kill
+  CI flake).** `OpfsVfs.readdir` and the `OpfsFsSync` boot index drop FILE
+  entries with the suffix — after a crash-reload a program sees the target
+  entry (complete or the empty created-not-swapped torn state), never the
+  platform's mid-op temp. Because Chromium ALLOWS user files named
+  `*.crswap` (probed), the filter is paired with a loud reservation: every
+  rifty create op targeting the suffix (`writeFile`/`mkdir` async;
+  `writeFileSync`/`mkdirSync`/`renameSync`/`copyFileSync`/`openSync(create)`
+  sync) throws `EINVAL` — a recorded per-backend gap vs real Node, never a
+  silent hide. Directories with the suffix stay visible (never a platform
+  artifact).
+
 ### Changed
 
 - **OPFS write-through drain goes bounded-parallel (#256, epic

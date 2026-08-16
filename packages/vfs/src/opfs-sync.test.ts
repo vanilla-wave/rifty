@@ -334,6 +334,71 @@ describe('walkOpfsTree', () => {
   });
 });
 
+// Fault: torn-state × Storage (OPFS) read surface. Chromium implements
+// `createWritable()` as an atomic swap through a sibling `<name>.crswap`
+// entry; the raw iterator lists it mid-write and a killed realm can orphan
+// it (CI: opfs-parallel-drain-kill, run 31942415727 saw
+// "unexpected: …/f001.js.crswap" through the production surface). The boot
+// index drops the artifact — and because Chromium ALLOWS user files with the
+// suffix (probed fact, tests/browser-unit/opfs-crswap-artifact.spec.ts), the
+// create ops refuse the reserved name loudly (EINVAL) so the filter can
+// never silently hide real user data. Real-platform halves live in the
+// browser spec; these pins cover the node-reachable index/op boundary.
+describe('crswap reservation (torn-state × OPFS read surface)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  const codeOf = (op: () => void): string | null => {
+    try {
+      op();
+      return null;
+    } catch (error) {
+      return (error as { code?: string }).code ?? null;
+    }
+  };
+
+  it('walkOpfsTree drops *.crswap FILE entries from the index and children', async () => {
+    const root = buildFakeRoot({
+      files: new Map([
+        ['/dir/x.js', { bytes: new Uint8Array([1]) }],
+        ['/dir/x.js.crswap', { bytes: new Uint8Array([2, 2]) }],
+      ]),
+      dirs: new Set(['/', '/dir']),
+    });
+    const idx = await walkOpfsTree(root);
+    expect(idx.get('/dir/x.js')).toEqual({ kind: 'file', size: 1 });
+    expect(idx.get('/dir/x.js.crswap')).toBeUndefined();
+    expect([...(idx.get('/dir')?.children ?? [])]).toEqual(['x.js']);
+  });
+
+  it('keeps a *.crswap DIRECTORY visible — never a platform artifact', async () => {
+    const root = buildFakeRoot({
+      files: new Map([['/odd.crswap/inner.txt', { bytes: new Uint8Array([3]) }]]),
+      dirs: new Set(['/', '/odd.crswap']),
+    });
+    const idx = await walkOpfsTree(root);
+    expect(idx.get('/odd.crswap')?.kind).toBe('dir');
+    expect(idx.get('/odd.crswap/inner.txt')).toEqual({ kind: 'file', size: 1 });
+  });
+
+  it('create ops refuse reserved *.crswap names with EINVAL, target named', () => {
+    const fs = new OpfsFsSync(buildFakeRoot({ files: new Map(), dirs: new Set(['/']) }));
+    fs.mkdirSync('/dir', { recursive: true });
+    fs.writeFileSync('/dir/real.js', enc.encode('r'));
+    expect(codeOf(() => fs.writeFileSync('/dir/user.crswap', enc.encode('x')))).toBe('EINVAL');
+    expect(codeOf(() => fs.mkdirSync('/dir/sub.crswap'))).toBe('EINVAL');
+    expect(codeOf(() => fs.renameSync('/dir/real.js', '/dir/real.crswap'))).toBe('EINVAL');
+    expect(codeOf(() => fs.copyFileSync('/dir/real.js', '/dir/copy.crswap'))).toBe('EINVAL');
+    // Nothing was created or moved by the refused ops.
+    expect(fs.readdirSync('/dir').map((entry) => entry.name)).toEqual(['real.js']);
+  });
+
+  it('openSync(create) refuses a reserved name before touching handles', async () => {
+    const fs = new OpfsFsSync(buildFakeRoot({ files: new Map(), dirs: new Set(['/']) }));
+    await expect(fs.openSync('/user.crswap', true)).rejects.toMatchObject({ code: 'EINVAL' });
+  });
+});
+
 describe('OpfsFsSync warm index — existsSync / statSync', () => {
   beforeEach(() => {
     // Make `OpfsFsSync` constructible in Node by faking the Worker realm.
