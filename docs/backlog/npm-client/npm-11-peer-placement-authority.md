@@ -29,6 +29,11 @@ closure nor distinguishes a direct conflict from a satisfiable nested peer
 environment. That success claim is observably unlike npm 11 and cannot become
 a shadow-only exception.
 
+Replay of peers an npm-authored lock ALREADY pins (no resolution decision) is
+carved out to `lockfile-replay-peer-entries` (epic
+`faithful-npm-lock-replay`); this item keeps live resolution, placement,
+conflicts, and `peer: true` lock provenance.
+
 ## Reference contract
 
 Node v24.16.0 / npm 11.17.0 runs the committed self-contained loopback-registry
