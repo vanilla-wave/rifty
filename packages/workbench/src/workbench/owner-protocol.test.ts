@@ -1035,4 +1035,50 @@ describe('Workbench owner protocol', () => {
   it('rejects empty owner token generation instead of falling back to host/env identity', () => {
     expect(() => createOwnerProjectToken(() => '')).toThrow(TypeError);
   });
+
+  // #256 first-open-progress (epic project-open-drain-latency I1; ADR-0359
+  // correction 2026-08-16) — committed RED-first carrier. The first-open
+  // materialization drain predates any project token, so durability progress
+  // joins the OWNER-LEVEL protocol as `workbench:durability-progress`. RED on
+  // main: the type is unknown to the inspector and the accept case throws.
+  describe('workbench:durability-progress (first-open unit — DESIGNED RED on main)', () => {
+    it('accepts real counts as an owner-level message and freezes it', () => {
+      // try/catch so the RED lands on the assert (null on main: unknown type throws).
+      const message = (() => {
+        try {
+          return inspectWorkbenchOwnerToPageMessage({
+            type: 'workbench:durability-progress',
+            persisted: 3,
+            total: 10,
+          });
+        } catch {
+          return null;
+        }
+      })();
+      expect(message).toEqual({
+        type: 'workbench:durability-progress',
+        persisted: 3,
+        total: 10,
+      });
+      expect(Object.isFrozen(message)).toBe(true);
+    });
+
+    it('rejects malformed counts at the protocol boundary', () => {
+      for (const counts of [
+        { persisted: '3', total: 10 },
+        { persisted: -1, total: 10 },
+        { persisted: Number.NaN, total: 10 },
+        { persisted: 3, total: Number.POSITIVE_INFINITY },
+        { persisted: 3 },
+        { persisted: 3, total: 10, extra: true },
+      ]) {
+        expect(() =>
+          inspectWorkbenchOwnerToPageMessage({
+            type: 'workbench:durability-progress',
+            ...counts,
+          }),
+        ).toThrow(TypeError);
+      }
+    });
+  });
 });

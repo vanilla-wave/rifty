@@ -1981,4 +1981,56 @@ describe('browser Workbench owner transport', () => {
     worker.emit('exit', 0, null);
     await raw.closed;
   });
+
+  // #256 first-open-progress (epic project-open-drain-latency I1; ADR-0359
+  // correction 2026-08-16) — committed RED-first carrier. The FIRST-OPEN
+  // materialization drain completes before any project runtime exists, so
+  // progress rides an owner-LEVEL `workbench:durability-progress` control
+  // message published straight to the owner-level health stream — no project
+  // token gate, delivery valid with NO project open at all. RED on main: the
+  // unknown owner message trips the protocol inspector into fatal-invariant
+  // and no durability-progress health event is delivered.
+  it('publishes owner-level durability-progress messages with no project open (first-open unit — DESIGNED RED on main)', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+    void raw.closed.catch(() => {});
+    const health: WorkbenchOwnerHealthEvent[] = [];
+    raw.subscribeHealth?.((event) => health.push(event));
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+
+    // First-open drain window: NO openProject has been requested yet.
+    for (const counts of [
+      { persisted: 4, total: 12 },
+      { persisted: 12, total: 12 },
+    ]) {
+      worker.emit('message', { type: 'workbench:durability-progress', ...counts });
+    }
+    await settleMicrotasks();
+
+    const progress = health
+      .filter((event) => (event as { readonly kind: string }).kind === 'durability-progress')
+      .map((event) => {
+        const shaped = event as unknown as {
+          readonly kind: string;
+          readonly persisted: number;
+          readonly total: number;
+        };
+        return { kind: shaped.kind, persisted: shaped.persisted, total: shaped.total };
+      });
+    expect(progress).toEqual([
+      { kind: 'durability-progress', persisted: 4, total: 12 },
+      { kind: 'durability-progress', persisted: 12, total: 12 },
+    ]);
+    // Progress is health, never failure: the owner stays alive and unkilled.
+    expect(health.some((event) => event.kind === 'fatal-invariant')).toBe(false);
+    expect(worker.killedWith).toBeNull();
+
+    raw.close();
+    worker.emit('exit', 0, null);
+    await raw.closed;
+  });
 });

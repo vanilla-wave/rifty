@@ -74,6 +74,12 @@ mid-drain reopens an honest project (no trusted stamp over an unproven tree);
    `durability-progress` health-event kind, counts done/total, owner-port only;
    ADR for the public API; independent of parallel-drain (works on the serial
    drain too).
+4. `playground/first-open-durability-progress` — **first-open-progress** —
+   the FIRST-OPEN materialization drain (I1's central case) delivers
+   `durability-progress` on the owner health stream: slice 3's emit slot
+   binds only at project-runtime creation, after the promote proof-flush —
+   first open was mute. Owner-level protocol hop (ADR-0359 in-place
+   correction 2026-08-16); carries the epic closure proof.
 
 ## Budget
 
@@ -88,6 +94,7 @@ mid-drain reopens an honest project (no trusted stamp over an unproven tree);
 | mkdir-dedup | 20–80 |
 | parallel-drain | 250–600 |
 | drain-progress | 80–250 |
+| first-open-progress | 40–150 |
 
 ## Decisions
 
@@ -108,3 +115,10 @@ mid-drain reopens an honest project (no trusted stamp over an unproven tree);
 - Pack-format storage rejected for this epic: >10x requires an on-disk layout
   change with format-versioning obligations — separate strategic decision,
   evidence in prototype RESULTS.md.
+- 2026-08-16 required goal work discovered at Final+GREEN #264: the
+  first-open materialization drain is mute on the owner port (slice-3 emit
+  slot binds at project-runtime creation; the promote proof-flush completes
+  before). User-resolved (option «б»): I1's plain reading covers first open —
+  the epic cannot close without it; item 4 carries the fix and the closure
+  proof. Slices 1-3 merged: PR #262 (I2), #263 (I3, ADR-0358), #264
+  (ADR-0359).
