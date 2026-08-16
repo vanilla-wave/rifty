@@ -205,7 +205,8 @@ pins"):
   handle on either side).
 
 Stamp-fence pins (install-stamp-authority.fault.test.ts, committed, GREEN —
-7 tests, every family swept over BOTH production writer branches): a trusted
+9 tests incl. the pre-existing hang pin, every family swept over BOTH
+production writer branches): a trusted
 stamp never becomes durable at the OPFS surface while an earlier-enqueued
 persist op is unsettled — four families: (i) pre-proof wedge held past the
 30s report bound; (ii) POST-PROOF window — an op enqueued after the
@@ -296,6 +297,8 @@ Canonical axes per fault-classes §Axes.
   an input here.
 
 ## Decisions
+
+ready-verdict: 2026-08-16 — Contract+RED @ 07557646d (attempt 7; fresh isolated reviewer, all 8 axes pass, 0 blockers)
 
 - ADR-0358 (decision subagent, this branch) supersedes ADR-0187 per
   decision-workflow §Reconsidering — removed file, README pointer, standing
