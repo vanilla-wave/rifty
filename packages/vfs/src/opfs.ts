@@ -12,7 +12,12 @@
  */
 
 import { VfsError, assertReadWindow } from './errors.ts';
-import { type OpfsErrorContext, mapOpfsError } from './opfs-errors.ts';
+import {
+  type OpfsErrorContext,
+  assertNotCrswapReserved,
+  isCrswapArtifactName,
+  mapOpfsError,
+} from './opfs-errors.ts';
 import { basename, dirname, normalizeAbsolute, segments } from './path.ts';
 import type { Vfs, VfsDirent, VfsStat } from './types.ts';
 
@@ -106,6 +111,7 @@ export class OpfsVfs implements Vfs {
 
   async writeFile(path: string, data: Uint8Array | string): Promise<void> {
     const np = normalizeAbsolute(path);
+    assertNotCrswapReserved(np);
     const handle = await this.getFileHandle(np, true);
     const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data;
     try {
@@ -129,6 +135,8 @@ export class OpfsVfs implements Vfs {
       for await (const [name, handle] of dir as unknown as AsyncIterable<
         [string, FileSystemHandle]
       >) {
+        // Platform atomic-swap temps are not tree content (see opfs-errors.ts).
+        if (handle.kind === 'file' && isCrswapArtifactName(name)) continue;
         out.push({
           name,
           isFile: handle.kind === 'file',
@@ -144,6 +152,7 @@ export class OpfsVfs implements Vfs {
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
     const np = normalizeAbsolute(path);
+    assertNotCrswapReserved(np);
     const recursive = options?.recursive ?? false;
     await this.init();
     let dir = this.root as FileSystemDirectoryHandle;
