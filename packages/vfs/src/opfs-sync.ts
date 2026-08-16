@@ -467,7 +467,25 @@ export class OpfsFsSync implements FsSync {
    * ({@link flush} reports them); the next `refreshIndex` reconciles disk.
    */
   private persistMkdirAsync(path: string, recursive: boolean): void {
-    this.enqueuePending({ paths: [path], op: 'mkdir' }, async (operation) => {
+    // Scope = the WHOLE chain this persist may create ('/a','/a/b','/a/b/c'
+    // for a recursive mkdir), never just the leaf: a later '/a/f' write's
+    // ancestor walk must find '/a' in the scheduler registry or it races the
+    // chain create — OpfsVfs.writeFile resolves parents with create:false →
+    // NotFoundError → torn tree (ADR-0358 ancestor gating). Non-recursive
+    // creates only the leaf (parents pre-exist), so its scope stays the leaf.
+    let paths: readonly string[];
+    if (recursive) {
+      const chain: string[] = [];
+      let prefix = '';
+      for (const part of segments(path)) {
+        prefix = `${prefix}/${part}`;
+        chain.push(prefix);
+      }
+      paths = chain;
+    } else {
+      paths = [path];
+    }
+    this.enqueuePending({ paths, op: 'mkdir' }, async (operation) => {
       try {
         await this.persistDirectoryPath(path, recursive);
         this.healPersistFailure(path, operation.sequence);
@@ -710,7 +728,10 @@ export class OpfsFsSync implements FsSync {
    * paths where OPFS still lags the mirror because their last persist attempt
    * failed. Callers that only order writes ignore the result; callers that
    * PROMISE durability (the install stamp) gate on `report.total === 0`.
-   * Bounded: a timed-out lane releases its reporting without settling.
+   * Bounded: a timed-out lane releases its own reporting without settling,
+   * AND once any lane holder times out, capacity-starved queued ops get
+   * bounded blocked reporting too (healed on later success) — so flush()
+   * resolves even when every lane is wedged.
    */
   async flush(): Promise<PersistFailureReport> {
     await this.scheduler.reportingBarrier();

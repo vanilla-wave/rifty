@@ -2210,6 +2210,49 @@ describe('OpfsFsSync write-through — per-path parallel drain (ADR-0358 replace
     expect(afWrites[afWrites.length - 1]).toEqual([2]); // last '/a/f' surface write carries v2
     expect(report.total).toBe(0);
   });
+
+  // RED-first pin (#256 slice 2, Final+GREEN torn-state defect — P2 sibling):
+  // ancestor gating must cover the WHOLE recursive-mkdir chain, not just its
+  // leaf. A leaf-only registration ('/a/b/c') leaves '/a' invisible to a later
+  // '/a/f' write's prefix walk — no edge, the write races the chain create; on
+  // real OPFS `OpfsVfs.writeFile` resolves parents with create:false →
+  // NotFoundError → permanent ledger entry (ADR-0358 "a child write persists
+  // only after its ancestor mkdirs"). Pinned as ORDERING because the fake
+  // pre-exists the chain so the surface write cannot fail: under leaf-only
+  // registration the instant write completes BEFORE the slow chain persist
+  // resolves '/a' (['write /a/f', 'dir /a']); chain-wide registration fences
+  // it behind the mkdir (['dir /a', 'write /a/f']).
+  it("a write under a recursive mkdir chain's INTERMEDIATE dir completes only after the chain persist resolves", async () => {
+    const events: string[] = [];
+    // The chain pre-exists in the FAKE (not the mirror — no refreshIndex) so
+    // the inner getDirectoryHandle resolves; the wrapper adds ~20ms latency +
+    // a completion log to the ROOT-level '/a' hop (nested 'b'/'c' hops go
+    // through unwrapped child handles).
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/a', '/a/b', '/a/b/c']) });
+    const innerGetDir = root.getDirectoryHandle.bind(root);
+    (
+      root as { getDirectoryHandle: FileSystemDirectoryHandle['getDirectoryHandle'] }
+    ).getDirectoryHandle = async (name, options) => {
+      const handle = await innerGetDir(name, options);
+      await new Promise<void>((r) => setTimeout(r, 20));
+      events.push(`dir /${name}`);
+      return handle;
+    };
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      writeFile: (path: string) => {
+        events.push(`write ${path}`);
+        return Promise.resolve();
+      },
+      rm: () => Promise.resolve(),
+    };
+    const fs = new OpfsFsSync(root, surface);
+    fs.mkdirSync('/a/b/c', { recursive: true }); // slow chain persist (root '/a' hop ~20ms)
+    fs.writeFileSync('/a/f', new Uint8Array([1])); // instant persist (surface)
+    const report = await fs.flush();
+    expect(events).toEqual(['dir /a', 'write /a/f']);
+    expect(report.total).toBe(0);
+  });
 });
 
 describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
@@ -2818,5 +2861,53 @@ describe('OpfsFsSync per-lane watchdog (ADR-0358)', () => {
     // every successor's blocked record healed on its own success
     // (equal-sequence heal — healPersistFailure keeps `<=` sequences).
     expect(report.total).toBe(0);
+  });
+
+  // RED-first pin (#256 slice 2, Final+GREEN unbounded-read defect): flush()
+  // must stay BOUNDED under full-wedge saturation. 16 never-settling writes
+  // hold every lane; their watchdogs self-ledger at 30s but keep their lanes
+  // (R5) — a 17th READY, capacity-starved op has no lane, no fence blocker,
+  // and no watchdog of its own, so nothing ever settles its reporting and a
+  // flush() started before the timeout parks forever: every durability caller
+  // (install-stamp promote, eval-boundary flush) hangs instead of failing
+  // loudly. Bound: once a lane HOLDER times out, capacity-starved queued ops
+  // get bounded blocked reporting (healed on later success, like fence
+  // dependents). Guardrails pinned elsewhere: healthy saturation never sweeps
+  // (capacity wait is not I/O time — the '/healthy' pin above) and a single
+  // wedge with free lanes admits '/other' pre-timeout (the unrelated-path
+  // pin).
+  it('flush() stays bounded when every lane is wedged — a capacity-starved ready op is blocked-reported once a holder times out', async () => {
+    vi.useFakeTimers();
+    const surface: PairedAsyncSurface = {
+      readFile: () => Promise.resolve(new Uint8Array()),
+      // Every write wedges — uncancellable browser I/O that never settles.
+      // '/starved' never reaches the surface: no lane ever frees.
+      writeFile: () => new Promise<void>(() => {}),
+      rm: () => Promise.resolve(),
+    };
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root, surface);
+    for (let i = 0; i < 16; i++) fs.writeFileSync(`/h${i}`, new Uint8Array([i])); // full window
+    fs.writeFileSync('/starved', new Uint8Array([99])); // 17th — READY, capacity-starved
+    let flushSettled = false;
+    const flushPromise = fs.flush().then((report) => {
+      flushSettled = true;
+      return report;
+    });
+
+    await Promise.resolve(); // admitted lanes enter their boundaries
+    await vi.advanceTimersByTimeAsync(30_000); // 16 watchdogs fire — wedges ledgered
+    // Generous residual drains: microtask chains + 1ms ticks, nowhere near
+    // another watchdog.
+    for (let tick = 0; tick < 10; tick++) await vi.advanceTimersByTimeAsync(1);
+
+    expect(flushSettled).toBe(true); // RED today: '/starved' reporting never settles → flush hangs
+    const report = await flushPromise;
+    // Bounded ledger covers the 16 wedges + the starved op's blocked record.
+    expect(report.total).toBe(17);
+    expect(report.failures).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: '/starved', op: 'write' })]),
+    );
+    expect(report.anyFailure?.((path) => path === '/starved')).toBe(true);
   });
 });

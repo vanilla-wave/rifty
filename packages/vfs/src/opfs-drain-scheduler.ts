@@ -24,7 +24,11 @@
  *   queue wait is not I/O time. A timed-out op keeps its lane and its fences
  *   (the browser op cannot be cancelled); only its reporting is released, and
  *   its transitively-fenced QUEUED dependents get bounded blocked reporting
- *   so flush() stays bounded.
+ *   so flush() stays bounded. Full-wedge saturation is bounded too: while a
+ *   TIMED-OUT holder occupies a lane and every lane is held, capacity-starved
+ *   READY ops (no fence, no lane, no watchdog of their own) get the same
+ *   bounded blocked reporting — healed on later success. Healthy saturation
+ *   (no holder timed out) never blocked-reports a queued op.
  * - Drain-scoped dir-handle cache: cleared when the drain goes idle and on
  *   every structural REGISTRATION; generation-guarded so an in-flight walk
  *   never re-inserts a pre-clear handle.
@@ -43,7 +47,8 @@ export interface PersistOperation {
 export interface DrainSchedulerHooks {
   /** Active op crossed the report bound — record its ledger failure. */
   onReportTimeout(operation: PersistOperation): void;
-  /** Queued op is transitively fenced behind a timed-out op — record + release. */
+  /** Queued op is transitively fenced behind a timed-out op, or capacity-starved
+   * while a timed-out holder wedges a full lane window — record + release. */
   onBlockedBehindTimeout(operation: PersistOperation, blocker: PersistOperation): void;
 }
 
@@ -194,6 +199,10 @@ export class OpfsDrainScheduler {
   private readonly lastChildIn = new Map<string, ScheduledOp>();
   /** Ready (all deps settled), awaiting a lane — FIFO admission. */
   private readonly ready: ScheduledOp[] = [];
+  /** ACTIVE ops past their report bound — still holding lanes (the browser op
+   * cannot be cancelled). Non-empty + full window ⇒ capacity-starved READY
+   * ops need bounded blocked reporting or flush() parks forever. */
+  private readonly timedOutHolders = new Set<ScheduledOp>();
   private readonly hooks: DrainSchedulerHooks;
   readonly dirHandles = new DrainDirHandleCache();
 
@@ -316,6 +325,9 @@ export class OpfsDrainScheduler {
       if (!op) return;
       this.activate(op);
     }
+    // Lanes full with ready ops left over: if a holder already timed out,
+    // the leftovers are starved behind an uncancellable wedge — bound them.
+    this.reportCapacityStarved();
   }
 
   private activate(op: ScheduledOp): void {
@@ -328,9 +340,11 @@ export class OpfsDrainScheduler {
     if (op.reportingSettled) resetReporting(op);
     const timer = setTimeout(() => {
       op.timedOut = true;
+      this.timedOutHolders.add(op);
       this.hooks.onReportTimeout(op.operation);
       op.settleReporting();
       this.reportBlockedDependents(op);
+      this.reportCapacityStarved();
     }, PERSIST_OPERATION_REPORT_TIMEOUT_MS);
     const finish = (): void => {
       clearTimeout(timer);
@@ -349,6 +363,7 @@ export class OpfsDrainScheduler {
   private settle(op: ScheduledOp): void {
     op.settleReporting();
     op.settleOp();
+    this.timedOutHolders.delete(op);
     this.pending.delete(op.operation.sequence);
     for (const path of op.operation.paths) {
       if (this.registry.get(path) === op) this.registry.delete(path);
@@ -375,6 +390,21 @@ export class OpfsDrainScheduler {
       if (next.phase !== 'queued' || next.blockedBehind !== null) continue;
       this.reportBlocked(next, from.operation);
       queue.push(...next.dependents);
+    }
+  }
+
+  /** Full-wedge starvation bound: a READY op behind a full lane window whose
+   * holders include a TIMED-OUT wedge has no fence blocker and no watchdog of
+   * its own — without this its reporting never settles and flush() parks
+   * forever. Reporting only (heals on later success, like fence dependents);
+   * scheduling is untouched — the op still admits when a lane REALLY frees.
+   * Healthy saturation never sweeps: capacity wait is not I/O time. */
+  private reportCapacityStarved(): void {
+    if (this.activeCount < MAX_ACTIVE_PERSIST_LANES) return;
+    const wedge: ScheduledOp | undefined = this.timedOutHolders.values().next().value;
+    if (!wedge) return;
+    for (const op of this.ready) {
+      if (op.blockedBehind === null) this.reportBlocked(op, wedge.operation);
     }
   }
 

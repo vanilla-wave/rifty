@@ -766,9 +766,9 @@ export function createInstallStampAuthority(options: {
         packages,
         lockfileBytes === null ? undefined : sha256Hex(lockfileBytes),
       );
-      // ADR-0358 stamp full fence, one per trusted transition: parallel lanes
-      // no longer park the stamp via FIFO — every persist op enqueued before
-      // this point must REALLY settle (fence() on OpfsFsSync/owner authority).
+      // ADR-0358 stamp full fence (one per trusted transition): all earlier
+      // persists REALLY settle. Fence→write microtask window: guarded scope
+      // demotes the epoch; closure = trusted-state-authority Contract+RED.
       const fence = (io.fsSync as { fence?: () => Promise<void> } | undefined)?.fence;
       if (typeof fence === 'function') await fence.call(io.fsSync);
       try {
