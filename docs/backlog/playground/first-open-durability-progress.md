@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: First-open materialization drain delivers durability-progress on the owner health stream
 created: 2026-08-16
 why: the FIRST open of a project — the epic's central 40s-scenario — is still mute; slice 3's emit slot binds only at project-runtime creation, AFTER the first-materialization promote proof-flush completes, so every frame drops (I1's plain reading is unmet; Final+GREEN #264 reviewer finding, code-verified)
@@ -80,15 +80,23 @@ main via structural casts; every RED fails on its runtime assert):
 - First-open closure proof (tests/browser-unit/first-open-progress.spec.ts +
   fixtures/first-open-progress-worker.ts, `FIRSTOPEN256` JSON logged for
   the PR record): the REAL `runWorkbenchOwner` composition in a browser
-  worker realm (fake `KernelIpc`, REAL OPFS via `storage.persistence:
-  'preferred'`), driven over the real owner protocol: `workbench:initialize`
-  → `workbench:open-project` with a definition materializing a
-  multi-thousand-file starter tree + a no-network install; the first-open
-  materialization flush drains through real OPFS. Asserts: open reply
-  arrives; `workbench:durability-progress` messages observed on the ipc
-  BEFORE the open reply, monotone non-decreasing, terminal
-  `persisted === total`; ≥1 mid-drain message. RED on main:
-  `progressCount > 0` fails (drain mute), all other asserts pass.
+  worker realm (fake `KernelIpc` recording every owner→page message in
+  order; REAL OPFS via `storage.persistence: 'preferred'`; minimal
+  process-shim replacing the kernel pre-entry), driven over the real owner
+  protocol: `workbench:initialize` → `workbench:open-project` with a
+  2 002-file / 201-dir inline starter tree + empty-deps `package.json` (no
+  network); the first-open materialization → ensure → promote proof-flush
+  drains through real OPFS before the reply. Asserts (in order): reply is
+  `workbench:project-opened`; post-reply REAL OPFS walk finds
+  `persistedProjectFiles >= fileCount`; **designed RED** `progressCount >
+  0` (owner-level `workbench:durability-progress` messages — 0 on main,
+  drain mute: total owner→page traffic during the whole 2 002-file first
+  open is exactly 2 messages); then post-fix I1 pins: every progress seq <
+  reply seq; per-flush-segment (`total` fixed per drain watermark)
+  monotone non-decreasing `persisted`; ≥1 mid-drain snapshot; final drain
+  terminates `persisted === total`. Watermark SIZE is deliberately not
+  asserted (write-through settles ops eagerly; universe durability is the
+  OPFS walk's pin).
   - Driver depth (carrier decision, recorded honestly): this drives the
     full worker-realm owner composition — the exact production
     `runWorkbenchOwner` wiring (packageState flush → forwarder → ipc) — at
@@ -161,3 +169,33 @@ Reporting-only surface over the owner protocol; tier production (epic).
 - This unit's Final+GREEN doubles as the epic I1 end-to-end proof; the same
   PR records epic closure (I2/I3 proofs = merged PR #262/#263/#264
   acceptance artifacts) and deletes the epic file (delete-on-done).
+- Closure-proof depth (carrier decision, resolved by feasibility spike
+  2026-08-16): an e2e-lane full-app spec observing `subscribeHealth` is
+  structurally impossible without widening user-routed-out reach — the
+  owner handle is package-private by design (`open-workbench.ts` "no owner
+  handle crosses the public Workbench"), the app-level `WorkbenchHealth`
+  deliberately drops `durability-progress` (reach), and the e2e env has no
+  eddy resolver for heavy dep snapshots. The browser-unit carrier above
+  drives the deepest real altitude that exists: the exact production
+  `runWorkbenchOwner` composition over the real owner protocol with real
+  OPFS; the page hop to `subscribeHealth` is pinned against the same real
+  protocol boundary in workbench-browser-owner.test.ts (slice-3-accepted
+  composition pattern).
+- RED evidence (pre-implementation, this branch, 2026-08-16, darwin arm64
+  macOS 26.3.1, node v24.16.0, vitest 2.1.9, Playwright 1.60.0 Chromium;
+  raw logs /tmp/first-open-evidence/):
+  - `npx vitest run packages/vfs packages/shell packages/workbench` →
+    `2 failed | 3588 passed | 1 skipped` — exactly the two designed REDs:
+    owner-protocol accept case (`expected null to deeply equal {type:
+    'workbench:durability-progress', …}` — unknown type throws on main)
+    and the browser-owner pin (`expected [] to deeply equal
+    [{kind:'durability-progress',persisted:4,total:12}, …]`).
+  - `RIFTY_PLAYGROUND_PORT=5299 npx playwright test --config
+    playwright.browser-unit.config.ts
+    tests/browser-unit/first-open-progress.spec.ts` → `1 failed`, RED only
+    on `expect(result.progressCount).toBeGreaterThan(0)`; `FIRSTOPEN256
+    {"replyKind":"workbench:project-opened","progressCount":0,
+    "vfsDurabilityFrameCount":0,"fileCount":2002,"dirCount":201,
+    "persistedProjectFiles":2004,"timings":{"openMs":7799,…}}` — the open
+    itself is fully real and green (deterministic across 3 runs incl. the
+    spike's two).

@@ -1069,6 +1069,7 @@ describe('Workbench owner protocol', () => {
         { persisted: -1, total: 10 },
         { persisted: Number.NaN, total: 10 },
         { persisted: 3, total: Number.POSITIVE_INFINITY },
+        { persisted: 11, total: 10 },
         { persisted: 3 },
         { persisted: 3, total: 10, extra: true },
       ]) {
