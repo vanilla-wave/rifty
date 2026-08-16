@@ -151,6 +151,8 @@ Reporting-only surface over the storage boundary; tier production (epic).
 
 ## Decisions
 
+ready-verdict: 2026-08-16 — Contract+RED @ 7792d70b4 (attempt 2; fresh isolated reviewer, all 8 axes pass, 0 blockers)
+
 - Compiled to ready 2026-08-16: ADR-0359 records all three user-resolved
   forks (rifty-refine 2026-08-15, epic Decisions); remaining carrier
   decisions (honest `total` watermark definition; acceptance driver depth)
