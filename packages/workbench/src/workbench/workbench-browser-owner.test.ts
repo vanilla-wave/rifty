@@ -23,7 +23,8 @@ import {
   projects,
 } from './project-definition.ts';
 import type { ProjectMaterializer } from './project-materialization.ts';
-import { startBrowserWorkspaceOwner, workbenchOwnerSpawnSpec } from './workbench-browser-owner.ts';
+import { workbenchOwnerSpawnSpec } from './workbench-browser-owner-spawn.ts';
+import { startBrowserWorkspaceOwner } from './workbench-browser-owner.ts';
 import type {
   WorkbenchOwnerHealthEvent,
   WorkbenchOwnerStartInput,
@@ -1900,17 +1901,16 @@ describe('browser Workbench owner transport', () => {
     }
   });
 
-  // ADR-0359 (#256 drain-progress, epic project-open-drain-latency I1) —
-  // committed RED-first carrier. Worker-realm drain counts ride the EXISTING
-  // owner→page durability channel (the workbench:project-vfs frame family
-  // that already feeds onDurabilityState → publishHealth); the page publishes
-  // them as a new `{ kind: 'durability-progress', persisted, total }` member
-  // of WorkbenchOwnerHealthEvent. Neither the owner frame nor the health kind
-  // exists on main — the assertion fails at runtime (no compile error: events
-  // are matched via structural casts). Monotonicity/coalescing is owned by
-  // the WORKER-side emitter (ADR-0359 Consequences: O(progress) at the
-  // emitter); the page hop pinned here forwards exact frames in order.
-  it('publishes owner drain-progress frames as durability-progress health events (ADR-0359 — DESIGNED RED on main)', async () => {
+  // ADR-0359 (#256 drain-progress, epic project-open-drain-latency I1;
+  // channel corrected 2026-08-16 by the first-open unit): drain counts ride
+  // the owner-LEVEL `workbench:durability-progress` control message — the
+  // per-project vfs frame hop was removed (it was mute for the first-open
+  // drain). This pin keeps the TRANSPORT-LIVE scenario (npm-install/restore
+  // with a project open): delivery and order are unchanged by project state.
+  // Monotonicity/coalescing is owned by the WORKER-side emitter (ADR-0359
+  // Consequences: O(progress) at the emitter); the page hop pinned here
+  // publishes exact counts in message order.
+  it('publishes owner drain-progress messages as durability-progress health events while a project is open', async () => {
     const worker = new FakeOwnerWorker();
     const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
     void raw.closed.catch(() => {});
@@ -1942,17 +1942,13 @@ describe('browser Workbench owner transport', () => {
     ]);
     await opening;
 
-    // Designed owner→page frame (absent on main): coalesced REAL counts from
-    // the drain owner, one mid-drain snapshot then the terminal completion.
+    // Coalesced REAL counts from the drain owner: one mid-drain snapshot then
+    // the terminal completion, on the owner-level channel.
     for (const counts of [
       { persisted: 3, total: 10 },
       { persisted: 10, total: 10 },
     ]) {
-      worker.emit('message', {
-        type: 'workbench:project-vfs',
-        projectToken: 'owner-token-a',
-        frame: { type: 'rifty:owner-vfs-durability-progress', ...counts },
-      });
+      worker.emit('message', { type: 'workbench:durability-progress', ...counts });
     }
     await settleMicrotasks();
 
@@ -1966,9 +1962,6 @@ describe('browser Workbench owner transport', () => {
         };
         return { kind: shaped.kind, persisted: shaped.persisted, total: shaped.total };
       });
-    // DESIGNED RED on main: no durability-progress handling exists anywhere in
-    // packages/workbench — the unknown frame trips the protocol inspector into
-    // fatal-invariant instead and the listener sees no progress event.
     expect(progress).toEqual([
       { kind: 'durability-progress', persisted: 3, total: 10 },
       { kind: 'durability-progress', persisted: 10, total: 10 },

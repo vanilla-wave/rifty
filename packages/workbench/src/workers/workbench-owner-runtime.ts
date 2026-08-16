@@ -9,7 +9,6 @@ import {
   ensureStarterInitialCommit,
 } from '../glue/git-initial-baseline.ts';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
-import type { OwnerVfsDurabilityProgressMessage } from '../glue/owner-vfs-ipc.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
@@ -113,15 +112,18 @@ const DURABILITY_PROGRESS_MIN_INTERVAL_MS = 200;
 
 /**
  * Per-flush O(progress) coalescer (ADR-0359 Consequences): the drain owner
- * emits one snapshot per settled op; this forwards a frame only for (a) a
+ * emits one snapshot per settled op; this forwards a message only for (a) a
  * CHANGED `persisted` that is (b) the first of the flush, the terminal
  * `persisted === total`, or ≥{@link DURABILITY_PROGRESS_MIN_INTERVAL_MS}
- * after the last forwarded frame — so frames scale with drain wall-clock,
- * never op count. Dropped/undeliverable frames are honest: progress is
- * advisory; the flush report stays the durability truth.
+ * after the last forwarded message — so messages scale with drain wall-clock,
+ * never op count. Owner-LEVEL channel (ADR-0359 correction 2026-08-16):
+ * durability is owner-scoped and the first-open drain predates any project
+ * token, so progress never waits for a project runtime to bind. Undeliverable
+ * messages are honest drops: progress is advisory; the flush report stays the
+ * durability truth.
  */
 function createDurabilityProgressForwarder(
-  emitter: () => ((frame: OwnerVfsDurabilityProgressMessage) => void) | null,
+  send: (message: WorkbenchOwnerToPageMessage) => void,
 ): (snapshot: { readonly persisted: number; readonly total: number }) => void {
   let lastForwardedAt = 0;
   let lastPersisted = -1;
@@ -134,18 +136,16 @@ function createDurabilityProgressForwarder(
     ) {
       return;
     }
-    const emit = emitter();
-    if (emit === null) return;
     lastForwardedAt = now;
     lastPersisted = snapshot.persisted;
     try {
-      emit({
-        type: 'rifty:owner-vfs-durability-progress',
+      send({
+        type: 'workbench:durability-progress',
         persisted: snapshot.persisted,
         total: snapshot.total,
       });
     } catch {
-      // Project channel fenced/closed mid-drain — drop; never fail the drain.
+      // Owner ipc unavailable mid-drain (shutdown) — drop; never fail the drain.
     }
   };
 }
@@ -330,17 +330,13 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           }),
     })
   ).manager;
-  // ADR-0359 late-bound durability-progress emitter: packageState composes
-  // before any project/controller exists, so drain snapshots route through
-  // this slot — bound by the active project below, null → frames drop.
-  let emitDurabilityProgress: ((frame: OwnerVfsDurabilityProgressMessage) => void) | null = null;
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
     installStampClaims,
     flush: () =>
       authority.flush({
-        onProgress: createDurabilityProgressForwarder(() => emitDurabilityProgress),
+        onProgress: createDurabilityProgressForwarder((message) => sendOwnerMessage(ipc, message)),
       }),
     amendGeneratedBaseline,
     nodeWorkerRuntimeEnv,
@@ -578,7 +574,6 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         }
       }
       activeProjectVfs = projectVfs;
-      emitDurabilityProgress = (frame) => input.emit({ type: 'vfs', frame });
       return Object.freeze({
         ...(playgroundTools === undefined
           ? {}
@@ -613,10 +608,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           } catch (error) {
             failures.push(error);
           } finally {
-            if (activeProjectVfs === projectVfs) {
-              activeProjectVfs = null;
-              emitDurabilityProgress = null;
-            }
+            if (activeProjectVfs === projectVfs) activeProjectVfs = null;
             if (activeProjectRoot === projectRoot) activeProjectRoot = null;
           }
           if (failures.length === 1) throw failures[0];
