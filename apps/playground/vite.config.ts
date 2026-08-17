@@ -1,6 +1,47 @@
-import { createLogger, defineConfig } from 'vite';
+import { readFile } from 'node:fs/promises';
+import { join, normalize, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { type Plugin, createLogger, defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import { rifySwPlugin } from './build/sw-plugin.ts';
+
+/**
+ * Dev-only static route for e2e fixtures (`tests/e2e/fixtures/` →
+ * `/__e2e-fixtures/*`): specs seed multi-KB project files (npm-authored
+ * lockfiles) into the browser shell via in-realm `fetch`, which a terminal
+ * one-liner cannot carry. Never part of the production build.
+ */
+function e2eFixturesPlugin(): Plugin {
+  const fixturesDir = resolve(
+    fileURLToPath(new URL('.', import.meta.url)),
+    '../../tests/e2e/fixtures',
+  );
+  return {
+    name: 'rifty-e2e-fixtures',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__e2e-fixtures', (req, res, next) => {
+        void (async () => {
+          const rel = normalize(decodeURIComponent((req.url ?? '/').split('?')[0] ?? '/'));
+          const target = join(fixturesDir, rel);
+          if (!target.startsWith(fixturesDir)) {
+            res.statusCode = 403;
+            res.end('forbidden');
+            return;
+          }
+          try {
+            const bytes = await readFile(target);
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+            res.end(bytes);
+          } catch {
+            next();
+          }
+        })();
+      });
+    },
+  };
+}
 
 /**
  * monaco-editor 0.52 ships `marked.umd.js` with a dangling
@@ -34,7 +75,7 @@ const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
 
 export default defineConfig({
   customLogger: quietLogger,
-  plugins: [solid(), rifySwPlugin()],
+  plugins: [solid(), rifySwPlugin(), e2eFixturesPlugin()],
   server: {
     port,
     strictPort: true,

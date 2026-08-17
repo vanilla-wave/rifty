@@ -1817,7 +1817,7 @@ describe('install — npm 11 probe differential', () => {
     const probe = JSON.parse(
       readFileSync(
         new URL(
-          '../../../docs/backlog/npm-client/reference/npm-11-lockfile-replay-probe-output.json',
+          './_test-fixtures/npm-11-lockfile-replay-probe/npm-11-lockfile-replay-probe-output.json',
           import.meta.url,
         ),
         'utf8',

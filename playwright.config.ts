@@ -20,6 +20,7 @@ const HEAVY_SPECS = [
   '**/project-management.spec.ts',
   '**/project-switch.spec.ts',
   '**/fullstack-demo.spec.ts',
+  '**/npm-lock-replay.spec.ts',
 ];
 
 export default defineConfig({

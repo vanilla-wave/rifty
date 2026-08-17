@@ -1,11 +1,12 @@
 # npm 11 lockfile replay shape probe
 
 Recorded 2026-08-17 on Node v24.16.0 / npm 11.17.0 against the committed
-self-contained loopback registry probe. Run:
+self-contained loopback registry probe. Oracle for the differential test in
+`packages/npm-client/src/installer-lockfile.test.ts`. Regenerate:
 
 ```sh
-node docs/backlog/npm-client/reference/npm-11-lockfile-replay-probe.mjs \
-  docs/backlog/npm-client/reference/npm-11-lockfile-replay-probe-output.json
+node packages/npm-client/src/_test-fixtures/npm-11-lockfile-replay-probe/npm-11-lockfile-replay-probe.mjs \
+  packages/npm-client/src/_test-fixtures/npm-11-lockfile-replay-probe/npm-11-lockfile-replay-probe-output.json
 ```
 
 The normalized output records lockfile v3, an entry-level

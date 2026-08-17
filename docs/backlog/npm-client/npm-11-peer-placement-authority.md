@@ -30,9 +30,10 @@ environment. That success claim is observably unlike npm 11 and cannot become
 a shadow-only exception.
 
 Replay of peers an npm-authored lock ALREADY pins (no resolution decision) is
-carved out to `lockfile-replay-peer-entries` (epic
-`faithful-npm-lock-replay`); this item keeps live resolution, placement,
-conflicts, and `peer: true` lock provenance.
+SHIPPED (epic `faithful-npm-lock-replay`, closed): the walk traverses
+lock-pinned `peerDependencies` — `installer-lockfile.test.ts`,
+`tests/e2e/npm-lock-replay.spec.ts`. This item keeps live resolution,
+placement, conflicts, and `peer: true` lock provenance.
 
 ## Reference contract
 
