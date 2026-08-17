@@ -98,7 +98,10 @@
 
 - npm-authored lockfile replay now traverses entry `optionalDependencies` and
   lock-pinned `peerDependencies`, applies the shared CPU admission gate, and
-  rejects unreached lock entries before publishing install success.
+  rejects unreached lock entries before publishing install success. Entries
+  reachable only through a skipped optional subtree (sharp's
+  `@img/sharp-<platform>` → `@img/sharp-libvips-<platform>` shape) count as
+  recorded skips: they stay in the rewritten lock and never trip the gate.
 
 - Registry-backed shadow recipes now reject dependency/bundle projection drift
   before acquisition and validate bundled manifests at the shared fresh,

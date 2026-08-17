@@ -1,6 +1,33 @@
+import { pinnedEntryForParent } from './installer-lockfile-reader.ts';
 import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
 import type { Lockfile, RootLockfileDependencyMaps } from './linker.ts';
 import type { VersionManifest } from './registry.ts';
+
+export interface LockfilePathTranslation {
+  readonly recordedPrefix: string;
+  readonly actualPrefix: string;
+}
+
+/** Longest-prefix rewrite of a recorded lockfile path into the actual tree
+ * path after mixed replay relocated a retained parent. */
+export function translateRecordedInstallPath(
+  installPath: string,
+  translations: readonly LockfilePathTranslation[],
+): string {
+  let match: LockfilePathTranslation | undefined;
+  for (const candidate of translations) {
+    if (
+      (installPath === candidate.recordedPrefix ||
+        installPath.startsWith(`${candidate.recordedPrefix}/node_modules/`)) &&
+      (match === undefined || candidate.recordedPrefix.length > match.recordedPrefix.length)
+    ) {
+      match = candidate;
+    }
+  }
+  return match === undefined
+    ? installPath
+    : `${match.actualPrefix}${installPath.slice(match.recordedPrefix.length)}`;
+}
 
 export interface ReplayPin {
   readonly origin: 'lockfile' | 'metadata';
@@ -34,6 +61,39 @@ export function recordReplaySkippedError(
 ): void {
   const installPath = (error as { installPath?: unknown })?.installPath;
   if (typeof installPath === 'string') accounting.skippedLockfilePaths.add(installPath);
+}
+
+/** A skipped optional's subtree is never walked, but its entries stay
+ * lock-recorded (npm keeps them; sharp: `@img/sharp-<platform>` →
+ * `@img/sharp-libvips-<platform>`). They are reachable through the skipped
+ * boundary, so they are recorded skips for the coverage gate and the lock
+ * rewrite — never unreached orphans. Same walk-up lookup as `resolve`/
+ * `hasLockEntry` (`pinnedEntryForParent`) — no second copy. */
+export function expandReplaySkipClosure(
+  lockfile: Lockfile,
+  accounting: LockfileReplayAccounting,
+): void {
+  const { reachedLockfilePaths, skippedLockfilePaths } = accounting;
+  const queue = [...skippedLockfilePaths];
+  while (queue.length > 0) {
+    const parentPath = queue.pop();
+    if (parentPath === undefined) break;
+    const entry = lockfile.packages[parentPath];
+    if (entry === undefined) continue;
+    const edges = {
+      ...entry.dependencies,
+      ...entry.optionalDependencies,
+      ...entry.peerDependencies,
+    };
+    for (const name of Object.keys(edges)) {
+      const hit = pinnedEntryForParent(lockfile, name, parentPath);
+      if (hit === undefined) continue;
+      if (reachedLockfilePaths.has(hit.installPath)) continue;
+      if (skippedLockfilePaths.has(hit.installPath)) continue;
+      skippedLockfilePaths.add(hit.installPath);
+      queue.push(hit.installPath);
+    }
+  }
 }
 
 export function assertLockfileReplayCoverage(
@@ -166,6 +226,13 @@ export function lockfileStringArray(
   return [...value];
 }
 
+/**
+ * Native-dependency gate (ADR-0051, D-005 source #6). rifty runs JS + WASI WASM
+ * only — never `.node` addons or native binaries. `cpu` (not `os`) is the
+ * signal: pure-JS rarely pins it, every real native does; `os`-only is a soft
+ * warning many JS packages use. One predicate, two call sites: lockfile-entry
+ * resolve (fail-before-fetch) and the live tarball-manifest backstop.
+ */
 export function assertNativeSupported(
   name: string,
   version: string,
@@ -190,6 +257,12 @@ export function assertNativeSupported(
   );
 }
 
+/** Optional-dependency warn messages, verbatim across sources. A platform-native
+ * optional sibling is EXPECTED to skip (ADR-0051) and is phrased as such so a
+ * pack of bindings does not read as a wall of install errors. `EBROKENLOCK
+ * missing-entry` on an optional edge = npm dropped a failed optional at write
+ * time → warn-and-skip (npm parity); other EBROKENLOCK reasons, path conflicts,
+ * and tar corruption stay loud. */
 export function warnOptional(
   desc: { depName: string; depRange: string; parentName: string },
   err: unknown,

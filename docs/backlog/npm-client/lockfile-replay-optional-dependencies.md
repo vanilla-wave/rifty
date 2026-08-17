@@ -130,7 +130,7 @@ bindings are skipped with a warning each, `vite build` completes.
 
 ## Decisions
 
-- ready-verdict: 2026-08-17 — Contract+RED @ 1ce0fd6cc97a8543c880db3fb77eacabd74e5866
+ready-verdict: 2026-08-17 — Contract+RED @ 1ce0fd6cc97a8543c880db3fb77eacabd74e5866
 - Traverse-on-replay chosen over materialize-lock-verbatim: the D-F unified
   walk (one pipeline for replay + live, `installer.ts:16-19`) is a recorded
   decision; a second install path duplicates placement/bin/shadow/progress

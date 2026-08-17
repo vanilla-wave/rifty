@@ -132,7 +132,7 @@ disappear, the SDK module loads.
 
 ## Decisions
 
-- ready-verdict: 2026-08-17 — Contract+RED @ 1ce0fd6cc97a8543c880db3fb77eacabd74e5866
+ready-verdict: 2026-08-17 — Contract+RED @ 1ce0fd6cc97a8543c880db3fb77eacabd74e5866
 - Presence-in-lock is the sole trigger: replay makes no version/placement
   decisions, so this item cannot conflict with the future live peer authority —
   when that lands, its locks replay through this same path.

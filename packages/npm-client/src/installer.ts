@@ -68,10 +68,12 @@ import {
   writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
 import {
+  type LockfilePathTranslation,
   type LockfileReplayAccounting,
   assertLockfileReplayCoverage,
   assertNativeSupported,
   createLockfileReplayAccounting,
+  expandReplaySkipClosure,
   lockfileRootMatchesRequest,
   lockfileStringArray,
   lockfileStringMap,
@@ -79,6 +81,7 @@ import {
   recordReplayReached,
   recordReplaySkippedError,
   recordReplaySkippedPin,
+  translateRecordedInstallPath,
   warnOptional,
 } from './installer-lockfile-replay.ts';
 import { assertShadowRecipeAdmission } from './internal/shadow/admission.ts';
@@ -379,7 +382,8 @@ interface ResolvedPin {
   readonly dependencies: Record<string, string>;
   readonly bin?: string | Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
-  /** Optional dependency edges. Lockfile replay reads npm-authored entries. */
+  /** Optional edges. npm-authored lock entries carry them; rifty's lock WRITER
+   * folds live-pin optionals into `dependencies` (byte-identical rifty replay). */
   readonly optionalDependencies: Record<string, string>;
   readonly cpu?: string[];
   readonly os?: string[];
@@ -417,11 +421,6 @@ interface SourcePlan {
   readonly resolution: () => InstallResolution;
   readonly dependencies: Record<string, string>;
   readonly optionalDependencies: Record<string, string>;
-}
-
-interface LockfilePathTranslation {
-  readonly recordedPrefix: string;
-  readonly actualPrefix: string;
 }
 
 /**
@@ -600,6 +599,7 @@ export async function install(
     plan.resolution() === 'lockfile' &&
     lockfileRootMatchesRequest(existingLockfile, rootLockfileDependencyMaps);
   if (fullLockfileReplay) {
+    expandReplaySkipClosure(existingLockfile!, resolved.replayAccounting);
     assertLockfileReplayCoverage(
       existingLockfile!,
       resolved.replayAccounting.reachedLockfilePaths,
@@ -2071,7 +2071,20 @@ async function readRegistryShadowReplayCache(
   return { bytes, cacheHit: true, integrity };
 }
 
-/** Unified lockfile/live walk; placement and acquisition are keyed by install path. */
+/**
+ * Single traversal driver: resolve pin → place → fetch → recurse into
+ * `dependencies`, `optionalDependencies`, and lock-pinned `peerDependencies`.
+ *
+ * Placement (M11 + direct-root tier): surviving direct identities reserve
+ * root-visible slots; recorded paths reuse-when-free, relocate on mixed-source
+ * conflict; descendants first-wins-flat + nest-on-conflict. Intentionally
+ * simpler than npm v3 hoisting: a conflict always nests under its immediate
+ * parent (costs a few duplicated nested copies — disk, never resolution);
+ * full "hoist as high as possible" is a follow-on. Full replay reproduces
+ * recorded paths; mixed replay rebases descendants when a retained parent
+ * moves. Keyed by **install path**, not name: post-M11 one name can sit at
+ * several paths (one flat + nested copies).
+ */
 async function walkAndPin(
   source: ResolutionSource,
   topLevelDependencies: Record<string, string>,
@@ -2080,8 +2093,11 @@ async function walkAndPin(
   fetchCtx: FetchAndUnpackCtx,
   onPackage?: (event: InstallProgressEvent) => void,
 ): Promise<WalkAndPinResult> {
-  // Root reservation is ordered; acquisition is bounded/deduped. Optional
-  // boundaries await before recursion so failures cannot orphan descendants.
+  // Direct roots resolve first and reserve flat slots before descendant DFS.
+  // Tarball fetches parallelize (bounded semaphore, `inFlight` dedup); bytes
+  // never feed the dep walk, so fetch order cannot perturb layout. ONE
+  // exception: an OPTIONAL-boundary node awaits acquisition pre-recursion, so
+  // its failure skips the subtree before it is walked.
   const FETCH_CONCURRENCY = 8; // perf knob only; any value yields the identical tree.
   const sem = new Semaphore(FETCH_CONCURRENCY);
 
@@ -2193,8 +2209,13 @@ async function walkAndPin(
   ): Promise<void> {
     return (async () => {
       const pin = preparedPin ?? (await source.resolve(name, range, ctx));
+      // ADR-0188: a shimmed package outside its shim's proven range must fail
+      // loudly BEFORE anything installs — never a stale shim silently applied.
       assertShimSupported(pin.name, pin.version);
 
+      // Did THIS visit newly claim the flat slot? An optional-boundary failure
+      // rolls back ONLY a claim it owns — never a slot a prior visit already
+      // won. Captured pre-placement: `choosePlacement` mutates `flatByName`.
       const flatSlotFreeBefore = !flatByName.has(pin.name);
       const key = resolvedPinIdentity(pin);
       let installPath =
@@ -2214,6 +2235,7 @@ async function walkAndPin(
           installPath = choosePlacement(pin, ctx.parentInstallPath, flatByName);
         }
       }
+      // Record the flat slot so a later live-source visit honours first-wins.
       if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
         flatByName.set(pin.name, { version: pin.version, identity: key });
       }
@@ -2277,8 +2299,10 @@ async function walkAndPin(
         fetchTasks.push({ promise: p, pin, installPath, optional });
       }
 
-      // Required children inherit the optional descriptor; placement uses pin
-      // metadata, never tarball bytes.
+      // Deps come from the resolved pin, not tarball bytes. Required children
+      // of an optional boundary INHERIT `optional`: a failed grandchild is
+      // warned-and-skipped while surviving siblings still pin — salvage, not
+      // npm's atomic rollback. Characterization-pinned; see Q-2026-06-07-324.
       const childContext: ResolveContext = {
         parentName: pin.name,
         parentInstallPath: installPath,
@@ -2471,25 +2495,6 @@ function choosePlacement(
 }
 
 /** Rebase a recorded descendant through the most-specific relocated ancestor. */
-function translateRecordedInstallPath(
-  installPath: string,
-  translations: readonly LockfilePathTranslation[],
-): string {
-  let match: LockfilePathTranslation | undefined;
-  for (const candidate of translations) {
-    if (
-      (installPath === candidate.recordedPrefix ||
-        installPath.startsWith(`${candidate.recordedPrefix}/node_modules/`)) &&
-      (match === undefined || candidate.recordedPrefix.length > match.recordedPrefix.length)
-    ) {
-      match = candidate;
-    }
-  }
-  return match === undefined
-    ? installPath
-    : `${match.actualPrefix}${installPath.slice(match.recordedPrefix.length)}`;
-}
-
 /**
  * Adapter: `ResolvedPin × tarballBytes × actualIntegrity → PinnedPackage`. The
  * single assembly point for both sources — before D-F this was copy-pasted and
