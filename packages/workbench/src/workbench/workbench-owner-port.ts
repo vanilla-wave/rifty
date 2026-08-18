@@ -43,6 +43,13 @@ export type WorkbenchOwnerHealthEvent =
   | Readonly<{
       kind: 'persistence';
       status: 'healthy';
+    }>
+  /** ADR-0359: REAL drain counts during the durability flush. Arrival doubles
+   * as the heartbeat; terminal = `persisted === total` (clean drains only). */
+  | Readonly<{
+      kind: 'durability-progress';
+      persisted: number;
+      total: number;
     }>;
 
 /** Package-private semantic companion extension on the same physical owner. */

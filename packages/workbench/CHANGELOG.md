@@ -4,6 +4,60 @@
 
 ### Fixed
 
+- **First-open materialization drain now emits `durability-progress` (#256,
+  epic project-open-drain-latency final slice; ADR-0359 corrected
+  2026-08-16).** Progress rides a new owner-LEVEL `workbench:durability-
+  progress` control message on the existing owner→page ipc — durability is
+  owner-scoped and the first-open promote proof-flush completes before any
+  project runtime exists, so the slice-3 per-project vfs frame hop (late-
+  bound emit slot, token-gated republish) was mute for the epic's central
+  case and is removed; one channel now carries ALL drains. Coalescing,
+  counts honesty, reach, and the `WorkbenchOwnerHealthEvent` surface are
+  unchanged.
+
+### Added
+
+- **Durability-drain progress on the owner port (#256, epic
+  project-open-drain-latency slice 3, ADR-0359).** New
+  `{ kind: 'durability-progress', persisted, total }` member of
+  `WorkbenchOwnerHealthEvent`: REAL drain-owner counts, arrival doubles as
+  the heartbeat, terminal `persisted === total` only for a clean drain.
+  Worker forwards coalesced `rifty:owner-vfs-durability-progress` frames
+  (O(progress): first + terminal + at most one per 200 ms) over the active
+  project's vfs channel; the page republishes them token-gated in frame
+  order. BREAKING (accepted loud migration, ADR-0359): embedders with
+  exhaustive switches over health-event kinds must handle or default-case
+  the new kind.
+
+### Changed
+
+- **Trusted install-stamp writes carry an explicit full fence (#256,
+  ADR-0358).** `promote()` awaits the drain's real-settle fence immediately
+  before publishing a trusted stamp — under the parallel OPFS drain a
+  trusted stamp still implies every earlier-enqueued persist settled
+  (FIFO admission no longer provides this implicitly); pending/demote
+  writes are unfenced (one fence per transition).
+
+- **Snapshot-restore mkdir dedup (#256, epic project-open-drain-latency
+  slice 1).** `prepareWorkspaceArchiveImport().apply()` issues one `mkdirSync`
+  per distinct file dirname instead of one before every write — on OpfsFsSync
+  every call is an async persist op, so a big-tree restore drained ~2 FIFO
+  ops/file. Same-pass first-seen dedup: duplicate mkdir calls
+  disappear by design; surviving-op order, interleaving, partial-failure
+  prefixes, and error identity are byte-identical to before (trace-pinned); ledger heal-on-retry, prepared re-apply, foreign-rm honesty, and
+  mid-drain realm-death recovery are fault-pinned over real OpfsVfs/OPFS.
+  Real-browser acceptance: 3002-file restore enqueues exactly 602 mkdir
+  persists (was 3003).
+
+### Fixed
+
+- Starter Git baselines again use Git's ignore pruning, exclude every nested
+  `node_modules` tree, and rebuild an interrupted unborn index before staging.
+  Ref and object read failures now propagate before baseline mutation instead
+  of masquerading as Git absence and risking replacement history; the
+  guarantee lives in the `@riftydev/git` facade (ADR-0357), so the local
+  Starter read-latch and preflight object reads are gone.
+
 - Dependency snapshot v3 now carries the exact integrity-pinned cache closure
   required by registry-backed shadow replay, verifies it before mutation, and
   merges it before publishing the restored lockfile. The first explicit install

@@ -225,9 +225,18 @@ export function prepareWorkspaceArchiveImport(
       }
       fs.mkdirSync(root, { recursive: true });
 
+      // One mkdir per distinct dirname, not per file (#256 mkdir-dedup):
+      // OpfsFsSync persists every mkdirSync call, so per-file mkdirs drained
+      // ~2 FIFO ops per file on a big-tree restore. First-seen tracking is
+      // scoped to THIS apply() — prepare-scoped state would poison a re-apply.
+      const mkdirDone = new Set<string>();
       for (const file of decoded) {
         const target = file.target;
-        fs.mkdirSync(dirname(target), { recursive: true });
+        const dir = dirname(target);
+        if (!mkdirDone.has(dir)) {
+          mkdirDone.add(dir);
+          fs.mkdirSync(dir, { recursive: true });
+        }
         fs.writeFileSync(target, file.content);
       }
     },

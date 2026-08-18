@@ -44,6 +44,19 @@ export class PathspecError extends Error {
 }
 
 /**
+ * isomorphic-git absence signal (`NotFoundError`, `code: 'NotFoundError'`).
+ * Trustworthy under ADR-0357: a storage read failure surfaces as the exact
+ * `VfsError` instead, so NotFound really means "proven absent".
+ */
+export function isGitNotFound(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'NotFoundError'
+  );
+}
+
+/**
  * Reject any non-smart-HTTP transport. `http:`/`https:` pass; `ssh:`/`git:`/etc.
  * throw `git.transport.<scheme>` since they need raw TCP/SSH we don't have in a
  * browser. scp-like syntax (`git@host:path` or `host:path` with no scheme) is

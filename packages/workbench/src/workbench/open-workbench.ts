@@ -306,7 +306,7 @@ function createWorkbench(
       healthAuthority.invariant.fatal({ summary: event.summary });
       return;
     }
-    if (state.kind !== 'active') return;
+    if (event.kind === 'durability-progress' || state.kind !== 'active') return; // ADR-0359 reach
     if (event.status === 'healthy') {
       state.project.healthGeneration.reporter.clear('persistence');
       return;

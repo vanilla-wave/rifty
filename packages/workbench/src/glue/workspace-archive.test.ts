@@ -1,9 +1,13 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type WorkspaceArchiveFs,
+  type WorkspaceArchiveV1,
+  applyWorkspaceArchive,
   buildWorkspaceArchive,
   exportWorkspaceArchive,
   importWorkspaceArchive,
+  prepareWorkspaceArchiveImport,
 } from './workspace-archive.ts';
 
 const enc = new TextEncoder();
@@ -212,5 +216,138 @@ describe('workspace archive', () => {
 
     expect(() => importWorkspaceArchive(fs, badArchive)).toThrow(/install-stamp claim/);
     expect(read(fs, '/workspace/src/main.ts')).toBe('keep');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Restore mkdir dedup (backlog playground/restore-mkdir-persist-dedup, issue
+// #256 slice mkdir-dedup): apply() issues one mkdirSync per distinct file
+// dirname — never one per file. On OpfsFsSync every mkdirSync call becomes an
+// async persist op, so per-file mkdirs made a big-tree restore drain ~2 FIFO
+// ops per file (epic I2 bounds it at N + D + O(1)).
+// ---------------------------------------------------------------------------
+
+function archiveFile(path: string, text: string): WorkspaceArchiveV1['files'][number] {
+  return { path, encoding: 'base64', content: Buffer.from(text).toString('base64') };
+}
+
+/** Records every mkdir/write in ONE ordered log over a real MemoryFsSync. */
+function loggingFs(): {
+  fs: WorkspaceArchiveFs;
+  inner: MemoryFsSync;
+  calls: Array<readonly ['mkdir' | 'write', string]>;
+} {
+  const inner = new MemoryFsSync();
+  const calls: Array<readonly ['mkdir' | 'write', string]> = [];
+  const fs: WorkspaceArchiveFs = {
+    existsSync: (path) => inner.existsSync(path),
+    readdirSync: (path) => inner.readdirSync(path),
+    readFileBytesSync: (path) => inner.readFileBytesSync(path),
+    writeFileSync: (path, data) => {
+      calls.push(['write', path]);
+      inner.writeFileSync(path, data);
+    },
+    mkdirSync: (path, options) => {
+      calls.push(['mkdir', path]);
+      inner.mkdirSync(path, options);
+    },
+    rmSync: (path, options) => inner.rmSync(path, options),
+  };
+  return { fs, inner, calls };
+}
+
+describe('workspace archive apply — one mkdir per distinct dirname (#256 mkdir-dedup)', () => {
+  // Dirnames interleave on purpose: a consecutive-only dedup fails this, and
+  // TWO nonconsecutive root-level files pin that the ROOT dirname is deduped
+  // too (an implementation deduping only nested dirs fails on root2.txt).
+  const archive: WorkspaceArchiveV1 = {
+    version: 1,
+    root: '/ws',
+    files: [
+      archiveFile('a/f1.js', 'f1'),
+      archiveFile('b/g1.js', 'g1'),
+      archiveFile('a/f2.js', 'f2'),
+      archiveFile('a/deep/h1.js', 'h1'),
+      archiveFile('root.txt', 'r'),
+      archiveFile('b/g2.js', 'g2'),
+      archiveFile('x/y/f.js', 'xy'), // '/ws/x' is created by the chain, never a dirname itself
+      archiveFile('root2.txt', 'r2'), // second root file, nonconsecutive with the first
+      archiveFile('a/deep/h2.js', 'h2'),
+    ],
+  };
+
+  // The COMPLETE desired trace, in one assert: same-pass first-seen dedup —
+  // every surviving mkdir keeps its exact per-file position (epic slice
+  // clause "no ordering change"), only duplicate mkdirs vanish. Pre-dedup
+  // RED: main interleaves one mkdir before EVERY write (10 mkdirs, not 6).
+  const DEDUPED_TRACE: Array<readonly ['mkdir' | 'write', string]> = [
+    ['mkdir', '/ws'],
+    ['mkdir', '/ws/a'],
+    ['write', '/ws/a/f1.js'],
+    ['mkdir', '/ws/b'],
+    ['write', '/ws/b/g1.js'],
+    ['write', '/ws/a/f2.js'],
+    ['mkdir', '/ws/a/deep'],
+    ['write', '/ws/a/deep/h1.js'],
+    ['mkdir', '/ws'], // root.txt's dirname — ONE loop-time root mkdir, first-seen
+    ['write', '/ws/root.txt'],
+    ['write', '/ws/b/g2.js'],
+    ['mkdir', '/ws/x/y'],
+    ['write', '/ws/x/y/f.js'],
+    ['write', '/ws/root2.txt'], // root already seen — NO second loop-time root mkdir
+    ['write', '/ws/a/deep/h2.js'],
+  ];
+
+  it('emits exactly the deduped per-file trace — one mkdir per distinct dirname, in place', () => {
+    const { fs, inner, calls } = loggingFs();
+    applyWorkspaceArchive(fs, archive);
+
+    expect(calls).toEqual(DEDUPED_TRACE);
+    expect(read(inner, '/ws/a/deep/h2.js')).toBe('h2');
+    expect(read(inner, '/ws/x/y/f.js')).toBe('xy');
+  });
+
+  it('a prepared import re-applied emits the FULL deduped trace again — no prepare-scoped dedup state (poisoned-cache guard; fault row g proves the heal side)', () => {
+    const { fs, inner, calls } = loggingFs();
+    const prepared = prepareWorkspaceArchiveImport(fs, archive);
+
+    prepared.apply();
+    const firstLength = calls.length;
+    prepared.apply();
+
+    expect(calls.slice(0, firstLength)).toEqual(DEDUPED_TRACE);
+    expect(calls.slice(firstLength)).toEqual(DEDUPED_TRACE);
+    expect(read(inner, '/ws/a/deep/h2.js')).toBe('h2');
+  });
+
+  it('a mid-apply write failure rethrows the ORIGINAL error and leaves exactly the pre-failure trace', () => {
+    const { fs, inner, calls } = loggingFs();
+    const failAt = '/ws/root.txt'; // 5th file — after a/b dirs, before b/g2, x/y, a/deep/h2
+    const failure = new Error('disk full');
+    const realWrite = fs.writeFileSync.bind(fs);
+    fs.writeFileSync = (path, data) => {
+      if (path === failAt) throw failure;
+      realWrite(path, data);
+    };
+
+    let caught: unknown;
+    try {
+      applyWorkspaceArchive(fs, archive);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBe(failure); // identity, not a wrapped copy
+    // The durable prefix is exactly the desired trace truncated at the
+    // failing write — no look-ahead effects, no post-failure effects.
+    const failureIndex = DEDUPED_TRACE.findIndex(
+      ([kind, path]) => kind === 'write' && path === failAt,
+    );
+    expect(calls).toEqual(DEDUPED_TRACE.slice(0, failureIndex));
+    expect(read(inner, '/ws/a/deep/h1.js')).toBe('h1');
+    expect(inner.existsSync('/ws/b/g2.js')).toBe(false);
+    expect(inner.existsSync('/ws/x/y')).toBe(false);
+    expect(inner.existsSync('/ws/root2.txt')).toBe(false);
+    expect(inner.existsSync('/ws/a/deep/h2.js')).toBe(false);
   });
 });

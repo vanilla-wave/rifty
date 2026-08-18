@@ -37,7 +37,7 @@ function claim(
   return { nodeModulesDir, command, owner, target };
 }
 
-function expectCollision(run: () => void): void {
+function expectCollision(run: () => void): NotImplementedError {
   let caught: unknown;
   try {
     run();
@@ -46,6 +46,10 @@ function expectCollision(run: () => void): void {
   }
   expect.soft(caught).toBeInstanceOf(NotImplementedError);
   expect.soft(caught).toMatchObject({ feature: 'npm-client.bin-collision-reify' });
+  if (!(caught instanceof NotImplementedError)) {
+    throw new Error('Expected npm-client.bin-collision-reify');
+  }
+  return caught;
 }
 
 it('[fault: observable-order][fault: lossy-aggregate] returns exact current claims for stable owners in independent scopes', () => {
@@ -108,4 +112,47 @@ it('[fault: lossy-aggregate] rejects one removed command while its owner survive
   const current = source('stable', { kept: './bin/kept.js' });
   const prior = source('stable', { kept: './bin/kept.js', removed: './bin/removed.js' });
   expectCollision(() => preflight([current], [prior]));
+});
+
+it('[fault: lossy-aggregate][fault: sibling-drift] names the exact scope, command, owners, claim set, and failed invariant', () => {
+  const preflight = requirePreflight();
+  const nestedDir = 'node_modules/host/node_modules';
+  const cases = [
+    {
+      run: () =>
+        preflight([
+          source('a-cli', { shared: './bin/a.js' }, nestedDir),
+          source('z-cli', { shared: './bin/z.js' }, nestedDir),
+        ]),
+      message:
+        'Not implemented: npm-client.bin-collision-reify (invariant=claim-uniqueness claimSet=current nodeModulesDir=node_modules/host/node_modules command=shared firstOwner=a-cli secondOwner=z-cli)',
+    },
+    {
+      run: () =>
+        preflight(
+          [source('stable', { stable: './bin/stable.js' })],
+          [source('a-cli', { shared: './bin/a.js' }), source('z-cli', { shared: './bin/z.js' })],
+        ),
+      message:
+        'Not implemented: npm-client.bin-collision-reify (invariant=claim-uniqueness claimSet=prior nodeModulesDir=node_modules command=shared firstOwner=a-cli secondOwner=z-cli)',
+    },
+    {
+      run: () => preflight([], [source('@grpc/proto-loader', { shared: './bin/prior.js' })]),
+      message:
+        'Not implemented: npm-client.bin-collision-reify (invariant=prior-owner-continuity nodeModulesDir=node_modules command=shared priorOwner=@grpc/proto-loader currentOwner=<none>)',
+    },
+    {
+      run: () =>
+        preflight(
+          [source('current-cli', { shared: './bin/current.js' })],
+          [source('prior-cli', { shared: './bin/prior.js' })],
+        ),
+      message:
+        'Not implemented: npm-client.bin-collision-reify (invariant=prior-owner-continuity nodeModulesDir=node_modules command=shared priorOwner=prior-cli currentOwner=current-cli)',
+    },
+  ] as const;
+
+  for (const scenario of cases) {
+    expect(expectCollision(scenario.run).message).toBe(scenario.message);
+  }
 });

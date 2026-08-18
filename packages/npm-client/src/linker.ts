@@ -55,6 +55,33 @@ export interface PackageBinClaim {
   readonly target: string;
 }
 
+type PackageBinClaimSet = 'current' | 'prior';
+
+type PackageBinCollision =
+  | {
+      readonly invariant: 'claim-uniqueness';
+      readonly claimSet: PackageBinClaimSet;
+      readonly nodeModulesDir: string;
+      readonly command: string;
+      readonly firstOwner: string;
+      readonly secondOwner: string;
+    }
+  | {
+      readonly invariant: 'prior-owner-continuity';
+      readonly nodeModulesDir: string;
+      readonly command: string;
+      readonly priorOwner: string;
+      readonly currentOwner: string | null;
+    };
+
+function packageBinCollisionError(input: PackageBinCollision): NotImplementedError {
+  const detail =
+    input.invariant === 'claim-uniqueness'
+      ? `invariant=${input.invariant} claimSet=${input.claimSet} nodeModulesDir=${input.nodeModulesDir} command=${input.command} firstOwner=${input.firstOwner} secondOwner=${input.secondOwner}`
+      : `invariant=${input.invariant} nodeModulesDir=${input.nodeModulesDir} command=${input.command} priorOwner=${input.priorOwner} currentOwner=${input.currentOwner ?? '<none>'}`;
+  return new NotImplementedError('npm-client.bin-collision-reify', detail);
+}
+
 export function normalizePackageBinSource(source: PackageBinSource): readonly PackageBinClaim[] {
   const pkg = source.package;
   const claims: PackageBinClaim[] = [];
@@ -85,15 +112,21 @@ export function preflightPackageBins(
 ): readonly PackageBinClaim[] {
   const current = normalizePackageBinSources(currentSources);
   const prior = normalizePackageBinSources(priorSources);
-  const currentByScope = indexPackageBinClaims(current);
-  const priorByScope = indexPackageBinClaims(prior);
+  const currentByScope = indexPackageBinClaims(current, 'current');
+  const priorByScope = indexPackageBinClaims(prior, 'prior');
 
   for (const [nodeModulesDir, priorCommands] of priorByScope) {
     const currentCommands = currentByScope.get(nodeModulesDir);
     for (const [command, priorClaim] of priorCommands) {
       const currentClaim = currentCommands?.get(command);
       if (!currentClaim || currentClaim.owner !== priorClaim.owner) {
-        throw new NotImplementedError('npm-client.bin-collision-reify');
+        throw packageBinCollisionError({
+          invariant: 'prior-owner-continuity',
+          nodeModulesDir,
+          command,
+          priorOwner: priorClaim.owner,
+          currentOwner: currentClaim?.owner ?? null,
+        });
       }
     }
   }
@@ -102,6 +135,7 @@ export function preflightPackageBins(
 
 function indexPackageBinClaims(
   claims: readonly PackageBinClaim[],
+  claimSet: PackageBinClaimSet,
 ): Map<string, Map<string, PackageBinClaim>> {
   const byScope = new Map<string, Map<string, PackageBinClaim>>();
   for (const claim of claims) {
@@ -110,8 +144,16 @@ function indexPackageBinClaims(
       byCommand = new Map();
       byScope.set(claim.nodeModulesDir, byCommand);
     }
-    if (byCommand.has(claim.command)) {
-      throw new NotImplementedError('npm-client.bin-collision-reify');
+    const firstClaim = byCommand.get(claim.command);
+    if (firstClaim !== undefined) {
+      throw packageBinCollisionError({
+        invariant: 'claim-uniqueness',
+        claimSet,
+        nodeModulesDir: claim.nodeModulesDir,
+        command: claim.command,
+        firstOwner: firstClaim.owner,
+        secondOwner: claim.owner,
+      });
     }
     byCommand.set(claim.command, claim);
   }

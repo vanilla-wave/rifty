@@ -17,6 +17,7 @@ import {
 } from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import type { CommandContext } from '../types.ts';
+import { throwIfStorageFailure } from './_git-errors.ts';
 import { hasGlobMeta } from './_glob.ts';
 
 /**
@@ -161,6 +162,7 @@ export function renderCheckoutOrFatal(e: unknown, ctx: CommandContext): number {
   try {
     return renderCheckoutError(e, ctx);
   } catch (fatal) {
+    throwIfStorageFailure(fatal);
     ctx.stderr.write(`fatal: ${fatal instanceof Error ? fatal.message : String(fatal)}\n`);
     return 128;
   }
@@ -214,6 +216,7 @@ async function hasResolvableRevisionBase(g: Git, rev: string): Promise<boolean> 
     return true;
   } catch (e) {
     if (e instanceof NotImplementedError) return true;
+    throwIfStorageFailure(e);
     return false;
   }
 }
@@ -224,6 +227,7 @@ export async function revisionExists(g: Git, rev: string): Promise<boolean> {
     return true;
   } catch (e) {
     if (e instanceof NotImplementedError) throw e;
+    throwIfStorageFailure(e);
     if (await hasResolvableRevisionBase(g, rev)) throw new RevisionArgumentError(rev);
     return false;
   }
@@ -421,6 +425,7 @@ export async function doCheckout(
           await g.resolveRevision(plan.source);
         } catch (e) {
           if (e instanceof NotImplementedError) return renderCheckoutError(e, ctx);
+          throwIfStorageFailure(e);
           ctx.stderr.write(`fatal: invalid reference: ${plan.source}\n`);
           return 128;
         }

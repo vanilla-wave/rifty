@@ -2,7 +2,49 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chromium `.crswap` atomic-swap temps no longer leak through the OPFS
+  read surface (torn-state × Storage; born as the opfs-parallel-drain-kill
+  CI flake).** `OpfsVfs.readdir` and the `OpfsFsSync` boot index drop FILE
+  entries with the suffix — after a crash-reload a program sees the target
+  entry (complete or the empty created-not-swapped torn state), never the
+  platform's mid-op temp. Because Chromium ALLOWS user files named
+  `*.crswap` (probed), the filter is paired with a loud reservation: every
+  rifty create op targeting the suffix (`writeFile`/`mkdir` async;
+  `writeFileSync`/`mkdirSync`/`renameSync`/`copyFileSync`/`openSync(create)`
+  sync) throws `EINVAL` — a recorded per-backend gap vs real Node, never a
+  silent hide. Directories with the suffix stay visible (never a platform
+  artifact).
+
+### Changed
+
+- **OPFS write-through drain goes bounded-parallel (#256, epic
+  project-open-drain-latency slice 2, ADR-0358 — supersedes ADR-0187's
+  global FIFO).** `OpfsFsSync` persists through a per-path lane scheduler
+  (`opfs-drain-scheduler.ts`, ≤16 active lanes): same-path order, ancestor
+  gating, rm/rename subtree fences, same-dir sibling order, per-lane
+  watchdog (30 s bounds ACTIVE I/O; capacity/fence wait never counts),
+  drain-scoped structurally-invalidated dir-handle cache. New
+  `OpfsFsSync.fence()` — real-settle barrier over everything enqueued
+  (cap-queued and past-report-timeout included). `flush()` ledger/report
+  contract unchanged. Real-browser acceptance: 26 811-file real
+  node_modules manifest drains 3.3x faster than the same-run faithful
+  serial baseline headless (41.4 s → 12.6 s), whole-tree byte-exact,
+  mid-drain kill never trusts a pending stamp.
+
 ### Added
+
+- **`OpfsFsSync.flush({ onProgress })` — real drain-progress observer (#256,
+  epic project-open-drain-latency slice 3, ADR-0359).** Events-out only,
+  never a scheduling input: `total` fixed at the flush call =
+  |pending watermark|, `persisted` = watermark ops since settled
+  SUCCESSFULLY — failure-settled and watchdog-released (timed-out) ops never
+  advance it, so an unclean drain never emits a terminal
+  `persisted === total`. One synchronous snapshot per qualifying settle.
+  Internally, persist tasks now rethrow after recording their ledger failure
+  (the scheduler's failure-settle signal); nothing escapes the scheduler and
+  the `flush()` report/ledger contract is unchanged.
 
 - Shared non-empty `VfsMutationIntent` batches and generic
   `VfsMutationGuard`/`guardVfsMutations` contract let host policy fence the

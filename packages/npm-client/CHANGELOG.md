@@ -106,6 +106,9 @@
   (`tests/e2e/npm-lock-replay.spec.ts`): `vite@8.0.16` replay materializes the
   wasm32 rolldown binding and `vite build` completes (#254); a 6-package
   peer-only lock replays 6/6 and the SDK entry module imports (#261).
+- Package-bin collision diagnostics now distinguish same-set first/second
+  owners from prior/current ownership continuity without changing the loud
+  unsupported-reify outcome.
 
 - Registry-backed shadow recipes now reject dependency/bundle projection drift
   before acquisition and validate bundled manifests at the shared fresh,

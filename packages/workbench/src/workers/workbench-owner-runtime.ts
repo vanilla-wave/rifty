@@ -107,6 +107,49 @@ function assertCleanDurability(report: Awaited<ReturnType<OwnerVfsAuthority['flu
   );
 }
 
+/** Coalescing floor for owner→page durability-progress frames (ADR-0359). */
+const DURABILITY_PROGRESS_MIN_INTERVAL_MS = 200;
+
+/**
+ * Per-flush O(progress) coalescer (ADR-0359 Consequences): the drain owner
+ * emits one snapshot per settled op; this forwards a message only for (a) a
+ * CHANGED `persisted` that is (b) the first of the flush, the terminal
+ * `persisted === total`, or ≥{@link DURABILITY_PROGRESS_MIN_INTERVAL_MS}
+ * after the last forwarded message — so messages scale with drain wall-clock,
+ * never op count. Owner-LEVEL channel (ADR-0359 correction 2026-08-16):
+ * durability is owner-scoped and the first-open drain predates any project
+ * token, so progress never waits for a project runtime to bind. Undeliverable
+ * messages are honest drops: progress is advisory; the flush report stays the
+ * durability truth.
+ */
+function createDurabilityProgressForwarder(
+  send: (message: WorkbenchOwnerToPageMessage) => void,
+): (snapshot: { readonly persisted: number; readonly total: number }) => void {
+  let lastForwardedAt = 0;
+  let lastPersisted = -1;
+  return (snapshot) => {
+    const now = Date.now();
+    if (snapshot.persisted === lastPersisted) return;
+    if (
+      snapshot.persisted !== snapshot.total &&
+      now - lastForwardedAt < DURABILITY_PROGRESS_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+    lastForwardedAt = now;
+    lastPersisted = snapshot.persisted;
+    try {
+      send({
+        type: 'workbench:durability-progress',
+        persisted: snapshot.persisted,
+        total: snapshot.total,
+      });
+    } catch {
+      // Owner ipc unavailable mid-drain (shutdown) — drop; never fail the drain.
+    }
+  };
+}
+
 function playgroundTypeScriptWorkerUrl(config: WorkbenchOwnerBootConfig): string {
   const url = config.deployment.workers.typescript;
   if (url === undefined) {
@@ -291,7 +334,10 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     vfs: ownerVfs,
     fsSync: authority,
     installStampClaims,
-    flush: () => authority.flush(),
+    flush: () =>
+      authority.flush({
+        onProgress: createDurabilityProgressForwarder((message) => sendOwnerMessage(ipc, message)),
+      }),
     amendGeneratedBaseline,
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),

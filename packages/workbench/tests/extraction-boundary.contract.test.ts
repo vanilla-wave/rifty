@@ -321,7 +321,11 @@ describe('@riftydev/workbench extraction boundary', () => {
 
     expect(closure.escapedEdges).toEqual([]);
     expect(closure.unresolvedEdges).toEqual([]);
-    expect(packageProductionFiles).toHaveLength(136);
+    // 136 → 139 (2026-08-16, #256 first-open unit): file-size-ratchet splits
+    // riding the delivery — owner-protocol-inspect.ts + owner-protocol-pty.ts
+    // (owner-protocol.ts was pushed past 800) and
+    // workbench-browser-owner-spawn.ts (browser owner sat at its exact pin).
+    expect(packageProductionFiles).toHaveLength(139);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

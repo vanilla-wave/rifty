@@ -1,13 +1,4 @@
-import { NotImplementedError } from '@riftydev/io';
-import {
-  type SpawnWorkerSpec,
-  type WorkerProcessHandle,
-  globalProcessManager,
-  isSabIpcSupported,
-  observeProcessTerminalOutcome,
-  setKernelWorkerUrl,
-} from '@riftydev/kernel';
-import { wirePreviewBridge } from '../glue/preview-port-wiring.ts';
+import { observeProcessTerminalOutcome } from '@riftydev/kernel';
 import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame, PageToOwnerFrame, PtyPreview } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
@@ -86,12 +77,12 @@ import {
   type ProjectTerminalSnapshot,
   createProjectTerminal,
 } from './project-terminal.ts';
-import {
-  type ServiceWorkerControlContainer,
-  type ServiceWorkerControlTimers,
-  proveRiftyServiceWorkerControl,
-} from './service-worker-control.ts';
+import { proveRiftyServiceWorkerControl } from './service-worker-control.ts';
 import { createViteProjectRuntime } from './vite-project-runtime.ts';
+import {
+  type BrowserOwnerDependencies,
+  browserDependencies,
+} from './workbench-browser-owner-spawn.ts';
 import {
   type PlaygroundOwnerOperationalHealth,
   type PlaygroundOwnerSessionToolLifecycle,
@@ -104,15 +95,6 @@ import {
 
 const PROJECT_VFS_COMMIT_TIMEOUT_MS = 60_000;
 const OWNER_OPERATION_TIMEOUT_MS = 60_000;
-
-interface BrowserOwnerDependencies {
-  readonly spawnOwner: (input: WorkbenchOwnerStartInput) => WorkerProcessHandle;
-  readonly serviceWorker: ServiceWorkerControlContainer;
-  readonly timers: ServiceWorkerControlTimers;
-  readonly fetch: (url: string, init: RequestInit) => Promise<Response>;
-  readonly mountPreview: typeof wirePreviewBridge;
-  readonly operationId: () => string;
-}
 
 interface OpenedProject {
   readonly projectToken: OwnerProjectToken;
@@ -195,58 +177,6 @@ function deferred<T>(): Deferred<T> {
 
 function errorFrom(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
-}
-
-function createOperationId(): string {
-  if (typeof globalThis.crypto?.randomUUID !== 'function') {
-    throw new Error('Workbench owner operations require cryptographic randomUUID support');
-  }
-  return globalThis.crypto.randomUUID();
-}
-
-function browserDependencies(): BrowserOwnerDependencies {
-  return {
-    spawnOwner: spawnBrowserOwner,
-    serviceWorker: navigator.serviceWorker,
-    timers: {
-      setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
-      clearTimeout: (timerId) => window.clearTimeout(timerId),
-    },
-    fetch: (url, init) => globalThis.fetch(url, init),
-    mountPreview: wirePreviewBridge,
-    operationId: createOperationId,
-  };
-}
-
-function spawnBrowserOwner(input: WorkbenchOwnerStartInput): WorkerProcessHandle {
-  if (!isSabIpcSupported()) {
-    throw new NotImplementedError(
-      'workbench.open',
-      'requires SAB IPC and a cross-origin-isolated browser tab',
-    );
-  }
-  setKernelWorkerUrl(input.deployment.workers.kernel);
-  const handle = globalProcessManager.spawnWorker(
-    'workbench-owner',
-    workbenchOwnerSpawnSpec(input),
-    1,
-    { cwd: '/' },
-  );
-  if (handle.kind !== 'worker') {
-    throw new NotImplementedError('workbench.owner.worker', `spawnWorker returned ${handle.kind}`);
-  }
-  return handle;
-}
-
-/** Deployment chooses the entry; owner/project identity never enters guest env. */
-export function workbenchOwnerSpawnSpec(input: WorkbenchOwnerStartInput): SpawnWorkerSpec {
-  return Object.freeze({
-    entry: Object.freeze({ kind: 'url' as const, url: input.deployment.workers.owner }),
-    argv: Object.freeze(['rifty', 'workbench-owner']),
-    env: Object.freeze({}),
-    cwd: '/',
-    serve: false,
-  });
 }
 
 /** Browser composition: one physical owner, then typed control IPC only. */
@@ -523,6 +453,17 @@ export function startBrowserWorkspaceOwner(
           }
           activeProject.acceptVfs(message);
           return;
+        case 'workbench:durability-progress':
+          // Owner-level (ADR-0359 corrected 2026-08-16): the first-open drain
+          // predates any project token; health listeners are owner-scoped.
+          publishHealth(
+            Object.freeze({
+              kind: 'durability-progress',
+              persisted: message.persisted,
+              total: message.total,
+            }),
+          );
+          return;
         case 'workbench:failure': {
           const error = deserializeWorkbenchOwnerError(message.error);
           if (!('opId' in message)) {
@@ -776,11 +717,7 @@ export function startBrowserWorkspaceOwner(
         publishHealth(
           state.status === 'proved'
             ? Object.freeze({ kind: 'persistence', status: 'healthy' })
-            : Object.freeze({
-                kind: 'persistence',
-                status: 'degraded',
-                recover: state.recover,
-              }),
+            : Object.freeze({ kind: 'persistence', status: 'degraded', recover: state.recover }),
         );
       },
     });
