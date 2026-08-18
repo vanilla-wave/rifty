@@ -598,15 +598,6 @@ export async function install(
     existingLockfile !== null &&
     plan.resolution() === 'lockfile' &&
     lockfileRootMatchesRequest(existingLockfile, rootLockfileDependencyMaps);
-  if (fullLockfileReplay) {
-    expandReplaySkipClosure(existingLockfile!, resolved.replayAccounting);
-    assertLockfileReplayCoverage(
-      existingLockfile!,
-      resolved.replayAccounting.reachedLockfilePaths,
-      resolved.replayAccounting.skippedLockfilePaths,
-      existingShadowPlan!,
-    );
-  }
   const packages = [...resolved.packages.values()];
   const provenancePackages: InstallPackageProvenance[] = [];
   const seenProvenance = new Set<string>();
@@ -663,6 +654,17 @@ export async function install(
       preparedPackages,
     ),
   );
+  // Unreached-entry gate AFTER the bin-claim preflight (continuity ceilings
+  // outrank the orphan refusal), BEFORE any mutation/linking/lock rewrite.
+  if (fullLockfileReplay) {
+    expandReplaySkipClosure(existingLockfile!, resolved.replayAccounting);
+    assertLockfileReplayCoverage(
+      existingLockfile!,
+      resolved.replayAccounting.reachedLockfilePaths,
+      resolved.replayAccounting.skippedLockfilePaths,
+      existingShadowPlan!,
+    );
+  }
   throwIfAborted(opts.signal);
   try {
     const checkpoint = () => throwIfAborted(opts.signal);
@@ -2214,8 +2216,7 @@ async function walkAndPin(
       assertShimSupported(pin.name, pin.version);
 
       // Did THIS visit newly claim the flat slot? An optional-boundary failure
-      // rolls back ONLY a claim it owns — never a slot a prior visit already
-      // won. Captured pre-placement: `choosePlacement` mutates `flatByName`.
+      // rolls back ONLY a claim it owns. Pre-placement: `choosePlacement` mutates `flatByName`.
       const flatSlotFreeBefore = !flatByName.has(pin.name);
       const key = resolvedPinIdentity(pin);
       let installPath =
@@ -2299,10 +2300,9 @@ async function walkAndPin(
         fetchTasks.push({ promise: p, pin, installPath, optional });
       }
 
-      // Deps come from the resolved pin, not tarball bytes. Required children
-      // of an optional boundary INHERIT `optional`: a failed grandchild is
-      // warned-and-skipped while surviving siblings still pin — salvage, not
-      // npm's atomic rollback. Characterization-pinned; see Q-2026-06-07-324.
+      // Deps come from the pin, not tarball bytes. Required children of an
+      // optional boundary INHERIT `optional`: failed grandchild warns-and-skips,
+      // survivors pin (salvage, not npm's rollback; pinned — Q-2026-06-07-324).
       const childContext: ResolveContext = {
         parentName: pin.name,
         parentInstallPath: installPath,
