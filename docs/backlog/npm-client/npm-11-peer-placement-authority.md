@@ -29,6 +29,12 @@ closure nor distinguishes a direct conflict from a satisfiable nested peer
 environment. That success claim is observably unlike npm 11 and cannot become
 a shadow-only exception.
 
+Replay of peers an npm-authored lock ALREADY pins (no resolution decision) is
+SHIPPED (epic `faithful-npm-lock-replay`, closed): the walk traverses
+lock-pinned `peerDependencies` — `installer-lockfile.test.ts`,
+`tests/e2e/npm-lock-replay.spec.ts`. This item keeps live resolution,
+placement, conflicts, and `peer: true` lock provenance.
+
 ## Reference contract
 
 Node v24.16.0 / npm 11.17.0 runs the committed self-contained loopback-registry

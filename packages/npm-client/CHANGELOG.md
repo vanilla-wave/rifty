@@ -96,6 +96,16 @@
 
 ### Fixed
 
+- npm-authored lockfile replay now traverses entry `optionalDependencies` and
+  lock-pinned `peerDependencies`, applies the shared CPU admission gate, and
+  rejects unreached lock entries before publishing install success. Entries
+  reachable only through a skipped optional subtree (sharp's
+  `@img/sharp-<platform>` → `@img/sharp-libvips-<platform>` shape) count as
+  recorded skips: they stay in the rewritten lock and never trip the gate.
+  Proven end-to-end in the browser shell against real npm 11.17.0 locks
+  (`tests/e2e/npm-lock-replay.spec.ts`): `vite@8.0.16` replay materializes the
+  wasm32 rolldown binding and `vite build` completes (#254); a 6-package
+  peer-only lock replays 6/6 and the SDK entry module imports (#261).
 - Package-bin collision diagnostics now distinguish same-set first/second
   owners from prior/current ownership continuity without changing the loud
   unsupported-reify outcome.

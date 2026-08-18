@@ -1,0 +1,7 @@
+{
+  "name": "repro-261",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@weavix/tracker-plugin-sdk": "0.0.33" }
+}

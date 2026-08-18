@@ -9,6 +9,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `npm install` from `package.json` | ✅ | Installs registry `dependencies`/`devDependencies`/root `optionalDependencies` tarballs and honors `dist-tags.latest` for unconstrained specs |
+| npm-authored `package-lock.json` replay | ⚠️ | Entry `optionalDependencies` replay through the shared cpu gate (native siblings skip with a warning, their lock-recorded subtrees preserved), lock-pinned `peerDependencies` traversal, loud `EBROKENLOCK unreached-entries` for entries no edge reaches. Proven end-to-end against real npm 11.17.0 locks: `vite@8.0.16` (47 entries, wasm32 rolldown binding + `vite build`) and a 6-package peer-only lock (module import). Recorded divergence: `npm ci` materializes parentless orphan lock entries verbatim; rifty refuses loudly — delete the lockfile and re-install |
 | npm workspaces | ❌ | Non-workspace `package.json`/`node_modules` prefix discovery matches npm; `package.json#workspaces` at the selected or an ancestor root throws `NotImplementedError('npm.workspaces')` before install/script mutation because npm separates the root lock/tree prefix from the selected member manifest/lifecycle target; malformed declarations fail as `EWORKSPACESCONFIG`; `--workspaces=false` remains a loud unsupported flag |
 | `npm` top-level command help | ✅ | `npm help` prints the browser npm subset and exits 0; bare `npm` / `-h` / `--help` print the same list with npm's usage exit 1; `npm help <topic>` is an explicit `NotImplementedError('npm.help.topic')` ceiling |
 | Package lifecycle scripts | ❌ | Root `preinstall`/`install`/`postinstall`/`prepare` and registry tarball `preinstall`/`install`/`postinstall` throw `NotImplementedError('npm-client.lifecycle.<name>')`; registry tarball `prepare` metadata is ignored like npm's prepared package install path |
@@ -40,6 +41,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/readline.test.ts`
 - `packages/io/src/streams/transform.test.ts`
 - `packages/npm-client/src/installer.test.ts`
+- `packages/npm-client/src/installer-lockfile.test.ts`
+- `tests/e2e/npm-lock-replay.spec.ts`
 
 ## Known Limitations
 
