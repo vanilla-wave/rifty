@@ -152,6 +152,8 @@ failing-first on the browser-unit harness:
 
 ## Decisions
 
+ready-verdict: 2026-08-19 — Contract+RED @ 1eec682c48dce83420ca8df89183cdfdd898567a (attempt 6, pass; attempts 1–5 blocked and were re-cut in place on this branch)
+
 - Silence-based deadline + kept fatality + in-tab recovery chosen over
   reject-without-kill (issue #255's literal suggestion): boundary model rules a
   local deadline can't prove not-applied; user ratified this direction in
