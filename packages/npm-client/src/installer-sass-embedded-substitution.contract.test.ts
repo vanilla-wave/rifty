@@ -1060,11 +1060,14 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
 
   it('[fault: frozen-assumption] replays a lock-pinned peer RANGE edge onto the recorded exact facade offline', async () => {
     requireSassRecipe();
-    // npm records a host's peer range verbatim on its lock entry, and live
-    // resolve never resolves peer edges — so the recorded pin is the only
-    // admission fact replay may consult. A replay that re-runs request-shape
-    // admission with the peer range freezes the false assumption that every
-    // resolved (name, range) is a user request.
+    // External oracle (docs/backlog/npm-client/reference/
+    // npm-11-lockfile-replay-probe-output.json `rangePeer`): npm 11.17.0
+    // records a host's peer RANGE verbatim on its lock entry and `npm ci`
+    // reifies it onto the exact pinned entry with exit 0. Live resolve never
+    // resolves peer edges — the recorded pin is the only admission fact replay
+    // may consult. A replay that re-runs request-shape admission with the peer
+    // range freezes the false assumption that every resolved (name, range) is
+    // a user request.
     const official = await loadOfficialSassEntries();
     const peerHost = await auxiliaryRegistryEntry(
       'peer-host',
@@ -1114,6 +1117,129 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('[fault: observable-order] warn-skips an OPTIONAL trigger-range edge on live install AND lock replay', async () => {
+    requireSassRecipe();
+    // An optional edge naming the trigger with a non-admitted range must keep
+    // npm parity — warn-and-skip — on BOTH paths. Today the walk's PREFETCH
+    // (advisory warm-up) runs request-shape admission synchronously OUTSIDE
+    // the optional error boundary, so the install fails loudly before the
+    // boundary can catch what resolve would have thrown in the right slot.
+    const optHost = await auxiliaryRegistryEntry(
+      'opt-host',
+      '1.0.0',
+      {},
+      { optionalDependencies: { [SASS_TRIGGER]: '^1.70.0' } },
+    );
+    const fixture = { dependencies: { 'opt-host': '1.0.0' }, entries: [optHost] };
+    const vfs = await project();
+    const cache = new LedgerTarballCache();
+    const reports: string[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await installFixture(
+        fixture,
+        vfs,
+        new SassFixtureRegistry(fixture.entries),
+        cache,
+        reports,
+      );
+      expect(result.packages.map(({ name }) => name)).toEqual(['opt-host']);
+
+      const replayVfs = await project();
+      const lockBefore = await writeLock(replayVfs, result.lockfile);
+      const replayCache = cache.clone();
+      replayCache.clearLedger();
+      const replay = await installFixture(fixture, replayVfs, new DenyAllRegistry(), replayCache, [
+      ]);
+      expect(replay.packages.map(({ name }) => name)).toEqual(['opt-host']);
+      expect(await replayVfs.readFile(`${ROOT}/package-lock.json`)).toEqual(lockBefore);
+      expect(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('refuses a foreign lock that pins a NON-attested trigger version behind a peer range', async () => {
+    requireSassRecipe();
+    // Regression pin, GREEN before and after: only the recipe's attested
+    // product replays without request admission. A foreign (npm-authored,
+    // native) sass-embedded pin stays a loud NotImplementedError.
+    const peerHost = await auxiliaryRegistryEntry(
+      'foreign-peer-host',
+      '1.0.0',
+      {},
+      { peerDependencies: { [SASS_TRIGGER]: '^1.70.0' } },
+    );
+    const fixture = { dependencies: { 'foreign-peer-host': '1.0.0' }, entries: [peerHost] };
+    const vfs = await project();
+    const cache = new LedgerTarballCache();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await installFixture(
+        fixture,
+        vfs,
+        new SassFixtureRegistry(fixture.entries),
+        cache,
+        [],
+      );
+      const lock = structuredClone(result.lockfile);
+      lock.packages[`node_modules/${SASS_TRIGGER}`] = {
+        version: '1.77.0',
+        resolved: `https://fixture.invalid/${SASS_TRIGGER}-1.77.0.tgz`,
+        integrity: 'sha512-Zm9yZWlnbi1sb2NrLXBpbi1uZXZlci1mZXRjaGVk',
+      };
+      const replayVfs = await project();
+      await writeLock(replayVfs, lock);
+      const replayCache = cache.clone();
+      replayCache.clearLedger();
+      const registry = new DenyAllRegistry();
+      const outcome = await settled(
+        installFixture(fixture, replayVfs, registry, replayCache, []),
+      );
+      expect(outcome.kind).toBe('rejected');
+      expect(
+        errorRecord(outcome.kind === 'rejected' ? outcome.error : undefined),
+      ).toMatchObject({ name: 'NotImplementedError', feature: SASS_VERSION_FEATURE });
+      expect(registry.reads).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps a REQUIRED trigger-range edge with no entry a loud NotImplementedError, not a lock repair', async () => {
+    requireSassRecipe();
+    // Regression pin, GREEN before and after: request-shape admission still
+    // precedes missing-entry handling — deleting the lock and re-installing
+    // could never satisfy this edge, so EBROKENLOCK guidance would lie.
+    const reqHost = await auxiliaryRegistryEntry('req-host', '1.0.0');
+    const fixture = { dependencies: { 'req-host': '1.0.0' }, entries: [reqHost] };
+    const vfs = await project();
+    const cache = new LedgerTarballCache();
+    const result = await installFixture(
+      fixture,
+      vfs,
+      new SassFixtureRegistry(fixture.entries),
+      cache,
+      [],
+    );
+    const lock = structuredClone(result.lockfile);
+    const hostEntry = lock.packages['node_modules/req-host'];
+    if (!hostEntry) throw new Error('req-host lock entry missing');
+    hostEntry.dependencies = { [SASS_TRIGGER]: '^1.70.0' };
+    const replayVfs = await project();
+    await writeLock(replayVfs, lock);
+    const replayCache = cache.clone();
+    replayCache.clearLedger();
+    const registry = new DenyAllRegistry();
+    const outcome = await settled(installFixture(fixture, replayVfs, registry, replayCache, []));
+    expect(outcome.kind).toBe('rejected');
+    expect(errorRecord(outcome.kind === 'rejected' ? outcome.error : undefined)).toMatchObject({
+      name: 'NotImplementedError',
+      feature: SASS_VERSION_FEATURE,
+    });
+    expect(registry.reads).toEqual([]);
   });
 
   it('materializes the official Sass closure through general Eddy with exact persisted tree/lock/provenance', async () => {
