@@ -382,8 +382,9 @@ interface ResolvedPin {
   readonly dependencies: Record<string, string>;
   readonly bin?: string | Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
-  /** Optional edges. npm-authored lock entries carry them; rifty's lock WRITER
-   * folds live-pin optionals into `dependencies` (byte-identical rifty replay). */
+  /** Optional edges (lock entry or manifest). The writer re-emits them on every
+   * origin: a recorded optional subtree must stay reachable through its
+   * parent's edges or the replay coverage gate refuses the written lock. */
   readonly optionalDependencies: Record<string, string>;
   readonly cpu?: string[];
   readonly os?: string[];
@@ -2529,11 +2530,13 @@ async function pinToPackage(
     resolved: pin.resolved,
     installPath,
     ...(acquisition.kind === 'tarball' ? { integrity: acquisition.result.integrity } : {}),
-    ...(pin.origin === 'lockfile' && Object.keys(pin.optionalDependencies).length > 0
+    // Every origin: recorded optional subtrees must stay justified by their
+    // parent's edges or the replay coverage gate refuses the written lock.
+    ...(Object.keys(pin.optionalDependencies).length > 0
       ? { optionalDependencies: pin.optionalDependencies }
       : {}),
-    ...(pin.origin === 'lockfile' && pin.cpu !== undefined ? { cpu: pin.cpu } : {}),
-    ...(pin.origin === 'lockfile' && pin.os !== undefined ? { os: pin.os } : {}),
+    ...(pin.cpu !== undefined ? { cpu: pin.cpu } : {}),
+    ...(pin.os !== undefined ? { os: pin.os } : {}),
   };
   if (pin.peerDependencies && Object.keys(pin.peerDependencies).length > 0) {
     pkg.peerDependencies = pin.peerDependencies;
@@ -2991,6 +2994,8 @@ function createRegistrySource(
           shadowProjection === undefined
             ? (manifest.optionalDependencies ?? {})
             : { ...shadowProjection.optionalDependencies },
+        ...(manifest.cpu === undefined ? {} : { cpu: manifest.cpu }),
+        ...(manifest.os === undefined ? {} : { os: manifest.os }),
         ...(shadowRecipe
           ? {
               shadow: {

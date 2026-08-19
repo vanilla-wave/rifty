@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- npm shell `EBROKENLOCK` stderr line surfaces the installer's message (which
+  entries, which reason) instead of a `(unknown package)` placeholder; the
+  `delete package-lock.json and retry` recovery hint stays.
 - **Owner operation deadline measures durability-progress SILENCE, not total
   duration (#255, ADR-0360).** `OWNER_OPERATION_TIMEOUT_MS` was a hard 60 s
   module constant on an operation's total wall clock, so a first `openProject`
