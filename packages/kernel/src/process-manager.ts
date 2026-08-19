@@ -4,12 +4,9 @@
  * `spawn` allocates a PID and runs a JS handler with an `IO` object;
  * `spawnWorker` spawns into its own Web Worker realm (ADR-0011).
  * `kill(pid, signal)` emits `exit`/`close`.
- *
  * Per-PID records are swept from `table` after `exit` fires, and the internal
  * stdio/IPC emitters are stripped of listeners, so a long-lived host (the
  * playground) doesn't accumulate deceased records or per-spawn listener stacks.
- * The handle object survives so callers can still read `handle.exitCode`.
- *
  * The runtime-js `child_process` builtin wires Node's API surface to this
  * manager; tests exercise the manager directly.
  */
@@ -1017,7 +1014,10 @@ export class ProcessManager {
       _terminate(signal: string, afterDescendants?: Promise<void>): boolean {
         const outcome = { kind: 'signal', signal } satisfies WorkerTerminalOutcome;
         if (!this._acceptOutcome(outcome)) return false;
-        if (afterDescendants === undefined) {
+        if (signal === 'SIGKILL') {
+          spawnResult.terminate();
+          this._abandonTerminal();
+        } else if (afterDescendants === undefined) {
           this._startOutputCut();
         } else {
           void afterDescendants.then(() => {

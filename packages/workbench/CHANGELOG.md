@@ -30,6 +30,11 @@
   needed — the default handles the 42 s first open unconfigured.
 
 ### Fixed
+- `@emnapi/core@1.10.0` installs receive the exact upstream child-thread
+  orphaned-reference cleanup backport before stamp promotion. A Vite 8
+  unresolved import now returns Vite's normal non-zero build error instead of
+  crashing a Rolldown pthread and stranding the command; nested copies and
+  baked-snapshot restores use the same version-gated transform.
 
 - **First-open materialization drain now emits `durability-progress` (#256,
   epic project-open-drain-latency final slice; ADR-0359 corrected

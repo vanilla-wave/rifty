@@ -98,7 +98,7 @@ test.describe('npm-authored lockfile replay (epic faithful-npm-lock-replay)', ()
     await runTerminalLineSettled(page, failingBuild, 180_000);
     await expectTerminalContains(
       page,
-      /Could not resolve ["']rifty-unresolved-import["']|Failed to resolve import ["']rifty-unresolved-import["']/,
+      /\[vite\]: Rolldown failed to resolve import ["']rifty-unresolved-import["']/,
       10_000,
     );
     expect(await terminalHistoryExitCode(page, failingBuild)).not.toBe(0);

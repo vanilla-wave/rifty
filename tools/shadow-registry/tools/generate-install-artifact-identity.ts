@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { emnapiCoreOrphanedReferencePatchPolicy } from '../../../packages/workbench/src/workers/emnapi-core-install-policy.ts';
 import {
   viteCliActionPatchPolicy,
   viteRootWatchPatchPolicy,
@@ -61,6 +62,7 @@ export async function buildInstallArtifactRecipe() {
       id: builtinShadowSubstitutionCatalog.id,
       digest: builtinShadowSubstitutionCatalog.digest,
     },
+    emnapiCoreOrphanedReferencePatch: emnapiCoreOrphanedReferencePatchPolicy,
     viteCliActionPatch: viteCliActionPatchPolicy,
     viteRootWatchPatch: viteRootWatchPatchPolicy,
     esbuildRuntimePolicy: identityPolicyProjection(await readJson(policyUrl)),

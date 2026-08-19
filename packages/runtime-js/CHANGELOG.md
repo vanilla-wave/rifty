@@ -48,6 +48,10 @@
 
 ### Fixed
 
+- Kernel-backed `worker_threads.Worker.terminate()` now uses an immediate
+  physical kill, preventing emnapi pthreads from running after their creator
+  has torn down shared N-API state during a failed Vite build.
+
 - Public `spawnRuntime` Worker crashes now stay owned by the runtime controller
   after it rejects pending calls and publishes stderr/exit, instead of also
   rethrowing the same error into the creator global.

@@ -328,7 +328,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 139 → 140 (2026-08-19, #255 silence deadline): same ratchet, same
     // reason — open-workbench.ts sat at its exact pin, so the one options
     // validation authority moved to internal/workbench-options.ts.
-    expect(packageProductionFiles).toHaveLength(140);
+    // 140 → 141 (2026-08-19, #247 item 5): emnapi install policy.
+    expect(packageProductionFiles).toHaveLength(141);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
