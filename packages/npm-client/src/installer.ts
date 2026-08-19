@@ -1820,7 +1820,13 @@ function lockfileReuseDecision(
     overrides,
   );
   const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
-  const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides, hit?.entry.version);
+  const recipe = builtinRecipeForRequest(
+    name,
+    range,
+    ctx.parentName,
+    overrides,
+    hit?.entry.version,
+  );
   const policyFrontier = override !== null || recipe !== null;
   if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
   if (
@@ -1912,7 +1918,13 @@ function analyzeLockfileRequest(
       overrides,
     );
     const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
-    const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides, hit?.entry.version);
+    const recipe = builtinRecipeForRequest(
+      name,
+      range,
+      ctx.parentName,
+      overrides,
+      hit?.entry.version,
+    );
     if (
       !hit ||
       (recipe?.acquisition.kind !== 'synthetic' && (!hit.entry.resolved || !hit.entry.integrity))

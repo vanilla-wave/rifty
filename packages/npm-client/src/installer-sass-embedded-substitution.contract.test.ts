@@ -1127,9 +1127,9 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       const rewritten = JSON.parse(
         new TextDecoder().decode(await replayVfs.readFile(`${ROOT}/package-lock.json`)),
       ) as Lockfile;
-      expect.soft(rewritten.packages[`node_modules/${SASS_TRIGGER}`]).toEqual(
-        result.lockfile.packages[`node_modules/${SASS_TRIGGER}`],
-      );
+      expect
+        .soft(rewritten.packages[`node_modules/${SASS_TRIGGER}`])
+        .toEqual(result.lockfile.packages[`node_modules/${SASS_TRIGGER}`]);
       expect.soft(rewritten.packages['node_modules/peer-host']?.peerDependencies).toEqual({
         [SASS_TRIGGER]: '^1.70.0',
       });
@@ -1329,13 +1329,12 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       const replayCache = cache.clone();
       replayCache.clearLedger();
       const registry = new DenyAllRegistry();
-      const outcome = await settled(
-        installFixture(fixture, replayVfs, registry, replayCache, []),
-      );
+      const outcome = await settled(installFixture(fixture, replayVfs, registry, replayCache, []));
       expect(outcome.kind).toBe('rejected');
-      expect(
-        errorRecord(outcome.kind === 'rejected' ? outcome.error : undefined),
-      ).toMatchObject({ name: 'NotImplementedError', feature: SASS_VERSION_FEATURE });
+      expect(errorRecord(outcome.kind === 'rejected' ? outcome.error : undefined)).toMatchObject({
+        name: 'NotImplementedError',
+        feature: SASS_VERSION_FEATURE,
+      });
       expect(registry.reads).toEqual([]);
     } finally {
       warn.mockRestore();

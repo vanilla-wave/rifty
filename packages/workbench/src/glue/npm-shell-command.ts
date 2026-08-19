@@ -1034,7 +1034,9 @@ function reportInstallError(err: unknown, ctx: CommandContext): number {
   if (e.code === 'EBROKENLOCK') {
     // Surface the installer's own message — which entries, which reason. A
     // generic placeholder here already cost one main-red diagnosis.
-    ctx.stderr.write(`npm: lockfile is broken (${e.message}); delete package-lock.json and retry\n`);
+    ctx.stderr.write(
+      `npm: lockfile is broken (${e.message}); delete package-lock.json and retry\n`,
+    );
     return 1;
   }
   ctx.stderr.write(`npm: install failed: ${e.message}\n`);
