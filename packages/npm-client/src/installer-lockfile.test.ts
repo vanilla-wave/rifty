@@ -1898,3 +1898,91 @@ describe('install — npm 11 probe differential', () => {
     }
   });
 });
+
+describe('install — fresh-install lock writer records optional edges', () => {
+  it('[fault: provenance-lie] round-trips its own written lock through the replay coverage gate', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'app',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'app',
+            '1.0.0',
+            { util: '1.0.0' },
+            { optionalDependencies: { wasm: '1.0.0', native: '1.0.0' } },
+          ),
+        ],
+      ]),
+    );
+    db.set('util', new Map([['1.0.0', await makeEntry('util', '1.0.0')]]));
+    db.set(
+      'wasm',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'wasm',
+            '1.0.0',
+            { helper: '1.0.0' },
+            { cpu: ['wasm32'], os: ['linux', 'darwin'] },
+          ),
+        ],
+      ]),
+    );
+    db.set('helper', new Map([['1.0.0', await makeEntry('helper', '1.0.0')]]));
+    db.set(
+      'native',
+      new Map([['1.0.0', await makeEntry('native', '1.0.0', {}, { cpu: ['x64'] })]]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const fresh = await install(
+        'root',
+        '1.0.0',
+        { app: '1.0.0' },
+        { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+      );
+      // Gate skips `native` (cpu x64); `wasm` + closure install and get lock
+      // entries. Those entries are reachable ONLY through app's optional edges,
+      // so the written lock must carry them — npm records the manifest's
+      // optionalDependencies (and cpu/os) on fresh installs too.
+      expect(fresh.packages.map(({ name }) => name).sort()).toEqual([
+        'app',
+        'helper',
+        'util',
+        'wasm',
+      ]);
+      expect(fresh.lockfile.packages['node_modules/app']?.optionalDependencies).toEqual({
+        wasm: '1.0.0',
+        native: '1.0.0',
+      });
+      expect(fresh.lockfile.packages['node_modules/wasm']?.cpu).toEqual(['wasm32']);
+      expect(fresh.lockfile.packages['node_modules/wasm']?.os).toEqual(['linux', 'darwin']);
+
+      // The same lock must pass its own replay coverage gate: wasm + helper are
+      // justified by the recorded edges; the never-pinned `native` edge is a
+      // write-time-dropped optional (warn-and-skip, npm parity).
+      const replayRegistry = new CountingFakeRegistry(db);
+      const replay = await install(
+        'root',
+        '1.0.0',
+        { app: '1.0.0' },
+        { vfs, cwd: '/proj', registry: replayRegistry },
+      );
+      expect(replay.packages.map(({ name }) => name).sort()).toEqual([
+        'app',
+        'helper',
+        'util',
+        'wasm',
+      ]);
+      expect(replayRegistry.calls.tarball).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

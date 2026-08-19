@@ -1133,6 +1133,19 @@ describe('npm-shell-command — error mapping', () => {
     expect(rec.stderr.join('')).toContain('lockfile is broken');
   });
 
+  it('[fault: provenance-lie] surfaces the installer EBROKENLOCK reason, never a generic line', async () => {
+    const { shell } = await makeShellWithThrow('EBROKENLOCK', {
+      reason: 'unreached-entries',
+      message:
+        'EBROKENLOCK: lockfile contains 2 unreached-entries (node_modules/wasm, node_modules/helper). Delete the lockfile and re-install.',
+    });
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+    expect(exitCode).toBe(1);
+    const stderr = rec.stderr.join('');
+    expect(stderr).toContain('lockfile is broken');
+    expect(stderr).toContain('unreached-entries (node_modules/wasm, node_modules/helper)');
+  });
+
   it('falls through to the raw message for unmapped error codes', async () => {
     const { shell } = await makeShellWithThrow('ENETUNREACH', {});
     const { exitCode, rec } = await runShell(shell, 'npm install x');
