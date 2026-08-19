@@ -1210,6 +1210,7 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       expect(replay.lockfile.packages['node_modules/opt-host']?.optionalDependencies).toEqual({
         [SASS_TRIGGER]: '^1.70.0',
       });
+      expect(replay.lockfile.packages[`node_modules/${SASS_TRIGGER}`]).toBeUndefined();
     } finally {
       warn.mockRestore();
     }

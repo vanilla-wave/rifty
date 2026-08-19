@@ -16,8 +16,11 @@ that scans every committed `package-lock.json` / lockfile-bearing fixture and
 refuses `resolved` hosts outside `registry.npmjs.org` (allowlist
 env-extensible per D-004 if a test ever needs a second public host).
 
-Known clean today: `tests/e2e/fixtures/npm-lock-replay/{vite8,weavix}` (vite8
-re-pointed in the PR that carries this draft), baked snapshot locks under
-`apps/playground/public/snapshots/` (written by rifty's own installer against
-REGISTRY_BASE_URL default npmjs). The guard's value is refusing the NEXT
-mirror-poisoned fixture at commit time instead of at post-merge CI triage.
+State at intake (2026-08-19): `vite8` is the live poisoned instance —
+46/46 `resolved` still `npm.yandex-team.ru` on this branch; its repair is the
+handoff's second named delivery (own PR, equivalence pre-verified: all 46
+rewritten URLs sha512-match the recorded `integrity` against
+registry.npmjs.org). Known clean: `weavix` (6/6 npmjs), baked snapshot locks
+under `apps/playground/public/snapshots/` (written by rifty's own installer
+against REGISTRY_BASE_URL default npmjs). The guard's value is refusing the
+NEXT mirror-poisoned fixture at commit time instead of at post-merge CI triage.
