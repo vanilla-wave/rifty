@@ -372,6 +372,40 @@ const invalidConfigurationCases: readonly {
     value: Number.POSITIVE_INFINITY,
     expectedPath: /deployment\.previewProbeTimeoutMs/,
   },
+  // #255 case 7 — fault class: corrupt-input. The silence budget is the same
+  // positive-finite contract as its preview-timeout twin, at the same one
+  // validator: a zero/negative/non-finite/non-number budget is a deadline that
+  // never fires or fires instantly, so it dies at the boundary, not in flight.
+  {
+    label: 'zero owner silence budget',
+    path: ['deployment', 'ownerOperationSilenceTimeoutMs'],
+    value: 0,
+    expectedPath: /deployment\.ownerOperationSilenceTimeoutMs/,
+  },
+  {
+    label: 'negative owner silence budget',
+    path: ['deployment', 'ownerOperationSilenceTimeoutMs'],
+    value: -1,
+    expectedPath: /deployment\.ownerOperationSilenceTimeoutMs/,
+  },
+  {
+    label: 'non-finite owner silence budget',
+    path: ['deployment', 'ownerOperationSilenceTimeoutMs'],
+    value: Number.POSITIVE_INFINITY,
+    expectedPath: /deployment\.ownerOperationSilenceTimeoutMs/,
+  },
+  {
+    label: 'NaN owner silence budget',
+    path: ['deployment', 'ownerOperationSilenceTimeoutMs'],
+    value: Number.NaN,
+    expectedPath: /deployment\.ownerOperationSilenceTimeoutMs/,
+  },
+  {
+    label: 'non-number owner silence budget',
+    path: ['deployment', 'ownerOperationSilenceTimeoutMs'],
+    value: '60000',
+    expectedPath: /deployment\.ownerOperationSilenceTimeoutMs/,
+  },
   {
     label: 'registry URL',
     path: ['packageAcquisition', 'registryUrl'],
@@ -588,6 +622,56 @@ describe('openWorkbench configuration and host admission', () => {
       await workbench.close();
     },
   );
+
+  // #255 case 7, sibling sweep. `PlaygroundWorkbenchOptions` is
+  // `WorkbenchOptions` plus a typescript worker and delegates to this one
+  // validator — there is no second normalization path to drift from. Pinned so
+  // a future Playground-local option parser cannot skip the budget contract.
+  it('refuses an invalid owner silence budget on the Playground-shaped options too', async () => {
+    const h = harness();
+    const base = validOptions();
+    const playgroundShaped = {
+      ...base,
+      deployment: {
+        ...base.deployment,
+        workers: { ...base.deployment.workers, typescript: '/assets/typescript.js' },
+        ownerOperationSilenceTimeoutMs: 0,
+      },
+    } as unknown as WorkbenchOptions;
+
+    await expect(h.open(playgroundShaped)).rejects.toThrow(
+      /deployment\.ownerOperationSilenceTimeoutMs/,
+    );
+    expect(h.locks.request).not.toHaveBeenCalled();
+    expect(h.serviceWorker.register).not.toHaveBeenCalled();
+    expect(h.owner.start).not.toHaveBeenCalled();
+  });
+
+  // #255 case 4 — a valid host budget reaches the owner start input verbatim;
+  // unset leaves the key absent so the owner's shipped 60 s default is the one
+  // authority for the default (never a second copy in the validator).
+  it('carries a valid owner silence budget into the normalized owner input', async () => {
+    const h = harness();
+    const base = validOptions();
+    const workbench = await h.open({
+      ...base,
+      deployment: { ...base.deployment, ownerOperationSilenceTimeoutMs: 300_000 },
+    } as unknown as WorkbenchOptions);
+
+    const started = h.owner.start.mock.calls[0]?.[0] as {
+      readonly deployment: Record<string, unknown>;
+    };
+    expect(started.deployment.ownerOperationSilenceTimeoutMs).toBe(300_000);
+    await workbench.close();
+
+    const unset = harness();
+    const plain = await unset.open(validOptions());
+    const plainStarted = unset.owner.start.mock.calls[0]?.[0] as {
+      readonly deployment: Record<string, unknown>;
+    };
+    expect(Object.hasOwn(plainStarted.deployment, 'ownerOperationSilenceTimeoutMs')).toBe(false);
+    await plain.close();
+  });
 
   it.each(malformedUrlCases)(
     'rejects malformed URL reference at %s before every external effect',

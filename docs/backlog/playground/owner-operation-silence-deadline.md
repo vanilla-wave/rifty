@@ -70,7 +70,13 @@ same tab and reopen succeeds.
   for wall clock ≫ budget (fake-timer browser-unit proof).
 - Progress silence ≥ budget → pending op rejects with the timeout error AND the
   owner worker is killed (death settles) — same observable fatality as today.
-- Host-supplied budget respected; unset → 60 000 ms of silence.
+- Host-supplied budget respected; unset → 60 000 ms of silence; the arriving
+  progress frame re-arms the CONFIGURED budget, and re-arms every pending
+  operation (they share one owner and one flush), not just the newest.
+- A non-positive or non-finite budget is refused at the public options boundary
+  before any lock, service-worker, storage, or owner effect — same authority
+  and same message shape as `previewProbeTimeoutMs` (one validator, no twin;
+  the Playground options surface delegates to it).
 - After a silence-timeout (and after any `failProtocol`), a fresh
   `openWorkbench` + `openProject` of the same project in the same tab succeeds
   with the durable tree intact (fault test, real OPFS in browser-unit).
@@ -90,17 +96,28 @@ failing-first on the browser-unit harness:
 3. Non-progress traffic does not reset: health/heartbeat-unrelated frames flow
    while progress is silent → still fires at budget.
 4. Knob: budget 5 s honored; default 60 s when unset.
+4b. Progress under a CONFIGURED 5 s budget re-arms 5 s, never the shipped
+   60 000 ms; the deadline fires exactly one budget after the LAST frame.
+4c. Sibling sweep over the timer owner: one progress frame re-arms EVERY
+   `PendingOperation` variant (`open`, `delete`, `playground-open`,
+   `playground-catalog`, `close`) — a queued sibling stays pending past the
+   budget while the shared flush is visibly alive.
 5. Recovery: after case 2, fresh `openWorkbench` in the same realm reopens the
    project; durable tree readable; no residual Web Lock / claim blocks it.
 6. In-flight ops at failure all reject with the protocol failure (no hang) —
    pinned unchanged from today.
+7. Budget validation: `0`, a negative value, `Infinity`, `NaN`, and a
+   non-number are refused naming `deployment.ownerOperationSilenceTimeoutMs`,
+   before lock/SW/storage/owner effects, on both the plain and the
+   Playground-shaped options surface.
 
 ## Fault matrix
 
 | Fault class | Required outcome | Proof |
 |---|---|---|
-| false-fallback | environmental slowness WITH progress completes; never protocol death | case 1 |
+| false-fallback | environmental slowness WITH progress completes; never protocol death | cases 1, 4b, 4c |
 | unbounded-read | silence deadline is a real bound; chatty-but-wedged cannot hang forever | cases 2–3 |
+| corrupt-input | a host budget that is not a positive finite number is refused at the one options validator before any external effect — never a silently ignored, zero, or infinite deadline | case 7 |
 | torn-state | timeout never invites retry against an unsettled mutation: fatality + fresh-handle reopen reconciles from durable OPFS state only | cases 2, 5 |
 | provenance-lie | post-failure `ClosedHandleError` carries the original timeout cause; recovery does not mask it | cases 2, 5 |
 | observable-order | pending rejections happen with kill initiated, not before deciding fatality | case 6 |
