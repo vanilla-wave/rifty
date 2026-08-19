@@ -132,6 +132,9 @@ class ControlledServiceWorkerContainer {
 interface Settlement {
   readonly settled: boolean;
   readonly error: unknown;
+  /** Probe value sampled AT settlement — observable-order proofs need the
+   *  world as it was when the rejection was delivered, not after it. */
+  readonly probed: unknown;
 }
 
 /**
@@ -139,19 +142,20 @@ interface Settlement {
  * deadline test must fail on a missed deadline with the real assertion, never
  * by hanging until the runner's own timeout.
  */
-function watch<T>(promise: Promise<T>): () => Settlement {
+function watch<T>(promise: Promise<T>, probe: () => unknown = () => null): () => Settlement {
   let settled = false;
   let error: unknown = null;
+  let probed: unknown = null;
+  const record = (reason: unknown): void => {
+    settled = true;
+    error = reason;
+    probed = probe();
+  };
   void promise.then(
-    () => {
-      settled = true;
-    },
-    (reason: unknown) => {
-      settled = true;
-      error = reason;
-    },
+    () => record(null),
+    (reason: unknown) => record(reason),
   );
-  return () => ({ settled, error });
+  return () => ({ settled, error, probed });
 }
 
 function failureMessage(settlement: Settlement): string {
@@ -561,10 +565,11 @@ describe('browser Workbench owner transport', () => {
           projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
         ),
       );
-      const opening = watch(openPromise);
+      const killSignal = () => worker.killedWith;
+      const opening = watch(openPromise, killSignal);
       void openPromise.catch(() => {});
       const deletePromise = raw.deleteProject('sibling-delete');
-      const deleting = watch(deletePromise);
+      const deleting = watch(deletePromise, killSignal);
       void deletePromise.catch(() => {});
 
       for (let persisted = 1; persisted <= 10; persisted += 1) {
@@ -584,6 +589,9 @@ describe('browser Workbench owner transport', () => {
         /timed out after 5000ms without owner durability progress/,
       );
       expect(deleting().error).toBe(opening().error);
+      // observable-order, sampled at delivery: kill decided before either
+      // pending operation observed the failure.
+      expect([opening().probed, deleting().probed]).toEqual(['SIGTERM', 'SIGTERM']);
       expect(worker.killedWith).toBe('SIGTERM');
     } finally {
       vi.useRealTimers();
@@ -633,10 +641,11 @@ describe('browser Workbench owner transport', () => {
         playgroundUrlContext,
       );
       const openPromise = companion.openProject(definition);
-      const opening = watch(openPromise);
+      const killSignal = () => worker.killedWith;
+      const opening = watch(openPromise, killSignal);
       void openPromise.catch(() => {});
       const renamePromise = companion.catalog.rename('project-a', 'Renamed');
-      const renaming = watch(renamePromise);
+      const renaming = watch(renamePromise, killSignal);
       void renamePromise.catch(() => {});
 
       for (let persisted = 1; persisted <= 10; persisted += 1) {
@@ -656,6 +665,7 @@ describe('browser Workbench owner transport', () => {
         /timed out after 5000ms without owner durability progress/,
       );
       expect(renaming().error).toBe(opening().error);
+      expect([opening().probed, renaming().probed]).toEqual(['SIGTERM', 'SIGTERM']);
       expect(worker.killedWith).toBe('SIGTERM');
     } finally {
       vi.useRealTimers();
@@ -699,7 +709,7 @@ describe('browser Workbench owner transport', () => {
       });
 
       const closePromise = project.close();
-      const closing = watch(closePromise);
+      const closing = watch(closePromise, () => worker.killedWith);
       void closePromise.catch(() => {});
       await settleMicrotasks();
       const closePty = sentOf(worker, 'workbench:project-pty').find(
@@ -731,6 +741,7 @@ describe('browser Workbench owner transport', () => {
       expect(failureMessage(closing())).toMatch(
         /timed out after 5000ms without owner durability progress/,
       );
+      expect(closing().probed).toBe('SIGTERM');
       expect(worker.killedWith).toBe('SIGTERM');
     } finally {
       vi.useRealTimers();
@@ -739,7 +750,8 @@ describe('browser Workbench owner transport', () => {
 
   // #255 case 6 — fault class: observable-order. Pinned unchanged: every
   // in-flight operation rejects with the one protocol failure (no hang), and
-  // the rejections land with the kill decided, never before it.
+  // the kill is already decided AT the moment each rejection is delivered —
+  // sampled inside the rejection observation, so reject-now/kill-later fails.
   it('silence deadline: every in-flight operation rejects with the one protocol failure', async () => {
     vi.useFakeTimers();
     try {
@@ -757,10 +769,11 @@ describe('browser Workbench owner transport', () => {
           projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
         ),
       );
-      const opening = watch(openPromise);
+      const killSignal = () => worker.killedWith;
+      const opening = watch(openPromise, killSignal);
       void openPromise.catch(() => {});
       const deletePromise = raw.deleteProject('sibling-delete');
-      const deleting = watch(deletePromise);
+      const deleting = watch(deletePromise, killSignal);
       void deletePromise.catch(() => {});
       expect(sentOf(worker, 'workbench:delete-project')).toHaveLength(1);
 
@@ -770,6 +783,9 @@ describe('browser Workbench owner transport', () => {
       expect([opening().settled, deleting().settled]).toEqual([true, true]);
       expect(opening().error).toBeInstanceOf(Error);
       expect(deleting().error).toBe(opening().error);
+      // Sampled at rejection delivery, not after: the fatality was decided and
+      // the kill initiated before any pending operation observed the failure.
+      expect([opening().probed, deleting().probed]).toEqual(['SIGTERM', 'SIGTERM']);
       expect(worker.killedWith).toBe('SIGTERM');
     } finally {
       vi.useRealTimers();

@@ -87,6 +87,11 @@ same tab and reopen succeeds.
 - No deadline proof may rest on a scheduling race or on a runner timeout: an
   operation that should stay pending is asserted pending by a bounded
   observation, and injected silence is a delay far larger than the budget.
+- The option is proven on the PUBLIC types, uncast: the acceptance literals
+  typecheck as `WorkbenchOptions` and `PlaygroundWorkbenchOptions`, so a
+  runtime-only knob absent from the SDK surface fails to compile.
+- Kill state is sampled INSIDE each rejection observation, so reject-now /
+  kill-later cannot pass the observable-order row.
 
 ## Parity cases
 

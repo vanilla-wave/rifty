@@ -2,6 +2,7 @@ import { SW_FRAME_VERSION, SW_PING, SW_PONG, SW_ROUTING_VERSION } from '@riftyde
 import { describe, expect, it, vi } from 'vitest';
 import { ClosedHandleError, WorkbenchOriginOccupiedError } from './errors.ts';
 import { type WorkbenchStorageSnapshot, createOpenWorkbench } from './open-workbench.ts';
+import type { PlaygroundWorkbenchOptions } from './playground.ts';
 import { createUnusedOwnerProjectHandles } from './project-content.test-fixture.ts';
 import { type InspectedProjectDefinition, projects } from './project-definition.ts';
 import type { ProjectSession } from './project-session.ts';
@@ -627,17 +628,19 @@ describe('openWorkbench configuration and host admission', () => {
   // `WorkbenchOptions` plus a typescript worker and delegates to this one
   // validator — there is no second normalization path to drift from. Pinned so
   // a future Playground-local option parser cannot skip the budget contract.
+  // No cast: the literal must typecheck against the PUBLIC option types, so a
+  // runtime-only knob missing from the SDK surface is a compile failure here.
   it('refuses an invalid owner silence budget on the Playground-shaped options too', async () => {
     const h = harness();
     const base = validOptions();
-    const playgroundShaped = {
+    const playgroundShaped: PlaygroundWorkbenchOptions = {
       ...base,
       deployment: {
         ...base.deployment,
         workers: { ...base.deployment.workers, typescript: '/assets/typescript.js' },
         ownerOperationSilenceTimeoutMs: 0,
       },
-    } as unknown as WorkbenchOptions;
+    };
 
     await expect(h.open(playgroundShaped)).rejects.toThrow(
       /deployment\.ownerOperationSilenceTimeoutMs/,
@@ -647,16 +650,42 @@ describe('openWorkbench configuration and host admission', () => {
     expect(h.owner.start).not.toHaveBeenCalled();
   });
 
+  // #255 case 7, fault class sibling-drift: one validator, not a twin. The
+  // budget must fail with the SAME positive-finite message shape as the
+  // preview-timeout sibling — a path-only matcher would pass an ad hoc copy.
+  it('validates the owner silence budget with the preview timeout authority', async () => {
+    const messageFor = async (path: readonly string[]): Promise<string> => {
+      const h = harness();
+      const failure = await h.open(withOption(path, 0)).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(TypeError);
+      return failure instanceof Error ? failure.message : String(failure);
+    };
+
+    const budget = await messageFor(['deployment', 'ownerOperationSilenceTimeoutMs']);
+    const preview = await messageFor(['deployment', 'previewProbeTimeoutMs']);
+    expect(budget).toBe(
+      'deployment.ownerOperationSilenceTimeoutMs must be a positive finite number',
+    );
+    expect(budget.replace('deployment.ownerOperationSilenceTimeoutMs', '<path>')).toBe(
+      preview.replace('deployment.previewProbeTimeoutMs', '<path>'),
+    );
+  });
+
   // #255 case 4 — a valid host budget reaches the owner start input verbatim;
   // unset leaves the key absent so the owner's shipped 60 s default is the one
-  // authority for the default (never a second copy in the validator).
+  // authority for the default (never a second copy in the validator). No cast:
+  // the option is proven present on the public `WorkbenchOptions` type.
   it('carries a valid owner silence budget into the normalized owner input', async () => {
     const h = harness();
     const base = validOptions();
-    const workbench = await h.open({
+    const configured: WorkbenchOptions = {
       ...base,
       deployment: { ...base.deployment, ownerOperationSilenceTimeoutMs: 300_000 },
-    } as unknown as WorkbenchOptions);
+    };
+    const workbench = await h.open(configured);
 
     const started = h.owner.start.mock.calls[0]?.[0] as {
       readonly deployment: Record<string, unknown>;
