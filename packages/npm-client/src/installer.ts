@@ -84,7 +84,10 @@ import {
   translateRecordedInstallPath,
   warnOptional,
 } from './installer-lockfile-replay.ts';
-import { assertShadowRecipeAdmission } from './internal/shadow/admission.ts';
+import {
+  builtinRecipeForRequest,
+  registryRecipeForResolution,
+} from './internal/shadow/admission.ts';
 import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
 import {
   type AppliedShadowSubstitution,
@@ -1608,37 +1611,6 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
   };
 }
 
-function builtinRecipeForRequest(
-  name: string,
-  range: string | null,
-  parent: string | undefined,
-  overrides: OverrideMap | undefined,
-): BuiltinShadowSubstitutionRecipe | null {
-  const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
-  if (override?.source === 'user') return null;
-  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-    (candidate) => candidate.trigger.name === name,
-  );
-  if (!recipe) return null;
-  assertShadowRecipeAdmission(recipe, range);
-  return recipe;
-}
-
-function registryRecipeForResolution(
-  recipe: BuiltinShadowSubstitutionRecipe | null,
-  effectiveName: string,
-  version: string,
-): BuiltinShadowSubstitutionRecipe | null {
-  if (
-    recipe?.acquisition.kind !== 'registry' ||
-    recipe.acquisition.name !== effectiveName ||
-    recipe.acquisition.version !== version
-  ) {
-    return null;
-  }
-  return recipe;
-}
-
 function exactStringRecord(actual: unknown, expected: Readonly<Record<string, string>>): boolean {
   if (actual === undefined) return Object.keys(expected).length === 0;
   if (actual === null || typeof actual !== 'object' || Array.isArray(actual)) return false;
@@ -1841,7 +1813,6 @@ function lockfileReuseDecision(
   ctx: ResolveContext,
   overrides: OverrideMap | undefined,
 ): LockfileReuseDecision {
-  const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides);
   const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
     name,
     range,
@@ -1849,6 +1820,7 @@ function lockfileReuseDecision(
     overrides,
   );
   const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+  const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides, hit?.entry.version);
   const policyFrontier = override !== null || recipe !== null;
   if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
   if (
@@ -1933,7 +1905,6 @@ function analyzeLockfileRequest(
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
-    const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides);
     const { effectiveName } = resolveEffectivePackageRequest(
       name,
       range,
@@ -1941,6 +1912,7 @@ function analyzeLockfileRequest(
       overrides,
     );
     const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+    const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides, hit?.entry.version);
     if (
       !hit ||
       (recipe?.acquisition.kind !== 'synthetic' && (!hit.entry.resolved || !hit.entry.integrity))
@@ -2013,9 +1985,16 @@ function createIncrementalSource(
         return locked.hasLockEntry?.(name, ctx) ?? false;
       },
       prefetch(name, range, ctx): void {
-        if (!useRegistry(name, range, ctx)) return;
-        metadataUsed = true;
-        registry.prefetch?.(name, range, ctx);
+        // Advisory warm-up only: resolve owns every error in its boundary
+        // (an optional edge's admission throw here would escape the optional
+        // catch and fail the install npm would warn-and-skip).
+        try {
+          if (!useRegistry(name, range, ctx)) return;
+          metadataUsed = true;
+          registry.prefetch?.(name, range, ctx);
+        } catch {
+          /* resolve re-raises in the correct error-order slot */
+        }
       },
       async resolve(name, range, ctx): Promise<ResolvedPin> {
         if (useRegistry(name, range, ctx)) {
@@ -2679,8 +2658,6 @@ function createLockfileSource(
       return pinnedEntryForParent(lockfile, name, ctx.parentLockfilePath) !== undefined;
     },
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
-      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       // Apply the same retained redirect/user override as live resolution
       // before lookup. Synthetic catalog recipes keep their source identity
       // and are validated separately against the lockfile recipe trace.
@@ -2691,6 +2668,16 @@ function createLockfileSource(
         opts.overrides,
       );
       const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+      // Recorded-pin admission fact (ADR-0361); absent entry keeps the
+      // request-shape throw ahead of the missing-entry EBROKENLOCK below.
+      const recipe = builtinRecipeForRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        hit?.entry.version,
+      );
+      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       if (!hit) {
         throw Object.assign(
           new Error(
@@ -2884,15 +2871,20 @@ function createRegistrySource(
 
   return {
     prefetch(name, range, ctx): void {
-      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
-      if (recipe?.acquisition.kind === 'synthetic') return;
-      const { effectiveName } = resolveEffectivePackageRequest(
-        name,
-        range,
-        ctx.parentName,
-        opts.overrides,
-      );
-      void loadPackument(effectiveName);
+      // Advisory warm-up only — admission throws belong to resolve's boundary.
+      try {
+        const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+        if (recipe?.acquisition.kind === 'synthetic') return;
+        const { effectiveName } = resolveEffectivePackageRequest(
+          name,
+          range,
+          ctx.parentName,
+          opts.overrides,
+        );
+        void loadPackument(effectiveName);
+      } catch {
+        /* resolve re-raises in the correct error-order slot */
+      }
     },
 
     async resolve(name, range, ctx): Promise<ResolvedPin> {

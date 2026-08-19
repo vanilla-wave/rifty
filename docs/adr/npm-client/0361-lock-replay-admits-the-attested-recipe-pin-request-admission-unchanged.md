@@ -52,8 +52,11 @@ Clauses graft ADR-0328/0335 verbatim except the two amended below.
   re-litigates the recorded range: the edge is admitted exactly and only when
   the recorded entry at the effective path IS the recipe's attested product
   version — the registry acquisition version for registry recipes, the
-  materialization version for synthetic recipes; any other recorded version, or
-  a missing entry, keeps the request-shape loud throw. Replay admission never
+  materialization version for synthetic recipes — AND the recorded range
+  semantically admits the trigger version (an out-of-sync lock, whose pinned
+  trigger version does not satisfy its own recorded edge, is refused by npm too
+  — `npm ci` EUSAGE); any other recorded version, an unsatisfied recorded
+  range, or a missing entry keeps the request-shape loud throw. Replay admission never
   attests: the strict v2 shadow-trace validation (catalog/recipe digests,
   acquisition name/version/resolved/integrity, materialization bytes) remains
   the sole authority that the pinned product is rifty's; an unattested or
