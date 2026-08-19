@@ -16,11 +16,14 @@ peer-only `peer-target` entry reachable from `peer-source.peerDependencies`.
 This pins the carrier shape; Rifty's CPU policy admits the WASI sibling and
 loudly skips the native sibling.
 
-`rangePeer` pins the peer RANGE replay contract: npm records
+`rangePeer` pins the peer RANGE replay contract: `range-peer-target` is NOT a
+root dependency — it is reachable ONLY through `range-peer-source`'s `^1.0.0`
+peer edge. npm records
 `range-peer-source.peerDependencies = { range-peer-target: "^1.0.0" }`
-VERBATIM on the entry, pins `range-peer-target@1.2.0`, and `npm ci` from that
-lock reifies 1.2.0 with exit 0 — replay materializes the ranged peer edge onto
-the exact pinned entry without re-resolving or re-litigating the range. Rifty's
-lockfile replay must therefore never re-run request-shape (shadow-recipe)
-admission with a recorded peer range when the recorded pin IS the attested
-product.
+VERBATIM on the entry, pins peer-only `range-peer-target@1.2.0`, and `npm ci`
+from that lock reifies 1.2.0 with exit 0 — replay materializes the ranged peer
+edge onto the exact pinned entry without re-resolving or re-litigating the
+range, and the peer traversal is causally necessary to reach the entry at all.
+Rifty's lockfile replay must therefore never re-run request-shape
+(shadow-recipe) admission with a recorded peer range when the recorded pin IS
+the attested product.

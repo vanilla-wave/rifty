@@ -136,8 +136,10 @@ try {
       dependencies: {
         'optional-host': '1.0.0',
         'peer-source': '1.0.0',
+        // range-peer-target is NOT a root dependency: it is reachable ONLY
+        // through range-peer-source's ^1.0.0 peer edge, so the recorded lock
+        // proves npm pins and replays a peer-RANGE-only entry.
         'range-peer-source': '1.0.0',
-        'range-peer-target': '1.2.0',
       },
     })}\n`,
   );

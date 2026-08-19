@@ -1094,26 +1094,106 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       expect(result.lockfile.packages['node_modules/peer-host']?.peerDependencies).toEqual({
         [SASS_TRIGGER]: '^1.70.0',
       });
-      const freshTree = await snapshotTree(vfs, `${ROOT}/node_modules`);
+
+      // Make the peer edge CAUSALLY NECESSARY (npm-11 probe `rangePeer` shape:
+      // the pinned target is peer-only): drop the root literal from the replay
+      // request and the recorded root entry. The facade entries stay recorded
+      // and are now reachable ONLY through peer-host's ^1.70.0 peer edge — an
+      // implementation that skips recipe-named peer traversal leaves them
+      // unreached and fails the coverage gate instead of replaying.
+      const peerOnlyLock = structuredClone(result.lockfile);
+      const rootEntry = peerOnlyLock.packages[''];
+      if (!rootEntry) throw new Error('root lock entry missing');
+      rootEntry.dependencies = { 'peer-host': '1.0.0' };
+      const peerOnlyFixture = { dependencies: { 'peer-host': '1.0.0' } };
 
       const replayVfs = await project();
-      const lockBefore = await writeLock(replayVfs, result.lockfile);
+      await writeLock(replayVfs, peerOnlyLock);
       const replayCache = cache.clone();
       replayCache.clearLedger();
-      const replayReports: string[] = [];
+      const registry = new DenyAllRegistry();
+      const replay = await installFixture(peerOnlyFixture, replayVfs, registry, replayCache, []);
+
+      expect
+        .soft(replay.packages.map(({ name }) => name).sort())
+        .toEqual(['chokidar', 'immutable', 'peer-host', 'readdirp', 'sass', 'source-map-js']);
+      expect.soft(registry.reads).toEqual([]);
+      // Traversal-only observable: the facade materialized at the alias path
+      // reachable through no edge but the recorded peer range.
+      expect.soft(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(true);
+      expect
+        .soft(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}/package.json`))
+        .toBe(true);
+      const rewritten = JSON.parse(
+        new TextDecoder().decode(await replayVfs.readFile(`${ROOT}/package-lock.json`)),
+      ) as Lockfile;
+      expect.soft(rewritten.packages[`node_modules/${SASS_TRIGGER}`]).toEqual(
+        result.lockfile.packages[`node_modules/${SASS_TRIGGER}`],
+      );
+      expect.soft(rewritten.packages['node_modules/peer-host']?.peerDependencies).toEqual({
+        [SASS_TRIGGER]: '^1.70.0',
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('[fault: frozen-assumption] replays a lock-pinned OPTIONAL RANGE edge onto the recorded exact facade offline', async () => {
+    requireSassRecipe();
+    // Success sibling of the optional path at the same replay-admission/
+    // prefetch boundary: the recorded entry is attested, so the recorded
+    // optional ^1.70.0 edge must ADMIT and materialize — not warn-skip and not
+    // fail at prefetch. The facade is reachable only through that edge.
+    const official = await loadOfficialSassEntries();
+    const optHost = await auxiliaryRegistryEntry(
+      'opt-facade-host',
+      '1.0.0',
+      {},
+      { optionalDependencies: { [SASS_TRIGGER]: '^1.70.0' } },
+    );
+    const seedFixture = {
+      dependencies: { 'opt-facade-host': '1.0.0', [SASS_TRIGGER]: SASS_TRIGGER_VERSION },
+      entries: [...official, optHost],
+    };
+    const vfs = await project();
+    const cache = new LedgerTarballCache();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const seeded = await installFixture(
+        seedFixture,
+        vfs,
+        new SassFixtureRegistry(seedFixture.entries),
+        cache,
+        [],
+      );
+      const optOnlyLock = structuredClone(seeded.lockfile);
+      const rootEntry = optOnlyLock.packages[''];
+      if (!rootEntry) throw new Error('root lock entry missing');
+      rootEntry.dependencies = { 'opt-facade-host': '1.0.0' };
+      // The live seed legitimately warn-skips its optional range edge; only
+      // the REPLAY phase warn stream is under test.
+      warn.mockClear();
+
+      const replayVfs = await project();
+      await writeLock(replayVfs, optOnlyLock);
+      const replayCache = cache.clone();
+      replayCache.clearLedger();
+      const registry = new DenyAllRegistry();
       const replay = await installFixture(
-        fixture,
+        { dependencies: { 'opt-facade-host': '1.0.0' } },
         replayVfs,
-        new DenyAllRegistry(),
+        registry,
         replayCache,
-        replayReports,
+        [],
       );
 
-      expect.soft(await replayVfs.readFile(`${ROOT}/package-lock.json`)).toEqual(lockBefore);
-      expect.soft(replay.lockfile).toEqual(result.lockfile);
-      expect
-        .soft(await snapshotTree(replayVfs, `${ROOT}/node_modules`), 'complete replay VFS tree')
-        .toEqual(freshTree);
+      expect.soft(replay.packages.map(({ name }) => name)).toContain('sass');
+      expect.soft(registry.reads).toEqual([]);
+      expect.soft(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(true);
+      // The attested optional edge ADMITS: no warn-skip line for it.
+      expect(warn.mock.calls.map(([message]) => String(message))).not.toContainEqual(
+        expect.stringContaining(`optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-facade-host`),
+      );
     } finally {
       warn.mockRestore();
     }
@@ -1317,6 +1397,63 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
         feature: 'npm-client.lockfile.shadowSubstitutionTrace',
       });
       expect(registry.reads).toEqual([]);
+      expect(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('refuses a MARKERLESS foreign lock whose effective entry pins a non-attested version', async () => {
+    requireSassRecipe();
+    // The mismatch branch of the replay-admission predicate, isolated: no
+    // shadow marker, no rifty trace (pre-shadow ordinary plan — the planner
+    // does not refuse first). The trigger entry satisfies the peer walk-up;
+    // the entry at the EFFECTIVE path (baked redirect → sass) pins 1.100.1,
+    // NOT the attested 1.100.0 — request-shape admission must re-run and throw
+    // sass-embedded.version. An implementation admitting any present effective
+    // version cannot pass this pin.
+    const peerHost = await auxiliaryRegistryEntry(
+      'markerless-peer-host',
+      '1.0.0',
+      {},
+      { peerDependencies: { [SASS_TRIGGER]: '^1.70.0' } },
+    );
+    const occupied = await auxiliaryRegistryEntry(SASS_SOURCE, '1.100.1');
+    const fixture = { dependencies: { 'markerless-peer-host': '1.0.0' }, entries: [peerHost] };
+    const vfs = await project();
+    const cache = new LedgerTarballCache();
+    const seeded = await installFixture(
+      fixture,
+      vfs,
+      new SassFixtureRegistry(fixture.entries),
+      cache,
+      [],
+    );
+    const lock = structuredClone(seeded.lockfile);
+    lock.packages[`node_modules/${SASS_TRIGGER}`] = {
+      version: SASS_TRIGGER_VERSION,
+      resolved: `https://fixture.invalid/${SASS_TRIGGER}-${SASS_TRIGGER_VERSION}.tgz`,
+      integrity: 'sha512-bWFya2VybGVzcy1mb3JlaWduLXRyaWdnZXItZW50cnk',
+    };
+    lock.packages[`node_modules/${SASS_SOURCE}`] = {
+      version: '1.100.1',
+      resolved: occupied.manifest.dist.tarball,
+      integrity: occupied.manifest.dist.integrity,
+    };
+    const replayVfs = await project();
+    await writeLock(replayVfs, lock);
+    const replayCache = cache.clone();
+    replayCache.seed(occupied);
+    replayCache.clearLedger();
+    const registry = new DenyAllRegistry();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const outcome = await settled(installFixture(fixture, replayVfs, registry, replayCache, []));
+      expect(outcome.kind).toBe('rejected');
+      expect(errorRecord(outcome.kind === 'rejected' ? outcome.error : undefined)).toMatchObject({
+        name: 'NotImplementedError',
+        feature: SASS_VERSION_FEATURE,
+      });
       expect(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);
     } finally {
       warn.mockRestore();

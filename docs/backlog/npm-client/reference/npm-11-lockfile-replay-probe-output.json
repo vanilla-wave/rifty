@@ -2,7 +2,7 @@
   "node": "v24.16.0",
   "npm": "11.17.0",
   "exit": 0,
-  "stdout": "\nup to date in 277ms\n",
+  "stdout": "\nup to date in 203ms\n",
   "stderr": "",
   "lockfileVersion": 3,
   "optionalDependencies": {
