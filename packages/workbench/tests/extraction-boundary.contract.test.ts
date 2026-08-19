@@ -325,7 +325,10 @@ describe('@riftydev/workbench extraction boundary', () => {
     // riding the delivery — owner-protocol-inspect.ts + owner-protocol-pty.ts
     // (owner-protocol.ts was pushed past 800) and
     // workbench-browser-owner-spawn.ts (browser owner sat at its exact pin).
-    expect(packageProductionFiles).toHaveLength(139);
+    // 139 → 140 (2026-08-19, #255 silence deadline): same ratchet, same
+    // reason — open-workbench.ts sat at its exact pin, so the one options
+    // validation authority moved to internal/workbench-options.ts.
+    expect(packageProductionFiles).toHaveLength(140);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
