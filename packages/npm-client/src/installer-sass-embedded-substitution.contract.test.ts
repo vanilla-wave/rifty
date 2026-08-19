@@ -1263,6 +1263,66 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
     }
   });
 
+  it('never replays a NON-attested effective acquisition version behind a recorded peer range', async () => {
+    requireSassRecipe();
+    // Discriminator for the replay-admission exception: the recorded entry at
+    // the EFFECTIVE path (baked redirect sass-embedded → sass@1.100.0) is the
+    // fact that admits replay. A lock whose effective entry pins any OTHER
+    // version (here pure sass@1.100.1) must stay a loud refusal. The refusal
+    // authority is layered — the shadow-substitution TRACE gate refuses this
+    // marker-without-attestation lock first (pinned below), a consistent-but-
+    // drifted trace is refused by the injection suite above (EBROKENLOCK
+    // shadow-trace-drift), and a mismatched `replayedEntryVersion` that ever
+    // reached admission re-runs the request-shape gate. Nothing admits a
+    // non-attested effective version.
+    const peerHost = await auxiliaryRegistryEntry(
+      'effective-peer-host',
+      '1.0.0',
+      {},
+      { peerDependencies: { [SASS_TRIGGER]: '^1.70.0' } },
+    );
+    const occupied = await auxiliaryRegistryEntry(SASS_SOURCE, '1.100.1');
+    const fixture = { dependencies: { 'effective-peer-host': '1.0.0' }, entries: [peerHost] };
+    const vfs = await project();
+    const cache = new LedgerTarballCache();
+    const seedResult = await installFixture(
+      fixture,
+      vfs,
+      new SassFixtureRegistry(fixture.entries),
+      cache,
+      [],
+    );
+    const lock = structuredClone(seedResult.lockfile);
+    lock.packages[`node_modules/${SASS_TRIGGER}`] = {
+      version: SASS_TRIGGER_VERSION,
+      riftyShadowRecipe: SASS_RECIPE_ID,
+    };
+    lock.packages[`node_modules/${SASS_SOURCE}`] = {
+      version: '1.100.1',
+      resolved: occupied.manifest.dist.tarball,
+      integrity: occupied.manifest.dist.integrity,
+    };
+    const replayVfs = await project();
+    await writeLock(replayVfs, lock);
+    const replayCache = cache.clone();
+    replayCache.seed(occupied);
+    replayCache.clearLedger();
+    const registry = new DenyAllRegistry();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const outcome = await settled(installFixture(fixture, replayVfs, registry, replayCache, []));
+      expect(outcome.kind).toBe('rejected');
+      expect(errorRecord(outcome.kind === 'rejected' ? outcome.error : undefined)).toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'npm-client.lockfile.shadowSubstitutionTrace',
+      });
+      expect(registry.reads).toEqual([]);
+      expect(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('keeps a REQUIRED trigger-range edge with no entry a loud NotImplementedError, not a lock repair', async () => {
     requireSassRecipe();
     // Regression pin, GREEN before and after: request-shape admission still
