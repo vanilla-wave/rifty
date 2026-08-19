@@ -211,8 +211,7 @@ try {
     },
     peerDependencies: peerSource.peerDependencies,
     rangePeer: {
-      recordedRange:
-        lockfile.packages['node_modules/range-peer-source'].peerDependencies,
+      recordedRange: lockfile.packages['node_modules/range-peer-source'].peerDependencies,
       pinnedVersion: lockfile.packages['node_modules/range-peer-target'].version,
       ciExit,
       ciStderr,

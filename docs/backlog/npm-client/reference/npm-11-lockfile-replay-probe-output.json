@@ -10,12 +10,8 @@
     "wasm-binding": "1.0.0"
   },
   "optionalCpu": {
-    "wasm": [
-      "wasm32"
-    ],
-    "native": [
-      "x64"
-    ]
+    "wasm": ["wasm32"],
+    "native": ["x64"]
   },
   "peerDependencies": {
     "peer-target": "1.0.0"
