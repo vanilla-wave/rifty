@@ -85,6 +85,7 @@ import {
   warnOptional,
 } from './installer-lockfile-replay.ts';
 import {
+  assertDirectShadowRecipeAdmissions,
   builtinRecipeForRequest,
   registryRecipeForResolution,
 } from './internal/shadow/admission.ts';
@@ -1668,20 +1669,6 @@ function assertRegistryShadowProjection(
   );
 }
 
-function assertDirectShadowRecipeAdmissions(
-  dependencies: Readonly<Record<string, string>>,
-  optionalDependencies: Readonly<Record<string, string>>,
-  rootName: string,
-  overrides: OverrideMap | undefined,
-): void {
-  for (const [name, range] of [
-    ...Object.entries(dependencies),
-    ...Object.entries(optionalDependencies),
-  ]) {
-    builtinRecipeForRequest(name, range, rootName, overrides);
-  }
-}
-
 function syntheticResolvedIdentity(recipe: BuiltinShadowSubstitutionRecipe): string {
   return `rifty:shadow-substitution/${recipe.id}@${recipe.digest}`;
 }
@@ -2521,8 +2508,6 @@ async function pinToPackage(
     resolved: pin.resolved,
     installPath,
     ...(acquisition.kind === 'tarball' ? { integrity: acquisition.result.integrity } : {}),
-    // Every origin: recorded optional subtrees must stay justified by their
-    // parent's edges or the replay coverage gate refuses the written lock.
     ...(Object.keys(pin.optionalDependencies).length > 0
       ? { optionalDependencies: pin.optionalDependencies }
       : {}),

@@ -47,6 +47,22 @@ function attestedProductVersion(recipe: BuiltinShadowSubstitutionRecipe): string
     : recipe.materialization.version;
 }
 
+/** Root-request admission preflight: every direct dependency edge must clear
+ * request-shape admission before any resolution work. */
+export function assertDirectShadowRecipeAdmissions(
+  dependencies: Readonly<Record<string, string>>,
+  optionalDependencies: Readonly<Record<string, string>>,
+  rootName: string,
+  overrides: OverrideMap | undefined,
+): void {
+  for (const [name, range] of [
+    ...Object.entries(dependencies),
+    ...Object.entries(optionalDependencies),
+  ]) {
+    builtinRecipeForRequest(name, range, rootName, overrides);
+  }
+}
+
 /** Recipe applies to a concrete registry resolution only when its exact
  * acquisition matches the resolved (name, version). */
 export function registryRecipeForResolution(
