@@ -1146,11 +1146,9 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
         [],
       );
       expect(result.packages.map(({ name }) => name)).toEqual(['opt-host']);
-      // The npm-visible skip observable: a warn naming edge and parent.
+      // The npm-visible skip observable, pinned verbatim including the reason.
       expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
-        expect.stringContaining(
-          `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed`,
-        ),
+        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (shadow recipe does not admit ^1.70.0)`,
       );
       // Writer records the declared edge; the never-pinned target has no entry.
       expect(result.lockfile.packages['node_modules/opt-host']?.optionalDependencies).toEqual({
@@ -1196,12 +1194,22 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       const replay = await installFixture(fixture, replayVfs, registry, replayCache, []);
       expect(replay.packages.map(({ name }) => name)).toEqual(['opt-host']);
       expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
-        expect.stringContaining(
-          `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed`,
-        ),
+        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (shadow recipe does not admit ^1.70.0)`,
       );
       expect(registry.reads).toEqual([]);
       expect(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);
+      // Post-replay lock shape: the recorded optional edge survives the
+      // rewrite and the never-pinned target still has no entry.
+      const rewritten = JSON.parse(
+        new TextDecoder().decode(await replayVfs.readFile(`${ROOT}/package-lock.json`)),
+      ) as Lockfile;
+      expect(rewritten.packages['node_modules/opt-host']?.optionalDependencies).toEqual({
+        [SASS_TRIGGER]: '^1.70.0',
+      });
+      expect(rewritten.packages[`node_modules/${SASS_TRIGGER}`]).toBeUndefined();
+      expect(replay.lockfile.packages['node_modules/opt-host']?.optionalDependencies).toEqual({
+        [SASS_TRIGGER]: '^1.70.0',
+      });
     } finally {
       warn.mockRestore();
     }
