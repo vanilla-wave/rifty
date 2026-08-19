@@ -541,212 +541,223 @@ describe('browser Workbench owner transport', () => {
     }
   });
 
-  // #255 case 4c — sibling sweep over the timer owner. `pendingTimers` holds
-  // every `PendingOperation` variant; one progress frame must re-arm ALL of
-  // them, so a queued sibling stays pending past N instead of dying while the
-  // flush it shares is visibly alive. Generic owner: `open` + `delete`.
-  it('silence deadline: progress re-arms every queued sibling operation (open + delete)', async () => {
-    vi.useFakeTimers();
-    try {
-      const worker = new FakeOwnerWorker();
-      const raw = startBrowserWorkspaceOwner(
-        { ...input, deployment: { ...input.deployment, ownerOperationSilenceTimeoutMs: 5_000 } },
-        dependencies(worker),
-      );
-      void raw.closed.catch(() => {});
-      worker.emit('message', {
-        type: 'workbench:owner-ready',
-        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
-      });
-      await raw.ready;
+  // #255 case 4c — sibling sweep over the timer owner with a SINGLE re-arming
+  // frame. `pendingTimers` holds every `PendingOperation` variant and one frame
+  // must re-arm ALL of them. A stream of frames cannot prove that: partial or
+  // round-robin re-arming keeps everything alive while the stream runs. One
+  // frame just under expiry + a bounded pending assertion PAST the original
+  // deadline + expiry exactly one budget after that frame can — a timer that
+  // was not re-armed dies at the original deadline and fails the middle step.
+  const sweepBudgetMs = 5_000;
 
-      const openPromise = raw.openProject(
-        inspectProjectDefinition(
-          projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
-        ),
-      );
-      const killSignal = () => worker.killedWith;
-      const opening = watch(openPromise, killSignal);
-      void openPromise.catch(() => {});
-      const deletePromise = raw.deleteProject('sibling-delete');
-      const deleting = watch(deletePromise, killSignal);
-      void deletePromise.catch(() => {});
+  interface SweepPending {
+    readonly kind: string;
+    readonly settlement: () => Settlement;
+  }
 
-      for (let persisted = 1; persisted <= 10; persisted += 1) {
-        await vi.advanceTimersByTimeAsync(2_000);
-        worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
+  interface SweepSetup {
+    readonly worker: FakeOwnerWorker;
+    readonly pending: readonly SweepPending[];
+  }
+
+  const readyStorage = {
+    type: 'workbench:owner-ready',
+    storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+  } as const;
+
+  const sweepScenarios: readonly {
+    readonly label: string;
+    setup(): Promise<SweepSetup>;
+  }[] = [
+    {
+      label: 'open + delete',
+      async setup(): Promise<SweepSetup> {
+        const worker = new FakeOwnerWorker();
+        const raw = startBrowserWorkspaceOwner(
+          {
+            ...input,
+            deployment: { ...input.deployment, ownerOperationSilenceTimeoutMs: sweepBudgetMs },
+          },
+          dependencies(worker),
+        );
+        void raw.closed.catch(() => {});
+        worker.emit('message', readyStorage);
+        await raw.ready;
+        const probe = () => worker.killedWith;
+        const openPromise = raw.openProject(
+          inspectProjectDefinition(
+            projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+          ),
+        );
+        void openPromise.catch(() => {});
+        const deletePromise = raw.deleteProject('sibling-delete');
+        void deletePromise.catch(() => {});
+        return {
+          worker,
+          pending: [
+            { kind: 'open', settlement: watch(openPromise, probe) },
+            { kind: 'delete', settlement: watch(deletePromise, probe) },
+          ],
+        };
+      },
+    },
+    {
+      label: 'playground-open + playground-catalog',
+      async setup(): Promise<SweepSetup> {
+        const worker = new FakeOwnerWorker();
+        const raw = startBrowserWorkspaceOwner(
+          {
+            ...companionInput,
+            deployment: {
+              ...companionInput.deployment,
+              ownerOperationSilenceTimeoutMs: sweepBudgetMs,
+            },
+          },
+          dependencies(worker),
+        );
+        void raw.closed.catch(() => {});
+        const companion = raw.playground;
+        if (companion === undefined) throw new Error('missing Playground companion handle');
+        worker.emit('message', readyStorage);
+        worker.emit('message', {
+          type: 'workbench:playground-ready',
+          catalog: {
+            active: { kind: 'scratch' },
+            scratch: { starterId: 'vite', dirty: false, editedAt: '2026-08-19T12:00:00.000Z' },
+            projects: [],
+          },
+        });
+        await raw.ready;
+        const probe = () => worker.killedWith;
+        const definition = definePlaygroundProject(
+          {
+            kind: 'vite',
+            id: 'scratch',
+            starterId: 'vite',
+            templateId: 'vite',
+            files: { '/index.html': '<main>Companion</main>' },
+            firstMaterialization: { kind: 'install' },
+            port: 4173,
+          },
+          playgroundUrlContext,
+        );
+        const openPromise = companion.openProject(definition);
+        void openPromise.catch(() => {});
+        const renamePromise = companion.catalog.rename('project-a', 'Renamed');
+        void renamePromise.catch(() => {});
+        return {
+          worker,
+          pending: [
+            { kind: 'playground-open', settlement: watch(openPromise, probe) },
+            { kind: 'playground-catalog', settlement: watch(renamePromise, probe) },
+          ],
+        };
+      },
+    },
+    {
+      label: 'close',
+      async setup(): Promise<SweepSetup> {
+        const worker = new FakeOwnerWorker();
+        const raw = startBrowserWorkspaceOwner(
+          {
+            ...input,
+            deployment: { ...input.deployment, ownerOperationSilenceTimeoutMs: sweepBudgetMs },
+          },
+          dependencies(worker),
+        );
+        void raw.closed.catch(() => {});
+        worker.emit('message', readyStorage);
+        await raw.ready;
+        const opening = raw.openProject(
+          inspectProjectDefinition(
+            projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+          ),
+        );
+        const openRequest = sentOf(worker, 'workbench:open-project')[0];
+        if (openRequest === undefined) throw new Error('missing open request');
+        await acceptOpenedProject(worker, openRequest, 'owner-token-a', '/owner-born/project-a');
+        const project = await opening;
+        const openPty = sentOf(worker, 'workbench:project-pty').find(
+          (message) => message.frame.type === 'pty:open',
+        );
+        if (openPty?.frame.type !== 'pty:open') throw new Error('missing PTY open');
+        worker.emit('message', {
+          type: 'workbench:project-pty',
+          projectToken: 'owner-token-a',
+          frame: { type: 'pty:ready', sid: openPty.frame.sid },
+        });
+
+        const closePromise = project.close();
+        void closePromise.catch(() => {});
+        const closing = watch(closePromise, () => worker.killedWith);
+        await settleMicrotasks();
+        const closePty = sentOf(worker, 'workbench:project-pty').find(
+          (message) => message.frame.type === 'pty:close',
+        );
+        if (closePty?.frame.type !== 'pty:close') throw new Error('missing PTY close');
+        worker.emit('message', {
+          type: 'workbench:project-pty',
+          projectToken: 'owner-token-a',
+          frame: {
+            type: 'pty:close-ack',
+            sid: closePty.frame.sid,
+            opId: closePty.frame.opId,
+            ok: true,
+          },
+        });
+        await settleMicrotasks();
+        expect(sentOf(worker, 'workbench:close-project')).toHaveLength(1);
+        return { worker, pending: [{ kind: 'close', settlement: closing }] };
+      },
+    },
+  ];
+
+  it.each(sweepScenarios)(
+    'silence deadline: one progress frame re-arms every pending $label operation',
+    async ({ setup }) => {
+      vi.useFakeTimers();
+      try {
+        const { worker, pending } = await setup();
+        const allPending = pending.map(() => false);
+        const allSettled = pending.map(() => true);
+        const settledFlags = () => pending.map((entry) => entry.settlement().settled);
+
+        // Just under the original deadline: nothing has fired.
+        await vi.advanceTimersByTimeAsync(sweepBudgetMs - 100);
+        await settleMicrotasks();
+        expect(settledFlags()).toEqual(allPending);
+
+        // The ONE re-arm of this timeline.
+        worker.emit('message', { type: 'workbench:durability-progress', persisted: 1, total: 4 });
+
+        // Past the ORIGINAL deadline: any timer this frame failed to re-arm
+        // (partial or round-robin reset) dies exactly here.
+        await vi.advanceTimersByTimeAsync(200);
+        await settleMicrotasks();
+        expect(settledFlags()).toEqual(allPending);
+        expect(worker.killedWith).toBeNull();
+
+        // Expiry is one configured budget after the frame, to the millisecond.
+        await vi.advanceTimersByTimeAsync(sweepBudgetMs - 200 - 1);
+        await settleMicrotasks();
+        expect(settledFlags()).toEqual(allPending);
+        await vi.advanceTimersByTimeAsync(1);
+        await settleMicrotasks();
+        expect(settledFlags()).toEqual(allSettled);
+
+        for (const entry of pending) {
+          expect(failureMessage(entry.settlement())).toMatch(
+            /timed out after 5000ms without owner durability progress/,
+          );
+          // observable-order, sampled at delivery, per variant.
+          expect(entry.settlement().probed).toBe('SIGTERM');
+        }
+        expect(worker.killedWith).toBe('SIGTERM');
+      } finally {
+        vi.useRealTimers();
       }
-      expect([opening().settled, deleting().settled, worker.killedWith]).toEqual([
-        false,
-        false,
-        null,
-      ]);
-
-      await vi.advanceTimersByTimeAsync(5_000);
-      await settleMicrotasks();
-      expect([opening().settled, deleting().settled]).toEqual([true, true]);
-      expect(failureMessage(opening())).toMatch(
-        /timed out after 5000ms without owner durability progress/,
-      );
-      expect(deleting().error).toBe(opening().error);
-      // observable-order, sampled at delivery: kill decided before either
-      // pending operation observed the failure.
-      expect([opening().probed, deleting().probed]).toEqual(['SIGTERM', 'SIGTERM']);
-      expect(worker.killedWith).toBe('SIGTERM');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  // #255 case 4c, continued — the companion variants of the same timer owner:
-  // `playground-open` + `playground-catalog`.
-  it('silence deadline: progress re-arms queued companion operations (playground-open + catalog)', async () => {
-    vi.useFakeTimers();
-    try {
-      const worker = new FakeOwnerWorker();
-      const raw = startBrowserWorkspaceOwner(
-        {
-          ...companionInput,
-          deployment: { ...companionInput.deployment, ownerOperationSilenceTimeoutMs: 5_000 },
-        },
-        dependencies(worker),
-      );
-      void raw.closed.catch(() => {});
-      const companion = raw.playground;
-      if (companion === undefined) throw new Error('missing Playground companion handle');
-      worker.emit('message', {
-        type: 'workbench:owner-ready',
-        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
-      });
-      worker.emit('message', {
-        type: 'workbench:playground-ready',
-        catalog: {
-          active: { kind: 'scratch' },
-          scratch: { starterId: 'vite', dirty: false, editedAt: '2026-08-19T12:00:00.000Z' },
-          projects: [],
-        },
-      });
-      await raw.ready;
-
-      const definition = definePlaygroundProject(
-        {
-          kind: 'vite',
-          id: 'scratch',
-          starterId: 'vite',
-          templateId: 'vite',
-          files: { '/index.html': '<main>Companion</main>' },
-          firstMaterialization: { kind: 'install' },
-          port: 4173,
-        },
-        playgroundUrlContext,
-      );
-      const openPromise = companion.openProject(definition);
-      const killSignal = () => worker.killedWith;
-      const opening = watch(openPromise, killSignal);
-      void openPromise.catch(() => {});
-      const renamePromise = companion.catalog.rename('project-a', 'Renamed');
-      const renaming = watch(renamePromise, killSignal);
-      void renamePromise.catch(() => {});
-
-      for (let persisted = 1; persisted <= 10; persisted += 1) {
-        await vi.advanceTimersByTimeAsync(2_000);
-        worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
-      }
-      expect([opening().settled, renaming().settled, worker.killedWith]).toEqual([
-        false,
-        false,
-        null,
-      ]);
-
-      await vi.advanceTimersByTimeAsync(5_000);
-      await settleMicrotasks();
-      expect([opening().settled, renaming().settled]).toEqual([true, true]);
-      expect(failureMessage(opening())).toMatch(
-        /timed out after 5000ms without owner durability progress/,
-      );
-      expect(renaming().error).toBe(opening().error);
-      expect([opening().probed, renaming().probed]).toEqual(['SIGTERM', 'SIGTERM']);
-      expect(worker.killedWith).toBe('SIGTERM');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  // #255 case 4c, continued — the last `PendingOperation` variant: `close`.
-  // A close request racing a live flush must ride the same re-armed deadline.
-  it('silence deadline: progress re-arms a pending close operation', async () => {
-    vi.useFakeTimers();
-    try {
-      const worker = new FakeOwnerWorker();
-      const raw = startBrowserWorkspaceOwner(
-        { ...input, deployment: { ...input.deployment, ownerOperationSilenceTimeoutMs: 5_000 } },
-        dependencies(worker),
-      );
-      void raw.closed.catch(() => {});
-      worker.emit('message', {
-        type: 'workbench:owner-ready',
-        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
-      });
-      await raw.ready;
-
-      const opening = raw.openProject(
-        inspectProjectDefinition(
-          projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
-        ),
-      );
-      const openRequest = sentOf(worker, 'workbench:open-project')[0];
-      if (openRequest === undefined) throw new Error('missing open request');
-      await acceptOpenedProject(worker, openRequest, 'owner-token-a', '/owner-born/project-a');
-      const project = await opening;
-      const openPty = sentOf(worker, 'workbench:project-pty').find(
-        (message) => message.frame.type === 'pty:open',
-      );
-      if (openPty?.frame.type !== 'pty:open') throw new Error('missing PTY open');
-      worker.emit('message', {
-        type: 'workbench:project-pty',
-        projectToken: 'owner-token-a',
-        frame: { type: 'pty:ready', sid: openPty.frame.sid },
-      });
-
-      const closePromise = project.close();
-      const closing = watch(closePromise, () => worker.killedWith);
-      void closePromise.catch(() => {});
-      await settleMicrotasks();
-      const closePty = sentOf(worker, 'workbench:project-pty').find(
-        (message) => message.frame.type === 'pty:close',
-      );
-      if (closePty?.frame.type !== 'pty:close') throw new Error('missing PTY close');
-      worker.emit('message', {
-        type: 'workbench:project-pty',
-        projectToken: 'owner-token-a',
-        frame: {
-          type: 'pty:close-ack',
-          sid: closePty.frame.sid,
-          opId: closePty.frame.opId,
-          ok: true,
-        },
-      });
-      await settleMicrotasks();
-      expect(sentOf(worker, 'workbench:close-project')).toHaveLength(1);
-
-      for (let persisted = 1; persisted <= 10; persisted += 1) {
-        await vi.advanceTimersByTimeAsync(2_000);
-        worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
-      }
-      expect([closing().settled, worker.killedWith]).toEqual([false, null]);
-
-      await vi.advanceTimersByTimeAsync(5_000);
-      await settleMicrotasks();
-      expect(closing().settled).toBe(true);
-      expect(failureMessage(closing())).toMatch(
-        /timed out after 5000ms without owner durability progress/,
-      );
-      expect(closing().probed).toBe('SIGTERM');
-      expect(worker.killedWith).toBe('SIGTERM');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+    },
+  );
 
   // #255 case 6 — fault class: observable-order. Pinned unchanged: every
   // in-flight operation rejects with the one protocol failure (no hang), and

@@ -106,10 +106,13 @@ failing-first on the browser-unit harness:
 4. Knob: budget 5 s honored; default 60 s when unset.
 4b. Progress under a CONFIGURED 5 s budget re-arms 5 s, never the shipped
    60 000 ms; the deadline fires exactly one budget after the LAST frame.
-4c. Sibling sweep over the timer owner: one progress frame re-arms EVERY
-   `PendingOperation` variant (`open`, `delete`, `playground-open`,
-   `playground-catalog`, `close`) — a queued sibling stays pending past the
-   budget while the shared flush is visibly alive.
+4c. Sibling sweep over the timer owner: ONE progress frame, delivered just
+   under expiry, re-arms EVERY `PendingOperation` variant (`open`, `delete`,
+   `playground-open`, `playground-catalog`, `close`). Proof shape is
+   discriminating, not a stream: pending is asserted PAST the original deadline
+   (a timer the frame missed dies exactly there, so partial or round-robin
+   re-arm fails), and expiry lands one configured budget after that frame to
+   the millisecond.
 5. Recovery: after case 2, fresh `openWorkbench` in the same realm reopens the
    project; durable tree readable; no residual Web Lock / claim blocks it.
    Silence is injected deterministically, never raced: one admitted owner
