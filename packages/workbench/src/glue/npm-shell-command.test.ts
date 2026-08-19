@@ -1126,11 +1126,15 @@ describe('npm-shell-command — error mapping', () => {
     expect(stderr).toContain('sha512-B');
   });
 
-  it('reports EBROKENLOCK with a recovery hint', async () => {
+  it('reports EBROKENLOCK with a recovery hint and the installer message (packageName present)', async () => {
     const { shell } = await makeShellWithThrow('EBROKENLOCK', { packageName: 'ms' });
     const { exitCode, rec } = await runShell(shell, 'npm install');
     expect(exitCode).toBe(1);
-    expect(rec.stderr.join('')).toContain('lockfile is broken');
+    const stderr = rec.stderr.join('');
+    expect(stderr).toContain('lockfile is broken');
+    expect(stderr).toContain('delete package-lock.json and retry');
+    // The installer message survives the mapping even when packageName is set.
+    expect(stderr).toContain('boom');
   });
 
   it('[fault: provenance-lie] surfaces the installer EBROKENLOCK reason, never a generic line', async () => {
@@ -1144,6 +1148,9 @@ describe('npm-shell-command — error mapping', () => {
     const stderr = rec.stderr.join('');
     expect(stderr).toContain('lockfile is broken');
     expect(stderr).toContain('unreached-entries (node_modules/wasm, node_modules/helper)');
+    expect(stderr).toContain('delete package-lock.json and retry');
+    // The generic placeholder must be gone, not merely accompanied by the reason.
+    expect(stderr).not.toContain('unknown package');
   });
 
   it('falls through to the raw message for unmapped error codes', async () => {
