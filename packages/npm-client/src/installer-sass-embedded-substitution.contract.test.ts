@@ -1058,6 +1058,64 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
     },
   );
 
+  it('[fault: frozen-assumption] replays a lock-pinned peer RANGE edge onto the recorded exact facade offline', async () => {
+    requireSassRecipe();
+    // npm records a host's peer range verbatim on its lock entry, and live
+    // resolve never resolves peer edges — so the recorded pin is the only
+    // admission fact replay may consult. A replay that re-runs request-shape
+    // admission with the peer range freezes the false assumption that every
+    // resolved (name, range) is a user request.
+    const official = await loadOfficialSassEntries();
+    const peerHost = await auxiliaryRegistryEntry(
+      'peer-host',
+      '1.0.0',
+      {},
+      { peerDependencies: { [SASS_TRIGGER]: '^1.70.0' } },
+    );
+    const fixture = {
+      dependencies: { 'peer-host': '1.0.0', [SASS_TRIGGER]: SASS_TRIGGER_VERSION },
+      entries: [...official, peerHost],
+    };
+    const vfs = await project();
+    const cache = new LedgerTarballCache();
+    const reports: string[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await installFixture(
+        fixture,
+        vfs,
+        new SassFixtureRegistry(fixture.entries),
+        cache,
+        reports,
+      );
+      expect(result.lockfile.packages['node_modules/peer-host']?.peerDependencies).toEqual({
+        [SASS_TRIGGER]: '^1.70.0',
+      });
+      const freshTree = await snapshotTree(vfs, `${ROOT}/node_modules`);
+
+      const replayVfs = await project();
+      const lockBefore = await writeLock(replayVfs, result.lockfile);
+      const replayCache = cache.clone();
+      replayCache.clearLedger();
+      const replayReports: string[] = [];
+      const replay = await installFixture(
+        fixture,
+        replayVfs,
+        new DenyAllRegistry(),
+        replayCache,
+        replayReports,
+      );
+
+      expect.soft(await replayVfs.readFile(`${ROOT}/package-lock.json`)).toEqual(lockBefore);
+      expect.soft(replay.lockfile).toEqual(result.lockfile);
+      expect
+        .soft(await snapshotTree(replayVfs, `${ROOT}/node_modules`), 'complete replay VFS tree')
+        .toEqual(freshTree);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('materializes the official Sass closure through general Eddy with exact persisted tree/lock/provenance', async () => {
     requireSassRecipe();
     const seeded = await seed('root');
