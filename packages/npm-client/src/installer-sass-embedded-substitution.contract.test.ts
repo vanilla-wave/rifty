@@ -1119,13 +1119,14 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
     }
   });
 
-  it('[fault: observable-order] warn-skips an OPTIONAL trigger-range edge on live install AND lock replay', async () => {
+  it('[fault: observable-order] live install warn-skips an OPTIONAL trigger-range edge instead of failing at prefetch', async () => {
     requireSassRecipe();
-    // An optional edge naming the trigger with a non-admitted range must keep
-    // npm parity — warn-and-skip — on BOTH paths. Today the walk's PREFETCH
-    // (advisory warm-up) runs request-shape admission synchronously OUTSIDE
-    // the optional error boundary, so the install fails loudly before the
-    // boundary can catch what resolve would have thrown in the right slot.
+    // npm parity: an optional edge naming the trigger with a non-admitted
+    // range warn-and-skips. Today the walk's registry-source PREFETCH
+    // (advisory warm-up, installer.ts registry `prefetch`) runs request-shape
+    // admission synchronously OUTSIDE the optional error boundary, so live
+    // install fails loudly before the boundary can catch what resolve would
+    // have thrown in the right slot.
     const optHost = await auxiliaryRegistryEntry(
       'opt-host',
       '1.0.0',
@@ -1135,7 +1136,6 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
     const fixture = { dependencies: { 'opt-host': '1.0.0' }, entries: [optHost] };
     const vfs = await project();
     const cache = new LedgerTarballCache();
-    const reports: string[] = [];
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const result = await installFixture(
@@ -1143,18 +1143,64 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
         vfs,
         new SassFixtureRegistry(fixture.entries),
         cache,
-        reports,
+        [],
       );
       expect(result.packages.map(({ name }) => name)).toEqual(['opt-host']);
+      // The npm-visible skip observable: a warn naming edge and parent.
+      expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+        expect.stringContaining(
+          `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed`,
+        ),
+      );
+      // Writer records the declared edge; the never-pinned target has no entry.
+      expect(result.lockfile.packages['node_modules/opt-host']?.optionalDependencies).toEqual({
+        [SASS_TRIGGER]: '^1.70.0',
+      });
+      expect(result.lockfile.packages[`node_modules/${SASS_TRIGGER}`]).toBeUndefined();
+      expect(await vfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 
-      const replayVfs = await project();
-      const lockBefore = await writeLock(replayVfs, result.lockfile);
-      const replayCache = cache.clone();
-      replayCache.clearLedger();
-      const replay = await installFixture(fixture, replayVfs, new DenyAllRegistry(), replayCache, [
-      ]);
+  it('[fault: observable-order] lock replay warn-skips a recorded OPTIONAL trigger-range edge with no entry', async () => {
+    requireSassRecipe();
+    // Same npm-recorded shape, replay side: the incremental source's PREFETCH
+    // (`useRegistry` → `lockfileReuseDecision`) runs the same request-shape
+    // admission synchronously outside the optional boundary. The lock is
+    // crafted directly (npm keeps a failed optional's edge and drops its
+    // entry), so this RED does not depend on the live-path fix.
+    const optHost = await auxiliaryRegistryEntry('opt-host', '1.0.0');
+    const fixture = { dependencies: { 'opt-host': '1.0.0' }, entries: [optHost] };
+    const vfs = await project();
+    const cache = new LedgerTarballCache();
+    const seedResult = await installFixture(
+      fixture,
+      vfs,
+      new SassFixtureRegistry(fixture.entries),
+      cache,
+      [],
+    );
+    const lock = structuredClone(seedResult.lockfile);
+    const hostEntry = lock.packages['node_modules/opt-host'];
+    if (!hostEntry) throw new Error('opt-host lock entry missing');
+    hostEntry.optionalDependencies = { [SASS_TRIGGER]: '^1.70.0' };
+
+    const replayVfs = await project();
+    await writeLock(replayVfs, lock);
+    const replayCache = cache.clone();
+    replayCache.clearLedger();
+    const registry = new DenyAllRegistry();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const replay = await installFixture(fixture, replayVfs, registry, replayCache, []);
       expect(replay.packages.map(({ name }) => name)).toEqual(['opt-host']);
-      expect(await replayVfs.readFile(`${ROOT}/package-lock.json`)).toEqual(lockBefore);
+      expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
+        expect.stringContaining(
+          `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed`,
+        ),
+      );
+      expect(registry.reads).toEqual([]);
       expect(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);
     } finally {
       warn.mockRestore();
