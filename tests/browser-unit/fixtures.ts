@@ -12,7 +12,15 @@ export interface BootOwnerOptions {
   readonly starter?: string;
   readonly hiddenEmptyBoot?: boolean;
   readonly persistence?: 'required' | 'preferred' | 'ephemeral';
+  /** #255: host budget of owner durability-progress SILENCE; unset = shipped 60 s. */
+  readonly ownerOperationSilenceTimeoutMs?: number;
   readonly plan?: Readonly<Record<string, unknown>>;
+}
+
+export interface BootAttempt {
+  readonly ok: boolean;
+  /** Failure message plus every nested aggregate/cause message, outermost first. */
+  readonly messages: readonly string[];
 }
 
 interface OwnerExecResult {
@@ -39,6 +47,36 @@ export async function bootOwner(page: Page, options: BootOwnerOptions): Promise<
     async ({ fixtureUrl, input }) => {
       const fixture = await import(/* @vite-ignore */ fixtureUrl);
       await fixture.openSealedWorkbenchFixture(input);
+    },
+    { fixtureUrl: sealedWorkbenchFixtureUrl, input: options },
+  );
+}
+
+/** Boots the sealed fixture reporting failure instead of throwing (fault lanes). */
+export function attemptBootOwner(page: Page, options: BootOwnerOptions): Promise<BootAttempt> {
+  return page.evaluate(
+    async ({ fixtureUrl, input }) => {
+      const flatten = (error: unknown, out: string[], seen: WeakSet<object>): string[] => {
+        if (!(error instanceof Error)) {
+          out.push(String(error));
+          return out;
+        }
+        if (seen.has(error)) return out;
+        seen.add(error);
+        out.push(error.message);
+        if (error instanceof AggregateError) {
+          for (const nested of error.errors) flatten(nested, out, seen);
+        }
+        if (error.cause !== undefined) flatten(error.cause, out, seen);
+        return out;
+      };
+      const fixture = await import(/* @vite-ignore */ fixtureUrl);
+      try {
+        await fixture.openSealedWorkbenchFixture(input);
+        return { ok: true, messages: [] };
+      } catch (error) {
+        return { ok: false, messages: flatten(error, [], new WeakSet<object>()) };
+      }
     },
     { fixtureUrl: sealedWorkbenchFixtureUrl, input: options },
   );

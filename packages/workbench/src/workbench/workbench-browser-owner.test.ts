@@ -9,6 +9,7 @@ import {
   createWorkbenchOwnerController,
 } from '../workers/workbench-owner-controller.ts';
 import {
+  ClosedHandleError,
   DirtyProjectDocumentError,
   ProjectDefinitionMismatchError,
   ProjectFileOperationError,
@@ -244,6 +245,244 @@ describe('browser Workbench owner transport', () => {
       await vi.runAllTimersAsync();
 
       await expect(deleting).rejects.toThrow(/owner.*delete.*timed out/i);
+      expect(worker.killedWith).toBe('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #255 owner-operation-silence-deadline, case 1 — fault class: false-fallback.
+  // The deadline measures SILENCE of owner `workbench:durability-progress`
+  // frames (ADR-0359), never total duration: a slow-but-alive first
+  // materialization (98 MB snapshot, ~42 s of OPFS flush on fast hardware,
+  // minutes on slow) completes at ANY wall clock while progress keeps arriving.
+  it('silence deadline: arriving durability progress carries an operation past 3x the budget', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+      void raw.closed.catch(() => {});
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+
+      const opening = raw.openProject(
+        inspectProjectDefinition(
+          projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+        ),
+      );
+      void opening.catch(() => {});
+      const openRequest = sentOf(worker, 'workbench:open-project')[0];
+      if (openRequest === undefined) throw new Error('missing open request');
+
+      // 180 s — 3x the 60 s budget — of flush frames every 5 s.
+      for (let persisted = 1; persisted <= 36; persisted += 1) {
+        await vi.advanceTimersByTimeAsync(5_000);
+        worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 36 });
+      }
+      expect(worker.killedWith).toBeNull();
+
+      await acceptOpenedProject(worker, openRequest, 'owner-token-a', '/owner-born/project-a');
+      const project = await opening;
+      expect(project.files.snapshot().entries).toEqual([]);
+
+      raw.close();
+      worker.emit('exit', 0, null);
+      await raw.closed;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #255 case 2 — fault classes: unbounded-read, provenance-lie. Genuine
+  // progress silence stays fatal (fault-classes.md §Boundary failure models,
+  // MessagePort/Worker row: a local deadline never proves not-applied, so only
+  // peer death settles the admitted mutation), and the poisoned transport keeps
+  // naming the original timeout as the cause.
+  it('silence deadline: progress silence rejects the operation, kills the owner, and names the cause', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+      void raw.closed.catch(() => {});
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+
+      const opening = raw.openProject(
+        inspectProjectDefinition(
+          projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+        ),
+      );
+      void opening.catch(() => {});
+
+      // Flush advances for 30 s, then wedges: the budget runs from the LAST frame.
+      await vi.advanceTimersByTimeAsync(30_000);
+      worker.emit('message', { type: 'workbench:durability-progress', persisted: 5, total: 40 });
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(worker.killedWith).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+
+      const failure = await opening.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      expect((failure as Error).message).toMatch(
+        /Workbench owner open operation \S+ timed out after 60000ms without owner durability progress/,
+      );
+      expect(worker.killedWith).toBe('SIGTERM');
+
+      const later = await raw.deleteProject('after-fatality').then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(later).toBeInstanceOf(ClosedHandleError);
+      expect((later as Error).cause).toBe(failure);
+      await expect(raw.closed).rejects.toBe(failure);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #255 case 3 — fault class: unbounded-read. Only durability progress resets
+  // the deadline; any-traffic reset would let a chatty transport mask a wedged
+  // flush forever.
+  it('silence deadline: unrelated owner traffic never resets the deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(companionInput, dependencies(worker));
+      void raw.closed.catch(() => {});
+      const catalog = {
+        active: { kind: 'scratch' },
+        scratch: { starterId: 'vite', dirty: false, editedAt: '2026-08-19T12:00:00.000Z' },
+        projects: [],
+      };
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      worker.emit('message', { type: 'workbench:playground-ready', catalog });
+      await raw.ready;
+
+      const deleting = raw.deleteProject('wedged-delete');
+      void deleting.catch(() => {});
+
+      // Chatty but progress-mute: catalog updates every 10 s for a full budget.
+      for (let tick = 1; tick <= 6; tick += 1) {
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(worker.killedWith).toBeNull();
+        await vi.advanceTimersByTimeAsync(1);
+        if (tick === 6) break;
+        worker.emit('message', {
+          type: 'workbench:playground-catalog-updated',
+          catalog: { ...catalog, projects: [] },
+        });
+      }
+
+      await expect(deleting).rejects.toThrow(
+        /timed out after 60000ms without owner durability progress/,
+      );
+      expect(worker.killedWith).toBe('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #255 case 4 — the budget is host-configurable (issue #255: the shipped
+  // constant forced a pnpm patch on dist); unset keeps the shipped 60 s.
+  it('silence deadline: honors a host budget and defaults to 60s of silence', async () => {
+    vi.useFakeTimers();
+    try {
+      const tightWorker = new FakeOwnerWorker();
+      const tight = startBrowserWorkspaceOwner(
+        {
+          ...input,
+          deployment: { ...input.deployment, ownerOperationSilenceTimeoutMs: 5_000 },
+        },
+        dependencies(tightWorker),
+      );
+      void tight.closed.catch(() => {});
+      tightWorker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await tight.ready;
+      const tightDelete = tight.deleteProject('tight-budget');
+      void tightDelete.catch(() => {});
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(tightWorker.killedWith).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(tightDelete).rejects.toThrow(
+        /timed out after 5000ms without owner durability progress/,
+      );
+      expect(tightWorker.killedWith).toBe('SIGTERM');
+
+      const defaultWorker = new FakeOwnerWorker();
+      const shipped = startBrowserWorkspaceOwner(input, dependencies(defaultWorker));
+      void shipped.closed.catch(() => {});
+      defaultWorker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await shipped.ready;
+      const shippedDelete = shipped.deleteProject('shipped-budget');
+      void shippedDelete.catch(() => {});
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(defaultWorker.killedWith).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(shippedDelete).rejects.toThrow(
+        /timed out after 60000ms without owner durability progress/,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #255 case 6 — fault class: observable-order. Pinned unchanged: every
+  // in-flight operation rejects with the one protocol failure (no hang), and
+  // the rejections land with the kill decided, never before it.
+  it('silence deadline: every in-flight operation rejects with the one protocol failure', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(input, dependencies(worker));
+      void raw.closed.catch(() => {});
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+
+      const opening = raw.openProject(
+        inspectProjectDefinition(
+          projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+        ),
+      );
+      void opening.catch(() => {});
+      const deleting = raw.deleteProject('sibling-delete');
+      void deleting.catch(() => {});
+      expect(sentOf(worker, 'workbench:delete-project')).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      const [openFailure, deleteFailure] = await Promise.all([
+        opening.then(
+          () => null,
+          (error: unknown) => error,
+        ),
+        deleting.then(
+          () => null,
+          (error: unknown) => error,
+        ),
+      ]);
+      expect(openFailure).toBeInstanceOf(Error);
+      expect(deleteFailure).toBe(openFailure);
       expect(worker.killedWith).toBe('SIGTERM');
     } finally {
       vi.useRealTimers();
