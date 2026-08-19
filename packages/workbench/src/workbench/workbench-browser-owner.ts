@@ -94,7 +94,10 @@ import {
 } from './workbench-owner-port.ts';
 
 const PROJECT_VFS_COMMIT_TIMEOUT_MS = 60_000;
-const OWNER_OPERATION_TIMEOUT_MS = 60_000;
+/** ADR-0360: shipped budget of owner durability-progress SILENCE, not of total
+ *  operation duration. One authority for the default; hosts override it with
+ *  `deployment.ownerOperationSilenceTimeoutMs`. */
+const OWNER_OPERATION_SILENCE_TIMEOUT_MS = 60_000;
 
 interface OpenedProject {
   readonly projectToken: OwnerProjectToken;
@@ -202,6 +205,8 @@ export function startBrowserWorkspaceOwner(
       -16_384,
     );
   });
+  const silenceBudgetMs =
+    input.deployment.ownerOperationSilenceTimeoutMs ?? OWNER_OPERATION_SILENCE_TIMEOUT_MS;
   const playgroundUrlContext = input.playgroundUrlContext;
   const companionMode = playgroundUrlContext !== undefined;
   const readyState = deferred<void>();
@@ -304,6 +309,34 @@ export function startBrowserWorkspaceOwner(
     }
   };
 
+  const armSilenceDeadline = (opId: string, operation: PendingOperation): void => {
+    const timer = setTimeout(() => {
+      if (pending.get(opId) !== operation) return;
+      pending.delete(opId);
+      pendingTimers.delete(opId);
+      const error = new Error(
+        `Workbench owner ${operation.kind} operation ${opId} timed out after ${String(silenceBudgetMs)}ms without owner durability progress`,
+      );
+      operation.reject(error);
+      failProtocol(error);
+    }, silenceBudgetMs);
+    pendingTimers.set(opId, timer);
+  };
+
+  /**
+   * ADR-0360: a durability-progress frame proves the owner is alive and
+   * flushing, so it re-arms EVERY pending operation — they share one owner and
+   * one flush. Nothing else resets the deadline: an any-traffic reset would let
+   * a chatty transport mask a wedged flush forever (`unbounded-read`).
+   */
+  const rearmSilenceDeadlines = (): void => {
+    for (const [opId, operation] of pending) {
+      const timer = pendingTimers.get(opId);
+      if (timer !== undefined) clearTimeout(timer);
+      armSilenceDeadline(opId, operation);
+    }
+  };
+
   const request = <T>(
     operation: PendingOperation,
     message: PageToPhysicalOwnerMessage,
@@ -311,23 +344,14 @@ export function startBrowserWorkspaceOwner(
     const opId = 'opId' in message ? message.opId : null;
     if (opId === null) return Promise.reject(new TypeError('Owner operation requires opId'));
     pending.set(opId, operation);
-    const timer = setTimeout(() => {
-      if (pending.get(opId) !== operation) return;
-      pending.delete(opId);
-      pendingTimers.delete(opId);
-      const error = new Error(
-        `Workbench owner ${operation.kind} operation ${opId} timed out after ${String(OWNER_OPERATION_TIMEOUT_MS)}ms`,
-      );
-      operation.reject(error);
-      failProtocol(error);
-    }, OWNER_OPERATION_TIMEOUT_MS);
-    pendingTimers.set(opId, timer);
+    armSilenceDeadline(opId, operation);
     try {
       send(message);
     } catch (error) {
       pending.delete(opId);
+      const timer = pendingTimers.get(opId);
+      if (timer !== undefined) clearTimeout(timer);
       pendingTimers.delete(opId);
-      clearTimeout(timer);
       operation.reject(errorFrom(error));
     }
     return operation.promise as Promise<T>;
@@ -456,6 +480,8 @@ export function startBrowserWorkspaceOwner(
         case 'workbench:durability-progress':
           // Owner-level (ADR-0359 corrected 2026-08-16): the first-open drain
           // predates any project token; health listeners are owner-scoped.
+          // ADR-0360: arrival is the liveness proof the deadline measures.
+          rearmSilenceDeadlines();
           publishHealth(
             Object.freeze({
               kind: 'durability-progress',

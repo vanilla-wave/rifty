@@ -75,6 +75,9 @@ export interface WorkbenchOwnerStartInput {
       readonly sqlite: string;
     };
     readonly previewProbeTimeoutMs: number;
+    /** ADR-0360: host budget of owner durability-progress SILENCE per
+     *  operation; unset = the shipped default at the transport. */
+    readonly ownerOperationSilenceTimeoutMs?: number;
   };
   readonly packageAcquisition: {
     readonly registryUrl: string;
