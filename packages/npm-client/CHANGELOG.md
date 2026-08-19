@@ -99,6 +99,10 @@
 - Rifty-authored locks now retain every successfully materialized transitive
   optional as a replayable dependency edge; the strict unreached-entry gate no
   longer rejects the writer's own WASI/package tree on the next install.
+- Lock-pinned peers now reuse an already scheduled identical direct package
+  before reapplying shadow admission. Vite's broad Sass peer no longer rejects
+  the exact root-pinned Sass recipe during replay; direct unsupported requests
+  remain loud.
 
 - npm-authored lockfile replay now traverses entry `optionalDependencies` and
   lock-pinned `peerDependencies`, applies the shared CPU admission gate, and

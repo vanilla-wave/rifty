@@ -69,11 +69,13 @@ import {
 } from './installer-lockfile-reader.ts';
 import {
   type LockfilePathTranslation,
+  type LockfilePinCandidate,
   type LockfileReplayAccounting,
   assertLockfileReplayCoverage,
   assertNativeSupported,
   createLockfileReplayAccounting,
   expandReplaySkipClosure,
+  lockfilePinCandidate,
   lockfileRootMatchesRequest,
   lockfileStringArray,
   lockfileStringMap,
@@ -81,6 +83,7 @@ import {
   recordReplayReached,
   recordReplaySkippedError,
   recordReplaySkippedPin,
+  resolvedPinIdentity,
   translateRecordedInstallPath,
   warnOptional,
 } from './installer-lockfile-replay.ts';
@@ -450,7 +453,11 @@ interface ResolveContext {
 interface ResolutionSource {
   resolve(name: string, range: string | null, ctx: ResolveContext): Promise<ResolvedPin>;
   prefetch?(name: string, range: string | null, ctx: ResolveContext): void;
-  hasLockEntry?(name: string, ctx: ResolveContext): boolean;
+  lockPin?(
+    name: string,
+    range: string | null,
+    ctx: ResolveContext,
+  ): LockfilePinCandidate | undefined;
 }
 
 export async function install(opts: InstallOptions): Promise<InstallResult>;
@@ -2009,8 +2016,8 @@ function createIncrementalSource(
 
   return {
     source: {
-      hasLockEntry(name, ctx): boolean {
-        return locked.hasLockEntry?.(name, ctx) ?? false;
+      lockPin(name, range, ctx): LockfilePinCandidate | undefined {
+        return locked.lockPin?.(name, range, ctx);
       },
       prefetch(name, range, ctx): void {
         if (!useRegistry(name, range, ctx)) return;
@@ -2027,11 +2034,6 @@ function createIncrementalSource(
     },
     resolution: () => (metadataUsed ? 'metadata' : 'lockfile'),
   };
-}
-
-/** Exact package identity shared by direct reservation, placement, and fetch dedup. */
-function resolvedPinIdentity(pin: ResolvedPin): string {
-  return `${pin.name}\0${pin.version}\0${pin.resolved}\0${pin.integrity ?? ''}`;
 }
 
 type PinAcquisitionResult =
@@ -2259,16 +2261,8 @@ async function walkAndPin(
 
       const p = acquirePin(pin);
 
-      // Optional-subtree skip-on-failure (npm parity, regression fix): when THIS
-      // node IS the optional boundary (reached as a direct optional child), its
-      // fetch must be awaited BEFORE recursing, exactly like the old serial walk.
-      // If it rejects, the throw propagates to the parent's optional try/catch
-      // (warn-and-skip) before any child `visit` runs, so the WHOLE optional
-      // subtree — the dep and its transitive required children — is skipped
-      // (not pinned, not on disk). Recursing first (the required-dep fast path)
-      // would orphan those required grandchildren on a failed optional fetch,
-      // diverging from real npm. Required deps keep the deferred/concurrent
-      // fetch; only the boundary trades concurrency for correctness here.
+      // Await an optional boundary before recursion: failure skips its subtree
+      // and lets the parent catch roll back this visit's claims.
       const isOptionalBoundary =
         optional !== null && optional.depName === name && optional.parentName === ctx.parentName;
       if (isOptionalBoundary) {
@@ -2299,10 +2293,6 @@ async function walkAndPin(
       } else {
         fetchTasks.push({ promise: p, pin, installPath, optional });
       }
-
-      // Deps come from the pin, not tarball bytes. Required children of an
-      // optional boundary INHERIT `optional`: failed grandchild warns-and-skips,
-      // survivors pin (salvage, not npm's rollback; pinned — Q-2026-06-07-324).
       const childContext: ResolveContext = {
         parentName: pin.name,
         parentInstallPath: installPath,
@@ -2338,11 +2328,17 @@ async function walkAndPin(
           warnOptional(desc, err);
         }
       }
-      if (pin.origin === 'lockfile' && source.hasLockEntry) {
+      if (pin.origin === 'lockfile' && source.lockPin) {
         for (const [peerName, peerRange] of Object.entries(pin.peerDependencies ?? {})) {
-          if (source.hasLockEntry(peerName, childContext)) {
-            await visit(peerName, peerRange, childContext, optional);
+          const candidate = source.lockPin(peerName, peerRange, childContext);
+          if (candidate === undefined) continue;
+          const scheduledPeer = scheduled.get(candidate.installPath);
+          if (scheduledPeer?.identity === candidate.identity) {
+            if (optional === null) requiredDemandPaths.add(candidate.installPath);
+            scheduledPeer.ordinaryBinDemand = true;
+            continue;
           }
+          await visit(peerName, peerRange, childContext, optional);
         }
       }
       // ADR-0188: same-version companion pins for shadow internals shims
@@ -2672,8 +2668,8 @@ function createLockfileSource(
 ): ResolutionSource {
   const embeddedSources = registryShadowEmbeddedSourcesFromLockfile(lockfile, shadowPlan);
   return {
-    hasLockEntry(name, ctx): boolean {
-      return pinnedEntryForParent(lockfile, name, ctx.parentLockfilePath) !== undefined;
+    lockPin(name, range, ctx): LockfilePinCandidate | undefined {
+      return lockfilePinCandidate(lockfile, name, range, ctx, opts.overrides);
     },
     async resolve(name, range, ctx): Promise<ResolvedPin> {
       const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);

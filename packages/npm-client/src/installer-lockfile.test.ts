@@ -1864,6 +1864,53 @@ describe('install — npm-authored lockfile replay faults', () => {
     expect(replay.packages.map(({ name }) => name).sort()).toEqual(['app', 'binding']);
     expect(await vfs.readFileText(lockPath)).toBe(before);
   });
+
+  it('[fault: observable-order / sibling-drift] reuses a direct shadow pin for a broad lock-pinned peer', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'host',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'host',
+            '1.0.0',
+            {},
+            {
+              peerDependencies: { esbuild: '^0.27.0 || ^0.28.0' },
+            },
+          ),
+        ],
+      ]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const dependencies = { esbuild: '^0.28.0', host: '1.0.0' };
+
+    await install('root', '1.0.0', dependencies, {
+      vfs,
+      cwd: '/proj',
+      registry: new CountingFakeRegistry(db),
+    });
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const before = await vfs.readFileText(lockPath);
+    const registry = new CountingFakeRegistry(db);
+    const substitutions: string[] = [];
+
+    const replay = await install('root', '1.0.0', dependencies, {
+      vfs,
+      cwd: '/proj',
+      registry,
+      onSubstitution: (line) => substitutions.push(line),
+    });
+
+    expect(registry.calls).toEqual({ packument: [], tarball: [] });
+    expect(substitutions).toEqual([
+      'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
+    ]);
+    expect(replay.packages.map(({ name }) => name).sort()).toEqual(['esbuild', 'host']);
+    expect(await vfs.readFileText(lockPath)).toBe(before);
+  });
 });
 
 describe('install — npm 11 probe differential', () => {
