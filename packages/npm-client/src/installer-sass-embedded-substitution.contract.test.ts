@@ -1143,14 +1143,13 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
     // Success sibling of the optional path at the same replay-admission/
     // prefetch boundary: the recorded entry is attested, so the recorded
     // optional ^1.70.0 edge must ADMIT and materialize — not warn-skip and not
-    // fail at prefetch. The facade is reachable only through that edge.
+    // fail at prefetch. The facade is reachable only through that edge. The
+    // seed manifest carries NO optional edge (its live traversal would hit the
+    // prefetch sibling and mask this RED); the edge is added to the lock
+    // directly — npm records the manifest's optional edges verbatim, so this
+    // is the npm-shape lock an evolved manifest produces.
     const official = await loadOfficialSassEntries();
-    const optHost = await auxiliaryRegistryEntry(
-      'opt-facade-host',
-      '1.0.0',
-      {},
-      { optionalDependencies: { [SASS_TRIGGER]: '^1.70.0' } },
-    );
+    const optHost = await auxiliaryRegistryEntry('opt-facade-host', '1.0.0');
     const seedFixture = {
       dependencies: { 'opt-facade-host': '1.0.0', [SASS_TRIGGER]: SASS_TRIGGER_VERSION },
       entries: [...official, optHost],
@@ -1170,9 +1169,9 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       const rootEntry = optOnlyLock.packages[''];
       if (!rootEntry) throw new Error('root lock entry missing');
       rootEntry.dependencies = { 'opt-facade-host': '1.0.0' };
-      // The live seed legitimately warn-skips its optional range edge; only
-      // the REPLAY phase warn stream is under test.
-      warn.mockClear();
+      const hostEntry = optOnlyLock.packages['node_modules/opt-facade-host'];
+      if (!hostEntry) throw new Error('opt-facade-host lock entry missing');
+      hostEntry.optionalDependencies = { [SASS_TRIGGER]: '^1.70.0' };
 
       const replayVfs = await project();
       await writeLock(replayVfs, optOnlyLock);
