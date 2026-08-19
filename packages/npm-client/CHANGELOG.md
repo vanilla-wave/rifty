@@ -96,6 +96,10 @@
 
 ### Fixed
 
+- Rifty-authored locks now retain every successfully materialized transitive
+  optional as a replayable dependency edge; the strict unreached-entry gate no
+  longer rejects the writer's own WASI/package tree on the next install.
+
 - npm-authored lockfile replay now traverses entry `optionalDependencies` and
   lock-pinned `peerDependencies`, applies the shared CPU admission gate, and
   rejects unreached lock entries before publishing install success. Entries

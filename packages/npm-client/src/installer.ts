@@ -99,6 +99,7 @@ import {
   registryShadowEmbeddedSourcesFromLockfile,
 } from './internal/shadow/planner.ts';
 import {
+  type InstalledMetadataOptionalEdge,
   type Lockfile,
   type PackageBinClaim,
   type PackageBinSource,
@@ -106,6 +107,7 @@ import {
   type ResolvedPackage,
   type RootLockfileDependencyMaps,
   buildPreparedInstallLockfile,
+  foldInstalledMetadataOptionalEdges,
   linkInstallPackageBins,
   linkInstallPackageFiles,
   normalizePackageBinSource,
@@ -382,8 +384,7 @@ interface ResolvedPin {
   readonly dependencies: Record<string, string>;
   readonly bin?: string | Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
-  /** Optional edges. npm-authored lock entries carry them; rifty's lock WRITER
-   * folds live-pin optionals into `dependencies` (byte-identical rifty replay). */
+  /** npm locks retain optionals; rifty locks fold live successes into dependencies. */
   readonly optionalDependencies: Record<string, string>;
   readonly cpu?: string[];
   readonly os?: string[];
@@ -2108,8 +2109,7 @@ async function walkAndPin(
   /** Every installed copy, keyed by install path. */
   const pinned = new Map<string, PinnedPackage>();
   const replayAccounting = createLockfileReplayAccounting();
-  /** Install paths already scheduled this walk (synchronous path-level dedup,
-   * replaces `pinned.has` since `pinned` is now populated at the await site). */
+  /** Synchronous path dedup; `pinned` populates later at the await site. */
   const scheduled = new Map<string, { readonly identity: string; ordinaryBinDemand: boolean }>();
   /** Paths reached by at least one non-optional edge; demand only strengthens. */
   const requiredDemandPaths = new Set<string>();
@@ -2124,7 +2124,7 @@ async function walkAndPin(
     installPath: string;
     optional: { depName: string; depRange: string; parentName: string } | null;
   }> = [];
-
+  const metadataOptionalEdges: InstalledMetadataOptionalEdge[] = [];
   function prefetchPackuments(dependencies: Record<string, string>, ctx: ResolveContext): void {
     prefetchDependencyEntries(Object.entries(dependencies), ctx);
   }
@@ -2208,7 +2208,7 @@ async function walkAndPin(
     optional: { depName: string; depRange: string; parentName: string } | null,
     ordinaryBinDemand = true,
     preparedPin?: ResolvedPin,
-  ): Promise<void> {
+  ): Promise<string> {
     return (async () => {
       const pin = preparedPin ?? (await source.resolve(name, range, ctx));
       // ADR-0188: a shimmed package outside its shim's proven range must fail
@@ -2252,7 +2252,7 @@ async function walkAndPin(
           );
         }
         if (ordinaryBinDemand) scheduledPackage.ordinaryBinDemand = true;
-        return;
+        return installPath;
       }
       scheduled.set(installPath, { identity: key, ordinaryBinDemand });
       const claimedFlat = flatSlotFreeBefore && installPath === `node_modules/${pin.name}`;
@@ -2324,16 +2324,14 @@ async function walkAndPin(
       for (const [depName, depRange] of requiredDependencies) {
         await visit(depName, depRange, childContext, optional);
       }
-      // npm contract: a missing optional dep is non-fatal (typically
-      // platform-specific native helpers like fsevents). A resolve-time failure
-      // is caught here; a fetch-time failure is attributed at the await site via
-      // the `optional` descriptor propagated into the subtree.
       const optionalDependencies = traversedDependencyEntries(pin, pin.optionalDependencies);
       prefetchDependencyEntries(optionalDependencies, childContext);
       for (const [depName, depRange] of optionalDependencies) {
         const desc = { depName, depRange, parentName: pin.name };
         try {
-          await visit(depName, depRange, childContext, desc);
+          const childInstallPath = await visit(depName, depRange, childContext, desc);
+          if (pin.origin === 'metadata')
+            metadataOptionalEdges.push([installPath, childInstallPath, depName, depRange]);
         } catch (err) {
           throwIfAborted(fetchCtx.signal);
           recordReplaySkippedError(replayAccounting, err);
@@ -2356,6 +2354,7 @@ async function walkAndPin(
       for (const [depName, depRange] of Object.entries(companions)) {
         await visit(depName, depRange, childContext, optional, false);
       }
+      return installPath;
     })();
   }
 
@@ -2463,6 +2462,7 @@ async function walkAndPin(
       warnOptional(optionalFailure, error);
     }
   }
+  foldInstalledMetadataOptionalEdges(pinned, metadataOptionalEdges);
   const companionOnlyBinInstallPaths = new Set<string>();
   for (const [installPath, scheduledPackage] of scheduled) {
     if (!scheduledPackage.ordinaryBinDemand && pinned.has(installPath)) {

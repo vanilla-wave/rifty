@@ -1087,6 +1087,7 @@ describe('install — npm-authored lockfile replay', () => {
     const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
       packages: Record<string, Record<string, unknown>>;
     };
+    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = {
       wasm: '1.0.0',
       native: '1.0.0',
@@ -1241,6 +1242,7 @@ describe('install — npm-authored lockfile replay', () => {
     const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
       packages: Record<string, Record<string, unknown>>;
     };
+    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = { native: '1.0.0' };
     lock.packages['node_modules/native']!.cpu = ['x64'];
     expect(lock.packages['node_modules/helper']).toBeDefined();
@@ -1300,6 +1302,7 @@ describe('install — npm-authored lockfile replay', () => {
       packages: Record<string, Record<string, unknown>>;
     };
     lock.packages['']!.dependencies = { app: '1.0.0' };
+    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = { plugin: '1.0.0' };
     lock.packages['node_modules/plugin']!.peerDependencies = { host: '1.0.0' };
     // Cache-miss + absent tarball = acquisition failure at the boundary.
@@ -1644,6 +1647,7 @@ describe('install — npm-authored lockfile replay faults', () => {
     const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
       packages: Record<string, Record<string, unknown>>;
     };
+    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = { opt: '1.0.0' };
     lock.packages['node_modules/opt']!.integrity = `sha512-${'A'.repeat(86)}==`;
     await vfs.writeFile(lockPath, JSON.stringify(lock));
@@ -1760,6 +1764,7 @@ describe('install — npm-authored lockfile replay faults', () => {
     const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
       packages: Record<string, Record<string, unknown>>;
     };
+    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = { native: '1.0.0' };
     lock.packages['node_modules/native']!.cpu = ['x64'];
     lock.packages['node_modules/orphan'] = { ...lock.packages['node_modules/app'] };
@@ -1808,6 +1813,55 @@ describe('install — npm-authored lockfile replay faults', () => {
     expect(replay.packages.map(({ name }) => name).sort()).toEqual(
       seeded.packages.map(({ name }) => name).sort(),
     );
+    expect(await vfs.readFileText(lockPath)).toBe(before);
+  });
+
+  it('[fault: provenance-lie / sibling-drift] records a successful transitive optional for zero-network replay', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'app',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'app',
+            '1.0.0',
+            {},
+            {
+              optionalDependencies: { binding: '1.0.0' },
+            },
+          ),
+        ],
+      ]),
+    );
+    db.set('binding', new Map([['1.0.0', await makeEntry('binding', '1.0.0')]]));
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const seeded = await install(
+      'root',
+      '1.0.0',
+      { app: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+    );
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const before = await vfs.readFileText(lockPath);
+
+    expect(seeded.lockfile.packages['node_modules/app']).toMatchObject({
+      dependencies: { binding: '1.0.0' },
+    });
+    expect(seeded.lockfile.packages['node_modules/app']?.optionalDependencies).toBeUndefined();
+
+    const registry = new CountingFakeRegistry(db);
+    const replay = await install(
+      'root',
+      '1.0.0',
+      { app: '1.0.0' },
+      { vfs, cwd: '/proj', registry },
+    );
+
+    expect(registry.calls).toEqual({ packument: [], tarball: [] });
+    expect(replay.packages.map(({ name }) => name).sort()).toEqual(['app', 'binding']);
     expect(await vfs.readFileText(lockPath)).toBe(before);
   });
 });
