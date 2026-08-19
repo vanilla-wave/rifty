@@ -444,6 +444,299 @@ describe('browser Workbench owner transport', () => {
     }
   });
 
+  // #255 case 4b — fault classes: false-fallback, unbounded-read. The host
+  // budget is what progress re-arms: a frame must restore the CONFIGURED N,
+  // never the shipped 60 000 ms, and the deadline must fire exactly N after the
+  // LAST frame — the two halves of case 4 and case 1 combined, because a
+  // deadline that resets to the wrong budget passes both halves separately.
+  it('silence deadline: progress re-arms the configured budget, not the shipped default', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(
+        { ...input, deployment: { ...input.deployment, ownerOperationSilenceTimeoutMs: 5_000 } },
+        dependencies(worker),
+      );
+      void raw.closed.catch(() => {});
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+
+      const opening = raw.openProject(
+        inspectProjectDefinition(
+          projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+        ),
+      );
+      void opening.catch(() => {});
+
+      // 30 s — 6x the configured budget — of frames every 2 s.
+      for (let persisted = 1; persisted <= 15; persisted += 1) {
+        await vi.advanceTimersByTimeAsync(2_000);
+        worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 15 });
+      }
+      expect(worker.killedWith).toBeNull();
+
+      // Silence from the last frame: the configured 5 s, not the shipped 60 s.
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(worker.killedWith).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(opening).rejects.toThrow(
+        /timed out after 5000ms without owner durability progress/,
+      );
+      expect(worker.killedWith).toBe('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #255 case 4c — sibling sweep over the timer owner. `pendingTimers` holds
+  // every `PendingOperation` variant; one progress frame must re-arm ALL of
+  // them, so a queued sibling stays pending past N instead of dying while the
+  // flush it shares is visibly alive. Generic owner: `open` + `delete`.
+  it('silence deadline: progress re-arms every queued sibling operation (open + delete)', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(
+        { ...input, deployment: { ...input.deployment, ownerOperationSilenceTimeoutMs: 5_000 } },
+        dependencies(worker),
+      );
+      void raw.closed.catch(() => {});
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+
+      const opening = raw.openProject(
+        inspectProjectDefinition(
+          projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+        ),
+      );
+      void opening.catch(() => {});
+      let openingSettled = false;
+      void opening.then(
+        () => {
+          openingSettled = true;
+        },
+        () => {
+          openingSettled = true;
+        },
+      );
+      const deleting = raw.deleteProject('sibling-delete');
+      void deleting.catch(() => {});
+      let deletingSettled = false;
+      void deleting.then(
+        () => {
+          deletingSettled = true;
+        },
+        () => {
+          deletingSettled = true;
+        },
+      );
+
+      for (let persisted = 1; persisted <= 10; persisted += 1) {
+        await vi.advanceTimersByTimeAsync(2_000);
+        worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
+      }
+      expect([openingSettled, deletingSettled, worker.killedWith]).toEqual([false, false, null]);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      const openFailure = await opening.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      const deleteFailure = await deleting.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect((openFailure as Error).message).toMatch(
+        /timed out after 5000ms without owner durability progress/,
+      );
+      expect(deleteFailure).toBe(openFailure);
+      expect(worker.killedWith).toBe('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #255 case 4c, continued — the companion variants of the same timer owner:
+  // `playground-open` + `playground-catalog`.
+  it('silence deadline: progress re-arms queued companion operations (playground-open + catalog)', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(
+        {
+          ...companionInput,
+          deployment: { ...companionInput.deployment, ownerOperationSilenceTimeoutMs: 5_000 },
+        },
+        dependencies(worker),
+      );
+      void raw.closed.catch(() => {});
+      const companion = raw.playground;
+      if (companion === undefined) throw new Error('missing Playground companion handle');
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      worker.emit('message', {
+        type: 'workbench:playground-ready',
+        catalog: {
+          active: { kind: 'scratch' },
+          scratch: { starterId: 'vite', dirty: false, editedAt: '2026-08-19T12:00:00.000Z' },
+          projects: [],
+        },
+      });
+      await raw.ready;
+
+      const definition = definePlaygroundProject(
+        {
+          kind: 'vite',
+          id: 'scratch',
+          starterId: 'vite',
+          templateId: 'vite',
+          files: { '/index.html': '<main>Companion</main>' },
+          firstMaterialization: { kind: 'install' },
+          port: 4173,
+        },
+        playgroundUrlContext,
+      );
+      const opening = companion.openProject(definition);
+      void opening.catch(() => {});
+      const renaming = companion.catalog.rename('project-a', 'Renamed');
+      void renaming.catch(() => {});
+      let openingSettled = false;
+      let renamingSettled = false;
+      void opening.then(
+        () => {
+          openingSettled = true;
+        },
+        () => {
+          openingSettled = true;
+        },
+      );
+      void renaming.then(
+        () => {
+          renamingSettled = true;
+        },
+        () => {
+          renamingSettled = true;
+        },
+      );
+
+      for (let persisted = 1; persisted <= 10; persisted += 1) {
+        await vi.advanceTimersByTimeAsync(2_000);
+        worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
+      }
+      expect([openingSettled, renamingSettled, worker.killedWith]).toEqual([false, false, null]);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      const openFailure = await opening.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      const renameFailure = await renaming.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect((openFailure as Error).message).toMatch(
+        /timed out after 5000ms without owner durability progress/,
+      );
+      expect(renameFailure).toBe(openFailure);
+      expect(worker.killedWith).toBe('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #255 case 4c, continued — the last `PendingOperation` variant: `close`.
+  // A close request racing a live flush must ride the same re-armed deadline.
+  it('silence deadline: progress re-arms a pending close operation', async () => {
+    vi.useFakeTimers();
+    try {
+      const worker = new FakeOwnerWorker();
+      const raw = startBrowserWorkspaceOwner(
+        { ...input, deployment: { ...input.deployment, ownerOperationSilenceTimeoutMs: 5_000 } },
+        dependencies(worker),
+      );
+      void raw.closed.catch(() => {});
+      worker.emit('message', {
+        type: 'workbench:owner-ready',
+        storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+      });
+      await raw.ready;
+
+      const opening = raw.openProject(
+        inspectProjectDefinition(
+          projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
+        ),
+      );
+      const openRequest = sentOf(worker, 'workbench:open-project')[0];
+      if (openRequest === undefined) throw new Error('missing open request');
+      await acceptOpenedProject(worker, openRequest, 'owner-token-a', '/owner-born/project-a');
+      const project = await opening;
+      const openPty = sentOf(worker, 'workbench:project-pty').find(
+        (message) => message.frame.type === 'pty:open',
+      );
+      if (openPty?.frame.type !== 'pty:open') throw new Error('missing PTY open');
+      worker.emit('message', {
+        type: 'workbench:project-pty',
+        projectToken: 'owner-token-a',
+        frame: { type: 'pty:ready', sid: openPty.frame.sid },
+      });
+
+      const closing = project.close();
+      void closing.catch(() => {});
+      let closingSettled = false;
+      void closing.then(
+        () => {
+          closingSettled = true;
+        },
+        () => {
+          closingSettled = true;
+        },
+      );
+      await settleMicrotasks();
+      const closePty = sentOf(worker, 'workbench:project-pty').find(
+        (message) => message.frame.type === 'pty:close',
+      );
+      if (closePty?.frame.type !== 'pty:close') throw new Error('missing PTY close');
+      worker.emit('message', {
+        type: 'workbench:project-pty',
+        projectToken: 'owner-token-a',
+        frame: {
+          type: 'pty:close-ack',
+          sid: closePty.frame.sid,
+          opId: closePty.frame.opId,
+          ok: true,
+        },
+      });
+      await settleMicrotasks();
+      expect(sentOf(worker, 'workbench:close-project')).toHaveLength(1);
+
+      for (let persisted = 1; persisted <= 10; persisted += 1) {
+        await vi.advanceTimersByTimeAsync(2_000);
+        worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
+      }
+      expect([closingSettled, worker.killedWith]).toEqual([false, null]);
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      const closeFailure = await closing.then(
+        () => null,
+        (error: unknown) => error,
+      );
+      expect(String((closeFailure as Error).message)).toMatch(
+        /timed out after 5000ms without owner durability progress/,
+      );
+      expect(worker.killedWith).toBe('SIGTERM');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // #255 case 6 — fault class: observable-order. Pinned unchanged: every
   // in-flight operation rejects with the one protocol failure (no hang), and
   // the rejections land with the kill decided, never before it.
