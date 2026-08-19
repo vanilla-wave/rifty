@@ -84,6 +84,9 @@ same tab and reopen succeeds.
   handles the 42 s first-open without host configuration.
 - A fake that asserts timer bookkeeping without driving the real
   `createBrowserOwner` request path cannot close this.
+- No deadline proof may rest on a scheduling race or on a runner timeout: an
+  operation that should stay pending is asserted pending by a bounded
+  observation, and injected silence is a delay far larger than the budget.
 
 ## Parity cases
 
@@ -104,6 +107,11 @@ failing-first on the browser-unit harness:
    budget while the shared flush is visibly alive.
 5. Recovery: after case 2, fresh `openWorkbench` in the same realm reopens the
    project; durable tree readable; no residual Web Lock / claim blocks it.
+   Silence is injected deterministically, never raced: one admitted owner
+   request is DELAYED (the MessagePort/Worker row's "slow peer" — never
+   dropped, duplicated, or reordered) an order of magnitude past the budget, so
+   the owner provably cannot answer or emit progress inside it, and the failure
+   must land at the budget rather than at the delay.
 6. In-flight ops at failure all reject with the protocol failure (no hang) —
    pinned unchanged from today.
 7. Budget validation: `0`, a negative value, `Infinity`, `NaN`, and a

@@ -129,6 +129,35 @@ class ControlledServiceWorkerContainer {
   }
 }
 
+interface Settlement {
+  readonly settled: boolean;
+  readonly error: unknown;
+}
+
+/**
+ * Bounded observation of a promise that may legitimately never settle: a
+ * deadline test must fail on a missed deadline with the real assertion, never
+ * by hanging until the runner's own timeout.
+ */
+function watch<T>(promise: Promise<T>): () => Settlement {
+  let settled = false;
+  let error: unknown = null;
+  void promise.then(
+    () => {
+      settled = true;
+    },
+    (reason: unknown) => {
+      settled = true;
+      error = reason;
+    },
+  );
+  return () => ({ settled, error });
+}
+
+function failureMessage(settlement: Settlement): string {
+  return settlement.error instanceof Error ? settlement.error.message : String(settlement.error);
+}
+
 async function settleMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -313,37 +342,42 @@ describe('browser Workbench owner transport', () => {
       });
       await raw.ready;
 
-      const opening = raw.openProject(
+      const openPromise = raw.openProject(
         inspectProjectDefinition(
           projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
         ),
       );
-      void opening.catch(() => {});
+      const opening = watch(openPromise);
+      void openPromise.catch(() => {});
 
       // Flush advances for 30 s, then wedges: the budget runs from the LAST frame.
       await vi.advanceTimersByTimeAsync(30_000);
       worker.emit('message', { type: 'workbench:durability-progress', persisted: 5, total: 40 });
       await vi.advanceTimersByTimeAsync(59_999);
-      expect(worker.killedWith).toBeNull();
+      expect([opening().settled, worker.killedWith]).toEqual([false, null]);
       await vi.advanceTimersByTimeAsync(1);
+      await settleMicrotasks();
 
-      const failure = await opening.then(
-        () => null,
-        (error: unknown) => error,
-      );
-      expect(failure).toBeInstanceOf(Error);
-      expect((failure as Error).message).toMatch(
+      expect(opening().settled).toBe(true);
+      expect(opening().error).toBeInstanceOf(Error);
+      expect(failureMessage(opening())).toMatch(
         /Workbench owner open operation \S+ timed out after 60000ms without owner durability progress/,
       );
       expect(worker.killedWith).toBe('SIGTERM');
 
-      const later = await raw.deleteProject('after-fatality').then(
-        () => null,
-        (error: unknown) => error,
-      );
-      expect(later).toBeInstanceOf(ClosedHandleError);
-      expect((later as Error).cause).toBe(failure);
-      await expect(raw.closed).rejects.toBe(failure);
+      const laterPromise = raw.deleteProject('after-fatality');
+      const later = watch(laterPromise);
+      void laterPromise.catch(() => {});
+      await settleMicrotasks();
+      expect(later().settled).toBe(true);
+      expect(later().error).toBeInstanceOf(ClosedHandleError);
+      expect((later().error as Error).cause).toBe(opening().error);
+
+      const lifetime = watch(raw.closed);
+      void raw.closed.catch(() => {});
+      await settleMicrotasks();
+      expect(lifetime().settled).toBe(true);
+      expect(lifetime().error).toBe(opening().error);
     } finally {
       vi.useRealTimers();
     }
@@ -370,8 +404,9 @@ describe('browser Workbench owner transport', () => {
       worker.emit('message', { type: 'workbench:playground-ready', catalog });
       await raw.ready;
 
-      const deleting = raw.deleteProject('wedged-delete');
-      void deleting.catch(() => {});
+      const deletePromise = raw.deleteProject('wedged-delete');
+      const deleting = watch(deletePromise);
+      void deletePromise.catch(() => {});
 
       // Chatty but progress-mute: catalog updates every 10 s for a full budget.
       for (let tick = 1; tick <= 6; tick += 1) {
@@ -384,8 +419,10 @@ describe('browser Workbench owner transport', () => {
           catalog: { ...catalog, projects: [] },
         });
       }
+      await settleMicrotasks();
 
-      await expect(deleting).rejects.toThrow(
+      expect(deleting().settled).toBe(true);
+      expect(failureMessage(deleting())).toMatch(
         /timed out after 60000ms without owner durability progress/,
       );
       expect(worker.killedWith).toBe('SIGTERM');
@@ -413,12 +450,15 @@ describe('browser Workbench owner transport', () => {
         storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
       });
       await tight.ready;
-      const tightDelete = tight.deleteProject('tight-budget');
-      void tightDelete.catch(() => {});
+      const tightPromise = tight.deleteProject('tight-budget');
+      const tightDelete = watch(tightPromise);
+      void tightPromise.catch(() => {});
       await vi.advanceTimersByTimeAsync(4_999);
-      expect(tightWorker.killedWith).toBeNull();
+      expect([tightDelete().settled, tightWorker.killedWith]).toEqual([false, null]);
       await vi.advanceTimersByTimeAsync(1);
-      await expect(tightDelete).rejects.toThrow(
+      await settleMicrotasks();
+      expect(tightDelete().settled).toBe(true);
+      expect(failureMessage(tightDelete())).toMatch(
         /timed out after 5000ms without owner durability progress/,
       );
       expect(tightWorker.killedWith).toBe('SIGTERM');
@@ -431,12 +471,15 @@ describe('browser Workbench owner transport', () => {
         storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
       });
       await shipped.ready;
-      const shippedDelete = shipped.deleteProject('shipped-budget');
-      void shippedDelete.catch(() => {});
+      const shippedPromise = shipped.deleteProject('shipped-budget');
+      const shippedDelete = watch(shippedPromise);
+      void shippedPromise.catch(() => {});
       await vi.advanceTimersByTimeAsync(59_999);
-      expect(defaultWorker.killedWith).toBeNull();
+      expect([shippedDelete().settled, defaultWorker.killedWith]).toEqual([false, null]);
       await vi.advanceTimersByTimeAsync(1);
-      await expect(shippedDelete).rejects.toThrow(
+      await settleMicrotasks();
+      expect(shippedDelete().settled).toBe(true);
+      expect(failureMessage(shippedDelete())).toMatch(
         /timed out after 60000ms without owner durability progress/,
       );
     } finally {
@@ -464,25 +507,28 @@ describe('browser Workbench owner transport', () => {
       });
       await raw.ready;
 
-      const opening = raw.openProject(
+      const openPromise = raw.openProject(
         inspectProjectDefinition(
           projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
         ),
       );
-      void opening.catch(() => {});
+      const opening = watch(openPromise);
+      void openPromise.catch(() => {});
 
       // 30 s — 6x the configured budget — of frames every 2 s.
       for (let persisted = 1; persisted <= 15; persisted += 1) {
         await vi.advanceTimersByTimeAsync(2_000);
         worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 15 });
       }
-      expect(worker.killedWith).toBeNull();
+      expect([opening().settled, worker.killedWith]).toEqual([false, null]);
 
       // Silence from the last frame: the configured 5 s, not the shipped 60 s.
       await vi.advanceTimersByTimeAsync(4_999);
-      expect(worker.killedWith).toBeNull();
+      expect([opening().settled, worker.killedWith]).toEqual([false, null]);
       await vi.advanceTimersByTimeAsync(1);
-      await expect(opening).rejects.toThrow(
+      await settleMicrotasks();
+      expect(opening().settled).toBe(true);
+      expect(failureMessage(opening())).toMatch(
         /timed out after 5000ms without owner durability progress/,
       );
       expect(worker.killedWith).toBe('SIGTERM');
@@ -510,52 +556,34 @@ describe('browser Workbench owner transport', () => {
       });
       await raw.ready;
 
-      const opening = raw.openProject(
+      const openPromise = raw.openProject(
         inspectProjectDefinition(
           projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
         ),
       );
-      void opening.catch(() => {});
-      let openingSettled = false;
-      void opening.then(
-        () => {
-          openingSettled = true;
-        },
-        () => {
-          openingSettled = true;
-        },
-      );
-      const deleting = raw.deleteProject('sibling-delete');
-      void deleting.catch(() => {});
-      let deletingSettled = false;
-      void deleting.then(
-        () => {
-          deletingSettled = true;
-        },
-        () => {
-          deletingSettled = true;
-        },
-      );
+      const opening = watch(openPromise);
+      void openPromise.catch(() => {});
+      const deletePromise = raw.deleteProject('sibling-delete');
+      const deleting = watch(deletePromise);
+      void deletePromise.catch(() => {});
 
       for (let persisted = 1; persisted <= 10; persisted += 1) {
         await vi.advanceTimersByTimeAsync(2_000);
         worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
       }
-      expect([openingSettled, deletingSettled, worker.killedWith]).toEqual([false, false, null]);
+      expect([opening().settled, deleting().settled, worker.killedWith]).toEqual([
+        false,
+        false,
+        null,
+      ]);
 
       await vi.advanceTimersByTimeAsync(5_000);
-      const openFailure = await opening.then(
-        () => null,
-        (error: unknown) => error,
-      );
-      const deleteFailure = await deleting.then(
-        () => null,
-        (error: unknown) => error,
-      );
-      expect((openFailure as Error).message).toMatch(
+      await settleMicrotasks();
+      expect([opening().settled, deleting().settled]).toEqual([true, true]);
+      expect(failureMessage(opening())).toMatch(
         /timed out after 5000ms without owner durability progress/,
       );
-      expect(deleteFailure).toBe(openFailure);
+      expect(deleting().error).toBe(opening().error);
       expect(worker.killedWith).toBe('SIGTERM');
     } finally {
       vi.useRealTimers();
@@ -604,48 +632,30 @@ describe('browser Workbench owner transport', () => {
         },
         playgroundUrlContext,
       );
-      const opening = companion.openProject(definition);
-      void opening.catch(() => {});
-      const renaming = companion.catalog.rename('project-a', 'Renamed');
-      void renaming.catch(() => {});
-      let openingSettled = false;
-      let renamingSettled = false;
-      void opening.then(
-        () => {
-          openingSettled = true;
-        },
-        () => {
-          openingSettled = true;
-        },
-      );
-      void renaming.then(
-        () => {
-          renamingSettled = true;
-        },
-        () => {
-          renamingSettled = true;
-        },
-      );
+      const openPromise = companion.openProject(definition);
+      const opening = watch(openPromise);
+      void openPromise.catch(() => {});
+      const renamePromise = companion.catalog.rename('project-a', 'Renamed');
+      const renaming = watch(renamePromise);
+      void renamePromise.catch(() => {});
 
       for (let persisted = 1; persisted <= 10; persisted += 1) {
         await vi.advanceTimersByTimeAsync(2_000);
         worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
       }
-      expect([openingSettled, renamingSettled, worker.killedWith]).toEqual([false, false, null]);
+      expect([opening().settled, renaming().settled, worker.killedWith]).toEqual([
+        false,
+        false,
+        null,
+      ]);
 
       await vi.advanceTimersByTimeAsync(5_000);
-      const openFailure = await opening.then(
-        () => null,
-        (error: unknown) => error,
-      );
-      const renameFailure = await renaming.then(
-        () => null,
-        (error: unknown) => error,
-      );
-      expect((openFailure as Error).message).toMatch(
+      await settleMicrotasks();
+      expect([opening().settled, renaming().settled]).toEqual([true, true]);
+      expect(failureMessage(opening())).toMatch(
         /timed out after 5000ms without owner durability progress/,
       );
-      expect(renameFailure).toBe(openFailure);
+      expect(renaming().error).toBe(opening().error);
       expect(worker.killedWith).toBe('SIGTERM');
     } finally {
       vi.useRealTimers();
@@ -688,17 +698,9 @@ describe('browser Workbench owner transport', () => {
         frame: { type: 'pty:ready', sid: openPty.frame.sid },
       });
 
-      const closing = project.close();
-      void closing.catch(() => {});
-      let closingSettled = false;
-      void closing.then(
-        () => {
-          closingSettled = true;
-        },
-        () => {
-          closingSettled = true;
-        },
-      );
+      const closePromise = project.close();
+      const closing = watch(closePromise);
+      void closePromise.catch(() => {});
       await settleMicrotasks();
       const closePty = sentOf(worker, 'workbench:project-pty').find(
         (message) => message.frame.type === 'pty:close',
@@ -721,14 +723,12 @@ describe('browser Workbench owner transport', () => {
         await vi.advanceTimersByTimeAsync(2_000);
         worker.emit('message', { type: 'workbench:durability-progress', persisted, total: 10 });
       }
-      expect([closingSettled, worker.killedWith]).toEqual([false, null]);
+      expect([closing().settled, worker.killedWith]).toEqual([false, null]);
 
       await vi.advanceTimersByTimeAsync(5_000);
-      const closeFailure = await closing.then(
-        () => null,
-        (error: unknown) => error,
-      );
-      expect(String((closeFailure as Error).message)).toMatch(
+      await settleMicrotasks();
+      expect(closing().settled).toBe(true);
+      expect(failureMessage(closing())).toMatch(
         /timed out after 5000ms without owner durability progress/,
       );
       expect(worker.killedWith).toBe('SIGTERM');
@@ -752,30 +752,24 @@ describe('browser Workbench owner transport', () => {
       });
       await raw.ready;
 
-      const opening = raw.openProject(
+      const openPromise = raw.openProject(
         inspectProjectDefinition(
           projects.vite({ id: 'project-a', files: { '/index.html': '<h1>A</h1>' } }),
         ),
       );
-      void opening.catch(() => {});
-      const deleting = raw.deleteProject('sibling-delete');
-      void deleting.catch(() => {});
+      const opening = watch(openPromise);
+      void openPromise.catch(() => {});
+      const deletePromise = raw.deleteProject('sibling-delete');
+      const deleting = watch(deletePromise);
+      void deletePromise.catch(() => {});
       expect(sentOf(worker, 'workbench:delete-project')).toHaveLength(1);
 
       await vi.advanceTimersByTimeAsync(60_000);
+      await settleMicrotasks();
 
-      const [openFailure, deleteFailure] = await Promise.all([
-        opening.then(
-          () => null,
-          (error: unknown) => error,
-        ),
-        deleting.then(
-          () => null,
-          (error: unknown) => error,
-        ),
-      ]);
-      expect(openFailure).toBeInstanceOf(Error);
-      expect(deleteFailure).toBe(openFailure);
+      expect([opening().settled, deleting().settled]).toEqual([true, true]);
+      expect(opening().error).toBeInstanceOf(Error);
+      expect(deleting().error).toBe(opening().error);
       expect(worker.killedWith).toBe('SIGTERM');
     } finally {
       vi.useRealTimers();
