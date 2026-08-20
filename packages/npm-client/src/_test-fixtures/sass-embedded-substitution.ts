@@ -119,8 +119,14 @@ export async function auxiliaryRegistryEntry(
   name: string,
   version: string,
   dependencies: Readonly<Record<string, string>> = {},
+  extraManifestFields: Readonly<Partial<FixtureManifest>> = {},
 ): Promise<RegistryEntry> {
-  const manifestFields = { name, version, dependencies: { ...dependencies } };
+  const manifestFields = {
+    name,
+    version,
+    dependencies: { ...dependencies },
+    ...extraManifestFields,
+  };
   const packageJson = new TextEncoder().encode(JSON.stringify(manifestFields));
   const tarball = await gzip(
     concat(

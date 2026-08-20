@@ -84,7 +84,11 @@ import {
   translateRecordedInstallPath,
   warnOptional,
 } from './installer-lockfile-replay.ts';
-import { assertShadowRecipeAdmission } from './internal/shadow/admission.ts';
+import {
+  assertDirectShadowRecipeAdmissions,
+  builtinRecipeForRequest,
+  registryRecipeForResolution,
+} from './internal/shadow/admission.ts';
 import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
 import {
   type AppliedShadowSubstitution,
@@ -382,8 +386,9 @@ interface ResolvedPin {
   readonly dependencies: Record<string, string>;
   readonly bin?: string | Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
-  /** Optional edges. npm-authored lock entries carry them; rifty's lock WRITER
-   * folds live-pin optionals into `dependencies` (byte-identical rifty replay). */
+  /** Optional edges (lock entry or manifest). The writer re-emits them on every
+   * origin: a recorded optional subtree must stay reachable through its
+   * parent's edges or the replay coverage gate refuses the written lock. */
   readonly optionalDependencies: Record<string, string>;
   readonly cpu?: string[];
   readonly os?: string[];
@@ -1607,37 +1612,6 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
   };
 }
 
-function builtinRecipeForRequest(
-  name: string,
-  range: string | null,
-  parent: string | undefined,
-  overrides: OverrideMap | undefined,
-): BuiltinShadowSubstitutionRecipe | null {
-  const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
-  if (override?.source === 'user') return null;
-  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-    (candidate) => candidate.trigger.name === name,
-  );
-  if (!recipe) return null;
-  assertShadowRecipeAdmission(recipe, range);
-  return recipe;
-}
-
-function registryRecipeForResolution(
-  recipe: BuiltinShadowSubstitutionRecipe | null,
-  effectiveName: string,
-  version: string,
-): BuiltinShadowSubstitutionRecipe | null {
-  if (
-    recipe?.acquisition.kind !== 'registry' ||
-    recipe.acquisition.name !== effectiveName ||
-    recipe.acquisition.version !== version
-  ) {
-    return null;
-  }
-  return recipe;
-}
-
 function exactStringRecord(actual: unknown, expected: Readonly<Record<string, string>>): boolean {
   if (actual === undefined) return Object.keys(expected).length === 0;
   if (actual === null || typeof actual !== 'object' || Array.isArray(actual)) return false;
@@ -1693,20 +1667,6 @@ function assertRegistryShadowProjection(
     projection.unsupportedFeature,
     `shadow recipe ${recipe.id} registry dependency projection drifted`,
   );
-}
-
-function assertDirectShadowRecipeAdmissions(
-  dependencies: Readonly<Record<string, string>>,
-  optionalDependencies: Readonly<Record<string, string>>,
-  rootName: string,
-  overrides: OverrideMap | undefined,
-): void {
-  for (const [name, range] of [
-    ...Object.entries(dependencies),
-    ...Object.entries(optionalDependencies),
-  ]) {
-    builtinRecipeForRequest(name, range, rootName, overrides);
-  }
 }
 
 function syntheticResolvedIdentity(recipe: BuiltinShadowSubstitutionRecipe): string {
@@ -1840,7 +1800,6 @@ function lockfileReuseDecision(
   ctx: ResolveContext,
   overrides: OverrideMap | undefined,
 ): LockfileReuseDecision {
-  const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides);
   const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
     name,
     range,
@@ -1848,6 +1807,13 @@ function lockfileReuseDecision(
     overrides,
   );
   const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+  const recipe = builtinRecipeForRequest(
+    name,
+    range,
+    ctx.parentName,
+    overrides,
+    hit?.entry.version,
+  );
   const policyFrontier = override !== null || recipe !== null;
   if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
   if (
@@ -1932,7 +1898,6 @@ function analyzeLockfileRequest(
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
-    const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides);
     const { effectiveName } = resolveEffectivePackageRequest(
       name,
       range,
@@ -1940,6 +1905,13 @@ function analyzeLockfileRequest(
       overrides,
     );
     const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+    const recipe = builtinRecipeForRequest(
+      name,
+      range,
+      ctx.parentName,
+      overrides,
+      hit?.entry.version,
+    );
     if (
       !hit ||
       (recipe?.acquisition.kind !== 'synthetic' && (!hit.entry.resolved || !hit.entry.integrity))
@@ -2012,9 +1984,16 @@ function createIncrementalSource(
         return locked.hasLockEntry?.(name, ctx) ?? false;
       },
       prefetch(name, range, ctx): void {
-        if (!useRegistry(name, range, ctx)) return;
-        metadataUsed = true;
-        registry.prefetch?.(name, range, ctx);
+        // Advisory warm-up only: resolve owns every error in its boundary
+        // (an optional edge's admission throw here would escape the optional
+        // catch and fail the install npm would warn-and-skip).
+        try {
+          if (!useRegistry(name, range, ctx)) return;
+          metadataUsed = true;
+          registry.prefetch?.(name, range, ctx);
+        } catch {
+          /* resolve re-raises in the correct error-order slot */
+        }
       },
       async resolve(name, range, ctx): Promise<ResolvedPin> {
         if (useRegistry(name, range, ctx)) {
@@ -2529,11 +2508,11 @@ async function pinToPackage(
     resolved: pin.resolved,
     installPath,
     ...(acquisition.kind === 'tarball' ? { integrity: acquisition.result.integrity } : {}),
-    ...(pin.origin === 'lockfile' && Object.keys(pin.optionalDependencies).length > 0
+    ...(Object.keys(pin.optionalDependencies).length > 0
       ? { optionalDependencies: pin.optionalDependencies }
       : {}),
-    ...(pin.origin === 'lockfile' && pin.cpu !== undefined ? { cpu: pin.cpu } : {}),
-    ...(pin.origin === 'lockfile' && pin.os !== undefined ? { os: pin.os } : {}),
+    ...(pin.cpu !== undefined ? { cpu: pin.cpu } : {}),
+    ...(pin.os !== undefined ? { os: pin.os } : {}),
   };
   if (pin.peerDependencies && Object.keys(pin.peerDependencies).length > 0) {
     pkg.peerDependencies = pin.peerDependencies;
@@ -2676,8 +2655,6 @@ function createLockfileSource(
       return pinnedEntryForParent(lockfile, name, ctx.parentLockfilePath) !== undefined;
     },
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
-      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       // Apply the same retained redirect/user override as live resolution
       // before lookup. Synthetic catalog recipes keep their source identity
       // and are validated separately against the lockfile recipe trace.
@@ -2688,6 +2665,16 @@ function createLockfileSource(
         opts.overrides,
       );
       const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+      // Recorded-pin admission fact (ADR-0361); absent entry keeps the
+      // request-shape throw ahead of the missing-entry EBROKENLOCK below.
+      const recipe = builtinRecipeForRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        hit?.entry.version,
+      );
+      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       if (!hit) {
         throw Object.assign(
           new Error(
@@ -2881,15 +2868,20 @@ function createRegistrySource(
 
   return {
     prefetch(name, range, ctx): void {
-      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
-      if (recipe?.acquisition.kind === 'synthetic') return;
-      const { effectiveName } = resolveEffectivePackageRequest(
-        name,
-        range,
-        ctx.parentName,
-        opts.overrides,
-      );
-      void loadPackument(effectiveName);
+      // Advisory warm-up only — admission throws belong to resolve's boundary.
+      try {
+        const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+        if (recipe?.acquisition.kind === 'synthetic') return;
+        const { effectiveName } = resolveEffectivePackageRequest(
+          name,
+          range,
+          ctx.parentName,
+          opts.overrides,
+        );
+        void loadPackument(effectiveName);
+      } catch {
+        /* resolve re-raises in the correct error-order slot */
+      }
     },
 
     async resolve(name, range, ctx): Promise<ResolvedPin> {
@@ -2991,6 +2983,8 @@ function createRegistrySource(
           shadowProjection === undefined
             ? (manifest.optionalDependencies ?? {})
             : { ...shadowProjection.optionalDependencies },
+        ...(manifest.cpu === undefined ? {} : { cpu: manifest.cpu }),
+        ...(manifest.os === undefined ? {} : { os: manifest.os }),
         ...(shadowRecipe
           ? {
               shadow: {

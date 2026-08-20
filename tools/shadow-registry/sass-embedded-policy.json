@@ -124,7 +124,7 @@
       "surface": "Other versions and version ranges",
       "kind": "runtime-throw",
       "feature": "sass-embedded.version",
-      "notes": "Every request except the literal 1.100.0 is rejected before registry or VFS work."
+      "notes": "Every request except the literal 1.100.0 is rejected before registry or VFS work. Lockfile replay reifies the attested 1.100.0 pin without re-litigating npm-recorded ranges (npm ci parity, ADR-0361); any other pinned version still throws."
     },
     {
       "surface": "Sass CLI/bin",

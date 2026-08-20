@@ -96,6 +96,12 @@
 
 ### Fixed
 
+- Fresh-install lock writer records the parent's `optionalDependencies` and
+  entry `cpu`/`os` from the registry manifest (previously lockfile-replay-only
+  fields), so a rifty-written lock justifies every recorded optional subtree
+  and passes its own replay coverage gate. Committed baked dep snapshots
+  regenerated with the fixed writer. Root cause of the post-#266
+  `EBROKENLOCK: unreached-entries` failure on snapshot-restored projects.
 - npm-authored lockfile replay now traverses entry `optionalDependencies` and
   lock-pinned `peerDependencies`, applies the shared CPU admission gate, and
   rejects unreached lock entries before publishing install success. Entries
