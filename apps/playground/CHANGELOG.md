@@ -14,6 +14,10 @@
 
 ### Fixed
 
+- Re-baked the Vite 8 instant snapshot with its successful Rolldown WASI
+  optional recorded as a replayable edge. The first explicit `npm install`
+  after restore remains cache-only and no longer fails `EBROKENLOCK` (#247.3).
+
 - First-run starter claims now stay tied to their real sources: the Project
   files and Node worker map CSS is an editable imported module instead of an
   ignored file beside an inline copy (class-killed for every preset seeding
