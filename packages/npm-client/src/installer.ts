@@ -69,13 +69,11 @@ import {
 } from './installer-lockfile-reader.ts';
 import {
   type LockfilePathTranslation,
-  type LockfilePinCandidate,
   type LockfileReplayAccounting,
   assertLockfileReplayCoverage,
   assertNativeSupported,
   createLockfileReplayAccounting,
   expandReplaySkipClosure,
-  lockfilePinCandidate,
   lockfileRootMatchesRequest,
   lockfileStringArray,
   lockfileStringMap,
@@ -83,11 +81,14 @@ import {
   recordReplayReached,
   recordReplaySkippedError,
   recordReplaySkippedPin,
-  resolvedPinIdentity,
   translateRecordedInstallPath,
   warnOptional,
 } from './installer-lockfile-replay.ts';
-import { assertShadowRecipeAdmission } from './internal/shadow/admission.ts';
+import {
+  assertDirectShadowRecipeAdmissions,
+  builtinRecipeForRequest,
+  registryRecipeForResolution,
+} from './internal/shadow/admission.ts';
 import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
 import {
   type AppliedShadowSubstitution,
@@ -102,7 +103,6 @@ import {
   registryShadowEmbeddedSourcesFromLockfile,
 } from './internal/shadow/planner.ts';
 import {
-  type InstalledMetadataOptionalEdge,
   type Lockfile,
   type PackageBinClaim,
   type PackageBinSource,
@@ -110,7 +110,6 @@ import {
   type ResolvedPackage,
   type RootLockfileDependencyMaps,
   buildPreparedInstallLockfile,
-  foldInstalledMetadataOptionalEdges,
   linkInstallPackageBins,
   linkInstallPackageFiles,
   normalizePackageBinSource,
@@ -387,7 +386,9 @@ interface ResolvedPin {
   readonly dependencies: Record<string, string>;
   readonly bin?: string | Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
-  /** npm locks retain optionals; rifty locks fold live successes into dependencies. */
+  /** Optional edges (lock entry or manifest). The writer re-emits them on every
+   * origin: a recorded optional subtree must stay reachable through its
+   * parent's edges or the replay coverage gate refuses the written lock. */
   readonly optionalDependencies: Record<string, string>;
   readonly cpu?: string[];
   readonly os?: string[];
@@ -453,11 +454,7 @@ interface ResolveContext {
 interface ResolutionSource {
   resolve(name: string, range: string | null, ctx: ResolveContext): Promise<ResolvedPin>;
   prefetch?(name: string, range: string | null, ctx: ResolveContext): void;
-  lockPin?(
-    name: string,
-    range: string | null,
-    ctx: ResolveContext,
-  ): LockfilePinCandidate | undefined;
+  hasLockEntry?(name: string, ctx: ResolveContext): boolean;
 }
 
 export async function install(opts: InstallOptions): Promise<InstallResult>;
@@ -1615,37 +1612,6 @@ function createSubstitutionReporter(sink: (line: string) => void): SubstitutionR
   };
 }
 
-function builtinRecipeForRequest(
-  name: string,
-  range: string | null,
-  parent: string | undefined,
-  overrides: OverrideMap | undefined,
-): BuiltinShadowSubstitutionRecipe | null {
-  const { override } = resolveEffectivePackageRequest(name, range, parent, overrides);
-  if (override?.source === 'user') return null;
-  const recipe = builtinShadowSubstitutionCatalog.recipes.find(
-    (candidate) => candidate.trigger.name === name,
-  );
-  if (!recipe) return null;
-  assertShadowRecipeAdmission(recipe, range);
-  return recipe;
-}
-
-function registryRecipeForResolution(
-  recipe: BuiltinShadowSubstitutionRecipe | null,
-  effectiveName: string,
-  version: string,
-): BuiltinShadowSubstitutionRecipe | null {
-  if (
-    recipe?.acquisition.kind !== 'registry' ||
-    recipe.acquisition.name !== effectiveName ||
-    recipe.acquisition.version !== version
-  ) {
-    return null;
-  }
-  return recipe;
-}
-
 function exactStringRecord(actual: unknown, expected: Readonly<Record<string, string>>): boolean {
   if (actual === undefined) return Object.keys(expected).length === 0;
   if (actual === null || typeof actual !== 'object' || Array.isArray(actual)) return false;
@@ -1701,20 +1667,6 @@ function assertRegistryShadowProjection(
     projection.unsupportedFeature,
     `shadow recipe ${recipe.id} registry dependency projection drifted`,
   );
-}
-
-function assertDirectShadowRecipeAdmissions(
-  dependencies: Readonly<Record<string, string>>,
-  optionalDependencies: Readonly<Record<string, string>>,
-  rootName: string,
-  overrides: OverrideMap | undefined,
-): void {
-  for (const [name, range] of [
-    ...Object.entries(dependencies),
-    ...Object.entries(optionalDependencies),
-  ]) {
-    builtinRecipeForRequest(name, range, rootName, overrides);
-  }
 }
 
 function syntheticResolvedIdentity(recipe: BuiltinShadowSubstitutionRecipe): string {
@@ -1848,7 +1800,6 @@ function lockfileReuseDecision(
   ctx: ResolveContext,
   overrides: OverrideMap | undefined,
 ): LockfileReuseDecision {
-  const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides);
   const { override, effectiveName, effectiveRange } = resolveEffectivePackageRequest(
     name,
     range,
@@ -1856,6 +1807,13 @@ function lockfileReuseDecision(
     overrides,
   );
   const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+  const recipe = builtinRecipeForRequest(
+    name,
+    range,
+    ctx.parentName,
+    overrides,
+    hit?.entry.version,
+  );
   const policyFrontier = override !== null || recipe !== null;
   if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
   if (
@@ -1940,7 +1898,6 @@ function analyzeLockfileRequest(
       recordOwnership(registryOwnsIncrementalMiss(decision, ctx) ? 'metadata' : 'broken');
       return;
     }
-    const recipe = builtinRecipeForRequest(name, range, ctx.parentName, overrides);
     const { effectiveName } = resolveEffectivePackageRequest(
       name,
       range,
@@ -1948,6 +1905,13 @@ function analyzeLockfileRequest(
       overrides,
     );
     const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+    const recipe = builtinRecipeForRequest(
+      name,
+      range,
+      ctx.parentName,
+      overrides,
+      hit?.entry.version,
+    );
     if (
       !hit ||
       (recipe?.acquisition.kind !== 'synthetic' && (!hit.entry.resolved || !hit.entry.integrity))
@@ -2016,13 +1980,20 @@ function createIncrementalSource(
 
   return {
     source: {
-      lockPin(name, range, ctx): LockfilePinCandidate | undefined {
-        return locked.lockPin?.(name, range, ctx);
+      hasLockEntry(name, ctx): boolean {
+        return locked.hasLockEntry?.(name, ctx) ?? false;
       },
       prefetch(name, range, ctx): void {
-        if (!useRegistry(name, range, ctx)) return;
-        metadataUsed = true;
-        registry.prefetch?.(name, range, ctx);
+        // Advisory warm-up only: resolve owns every error in its boundary
+        // (an optional edge's admission throw here would escape the optional
+        // catch and fail the install npm would warn-and-skip).
+        try {
+          if (!useRegistry(name, range, ctx)) return;
+          metadataUsed = true;
+          registry.prefetch?.(name, range, ctx);
+        } catch {
+          /* resolve re-raises in the correct error-order slot */
+        }
       },
       async resolve(name, range, ctx): Promise<ResolvedPin> {
         if (useRegistry(name, range, ctx)) {
@@ -2034,6 +2005,11 @@ function createIncrementalSource(
     },
     resolution: () => (metadataUsed ? 'metadata' : 'lockfile'),
   };
+}
+
+/** Exact package identity shared by direct reservation, placement, and fetch dedup. */
+function resolvedPinIdentity(pin: ResolvedPin): string {
+  return `${pin.name}\0${pin.version}\0${pin.resolved}\0${pin.integrity ?? ''}`;
 }
 
 type PinAcquisitionResult =
@@ -2111,7 +2087,8 @@ async function walkAndPin(
   /** Every installed copy, keyed by install path. */
   const pinned = new Map<string, PinnedPackage>();
   const replayAccounting = createLockfileReplayAccounting();
-  /** Synchronous path dedup; `pinned` populates later at the await site. */
+  /** Install paths already scheduled this walk (synchronous path-level dedup,
+   * replaces `pinned.has` since `pinned` is now populated at the await site). */
   const scheduled = new Map<string, { readonly identity: string; ordinaryBinDemand: boolean }>();
   /** Paths reached by at least one non-optional edge; demand only strengthens. */
   const requiredDemandPaths = new Set<string>();
@@ -2126,7 +2103,7 @@ async function walkAndPin(
     installPath: string;
     optional: { depName: string; depRange: string; parentName: string } | null;
   }> = [];
-  const metadataOptionalEdges: InstalledMetadataOptionalEdge[] = [];
+
   function prefetchPackuments(dependencies: Record<string, string>, ctx: ResolveContext): void {
     prefetchDependencyEntries(Object.entries(dependencies), ctx);
   }
@@ -2210,7 +2187,7 @@ async function walkAndPin(
     optional: { depName: string; depRange: string; parentName: string } | null,
     ordinaryBinDemand = true,
     preparedPin?: ResolvedPin,
-  ): Promise<string> {
+  ): Promise<void> {
     return (async () => {
       const pin = preparedPin ?? (await source.resolve(name, range, ctx));
       // ADR-0188: a shimmed package outside its shim's proven range must fail
@@ -2254,15 +2231,23 @@ async function walkAndPin(
           );
         }
         if (ordinaryBinDemand) scheduledPackage.ordinaryBinDemand = true;
-        return installPath;
+        return;
       }
       scheduled.set(installPath, { identity: key, ordinaryBinDemand });
       const claimedFlat = flatSlotFreeBefore && installPath === `node_modules/${pin.name}`;
 
       const p = acquirePin(pin);
 
-      // Await an optional boundary before recursion: failure skips its subtree
-      // and lets the parent catch roll back this visit's claims.
+      // Optional-subtree skip-on-failure (npm parity, regression fix): when THIS
+      // node IS the optional boundary (reached as a direct optional child), its
+      // fetch must be awaited BEFORE recursing, exactly like the old serial walk.
+      // If it rejects, the throw propagates to the parent's optional try/catch
+      // (warn-and-skip) before any child `visit` runs, so the WHOLE optional
+      // subtree — the dep and its transitive required children — is skipped
+      // (not pinned, not on disk). Recursing first (the required-dep fast path)
+      // would orphan those required grandchildren on a failed optional fetch,
+      // diverging from real npm. Required deps keep the deferred/concurrent
+      // fetch; only the boundary trades concurrency for correctness here.
       const isOptionalBoundary =
         optional !== null && optional.depName === name && optional.parentName === ctx.parentName;
       if (isOptionalBoundary) {
@@ -2293,6 +2278,10 @@ async function walkAndPin(
       } else {
         fetchTasks.push({ promise: p, pin, installPath, optional });
       }
+
+      // Deps come from the pin, not tarball bytes. Required children of an
+      // optional boundary INHERIT `optional`: failed grandchild warns-and-skips,
+      // survivors pin (salvage, not npm's rollback; pinned — Q-2026-06-07-324).
       const childContext: ResolveContext = {
         parentName: pin.name,
         parentInstallPath: installPath,
@@ -2314,31 +2303,27 @@ async function walkAndPin(
       for (const [depName, depRange] of requiredDependencies) {
         await visit(depName, depRange, childContext, optional);
       }
+      // npm contract: a missing optional dep is non-fatal (typically
+      // platform-specific native helpers like fsevents). A resolve-time failure
+      // is caught here; a fetch-time failure is attributed at the await site via
+      // the `optional` descriptor propagated into the subtree.
       const optionalDependencies = traversedDependencyEntries(pin, pin.optionalDependencies);
       prefetchDependencyEntries(optionalDependencies, childContext);
       for (const [depName, depRange] of optionalDependencies) {
         const desc = { depName, depRange, parentName: pin.name };
         try {
-          const childInstallPath = await visit(depName, depRange, childContext, desc);
-          if (pin.origin === 'metadata')
-            metadataOptionalEdges.push([installPath, childInstallPath, depName, depRange]);
+          await visit(depName, depRange, childContext, desc);
         } catch (err) {
           throwIfAborted(fetchCtx.signal);
           recordReplaySkippedError(replayAccounting, err);
           warnOptional(desc, err);
         }
       }
-      if (pin.origin === 'lockfile' && source.lockPin) {
+      if (pin.origin === 'lockfile' && source.hasLockEntry) {
         for (const [peerName, peerRange] of Object.entries(pin.peerDependencies ?? {})) {
-          const candidate = source.lockPin(peerName, peerRange, childContext);
-          if (candidate === undefined) continue;
-          const scheduledPeer = scheduled.get(candidate.installPath);
-          if (scheduledPeer?.identity === candidate.identity) {
-            if (optional === null) requiredDemandPaths.add(candidate.installPath);
-            scheduledPeer.ordinaryBinDemand = true;
-            continue;
+          if (source.hasLockEntry(peerName, childContext)) {
+            await visit(peerName, peerRange, childContext, optional);
           }
-          await visit(peerName, peerRange, childContext, optional);
         }
       }
       // ADR-0188: same-version companion pins for shadow internals shims
@@ -2350,7 +2335,6 @@ async function walkAndPin(
       for (const [depName, depRange] of Object.entries(companions)) {
         await visit(depName, depRange, childContext, optional, false);
       }
-      return installPath;
     })();
   }
 
@@ -2458,7 +2442,6 @@ async function walkAndPin(
       warnOptional(optionalFailure, error);
     }
   }
-  foldInstalledMetadataOptionalEdges(pinned, metadataOptionalEdges);
   const companionOnlyBinInstallPaths = new Set<string>();
   for (const [installPath, scheduledPackage] of scheduled) {
     if (!scheduledPackage.ordinaryBinDemand && pinned.has(installPath)) {
@@ -2525,11 +2508,11 @@ async function pinToPackage(
     resolved: pin.resolved,
     installPath,
     ...(acquisition.kind === 'tarball' ? { integrity: acquisition.result.integrity } : {}),
-    ...(pin.origin === 'lockfile' && Object.keys(pin.optionalDependencies).length > 0
+    ...(Object.keys(pin.optionalDependencies).length > 0
       ? { optionalDependencies: pin.optionalDependencies }
       : {}),
-    ...(pin.origin === 'lockfile' && pin.cpu !== undefined ? { cpu: pin.cpu } : {}),
-    ...(pin.origin === 'lockfile' && pin.os !== undefined ? { os: pin.os } : {}),
+    ...(pin.cpu !== undefined ? { cpu: pin.cpu } : {}),
+    ...(pin.os !== undefined ? { os: pin.os } : {}),
   };
   if (pin.peerDependencies && Object.keys(pin.peerDependencies).length > 0) {
     pkg.peerDependencies = pin.peerDependencies;
@@ -2668,12 +2651,10 @@ function createLockfileSource(
 ): ResolutionSource {
   const embeddedSources = registryShadowEmbeddedSourcesFromLockfile(lockfile, shadowPlan);
   return {
-    lockPin(name, range, ctx): LockfilePinCandidate | undefined {
-      return lockfilePinCandidate(lockfile, name, range, ctx, opts.overrides);
+    hasLockEntry(name, ctx): boolean {
+      return pinnedEntryForParent(lockfile, name, ctx.parentLockfilePath) !== undefined;
     },
     async resolve(name, range, ctx): Promise<ResolvedPin> {
-      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
-      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       // Apply the same retained redirect/user override as live resolution
       // before lookup. Synthetic catalog recipes keep their source identity
       // and are validated separately against the lockfile recipe trace.
@@ -2684,6 +2665,16 @@ function createLockfileSource(
         opts.overrides,
       );
       const hit = pinnedEntryForParent(lockfile, effectiveName, ctx.parentLockfilePath);
+      // Recorded-pin admission fact (ADR-0361); absent entry keeps the
+      // request-shape throw ahead of the missing-entry EBROKENLOCK below.
+      const recipe = builtinRecipeForRequest(
+        name,
+        range,
+        ctx.parentName,
+        opts.overrides,
+        hit?.entry.version,
+      );
+      const synthetic = recipe?.acquisition.kind === 'synthetic' ? recipe : null;
       if (!hit) {
         throw Object.assign(
           new Error(
@@ -2877,15 +2868,20 @@ function createRegistrySource(
 
   return {
     prefetch(name, range, ctx): void {
-      const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
-      if (recipe?.acquisition.kind === 'synthetic') return;
-      const { effectiveName } = resolveEffectivePackageRequest(
-        name,
-        range,
-        ctx.parentName,
-        opts.overrides,
-      );
-      void loadPackument(effectiveName);
+      // Advisory warm-up only — admission throws belong to resolve's boundary.
+      try {
+        const recipe = builtinRecipeForRequest(name, range, ctx.parentName, opts.overrides);
+        if (recipe?.acquisition.kind === 'synthetic') return;
+        const { effectiveName } = resolveEffectivePackageRequest(
+          name,
+          range,
+          ctx.parentName,
+          opts.overrides,
+        );
+        void loadPackument(effectiveName);
+      } catch {
+        /* resolve re-raises in the correct error-order slot */
+      }
     },
 
     async resolve(name, range, ctx): Promise<ResolvedPin> {
@@ -2987,6 +2983,8 @@ function createRegistrySource(
           shadowProjection === undefined
             ? (manifest.optionalDependencies ?? {})
             : { ...shadowProjection.optionalDependencies },
+        ...(manifest.cpu === undefined ? {} : { cpu: manifest.cpu }),
+        ...(manifest.os === undefined ? {} : { os: manifest.os }),
         ...(shadowRecipe
           ? {
               shadow: {

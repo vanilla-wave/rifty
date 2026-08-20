@@ -1,57 +1,11 @@
 import { pinnedEntryForParent } from './installer-lockfile-reader.ts';
 import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
 import type { Lockfile, RootLockfileDependencyMaps } from './linker.ts';
-import type { OverrideMap } from './overrides.ts';
 import type { VersionManifest } from './registry.ts';
-import { resolveEffectivePackageRequest } from './shadow-shims.ts';
 
 export interface LockfilePathTranslation {
   readonly recordedPrefix: string;
   readonly actualPrefix: string;
-}
-
-export function resolvedPinIdentity(pin: {
-  readonly name: string;
-  readonly version: string;
-  readonly resolved: string;
-  readonly integrity?: string;
-}): string {
-  return `${pin.name}\0${pin.version}\0${pin.resolved}\0${pin.integrity ?? ''}`;
-}
-
-export interface LockfilePinCandidate {
-  readonly installPath: string;
-  readonly identity: string;
-}
-
-export function lockfilePinCandidate(
-  lockfile: Lockfile,
-  name: string,
-  range: string | null,
-  context: Readonly<{
-    parentName: string | undefined;
-    parentLockfilePath: string;
-    lockfilePathTranslations: readonly LockfilePathTranslation[];
-  }>,
-  overrides: OverrideMap | undefined,
-): LockfilePinCandidate | undefined {
-  const { effectiveName } = resolveEffectivePackageRequest(
-    name,
-    range,
-    context.parentName,
-    overrides,
-  );
-  const hit = pinnedEntryForParent(lockfile, effectiveName, context.parentLockfilePath);
-  if (hit?.entry.resolved === undefined) return undefined;
-  return {
-    installPath: translateRecordedInstallPath(hit.installPath, context.lockfilePathTranslations),
-    identity: resolvedPinIdentity({
-      name: effectiveName,
-      version: hit.entry.version,
-      resolved: hit.entry.resolved,
-      ...(hit.entry.integrity === undefined ? {} : { integrity: hit.entry.integrity }),
-    }),
-  };
 }
 
 /** Longest-prefix rewrite of a recorded lockfile path into the actual tree
@@ -114,7 +68,7 @@ export function recordReplaySkippedError(
  * `@img/sharp-libvips-<platform>`). They are reachable through the skipped
  * boundary, so they are recorded skips for the coverage gate and the lock
  * rewrite — never unreached orphans. Same walk-up lookup as `resolve`/
- * `lockPin` (`pinnedEntryForParent`) — no second copy. */
+ * `hasLockEntry` (`pinnedEntryForParent`) — no second copy. */
 export function expandReplaySkipClosure(
   lockfile: Lockfile,
   accounting: LockfileReplayAccounting,

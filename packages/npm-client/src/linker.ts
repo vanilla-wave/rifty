@@ -37,25 +37,6 @@ export interface ResolvedPackage {
   installPath?: string;
 }
 
-export type InstalledMetadataOptionalEdge = readonly [
-  parentInstallPath: string,
-  childInstallPath: string,
-  name: string,
-  range: string,
-];
-
-/** Fold only materialized live optionals into rifty-authored replay edges. */
-export function foldInstalledMetadataOptionalEdges(
-  packages: ReadonlyMap<string, ResolvedPackage>,
-  edges: readonly InstalledMetadataOptionalEdge[],
-): void {
-  for (const [parentPath, childPath, name, range] of edges) {
-    const parent = packages.get(parentPath);
-    if (parent === undefined || !packages.has(childPath)) continue;
-    parent.dependencies = { ...parent.dependencies, [name]: range };
-  }
-}
-
 export interface PreparedInstallPackage<TPackage extends ResolvedPackage = ResolvedPackage> {
   readonly package: TPackage;
   readonly relativePath: string;

@@ -88,7 +88,6 @@ export const BASELINE = [
   { file: 'packages/runtime-js/src/builtins/vm/rewrite-engine.ts', max: 1021 },
   { file: 'packages/runtime-js/src/builtins/fs-streams.ts', max: 1016 },
   { file: 'packages/workbench/src/glue/pty-client.ts', max: 1012 },
-  { file: 'packages/workbench/src/workbench/open-workbench.ts', max: 1012 },
   { file: 'packages/net/src/http/server.ts', max: 1010 },
   { file: 'packages/workbench/src/glue/install-stamp-authority.ts', max: 1005 },
   { file: 'packages/net/src/http/upgrade-socket.ts', max: 976 },

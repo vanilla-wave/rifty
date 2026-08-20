@@ -1087,7 +1087,6 @@ describe('install — npm-authored lockfile replay', () => {
     const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
       packages: Record<string, Record<string, unknown>>;
     };
-    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = {
       wasm: '1.0.0',
       native: '1.0.0',
@@ -1242,7 +1241,6 @@ describe('install — npm-authored lockfile replay', () => {
     const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
       packages: Record<string, Record<string, unknown>>;
     };
-    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = { native: '1.0.0' };
     lock.packages['node_modules/native']!.cpu = ['x64'];
     expect(lock.packages['node_modules/helper']).toBeDefined();
@@ -1302,7 +1300,6 @@ describe('install — npm-authored lockfile replay', () => {
       packages: Record<string, Record<string, unknown>>;
     };
     lock.packages['']!.dependencies = { app: '1.0.0' };
-    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = { plugin: '1.0.0' };
     lock.packages['node_modules/plugin']!.peerDependencies = { host: '1.0.0' };
     // Cache-miss + absent tarball = acquisition failure at the boundary.
@@ -1647,7 +1644,6 @@ describe('install — npm-authored lockfile replay faults', () => {
     const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
       packages: Record<string, Record<string, unknown>>;
     };
-    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = { opt: '1.0.0' };
     lock.packages['node_modules/opt']!.integrity = `sha512-${'A'.repeat(86)}==`;
     await vfs.writeFile(lockPath, JSON.stringify(lock));
@@ -1764,7 +1760,6 @@ describe('install — npm-authored lockfile replay faults', () => {
     const lock = JSON.parse(await vfs.readFileText(lockPath)) as {
       packages: Record<string, Record<string, unknown>>;
     };
-    lock.packages['node_modules/app']!.dependencies = {};
     lock.packages['node_modules/app']!.optionalDependencies = { native: '1.0.0' };
     lock.packages['node_modules/native']!.cpu = ['x64'];
     lock.packages['node_modules/orphan'] = { ...lock.packages['node_modules/app'] };
@@ -1813,102 +1808,6 @@ describe('install — npm-authored lockfile replay faults', () => {
     expect(replay.packages.map(({ name }) => name).sort()).toEqual(
       seeded.packages.map(({ name }) => name).sort(),
     );
-    expect(await vfs.readFileText(lockPath)).toBe(before);
-  });
-
-  it('[fault: provenance-lie / sibling-drift] records a successful transitive optional for zero-network replay', async () => {
-    const db = new Map<string, Map<string, FakeRegistryEntry>>();
-    db.set(
-      'app',
-      new Map([
-        [
-          '1.0.0',
-          await makeEntry(
-            'app',
-            '1.0.0',
-            {},
-            {
-              optionalDependencies: { binding: '1.0.0' },
-            },
-          ),
-        ],
-      ]),
-    );
-    db.set('binding', new Map([['1.0.0', await makeEntry('binding', '1.0.0')]]));
-    const vfs = new MemoryVfs();
-    await vfs.mkdir('/proj', { recursive: true });
-
-    const seeded = await install(
-      'root',
-      '1.0.0',
-      { app: '1.0.0' },
-      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
-    );
-    const lockPath = joinPath('/proj', 'package-lock.json');
-    const before = await vfs.readFileText(lockPath);
-
-    expect(seeded.lockfile.packages['node_modules/app']).toMatchObject({
-      dependencies: { binding: '1.0.0' },
-    });
-    expect(seeded.lockfile.packages['node_modules/app']?.optionalDependencies).toBeUndefined();
-
-    const registry = new CountingFakeRegistry(db);
-    const replay = await install(
-      'root',
-      '1.0.0',
-      { app: '1.0.0' },
-      { vfs, cwd: '/proj', registry },
-    );
-
-    expect(registry.calls).toEqual({ packument: [], tarball: [] });
-    expect(replay.packages.map(({ name }) => name).sort()).toEqual(['app', 'binding']);
-    expect(await vfs.readFileText(lockPath)).toBe(before);
-  });
-
-  it('[fault: observable-order / sibling-drift] reuses a direct shadow pin for a broad lock-pinned peer', async () => {
-    const db = new Map<string, Map<string, FakeRegistryEntry>>();
-    db.set(
-      'host',
-      new Map([
-        [
-          '1.0.0',
-          await makeEntry(
-            'host',
-            '1.0.0',
-            {},
-            {
-              peerDependencies: { esbuild: '^0.27.0 || ^0.28.0' },
-            },
-          ),
-        ],
-      ]),
-    );
-    const vfs = new MemoryVfs();
-    await vfs.mkdir('/proj', { recursive: true });
-    const dependencies = { esbuild: '^0.28.0', host: '1.0.0' };
-
-    await install('root', '1.0.0', dependencies, {
-      vfs,
-      cwd: '/proj',
-      registry: new CountingFakeRegistry(db),
-    });
-    const lockPath = joinPath('/proj', 'package-lock.json');
-    const before = await vfs.readFileText(lockPath);
-    const registry = new CountingFakeRegistry(db);
-    const substitutions: string[] = [];
-
-    const replay = await install('root', '1.0.0', dependencies, {
-      vfs,
-      cwd: '/proj',
-      registry,
-      onSubstitution: (line) => substitutions.push(line),
-    });
-
-    expect(registry.calls).toEqual({ packument: [], tarball: [] });
-    expect(substitutions).toEqual([
-      'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
-    ]);
-    expect(replay.packages.map(({ name }) => name).sort()).toEqual(['esbuild', 'host']);
     expect(await vfs.readFileText(lockPath)).toBe(before);
   });
 });
@@ -1994,6 +1893,94 @@ describe('install — npm 11 probe differential', () => {
       });
       expect(second.packages.map(({ installPath }) => installPath).sort()).toEqual(expectedPaths);
       expect(await vfs.readFileText(lockPath)).toBe(afterFirst);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+describe('install — fresh-install lock writer records optional edges', () => {
+  it('[fault: provenance-lie] round-trips its own written lock through the replay coverage gate', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'app',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'app',
+            '1.0.0',
+            { util: '1.0.0' },
+            { optionalDependencies: { wasm: '1.0.0', native: '1.0.0' } },
+          ),
+        ],
+      ]),
+    );
+    db.set('util', new Map([['1.0.0', await makeEntry('util', '1.0.0')]]));
+    db.set(
+      'wasm',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'wasm',
+            '1.0.0',
+            { helper: '1.0.0' },
+            { cpu: ['wasm32'], os: ['linux', 'darwin'] },
+          ),
+        ],
+      ]),
+    );
+    db.set('helper', new Map([['1.0.0', await makeEntry('helper', '1.0.0')]]));
+    db.set(
+      'native',
+      new Map([['1.0.0', await makeEntry('native', '1.0.0', {}, { cpu: ['x64'] })]]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const fresh = await install(
+        'root',
+        '1.0.0',
+        { app: '1.0.0' },
+        { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db) },
+      );
+      // Gate skips `native` (cpu x64); `wasm` + closure install and get lock
+      // entries. Those entries are reachable ONLY through app's optional edges,
+      // so the written lock must carry them — npm records the manifest's
+      // optionalDependencies (and cpu/os) on fresh installs too.
+      expect(fresh.packages.map(({ name }) => name).sort()).toEqual([
+        'app',
+        'helper',
+        'util',
+        'wasm',
+      ]);
+      expect(fresh.lockfile.packages['node_modules/app']?.optionalDependencies).toEqual({
+        wasm: '1.0.0',
+        native: '1.0.0',
+      });
+      expect(fresh.lockfile.packages['node_modules/wasm']?.cpu).toEqual(['wasm32']);
+      expect(fresh.lockfile.packages['node_modules/wasm']?.os).toEqual(['linux', 'darwin']);
+
+      // The same lock must pass its own replay coverage gate: wasm + helper are
+      // justified by the recorded edges; the never-pinned `native` edge is a
+      // write-time-dropped optional (warn-and-skip, npm parity).
+      const replayRegistry = new CountingFakeRegistry(db);
+      const replay = await install(
+        'root',
+        '1.0.0',
+        { app: '1.0.0' },
+        { vfs, cwd: '/proj', registry: replayRegistry },
+      );
+      expect(replay.packages.map(({ name }) => name).sort()).toEqual([
+        'app',
+        'helper',
+        'util',
+        'wasm',
+      ]);
+      expect(replayRegistry.calls.tarball).toEqual([]);
     } finally {
       warn.mockRestore();
     }

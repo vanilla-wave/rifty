@@ -1033,7 +1033,7 @@ function reportInstallError(err: unknown, ctx: CommandContext): number {
   }
   if (e.code === 'EBROKENLOCK') {
     ctx.stderr.write(
-      `npm: lockfile is broken (${e.packageName ?? 'unknown package'}); delete package-lock.json and retry\n`,
+      `npm: lockfile is broken (${e.message}); delete package-lock.json and retry\n`,
     );
     return 1;
   }

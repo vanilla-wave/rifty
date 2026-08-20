@@ -149,9 +149,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0314 | Cancellable package acquisition |
 | 0318 | Retain verified shadow assets for manager lifetime |
 | 0321 | Keep shadow asset port correlation package local |
-| 0335 | Shadow recipe v2 owns materialized bin claims; npm reify owns collision settlement |
 | 0343 | Auto-injected companions do not claim package bins without ordinary demand |
 | 0344 | Exact Sass twin exposes named positive surfaces; gaps require observed unsupported behavior |
+| 0361 | Lock replay admits the attested recipe pin; request admission unchanged |
 
 ### playground
 
@@ -197,6 +197,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0336 | Exact Vite 8 projects pin the proven Rolldown WASI runtime |
 | 0346 | Baked dependency snapshots carry replay tarball cache |
 | 0359 | Durability-drain progress as a health-event kind on the workbench owner port |
+| 0360 | Owner operation deadline is a host-configurable budget of durability-progress silence |
 
 ### toolchain-build
 
@@ -325,6 +326,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0045 | 0326 | dedicated MessagePort rationale retained; unconditional structured-clone fork IPC and mixed public/control frames replaced |
 | 0308 | 0328 | generic registry retained; recipe v2 adds admission, exact dependency projection, and materialization-owned bins |
 | 0328 | 0335 | recipe-v2 authority retained; lexical-min/every-install settlement replaced by npm reify operation history and a loud collision ceiling |
+| 0335 | 0361 | recipe-v2/bin/ingress clauses grafted verbatim; admission gains the request/replay boundary — lock replay admits the attested recipe pin, requests unchanged |
 | 0332 | 0340 | output admission/drain retained; authenticated cross-port write order added |
 | 0337 | 0338 | raw trace retained; permissive comparator replaced by exact one-axis native resize steps |
 | 0310 | 0344 | Pattern-1 carrier retained; impossible generic unproven-surface gap replaced by finite positive claims and RED-first specific gaps |

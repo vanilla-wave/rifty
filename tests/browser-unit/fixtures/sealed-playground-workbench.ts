@@ -22,6 +22,8 @@ export interface SealedWorkbenchBootOptions {
   readonly starter?: string;
   readonly hiddenEmptyBoot?: boolean;
   readonly persistence?: 'required' | 'preferred' | 'ephemeral';
+  /** #255: host budget of owner durability-progress SILENCE; unset = shipped 60 s. */
+  readonly ownerOperationSilenceTimeoutMs?: number;
   readonly plan?: PlaygroundProjectPlan;
 }
 
@@ -248,6 +250,9 @@ export async function openSealedWorkbenchFixture(
         serviceWorker: { url: '/sw.js', scope: '/' },
         wasm: assets.wasm,
         previewProbeTimeoutMs: 30_000,
+        ...(options.ownerOperationSilenceTimeoutMs === undefined
+          ? {}
+          : { ownerOperationSilenceTimeoutMs: options.ownerOperationSilenceTimeoutMs }),
       },
       packageAcquisition: { registryUrl: '/npm-registry' },
       storage: { persistence: options.persistence ?? 'ephemeral' },

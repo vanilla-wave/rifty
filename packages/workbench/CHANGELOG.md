@@ -4,6 +4,33 @@
 
 ### Fixed
 
+- npm shell `EBROKENLOCK` stderr line surfaces the installer's message (which
+  entries, which reason) instead of a `(unknown package)` placeholder; the
+  `delete package-lock.json and retry` recovery hint stays.
+- **Owner operation deadline measures durability-progress SILENCE, not total
+  duration (#255, ADR-0360).** `OWNER_OPERATION_TIMEOUT_MS` was a hard 60 s
+  module constant on an operation's total wall clock, so a first `openProject`
+  restoring a 98 MB baked snapshot (~42 s of OPFS flush on warm hardware,
+  minutes on slow) raced the budget and, on losing, called `failProtocol` —
+  killing the transport for an environmental condition. Every arriving
+  owner-level `workbench:durability-progress` frame (ADR-0359) now re-arms the
+  deadline of ALL pending operations, so a slow-but-alive owner completes at
+  any wall clock. No other traffic resets it: a chatty transport must not mask
+  a wedged flush. Genuine silence keeps today's fatality — reject + kill, since
+  only peer death settles an admitted mutation — and the timeout message now
+  names the cause (`… timed out after Nms without owner durability progress`).
+
+### Added
+
+- **`deployment.ownerOperationSilenceTimeoutMs` (#255, ADR-0360).** Host budget
+  of owner progress silence on `WorkbenchOptions` (and therefore
+  `PlaygroundWorkbenchOptions`), validated by the same positive-finite
+  authority as `previewProbeTimeoutMs`; unset keeps the shipped 60 000 ms. The
+  published-dist pnpm patch that raised the old constant to 300 s is no longer
+  needed — the default handles the 42 s first open unconfigured.
+
+### Fixed
+
 - **First-open materialization drain now emits `durability-progress` (#256,
   epic project-open-drain-latency final slice; ADR-0359 corrected
   2026-08-16).** Progress rides a new owner-LEVEL `workbench:durability-

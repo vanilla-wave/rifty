@@ -1,0 +1,38 @@
+{
+  "node": "v24.16.0",
+  "npm": "11.17.0",
+  "exit": 0,
+  "stdout": "\nup to date in 203ms\n",
+  "stderr": "",
+  "lockfileVersion": 3,
+  "optionalDependencies": {
+    "native-binding": "1.0.0",
+    "wasm-binding": "1.0.0"
+  },
+  "optionalCpu": {
+    "wasm": ["wasm32"],
+    "native": ["x64"]
+  },
+  "peerDependencies": {
+    "peer-target": "1.0.0"
+  },
+  "rangePeer": {
+    "recordedRange": {
+      "range-peer-target": "^1.0.0"
+    },
+    "pinnedVersion": "1.2.0",
+    "ciExit": 0,
+    "ciStderr": "",
+    "reifiedVersion": "1.2.0"
+  },
+  "packagePaths": [
+    "",
+    "node_modules/native-binding",
+    "node_modules/optional-host",
+    "node_modules/peer-source",
+    "node_modules/peer-target",
+    "node_modules/range-peer-source",
+    "node_modules/range-peer-target",
+    "node_modules/wasm-binding"
+  ]
+}
