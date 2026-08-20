@@ -14,6 +14,11 @@ import {
   projects,
 } from '../../../packages/workbench/src/workbench/project-definition.ts';
 import {
+  type EmnapiCorePatchFormat,
+  applyEmnapiCoreOrphanedReferencePatch,
+  emnapiCoreOrphanedReferencePatchPolicy,
+} from '../../../packages/workbench/src/workers/emnapi-core-install-policy.ts';
+import {
   applyViteCliActionPatch,
   applyViteRootWatchPatch,
   viteRootWatchPatchPolicy,
@@ -83,6 +88,7 @@ async function main(): Promise<void> {
 
 const decoder = new TextDecoder();
 function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
+  proveEmnapiCorePatchInput(files);
   const cliPaths = [...files.keys()].filter(
     (path) =>
       path === 'vite/dist/node/cli.js' || path.endsWith('/node_modules/vite/dist/node/cli.js'),
@@ -122,6 +128,32 @@ function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
       throw new Error(`${path} is not patchable by the current Vite root watcher transform`, {
         cause: error,
       });
+    }
+  }
+}
+
+function proveEmnapiCorePatchInput(files: ReadonlyMap<string, Uint8Array>): void {
+  const manifests = [...files.keys()].filter((path) => path.endsWith('@emnapi/core/package.json'));
+  for (const manifestPath of manifests) {
+    const manifest = JSON.parse(decoder.decode(files.get(manifestPath))) as {
+      readonly version?: unknown;
+    };
+    if (manifest.version !== emnapiCoreOrphanedReferencePatchPolicy.version) continue;
+    const packageRoot = manifestPath.slice(0, -'/package.json'.length);
+    const inputs = [
+      [`${packageRoot}/dist/emnapi-core.cjs.js`, 'readable'],
+      [`${packageRoot}/dist/emnapi-core.cjs.min.js`, 'minified'],
+    ] as const satisfies readonly (readonly [string, EmnapiCorePatchFormat])[];
+    for (const [path, format] of inputs) {
+      const bytes = files.get(path);
+      if (bytes === undefined) throw new Error(`${path} is missing from the snapshot`);
+      try {
+        applyEmnapiCoreOrphanedReferencePatch(decoder.decode(bytes), format);
+      } catch (error) {
+        throw new Error(`${path} is not patchable by the current @emnapi/core transform`, {
+          cause: error,
+        });
+      }
     }
   }
 }

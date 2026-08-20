@@ -372,6 +372,28 @@ describe('Worker terminal drain fault matrix', () => {
     expect(subject.worker.terminate).toHaveBeenCalledTimes(1);
   });
 
+  it('SIGKILL physically terminates without waiting for a stranded output write', async () => {
+    const subject = spawnSubject(new BoundaryWorker());
+    const observed = observeTerminal(subject.handle);
+    const words = new Int32Array(subject.init.spec.outputState);
+    Atomics.store(words, 1, 1);
+
+    expect(subject.handle.kill('SIGKILL')).toBe(true);
+    const physicalTerminationsBeforePeerDeath = subject.worker.terminate.mock.calls.length;
+    const settlementBeforePeerDeath = await closesWithin(observed.closed);
+
+    if (settlementBeforePeerDeath === 'timeout') {
+      subject.worker.fireError('worker remained alive after SIGKILL');
+      await observed.closed;
+    }
+
+    expect(physicalTerminationsBeforePeerDeath).toBe(1);
+    expect(settlementBeforePeerDeath).toBe('closed');
+    expect(observed.events).toEqual(['exit:null/SIGKILL', 'close:null/SIGKILL']);
+    expect(subject.handle.signalCode).toBe('SIGKILL');
+    expect(subject.manager.get(subject.handle.pid)).toBeNull();
+  });
+
   it('releases a pending output waiter when unsealed death abandons an accepted signal', async () => {
     const subject = spawnSubject(new BoundaryWorker());
     const observed = observeTerminal(subject.handle);

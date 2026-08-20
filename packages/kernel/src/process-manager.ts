@@ -4,12 +4,9 @@
  * `spawn` allocates a PID and runs a JS handler with an `IO` object;
  * `spawnWorker` spawns into its own Web Worker realm (ADR-0011).
  * `kill(pid, signal)` emits `exit`/`close`.
- *
  * Per-PID records are swept from `table` after `exit` fires, and the internal
  * stdio/IPC emitters are stripped of listeners, so a long-lived host (the
  * playground) doesn't accumulate deceased records or per-spawn listener stacks.
- * The handle object survives so callers can still read `handle.exitCode`.
- *
  * The runtime-js `child_process` builtin wires Node's API surface to this
  * manager; tests exercise the manager directly.
  */
@@ -1017,7 +1014,13 @@ export class ProcessManager {
       _terminate(signal: string, afterDescendants?: Promise<void>): boolean {
         const outcome = { kind: 'signal', signal } satisfies WorkerTerminalOutcome;
         if (!this._acceptOutcome(outcome)) return false;
-        if (afterDescendants === undefined) {
+        if (signal === 'SIGKILL') {
+          // Abrupt death cannot attest complete drain, so committed-but-
+          // undelivered chunks drop; real Node delivers pre-death pipe data.
+          // TODO(backlog: kernel/sigkill-abandons-committed-stdio)
+          spawnResult.terminate();
+          this._abandonTerminal();
+        } else if (afterDescendants === undefined) {
           this._startOutputCut();
         } else {
           void afterDescendants.then(() => {
@@ -1420,6 +1423,9 @@ export class ProcessManager {
 
   kill(pid: number, signal = 'SIGTERM'): boolean {
     const record = this.table.get(pid); // ADR-0347: manager confirms settlement; handles admit once.
+    // TODO(backlog: kernel/sigkill-escalation-after-accepted-outcome): the ack
+    // makes SIGKILL a no-op once any outcome was accepted — a stranded SIGTERM
+    // drain cannot be escalated.
     if (record) return record.terminationRequested || this.killRecordTree(record, signal);
     const route = this.forwardedRoutes.get(pid);
     if (route === undefined || route.killRequested) return route !== undefined;

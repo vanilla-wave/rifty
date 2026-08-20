@@ -17,6 +17,9 @@
 
 ### Fixed
 
+- `SIGKILL` now physically terminates a Worker before abandoning stranded
+  output, so forced thread teardown cannot wait on a dead peer's stdio seal.
+
 - **Manager PID kill is idempotent during settlement (ADR-0347).** Public
   `ProcessManager.kill(pid)` now acknowledges an existing local or forwarded
   target already terminating without sending control twice. Missing and

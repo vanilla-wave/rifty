@@ -709,6 +709,27 @@ globalThis.onmessage = ({ data }) => {
     });
   });
 
+  it('routes terminate() through an immediate physical worker kill', async () => {
+    const killSignals: string[] = [];
+    const fakeHandle = makeFakeWorkerHandle([], killSignals);
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockReturnValue(fakeHandle);
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    configureNodeEntryWorker('https://rifty.test/node-entry.js', {
+      RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
+    });
+    const parent = new NodeProcess();
+
+    await withProcessGlobal(parent, async () => {
+      const worker = new Worker('/workspace/w-immediate-terminate.mjs');
+      await onceEvent(worker, 'online');
+
+      expect(await worker.terminate()).toBe(1);
+      expect(killSignals).toEqual(['SIGKILL']);
+    });
+  });
+
   it('fails loud before kernel spawn when only the URL seam was configured', async () => {
     vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((_command, _spec) =>
       makeFakeWorkerHandle([]),
@@ -954,7 +975,7 @@ describe('worker_threads Node parity (threadId / online / terminate)', () => {
   });
 });
 
-function makeFakeWorkerHandle(sent: unknown[]): WorkerProcessHandle {
+function makeFakeWorkerHandle(sent: unknown[], killSignals: string[] = []): WorkerProcessHandle {
   const stdout = new EventEmitter();
   const stderr = new EventEmitter();
   const stdin = new EventEmitter();
@@ -989,10 +1010,12 @@ function makeFakeWorkerHandle(sent: unknown[]): WorkerProcessHandle {
     kill(
       this: EventEmitter & { exitCode: number | null; signalCode: string | null },
       signal = 'SIGTERM',
-    ): void {
+    ): boolean {
+      killSignals.push(signal);
       this.signalCode = signal;
       this.exitCode = 1;
       this.emit('exit', 1, signal);
+      return true;
     },
   });
   return handle as unknown as WorkerProcessHandle;

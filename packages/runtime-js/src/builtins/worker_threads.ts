@@ -314,7 +314,9 @@ export class Worker extends EventEmitter {
     // callers pass `code` only to drive the synthesized 'exit' event.
     if (this.exited) return undefined;
     if (this.workerHandle) {
-      this.workerHandle.kill('SIGTERM');
+      // Node Worker.terminate() is a forced stop. A drain-waiting SIGTERM lets
+      // pthread code run after its creator has destroyed shared N-API state.
+      this.workerHandle.kill('SIGKILL');
     }
     this.sameRealmParentPort?.removeAllListeners();
     this.sameRealmContext = null;

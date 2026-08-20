@@ -23,6 +23,7 @@ import {
   openShellTerminal,
   runTerminalLineSettled,
   terminalBuffer,
+  terminalHistoryExitCode,
 } from './helpers/playground.ts';
 
 async function seedFixtureProject(
@@ -54,7 +55,7 @@ async function seedFixtureProject(
 }
 
 test.describe('npm-authored lockfile replay (epic faithful-npm-lock-replay)', () => {
-  test('#254: vite@8.0.16 lock replays the wasm32 rolldown binding and `vite build` completes', async ({
+  test('#254/#247: Vite 8 lock builds and an unresolved import stays a command failure', async ({
     page,
     browserName,
   }) => {
@@ -87,6 +88,23 @@ test.describe('npm-authored lockfile replay (epic faithful-npm-lock-replay)', ()
     await expectTerminalContains(page, /assets\/index-[^"]+\.js/, 10_000);
     const afterBuild = await terminalBuffer(page);
     expect(afterBuild).not.toContain('Cannot find native binding');
+
+    await runTerminalLineSettled(
+      page,
+      `printf "import 'rifty-unresolved-import';\\ndocument.querySelector('#app').textContent = 'unreachable';\\n" > src/main.js`,
+      30_000,
+    );
+    const failingBuild = 'vite build';
+    await runTerminalLineSettled(page, failingBuild, 180_000);
+    await expectTerminalContains(
+      page,
+      /\[vite\]: Rolldown failed to resolve import ["']rifty-unresolved-import["']/,
+      10_000,
+    );
+    expect(await terminalHistoryExitCode(page, failingBuild)).not.toBe(0);
+
+    await runTerminalLineSettled(page, `printf 'OWNER-ALIVE\\n'`, 30_000);
+    await expectTerminalContains(page, 'OWNER-ALIVE', 10_000);
   });
 
   test('#261: peer-only lock entries replay 6/6 and the SDK entry module imports', async ({

@@ -1,6 +1,13 @@
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
-import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
+import {
+  emnapiCoreOrphanedReferencePatchApplied,
+  emnapiCoreOrphanedReferencePatchPolicy,
+} from './emnapi-core-install-policy.ts';
+import {
+  finalizePackageInstallFiles,
+  finalizerPackagesFromLockfile,
+} from './package-install-finalizer.ts';
 import { viteCliActionPatchApplied, viteRootWatchPatchApplied } from './vite-cli-install-policy.ts';
 
 const enc = new TextEncoder();
@@ -25,9 +32,50 @@ function seedViteFiles(
   return { cli, watcher };
 }
 
+function seedEmnapiCore(
+  fsSync: ReturnType<typeof createMemoryFs>['fsSync'],
+  root: string,
+  installPath: string,
+): { readable: string; minified: string } {
+  const packageRoot = `${root}/${installPath}`;
+  const readable = `${packageRoot}/dist/emnapi-core.cjs.js`;
+  const minified = `${packageRoot}/dist/emnapi-core.cjs.min.js`;
+  fsSync.mkdirSync(`${packageRoot}/dist`, { recursive: true });
+  fsSync.writeFileSync(
+    readable,
+    enc.encode(
+      emnapiCoreOrphanedReferencePatchPolicy.readable.map((site) => site.needle).join('\n'),
+    ),
+  );
+  fsSync.writeFileSync(
+    minified,
+    enc.encode(
+      emnapiCoreOrphanedReferencePatchPolicy.minified.map((site) => site.needle).join(';'),
+    ),
+  );
+  return { readable, minified };
+}
+
 afterEach(() => resetSyncMirror());
 
 describe('finalizePackageInstallFiles', () => {
+  it('recovers hoisted and nested @emnapi/core copies from npm v3 lock paths', () => {
+    expect(
+      finalizerPackagesFromLockfile({
+        lockfileVersion: 3,
+        packages: {
+          '': { name: 'app' },
+          'node_modules/@emnapi/core': { version: '1.10.0' },
+          'node_modules/tool/node_modules/@emnapi/core': { version: '1.11.3' },
+          'node_modules/other': { version: '1.0.0' },
+        },
+      }),
+    ).toEqual([
+      { version: '1.10.0', installPath: 'node_modules/@emnapi/core' },
+      { version: '1.11.3', installPath: 'node_modules/tool/node_modules/@emnapi/core' },
+    ]);
+  });
+
   it('patches Vite at an arbitrary non-preset project root before promotion can follow', async () => {
     const { vfs, fsSync } = createMemoryFs();
     setSyncMirror(fsSync, { async: vfs });
@@ -57,6 +105,72 @@ describe('finalizePackageInstallFiles', () => {
     expect(viteCliActionPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.cli)))).toBe(true);
     expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
       true,
+    );
+  });
+
+  it('patches every pinned @emnapi/core 1.10 copy at its real hoisted or nested path', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    setSyncMirror(fsSync, { async: vfs });
+    const root = '/scratch/nested';
+    const copies = [
+      {
+        installPath: 'node_modules/@emnapi/core',
+        files: seedEmnapiCore(fsSync, root, 'node_modules/@emnapi/core'),
+      },
+      {
+        installPath: 'node_modules/tool/node_modules/@emnapi/core',
+        files: seedEmnapiCore(fsSync, root, 'node_modules/tool/node_modules/@emnapi/core'),
+      },
+    ];
+    fsSync.writeFileSync(
+      `${root}/package-lock.json`,
+      enc.encode(
+        JSON.stringify({
+          lockfileVersion: 3,
+          packages: Object.fromEntries(
+            copies.map(({ installPath }) => [installPath, { version: '1.10.0' }]),
+          ),
+        }),
+      ),
+    );
+
+    await finalizePackageInstallFiles({ root });
+
+    for (const { files } of copies) {
+      expect(
+        emnapiCoreOrphanedReferencePatchApplied(
+          dec.decode(fsSync.readFileBytesSync(files.readable)),
+          'readable',
+        ),
+      ).toBe(true);
+      expect(
+        emnapiCoreOrphanedReferencePatchApplied(
+          dec.decode(fsSync.readFileBytesSync(files.minified)),
+          'minified',
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it('rejects a drifted @emnapi/core 1.10 artifact before promotion', async () => {
+    const { vfs, fsSync } = createMemoryFs();
+    setSyncMirror(fsSync, { async: vfs });
+    const packageRoot = '/scratch/node_modules/@emnapi/core';
+    fsSync.mkdirSync(`${packageRoot}/dist`, { recursive: true });
+    fsSync.writeFileSync(`${packageRoot}/dist/emnapi-core.cjs.js`, enc.encode('drifted'));
+    fsSync.writeFileSync(`${packageRoot}/dist/emnapi-core.cjs.min.js`, enc.encode('drifted'));
+    fsSync.writeFileSync(
+      '/scratch/package-lock.json',
+      enc.encode(
+        JSON.stringify({
+          lockfileVersion: 3,
+          packages: { 'node_modules/@emnapi/core': { version: '1.10.0' } },
+        }),
+      ),
+    );
+
+    await expect(finalizePackageInstallFiles({ root: '/scratch' })).rejects.toThrow(
+      '@emnapi/core orphaned-reference patch failed: readable anchors drifted',
     );
   });
 
