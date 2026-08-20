@@ -1015,6 +1015,9 @@ export class ProcessManager {
         const outcome = { kind: 'signal', signal } satisfies WorkerTerminalOutcome;
         if (!this._acceptOutcome(outcome)) return false;
         if (signal === 'SIGKILL') {
+          // Abrupt death cannot attest complete drain, so committed-but-
+          // undelivered chunks drop; real Node delivers pre-death pipe data.
+          // TODO(backlog: kernel/sigkill-abandons-committed-stdio)
           spawnResult.terminate();
           this._abandonTerminal();
         } else if (afterDescendants === undefined) {
@@ -1420,6 +1423,9 @@ export class ProcessManager {
 
   kill(pid: number, signal = 'SIGTERM'): boolean {
     const record = this.table.get(pid); // ADR-0347: manager confirms settlement; handles admit once.
+    // TODO(backlog: kernel/sigkill-escalation-after-accepted-outcome): the ack
+    // makes SIGKILL a no-op once any outcome was accepted — a stranded SIGTERM
+    // drain cannot be escalated.
     if (record) return record.terminationRequested || this.killRecordTree(record, signal);
     const route = this.forwardedRoutes.get(pid);
     if (route === undefined || route.killRequested) return route !== undefined;

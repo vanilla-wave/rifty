@@ -13,7 +13,6 @@ export interface PackageInstallFinalizerOptions {
 }
 
 interface FinalizerPackage {
-  readonly name: string;
   readonly version: string;
   readonly installPath: string;
 }
@@ -35,7 +34,7 @@ export function finalizerPackagesFromLockfile(lockfile: unknown): readonly Final
     if (typeof version !== 'string') {
       throw new Error(`@emnapi/core lockfile entry has no exact version: ${installPath}`);
     }
-    targets.push({ name: '@emnapi/core', version, installPath });
+    targets.push({ version, installPath });
   }
   return targets;
 }
@@ -54,12 +53,7 @@ function patchEmnapiCoreCopies(options: PackageInstallFinalizerOptions): void {
       )
     : [];
   for (const pkg of packages) {
-    if (
-      pkg.name !== '@emnapi/core' ||
-      pkg.version !== emnapiCoreOrphanedReferencePatchPolicy.version
-    ) {
-      continue;
-    }
+    if (pkg.version !== emnapiCoreOrphanedReferencePatchPolicy.version) continue;
     const packageRoot = normalizePath(`${options.root}/${pkg.installPath}`);
     for (const [relativePath, format] of emnapiCoreFiles) {
       const path = `${packageRoot}/${relativePath}`;

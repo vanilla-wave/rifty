@@ -71,16 +71,8 @@ describe('finalizePackageInstallFiles', () => {
         },
       }),
     ).toEqual([
-      {
-        name: '@emnapi/core',
-        version: '1.10.0',
-        installPath: 'node_modules/@emnapi/core',
-      },
-      {
-        name: '@emnapi/core',
-        version: '1.11.3',
-        installPath: 'node_modules/tool/node_modules/@emnapi/core',
-      },
+      { version: '1.10.0', installPath: 'node_modules/@emnapi/core' },
+      { version: '1.11.3', installPath: 'node_modules/tool/node_modules/@emnapi/core' },
     ]);
   });
 

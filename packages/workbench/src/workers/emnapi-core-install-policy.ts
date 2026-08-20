@@ -33,6 +33,8 @@ const readableUnref: PatchSite = {
             envObject.checkGCAccess();`,
 };
 
+// Minified replacements reference `g` = napiModule alias in the 1.10.0 build
+// (bytes immutable on npm); the failing-build e2e executes the patched branch.
 const minifiedDeleteReference: PatchSite = {
   needle:
     'napi_delete_reference:function(e,r){if(!e)return 1;var t=d.envStore.get(e);return r?(d.refStore.get(r).dispose(),t.clearLastError()):t.setLastError(1)}',
@@ -49,6 +51,9 @@ const minifiedUnref: PatchSite = {
 
 /** Exact upstream 1.0.3 backport; included in installArtifactIdentity. */
 export const emnapiCoreOrphanedReferencePatchPolicy = {
+  // TODO(backlog: npm-client/emnapi-orphaned-reference-version-coverage):
+  // other releases carrying the upstream bug skip the patch (= real Node-WASI
+  // behavior); affected range unrecorded.
   version: '1.10.0',
   readable: [readableDeleteReference, readableUnref],
   minified: [minifiedDeleteReference, minifiedUnref],
