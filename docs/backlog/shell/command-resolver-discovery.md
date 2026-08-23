@@ -88,7 +88,7 @@ completion is unwired, and the four consumers use separate inventories.
 |---|---|---|
 | page client↔owner server completion | quota-perm-fail / peer death / port close / finite-ACK timeout | real client↔server loopback carries owner `readdir` failure exactly; client timeout/disconnect/close settle once; e2e owner death shows the product error toast, no menu |
 | completion `sid/opId` + edit state | concurrent-same-key / observable-order | inverted/wrong-sid replies settle only matching calls; e2e holds, edits, releases the matching result, and publishes no stale menu |
-| PTY completion trust boundary | corrupt-input | reject missing/extra/wrong fields; empty IDs; negative/fractional/non-finite/inverted offsets; non-array items; missing/non-string values; bad optional display; nested extras; malformed success/error branches |
+| PTY completion trust boundary | corrupt-input | mutation-cover both frame branches: missing/extra/wrong fields; empty IDs/values; negative/fractional/non-finite/unsafe/inverted offsets; non-array or malformed items; bad optional display; nested extras |
 | execution/discovery/which/suggestion siblings | sibling-drift | `command-resolver-discovery.test.ts`: one result projects consistently; no caller-owned precedence copy |
 
 ## Out of scope
@@ -107,10 +107,14 @@ completion is unwired, and the four consumers use separate inventories.
 
 ## Decisions
 
-ready-verdict: 2026-08-24 — Contract+RED @ 465597e0d2b8f729e20fb0a2cb66e74316e308b5 — BLOCKED; implementation forbidden
-
 - `checkpoint-lineage: [c3d83ef02d5e92db14d61aa7f010073f619add4f,
-  465597e0d2b8f729e20fb0a2cb66e74316e308b5]`.
+  465597e0d2b8f729e20fb0a2cb66e74316e308b5,
+  d31f7615ece9cd26e3d6e613a98fc10b6daf417d]`.
+- Contract+RED @ `d31f7615ece9cd26e3d6e613a98fc10b6daf417d`
+  BLOCKED: mutation-cover every missing/empty/wrong request and both result
+  envelope fields, and keep blocked SHAs only in lineage — never in the
+  reserved passing `ready-verdict`. Attempt 4 adds only those RED mutations;
+  production remains untouched.
 - Contract+RED @ `465597e0d2b8f729e20fb0a2cb66e74316e308b5`
   BLOCKED: replace separate client/server fault proofs with one seam round
   trip, move UI fault acceptance from browser-unit to real Playground e2e,
@@ -185,3 +189,7 @@ allocation is:
   tests/e2e/command-resolver-discovery.spec.ts --project=chromium-light
   --grep "superseding|owner death" --workers=1` → `2 failed`: both held-request
   probes remain in `waiting` because production emits no `pty:complete` yet.
+- Attempt 4 keeps the same `7 failed | 97 passed` PTY allocation and expands
+  the strict-frame RED into mutation coverage of every request/success/error
+  envelope field plus safe numeric and nested-item domains. It removes the
+  blocked SHA from reserved `ready-verdict`; lineage above remains complete.

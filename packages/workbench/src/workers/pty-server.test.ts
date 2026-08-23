@@ -158,6 +158,20 @@ function handleCompletion(
   return server.handleFrame(frame as unknown as PageToOwnerFrame);
 }
 
+function envelopeMutations(
+  base: Readonly<Record<string, unknown>>,
+  wrongValues: Readonly<Record<string, readonly unknown[]>>,
+): readonly unknown[] {
+  const mutations: unknown[] = [];
+  for (const field of Object.keys(base)) {
+    const missing = { ...base };
+    Reflect.deleteProperty(missing, field);
+    mutations.push(missing);
+    for (const value of wrongValues[field] ?? []) mutations.push({ ...base, [field]: value });
+  }
+  return mutations;
+}
+
 class ReaddirFailingMemoryFsSync extends MemoryFsSync {
   #failure: Error | null = null;
 
@@ -218,9 +232,14 @@ describe('pty-server', () => {
     expect(inspectOwnerPtyFrame(structuredClone(failure))).toEqual(failure);
 
     const invalidPageFrames: readonly unknown[] = [
+      ...envelopeMutations(request, {
+        type: ['pty:not-complete'],
+        sid: ['', 1],
+        opId: ['', 1],
+        line: [1],
+        cursor: ['2'],
+      }),
       { ...request, extra: true },
-      { type: request.type, sid: request.sid, opId: request.opId, line: request.line },
-      { ...request, cursor: '2' },
       { ...request, cursor: -1 },
       { ...request, cursor: 1.5 },
       { ...request, cursor: Number.NaN },
@@ -228,7 +247,6 @@ describe('pty-server', () => {
       { ...request, cursor: Number.NEGATIVE_INFINITY },
       { ...request, cursor: Number.MAX_SAFE_INTEGER + 1 },
       { ...request, cursor: request.line.length + 1 },
-      { ...request, opId: '' },
     ];
     const invalidOffsets = [
       { start: -1, end: 2 },
@@ -246,6 +264,20 @@ describe('pty-server', () => {
       { start: 2, end: 1 },
     ];
     const invalidOwnerFrames: readonly unknown[] = [
+      ...envelopeMutations(success, {
+        type: ['pty:not-complete-result'],
+        sid: ['', 1],
+        opId: ['', 1],
+        ok: [false, 'true'],
+        result: ['vite'],
+      }),
+      ...envelopeMutations(failure, {
+        type: ['pty:not-complete-result'],
+        sid: ['', 1],
+        opId: ['', 1],
+        ok: [true, 'false'],
+        error: ['', 1],
+      }),
       { ...success, extra: true },
       { ...success, result: { ...success.result, extra: true } },
       ...invalidOffsets.map((offsets) => ({
@@ -255,12 +287,11 @@ describe('pty-server', () => {
       { ...success, result: { ...success.result, items: 'vite' } },
       { ...success, result: { start: 0, end: 2 } },
       { ...success, result: { ...success.result, items: [{}] } },
+      { ...success, result: { ...success.result, items: [{ value: '' }] } },
       { ...success, result: { ...success.result, items: [{ value: 1 }] } },
       { ...success, result: { ...success.result, items: [{ value: 'vite ', display: 1 }] } },
       { ...success, result: { ...success.result, items: [{ value: 'vite ', extra: true }] } },
-      { type: success.type, sid: success.sid, opId: success.opId, ok: true },
       { ...failure, result: null },
-      { ...failure, error: '' },
       { ...failure, extra: true },
     ];
     for (const frame of invalidPageFrames) {
