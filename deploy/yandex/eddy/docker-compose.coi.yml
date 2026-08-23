@@ -92,11 +92,11 @@ services:
       PROC_DIRECTORY: "/ua_proc"
       SYS_DIRECTORY: "/ua_sys"
       UA_LINUX_RESOURCE_CPU: "basic"
-      UA_LINUX_RESOURCE_MEMORY: "basic"
+      UA_LINUX_RESOURCE_MEMORY: "advanced"
       UA_LINUX_RESOURCE_NETWORK: "basic"
       UA_LINUX_RESOURCE_STORAGE: "basic"
-      UA_LINUX_RESOURCE_IO: "basic"
-      UA_LINUX_RESOURCE_KERNEL: "basic"
+      UA_LINUX_RESOURCE_IO: "advanced"
+      UA_LINUX_RESOURCE_KERNEL: "advanced"
     volumes:
       - /proc:/ua_proc:ro
       - /sys:/ua_sys:ro

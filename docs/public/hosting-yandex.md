@@ -74,12 +74,14 @@ tools/eddy/smoke-eddy.mjs
 Current resources (folder `b1g7flke7mgq94dklalu`):
 
 - Registry: `rifty` (`crpo6kvhb4o7gv41g0s4`); live image
-  `cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.2` (linux/amd64 — the VM is x86_64).
+  `cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.4` (linux/amd64, digest
+  `sha256:2660a9122c79ce759cf30b4791281ed5ae2e6fba7e07a87c43aec466048623ce`).
 - VM: `rifty-eddy`, `ru-central1-a`; reuses the `rifty-registry-proxy` security
   group (`enp064boa7v26die0el1`, ingress 80/443 tcp + 443 udp).
 - Public IPv4: `89.169.128.66` (`rifty-eddy-ip`, `e9bbnd8mhba48o4vq5kn`).
 - VM service account: `rifty-eddy-vm` (`ajeknkij3plg4dua0g1u`) with
-  `container-registry.images.puller` on the registry (COI pulls via the VM SA).
+  `container-registry.images.puller` on the registry and folder-level
+  `monium.metrics.writer` (COI pulls + Unified Agent writes metrics via VM SA).
 - DNS: `eddy.rifty.dev. 600 A 89.169.128.66` in zone `rifty`.
 - Upstream: `REGISTRY_BASE_URL=https://registry.npmjs.org` (flipped
   2026-07-07 after on-VM A/B; the browser standard path still uses
@@ -93,6 +95,11 @@ Current resources (folder `b1g7flke7mgq94dklalu`):
   origin `102946` = `eddy-bundles.storage.yandexcloud.net`, host header pinned
   to the bucket, methods GET/HEAD/OPTIONS, CORS `*`, and static CORP
   `cross-origin`.
+- Memory envelope: 64 MiB serialized packuments, 128 MiB tarballs, one
+  admitted heavy POST flight; overload is retryable 503 (ADR-0363).
+- Guest monitoring: pinned `cr.yandex/yc/unified-agent` sidecar digest
+  `sha256:ab285672…b59e5`; advanced memory/kernel/I/O metrics use
+  `service=custom`, label `host=fhme5dumk6bouckm931s`.
 
 Build + push the image (amd64), then create the VM:
 

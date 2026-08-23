@@ -408,10 +408,11 @@ first.
 ## CDN tier on rifty.dev (deployed 2026-07-01)
 
 The resources below are LIVE from the 2026-07-01 CDN setup. The running image is
-**v1.2** (tag `0.2.3`, redeployed 2026-07-08 — h3/UDP, eddy wire protocol v1.1,
-non-blocking stamp, raw-slash S3 bundle-key signing; a live POST now emits
-`x-eddy-store-durable` + a deep-canonical closure hash independent of the
-upstream registry URL). On
+**v1.2** (tag `0.2.4`, redeployed 2026-08-23 — bounded packument/tarball
+residency, full-path same-key single-flight, fail-fast admission, h3/UDP, eddy
+wire protocol v1.1, non-blocking stamp, raw-slash S3 bundle-key signing; a live
+POST emits `x-eddy-store-durable` + a deep-canonical closure hash independent
+of the upstream registry URL). On
 2026-07-07 the on-VM A/B measured direct npmjs faster than the CDN registry
 proxy for eddy cold resolves, so live `REGISTRY_BASE_URL` is
 `https://registry.npmjs.org`. S3 bundle store is live: POSTs publish durable
@@ -432,6 +433,9 @@ edge, hence the split-host shape):
 - VM Caddy serves BOTH `eddy.rifty.dev` and `eddy-origin.rifty.dev`
   (`deploy/yandex/eddy/docker-compose.coi.yml`); `eddy-origin` is now the
   rollback/smoke origin for GET-by-hash, while live CDN misses fetch the bucket.
+- The pinned Unified Agent service in the same COI compose publishes guest
+  memory/kernel/I/O metrics with the VM's narrow `monium.metrics.writer` role;
+  alerts select `service=custom`, `host=fhme5dumk6bouckm931s`.
 - Playground env (operator-set, OPT-IN — `netlify.toml` ships only
   `VITE_RIFTY_RESOLVER_URL` today): to route pinned GETs through the CDN, add
   `VITE_RIFTY_EDDY_BUNDLE_URL=https://eddy-cdn.rifty.dev`; to pin presets, add
