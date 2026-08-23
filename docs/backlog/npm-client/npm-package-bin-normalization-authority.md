@@ -105,6 +105,8 @@ and proves why it cannot be the sole oracle.
 
 ## Decisions
 
+ready-verdict: 2026-08-24 — Contract+RED @ f719b00ac
+
 - ADR-0364 selects one browser-safe package-private semantic copy of npm's
   active finite bin algorithm; no runtime dependency or public normalizer.
 - Public `PackageBin` raw ingress is string, readonly string array, or readonly
