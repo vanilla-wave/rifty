@@ -85,7 +85,9 @@ run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
 - A ready `goal.md` never changes — amend = close + re-fit. `ledger.md` only
   grows. `map.md` is live: RE-CHART graduates fog into drafts, re-cuts or
   deletes unpicked items, reorders; weakening a `ready` item stays a demotion
-  with its fork recorded (§Backlog readiness 5).
+  with its fork recorded (§Backlog readiness 5). Every merged slice gets a
+  `re-chart after <slice>` ledger line; the next PICKUP and CLOSE refuse while
+  it is missing.
 - Slices land serially — never stack a slice PR on an unmerged one.
 - Close only with no linked children, empty unit/goal residuals, end-to-end
   proof of `## Invariants`, and the ledger walk exporting every line to a

@@ -16,6 +16,9 @@ The map is a live hypothesis; only `goal.md` is frozen.
    line. Classify every discovery: required → reverse-linked draft child;
    outside the goal → `rifty-to-backlog`.
 4. **Reorder** seed order if dependencies changed.
+5. **Record.** Append the ledger line
+   `re-chart after <slice>: <n> graduated / <m> invalidated / no changes` —
+   PICKUP and CLOSE refuse while the last merged slice lacks it.
 
 Done when the map matches ALL known facts: no item a fact contradicts, no
 phrasable question still sitting in fog, no discovery left unclassified.

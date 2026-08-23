@@ -1,6 +1,7 @@
 # CLOSE — export knowledge, then delete the goal whole
 
-Preconditions: no `epic:` backlinks remain, unit/goal residuals empty, and
+Preconditions: the last merged slice carries its `re-chart after <slice>`
+ledger line, no `epic:` backlinks remain, unit/goal residuals empty, and
 every `## Invariants` statement proven end-to-end — run the named proof and
 cite its artifact; a source grep, a warning, or one green slice closes nothing.
 

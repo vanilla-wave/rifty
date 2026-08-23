@@ -10,7 +10,7 @@ Report these axes once, in order:
 
 1. **Completeness** — every unit clause covered; no required deferral.
 2. **Mission and architecture** — fits rifty's mission and boundaries.
-3. **Goal drift** — delivery matches the named goal (`docs/backlog/epics/<slug>/goal.md`), else ready contract; a ready `goal.md` never changes and `ledger.md` only grows; a `draft→ready` flip in the diff carries its `ready-verdict:` line.
+3. **Goal drift** — delivery matches the named goal (`docs/backlog/epics/<slug>/goal.md`), else ready contract; a ready `goal.md` never changes and `ledger.md` only grows; a `draft→ready` flip in the diff carries its `ready-verdict:` line; every previously merged slice carries its `re-chart after <slice>` ledger line.
 4. **Approach cost** — identify removable machinery: contract deliverable without it → blocker, first instance and ported/carried machinery included (a port re-states its forcing constraint — §Class-kill); pure code shrinkage → goal residual (in a run) or capture, never a checkpoint condition. Apply §Class-kill.
 5. **Budget** — one declared slice with its band in the goal's `ledger.md`; inspect modified files against it.
 6. **Bugs** — no correctness defect.
