@@ -6,6 +6,7 @@
 **/dist
 **/.cache
 .claude
+.codex
 **/*.tsbuildinfo
 **/coverage
 **/test-results
