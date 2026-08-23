@@ -280,12 +280,15 @@ describe('pty-server', () => {
       }),
       { ...success, extra: true },
       { ...success, result: { ...success.result, extra: true } },
+      ...envelopeMutations(success.result, {
+        start: ['0'],
+        end: ['2'],
+        items: ['vite'],
+      }).map((result) => ({ ...success, result })),
       ...invalidOffsets.map((offsets) => ({
         ...success,
         result: { ...success.result, ...offsets },
       })),
-      { ...success, result: { ...success.result, items: 'vite' } },
-      { ...success, result: { start: 0, end: 2 } },
       { ...success, result: { ...success.result, items: [{}] } },
       { ...success, result: { ...success.result, items: [{ value: '' }] } },
       { ...success, result: { ...success.result, items: [{ value: 1 }] } },
@@ -371,9 +374,16 @@ describe('pty-server', () => {
       items: [{ value: 'vite ', display: 'vite' }],
     });
 
-    fileSystem.failNextReaddir(new Error('loopback owner readdir failed exactly'));
+    fileSystem.failNextReaddir(new Error('loopback bare owner readdir failed exactly'));
     await expect(completer.complete('completion-loopback', 'vi', 2)).rejects.toMatchObject({
-      message: 'loopback owner readdir failed exactly',
+      message: 'loopback bare owner readdir failed exactly',
+    });
+
+    fileSystem.failNextReaddir(new Error('loopback path-like owner readdir failed exactly'));
+    await expect(
+      completer.complete('completion-loopback', './scripts/to', 12),
+    ).rejects.toMatchObject({
+      message: 'loopback path-like owner readdir failed exactly',
     });
   });
 

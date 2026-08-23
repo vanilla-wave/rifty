@@ -99,7 +99,12 @@ test('an explicitly addressed .bin launcher runs its real target in the owner ch
   await writeOwnerFile(
     page,
     '/scratch/node_modules/.bin/probe',
-    "#!/usr/bin/env node\nimport('../probe/cli.cjs');\n",
+    [
+      '#!/usr/bin/env node',
+      "throw new Error('SHIM_BODY_EXECUTED_AS_ORDINARY_ENTRY');",
+      "import('../probe/cli.cjs');",
+      '',
+    ].join('\n'),
   );
   await writeOwnerFile(
     page,
@@ -119,6 +124,7 @@ test('an explicitly addressed .bin launcher runs its real target in the owner ch
   // entry cannot route its dynamic import through the VFS module loader.
   expect(directBin.exit, directBin.out).toBe(0);
   expect(directBin.out).toContain('DIRECT_BIN_TARGET:first,second');
+  expect(directBin.out).not.toContain('SHIM_BODY_EXECUTED_AS_ORDINARY_ENTRY');
 });
 
 test('terminal nested npm install gives child exact package-tree ancestry', async ({ page }) => {

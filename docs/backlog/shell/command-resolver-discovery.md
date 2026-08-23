@@ -72,7 +72,8 @@ completion is unwired, and the four consumers use separate inventories.
    rejection; separate locally synthesized ends do not close this seam.
 5. `tests/browser-unit/owner-shell-routing.spec.ts` RED: a direct workspace
    script runs in the real owner supervised child as `bin:false`, while an
-   explicitly addressed `.bin` launcher runs its target as `bin:true`.
+   explicitly addressed `.bin` launcher runs its target as `bin:true`; the
+   launcher's own body throws if misclassified as an ordinary entry.
 6. `tests/e2e/command-resolver-discovery.spec.ts` Chromium RED: typing installed
    bare and direct-path prefixes opens the real DOM menu; selecting the direct
    entry runs it and records exit 0.
@@ -80,15 +81,16 @@ completion is unwired, and the four consumers use separate inventories.
    live xterm line, releases it, observes the matching result, and requires no
    late menu. With another real request pending it terminates the actual
    `workbench-owner` and requires the product error toast plus no menu. The
-   boundary decorator restores MessagePort descriptors; no test-owned UI.
+   boundary decorator counts exactly one physical request per Tab and restores
+   MessagePort descriptors; no test-owned UI.
 
 ## Fault matrix
 
 | Boundary × operation | Fault axis | Honest outcome / test target |
 |---|---|---|
-| page client↔owner server completion | quota-perm-fail / peer death / port close / finite-ACK timeout | real client↔server loopback carries owner `readdir` failure exactly; client timeout/disconnect/close settle once; e2e owner death shows the product error toast, no menu |
-| completion `sid/opId` + edit state | concurrent-same-key / observable-order | inverted/wrong-sid replies settle only matching calls; e2e holds, edits, releases the matching result, and publishes no stale menu |
-| PTY completion trust boundary | corrupt-input | mutation-cover both frame branches: missing/extra/wrong fields; empty IDs/values; negative/fractional/non-finite/unsafe/inverted offsets; non-array or malformed items; bad optional display; nested extras |
+| page client↔owner server completion | quota-perm-fail / peer death / port close / finite-ACK timeout | real loopback carries bare and path-like `readdir` failures exactly; client timeout/disconnect/close settle once; e2e owner death shows exact `(code null, signal SIGTERM)`, no menu |
+| completion `sid/opId` + edit state | concurrent-same-key / observable-order | inverted/wrong-sid replies settle only matching calls; e2e counts one request per Tab, then holds/edits/releases one matching result without stale menu |
+| PTY completion trust boundary | corrupt-input | mutation-cover request, both result envelopes, nested start/end/items: missing/extra/wrong; empty IDs/values; negative/fractional/non-finite/unsafe/inverted offsets; malformed items/display |
 | execution/discovery/which/suggestion siblings | sibling-drift | `command-resolver-discovery.test.ts`: one result projects consistently; no caller-owned precedence copy |
 
 ## Out of scope
@@ -110,7 +112,13 @@ completion is unwired, and the four consumers use separate inventories.
 - `checkpoint-lineage: [c3d83ef02d5e92db14d61aa7f010073f619add4f,
   465597e0d2b8f729e20fb0a2cb66e74316e308b5,
   d31f7615ece9cd26e3d6e613a98fc10b6daf417d,
-  dd1dc618aefe81619a129801d0e85ed0b4756e0b]`.
+  dd1dc618aefe81619a129801d0e85ed0b4756e0b,
+  07ad7789e0f73005e5da24424b2d38257f4f6054]`.
+- Contract+RED @ `07ad7789e0f73005e5da24424b2d38257f4f6054`
+  BLOCKED: count every physical request, mutate nested start/end, cross the
+  path-like reader fault, require exact SIGTERM exit identity, and make the
+  explicit `.bin` fixture fail under `bin:false`. Attempt 6 adds only those
+  discriminating REDs; production remains untouched.
 - Contract+RED @ `dd1dc618aefe81619a129801d0e85ed0b4756e0b`
   BLOCKED: the real product toast RED asserted only the constant
   `Completion failed:` prefix, allowing a lossy empty reason. Attempt 5 pins
@@ -199,3 +207,7 @@ allocation is:
   the strict-frame RED into mutation coverage of every request/success/error
   envelope field plus safe numeric and nested-item domains. It removes the
   blocked SHA from reserved `ready-verdict`; lineage above remains complete.
+- Attempt 6 keeps the same expected-RED commands while strengthening their
+  discriminants: exact-one request counts on all three e2e paths, nested result
+  mutation cover, bare + path-like loopback failures, exact SIGTERM toast, and
+  a shim body that throws unless the owner selects `bin:true`.
