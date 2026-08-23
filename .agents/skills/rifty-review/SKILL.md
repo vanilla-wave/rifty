@@ -44,6 +44,10 @@ spend attempts, never the PR — `fault-classes.md` Lineage row), its body namin
 prior local verdict SHAs. Final+GREEN requires the PR and first runs
 `pnpm pr:check` on the committed SHA.
 
+`--approve-for-me` = workspace-write sandbox with escalations judged by the
+automatic reviewer: the checkpoint can actually run gates (`pnpm pr:check`
+writes gitignored artifacts) while "Do not modify files" stays a prompt rule —
+any tracked-file mutation invalidates the verdict via its tree binding.
 Never poll or read reviewer stdout — the verdict is the `-o` JSON, liveness is
 the process state. Log is post-mortem: read it only if `verdict.json` is missing.
 `</dev/null` is load-bearing: without a TTY (background shells) codex parks on
@@ -51,7 +55,7 @@ the process state. Log is post-mortem: read it only if `verdict.json` is missing
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
-codex exec -C "$(git rev-parse --show-toplevel)" -s read-only -c approval_policy="never" \
+codex exec -C "$(git rev-parse --show-toplevel)" --approve-for-me \
   --skip-git-repo-check --output-schema tools/review/review-schema.json -o "$RUN/verdict.json" \
   "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, the named goal directory (docs/backlog/epics/<slug>/) when declared, current-unit contract, and every changed file. Do not modify files. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
   </dev/null >"$RUN/log" 2>&1
