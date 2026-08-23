@@ -319,7 +319,10 @@ test('owner death during completion reports a product error and leaves no menu',
     await killPageWorkbenchOwner(page);
 
     const errorToast = page.locator('.rf-toast[data-tone="error"]');
-    await expect(errorToast).toContainText('Completion failed:', { timeout: 15_000 });
+    await expect(errorToast).toContainText(
+      /Completion failed: Workbench owner exited unexpectedly \(code (?:null|\d+), signal (?:SIGTERM|null)\)/u,
+      { timeout: 15_000 },
+    );
     await expect(menu).toHaveCount(0);
   } finally {
     await restoreCompletionBoundary(page);

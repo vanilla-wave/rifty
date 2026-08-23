@@ -109,7 +109,13 @@ completion is unwired, and the four consumers use separate inventories.
 
 - `checkpoint-lineage: [c3d83ef02d5e92db14d61aa7f010073f619add4f,
   465597e0d2b8f729e20fb0a2cb66e74316e308b5,
-  d31f7615ece9cd26e3d6e613a98fc10b6daf417d]`.
+  d31f7615ece9cd26e3d6e613a98fc10b6daf417d,
+  dd1dc618aefe81619a129801d0e85ed0b4756e0b]`.
+- Contract+RED @ `dd1dc618aefe81619a129801d0e85ed0b4756e0b`
+  BLOCKED: the real product toast RED asserted only the constant
+  `Completion failed:` prefix, allowing a lossy empty reason. Attempt 5 pins
+  the owner-exit reason and SIGTERM provenance; all transport siblings and
+  production remain unchanged.
 - Contract+RED @ `d31f7615ece9cd26e3d6e613a98fc10b6daf417d`
   BLOCKED: mutation-cover every missing/empty/wrong request and both result
   envelope fields, and keep blocked SHAs only in lineage — never in the
