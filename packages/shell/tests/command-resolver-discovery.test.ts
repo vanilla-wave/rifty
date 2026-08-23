@@ -60,6 +60,32 @@ describe('Shell command resolution and discovery', () => {
     expect(calls).toEqual([]);
   });
 
+  it('discovers installed bins for names, suggestions, and completion without leaking into help', async () => {
+    const fileSystem = new MemoryFsSync();
+    fileSystem.loadFixture({
+      '/proj/node_modules/.bin/vite': 'installed shim\n',
+    });
+    const shell = new Shell({ cwd: '/proj', fileSystem });
+    shell.registerCommand('frobnicate', async () => 0);
+
+    expect(shell.commandNames()).toContain('vite');
+    expect(await shell.run('vtei')).toMatchObject({
+      exitCode: 127,
+      stderr: "vtei: command not found\nDid you mean 'vite'?\n",
+    });
+    expect(shell.complete('vi', 2)).toEqual({
+      start: 0,
+      end: 2,
+      items: [{ value: 'vite ', display: 'vite' }],
+    });
+
+    const help = await shell.run('help');
+    const commandList = help.stdout.split('\n')[0];
+    expect(help.exitCode).toBe(0);
+    expect(commandList).toContain('frobnicate');
+    expect(commandList).not.toContain('vite');
+  });
+
   it('uses the same nearest ancestor bin for execution, which, presence, and names', async () => {
     const fileSystem = new MemoryFsSync();
     fileSystem.loadFixture({
@@ -169,7 +195,7 @@ describe('Shell command resolution and discovery', () => {
     {
       command: './scripts',
       exitCode: 126,
-      diagnostic: './scripts: Is a directory\n',
+      diagnostic: './scripts: is a directory\n',
     },
     {
       command: './scripts/tool.mjs/child',

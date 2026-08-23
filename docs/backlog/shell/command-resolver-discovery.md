@@ -57,7 +57,9 @@ completion is unwired, and the four consumers use separate inventories.
    diagnostics match the frozen bash classes; a path-like miss never falls back
    to a same-named `.bin`.
 2. Same suite: builtin/custom shadowing, live cwd, nearest ancestor `.bin`, and
-   `which` spelling remain green while all consumers route through one result.
+   `which` spelling remain green while all consumers route through one result;
+   installed names enter discovery/suggestions/completion but never the
+   registered-only `help` synopsis.
 3. `packages/shell/tests/language-service.test.ts` RED: a real Shell discovers
    installed ancestor shims, suggests them, and completes bare/direct argv-0
    from its live Memory VFS after cwd changes.
@@ -65,17 +67,21 @@ completion is unwired, and the four consumers use separate inventories.
    replies, error/timeout/disconnect/close settlement, strict frame validation,
    and owner-live cwd/VFS result.
 5. `tests/browser-unit/owner-shell-routing.spec.ts` RED: a direct workspace
-   script runs in the real owner supervised child as `bin:false`.
+   script runs in the real owner supervised child as `bin:false`, while an
+   explicitly addressed `.bin` launcher runs its target as `bin:true`.
 6. Chromium terminal acceptance RED: typing an installed bare prefix and a
    direct path prefix opens the real DOM completion menu; selecting the direct
    entry runs it and records exit 0.
+7. `tests/browser-unit/terminal-completion.spec.ts` RED: an edit superseding an
+   inflight request drops its late menu; a rejected request renders
+   `Completion failed` and no menu.
 
 ## Fault matrix
 
 | Boundary × operation | Fault axis | Honest outcome / test target |
 |---|---|---|
-| page→owner completion request | peer death / port close / finite-ACK timeout | `pty-client.test.ts`: pending request rejects once; Playground shows `Completion failed`, no menu |
-| completion `sid/opId` result | concurrent-same-key / observable-order | `pty-client.test.ts`: inverted simultaneous replies settle only matching calls; close fences; TerminalPanel's existing sequence drops superseded edits |
+| page→owner completion request | peer death / port close / finite-ACK timeout | `pty-client.test.ts` settles the request; `terminal-completion.spec.ts` shows `Completion failed` and no menu |
+| completion `sid/opId` result | concurrent-same-key / observable-order | `pty-client.test.ts`: inverted/wrong-sid replies settle only matching calls; `terminal-completion.spec.ts` drops a reply superseded by edit |
 | PTY completion frame | corrupt-input | `pty-server.test.ts`: strict inspectors reject extra/missing/wrong-shaped fields before dispatch |
 | owner resolver VFS discovery | quota-perm-fail / provenance-lie | `pty-server.test.ts`: exact readdir error becomes failure result; no empty-success inventory |
 | execution/discovery/which/suggestion siblings | sibling-drift | `command-resolver-discovery.test.ts`: one result projects consistently; no caller-owned precedence copy |
@@ -96,6 +102,12 @@ completion is unwired, and the four consumers use separate inventories.
 
 ## Decisions
 
+- `checkpoint-lineage: [c3d83ef02d5e92db14d61aa7f010073f619add4f]`.
+- Contract+RED @ `c3d83ef02d5e92db14d61aa7f010073f619add4f`
+  BLOCKED: add real-owner explicit `.bin`, registered-only help, visible
+  completion failure, wrong-sid and stale-edit fences, reconcile the old
+  slash-miss test, and pin directory/ENOTDIR exact diagnostics. Attempt 2
+  re-cuts those carriers in place without changing scope or production code.
 - ADR-0362 settles direct regular-file semantics, the internal two-method
   resolver, and the owner-backed completion carrier.
 - The resolver is internal; no exported resolver type or external adapter seam.
@@ -126,3 +138,22 @@ Playwright install. Captured 2026-08-23 before production changes.
   tests/e2e/command-resolver-discovery.spec.ts --project=chromium-light
   --workers=1` → `1 failed`: `.rf-terminal-autocomplete` never appears after
   `vit` + Tab.
+
+Attempt 2 re-cut, still before production changes:
+
+- `pnpm vitest run packages/shell/tests/command-resolver-discovery.test.ts
+  packages/shell/tests/bin-resolution.test.ts
+  packages/shell/tests/language-service.test.ts --reporter=dot` →
+  `15 failed | 31 passed`: the former green slash-miss assertion is RED;
+  registered-only help, exact Bash failure classes, and live installed
+  discovery are one projection suite.
+- The PTY command above remains `8 failed | 97 passed`; its inverted-response
+  case now first rejects a correct `opId` carrying a sibling `sid`, proves the
+  target pending, then settles the correct result.
+- `RIFTY_PLAYGROUND_PORT=5396 pnpm exec playwright test --config
+  playwright.browser-unit.config.ts tests/browser-unit/owner-shell-routing.spec.ts
+  tests/browser-unit/terminal-completion.spec.ts --grep "direct workspace
+  module|explicitly addressed|TerminalPanel owner completion settlement"
+  --workers=1` → `4 failed`: ordinary direct and explicit `.bin` both return
+  127; a late reply publishes one stale menu; a rejected completion publishes
+  no `Completion failed` element.

@@ -19,6 +19,7 @@ printf 'directory='; command -v ./scripts || printf 'MISS:%s\n' "$?"
 ./scripts/tool direct-ok
 ./scripts/missing 2>&1 || printf 'missing-exit=%s\n' "$?"
 ./scripts 2>&1 || printf 'directory-exit=%s\n' "$?"
+./scripts/tool/child 2>&1 || printf 'enotdir-exit=%s\n' "$?"
 printf 'completion='; compgen -c vi | LC_ALL=C sort -u | tr '\n' ','; printf '\n'
 ```
 
@@ -37,6 +38,8 @@ bash: ./scripts/missing: No such file or directory
 missing-exit=127
 bash: ./scripts: is a directory
 directory-exit=126
+bash: ./scripts/tool/child: Not a directory
+enotdir-exit=126
 completion=vi,view,viewdiagnostic,vim,vimdiff,vimtutor,vis,vite,
 ```
 

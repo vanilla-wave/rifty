@@ -88,6 +88,39 @@ test('a direct workspace module runs in the real owner child with argv and exit 
   expect(direct.out).toContain('DIRECT_ARGS:first,second');
 });
 
+test('an explicitly addressed .bin launcher runs its real target in the owner child', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-direct-bin-entry',
+    hiddenEmptyBoot: true,
+  });
+  await writeOwnerFile(
+    page,
+    '/scratch/node_modules/.bin/probe',
+    "#!/usr/bin/env node\nimport('../probe/cli.cjs');\n",
+  );
+  await writeOwnerFile(
+    page,
+    '/scratch/node_modules/probe/cli.cjs',
+    [
+      'const args = process.argv.slice(2);',
+      "console.log('DIRECT_BIN_TARGET:' + args.join(','));",
+      "process.exitCode = args.join(',') === 'first,second' ? 0 : 9;",
+      '',
+    ].join('\n'),
+  );
+
+  const directBin = await execLine(page, '/node_modules/.bin/probe first second');
+
+  // Success requires `.bin` classification: the launcher is a carrier and its
+  // target is the program. Treating the extensionless launcher as an ordinary
+  // entry cannot route its dynamic import through the VFS module loader.
+  expect(directBin.exit, directBin.out).toBe(0);
+  expect(directBin.out).toContain('DIRECT_BIN_TARGET:first,second');
+});
+
 test('terminal nested npm install gives child exact package-tree ancestry', async ({ page }) => {
   test.setTimeout(240_000);
   await gotoHarness(page);

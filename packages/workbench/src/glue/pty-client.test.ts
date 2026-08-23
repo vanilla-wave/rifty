@@ -1766,6 +1766,23 @@ describe('pty-client', () => {
     });
     expect(firstFrame.opId).not.toBe(secondFrame.opId);
 
+    const mismatch = captureThrown(() =>
+      deliverCompletion(client, {
+        type: 'pty:complete-result',
+        sid: 'completion-sibling',
+        opId: firstFrame.opId,
+        ok: true,
+        result: firstResult,
+      }),
+    );
+    expectCorrelationMismatch(mismatch, 'pty:complete-result', 'completion-sibling');
+    await expect(
+      settledOr(
+        first.then(() => 'resolved'),
+        'pending',
+      ),
+    ).resolves.toBe('pending');
+
     deliverCompletion(client, {
       type: 'pty:complete-result',
       sid: secondFrame.sid,
