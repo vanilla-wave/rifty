@@ -1,6 +1,61 @@
+import type { ShellCompletionResult } from '@riftydev/shell';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPtyClient } from './pty-client.ts';
-import type { PageToOwnerFrame } from './pty-protocol.ts';
+import type { OwnerToPageFrame, PageToOwnerFrame } from './pty-protocol.ts';
+
+type FuturePtyComplete = {
+  readonly type: 'pty:complete';
+  readonly sid: string;
+  readonly opId: string;
+  readonly line: string;
+  readonly cursor: number;
+};
+
+type FuturePtyCompleteResult =
+  | {
+      readonly type: 'pty:complete-result';
+      readonly sid: string;
+      readonly opId: string;
+      readonly ok: true;
+      readonly result: ShellCompletionResult | null;
+    }
+  | {
+      readonly type: 'pty:complete-result';
+      readonly sid: string;
+      readonly opId: string;
+      readonly ok: false;
+      readonly error: string;
+    };
+
+type CompletionPtyClient = ReturnType<typeof createPtyClient> & {
+  complete(sid: string, line: string, cursor: number): Promise<ShellCompletionResult | null>;
+};
+
+function completionClient(client: ReturnType<typeof createPtyClient>): CompletionPtyClient {
+  return client as unknown as CompletionPtyClient;
+}
+
+function completionFrames(sent: readonly PageToOwnerFrame[]): readonly FuturePtyComplete[] {
+  return (sent as readonly (PageToOwnerFrame | FuturePtyComplete)[]).filter(
+    (frame): frame is FuturePtyComplete => frame.type === 'pty:complete',
+  );
+}
+
+function deliverCompletion(
+  client: ReturnType<typeof createPtyClient>,
+  frame: FuturePtyCompleteResult,
+): void {
+  client.onFrame(frame as unknown as OwnerToPageFrame);
+}
+
+async function openCompletionSession(
+  client: ReturnType<typeof createPtyClient>,
+  sid: string,
+): Promise<void> {
+  const opened = client.openSession(sid);
+  client.onFrame({ type: 'pty:ready', sid });
+  await opened;
+}
 
 function harness() {
   const sent: PageToOwnerFrame[] = [];
@@ -1669,4 +1724,173 @@ describe('pty-client', () => {
     await expect(settledOr(future, 'pending')).resolves.toMatch(/ClosedHandleError.*owner died/i);
     expect(sent.filter((frame) => frame.type === 'pty:dev-config')).toHaveLength(1);
   });
+
+  it('posts exact completion requests and settles two inverted replies by opId', async () => {
+    const { client, sent } = harness();
+    await openCompletionSession(client, 'completion-order');
+    const completer = completionClient(client);
+    const firstResult = {
+      start: 0,
+      end: 2,
+      items: [{ value: 'vite ', display: 'vite' }],
+    } satisfies ShellCompletionResult;
+    const secondResult = {
+      start: 0,
+      end: 3,
+      items: [{ value: 'pwd ', display: 'pwd' }],
+    } satisfies ShellCompletionResult;
+    const settlementOrder: string[] = [];
+
+    const first = completer.complete('completion-order', 'vi', 2);
+    const second = completer.complete('completion-order', 'pwd', 3);
+    void first.then(() => settlementOrder.push('first'));
+    void second.then(() => settlementOrder.push('second'));
+
+    const frames = completionFrames(sent);
+    expect(frames).toHaveLength(2);
+    const firstFrame = frames[0]!;
+    const secondFrame = frames[1]!;
+    expect(firstFrame).toEqual({
+      type: 'pty:complete',
+      sid: 'completion-order',
+      opId: firstFrame.opId,
+      line: 'vi',
+      cursor: 2,
+    });
+    expect(secondFrame).toEqual({
+      type: 'pty:complete',
+      sid: 'completion-order',
+      opId: secondFrame.opId,
+      line: 'pwd',
+      cursor: 3,
+    });
+    expect(firstFrame.opId).not.toBe(secondFrame.opId);
+
+    deliverCompletion(client, {
+      type: 'pty:complete-result',
+      sid: secondFrame.sid,
+      opId: secondFrame.opId,
+      ok: true,
+      result: secondResult,
+    });
+    await expect(second).resolves.toEqual(secondResult);
+    expect(settlementOrder).toEqual(['second']);
+
+    deliverCompletion(client, {
+      type: 'pty:complete-result',
+      sid: firstFrame.sid,
+      opId: firstFrame.opId,
+      ok: true,
+      result: firstResult,
+    });
+    await expect(first).resolves.toEqual(firstResult);
+    expect(settlementOrder).toEqual(['second', 'first']);
+  });
+
+  it('rejects completion with the exact owner error instead of publishing an empty result', async () => {
+    const { client, sent } = harness();
+    await openCompletionSession(client, 'completion-error');
+    const pending = completionClient(client).complete('completion-error', './private/', 10);
+    const frame = completionFrames(sent)[0]!;
+
+    deliverCompletion(client, {
+      type: 'pty:complete-result',
+      sid: frame.sid,
+      opId: frame.opId,
+      ok: false,
+      error: 'owner completion readdir failed exactly',
+    });
+
+    await expect(pending).rejects.toMatchObject({
+      message: 'owner completion readdir failed exactly',
+    });
+  });
+
+  it('bounds completion, ignores its late result, and admits the next request', async () => {
+    vi.useFakeTimers();
+    const { client, sent } = harness();
+    await openCompletionSession(client, 'completion-timeout');
+    const completer = completionClient(client);
+    const first = completer.complete('completion-timeout', 'vi', 2);
+    const firstFrame = completionFrames(sent)[0]!;
+    let failure: unknown;
+    void first.catch((error: unknown) => {
+      failure = error;
+    });
+
+    await vi.advanceTimersByTimeAsync(ACK_TIMEOUT_MS + 1);
+
+    expect(failure).toEqual(
+      expect.objectContaining({
+        name: 'PtyAckTimeoutError',
+        message: expect.stringMatching(/pty:complete-result.*completion-timeout.*60000ms/i),
+      }),
+    );
+    deliverCompletion(client, {
+      type: 'pty:complete-result',
+      sid: firstFrame.sid,
+      opId: firstFrame.opId,
+      ok: true,
+      result: null,
+    });
+
+    const second = completer.complete('completion-timeout', 'vit', 3);
+    const secondFrame = completionFrames(sent)[1]!;
+    const result = {
+      start: 0,
+      end: 3,
+      items: [{ value: 'vite ', display: 'vite' }],
+    } satisfies ShellCompletionResult;
+    deliverCompletion(client, {
+      type: 'pty:complete-result',
+      sid: secondFrame.sid,
+      opId: secondFrame.opId,
+      ok: true,
+      result,
+    });
+
+    await expect(second).resolves.toEqual(result);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['disconnect', 'close'] as const)(
+    '%s rejects pending and future completion without posting a doomed request',
+    async (settlement) => {
+      const { client, sent } = harness();
+      await openCompletionSession(client, `completion-${settlement}`);
+      const completer = completionClient(client);
+      const pending = completer.complete(`completion-${settlement}`, 'vi', 2);
+      const outcome = pending.then(
+        () => 'resolved' as const,
+        (error: unknown) => error,
+      );
+
+      if (settlement === 'disconnect') {
+        const cause = new Error('exact completion owner disconnect');
+        client.disconnect(cause);
+        await expect(outcome).resolves.toBe(cause);
+        await expect(completer.complete('completion-disconnect', 'vit', 3)).rejects.toBe(cause);
+      } else {
+        const cause = new Error('project terminal close started exactly');
+        const closing = client.closeSession('completion-close', cause);
+        await expect(outcome).resolves.toBe(cause);
+        const closeFrame = sent.find(
+          (frame): frame is Extract<PageToOwnerFrame, { type: 'pty:close' }> =>
+            frame.type === 'pty:close',
+        )!;
+        client.onFrame({
+          type: 'pty:close-ack',
+          sid: closeFrame.sid,
+          opId: closeFrame.opId,
+          ok: true,
+        });
+        await closing;
+        await expect(completer.complete('completion-close', 'vit', 3)).rejects.toThrow(
+          /ClosedHandleError.*closed/i,
+        );
+      }
+
+      expect(completionFrames(sent)).toHaveLength(1);
+    },
+  );
 });

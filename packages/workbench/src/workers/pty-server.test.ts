@@ -1,10 +1,11 @@
 import { EventEmitter } from 'node:events';
-import { Shell } from '@riftydev/shell';
-import { resetSyncMirror } from '@riftydev/vfs/internal';
+import { Shell, type ShellCompletionResult } from '@riftydev/shell';
+import { MemoryFsSync, resetSyncMirror } from '@riftydev/vfs/internal';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
 import { type ForegroundChildHandle, runForegroundChild } from '../glue/run-foreground-child.ts';
+import { inspectOwnerPtyFrame, inspectPagePtyFrame } from '../workbench/owner-protocol-pty.ts';
 import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
 import { type DevServerChildHandle, createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createPtyServer } from './pty-server.ts';
@@ -105,15 +106,200 @@ type FutureAck =
       readonly opId: string;
       readonly ok: boolean;
       readonly error?: string;
+    }
+  | FuturePtyCompleteResult;
+
+type FuturePtyComplete = {
+  readonly type: 'pty:complete';
+  readonly sid: string;
+  readonly opId: string;
+  readonly line: string;
+  readonly cursor: number;
+};
+
+type FuturePtyCompleteResult =
+  | {
+      readonly type: 'pty:complete-result';
+      readonly sid: string;
+      readonly opId: string;
+      readonly ok: true;
+      readonly result: ShellCompletionResult | null;
+    }
+  | {
+      readonly type: 'pty:complete-result';
+      readonly sid: string;
+      readonly opId: string;
+      readonly ok: false;
+      readonly error: string;
     };
 
 function wireFrames(out: readonly OwnerToPageFrame[]): readonly (OwnerToPageFrame | FutureAck)[] {
   return out as readonly (OwnerToPageFrame | FutureAck)[];
 }
 
+function completionResults(out: readonly OwnerToPageFrame[]): readonly FuturePtyCompleteResult[] {
+  return wireFrames(out).filter(
+    (frame): frame is FuturePtyCompleteResult => frame.type === 'pty:complete-result',
+  );
+}
+
+function handleCompletion(
+  server: ReturnType<typeof createPtyServer>,
+  frame: FuturePtyComplete,
+): void | Promise<void> {
+  return server.handleFrame(frame as unknown as PageToOwnerFrame);
+}
+
+class ReaddirFailingMemoryFsSync extends MemoryFsSync {
+  #failure: Error | null = null;
+
+  failNextReaddir(error: Error): void {
+    this.#failure = error;
+  }
+
+  override readdirSync(path: string) {
+    const failure = this.#failure;
+    this.#failure = null;
+    if (failure !== null) throw failure;
+    return super.readdirSync(path);
+  }
+}
+
 describe('pty-server', () => {
   beforeEach(() => {
     resetSyncMirror(); // fresh in-memory owner store per test
+  });
+
+  it('strictly inspects exact clone-safe completion request and result frames', () => {
+    const request = {
+      type: 'pty:complete',
+      sid: 'completion-protocol',
+      opId: 'complete-1',
+      line: 'vi',
+      cursor: 2,
+    } as const;
+    const success = {
+      type: 'pty:complete-result',
+      sid: request.sid,
+      opId: request.opId,
+      ok: true,
+      result: {
+        start: 0,
+        end: 2,
+        items: [{ value: 'vite ', display: 'vite' }, { value: 'vitest ' }],
+      },
+    } as const;
+    const empty = {
+      type: 'pty:complete-result',
+      sid: request.sid,
+      opId: 'complete-2',
+      ok: true,
+      result: null,
+    } as const;
+    const failure = {
+      type: 'pty:complete-result',
+      sid: request.sid,
+      opId: 'complete-3',
+      ok: false,
+      error: 'owner completion failed',
+    } as const;
+
+    expect(inspectPagePtyFrame(structuredClone(request))).toEqual(request);
+    expect(inspectOwnerPtyFrame(structuredClone(success))).toEqual(success);
+    expect(inspectOwnerPtyFrame(structuredClone(empty))).toEqual(empty);
+    expect(inspectOwnerPtyFrame(structuredClone(failure))).toEqual(failure);
+
+    const invalidPageFrames: readonly unknown[] = [
+      { ...request, extra: true },
+      { type: request.type, sid: request.sid, opId: request.opId, line: request.line },
+      { ...request, cursor: '2' },
+      { ...request, opId: '' },
+    ];
+    const invalidOwnerFrames: readonly unknown[] = [
+      { ...success, extra: true },
+      { ...success, result: { ...success.result, extra: true } },
+      { ...success, result: { ...success.result, items: [{ value: 'vite ', display: 1 }] } },
+      { type: success.type, sid: success.sid, opId: success.opId, ok: true },
+      { ...failure, result: null },
+    ];
+    for (const frame of invalidPageFrames) {
+      expect(() => inspectPagePtyFrame(structuredClone(frame))).toThrow(TypeError);
+    }
+    for (const frame of invalidOwnerFrames) {
+      expect(() => inspectOwnerPtyFrame(structuredClone(frame))).toThrow(TypeError);
+    }
+  });
+
+  it('answers completion from the owner session Shell and its live VFS after open', async () => {
+    const out: OwnerToPageFrame[] = [];
+    const fileSystem = new MemoryFsSync();
+    const shell = new Shell({ cwd: '/workspace/packages/app', fileSystem });
+    const server = createPtyServer({
+      send: (frame) => out.push(frame),
+      makeShell: () => shell,
+    });
+    server.handleFrame({ type: 'pty:open', sid: 'completion-live' });
+    fileSystem.mkdirSync('/workspace/node_modules/.bin', { recursive: true });
+    fileSystem.writeFileSync(
+      '/workspace/node_modules/.bin/vite',
+      new TextEncoder().encode('#!/usr/bin/env node\n'),
+    );
+
+    await handleCompletion(server, {
+      type: 'pty:complete',
+      sid: 'completion-live',
+      opId: 'complete-live-1',
+      line: 'vi',
+      cursor: 2,
+    });
+
+    expect(completionResults(out)).toEqual([
+      {
+        type: 'pty:complete-result',
+        sid: 'completion-live',
+        opId: 'complete-live-1',
+        ok: true,
+        result: {
+          start: 0,
+          end: 2,
+          items: [{ value: 'vite ', display: 'vite' }],
+        },
+      },
+    ]);
+  });
+
+  it('returns the exact owner completion read error instead of an empty-success inventory', async () => {
+    const out: OwnerToPageFrame[] = [];
+    const fileSystem = new ReaddirFailingMemoryFsSync();
+    fileSystem.mkdirSync('/workspace/node_modules/.bin', { recursive: true });
+    fileSystem.writeFileSync(
+      '/workspace/node_modules/.bin/vite',
+      new TextEncoder().encode('#!/usr/bin/env node\n'),
+    );
+    const server = createPtyServer({
+      send: (frame) => out.push(frame),
+      makeShell: () => new Shell({ cwd: '/workspace', fileSystem }),
+    });
+    server.handleFrame({ type: 'pty:open', sid: 'completion-error' });
+    fileSystem.failNextReaddir(new Error('owner completion readdir failed exactly'));
+
+    await handleCompletion(server, {
+      type: 'pty:complete',
+      sid: 'completion-error',
+      opId: 'complete-error-1',
+      line: 'vi',
+      cursor: 2,
+    });
+
+    expect(completionResults(out)).toEqual([
+      {
+        type: 'pty:complete-result',
+        sid: 'completion-error',
+        opId: 'complete-error-1',
+        ok: false,
+        error: 'owner completion readdir failed exactly',
+      },
+    ]);
   });
 
   it('open → ready', () => {

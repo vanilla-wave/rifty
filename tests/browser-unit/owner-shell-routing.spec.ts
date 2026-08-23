@@ -59,6 +59,35 @@ test('npm scripts route through the real shell; vite stays package-owned; node-c
   expect(dev.out).toContain('cli-dev-body-ran');
 });
 
+test('a direct workspace module runs in the real owner child with argv and exit status', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  await bootOwner(page, {
+    workspaceId: 'bu-direct-workspace-entry',
+    hiddenEmptyBoot: true,
+  });
+  await writeOwnerFile(
+    page,
+    '/scratch/scripts/tool.mjs',
+    [
+      'const args = process.argv.slice(2);',
+      "console.log('DIRECT_ENTRY:' + process.argv[1]);",
+      "console.log('DIRECT_ARGS:' + args.join(','));",
+      "process.exitCode = args.join(',') === 'first,second' ? 0 : 9;",
+      '',
+    ].join('\n'),
+  );
+
+  const direct = await execLine(page, '/scripts/tool.mjs first second');
+
+  // A normal .mjs file is not a .bin launcher. These observations therefore
+  // require the supervised node-entry worker to classify this launch bin:false.
+  expect(direct.exit, direct.out).toBe(0);
+  expect(direct.out).toContain('DIRECT_ENTRY:/scripts/tool.mjs');
+  expect(direct.out).toContain('DIRECT_ARGS:first,second');
+});
+
 test('terminal nested npm install gives child exact package-tree ancestry', async ({ page }) => {
   test.setTimeout(240_000);
   await gotoHarness(page);

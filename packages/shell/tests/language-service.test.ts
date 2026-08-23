@@ -1,5 +1,7 @@
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import {
+  Shell,
   type ShellCompletionMode,
   createShellCompleter,
   shellLineHighlightSpans,
@@ -66,6 +68,55 @@ describe('createShellCompleter', () => {
   it('returns null for missing completion directories', () => {
     const complete = makeCompleter();
     expect(complete('cat nope/a', 10)).toBeNull();
+  });
+});
+
+describe('Shell.complete', () => {
+  it('discovers installed ancestor bins from the live cwd and filesystem', async () => {
+    const fileSystem = new MemoryFsSync();
+    fileSystem.loadFixture({
+      '/workspace/node_modules/.bin/vite': 'workspace shim\n',
+      '/workspace/packages/app/src/index.ts': 'export {};\n',
+    });
+    const shell = new Shell({ cwd: '/workspace', fileSystem });
+
+    expect(shell.complete('vi', 2)).toEqual({
+      start: 0,
+      end: 2,
+      items: [{ value: 'vite ', display: 'vite' }],
+    });
+
+    fileSystem.loadFixture({
+      '/workspace/packages/app/node_modules/.bin/vitest': 'installed after construction\n',
+    });
+    expect((await shell.run('cd packages/app/src')).exitCode).toBe(0);
+    expect(shell.complete('vi', 2)).toEqual({
+      start: 0,
+      end: 2,
+      items: [
+        { value: 'vite ', display: 'vite' },
+        { value: 'vitest ', display: 'vitest' },
+      ],
+    });
+  });
+
+  it('completes a direct argv-0 path from the live cwd and filesystem', async () => {
+    const fileSystem = new MemoryFsSync();
+    fileSystem.loadFixture({
+      '/workspace/packages/app/src/index.ts': 'export {};\n',
+    });
+    const shell = new Shell({ cwd: '/workspace', fileSystem });
+
+    expect((await shell.run('cd packages/app')).exitCode).toBe(0);
+    fileSystem.loadFixture({
+      '/workspace/packages/app/scripts/tool.mjs': 'console.log("tool");\n',
+    });
+
+    expect(shell.complete('./scripts/to', 12)).toEqual({
+      start: 0,
+      end: 12,
+      items: [{ value: './scripts/tool.mjs ', display: 'tool.mjs' }],
+    });
   });
 });
 
