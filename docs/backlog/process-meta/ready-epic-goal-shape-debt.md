@@ -1,10 +1,10 @@
 ---
 area: process-meta
 status: draft
-title: Ready epics carry no Invariants/tier/Budget — every hand-off starts with an unplanned refit
+title: Legacy ready epics carry no Invariants/tier — every hand-off starts with an unplanned refit
 created: 2026-07-30
 why: legacy single-file ready epics predate goal-shape requirements, so most are shaped for reading, not pickup — re-typing them (bounded goal via `rifty-goal` FIT vs direction → ROADMAP) needs user signoff per epic
-user_story: As the repo owner handing off a ready epic, I want the hand-off to start the run, but today it starts a refit — invariants sign-off, tier call, and a Budget table before any slice can be picked
+user_story: As the repo owner handing off a ready epic, I want the hand-off to start the run, but today it starts a refit — invariants sign-off and tier call before any slice can be picked (bands are JIT since goal artifact v2)
 sources: [docs/backlog/README.md §Shape, tools/backlog/check.mjs:231, M11 parallel-track sweep 2026-07-30]
 code: [docs/backlog/README.md, tools/backlog/check.mjs]
 ---
@@ -23,7 +23,7 @@ checked false on `14b0dad99`, carrying the user's sign-off), leaving 8:
 `fast-install-resolver`.
 
 Not a validation hole by accident: `tools/backlog/check.mjs:231` demands
-`## Invariants` only when `goal_baseline` is present, so `backlog:check` reports
+`## Invariants` on legacy single-file epics never (dir-format goals require them at ready), so `backlog:check` reports
 17 epics / 0 invalid. README §Shape states the requirement for every ready epic
 and defers it ("legacy epics add them at next refine"); nothing measures the
 deferral, so the cost lands at hand-off time.
@@ -49,7 +49,7 @@ Pick at refine; each is a different cost/timing trade:
   hand-off — e.g. `backlog:check` warns (not fails) on a ready epic without
   Invariants/tier so the refit is priced before the run is promised;
 - eager batch: one refine pass per epic, ordered by which epics are actually
-  near pickup (M11 first), each producing invariants + tier + Budget;
+  near pickup (M11 first), each producing invariants + tier via `rifty-goal` FIT;
 - gate: require the three on `draft→ready` for NEW epics only, leaving the 10
   legacy ones on the lazy path — stops the debt growing without a big-bang.
 

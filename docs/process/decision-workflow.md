@@ -13,7 +13,9 @@ Elaborates `AGENTS.md` §Decisions (`CLAUDE.md` = symlink). Read at any fork. Ru
    model/authority encoding external-system semantics (npm tree/bins/peers,
    Node identity) carries the contract evidence bar: the ADR cites a pinned
    discriminating probe (command + output + version); a non-discriminating
-   probe = frozen assumption.
+   probe = frozen assumption. A new-mechanism or data-authority ADR records
+   ≥2 radically different candidates — the minimal-interface one among them —
+   each kept or killed by named evidence.
 5. Otherwise **REVERSIBLE**: contract-stable change → CHANGELOG; provisional
    judgment → backlog item + `// TODO(backlog: <area>/<slug>)`.
 

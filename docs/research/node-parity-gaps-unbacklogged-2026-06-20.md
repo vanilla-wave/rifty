@@ -1,5 +1,9 @@
 # Node-paritet: реализуемые gap'ы вне бэклога
 
+> Snapshot 2026-06-20 — provenance, not a plan (`docs/research/README.md`): the
+> gap list predates the shadow/eval epics; verify each claim against current
+> main + `docs/backlog/` before citing or re-proposing.
+
 Свип Node API surface на пересечении трёх условий:
 1. **Реализуемо** для паритета с реальной экосистемой Node (pure-JS алгоритм или браузерный примитив, дающий Node-идентичное наблюдаемое поведение — без happy-path заглушек).
 2. **Не упирается в hard-ceiling браузера** (исключены: raw TCP/UDP/TLS/HTTP2-сокеты, native .node addons, реальные OS-потоки/сигналы, full async-context propagation, inspector/V8-snapshots).
