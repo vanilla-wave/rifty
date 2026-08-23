@@ -109,6 +109,8 @@ completion is unwired, and the four consumers use separate inventories.
 
 ## Decisions
 
+ready-verdict: 2026-08-24 — Contract+RED @ 9198a3aa0f4b1ac57097f5d74b7be8a7ae433630
+
 - `checkpoint-lineage: [c3d83ef02d5e92db14d61aa7f010073f619add4f,
   465597e0d2b8f729e20fb0a2cb66e74316e308b5,
   d31f7615ece9cd26e3d6e613a98fc10b6daf417d,
