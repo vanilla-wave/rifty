@@ -339,6 +339,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
 | 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
 | 0009 unconditional async-wrapper assumption | 0348 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |
 | 0053 shared JS/TS extension-fallback clause | 0348 / note 2026-08-10 | TS-aware fallback stays on import; require uses Node's legacy suffix set |
@@ -513,3 +514,4 @@ here.
 | Tracker-hosted goal map (wayfinder-style plan state in GH issues) | 2026-08 | contract state must ride the PR diff atomically with code; issues are out-of-band mutable — issues stay inbox/mirror only |
 | Spike-harness branches with contract pointers | 2026-08 | ownerless git-ref artifacts rot (`refs:check` cannot validate branches); inline the minimal repro command in the evidence block instead |
 | Marker/merge-base goal gates (`goal_baseline`, `check:goal-contract`, `check:budget`) | 2026-08 | goal/map/ledger split makes frozen-ness = file immutability; bands live in the ledger, review-owned — the gate code priced more than it caught |
+| Shadow-registry debug-disable flag (`disableShadowRegistry` / env switch) | 2026-08-23 | all substituted packages are native and cannot run in-browser regardless; behavioral comparison lives in Node parity oracles; SCSS comparison exists via unsubstituted pure-JS `sass`; install-artifact audit does not justify a public surface. Record: git history of the `npm-client/shadow-registry-disable-flag` draft + ADR-0006 correction |
