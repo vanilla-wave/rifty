@@ -133,6 +133,14 @@ type FuturePtyCompleteResult =
       readonly error: string;
     };
 
+type CompletionPtyClient = ReturnType<typeof createPtyClient> & {
+  complete(sid: string, line: string, cursor: number): Promise<ShellCompletionResult | null>;
+};
+
+function completionClient(client: ReturnType<typeof createPtyClient>): CompletionPtyClient {
+  return client as unknown as CompletionPtyClient;
+}
+
 function wireFrames(out: readonly OwnerToPageFrame[]): readonly (OwnerToPageFrame | FutureAck)[] {
   return out as readonly (OwnerToPageFrame | FutureAck)[];
 }
@@ -213,14 +221,47 @@ describe('pty-server', () => {
       { ...request, extra: true },
       { type: request.type, sid: request.sid, opId: request.opId, line: request.line },
       { ...request, cursor: '2' },
+      { ...request, cursor: -1 },
+      { ...request, cursor: 1.5 },
+      { ...request, cursor: Number.NaN },
+      { ...request, cursor: Number.POSITIVE_INFINITY },
+      { ...request, cursor: Number.NEGATIVE_INFINITY },
+      { ...request, cursor: Number.MAX_SAFE_INTEGER + 1 },
+      { ...request, cursor: request.line.length + 1 },
       { ...request, opId: '' },
+    ];
+    const invalidOffsets = [
+      { start: -1, end: 2 },
+      { start: 0.5, end: 2 },
+      { start: Number.NaN, end: 2 },
+      { start: Number.POSITIVE_INFINITY, end: 2 },
+      { start: Number.NEGATIVE_INFINITY, end: 2 },
+      { start: Number.MAX_SAFE_INTEGER + 1, end: Number.MAX_SAFE_INTEGER + 1 },
+      { start: 0, end: -1 },
+      { start: 0, end: 1.5 },
+      { start: 0, end: Number.NaN },
+      { start: 0, end: Number.POSITIVE_INFINITY },
+      { start: 0, end: Number.NEGATIVE_INFINITY },
+      { start: 0, end: Number.MAX_SAFE_INTEGER + 1 },
+      { start: 2, end: 1 },
     ];
     const invalidOwnerFrames: readonly unknown[] = [
       { ...success, extra: true },
       { ...success, result: { ...success.result, extra: true } },
+      ...invalidOffsets.map((offsets) => ({
+        ...success,
+        result: { ...success.result, ...offsets },
+      })),
+      { ...success, result: { ...success.result, items: 'vite' } },
+      { ...success, result: { start: 0, end: 2 } },
+      { ...success, result: { ...success.result, items: [{}] } },
+      { ...success, result: { ...success.result, items: [{ value: 1 }] } },
       { ...success, result: { ...success.result, items: [{ value: 'vite ', display: 1 }] } },
+      { ...success, result: { ...success.result, items: [{ value: 'vite ', extra: true }] } },
       { type: success.type, sid: success.sid, opId: success.opId, ok: true },
       { ...failure, result: null },
+      { ...failure, error: '' },
+      { ...failure, extra: true },
     ];
     for (const frame of invalidPageFrames) {
       expect(() => inspectPagePtyFrame(structuredClone(frame))).toThrow(TypeError);
@@ -268,38 +309,41 @@ describe('pty-server', () => {
     ]);
   });
 
-  it('returns the exact owner completion read error instead of an empty-success inventory', async () => {
-    const out: OwnerToPageFrame[] = [];
+  it('settles client completion through the live owner and rejects its exact read failure', async () => {
     const fileSystem = new ReaddirFailingMemoryFsSync();
+    const shell = new Shell({ cwd: '/workspace/packages/app', fileSystem });
+    const server = createPtyServer({
+      send: (frame) =>
+        client.onFrame(inspectOwnerPtyFrame(structuredClone(frame)) as unknown as OwnerToPageFrame),
+      makeShell: () => shell,
+    });
+    const client = createPtyClient({
+      send: (frame) => {
+        const handled = server.handleFrame(
+          inspectPagePtyFrame(structuredClone(frame)) as unknown as PageToOwnerFrame,
+        );
+        if (handled) void handled;
+      },
+    });
+
+    await client.openSession('completion-loopback');
     fileSystem.mkdirSync('/workspace/node_modules/.bin', { recursive: true });
     fileSystem.writeFileSync(
       '/workspace/node_modules/.bin/vite',
       new TextEncoder().encode('#!/usr/bin/env node\n'),
     );
-    const server = createPtyServer({
-      send: (frame) => out.push(frame),
-      makeShell: () => new Shell({ cwd: '/workspace', fileSystem }),
-    });
-    server.handleFrame({ type: 'pty:open', sid: 'completion-error' });
-    fileSystem.failNextReaddir(new Error('owner completion readdir failed exactly'));
+    const completer = completionClient(client);
 
-    await handleCompletion(server, {
-      type: 'pty:complete',
-      sid: 'completion-error',
-      opId: 'complete-error-1',
-      line: 'vi',
-      cursor: 2,
+    await expect(completer.complete('completion-loopback', 'vi', 2)).resolves.toEqual({
+      start: 0,
+      end: 2,
+      items: [{ value: 'vite ', display: 'vite' }],
     });
 
-    expect(completionResults(out)).toEqual([
-      {
-        type: 'pty:complete-result',
-        sid: 'completion-error',
-        opId: 'complete-error-1',
-        ok: false,
-        error: 'owner completion readdir failed exactly',
-      },
-    ]);
+    fileSystem.failNextReaddir(new Error('loopback owner readdir failed exactly'));
+    await expect(completer.complete('completion-loopback', 'vi', 2)).rejects.toMatchObject({
+      message: 'loopback owner readdir failed exactly',
+    });
   });
 
   it('open → ready', () => {

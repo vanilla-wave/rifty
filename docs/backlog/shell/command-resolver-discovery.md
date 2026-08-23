@@ -47,8 +47,10 @@ completion is unwired, and the four consumers use separate inventories.
    names; path-like argv-0 completes live VFS paths. Cwd/install changes are
    visible on the next request, without a page-side inventory.
 6. Completion timeout, owner death/close, malformed/cross-correlated response,
-   and owner read failure cannot hang or publish a stale result. Playground
-   reports the failure visibly and shows no fabricated menu.
+   and owner read failure cannot hang or publish a stale result. The real
+   Playground→BottomPanel→TerminalPanel binding reports
+   `Completion failed: <reason>` through the product error toast and leaves no
+   completion menu.
 
 ## Parity cases
 
@@ -63,27 +65,30 @@ completion is unwired, and the four consumers use separate inventories.
 3. `packages/shell/tests/language-service.test.ts` RED: a real Shell discovers
    installed ancestor shims, suggests them, and completes bare/direct argv-0
    from its live Memory VFS after cwd changes.
-4. PTY client/server tests RED: exact `sid/opId` correlation, two inverted
-   replies, error/timeout/disconnect/close settlement, strict frame validation,
-   and owner-live cwd/VFS result.
+4. PTY tests RED: exact `sid/opId` correlation, inverted/wrong-sid replies,
+   timeout/disconnect/close settlement, and exhaustive frame-domain validation.
+   One real `createPtyClient`↔`createPtyServer` loopback proves both live-owner
+   success and injected owner `readdir` failure through the exact client
+   rejection; separate locally synthesized ends do not close this seam.
 5. `tests/browser-unit/owner-shell-routing.spec.ts` RED: a direct workspace
    script runs in the real owner supervised child as `bin:false`, while an
    explicitly addressed `.bin` launcher runs its target as `bin:true`.
-6. Chromium terminal acceptance RED: typing an installed bare prefix and a
-   direct path prefix opens the real DOM completion menu; selecting the direct
+6. `tests/e2e/command-resolver-discovery.spec.ts` Chromium RED: typing installed
+   bare and direct-path prefixes opens the real DOM menu; selecting the direct
    entry runs it and records exit 0.
-7. `tests/browser-unit/terminal-completion.spec.ts` RED: an edit superseding an
-   inflight request drops its late menu; a rejected request renders
-   `Completion failed` and no menu.
+7. Same e2e spec on the booted App holds one physical `pty:complete`, edits the
+   live xterm line, releases it, observes the matching result, and requires no
+   late menu. With another real request pending it terminates the actual
+   `workbench-owner` and requires the product error toast plus no menu. The
+   boundary decorator restores MessagePort descriptors; no test-owned UI.
 
 ## Fault matrix
 
 | Boundary × operation | Fault axis | Honest outcome / test target |
 |---|---|---|
-| page→owner completion request | peer death / port close / finite-ACK timeout | `pty-client.test.ts` settles the request; `terminal-completion.spec.ts` shows `Completion failed` and no menu |
-| completion `sid/opId` result | concurrent-same-key / observable-order | `pty-client.test.ts`: inverted/wrong-sid replies settle only matching calls; `terminal-completion.spec.ts` drops a reply superseded by edit |
-| PTY completion frame | corrupt-input | `pty-server.test.ts`: strict inspectors reject extra/missing/wrong-shaped fields before dispatch |
-| owner resolver VFS discovery | quota-perm-fail / provenance-lie | `pty-server.test.ts`: exact readdir error becomes failure result; no empty-success inventory |
+| page client↔owner server completion | quota-perm-fail / peer death / port close / finite-ACK timeout | real client↔server loopback carries owner `readdir` failure exactly; client timeout/disconnect/close settle once; e2e owner death shows the product error toast, no menu |
+| completion `sid/opId` + edit state | concurrent-same-key / observable-order | inverted/wrong-sid replies settle only matching calls; e2e holds, edits, releases the matching result, and publishes no stale menu |
+| PTY completion trust boundary | corrupt-input | reject missing/extra/wrong fields; empty IDs; negative/fractional/non-finite/inverted offsets; non-array items; missing/non-string values; bad optional display; nested extras; malformed success/error branches |
 | execution/discovery/which/suggestion siblings | sibling-drift | `command-resolver-discovery.test.ts`: one result projects consistently; no caller-owned precedence copy |
 
 ## Out of scope
@@ -102,7 +107,17 @@ completion is unwired, and the four consumers use separate inventories.
 
 ## Decisions
 
-- `checkpoint-lineage: [c3d83ef02d5e92db14d61aa7f010073f619add4f]`.
+ready-verdict: 2026-08-24 — Contract+RED @ 465597e0d2b8f729e20fb0a2cb66e74316e308b5 — BLOCKED; implementation forbidden
+
+- `checkpoint-lineage: [c3d83ef02d5e92db14d61aa7f010073f619add4f,
+  465597e0d2b8f729e20fb0a2cb66e74316e308b5]`.
+- Contract+RED @ `465597e0d2b8f729e20fb0a2cb66e74316e308b5`
+  BLOCKED: replace separate client/server fault proofs with one seam round
+  trip, move UI fault acceptance from browser-unit to real Playground e2e,
+  exhaust offset/item frame domains, and do not fabricate a `ready-verdict`.
+  Attempt 3 is the mandatory in-place re-refinement: it replaces those proof
+  carriers without weakening Acceptance or changing production scope; the
+  removable browser-unit harness is deleted and production remains untouched.
 - Contract+RED @ `c3d83ef02d5e92db14d61aa7f010073f619add4f`
   BLOCKED: add real-owner explicit `.bin`, registered-only help, visible
   completion failure, wrong-sid and stale-edit fences, reconcile the old
@@ -157,3 +172,16 @@ Attempt 2 re-cut, still before production changes:
   --workers=1` → `4 failed`: ordinary direct and explicit `.bin` both return
   127; a late reply publishes one stale menu; a rejected completion publishes
   no `Completion failed` element.
+
+Re-refined attempt 3 deletes that wrong-lane/test-owned UI harness. Its RED
+allocation is:
+
+- `pnpm vitest run packages/workbench/src/glue/pty-client.test.ts
+  packages/workbench/src/workers/pty-server.test.ts --reporter=dot` →
+  `7 failed | 97 passed`: client timeout/close/correlation plus the strict
+  inspector and real client↔server owner-failure seam are RED; all 97 siblings
+  stay GREEN.
+- `RIFTY_PLAYGROUND_PORT=5397 pnpm exec playwright test
+  tests/e2e/command-resolver-discovery.spec.ts --project=chromium-light
+  --grep "superseding|owner death" --workers=1` → `2 failed`: both held-request
+  probes remain in `waiting` because production emits no `pty:complete` yet.

@@ -1804,25 +1804,6 @@ describe('pty-client', () => {
     expect(settlementOrder).toEqual(['second', 'first']);
   });
 
-  it('rejects completion with the exact owner error instead of publishing an empty result', async () => {
-    const { client, sent } = harness();
-    await openCompletionSession(client, 'completion-error');
-    const pending = completionClient(client).complete('completion-error', './private/', 10);
-    const frame = completionFrames(sent)[0]!;
-
-    deliverCompletion(client, {
-      type: 'pty:complete-result',
-      sid: frame.sid,
-      opId: frame.opId,
-      ok: false,
-      error: 'owner completion readdir failed exactly',
-    });
-
-    await expect(pending).rejects.toMatchObject({
-      message: 'owner completion readdir failed exactly',
-    });
-  });
-
   it('bounds completion, ignores its late result, and admits the next request', async () => {
     vi.useFakeTimers();
     const { client, sent } = harness();
