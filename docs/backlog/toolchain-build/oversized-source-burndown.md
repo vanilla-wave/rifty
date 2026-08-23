@@ -51,6 +51,11 @@ gate went red repo-wide until re-pinned at 1215 (PR #250). Debt stands: the
 watchdog rework is the growth; its seam analysis belongs to this item. A
 CI-side file-size lane would close the class.
 
+Recurrence: PR #270 (`9c6ad401f`) added six finding/TODO comment lines to
+`kernel/src/process-manager.ts` without moving its 2392 pin; post-merge main was
+2398 and `pnpm check:file-size` failed before unrelated npm-client source.
+Baseline re-pinned to the already-landed size; the file may only shrink again.
+
 ## Reversibility
 REVERSIBLE per file while the move stays inside a package and `src/index.ts`
 keeps its shape. A split that changes cross-package public API or introduces a

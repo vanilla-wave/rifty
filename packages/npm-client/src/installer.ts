@@ -104,10 +104,10 @@ import {
 } from './internal/shadow/planner.ts';
 import {
   type Lockfile,
+  type NormalizedResolvedPackage,
   type PackageBinClaim,
   type PackageBinSource,
   type PreparedInstallPackage,
-  type ResolvedPackage,
   type RootLockfileDependencyMaps,
   buildPreparedInstallLockfile,
   linkInstallPackageBins,
@@ -118,6 +118,7 @@ import {
   preflightPackageInstallPaths,
 } from './linker.ts';
 import type { OverrideMap } from './overrides.ts';
+import { type PackageBin, normalizePackageBin } from './package-bin.ts';
 import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import {
@@ -305,7 +306,7 @@ export interface InstallAcquisitionProvenance {
  * `node_modules/<parent>[…]/node_modules/<name>`. The linker writes by it; the
  * lockfile keys by it.
  */
-type PinnedPackage = ResolvedPackage & {
+type PinnedPackage = NormalizedResolvedPackage & {
   resolved?: string;
   integrity?: string;
   peerDependencies?: Record<string, string>;
@@ -329,7 +330,7 @@ interface PinnedShadowState {
 const pinnedShadowSubstitutions = new WeakMap<PinnedPackage, PinnedShadowState>();
 
 export interface InstallResult {
-  packages: ResolvedPackage[];
+  packages: NormalizedResolvedPackage[];
   lockfile: Lockfile;
   /** Retained for shape compat; always empty since M11 nests conflicts (ADR-0042). */
   conflicts: { name: string; firstVersion: string; secondVersion: string }[];
@@ -384,7 +385,7 @@ interface ResolvedPin {
   readonly resolved: string;
   readonly integrity?: string;
   readonly dependencies: Record<string, string>;
-  readonly bin?: string | Record<string, string>;
+  readonly bin?: PackageBin;
   readonly peerDependencies?: Record<string, string>;
   /** Optional edges (lock entry or manifest). The writer re-emits them on every
    * origin: a recorded optional subtree must stay reachable through its
@@ -1677,7 +1678,7 @@ function syntheticManifest(recipe: BuiltinShadowSubstitutionRecipe): Readonly<{
   dependencies: Record<string, string>;
   optionalDependencies: Record<string, string>;
   peerDependencies?: Record<string, string>;
-  bin?: string | Record<string, string>;
+  bin?: PackageBin;
 }> {
   const file = recipe.materialization.files.find((candidate) => candidate.path === 'package.json');
   if (!file) throw new TypeError(`synthetic recipe ${recipe.id} has no package.json`);
@@ -1708,7 +1709,7 @@ function syntheticManifest(recipe: BuiltinShadowSubstitutionRecipe): Readonly<{
     return output;
   };
   const binValue = manifest.bin;
-  let bin: string | Record<string, string> | undefined;
+  let bin: PackageBin | undefined;
   if (typeof binValue === 'string') bin = binValue;
   else if (binValue !== undefined) {
     if (binValue === null || typeof binValue !== 'object' || Array.isArray(binValue)) {
@@ -2494,11 +2495,14 @@ async function pinToPackage(
         )
       : await extractTarGz(acquisition.result.bytes);
   const embeddedDependencies = assertRegistryShadowEmbeddedManifests(pin, files, installPath);
-  const bin = pin.shadow
-    ? pin.shadow.acquisition.kind === 'registry'
-      ? undefined
-      : { ...pin.shadow.recipe.materialization.bin }
-    : pin.bin;
+  const bin = normalizePackageBin(
+    pin.name,
+    pin.shadow
+      ? pin.shadow.acquisition.kind === 'registry'
+        ? undefined
+        : { ...pin.shadow.recipe.materialization.bin }
+      : pin.bin,
+  );
   const pkg: PinnedPackage = {
     name: pin.name,
     version: pin.version,

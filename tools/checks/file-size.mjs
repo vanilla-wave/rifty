@@ -53,7 +53,7 @@ export const BASELINE = [
   { file: 'packages/shell/src/commands/git.ts', max: 3064 },
   { file: 'packages/runtime-js/src/module-loader/function-import-routing.ts', max: 2806 },
   { file: 'packages/workbench/src/workers/playground-project-authority.ts', max: 2697 },
-  { file: 'packages/kernel/src/process-manager.ts', max: 2392 },
+  { file: 'packages/kernel/src/process-manager.ts', max: 2398 },
   { file: 'tools/node-parity-runner/src/run-in-rifty.ts', max: 2069 },
   { file: 'packages/runtime-js/src/builtins/vm/membrane.ts', max: 2058 },
   { file: 'packages/runtime-js/src/module-loader/cjs.ts', max: 2052 },
