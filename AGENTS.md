@@ -30,6 +30,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: new finding/idea → `rifty-to-backlog`; settled draft → compile to `ready`, verified at pickup Contract+RED (`decision-workflow.md` §Backlog readiness); unresolved observable fork → request manual `rifty-refine`; unsettled fork inside a `ready` item → demote first (same §); epic missing tier/Invariants → fit it yourself (`rifty-goal` FIT) — a write-up is never a blocked ask; ready → implement normally; PR review → `rifty-review`. Never implement a draft. Planned/process work never invokes `rifty-fix`.
 - `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/decision-workflow.md` — read at any fork
+- `docs/process/traps.md` — hard-won gotchas (worktrees/git, CI, e2e, browser runtime, tooling); check before debugging a weird fail or re-proposing a rejected speedup
 - `docs/process/fault-classes.md` — fault taxonomy + review convergence
 - `docs/process/testing.md` — test pyramid + why parity
 - `docs/public/` — compat matrix, publishing, hosting
