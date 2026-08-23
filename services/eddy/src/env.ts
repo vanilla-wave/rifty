@@ -43,6 +43,16 @@ export function parseByteCount(raw: string | undefined, name: string): number | 
   return value;
 }
 
+/** Parse an optional positive integer operator knob. */
+export function parsePositiveInteger(raw: string | undefined, name: string): number | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  const value = Number(raw);
+  if (raw.trim() === '' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive safe integer; got ${JSON.stringify(raw)}`);
+  }
+  return value;
+}
+
 /**
  * Parse the `PORT` env var. Unset → `undefined` (the bin defaults to 8788).
  * Otherwise it MUST be an integer in 1..65535 — `Number('abc')` = NaN and

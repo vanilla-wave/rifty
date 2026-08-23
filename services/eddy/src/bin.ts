@@ -5,13 +5,20 @@
  * (the upstream registry; npmjs default, mirroring the bake-snapshots tool),
  * `EDDY_TTL_SECONDS` (mutable-tier TTL; 0 = always recompute),
  * `EDDY_PACKUMENT_TTL_SECONDS` (shared packument cache; default 300, 0 = off),
- * `EDDY_TARBALL_CACHE_MAX_BYTES`, `EDDY_BUNDLE_MEMORY_MAX_BYTES`, and the
- * `EDDY_S3_*` group (all-or-none) selecting the Object-Storage bundle store
- * (ADR-0194). All parsers throw loudly on junk instead of coercing to NaN and
- * silently disabling the cache they configure.
+ * `EDDY_PACKUMENT_CACHE_MAX_BYTES`, `EDDY_TARBALL_CACHE_MAX_BYTES`,
+ * `EDDY_BUNDLE_MEMORY_MAX_BYTES`, `EDDY_MAX_CONCURRENT_RESOLVES` (default 1),
+ * and the `EDDY_S3_*` group (all-or-none) selecting the Object-Storage bundle
+ * store (ADR-0194, ADR-0363). All parsers throw loudly on junk instead of
+ * silently weakening the configured bounds.
  */
 import { MemoryBundleStore } from './bundle-store.ts';
-import { parseByteCount, parsePort, parseS3Config, parseTtlSeconds } from './env.ts';
+import {
+  parseByteCount,
+  parsePort,
+  parsePositiveInteger,
+  parseS3Config,
+  parseTtlSeconds,
+} from './env.ts';
 import { S3BundleStore } from './s3-bundle-store.ts';
 import { createEddyServer } from './server.ts';
 
@@ -22,10 +29,17 @@ const packumentTtlSeconds = parseTtlSeconds(
   process.env.EDDY_PACKUMENT_TTL_SECONDS,
   'EDDY_PACKUMENT_TTL_SECONDS',
 );
+const packumentCacheMaxBytes = parseByteCount(
+  process.env.EDDY_PACKUMENT_CACHE_MAX_BYTES,
+  'EDDY_PACKUMENT_CACHE_MAX_BYTES',
+);
 const tarballCacheMaxBytes = parseByteCount(
   process.env.EDDY_TARBALL_CACHE_MAX_BYTES,
   'EDDY_TARBALL_CACHE_MAX_BYTES',
 );
+const maxConcurrentResolves =
+  parsePositiveInteger(process.env.EDDY_MAX_CONCURRENT_RESOLVES, 'EDDY_MAX_CONCURRENT_RESOLVES') ??
+  1;
 const bundleMemoryMaxBytes = parseByteCount(
   process.env.EDDY_BUNDLE_MEMORY_MAX_BYTES,
   'EDDY_BUNDLE_MEMORY_MAX_BYTES',
@@ -41,7 +55,9 @@ const server = createEddyServer({
   registryBaseUrl,
   ttlSeconds,
   packumentTtlSeconds,
+  packumentCacheMaxBytes,
   tarballCacheMaxBytes,
+  maxConcurrentResolves,
   store,
 });
 server

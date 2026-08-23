@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Eddy has a bounded process memory envelope.** Shared packuments now use an
+  exact serialized-byte LRU (64 MiB default) in addition to their entry/TTL
+  bounds; production tarballs are capped at 128 MiB. Cached-policy single-flight
+  covers the linked S3 lookup as well as fallback compute, so identical warm
+  POSTs no longer duplicate bundle buffers.
+- **Distinct resolver work fails fast instead of exhausting the origin.** The
+  CLI admits one heavy POST flight by default; same-key cached callers join it,
+  excess work receives retryable CORS-readable `503`, and disconnected waiters
+  cancel only the work they solely own. The standard verifying client fallback
+  remains the honest overload outcome (ADR-0363).
+
 ### Changed
 
 - Tagged GitHub releases now version, license, and publish `@riftydev/eddy`

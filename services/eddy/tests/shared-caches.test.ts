@@ -18,6 +18,9 @@ import { MemoryTarballCache, TtlPackumentCache } from '../src/shared-caches.ts';
 const packument = (name: string) =>
   ({ name, 'dist-tags': {}, versions: {} }) as unknown as Parameters<TtlPackumentCache['set']>[1];
 
+const serializedBytes = (value: Parameters<TtlPackumentCache['set']>[1]) =>
+  new TextEncoder().encode(JSON.stringify(value)).byteLength;
+
 const okBundle = (closureHash: string): EddyResolveResult => ({
   kind: 'bundle',
   bytes: new Uint8Array([1]),
@@ -312,6 +315,150 @@ describe('TtlPackumentCache', () => {
     expect(cache.get('b')).toBeUndefined();
     expect(cache.get('a')?.name).toBe('a');
     expect(cache.get('c')?.name).toBe('c');
+  });
+
+  it('caps exact serialized UTF-8 bytes and get promotes for byte eviction', () => {
+    const a = packument('a');
+    const b = packument('b');
+    const c = packument('c');
+    const entryBytes = serializedBytes(a);
+    expect(serializedBytes(b)).toBe(entryBytes);
+    expect(serializedBytes(c)).toBe(entryBytes);
+
+    const cache = new TtlPackumentCache({
+      ttlSeconds: 300,
+      clock: () => 0,
+      maxBytes: entryBytes * 2,
+    });
+    cache.set('a', a);
+    cache.set('b', b);
+    expect(cache.residentBytes).toBe(entryBytes * 2);
+    expect(cache.get('a')?.name).toBe('a'); // promote a
+    cache.set('c', c); // evicts b by byte cap
+
+    expect(cache.get('b')).toBeUndefined();
+    expect(cache.get('a')?.name).toBe('a');
+    expect(cache.get('c')?.name).toBe('c');
+    expect(cache.entryCount).toBe(2);
+    expect(cache.residentBytes).toBe(entryBytes * 2);
+  });
+
+  it('counts multibyte UTF-8 and subtracts replaced entries exactly', () => {
+    const small = packument('é');
+    const replacement = packument('💩💩');
+    const other = packument('z');
+    const smallBytes = serializedBytes(small);
+    const replacementBytes = serializedBytes(replacement);
+    const otherBytes = serializedBytes(other);
+    expect(replacementBytes).toBeGreaterThan(JSON.stringify(replacement).length);
+
+    const cache = new TtlPackumentCache({
+      ttlSeconds: 300,
+      clock: () => 0,
+      maxBytes: replacementBytes + otherBytes,
+    });
+    cache.set('same-key', small);
+    expect(cache.residentBytes).toBe(smallBytes);
+    cache.set('other', other);
+    cache.set('same-key', replacement);
+
+    expect(cache.get('other')?.name).toBe('z');
+    expect(cache.get('same-key')?.name).toBe('💩💩');
+    expect(cache.residentBytes).toBe(replacementBytes + otherBytes);
+  });
+
+  it('does not retain an oversize value or evict unrelated entries', () => {
+    const kept = packument('kept');
+    const maxBytes = serializedBytes(kept);
+    const cache = new TtlPackumentCache({ ttlSeconds: 300, clock: () => 0, maxBytes });
+    cache.set('kept', kept);
+    cache.set('oversize', packument('x'.repeat(maxBytes)));
+
+    expect(cache.get('oversize')).toBeUndefined();
+    expect(cache.get('kept')?.name).toBe('kept');
+    expect(cache.residentBytes).toBe(maxBytes);
+  });
+
+  it('an oversize refresh leaves a tombstone that blocks late older generations', () => {
+    const current = packument('current');
+    const maxBytes = serializedBytes(current);
+    const oversize = packument('x'.repeat(maxBytes));
+    const cache = new TtlPackumentCache({ ttlSeconds: 300, clock: () => 0, maxBytes });
+
+    cache.setWithGen('debug', packument('old'), 1);
+    cache.setWithGen('debug', oversize, 2);
+    expect(cache.get('debug')).toBeUndefined();
+    expect(cache.entryCount).toBe(1);
+    expect(cache.residentBytes).toBe(0);
+
+    cache.setWithGen('debug', packument('late-old'), 1);
+    expect(cache.get('debug')).toBeUndefined();
+
+    cache.setWithGen('debug', current, 3);
+    cache.setWithGen('debug', oversize, 2);
+    expect(cache.get('debug')?.name).toBe('current');
+  });
+
+  it('bounds generation tombstones by TTL and the entry cap', () => {
+    let nowMs = 0;
+    const small = packument('small');
+    const maxBytes = serializedBytes(small);
+    const oversize = packument('x'.repeat(maxBytes));
+    const cache = new TtlPackumentCache({
+      ttlSeconds: 1,
+      clock: () => nowMs,
+      maxEntries: 1,
+      maxBytes,
+    });
+
+    cache.setWithGen('oversize', oversize, 2);
+    cache.setWithGen('oversize', small, 1);
+    expect(cache.get('oversize')).toBeUndefined();
+    expect(cache.entryCount).toBe(1);
+
+    cache.setWithGen('other', small, 1); // entry cap evicts the tombstone
+    cache.setWithGen('oversize', small, 1);
+    expect(cache.get('oversize')?.name).toBe('small');
+    expect(cache.entryCount).toBe(1);
+
+    cache.setWithGen('oversize', oversize, 2);
+    nowMs = 1_000;
+    cache.setWithGen('oversize', small, 1); // expired tombstone no longer guards
+    expect(cache.get('oversize')?.name).toBe('small');
+  });
+
+  it('sweeps expired entries and their bytes on writes', () => {
+    let nowMs = 0;
+    const a = packument('a');
+    const cache = new TtlPackumentCache({
+      ttlSeconds: 1,
+      clock: () => nowMs,
+      maxBytes: serializedBytes(a) * 2,
+    });
+    cache.set('a', a);
+    cache.set('b', packument('b'));
+    nowMs = 1_000;
+    cache.set('c', packument('c'));
+
+    expect(cache.get('a')).toBeUndefined();
+    expect(cache.get('b')).toBeUndefined();
+    expect(cache.get('c')?.name).toBe('c');
+    expect(cache.entryCount).toBe(1);
+    expect(cache.residentBytes).toBe(serializedBytes(packument('c')));
+  });
+
+  it('rejects a non-positive or unsafe byte cap', () => {
+    expect(() => new TtlPackumentCache({ ttlSeconds: 300, clock: () => 0, maxBytes: 0 })).toThrow(
+      RangeError,
+    );
+    expect(
+      () =>
+        new TtlPackumentCache({
+          ttlSeconds: 300,
+          clock: () => 0,
+          maxBytes: Number.MAX_SAFE_INTEGER + 1,
+        }),
+    ).toThrow(RangeError);
   });
 });
 

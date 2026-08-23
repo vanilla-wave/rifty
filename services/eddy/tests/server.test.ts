@@ -1,6 +1,6 @@
 import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { unpackEddyBundle } from '@riftydev/npm-client';
+import { type Fetcher, unpackEddyBundle } from '@riftydev/npm-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   LOCAL_REGISTRY_BASE_URL,
@@ -363,6 +363,75 @@ describe('eddy HTTP server', () => {
       expect(again.status).toBe(500); // still answering — no crash
     } finally {
       await broken.close();
+    }
+  });
+
+  it('fails excess distinct POST work with retryable CORS 503 and releases after disconnect cancellation', async () => {
+    const fixtureFetch = makeLocalFetcher().fetch;
+    let firstRegistryRequest = true;
+    let markStarted = (): void => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let markUpstreamAborted = (): void => {};
+    const upstreamAborted = new Promise<void>((resolve) => {
+      markUpstreamAborted = resolve;
+    });
+    const controlledFetch: Fetcher = async (url, init) => {
+      if (!firstRegistryRequest) return fixtureFetch(url, init);
+      firstRegistryRequest = false;
+      markStarted();
+      return await new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal as AbortSignal;
+        const onAbort = (): void => {
+          markUpstreamAborted();
+          reject(signal.reason);
+        };
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+      });
+    };
+    const bounded = createEddyServer({
+      registryBaseUrl: LOCAL_REGISTRY_BASE_URL,
+      fetch: controlledFetch,
+      maxConcurrentResolves: 1,
+    });
+    await bounded.listen(0);
+    const url = `http://127.0.0.1:${(bounded.address() as AddressInfo).port}`;
+    const firstController = new AbortController();
+    const first = fetch(url, {
+      method: 'POST',
+      body: JSON.stringify({ dependencies: { debug: '^4.4.1' } }),
+      signal: firstController.signal,
+    });
+    try {
+      await started;
+      const overload = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ dependencies: { kleur: '4.1.5' } }),
+      });
+      expect(overload.status).toBe(503);
+      expect(overload.headers.get('retry-after')).toBe('1');
+      expect(overload.headers.get('cache-control')).toBe('no-store');
+      expect(overload.headers.get('access-control-allow-origin')).toBe('*');
+      expect(overload.headers.get('access-control-expose-headers')).toMatch(/retry-after/i);
+      await expect(overload.json()).resolves.toMatchObject({ kind: 'overloaded' });
+
+      firstController.abort(new Error('client disconnected'));
+      await first.catch(() => undefined);
+      await upstreamAborted;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      const recovered = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ dependencies: { kleur: '4.1.5' } }),
+      });
+      expect(recovered.status).toBe(200);
+      await recovered.body?.cancel();
+    } finally {
+      firstController.abort();
+      await first.catch(() => undefined);
+      await bounded.close();
     }
   });
 });

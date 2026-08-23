@@ -49,15 +49,20 @@ The published `@riftydev/eddy` package also supports a thin image:
 | `REGISTRY_BASE_URL` | `https://registry.npmjs.org` | Upstream registry eddy resolves against (rifty.dev uses direct npmjs; the browser standard path still uses the CORS registry proxy) |
 | `EDDY_TTL_SECONDS` | `1800` | Mutable-tier resolution TTL; `0` = always recompute (`--prefer-online` always) |
 | `EDDY_PACKUMENT_TTL_SECONDS` | `300` | Process-wide packument cache (ADR-0194 §1; `300` = npmjs edge `max-age`); `0` = off |
-| `EDDY_TARBALL_CACHE_MAX_BYTES` | `536870912` | Process-wide immutable tarball cache byte cap (ADR-0194 §2) |
+| `EDDY_PACKUMENT_CACHE_MAX_BYTES` | `67108864` | Exact serialized UTF-8 byte cap in addition to the packument entry cap (ADR-0363) |
+| `EDDY_TARBALL_CACHE_MAX_BYTES` | `536870912` | Process-wide immutable tarball cache byte cap; rifty.dev pins `134217728` (ADR-0194 §2, ADR-0363) |
+| `EDDY_MAX_CONCURRENT_RESOLVES` | `1` | Distinct heavy POST-flight cap; excess gets retryable 503 with no waiter queue (ADR-0363) |
 | `EDDY_BUNDLE_MEMORY_MAX_BYTES` | `536870912` | Memory bundle-store byte cap (only without `EDDY_S3_*`) |
 | `EDDY_S3_ENDPOINT` `EDDY_S3_BUCKET` `EDDY_S3_REGION` `EDDY_S3_ACCESS_KEY_ID` `EDDY_S3_SECRET_ACCESS_KEY` | unset | All-or-none: bundles live in an S3-compatible public-read bucket (ADR-0194 §4); partial config refuses to boot |
 
-Caching (ADR-0182 §6, restructured by ADR-0194): the mutable
-`dep-set → closure-hash` link honors the TTL and single-flights concurrent
-identical requests; cold resolves share process-wide packument (TTL) and
-immutable tarball caches, so an unseen-but-overlapping dep set refetches only
-its novel packages. The immutable `closure-hash → bundle` tier is a
+Caching (ADR-0182 §6, restructured by ADR-0194/0363): the mutable
+`dep-set → closure-hash` link honors the TTL and single-flights the whole
+cached POST path (linked store lookup + fallback compute). Cold resolves share
+byte-bounded process-wide packument and immutable tarball caches, so an
+unseen-but-overlapping dep set refetches only its novel packages. Different
+heavy POST flights are admitted up to `EDDY_MAX_CONCURRENT_RESOLVES`; overload
+is a retryable 503 and the optional client uses its standard verifying path.
+The immutable `closure-hash → bundle` tier is a
 **BundleStore** — byte-bounded memory by default, an Object-Storage bucket
 with `EDDY_S3_*` (below) — served content-addressed by
 **`GET /bundle/<closure-hash>`** with

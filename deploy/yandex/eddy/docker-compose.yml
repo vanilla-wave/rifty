@@ -36,10 +36,23 @@ services:
       # Mutable-tier TTL (seconds); 0 = always recompute. Immutable artifacts are
       # served Cache-Control: immutable for the CDN to hold.
       EDDY_TTL_SECONDS: "1800"
+      EDDY_PACKUMENT_CACHE_MAX_BYTES: "67108864"
+      EDDY_TARBALL_CACHE_MAX_BYTES: "134217728"
+      EDDY_MAX_CONCURRENT_RESOLVES: "1"
       # Without the EDDY_S3_* group the bundle store is MEMORY (dies with the
       # container); the stateless origin (ADR-0194 §4) needs the operator-
       # provisioned bucket env — see docker-compose.coi.yml + hosting-eddy.md
       # §Object-Storage. Never commit the secret pair.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:8788',{method:'OPTIONS'}).then(r=>process.exit(r.status===204?0:1)).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   caddy:
     image: caddy:2.10.2-alpine
