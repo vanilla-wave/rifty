@@ -230,3 +230,16 @@ allocation is:
   Installed suggestion uses a distance-one typo within the existing threshold;
   three correlated completion replies outside their originating line/cursor
   resolve instead of rejecting and therefore remain RED.
+- `pnpm exec vitest run --project unit
+  packages/shell/tests/command-resolver-discovery.test.ts
+  packages/shell/tests/language-service.test.ts
+  packages/shell/tests/bin-resolution.test.ts` → `15 failed | 31 passed`.
+- `pnpm exec vitest run --project unit
+  packages/workbench/src/glue/pty-client.test.ts
+  packages/workbench/src/workers/pty-server.test.ts` →
+  `10 failed | 97 passed`; all three request-relative ranges reach the wrong
+  resolve path.
+- `RIFTY_PLAYGROUND_PORT=5508 pnpm exec playwright test --config
+  playwright.browser-unit.config.ts tests/browser-unit/owner-shell-routing.spec.ts
+  --grep "direct workspace module|explicitly addressed installed" --workers=1`
+  → `2 failed`: both paths exit 127 with exact `command not found` diagnostics.
