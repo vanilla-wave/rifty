@@ -3,7 +3,13 @@ import { NotImplementedError } from '@riftydev/io';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import * as npmClientRoot from './index.ts';
-import type { PackageBin, ResolvedPackage, VersionManifest } from './index.ts';
+import type {
+  InstallResult,
+  NormalizedPackageBin,
+  PackageBin,
+  ResolvedPackage,
+  VersionManifest,
+} from './index.ts';
 import * as linker from './linker.ts';
 
 type PackageBinInput = PackageBin | null | false | number | undefined;
@@ -27,8 +33,14 @@ function requireNormalizer(): PackageBinNormalizationApi['normalizePackageBin'] 
   return candidate;
 }
 
-function proveReadonlyArrayIngress(): void {
-  const bin = ['first/array-z', 'middle/array-a', 'last/array-z'] as const satisfies PackageBin;
+function provePackageBinTypes(): void {
+  const bin = [
+    'first/array-z',
+    'middle/array-a',
+    'a-very-long-intermediate-directory-name/array-z',
+    'last/array-z',
+  ] as const satisfies PackageBin;
+  const objectBin = { valid: './valid.js', removed: 42 } as const satisfies PackageBin;
   const resolved: ResolvedPackage = {
     name: 'array-cli',
     version: '1.0.0',
@@ -42,10 +54,15 @@ function proveReadonlyArrayIngress(): void {
     bin,
     dist: { tarball: 'fixture:array-cli' },
   };
-  void [resolved, manifest];
+  const resolvedObject: ResolvedPackage = { ...resolved, bin: objectBin };
+  const manifestObject: VersionManifest = { ...manifest, bin: objectBin };
+  const result = {} as InstallResult;
+  const resultBin: NormalizedPackageBin | undefined = result.packages[0]?.bin;
+  const lockBin: NormalizedPackageBin | undefined = result.lockfile.packages.entry?.bin;
+  void [resolved, manifest, resolvedObject, manifestObject, resultBin, lockBin];
 }
 
-void proveReadonlyArrayIngress;
+void provePackageBinTypes;
 
 function rawPackage(
   name: string,
@@ -80,7 +97,12 @@ describe('npm package-bin normalization authority', () => {
 
   it('[fault: frozen-assumption][fault: observable-order] matches npm 11 string and array rows', () => {
     const normalize = requireNormalizer();
-    const array = ['first/array-z', 'middle/array-a', 'last/array-z'] as const;
+    const array = [
+      'first/array-z',
+      'middle/array-a',
+      'a-very-long-intermediate-directory-name/array-z',
+      'last/array-z',
+    ] as const;
 
     expect(normalize('plain-cli', './bin/../plain.js')).toEqual({
       'plain-cli': 'plain.js',
@@ -91,7 +113,12 @@ describe('npm package-bin normalization authority', () => {
     expect(JSON.stringify(normalize('array-cli', array))).toBe(
       '{"array-z":"last/array-z","array-a":"middle/array-a"}',
     );
-    expect(array).toEqual(['first/array-z', 'middle/array-a', 'last/array-z']);
+    expect(array).toEqual([
+      'first/array-z',
+      'middle/array-a',
+      'a-very-long-intermediate-directory-name/array-z',
+      'last/array-z',
+    ]);
   });
 
   it('[fault: frozen-assumption][fault: lossy-aggregate] matches npm 11 object mutation order without mutating ingress', () => {
@@ -151,6 +178,13 @@ describe('npm package-bin normalization authority', () => {
 
     for (const [name, bin] of cases) expect(normalize(name, bin)).toBeUndefined();
     expect(normalize(undefined, './unnamed.js')).toBeUndefined();
+    expect(
+      normalize('all-invalid-object', {
+        '': 'ignored.js',
+        'bad/empty-target': '',
+        'bad/non-string': 42,
+      }),
+    ).toBeUndefined();
   });
 
   it('[fault: corrupt-input] keeps a non-string array member as one named loud gap', () => {
@@ -174,7 +208,12 @@ describe('npm package-bin normalization authority', () => {
   it('[fault: sibling-drift] canonicalizes direct lock facts through the same map', () => {
     const lock = linker.buildLockfile('root', '1.0.0', [
       rawPackage('@scope/string-cli', '.\\bin\\..\\scoped.js'),
-      rawPackage('array-cli', ['first/array-z', 'middle/array-a', 'last/array-z']),
+      rawPackage('array-cli', [
+        'first/array-z',
+        'middle/array-a',
+        'a-very-long-intermediate-directory-name/array-z',
+        'last/array-z',
+      ]),
       rawPackage('object-cli', {
         'bad/tool': '../tool.js',
         'bad/canonical': './first.js',
@@ -194,6 +233,36 @@ describe('npm package-bin normalization authority', () => {
       drive: 'C/bin/drive.js',
       tool: 'tool.js',
     });
+  });
+
+  it('[fault: sibling-drift] public link consumes a valid array through the shared map', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    await npmClientRoot.link(vfs, '/project', [
+      rawPackage(
+        'array-cli',
+        [
+          'first/array-z',
+          'middle/array-a',
+          'a-very-long-intermediate-directory-name/array-z',
+          'last/array-z',
+        ],
+        {
+          'first/array-z': new Uint8Array(),
+          'middle/array-a': new Uint8Array(),
+          'a-very-long-intermediate-directory-name/array-z': new Uint8Array(),
+          'last/array-z': new Uint8Array(),
+        },
+      ),
+    ]);
+
+    expect(await vfs.readFileText('/project/node_modules/.bin/array-z')).toBe(
+      "#!/usr/bin/env node\nimport('../array-cli/last/array-z');\n",
+    );
+    expect(await vfs.readFileText('/project/node_modules/.bin/array-a')).toBe(
+      "#!/usr/bin/env node\nimport('../array-cli/middle/array-a');\n",
+    );
+    expect(await vfs.exists('/project/node_modules/.bin/0')).toBe(false);
   });
 
   it('[fault: corrupt-input][fault: sibling-drift] normalizes before collision preflight or VFS mutation', async () => {

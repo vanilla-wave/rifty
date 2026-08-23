@@ -142,11 +142,21 @@ describe('install — npm package-bin normalization authority', () => {
       ],
       [
         'array-cli',
-        await registryEntry('array-cli', ['first/array-z', 'middle/array-a', 'last/array-z'], {
-          'first/array-z': 'console.log("first-z");\n',
-          'middle/array-a': 'console.log("array-a");\n',
-          'last/array-z': 'console.log("last-z");\n',
-        }),
+        await registryEntry(
+          'array-cli',
+          [
+            'first/array-z',
+            'middle/array-a',
+            'a-very-long-intermediate-directory-name/array-z',
+            'last/array-z',
+          ],
+          {
+            'first/array-z': 'console.log("first-z");\n',
+            'middle/array-a': 'console.log("array-a");\n',
+            'a-very-long-intermediate-directory-name/array-z': 'console.log("intermediate-z");\n',
+            'last/array-z': 'console.log("last-z");\n',
+          },
+        ),
       ],
       [
         'object-cli',
@@ -226,5 +236,42 @@ describe('install — npm package-bin normalization authority', () => {
     });
     expect.soft(await vfs.exists('/project/node_modules')).toBe(false);
     expect.soft(await vfs.exists('/project/package-lock.json')).toBe(false);
+  });
+
+  it('[fault: corrupt-input, sibling-drift] rejects the same gap on zero-registry lock replay', async () => {
+    const valid = await registryEntry('replay-array', ['valid.js'], {
+      'valid.js': 'console.log("valid");\n',
+    });
+    const vfs = await project({ 'replay-array': '1.0.0' });
+    await install({
+      vfs,
+      cwd: '/project',
+      registry: new FixtureRegistry(new Map([['replay-array', valid]])),
+    });
+    const lock = JSON.parse(await vfs.readFileText('/project/package-lock.json')) as {
+      packages: Record<string, { bin?: unknown }>;
+    };
+    const entry = lock.packages['node_modules/replay-array'];
+    if (!entry) throw new Error('Contract fixture: replay-array lock entry missing');
+    entry.bin = ['valid.js', 42];
+    const malformedLockBytes = JSON.stringify(lock, null, 2);
+    await vfs.writeFile('/project/package-lock.json', malformedLockBytes);
+    await vfs.rm('/project/node_modules', { recursive: true });
+    const replayRegistry = new FixtureRegistry(new Map());
+    let caught: unknown;
+
+    try {
+      await install({ vfs, cwd: '/project', registry: replayRegistry });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect.soft(caught).toBeInstanceOf(NotImplementedError);
+    expect.soft(caught).toMatchObject({
+      feature: 'npm-client.package-bin.non-string-array-entry',
+    });
+    expect.soft([replayRegistry.packumentReads, replayRegistry.tarballReads]).toEqual([0, 0]);
+    expect.soft(await vfs.exists('/project/node_modules')).toBe(false);
+    expect(await vfs.readFileText('/project/package-lock.json')).toBe(malformedLockBytes);
   });
 });

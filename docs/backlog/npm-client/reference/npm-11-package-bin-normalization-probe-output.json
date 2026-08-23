@@ -123,6 +123,15 @@
       }
     },
     {
+      "id": "all-invalid-object",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
       "id": "empty-string",
       "packageJson": {
         "bin": null
@@ -191,6 +200,7 @@
         "array-cli": [
           "first/array-z",
           "middle/array-a",
+          "a-very-long-intermediate-directory-name/array-z",
           "last/array-z"
         ],
         "object-cli": {
@@ -249,6 +259,7 @@
         "array-cli": [
           "first/array-z",
           "middle/array-a",
+          "a-very-long-intermediate-directory-name/array-z",
           "last/array-z"
         ],
         "object-cli": {

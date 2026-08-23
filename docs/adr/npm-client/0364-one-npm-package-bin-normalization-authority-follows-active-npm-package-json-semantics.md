@@ -51,7 +51,9 @@ Candidates:
 - Public raw ingress uses one `PackageBin` type: string, readonly string array,
   or readonly object with unknown target values. `VersionManifest` and public
   `ResolvedPackage` refer to it; `PackageBin` is exported only through
-  `src/index.ts`.
+  `src/index.ts`. `NormalizedPackageBin` and `NormalizedResolvedPackage`
+  expose the canonical output: `InstallResult.packages` and lock entries never
+  type raw forms as already-normalized facts.
 - One package-private `normalizePackageBin(name, bin)` returns either an exact
   readonly string map or absence. It clones object/array input, then reproduces
   npm's in-place delete/rename/assign order; a fresh-map last-writer loop is not

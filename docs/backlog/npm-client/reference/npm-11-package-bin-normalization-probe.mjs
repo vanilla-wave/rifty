@@ -10,9 +10,9 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRequire } from 'node:module';
 
 const root = mkdtempSync(join(tmpdir(), 'npm-bin-normalization-probe-'));
 const cache = mkdtempSync(join(tmpdir(), 'npm-bin-normalization-cache-'));
@@ -57,7 +57,12 @@ const directCases = [
   {
     id: 'array-order-and-collision',
     name: 'array-cli',
-    bin: ['first/array-z', 'middle/array-a', 'last/array-z'],
+    bin: [
+      'first/array-z',
+      'middle/array-a',
+      'a-very-long-intermediate-directory-name/array-z',
+      'last/array-z',
+    ],
   },
   {
     id: 'object-sanitize-filter-and-collision',
@@ -89,6 +94,11 @@ const directCases = [
   },
   { id: 'empty-array', name: 'empty-array', bin: [] },
   { id: 'empty-object', name: 'empty-object', bin: {} },
+  {
+    id: 'all-invalid-object',
+    name: 'all-invalid-object',
+    bin: { '': 'ignored.js', 'bad/empty-target': '', 'bad/non-string': 42 },
+  },
   { id: 'empty-string', name: 'empty-string', bin: '' },
   { id: 'null', name: 'null-bin', bin: null },
   { id: 'false', name: 'false-bin', bin: false },
@@ -139,10 +149,16 @@ const packages = [
   },
   {
     name: 'array-cli',
-    bin: ['first/array-z', 'middle/array-a', 'last/array-z'],
+    bin: [
+      'first/array-z',
+      'middle/array-a',
+      'a-very-long-intermediate-directory-name/array-z',
+      'last/array-z',
+    ],
     files: {
       'first/array-z': 'first-array-z',
       'middle/array-a': 'array-a',
+      'a-very-long-intermediate-directory-name/array-z': 'intermediate-array-z',
       'last/array-z': 'last-array-z',
     },
   },

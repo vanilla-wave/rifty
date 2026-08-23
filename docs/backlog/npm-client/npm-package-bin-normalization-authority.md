@@ -107,14 +107,19 @@ and proves why it cannot be the sole oracle.
 
 - ADR-0364 selects one browser-safe package-private semantic copy of npm's
   active finite bin algorithm; no runtime dependency or public normalizer.
-- Public raw ingress is string, readonly string array, or readonly object with
-  unknown values. Installed results and written lock entries carry only the
-  normalized readonly string map.
+- Public `PackageBin` raw ingress is string, readonly string array, or readonly
+  object with unknown values. Public `NormalizedPackageBin`, install-result
+  packages, and written lock entries expose only the normalized readonly string
+  map.
 - npm-removed malformed forms remain removals. Only the oracle-throwing
   non-string array member stays a named loud Rifty gap.
 - The prior absolute/traversal rejection rows in source, aggregation, and link-
   ingress contracts are re-cut to npm's rooted package-relative behavior;
   tar/install-path escape rejection is unaffected.
+- First isolated Contract+RED review at `15d047afd` blocked changed-file Biome
+  plus all-invalid-object, valid-array public-link, malformed-lock offline-
+  replay, and canonical-output type false-greens. The in-place re-cut adds each
+  exact witness without production source.
 
 ## Fault matrix
 
