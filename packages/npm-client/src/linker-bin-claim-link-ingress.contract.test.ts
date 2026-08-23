@@ -30,10 +30,9 @@ function provePreparedType(vfs: Vfs, prepared: linker.PreparedInstallPackage, na
 }
 void provePreparedType;
 
-function pkg(name: string, scope: string, target: string): Package {
-  const valid = !target.startsWith('/') && !target.startsWith('../');
+function pkg(name: string, scope: string, target: string, fileTarget = target): Package {
   // biome-ignore format: fixture fields are one value, not separate behavior.
-  return { name, version: '1.0.0', installPath: `${scope}/${name}`, dependencies: {}, bin: { shared: target }, files: valid ? { [target]: new Uint8Array() } : {} };
+  return { name, version: '1.0.0', installPath: `${scope}/${name}`, dependencies: {}, bin: { shared: target }, files: { [fileTarget]: new Uint8Array() } };
 }
 
 function prior(name: string, scope: string): BinSource {
@@ -79,8 +78,6 @@ const rejectedCases: readonly RejectCase[] = [
   ['root reverse', entrypoints, packages(root, 'z-cli', 'a-cli'), ceiling, []],
   ['nested forward', entrypoints, packages(nested, 'a-cli', 'z-cli'), ceiling, []],
   ['nested reverse', entrypoints, packages(nested, 'z-cli', 'a-cli'), ceiling, []],
-  ['root traversal', entrypoints, [pkg('bad-target', root, '../escape.js')], 'Invalid package bin target: ../escape.js', []],
-  ['nested absolute', entrypoints, [pkg('bad-target', nested, '/absolute.js')], 'Invalid package bin target: /absolute.js', []],
   ['prior collision', ['prepared'], packages(root, 'stable'), ceiling, priors(root, 'stable', 'other')],
   ['prior transition', ['prepared'], packages(root, 'current'), ceiling, priors(root, 'prior')],
   ['prior removal', ['prepared'], [], ceiling, priors(root, 'removed')],
@@ -110,12 +107,19 @@ it.each(rejectedCases)(
 
 it('[fault: sibling-drift] links stable prior and independent scopes', async () => {
   const independent = [...packages(root, 'root-cli'), ...packages(nested, 'nested-cli')];
+  const rootedTargets = [
+    pkg('rooted-root', root, '../rooted.js', 'rooted.js'),
+    pkg('rooted-nested', nested, '/absolute.js', 'absolute.js'),
+  ];
   // biome-ignore format: one compact row per green ingress case.
   const cases = [
     ['prepared', [pkg('stable', root, 'bin/current.js')], priors(root, 'stable'), [['/project/node_modules/.bin/shared', '../stable/bin/current.js']]],
     ['public', independent, [], [['/project/node_modules/.bin/shared', '../root-cli/bin/root-cli.js'], ['/project/node_modules/host/node_modules/.bin/shared', '../nested-cli/bin/nested-cli.js']]],
     ['cancellable', independent, [], [['/project/node_modules/.bin/shared', '../root-cli/bin/root-cli.js'], ['/project/node_modules/host/node_modules/.bin/shared', '../nested-cli/bin/nested-cli.js']]],
     ['prepared', independent, [], [['/project/node_modules/.bin/shared', '../root-cli/bin/root-cli.js'], ['/project/node_modules/host/node_modules/.bin/shared', '../nested-cli/bin/nested-cli.js']]],
+    ['public', rootedTargets, [], [['/project/node_modules/.bin/shared', '../rooted-root/rooted.js'], ['/project/node_modules/host/node_modules/.bin/shared', '../rooted-nested/absolute.js']]],
+    ['cancellable', rootedTargets, [], [['/project/node_modules/.bin/shared', '../rooted-root/rooted.js'], ['/project/node_modules/host/node_modules/.bin/shared', '../rooted-nested/absolute.js']]],
+    ['prepared', rootedTargets, [], [['/project/node_modules/.bin/shared', '../rooted-root/rooted.js'], ['/project/node_modules/host/node_modules/.bin/shared', '../rooted-nested/absolute.js']]],
   ] as const;
   for (const [entrypoint, packages, previous, launchers] of cases) {
     const observed = await project();

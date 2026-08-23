@@ -1,0 +1,304 @@
+{
+  "runtime": {
+    "node": "v24.16.0",
+    "npm": "11.17.0",
+    "npmPackageJson": "7.0.5",
+    "legacyNpmNormalizePackageBin": "5.0.0"
+  },
+  "sourceSha256": {
+    "packageJsonNormalize": "ba75d512103e404d6125fb658211069f3eb0db0d6687d499130cd86a2b817014",
+    "legacyPackageBin": "5d5fb5cae6d9c04079c01e6e1978de69d19c77ff160f523df462d08bca44b2dd"
+  },
+  "direct": [
+    {
+      "id": "absent",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
+      "id": "bare-string",
+      "packageJson": {
+        "bin": {
+          "plain-cli": "plain.js"
+        }
+      },
+      "legacyPackage": {
+        "bin": {
+          "plain-cli": "plain.js"
+        }
+      }
+    },
+    {
+      "id": "scoped-string",
+      "packageJson": {
+        "bin": {
+          "scoped-cli": "scoped.js"
+        }
+      },
+      "legacyPackage": {
+        "bin": {
+          "scoped-cli": "scoped.js"
+        }
+      }
+    },
+    {
+      "id": "array-order-and-collision",
+      "packageJson": {
+        "bin": {
+          "array-z": "last/array-z",
+          "array-a": "middle/array-a"
+        }
+      },
+      "legacyPackage": {
+        "bin": {
+          "array-z": "last/array-z",
+          "array-a": "middle/array-a"
+        }
+      }
+    },
+    {
+      "id": "object-sanitize-filter-and-collision",
+      "packageJson": {
+        "bin": {
+          "canonical-collision": "renamed-first.js",
+          "drive-target": "C/bin/drive.js",
+          "object-command": "bin/object.js",
+          "windows-command": "bin/windows.js",
+          "colon-command": "colon.js",
+          "collision": "two.js"
+        }
+      },
+      "legacyPackage": {
+        "bin": {
+          "object-command": "bin/object.js",
+          "windows-command": "bin/windows.js",
+          "colon-command": "colon.js",
+          "collision": "two.js",
+          "canonical-collision": "canonical-second.js",
+          "drive-target": "C:/bin/drive.js"
+        }
+      }
+    },
+    {
+      "id": "target-rooting",
+      "packageJson": {
+        "bin": {
+          "dot": "bin/dot.js",
+          "traversal": "outside.js",
+          "absolute": "absolute.js",
+          "segments": "segments.js",
+          "windows": "bin/windows.js"
+        }
+      },
+      "legacyPackage": {
+        "bin": {
+          "dot": "bin/dot.js",
+          "traversal": "outside.js",
+          "absolute": "absolute.js",
+          "segments": "segments.js",
+          "windows": "bin/windows.js"
+        }
+      }
+    },
+    {
+      "id": "empty-array",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
+      "id": "empty-object",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
+      "id": "empty-string",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
+      "id": "null",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
+      "id": "false",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
+      "id": "number",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
+      "id": "missing-name-string",
+      "packageJson": {
+        "bin": null
+      },
+      "legacyPackage": {
+        "bin": null
+      }
+    },
+    {
+      "id": "non-string-array-entry",
+      "packageJson": {
+        "error": {
+          "name": "TypeError",
+          "message": "The \"path\" argument must be of type string. Received type number (42)"
+        }
+      },
+      "legacyPackage": {
+        "error": {
+          "name": "TypeError",
+          "message": "The \"path\" argument must be of type string. Received type number (42)"
+        }
+      }
+    }
+  ],
+  "install": {
+    "fresh": {
+      "manifests": {
+        "plain-cli": "./bin/../plain.js",
+        "@scope/scoped-cli": ".\\bin\\..\\scoped.js",
+        "array-cli": [
+          "first/array-z",
+          "middle/array-a",
+          "last/array-z"
+        ],
+        "object-cli": {
+          "bad/object-command": "./bin/./object.js",
+          "bad\\windows-command": "bin\\windows.js",
+          "bad:colon-command": "../colon.js",
+          "first/collision": "./one.js",
+          "second:collision": "dir/../two.js",
+          "bad/canonical-collision": "./renamed-first.js",
+          "canonical-collision": "./canonical-second.js",
+          "drive-target": "C:\\bin\\drive.js",
+          "": "ignored.js",
+          "bad/empty-target": "",
+          "bad/non-string": 42
+        },
+        "invalid-top-cli": 42
+      },
+      "lockBins": {
+        "plain-cli": {
+          "plain-cli": "plain.js"
+        },
+        "@scope/scoped-cli": {
+          "scoped-cli": "scoped.js"
+        },
+        "array-cli": {
+          "array-a": "middle/array-a",
+          "array-z": "last/array-z"
+        },
+        "object-cli": {
+          "canonical-collision": "renamed-first.js",
+          "collision": "two.js",
+          "colon-command": "colon.js",
+          "drive-target": "C/bin/drive.js",
+          "object-command": "bin/object.js",
+          "windows-command": "bin/windows.js"
+        },
+        "invalid-top-cli": null
+      },
+      "links": {
+        "plain-cli": "../plain-cli/plain.js",
+        "scoped-cli": "../@scope/scoped-cli/scoped.js",
+        "array-z": "../array-cli/last/array-z",
+        "array-a": "../array-cli/middle/array-a",
+        "object-command": "../object-cli/bin/object.js",
+        "windows-command": "../object-cli/bin/windows.js",
+        "colon-command": "../object-cli/colon.js",
+        "collision": "../object-cli/two.js",
+        "canonical-collision": "../object-cli/renamed-first.js",
+        "drive-target": "../object-cli/C/bin/drive.js"
+      }
+    },
+    "replay": {
+      "manifests": {
+        "plain-cli": "./bin/../plain.js",
+        "@scope/scoped-cli": ".\\bin\\..\\scoped.js",
+        "array-cli": [
+          "first/array-z",
+          "middle/array-a",
+          "last/array-z"
+        ],
+        "object-cli": {
+          "bad/object-command": "./bin/./object.js",
+          "bad\\windows-command": "bin\\windows.js",
+          "bad:colon-command": "../colon.js",
+          "first/collision": "./one.js",
+          "second:collision": "dir/../two.js",
+          "bad/canonical-collision": "./renamed-first.js",
+          "canonical-collision": "./canonical-second.js",
+          "drive-target": "C:\\bin\\drive.js",
+          "": "ignored.js",
+          "bad/empty-target": "",
+          "bad/non-string": 42
+        },
+        "invalid-top-cli": 42
+      },
+      "lockBins": {
+        "plain-cli": {
+          "plain-cli": "plain.js"
+        },
+        "@scope/scoped-cli": {
+          "scoped-cli": "scoped.js"
+        },
+        "array-cli": {
+          "array-a": "middle/array-a",
+          "array-z": "last/array-z"
+        },
+        "object-cli": {
+          "canonical-collision": "renamed-first.js",
+          "collision": "two.js",
+          "colon-command": "colon.js",
+          "drive-target": "C/bin/drive.js",
+          "object-command": "bin/object.js",
+          "windows-command": "bin/windows.js"
+        },
+        "invalid-top-cli": null
+      },
+      "links": {
+        "plain-cli": "../plain-cli/plain.js",
+        "scoped-cli": "../@scope/scoped-cli/scoped.js",
+        "array-z": "../array-cli/last/array-z",
+        "array-a": "../array-cli/middle/array-a",
+        "object-command": "../object-cli/bin/object.js",
+        "windows-command": "../object-cli/bin/windows.js",
+        "colon-command": "../object-cli/colon.js",
+        "collision": "../object-cli/two.js",
+        "canonical-collision": "../object-cli/renamed-first.js",
+        "drive-target": "../object-cli/C/bin/drive.js"
+      }
+    }
+  }
+}

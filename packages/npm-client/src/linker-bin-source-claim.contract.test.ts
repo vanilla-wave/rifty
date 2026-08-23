@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import { describe, expect, it } from 'vitest';
 import * as npmClientRoot from './index.ts';
 import * as linker from './linker.ts';
@@ -18,6 +19,8 @@ interface PackageBinClaim {
   readonly owner: string;
   readonly target: string;
 }
+
+type RawPackageBin = string | readonly string[] | Readonly<Record<string, unknown>>;
 
 interface PackageBinSourceClaimApi {
   normalizePackageBinSource(source: PackageBinSource): readonly PackageBinClaim[];
@@ -86,12 +89,8 @@ interface ObservedSource {
   readonly reads: () => number;
 }
 
-function observedSource(
-  name: string,
-  nodeModulesDir: string,
-  bin: string | Record<string, string>,
-): ObservedSource {
-  const packageValue: { name: string; bin?: string | Record<string, string> } = { name };
+function observedSource(name: string, nodeModulesDir: string, bin: RawPackageBin): ObservedSource {
+  const packageValue: { name: string; bin?: RawPackageBin } = { name };
   let reads = 0;
   Object.defineProperty(packageValue, 'bin', {
     configurable: true,
@@ -103,7 +102,10 @@ function observedSource(
     },
   });
   return {
-    value: { package: packageValue, nodeModulesDir },
+    value: {
+      package: packageValue as PackageBinSource['package'],
+      nodeModulesDir,
+    },
     reads: () => reads,
   };
 }
@@ -191,25 +193,60 @@ describe('package-bin source claim authority', () => {
   });
 
   it.each([
-    ['object', '../escape.js', { valid: './bin/valid.js', bad: '../escape.js' }],
-    ['object', '/absolute.js', { valid: './bin/valid.js', bad: '/absolute.js' }],
-    ['string', '../escape.js', '../escape.js'],
-    ['string', '/absolute.js', '/absolute.js'],
+    [
+      'object traversal',
+      { valid: './bin/valid.js', bad: '../escape.js' },
+      [
+        ['valid', 'bin/valid.js'],
+        ['bad', 'escape.js'],
+      ],
+    ],
+    [
+      'object absolute',
+      { valid: './bin/valid.js', bad: '/absolute.js' },
+      [
+        ['valid', 'bin/valid.js'],
+        ['bad', 'absolute.js'],
+      ],
+    ],
+    ['string traversal', '../escape.js', [['bad-target', 'escape.js']]],
+    ['string absolute', '/absolute.js', [['bad-target', 'absolute.js']]],
   ] as const)(
-    '[fault: corrupt-input] rejects escaping %s target %s after one bin read',
-    (_shape, target, bin) => {
+    '[fault: frozen-assumption][fault: corrupt-input] roots %s inside the package after one bin read',
+    (_case, bin, expected) => {
       const normalize = requireNormalizer();
-      const invalid = observedSource('bad-target', 'node_modules', bin);
-      let caught: unknown;
+      const source = observedSource('bad-target', 'node_modules', bin);
 
-      try {
-        normalize(invalid.value);
-      } catch (error) {
-        caught = error;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      expect((caught as Error).message).toBe(`Invalid package bin target: ${target}`);
-      expect(invalid.reads()).toBe(1);
+      expect(structuredClone(normalize(source.value))).toEqual(
+        expected.map(([command, target]) => ({
+          nodeModulesDir: 'node_modules',
+          command,
+          owner: 'bad-target',
+          target,
+        })),
+      );
+      expect(source.reads()).toBe(1);
     },
   );
+
+  it('[fault: corrupt-input] names a non-string array member after one bin read', () => {
+    const normalize = requireNormalizer();
+    const invalid = observedSource('invalid-array', 'node_modules', [
+      'valid.js',
+      42,
+    ] as unknown as RawPackageBin);
+    let caught: unknown;
+
+    try {
+      normalize(invalid.value);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(NotImplementedError);
+    expect(caught).toMatchObject({
+      feature: 'npm-client.package-bin.non-string-array-entry',
+    });
+    expect(invalid.reads()).toBe(1);
+  });
 });
