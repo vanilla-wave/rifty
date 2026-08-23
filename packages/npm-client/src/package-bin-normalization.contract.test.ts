@@ -6,23 +6,137 @@ import * as npmClientRoot from './index.ts';
 import type {
   InstallResult,
   NormalizedPackageBin,
+  NormalizedResolvedPackage,
   PackageBin,
   ResolvedPackage,
   VersionManifest,
 } from './index.ts';
 import * as linker from './linker.ts';
 
-type PackageBinInput = PackageBin | null | false | number | undefined;
+type OracleBin =
+  | string
+  | readonly unknown[]
+  | Readonly<Record<string, unknown>>
+  | null
+  | boolean
+  | number;
+
+interface OracleDirectCase {
+  readonly id: string;
+  readonly input: Readonly<{ name?: string; bin?: OracleBin }>;
+  readonly packageJson: Readonly<{
+    bin?: Readonly<Record<string, string>> | null;
+    error?: Readonly<{ name: string; message: string }>;
+  }>;
+}
+
+interface OracleFixture {
+  readonly name: string;
+  readonly bin?: OracleBin;
+  readonly files: Readonly<Record<string, boolean>>;
+}
+
+interface PackageBinOracle {
+  readonly direct: readonly OracleDirectCase[];
+  readonly fixtures: readonly OracleFixture[];
+  readonly install: Readonly<{
+    fresh: Readonly<{
+      lockBins: Readonly<Record<string, Readonly<Record<string, string>> | null>>;
+      links: Readonly<Record<string, string>>;
+    }>;
+  }>;
+}
 
 interface PackageBinNormalizationApi {
   normalizePackageBin(
     packageName: string | undefined,
-    bin: PackageBinInput,
-  ): Readonly<Record<string, string>> | undefined;
+    bin: unknown,
+  ): NormalizedPackageBin | undefined;
 }
+
+type Equal<Left, Right> = (<Value>() => Value extends Left ? 1 : 2) extends <
+  Value,
+>() => Value extends Right ? 1 : 2
+  ? (<Value>() => Value extends Right ? 1 : 2) extends <Value>() => Value extends Left ? 1 : 2
+    ? true
+    : false
+  : false;
+type ExpectedPackageBin = string | readonly string[] | Readonly<Record<string, unknown>>;
+type ExpectedNormalizedResolvedPackage = Omit<ResolvedPackage, 'bin'> & {
+  bin?: NormalizedPackageBin;
+};
+type MissingNormalizer = (packageName: number, bin: string) => string;
+type ConditionalExport<Key extends PropertyKey> = Key extends keyof typeof linker
+  ? Extract<(typeof linker)[Key], (...args: never[]) => unknown>
+  : MissingNormalizer;
+type NormalizeExport = ConditionalExport<'normalizePackageBin'>;
 
 const contractApi = linker as unknown as Partial<PackageBinNormalizationApi>;
 const compatUrl = new URL('../../../docs/public/compat/package-tooling.md', import.meta.url);
+const oracleUrl = new URL(
+  '../../../docs/backlog/npm-client/reference/npm-11-package-bin-normalization-probe-output.json',
+  import.meta.url,
+);
+const oraclePromise = readFile(oracleUrl, 'utf8').then(
+  (text) => JSON.parse(text) as PackageBinOracle,
+);
+
+function provePackageBinTypes(): void {
+  const rawExact: Equal<PackageBin, ExpectedPackageBin> = true;
+  const normalizedExact: Equal<NormalizedPackageBin, Readonly<Record<string, string>>> = true;
+  const resolvedIngressExact: Equal<ResolvedPackage['bin'], PackageBin | undefined> = true;
+  const manifestIngressExact: Equal<VersionManifest['bin'], PackageBin | undefined> = true;
+  const normalizedPackageExact: Equal<
+    NormalizedResolvedPackage,
+    ExpectedNormalizedResolvedPackage
+  > = true;
+  const resultPackageExact: Equal<InstallResult['packages'][number], NormalizedResolvedPackage> =
+    true;
+  const resultBinExact: Equal<
+    InstallResult['packages'][number]['bin'],
+    NormalizedPackageBin | undefined
+  > = true;
+  const lockBinExact: Equal<
+    InstallResult['lockfile']['packages'][string]['bin'],
+    NormalizedPackageBin | undefined
+  > = true;
+  const normalizerExact: Equal<NormalizeExport, PackageBinNormalizationApi['normalizePackageBin']> =
+    true;
+  const array = ['first/array-z', 'last/array-z'] as const satisfies PackageBin;
+  const object = { valid: './valid.js', removed: 42 } as const satisfies PackageBin;
+  const resolved: ResolvedPackage = {
+    name: 'typed-bin',
+    version: '1.0.0',
+    dependencies: {},
+    files: {},
+    bin: array,
+  };
+  const manifest: VersionManifest = {
+    name: 'typed-bin',
+    version: '1.0.0',
+    bin: object,
+    dist: { tarball: 'fixture:typed-bin' },
+  };
+  const raw = {} as PackageBin;
+  // @ts-expect-error Contract: raw forms are not canonical output facts.
+  const rejectedOutput: NormalizedPackageBin = raw;
+  void [
+    rawExact,
+    normalizedExact,
+    resolvedIngressExact,
+    manifestIngressExact,
+    normalizedPackageExact,
+    resultPackageExact,
+    resultBinExact,
+    lockBinExact,
+    normalizerExact,
+    resolved,
+    manifest,
+    rejectedOutput,
+  ];
+}
+
+void provePackageBinTypes;
 
 function requireNormalizer(): PackageBinNormalizationApi['normalizePackageBin'] {
   const candidate = contractApi.normalizePackageBin;
@@ -33,48 +147,13 @@ function requireNormalizer(): PackageBinNormalizationApi['normalizePackageBin'] 
   return candidate;
 }
 
-function provePackageBinTypes(): void {
-  const bin = [
-    'first/array-z',
-    'middle/array-a',
-    'a-very-long-intermediate-directory-name/array-z',
-    'last/array-z',
-  ] as const satisfies PackageBin;
-  const objectBin = { valid: './valid.js', removed: 42 } as const satisfies PackageBin;
-  const resolved: ResolvedPackage = {
-    name: 'array-cli',
-    version: '1.0.0',
-    dependencies: {},
-    files: {},
-    bin,
-  };
-  const manifest: VersionManifest = {
-    name: 'array-cli',
-    version: '1.0.0',
-    bin,
-    dist: { tarball: 'fixture:array-cli' },
-  };
-  const resolvedObject: ResolvedPackage = { ...resolved, bin: objectBin };
-  const manifestObject: VersionManifest = { ...manifest, bin: objectBin };
-  const result = {} as InstallResult;
-  const resultBin: NormalizedPackageBin | undefined = result.packages[0]?.bin;
-  const lockBin: NormalizedPackageBin | undefined = result.lockfile.packages.entry?.bin;
-  void [resolved, manifest, resolvedObject, manifestObject, resultBin, lockBin];
-}
-
-void provePackageBinTypes;
-
-function rawPackage(
-  name: string,
-  bin: PackageBinInput,
-  files: Readonly<Record<string, Uint8Array>> = {},
-): ResolvedPackage {
+function rawPackage(fixture: OracleFixture): ResolvedPackage {
   return {
-    name,
+    name: fixture.name,
     version: '1.0.0',
     dependencies: {},
-    files: { ...files },
-    bin: bin as ResolvedPackage['bin'],
+    files: Object.fromEntries(Object.keys(fixture.files).map((path) => [path, new Uint8Array()])),
+    ...(Object.hasOwn(fixture, 'bin') ? { bin: fixture.bin as ResolvedPackage['bin'] } : {}),
   };
 }
 
@@ -91,109 +170,33 @@ async function observedProject() {
 }
 
 describe('npm package-bin normalization authority', () => {
-  it('exports the raw type but keeps the normalizer package-private', () => {
+  it('exports exact raw/output types but keeps the normalizer package-private', () => {
     expect(npmClientRoot).not.toHaveProperty('normalizePackageBin');
   });
 
-  it('[fault: frozen-assumption][fault: observable-order] matches npm 11 string and array rows', () => {
+  it('[fault: frozen-assumption][fault: corrupt-input][fault: lossy-aggregate] runs every npm direct fixture through the pure seam', async () => {
     const normalize = requireNormalizer();
-    const array = [
-      'first/array-z',
-      'middle/array-a',
-      'a-very-long-intermediate-directory-name/array-z',
-      'last/array-z',
-    ] as const;
-
-    expect(normalize('plain-cli', './bin/../plain.js')).toEqual({
-      'plain-cli': 'plain.js',
-    });
-    expect(normalize('@scope/scoped-cli', '.\\bin\\..\\scoped.js')).toEqual({
-      'scoped-cli': 'scoped.js',
-    });
-    expect(JSON.stringify(normalize('array-cli', array))).toBe(
-      '{"array-z":"last/array-z","array-a":"middle/array-a"}',
-    );
-    expect(array).toEqual([
-      'first/array-z',
-      'middle/array-a',
-      'a-very-long-intermediate-directory-name/array-z',
-      'last/array-z',
-    ]);
+    const oracle = await oraclePromise;
+    for (const row of oracle.direct.filter(
+      (candidate) => candidate.packageJson.error === undefined,
+    )) {
+      const input = structuredClone(row.input);
+      const expected = row.packageJson.bin ?? null;
+      const actual = normalize(input.name, input.bin) ?? null;
+      expect(JSON.stringify(actual), row.id).toBe(JSON.stringify(expected));
+      expect(input, `${row.id} ingress mutation`).toEqual(row.input);
+    }
   });
 
-  it('[fault: frozen-assumption][fault: lossy-aggregate] matches npm 11 object mutation order without mutating ingress', () => {
+  it('[fault: corrupt-input] maps npm array TypeError to one named loud gap', async () => {
     const normalize = requireNormalizer();
-    const bin = {
-      'bad/object-command': './bin/./object.js',
-      'bad\\windows-command': 'bin\\windows.js',
-      'bad:colon-command': '../colon.js',
-      'first/collision': './one.js',
-      'second:collision': 'dir/../two.js',
-      'bad/canonical-collision': './renamed-first.js',
-      'canonical-collision': './canonical-second.js',
-      'drive-target': 'C:\\bin\\drive.js',
-      '': 'ignored.js',
-      'bad/empty-target': '',
-      'bad/non-string': 42,
-    } as const;
-    const before = structuredClone(bin);
-
-    expect(JSON.stringify(normalize('object-cli', bin))).toBe(
-      '{"canonical-collision":"renamed-first.js","drive-target":"C/bin/drive.js","object-command":"bin/object.js","windows-command":"bin/windows.js","colon-command":"colon.js","collision":"two.js"}',
-    );
-    expect(bin).toEqual(before);
-  });
-
-  it('[fault: frozen-assumption][fault: corrupt-input] roots dot, traversal, absolute, and platform separators inside the package', () => {
-    const normalize = requireNormalizer();
-
-    expect(
-      normalize('target-cli', {
-        dot: './bin/dot.js',
-        traversal: '../../outside.js',
-        absolute: '/absolute.js',
-        segments: 'bin/../segments.js',
-        windows: 'bin\\nested\\..\\windows.js',
-      }),
-    ).toEqual({
-      dot: 'bin/dot.js',
-      traversal: 'outside.js',
-      absolute: 'absolute.js',
-      segments: 'segments.js',
-      windows: 'bin/windows.js',
-    });
-  });
-
-  it('[fault: corrupt-input] removes every npm-removed top-level form', () => {
-    const normalize = requireNormalizer();
-    const cases = [
-      ['absent', undefined],
-      ['empty-array', [] as const],
-      ['empty-object', {}],
-      ['empty-string', ''],
-      ['null-bin', null],
-      ['false-bin', false],
-      ['number-bin', 42],
-    ] as const;
-
-    for (const [name, bin] of cases) expect(normalize(name, bin)).toBeUndefined();
-    expect(normalize(undefined, './unnamed.js')).toBeUndefined();
-    expect(
-      normalize('all-invalid-object', {
-        '': 'ignored.js',
-        'bad/empty-target': '',
-        'bad/non-string': 42,
-      }),
-    ).toBeUndefined();
-  });
-
-  it('[fault: corrupt-input] keeps a non-string array member as one named loud gap', () => {
-    const normalize = requireNormalizer();
-    const bin = ['valid.js', 42] as unknown as PackageBin;
+    const oracle = await oraclePromise;
+    const row = oracle.direct.find((candidate) => candidate.id === 'non-string-array-entry');
+    if (!row) throw new Error('Contract oracle: non-string array row missing');
     let caught: unknown;
 
     try {
-      normalize('invalid-array', bin);
+      normalize(row.input.name, structuredClone(row.input.bin));
     } catch (error) {
       caught = error;
     }
@@ -202,75 +205,47 @@ describe('npm package-bin normalization authority', () => {
     expect(caught).toMatchObject({
       feature: 'npm-client.package-bin.non-string-array-entry',
     });
-    expect(bin).toEqual(['valid.js', 42]);
   });
 
-  it('[fault: sibling-drift] canonicalizes direct lock facts through the same map', () => {
-    const lock = linker.buildLockfile('root', '1.0.0', [
-      rawPackage('@scope/string-cli', '.\\bin\\..\\scoped.js'),
-      rawPackage('array-cli', [
-        'first/array-z',
-        'middle/array-a',
-        'a-very-long-intermediate-directory-name/array-z',
-        'last/array-z',
-      ]),
-      rawPackage('object-cli', {
-        'bad/tool': '../tool.js',
-        'bad/canonical': './first.js',
-        canonical: './second.js',
-        drive: 'C:\\bin\\drive.js',
-      }),
-    ]);
+  it('[fault: sibling-drift] runs every install fixture through direct lock construction', async () => {
+    const oracle = await oraclePromise;
+    const lock = linker.buildLockfile('root', '1.0.0', oracle.fixtures.map(rawPackage));
 
-    expect(lock.packages['node_modules/@scope/string-cli']?.bin).toEqual({
-      'string-cli': 'scoped.js',
-    });
-    expect(JSON.stringify(lock.packages['node_modules/array-cli']?.bin)).toBe(
-      '{"array-z":"last/array-z","array-a":"middle/array-a"}',
-    );
-    expect(lock.packages['node_modules/object-cli']?.bin).toEqual({
-      canonical: 'first.js',
-      drive: 'C/bin/drive.js',
-      tool: 'tool.js',
-    });
+    for (const fixture of oracle.fixtures) {
+      expect(lock.packages[`node_modules/${fixture.name}`]?.bin ?? null, fixture.name).toEqual(
+        oracle.install.fresh.lockBins[fixture.name],
+      );
+    }
   });
 
-  it('[fault: sibling-drift] public link consumes a valid array through the shared map', async () => {
+  it('[fault: sibling-drift] runs every install fixture through public link', async () => {
+    const oracle = await oraclePromise;
     const vfs = new MemoryVfs();
     await vfs.mkdir('/project', { recursive: true });
-    await npmClientRoot.link(vfs, '/project', [
-      rawPackage(
-        'array-cli',
-        [
-          'first/array-z',
-          'middle/array-a',
-          'a-very-long-intermediate-directory-name/array-z',
-          'last/array-z',
-        ],
-        {
-          'first/array-z': new Uint8Array(),
-          'middle/array-a': new Uint8Array(),
-          'a-very-long-intermediate-directory-name/array-z': new Uint8Array(),
-          'last/array-z': new Uint8Array(),
-        },
-      ),
-    ]);
+    await npmClientRoot.link(vfs, '/project', oracle.fixtures.map(rawPackage));
 
-    expect(await vfs.readFileText('/project/node_modules/.bin/array-z')).toBe(
-      "#!/usr/bin/env node\nimport('../array-cli/last/array-z');\n",
-    );
-    expect(await vfs.readFileText('/project/node_modules/.bin/array-a')).toBe(
-      "#!/usr/bin/env node\nimport('../array-cli/middle/array-a');\n",
-    );
-    expect(await vfs.exists('/project/node_modules/.bin/0')).toBe(false);
+    const commands = Object.keys(oracle.install.fresh.links).sort();
+    expect(
+      (await vfs.readdir('/project/node_modules/.bin')).map((entry) => entry.name).sort(),
+    ).toEqual(commands);
+    for (const [command, target] of Object.entries(oracle.install.fresh.links)) {
+      expect(await vfs.readFileText(`/project/node_modules/.bin/${command}`), command).toBe(
+        `#!/usr/bin/env node\nimport('${target}');\n`,
+      );
+    }
   });
 
   it('[fault: corrupt-input][fault: sibling-drift] normalizes before collision preflight or VFS mutation', async () => {
     const observed = await observedProject();
-    const packages = [
-      rawPackage('renamed-owner', { 'bad/shared': './a.js' }, { 'a.js': new Uint8Array() }),
-      rawPackage('canonical-owner', { shared: './b.js' }, { 'b.js': new Uint8Array() }),
+    const collisionFixtures: readonly OracleFixture[] = [
+      {
+        name: 'renamed-owner',
+        bin: { 'bad/shared': './a.js' },
+        files: { 'a.js': true },
+      },
+      { name: 'canonical-owner', bin: { shared: './b.js' }, files: { 'b.js': true } },
     ];
+    const packages = collisionFixtures.map(rawPackage);
     let caught: unknown;
 
     try {
@@ -284,10 +259,21 @@ describe('npm package-bin normalization authority', () => {
     expect(observed.mutations.map((spy) => spy.mock.calls.length)).toEqual([0, 0, 0, 0]);
   });
 
-  it('[fault: corrupt-input] rejects a non-string array before direct-link mutation', async () => {
+  it('[fault: corrupt-input] rejects the oracle array gap before direct-link mutation', async () => {
+    const oracle = await oraclePromise;
+    const row = oracle.direct.find((candidate) => candidate.id === 'non-string-array-entry');
+    if (!row) throw new Error('Contract oracle: non-string array row missing');
+    const targets = Array.isArray(row.input.bin)
+      ? row.input.bin.filter((value): value is string => typeof value === 'string')
+      : [];
+    if (targets.length === 0) {
+      throw new Error('Contract oracle: non-string array prefix missing');
+    }
     const observed = await observedProject();
-    const invalid = rawPackage('invalid-array', ['valid.js', 42] as unknown as PackageBin, {
-      'valid.js': new Uint8Array(),
+    const invalid = rawPackage({
+      name: row.input.name ?? 'invalid-array',
+      bin: row.input.bin,
+      files: Object.fromEntries(targets.map((target) => [target, true])),
     });
     let reads = 0;
     Object.defineProperty(invalid, 'bin', {
@@ -295,7 +281,7 @@ describe('npm package-bin normalization authority', () => {
       enumerable: true,
       get: () => {
         reads += 1;
-        return ['valid.js', 42];
+        return row.input.bin;
       },
     });
     const caught: unknown = await npmClientRoot

@@ -17,9 +17,9 @@ shasum -a 256 \
 ```
 
 Probe SHA-256:
-`b9abfcf54d7b4d51d268ecdfb26a091f53d36cc971d0ba99602541fc68502362`.
+`5127a0245e308e4a4a3323b53aa0a124e7e550a3fb8e0c7a5e7393fa93624faf`.
 Golden SHA-256:
-`48b78f60588f22069fb4bf4706b51af62051e574d807bc2927a84c1dc5eb194d`.
+`97dd733bde16c913d04fa944122d3d768171f3e619e1117be489ab18dde57c47`.
 
 Pinned npm sources:
 
@@ -53,3 +53,8 @@ metadata. Fresh and offline replay nevertheless write the same normalized lock
 map and the same relative `.bin` symlink targets. Rifty's no-symlink carrier
 (ADR-0050) must therefore preserve that command/target identity while retaining
 its existing exact launcher-shim bytes.
+
+The golden includes the direct input table and packed fixture file lists. Rifty
+contracts consume those exact rows for its pure, public-link, direct-lock,
+fresh-install, and replay paths; no hand-copied expectation is an acceptance
+oracle.

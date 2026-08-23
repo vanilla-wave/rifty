@@ -12,6 +12,9 @@
   "direct": [
     {
       "id": "absent",
+      "input": {
+        "name": "absent"
+      },
       "packageJson": {
         "bin": null
       },
@@ -21,6 +24,10 @@
     },
     {
       "id": "bare-string",
+      "input": {
+        "name": "plain-cli",
+        "bin": "./bin/../plain.js"
+      },
       "packageJson": {
         "bin": {
           "plain-cli": "plain.js"
@@ -34,6 +41,10 @@
     },
     {
       "id": "scoped-string",
+      "input": {
+        "name": "@scope/scoped-cli",
+        "bin": ".\\bin\\..\\scoped.js"
+      },
       "packageJson": {
         "bin": {
           "scoped-cli": "scoped.js"
@@ -47,6 +58,15 @@
     },
     {
       "id": "array-order-and-collision",
+      "input": {
+        "name": "array-cli",
+        "bin": [
+          "first/array-z",
+          "middle/array-a",
+          "a-very-long-intermediate-directory-name/array-z",
+          "last/array-z"
+        ]
+      },
       "packageJson": {
         "bin": {
           "array-z": "last/array-z",
@@ -62,6 +82,22 @@
     },
     {
       "id": "object-sanitize-filter-and-collision",
+      "input": {
+        "name": "object-cli",
+        "bin": {
+          "bad/object-command": "./bin/./object.js",
+          "bad\\windows-command": "bin\\windows.js",
+          "bad:colon-command": "../colon.js",
+          "first/collision": "./one.js",
+          "second:collision": "dir/../two.js",
+          "bad/canonical-collision": "./renamed-first.js",
+          "canonical-collision": "./canonical-second.js",
+          "drive-target": "C:\\bin\\drive.js",
+          "": "ignored.js",
+          "bad/empty-target": "",
+          "bad/non-string": 42
+        }
+      },
       "packageJson": {
         "bin": {
           "canonical-collision": "renamed-first.js",
@@ -85,6 +121,16 @@
     },
     {
       "id": "target-rooting",
+      "input": {
+        "name": "target-cli",
+        "bin": {
+          "dot": "./bin/dot.js",
+          "traversal": "../../outside.js",
+          "absolute": "/absolute.js",
+          "segments": "bin/../segments.js",
+          "windows": "bin\\nested\\..\\windows.js"
+        }
+      },
       "packageJson": {
         "bin": {
           "dot": "bin/dot.js",
@@ -106,6 +152,10 @@
     },
     {
       "id": "empty-array",
+      "input": {
+        "name": "empty-array",
+        "bin": []
+      },
       "packageJson": {
         "bin": null
       },
@@ -115,6 +165,10 @@
     },
     {
       "id": "empty-object",
+      "input": {
+        "name": "empty-object",
+        "bin": {}
+      },
       "packageJson": {
         "bin": null
       },
@@ -124,6 +178,14 @@
     },
     {
       "id": "all-invalid-object",
+      "input": {
+        "name": "all-invalid-object",
+        "bin": {
+          "": "ignored.js",
+          "bad/empty-target": "",
+          "bad/non-string": 42
+        }
+      },
       "packageJson": {
         "bin": null
       },
@@ -133,6 +195,10 @@
     },
     {
       "id": "empty-string",
+      "input": {
+        "name": "empty-string",
+        "bin": ""
+      },
       "packageJson": {
         "bin": null
       },
@@ -142,6 +208,10 @@
     },
     {
       "id": "null",
+      "input": {
+        "name": "null-bin",
+        "bin": null
+      },
       "packageJson": {
         "bin": null
       },
@@ -151,6 +221,10 @@
     },
     {
       "id": "false",
+      "input": {
+        "name": "false-bin",
+        "bin": false
+      },
       "packageJson": {
         "bin": null
       },
@@ -160,6 +234,10 @@
     },
     {
       "id": "number",
+      "input": {
+        "name": "number-bin",
+        "bin": 42
+      },
       "packageJson": {
         "bin": null
       },
@@ -169,6 +247,9 @@
     },
     {
       "id": "missing-name-string",
+      "input": {
+        "bin": "./unnamed.js"
+      },
       "packageJson": {
         "bin": null
       },
@@ -178,6 +259,20 @@
     },
     {
       "id": "non-string-array-entry",
+      "input": {
+        "name": "invalid-array",
+        "bin": [
+          "valid-0.js",
+          "valid-1.js",
+          "valid-2.js",
+          "valid-3.js",
+          "valid-4.js",
+          "valid-5.js",
+          "valid-6.js",
+          "valid-7.js",
+          42
+        ]
+      },
       "packageJson": {
         "error": {
           "name": "TypeError",
@@ -189,6 +284,108 @@
           "name": "TypeError",
           "message": "The \"path\" argument must be of type string. Received type number (42)"
         }
+      }
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "plain-cli",
+      "bin": "./bin/../plain.js",
+      "files": {
+        "plain.js": true
+      }
+    },
+    {
+      "name": "@scope/scoped-cli",
+      "bin": ".\\bin\\..\\scoped.js",
+      "files": {
+        "scoped.js": true
+      }
+    },
+    {
+      "name": "array-cli",
+      "bin": [
+        "first/array-z",
+        "middle/array-a",
+        "a-very-long-intermediate-directory-name/array-z",
+        "last/array-z"
+      ],
+      "files": {
+        "first/array-z": true,
+        "middle/array-a": true,
+        "a-very-long-intermediate-directory-name/array-z": true,
+        "last/array-z": true
+      }
+    },
+    {
+      "name": "object-cli",
+      "bin": {
+        "bad/object-command": "./bin/./object.js",
+        "bad\\windows-command": "bin\\windows.js",
+        "bad:colon-command": "../colon.js",
+        "first/collision": "./one.js",
+        "second:collision": "dir/../two.js",
+        "bad/canonical-collision": "./renamed-first.js",
+        "canonical-collision": "./canonical-second.js",
+        "drive-target": "C:\\bin\\drive.js",
+        "": "ignored.js",
+        "bad/empty-target": "",
+        "bad/non-string": 42
+      },
+      "files": {
+        "bin/object.js": true,
+        "bin/windows.js": true,
+        "colon.js": true,
+        "one.js": true,
+        "two.js": true,
+        "renamed-first.js": true,
+        "canonical-second.js": true,
+        "C/bin/drive.js": true
+      }
+    },
+    {
+      "name": "absent-bin-cli",
+      "files": {}
+    },
+    {
+      "name": "empty-array-cli",
+      "bin": [],
+      "files": {}
+    },
+    {
+      "name": "empty-object-cli",
+      "bin": {},
+      "files": {}
+    },
+    {
+      "name": "all-invalid-bin-cli",
+      "bin": {
+        "": "ignored.js",
+        "bad/empty-target": "",
+        "bad/non-string": 42
+      },
+      "files": {}
+    },
+    {
+      "name": "empty-string-cli",
+      "bin": "",
+      "files": {}
+    },
+    {
+      "name": "null-bin-cli",
+      "bin": null,
+      "files": {}
+    },
+    {
+      "name": "false-bin-cli",
+      "bin": false,
+      "files": {}
+    },
+    {
+      "name": "invalid-top-cli",
+      "bin": 42,
+      "files": {
+        "ignored.js": true
       }
     }
   ],
@@ -216,6 +413,17 @@
           "bad/empty-target": "",
           "bad/non-string": 42
         },
+        "absent-bin-cli": null,
+        "empty-array-cli": [],
+        "empty-object-cli": {},
+        "all-invalid-bin-cli": {
+          "": "ignored.js",
+          "bad/empty-target": "",
+          "bad/non-string": 42
+        },
+        "empty-string-cli": "",
+        "null-bin-cli": null,
+        "false-bin-cli": false,
         "invalid-top-cli": 42
       },
       "lockBins": {
@@ -237,6 +445,13 @@
           "object-command": "bin/object.js",
           "windows-command": "bin/windows.js"
         },
+        "absent-bin-cli": null,
+        "empty-array-cli": null,
+        "empty-object-cli": null,
+        "all-invalid-bin-cli": null,
+        "empty-string-cli": null,
+        "null-bin-cli": null,
+        "false-bin-cli": null,
         "invalid-top-cli": null
       },
       "links": {
@@ -275,6 +490,17 @@
           "bad/empty-target": "",
           "bad/non-string": 42
         },
+        "absent-bin-cli": null,
+        "empty-array-cli": [],
+        "empty-object-cli": {},
+        "all-invalid-bin-cli": {
+          "": "ignored.js",
+          "bad/empty-target": "",
+          "bad/non-string": 42
+        },
+        "empty-string-cli": "",
+        "null-bin-cli": null,
+        "false-bin-cli": false,
         "invalid-top-cli": 42
       },
       "lockBins": {
@@ -296,6 +522,13 @@
           "object-command": "bin/object.js",
           "windows-command": "bin/windows.js"
         },
+        "absent-bin-cli": null,
+        "empty-array-cli": null,
+        "empty-object-cli": null,
+        "all-invalid-bin-cli": null,
+        "empty-string-cli": null,
+        "null-bin-cli": null,
+        "false-bin-cli": null,
         "invalid-top-cli": null
       },
       "links": {

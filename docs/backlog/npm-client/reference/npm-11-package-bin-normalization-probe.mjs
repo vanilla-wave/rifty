@@ -104,7 +104,21 @@ const directCases = [
   { id: 'false', name: 'false-bin', bin: false },
   { id: 'number', name: 'number-bin', bin: 42 },
   { id: 'missing-name-string', bin: './unnamed.js' },
-  { id: 'non-string-array-entry', name: 'invalid-array', bin: ['valid.js', 42] },
+  {
+    id: 'non-string-array-entry',
+    name: 'invalid-array',
+    bin: [
+      'valid-0.js',
+      'valid-1.js',
+      'valid-2.js',
+      'valid-3.js',
+      'valid-4.js',
+      'valid-5.js',
+      'valid-6.js',
+      'valid-7.js',
+      42,
+    ],
+  },
 ];
 
 const observe = async (input, normalize) => {
@@ -124,16 +138,21 @@ const observe = async (input, normalize) => {
 };
 
 const direct = await Promise.all(
-  directCases.map(async (input) => ({
-    id: input.id,
-    packageJson: await observe(input, (pkg) =>
-      normalizePackageJson(
-        { content: pkg },
-        { strict: false, steps: ['bin'], changes: [], allowLegacyCase: true },
+  directCases.map(async (input) => {
+    const fixture = structuredClone(input);
+    Reflect.deleteProperty(fixture, 'id');
+    return {
+      id: input.id,
+      input: fixture,
+      packageJson: await observe(input, (pkg) =>
+        normalizePackageJson(
+          { content: pkg },
+          { strict: false, steps: ['bin'], changes: [], allowLegacyCase: true },
+        ),
       ),
-    ),
-    legacyPackage: await observe(input, legacyNormalize),
-  })),
+      legacyPackage: await observe(input, legacyNormalize),
+    };
+  }),
 );
 
 const packages = [
@@ -188,6 +207,17 @@ const packages = [
       'C/bin/drive.js': 'drive-target',
     },
   },
+  { name: 'absent-bin-cli', files: {} },
+  { name: 'empty-array-cli', bin: [], files: {} },
+  { name: 'empty-object-cli', bin: {}, files: {} },
+  {
+    name: 'all-invalid-bin-cli',
+    bin: { '': 'ignored.js', 'bad/empty-target': '', 'bad/non-string': 42 },
+    files: {},
+  },
+  { name: 'empty-string-cli', bin: '', files: {} },
+  { name: 'null-bin-cli', bin: null, files: {} },
+  { name: 'false-bin-cli', bin: false, files: {} },
   { name: 'invalid-top-cli', bin: 42, files: { 'ignored.js': 'ignored' } },
 ];
 
@@ -283,6 +313,11 @@ console.log(
         legacyPackageBin: sha256(legacyNormalizerPath),
       },
       direct,
+      fixtures: packages.map((fixture) => ({
+        name: fixture.name,
+        ...(Object.hasOwn(fixture, 'bin') ? { bin: fixture.bin } : {}),
+        files: Object.fromEntries(Object.keys(fixture.files).map((path) => [path, true])),
+      })),
       install: { fresh, replay },
     },
     null,

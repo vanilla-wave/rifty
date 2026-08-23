@@ -120,6 +120,12 @@ and proves why it cannot be the sole oracle.
   plus all-invalid-object, valid-array public-link, malformed-lock offline-
   replay, and canonical-output type false-greens. The in-place re-cut adds each
   exact witness without production source.
+- Second isolated review at `4c89961b9` blocked hand-copied Rifty fixtures,
+  one-way output types, and incomplete per-ingress form/removal coverage. Per
+  Contract escalation the in-place re-refinement makes the committed golden the
+  one input/output table consumed by pure/link/lock/fresh/replay tests and adds
+  exact bidirectional raw/normalized/API/output type witnesses. No production
+  source is present.
 
 ## Fault matrix
 
