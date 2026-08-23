@@ -9,7 +9,13 @@ Elaborates `AGENTS.md` §Decisions (`CLAUDE.md` = symlink). Read at any fork. Ru
 2. New external dependency → **IRREVERSIBLE** → ADR.
 3. Contradicts an ADR → **IRREVERSIBLE** → §Reconsidering.
 4. Live alternatives affecting behavior/parity, a new mechanism, or contested
-   policy/default → **IRREVERSIBLE** → ADR. Diff size is irrelevant.
+   policy/default → **IRREVERSIBLE** → ADR. Diff size is irrelevant. A data
+   model/authority encoding external-system semantics (npm tree/bins/peers,
+   Node identity) carries the contract evidence bar: the ADR cites a pinned
+   discriminating probe (command + output + version); a non-discriminating
+   probe = frozen assumption. A new-mechanism or data-authority ADR records
+   ≥2 radically different candidates — the minimal-interface one among them —
+   each kept or killed by named evidence.
 5. Otherwise **REVERSIBLE**: contract-stable change → CHANGELOG; provisional
    judgment → backlog item + `// TODO(backlog: <area>/<slug>)`.
 
@@ -47,7 +53,8 @@ Shape and validation: `docs/backlog/README.md`. Never implement a draft.
    demote to `draft` recording the fork AND the pre-demotion Acceptance/Parity
    verbatim; the next Contract+RED checkpoint diffs the re-cut against them — any weakening is a
    user-observable fork → manual `rifty-refine`. Never absorb silently. (An
-   active goal epic itself cannot be demoted — `check:goal-contract`.) The
+   active goal itself cannot be demoted — a ready `goal.md` never changes;
+   amend = close + re-fit.) The
    demotion commits in the discovering PR — pre- or post-pickup;
    `check:contract-drift` allows the `ready`→`draft` flip, the recorded fork +
    verbatim Acceptance stay mandatory.
@@ -66,33 +73,33 @@ Without one, record the attempt and keep `draft`. Inject only faults physically
 allowed by `fault-classes.md` §Boundary failure models and within the epic tier.
 Raising tier requires an ADR.
 
-## Autonomous goals
+## Goal runs
 
-Data contract (marker, Budget, residuals, closure): `docs/backlog/README.md`
-§Autonomous goal. Own the frozen outcome, not a prewritten plan. At a fork, the
-only extra rule: the user owns frozen observable fields; re-cut live
-items/order/mechanisms, never the goal or its required reverse-linked work.
+Data contract (goal/map/ledger, run rules): `docs/backlog/README.md` §Goal run;
+procedure per mode: `rifty-goal` (FIT / PICKUP / RE-CHART / CLOSE). Own the
+frozen destination, not a prewritten plan: `goal.md` is user-owned; children,
+order, mechanisms, and fog are live run state — re-cut them, never the goal.
 
-Run loop — starts only on an explicit whole-ready-epic hand-off or a task/PR
-carrying `Goal-Baseline`; never for ordinary items, single fixes, or
-process/docs/skill work:
+Run loop — starts only on an explicit whole-ready-goal hand-off; never for
+ordinary items, single fixes, or process/docs/skill work:
 
-1. Bootstrap or inherit the write-once marker (bootstrap = ONE contract-only PR:
-   epic commit, then marker-only commit pointing at it — never a chain of PRs);
-   declare the matching `Goal-Baseline` and one `Budget-Slice`.
-2. Pick one dependency-ready residual; compile a settled draft per §Backlog
-   readiness above; surface only a remaining observable fork for manual
-   `rifty-refine`.
-3. Run Contract+RED (fresh isolated reviewer — `rifty-review` §Checkpoint run;
-   never the implementer's own pass), then implement the ready unit. Planned work
-   and expected RED never invoke `rifty-fix`.
-4. Classify discoveries against the frozen goal/tier/Fidelity: required →
-   reverse-linked goal residual; outside → `rifty-to-backlog`.
-5. Budget trip or Final+GREEN unit residual → re-cut the unit: shrink/split its
-   boundary IN PLACE — same branch, attempt + checkpoint count carries. Never a
-   fresh start, never narrow the goal, detach required work, or auto-fix.
-6. Unit clean with goal residuals → close only that unit and continue.
-7. Close per `docs/backlog/README.md` §Autonomous goal — incl. end-to-end proof
-   of the baseline `## Invariants`; then delete the epic.
+1. FIT (or inherit a ready goal): destination + user signoff (invariants AND
+   tier), probe-or-fog over external-semantics assumptions, specifiable
+   children only.
+2. PICKUP one dependency-ready child: compile per §Backlog readiness above;
+   declare its ledger band; Contract+RED (fresh isolated reviewer —
+   `rifty-review` §Checkpoint run; never the implementer's own pass); then
+   implement. Planned work and expected RED never invoke `rifty-fix`.
+3. Classify discoveries against the frozen goal/tier/Fidelity: required → goal
+   residual (reverse-linked draft child); outside → `rifty-to-backlog`.
+4. Band trip or Final+GREEN unit residual → re-cut the unit IN PLACE — same
+   branch, attempt + checkpoint count carries. Never a fresh start, never
+   narrow the goal or detach required work.
+5. Unit clean → merge, then RE-CHART: graduate touched fog into draft children;
+   re-cut or delete unpicked items the new facts invalidated; append learned
+   one-liners to the ledger.
+6. Map empty + `## Invariants` proven end-to-end → CLOSE: walk the ledger —
+   every line exports to a durable carrier or gets an explicit drop — then
+   delete the goal directory whole.
 
-Show any conflict with the baseline against its exact clause.
+Show any conflict with the destination against its exact clause.

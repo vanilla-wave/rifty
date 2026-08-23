@@ -20,7 +20,15 @@ Substitute native and incompatible packages at the module-resolver level. Substi
 
 ## Mechanism
 
-Resolver (D-003) consults the shadow table before `node_modules`. A flag disables it for debugging. Every substitution must pass parity tests against the substitute's claimed API surface.
+Resolver (D-003) consults the shadow table before `node_modules`. Every substitution must pass parity tests against the substitute's claimed API surface.
+
+> Correction 2026-08-23 — the "a flag disables it for debugging" clause is
+> withdrawn (refine verdict, user-signed): every substituted package is native
+> and cannot run in-browser regardless, so behavioral comparison lives in the
+> Node parity oracles; SCSS comparison exists via unsubstituted pure-JS `sass`;
+> an install-artifact audit does not justify a public surface. Per-package user
+> override remains the escape hatch. See `docs/adr/README.md` §Declined
+> concepts.
 
 ## Process
 

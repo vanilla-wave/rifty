@@ -116,9 +116,12 @@ const mdFiles = walk(
 );
 
 const itemRecords = []; // { file, rel, area, slug, key, fm, text }
-const epicRecords = []; // { file, rel, slug, fm, text }
+const epicRecords = []; // { file, rel, slug, fm, text }  (legacy single-file)
+const dirEpics = new Map(); // slug -> { rel, files: Set<name>, goal: {rel, fm, text} | null }
 const itemKeys = new Set(); // "<area>/<slug>"
 const epicKeys = new Set(); // "<slug>"
+
+const DIR_EPIC_FILES = new Set(['goal.md', 'map.md', 'ledger.md']);
 
 for (const file of mdFiles) {
   const rel = relative(BACKLOG_DIR, file);
@@ -128,7 +131,22 @@ for (const file of mdFiles) {
   const text = readFileSync(file, 'utf8');
   const fm = parseFrontmatter(text);
 
-  if (folder === EPICS_DIR_NAME) {
+  if (parts[0] === EPICS_DIR_NAME && parts.length === 3) {
+    // dir-format epic (goal/map/ledger split): docs/backlog/epics/<slug>/goal.md
+    const epicSlug = parts[1];
+    const name = parts[2];
+    epicKeys.add(epicSlug);
+    let record = dirEpics.get(epicSlug);
+    if (!record) {
+      record = { rel: `${EPICS_DIR_NAME}/${epicSlug}`, files: new Set(), goal: null };
+      dirEpics.set(epicSlug, record);
+    }
+    record.files.add(name);
+    if (!DIR_EPIC_FILES.has(name)) {
+      errors.push(`${rel}: epic dir holds only goal.md/map.md/ledger.md`);
+    }
+    if (name === 'goal.md') record.goal = { rel, fm, text };
+  } else if (folder === EPICS_DIR_NAME) {
     epicKeys.add(slug);
     epicRecords.push({ file, rel, slug, fm, text });
   } else {
@@ -243,6 +261,60 @@ for (const { rel, fm, text } of epicRecords) {
   epicCounts[EPIC_STATUS_SET.has(fm?.status) ? fm.status : 'invalid'] += 1;
 }
 
+// --- Pass 3b: validate dir-format epics (goal/map/ledger) ---------------------
+
+const DIR_EPIC_STATUSES = new Set(['draft', 'ready']);
+const READY_GOAL_SECTIONS = ['Outcome', 'User scenario', 'Invariants'];
+
+for (const record of dirEpics.values()) {
+  const rel = record.rel;
+  if (!record.goal) {
+    errors.push(`${rel}: dir epic missing goal.md`);
+    epicCounts.invalid += 1;
+    continue;
+  }
+  const { fm, text } = record.goal;
+  if (!fm) {
+    errors.push(`${record.goal.rel}: missing or malformed frontmatter (need '---' fenced block)`);
+    epicCounts.invalid += 1;
+    continue;
+  }
+  for (const reqKey of EPIC_REQUIRED_KEYS) {
+    if (!(reqKey in fm) || fm[reqKey] === '' || fm[reqKey] == null) {
+      errors.push(`${record.goal.rel}: missing required key '${reqKey}'`);
+    }
+  }
+  if (fm.kind !== 'epic') errors.push(`${record.goal.rel}: epic must set 'kind: epic'`);
+  if (fm.status != null && !DIR_EPIC_STATUSES.has(fm.status)) {
+    errors.push(
+      `${record.goal.rel}: invalid status '${fm.status}' (draft|ready — activity = non-empty ledger/linked children)`,
+    );
+  }
+  if (fm.tier != null && !EPIC_TIER_SET.has(fm.tier)) {
+    errors.push(`${record.goal.rel}: invalid tier '${fm.tier}' (must be ${EPIC_TIERS.join('|')})`);
+  }
+  if (fm.goal_baseline != null) {
+    errors.push(`${record.goal.rel}: goal_baseline marker is retired — the goal dir is the run id`);
+  }
+  if ('items' in fm) {
+    errors.push(`${record.goal.rel}: frontmatter items duplicates map.md and child epic: links`);
+  }
+  if (fm.status === 'ready') {
+    if (fm.tier == null) errors.push(`${record.goal.rel}: ready goal requires tier`);
+    for (const s of READY_GOAL_SECTIONS) {
+      if (!hasSection(text, s)) {
+        errors.push(`${record.goal.rel}: ready goal missing '## ${s}' section`);
+      }
+    }
+    for (const sibling of ['map.md', 'ledger.md']) {
+      if (!record.files.has(sibling)) {
+        errors.push(`${rel}: ready goal requires ${sibling} beside goal.md`);
+      }
+    }
+  }
+  epicCounts[DIR_EPIC_STATUSES.has(fm?.status) ? fm.status : 'invalid'] += 1;
+}
+
 // --- Pass 4: resolve code markers -------------------------------------------
 
 // Built from parts so the literal marker token never appears in this source.
@@ -314,10 +386,12 @@ function printTable() {
   console.log(totalRow.join(' '));
 }
 
-console.log(`backlog: ${itemRecords.length} item(s), ${epicRecords.length} epic(s)\n`);
+console.log(
+  `backlog: ${itemRecords.length} item(s), ${epicRecords.length + dirEpics.size} epic(s)\n`,
+);
 printTable();
 console.log(
-  `\nepics: ${epicRecords.length} (draft ${epicCounts.draft}, ready ${epicCounts.ready}, in-progress ${epicCounts['in-progress']}, invalid ${epicCounts.invalid})`,
+  `\nepics: ${epicRecords.length + dirEpics.size} (draft ${epicCounts.draft}, ready ${epicCounts.ready}, in-progress ${epicCounts['in-progress']}, invalid ${epicCounts.invalid})`,
 );
 
 if (errors.length > 0) {

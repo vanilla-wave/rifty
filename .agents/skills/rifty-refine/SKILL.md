@@ -16,7 +16,7 @@ ordinary contract compilation.
 ## Interview
 
 1. Restate the real package/program, exact action, and observed result. No real software unblocked → stop as off-mission or `process-meta`.
-2. Ask one scenario branch at a time, with a recommendation. The user chooses observable scope; the agent chooses carriers and other internal mechanisms.
+2. Ask in frontier rounds: one numbered round holds ALL currently-independent open forks, each with a recommendation. A fork whose scope depends on a still-open fork (or a running spike) waits for a later round. Done when the frontier is empty. The user chooses observable scope; the agent chooses carriers and other internal mechanisms.
 3. Do not ask what code/ADR/Node already answers. Apply reachability and refine-altitude rules from `docs/process/decision-workflow.md` §Backlog readiness.
 4. For infra, ask only physically reachable fault branches within the epic tier; use `docs/process/fault-classes.md` and `docs/backlog/README.md` §Tier.
 5. Treat any active-baseline change as user-owned; never soften it through ADR, backlog, Out of scope, or rewritten acceptance.

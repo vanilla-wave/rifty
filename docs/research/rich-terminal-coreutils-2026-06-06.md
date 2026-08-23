@@ -1,6 +1,6 @@
 # Rich Terminal / Coreutils for rifty — Research
 
-Status: research / pre-design. Today: 2026-06-06. Active milestones: M10 Real Tooling (partial), M12 opencode facade (partial).
+Status: snapshot 2026-06-06 — provenance, not a plan (`docs/research/README.md`); verify against main before citing. Active milestones: M10 Real Tooling (partial), M12 opencode facade (partial).
 
 ## 1. Problem & motivation, scope
 

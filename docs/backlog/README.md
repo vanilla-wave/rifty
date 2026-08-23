@@ -1,10 +1,14 @@
 # Backlog
 
 - Item: one implementable unit at `docs/backlog/<area>/<slug>.md`.
-- Epic: user outcome spanning items at `docs/backlog/epics/<slug>.md`.
+- Epic: user outcome spanning items at `docs/backlog/epics/<slug>/` — `goal.md`
+  (frozen destination) + `map.md` (live plan) + `ledger.md` (append-only
+  journal). Template: `epics/TEMPLATE.md`. Legacy single-file epics remain
+  valid until re-typed or closed; no new ones.
 
-Routing: `AGENTS.md` + `docs/process/decision-workflow.md`. Delete completed
-work; there is no done status.
+Routing: `AGENTS.md` + `docs/process/decision-workflow.md`; goal lifecycle
+(FIT / PICKUP / RE-CHART / CLOSE): `rifty-goal` skill. Delete completed work;
+there is no done status.
 
 ## Shape
 
@@ -12,21 +16,35 @@ Areas: `vfs`, `kernel`, `runtime-js`, `runtime-wasi`, `net`, `service-worker`,
 `npm-client`, `shell`, `playground`, `toolchain-build`, `protocol`,
 `process-meta`, `perf`, `terminal`, `distribution`.
 
-| | Item | Epic |
+| | Item | Epic (`goal.md`) |
 |---|---|---|
-| Status | `draft\|ready` | `draft\|ready\|in-progress` |
+| Status | `draft\|ready` | `draft\|ready` |
 | Required | `area`, `status`, `title`, `created`, `why` | `kind: epic`, `status`, `title`, `created`, `value` |
-| Optional | `user_story`, `epic`, `blocked_by`, `sources`, `code` | `user_story`, `tier`, `goal_baseline` |
+| Optional | `user_story`, `epic`, `blocked_by`, `sources`, `code` | `user_story`, `tier` (required at ready) |
 
 `area` equals the parent folder. Dates use `YYYY-MM-DD`; arrays use `[a, b]`.
 Place `user_story` after `why`/`value`: `As <persona>, I want <action>, but today
-<blocker>`.
+<blocker>`. An epic is a bounded, provably closable destination — a direction,
+theme, or standing invariant is not an epic (route to `docs/ROADMAP.md`, an
+owner doc, or a ratchet).
 
-A draft needs `## Context`. A ready item needs:
+A draft is one of two shapes — never a solution without its decision:
+
+- **question** — `## Question` + context; no prescribed carrier (a carrier with
+  no spike/ADR fact = frozen assumption). Exits: compiled to `ready`, absorbed
+  into a goal's `map.md` fog, or declined into `docs/adr/README.md` §Declined
+  concepts.
+- **finding** — observed fact/gap with evidence: `## Context`, honest sources,
+  compat ❌ / code-marker link. A draft whose `sources`/`code` refs no longer
+  resolve on main is stale: refresh or delete.
+
+A ready item needs:
 
 - `## User scenario` unless its epic supplies it: real package/program, exact
   call, observed result;
-- `## Acceptance`: testable done-definition that rejects approximations;
+- `## Acceptance`: testable done-definition that rejects approximations; an
+  admission/policy surface names the organic request form it admits — a pinned
+  fixture alone is not reach;
 - `## Parity cases`: enumerated oracle behaviors and RED targets;
 - `## Out of scope`: named loud throws + compat ❌;
 - `## Decisions`: every fork resolved or ADR-linked;
@@ -41,111 +59,51 @@ Infra work also needs `## Fault matrix`: each reachable axis × operation →
 fallback, visible degradation, or loud throw; each row is a fault-test target.
 Use `docs/process/fault-classes.md`. Template: `TEMPLATE.md`.
 
-A ready/in-progress epic needs `## Outcome`, end-to-end `## User scenario`,
-numbered checkable `## Invariants` (observable statements the closing smoke
-proves), and `## Items`. Known children
-seed order; reverse links (`epic: <slug>`) are the live residual set. Map a Budget slice once:
+A ready goal (`goal.md`) needs `## Outcome`, end-to-end `## User scenario`,
+numbered checkable `## Invariants` (each false on current main, evidence
+recorded), `tier`, and a user `signoff:` line covering invariants AND tier.
+`map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
+`ledger.md` opens empty. Seed order proves the minimal pattern first (the
+null/install-only case of a shared mechanism lands before machinery for the
+maximal case); a child whose contract depends on an open question is not
+seeded. A mechanism shared by two children needs an existing owner, a first
+substrate item, or an ADR explaining separation. Procedure, incl.
+probe-or-fog and signoff: `rifty-goal` FIT.
 
-```md
-- `area/item` — **slice-name** — dependency/result
-```
+## Goal run
 
-A mechanism shared by two children needs an existing owner, a first substrate
-item, or an ADR explaining separation. Template: `epics/TEMPLATE.md`.
+An explicit whole-ready-goal hand-off starts a run; the goal directory is the
+run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
 
-### Epic fit (legacy epic → pickup shape)
-
-"Write up / flesh out epic X" is ordinary work, never a blocked ask. Do it in
-the delivering branch, in order:
-
-1. `tier` — pick from §Tier and justify it in one §Decisions line.
-2. `## Invariants` — DRAFT them from the already-ratified Outcome / User
-   scenario / Decisions. Derivation only: an invariant needing scope the epic
-   never settled is an observable fork → manual `rifty-refine` for THAT
-   statement, not for the whole epic.
-3. Check each false on current `main` and record the evidence (comment above
-   the list). A trivially-true invariant closes the goal on an empty proof.
-4. `## Budget` — one slice per item with a band; the slice names are what a run
-   picks up.
-5. Put the drafted invariants to the user; on approval add
-   `invariants-signoff: <date> — user` to `## Decisions`. Missing signature
-   blocks the RUN, never the write-up.
-6. Finish with the marker in the SAME PR — one more commit adding only
-   `goal_baseline` (§Autonomous goal 2). A fit PR that lands without it forces a
-   second contract-only PR before any source, which is the chain §Autonomous
-   goal forbids. Fit PR = bootstrap PR.
-
-Only the user changes an invariant after that, and a run never edits one.
-
-## Autonomous goal
-
-Only an explicit whole-ready-epic hand-off or a task/PR carrying `Goal-Baseline`
-starts a run.
-
-1. Land the ready epic (with its ADRs — the bootstrap PR is contract-only:
-   `docs/**.md`, zero source).
-2. In a later commit — the SAME contract-only PR is fine — add only
-   `goal_baseline: <the ready-epic commit's SHA>`. ONE bootstrap PR, two commits
-   (epic, then marker) — never a chain. It stays a separate PR only because
-   `check:budget` reads the epic authority from merge-base; see
-   `process-meta/autonomous-epic-runs.md` §Residual.
-   The marker is an opaque write-once run id (conventionally that commit's SHA):
-   gates compare it as a string against merge-base and never resolve it — merge
-   strategy and squash cannot break it. Frozen fields are checked against the
-   merge-base copy of the epic, inductively frozen since bootstrap.
-3. Every source PR repeats exactly one same-epic pair:
-
-```text
-Goal-Baseline: <epic>@<40-hex-commit>
-Budget-Slice: <epic>/<slice>
-```
-
-The marker is write-once and inherited from merge-base. It freezes `value`,
-`tier`, Outcome, User scenario, and `## Invariants`; only the user may change
-them. Title and
-`user_story` are indexes; children, order, mechanisms, slices, and append-only
-Budget are live run state.
-
-Required discoveries stay reverse-linked; only outside-goal work enters normal
-backlog. A required discovery may mint a `draft` child (`epic:` link) at any
-time; its readiness, Items mapping, and Budget row wait for a pre-pickup window. A clean slice may merge while goal residuals remain. Slices land serially —
-never stack a slice PR on an unmerged one (the marker inherits from merge-base). Close the goal
-only with no linked children, empty unit/goal residuals, end-to-end baseline
-proof, fresh `goal_complete: true`, and DoD green on one SHA; then delete it.
-
-## Budget
-
-Each autonomous source PR selects one epic `## Budget` row. Tripwires:
-
-- scope implemented outside ready items: `0`;
-- ready-contract rewrites vs merge-base: `0`;
-- new coordination mechanisms: `0`, unless the named substrate item owns one;
-- hand-written insertion band = inserted lines in the slice source PR (tests,
-  `docs/backlog/**`, generated globs excluded — `check:budget`): above high
-  warns; at `2×` high re-cut;
-- expected-RED batch far above the slice band → the unit is too big: split it
-  before implementation.
-
-Gates read the aggregate PR diff (merge-base → head), never commit topology.
-The PR may append one ready JIT child, its Items mapping, and its Budget row;
-existing rows/tripwires cannot weaken. A guarded ready contract otherwise
-matches merge-base — allowed deltas: the pickup `ready-verdict:` line, exact
-`blocked_by:` subtraction for items the PR deletes, and a `ready`→`draft`
-demotion (fork + pre-demotion Acceptance recorded, §Backlog readiness 5).
-Optional `generated globs` exclude generated files from the band.
+- A slice PR names its goal and its ledger band row in the body
+  (convention, review-checked — `rifty-review` axis 5).
+- Review-owned rules: scope outside `ready` items: 0; ready-contract edits
+  after pickup: 0 (items: `check:contract-drift`); new coordination
+  mechanisms: 0 unless a named substrate item owns one; hand-written insertions
+  far above the declared band, or an expected-RED batch far above it → the unit
+  is too big: re-cut/split before implementation.
+- A ready `goal.md` never changes — amend = close + re-fit. `ledger.md` only
+  grows. `map.md` is live: RE-CHART graduates fog into drafts, re-cuts or
+  deletes unpicked items, reorders; weakening a `ready` item stays a demotion
+  with its fork recorded (§Backlog readiness 5). Every merged slice gets a
+  `re-chart after <slice>` ledger line; the next PICKUP and CLOSE refuse while
+  it is missing.
+- Slices land serially — never stack a slice PR on an unmerged one.
+- Close only with no linked children, empty unit/goal residuals, end-to-end
+  proof of `## Invariants`, and the ledger walk exporting every line to a
+  durable carrier or an explicit drop (`rifty-goal` CLOSE); then delete the
+  directory whole.
 
 ## Gates
 
 | Owner | Enforces |
 |---|---|
-| `backlog:check` | schema, ready sections, links, markers |
-| `check:goal-contract` | write-once marker vs merge-base, frozen fields, contract-only bootstrap, closure |
-| `check:budget` | paired declaration, append-only Budget vs merge-base, ready item, band |
-| `check:contract-drift` | ready-contract content vs merge-base and process referees |
-| Final review | routing/run membership, checkpoint order, semantic scope/residuals, full mechanism sweep, acceptance |
+| `backlog:check` | schema, ready sections, links, markers, goal-dir shape |
+| `check:contract-drift` | ready item contracts vs merge-base beside source |
+| Final review | frozen goal, append-only ledger, run membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
 
-Machine gates prove only the listed local facts; review owns contextual
-classification. `pr:check`/CI run the machine gates.
+Machine gates prove only the listed local facts; review owns everything else —
+including that a ready `goal.md` never changed and the ledger only grew.
 
 ## Tier
 
@@ -155,8 +113,8 @@ The epic tier bounds required fault behavior; items inherit it:
 - `robust`: every reachable axis × operation has an honest outcome + fault test;
 - `production`: robust + crash/reload consistency + e2e fault proof.
 
-No silent lie is allowed at any tier. No tier means undecided and cannot start an
-autonomous run. Raising tier requires an ADR; above-tier findings remain draft.
+No silent lie is allowed at any tier. No tier means undecided and cannot start a
+goal run. Raising tier requires an ADR; above-tier findings remain draft.
 
 ## Code markers
 

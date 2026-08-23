@@ -1,3 +1,12 @@
+# Epic template — directory format (goal/map/ledger)
+
+An epic is a directory `docs/backlog/epics/<slug>/` with three files split by
+owner × mutability. Procedure: `rifty-goal` skill (FIT mode). No new
+single-file epics.
+
+## `goal.md` — destination (frozen once `status: ready`)
+
+```md
 ---
 kind: epic
 status: draft
@@ -5,8 +14,7 @@ title: <short label>
 created: <YYYY-MM-DD>
 value: <one line — the user outcome this epic delivers>
 user_story: As <persona>, I want <end-to-end outcome>, but today <blocker>
-tier: <works|robust|production — required for an autonomous goal>
-# goal_baseline: <ready-epic SHA; add alone, in a commit before the branch's first source commit>
+tier: <works|robust|production — required at ready>
 ---
 
 ## Outcome
@@ -19,29 +27,49 @@ tier: <works|robust|production — required for an autonomous goal>
 
 ## Invariants
 
-<!-- Frozen with the marker (shape: README §Shape). DRAFTED at fit time by whoever
-     writes the epic up — derived from Outcome/User scenario/Decisions, never new
-     scope — then signed off by the user (`invariants-signoff:` in §Decisions).
-     The RUN only proves them; it never writes or edits one. Each must be false
-     on main before the run: a trivially-true invariant closes the goal on an
-     empty proof. Procedure: README §Epic fit. -->
+<!-- Drafted at FIT from Outcome/User scenario/Decisions — never new scope.
+     Each checked false on current main (evidence comment above the list).
+     Signed off by the user together with tier: `signoff:` in ## Decisions.
+     A run only proves them. Amending a ready goal = close + re-fit. -->
 
 - I1. <user-observable statement>
 
-## Items
+## Decisions
 
-<!-- Historical slice/role ledger; child `epic:` links are the live residual set. -->
+- signoff: <YYYY-MM-DD> — user (invariants + tier)
+```
+
+## `map.md` — live plan (freely edited at every re-chart)
+
+Index, not store: one line + link per entry; content lives on items/ledger.
+
+```md
+## Items
 
 1. `<area>/<slug>` — **<slice>** — <dependency/result>
 
-## Budget
+## Open questions
 
-<!-- Required for autonomous pickup. Append JIT rows; never weaken existing data. -->
+<!-- Fog: in-scope questions not yet phrasable as a contract. A child whose
+     contract depends on an open question is not seeded. Don't pre-slice fog. -->
 
-- scope implemented outside `ready` items: 0
-- ready-contract edits after pickup: 0
-- new coordination mechanisms: 0
+- <question> — <what would settle it: probe/spike/decision>
 
-| slice | band |
-|---|---|
-| <slice> | <lo>–<hi> |
+## Out of scope
+
+- <consciously ruled beyond the destination — never graduates>
+```
+
+## `ledger.md` — append-only journal
+
+Budget bands (declared JIT at pickup, review-owned — `rifty-review` axis 5),
+one-line decisions (what + where the full answer lives), verdicts,
+observations/diagnoses (or links to `reference/`). Lines are never edited or
+removed; the closure walk (`rifty-goal` CLOSE) exports every line to a durable
+carrier or drops it explicitly.
+
+```md
+- <YYYY-MM-DD> — <slice> band <lo>–<hi> declared at pickup
+- <YYYY-MM-DD> — decided <one line>; full answer: <link>
+- <YYYY-MM-DD> — ready-verdict <slice>: Contract+RED @ <sha>
+```

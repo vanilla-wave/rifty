@@ -9,8 +9,62 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { goalContract, historyHeadRevision } from './goal-contract.mjs';
 import { classifyAutonomousRunPath } from './run-pickup.mjs';
+
+const EXACT_SHA_RE = /^[0-9a-f]{40}$/u;
+
+/**
+ * PR-head identity. GitHub checks out a synthetic merge commit for PR jobs;
+ * gates must read HEAD content from the exact PR head recorded in the event.
+ */
+export function historyHeadRevision(env, readEvent) {
+  if (!env.GITHUB_EVENT_PATH) return { revision: 'HEAD', kind: 'checkout', error: null };
+  let event;
+  try {
+    event = JSON.parse(readEvent(env.GITHUB_EVENT_PATH));
+  } catch {
+    return { revision: null, kind: 'event', error: 'cannot read GitHub event for history head' };
+  }
+  if (event?.pull_request === undefined) {
+    return { revision: 'HEAD', kind: 'checkout', error: null };
+  }
+  const revision = event.pull_request?.head?.sha;
+  return EXACT_SHA_RE.test(revision ?? '')
+    ? { revision, kind: 'pull-request', error: null }
+    : {
+        revision: null,
+        kind: 'pull-request',
+        error: 'pull_request.head.sha must be one exact 40-hex commit',
+      };
+}
+
+function frontmatterValue(text, key) {
+  const frontmatter = /^---\r?\n([\s\S]*?)^---\s*$/mu.exec(text ?? '')?.[1];
+  if (!frontmatter) return null;
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped}:\\s*([^\\r\\n]*?)\\s*$`, 'mu').exec(frontmatter)?.[1] ?? null;
+}
+
+function section(text, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (
+    new RegExp(`^##\\s+${escaped}\\s*$\\r?\\n([\\s\\S]*?)(?=^##\\s+|$(?![\\s\\S]))`, 'mu')
+      .exec(text ?? '')?.[1]
+      ?.trim() ?? null
+  );
+}
+
+/** Canonical observable part of a ready epic (legacy single-file format). */
+export function goalContract(text) {
+  if (text === null || text === undefined) return null;
+  return {
+    value: frontmatterValue(text, 'value'),
+    tier: frontmatterValue(text, 'tier'),
+    outcome: section(text, 'Outcome'),
+    userScenario: section(text, 'User scenario'),
+    invariants: section(text, 'Invariants'),
+  };
+}
 
 const CONTRACT_RE = /^docs\/backlog\/.+\.md$/;
 const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
@@ -18,7 +72,7 @@ const GUARDED = new Set(['ready', 'in-progress']);
 const ITEM_PATH_RE = /^docs\/backlog\/(?!epics\/)(.+)\.md$/;
 const EPIC_PATH_RE = /^docs\/backlog\/epics\/[^/]+\.md$/;
 const REFEREE_RE =
-  /^(?:tools\/checks\/(?:(?:budget|contract-drift|goal-contract|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs))$/;
+  /^(?:tools\/checks\/(?:(?:contract-drift|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs))$/;
 const READY_VERDICT_LINE_RE = /^ready-verdict:[^\n]*\n?/gm;
 const FROZEN_FIELDS = [
   ['value', 'value'],
@@ -96,6 +150,8 @@ export function evaluate(entries, read, refereeEntries = entries) {
       }
       continue;
     }
+    // directory-format epics (goal/map/ledger) carry no drift machinery — review owns them
+    if (entry.path.startsWith('docs/backlog/epics/')) continue;
     const baseStatus = statusOf(baseText);
     const headStatus = statusOf(headText);
     if (GUARDED.has(baseStatus)) {

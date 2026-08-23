@@ -72,8 +72,6 @@ const TASKS = [
   'check:dir-owner',
   'check:file-size',
   'check:contract-drift',
-  'check:goal-contract',
-  'check:budget',
   'check:install-stamp-writers',
   'check:runtime-adapter-boundary',
   'check:esbuild-legacy-retirement',
