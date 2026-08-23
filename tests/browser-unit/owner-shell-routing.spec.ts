@@ -88,43 +88,22 @@ test('a direct workspace module runs in the real owner child with argv and exit 
   expect(direct.out).toContain('DIRECT_ARGS:first,second');
 });
 
-test('an explicitly addressed .bin launcher runs its real target in the owner child', async ({
+test('an explicitly addressed installed .bin launcher runs in the owner child', async ({
   page,
 }) => {
   await gotoHarness(page);
   await bootOwner(page, {
     workspaceId: 'bu-direct-bin-entry',
-    hiddenEmptyBoot: true,
+    template: 'vite',
+    persistence: 'ephemeral',
   });
-  await writeOwnerFile(
-    page,
-    '/scratch/node_modules/.bin/probe',
-    [
-      '#!/usr/bin/env node',
-      "throw new Error('SHIM_BODY_EXECUTED_AS_ORDINARY_ENTRY');",
-      "import('../probe/cli.cjs');",
-      '',
-    ].join('\n'),
-  );
-  await writeOwnerFile(
-    page,
-    '/scratch/node_modules/probe/cli.cjs',
-    [
-      'const args = process.argv.slice(2);',
-      "console.log('DIRECT_BIN_TARGET:' + args.join(','));",
-      "process.exitCode = args.join(',') === 'first,second' ? 0 : 9;",
-      '',
-    ].join('\n'),
-  );
 
-  const directBin = await execLine(page, '/node_modules/.bin/probe first second');
+  const directBin = await execLine(page, '/node_modules/.bin/vite --version');
 
-  // Success requires `.bin` classification: the launcher is a carrier and its
-  // target is the program. Treating the extensionless launcher as an ordinary
-  // entry cannot route its dynamic import through the VFS module loader.
+  // The installed snapshot publishes package-tree readiness, so this crosses
+  // the same supervised child/admission path as a bare installed command.
   expect(directBin.exit, directBin.out).toBe(0);
-  expect(directBin.out).toContain('DIRECT_BIN_TARGET:first,second');
-  expect(directBin.out).not.toContain('SHIM_BODY_EXECUTED_AS_ORDINARY_ENTRY');
+  expect(directBin.out).toMatch(/vite\/7\./iu);
 });
 
 test('terminal nested npm install gives child exact package-tree ancestry', async ({ page }) => {

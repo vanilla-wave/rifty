@@ -67,13 +67,16 @@ completion is unwired, and the four consumers use separate inventories.
    from its live Memory VFS after cwd changes.
 4. PTY tests RED: exact `sid/opId` correlation, inverted/wrong-sid replies,
    timeout/disconnect/close settlement, and exhaustive frame-domain validation.
+   A correlated success range must remain inside the originating line and span
+   its cursor before it can settle that request.
    One real `createPtyClient`↔`createPtyServer` loopback proves both live-owner
    success and injected owner `readdir` failure through the exact client
    rejection; separate locally synthesized ends do not close this seam.
 5. `tests/browser-unit/owner-shell-routing.spec.ts` RED: a direct workspace
    script runs in the real owner supervised child as `bin:false`, while an
-   explicitly addressed `.bin` launcher runs its target as `bin:true`; the
-   launcher's own body throws if misclassified as an ordinary entry.
+   explicitly addressed installed Vite launcher crosses trusted package-tree
+   admission and runs its real target. `owner-child-bin-executor.test.ts`
+   discriminates the spawn metadata as `bin:true` for that exact `.bin` path.
 6. `tests/e2e/command-resolver-discovery.spec.ts` Chromium RED: typing installed
    bare and direct-path prefixes opens the real DOM menu; selecting the direct
    entry runs it and records exit 0.
@@ -90,7 +93,7 @@ completion is unwired, and the four consumers use separate inventories.
 |---|---|---|
 | page client↔owner server completion | quota-perm-fail / peer death / port close / finite-ACK timeout | real loopback carries bare and path-like `readdir` failures exactly; client timeout/disconnect/close settle once; e2e owner death shows exact `(code null, signal SIGTERM)`, no menu |
 | completion `sid/opId` + edit state | concurrent-same-key / observable-order | inverted/wrong-sid replies settle only matching calls; e2e counts one request per Tab, then holds/edits/releases one matching result without stale menu |
-| PTY completion trust boundary | corrupt-input | mutation-cover request, both result envelopes, nested start/end/items: missing/extra/wrong; empty IDs/values; negative/fractional/non-finite/unsafe/inverted offsets; malformed items/display |
+| PTY completion trust boundary | corrupt-input | mutation-cover request, both result envelopes, nested start/end/items: missing/extra/wrong; empty IDs/values; negative/fractional/non-finite/unsafe/inverted offsets; malformed items/display; correlated result range must stay within its request line and span its cursor |
 | execution/discovery/which/suggestion siblings | sibling-drift | `command-resolver-discovery.test.ts`: one result projects consistently; no caller-owned precedence copy |
 
 ## Out of scope
@@ -109,13 +112,21 @@ completion is unwired, and the four consumers use separate inventories.
 
 ## Decisions
 
-ready-verdict: 2026-08-24 — Contract+RED @ 9198a3aa0f4b1ac57097f5d74b7be8a7ae433630
-
 - `checkpoint-lineage: [c3d83ef02d5e92db14d61aa7f010073f619add4f,
   465597e0d2b8f729e20fb0a2cb66e74316e308b5,
   d31f7615ece9cd26e3d6e613a98fc10b6daf417d,
   dd1dc618aefe81619a129801d0e85ed0b4756e0b,
-  07ad7789e0f73005e5da24424b2d38257f4f6054]`.
+  07ad7789e0f73005e5da24424b2d38257f4f6054,
+  9198a3aa0f4b1ac57097f5d74b7be8a7ae433630]`.
+- Contract+RED @ `9198a3aa0f4b1ac57097f5d74b7be8a7ae433630`
+  PASS invalidated by a proof-carrier fault discovered during GREEN: manually
+  writing `node_modules` correctly revokes package-tree readiness, so the
+  generated throw-shim could not reach child bootstrap without bypassing the
+  package authority. Attempt 7 preserves Acceptance and replaces only that
+  unsafe carrier with a real installed Vite shim plus the existing exact
+  `bin:true` spawn-spec RED. The same carrier re-cut restores the established
+  typo-distance threshold and adds request-relative completion-range REDs.
+  Production remains uncommitted for the fresh checkpoint.
 - Contract+RED @ `07ad7789e0f73005e5da24424b2d38257f4f6054`
   BLOCKED: count every physical request, mutate nested start/end, cross the
   path-like reader fault, require exact SIGTERM exit identity, and make the
@@ -213,3 +224,9 @@ allocation is:
   discriminants: exact-one request counts on all three e2e paths, nested result
   mutation cover, bare + path-like loopback failures, exact SIGTERM toast, and
   a shim body that throws unless the owner selects `bin:true`.
+- Attempt 7 replaces only that last manual-node_modules fixture. At the
+  committed checkpoint, the browser-unit direct installed Vite path remains
+  127/`command not found`; the spawn-spec unit remains RED on `bin:false`.
+  Installed suggestion uses a distance-one typo within the existing threshold;
+  three correlated completion replies outside their originating line/cursor
+  resolve instead of rejecting and therefore remain RED.

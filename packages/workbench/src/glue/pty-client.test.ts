@@ -1804,6 +1804,58 @@ describe('pty-client', () => {
     expect(settlementOrder).toEqual(['second', 'first']);
   });
 
+  it.each([
+    ['start after cursor', { start: 5, end: 5 }],
+    ['end before cursor', { start: 0, end: 3 }],
+    ['end after line', { start: 0, end: 9 }],
+  ] as const)(
+    'rejects a correlated completion with %s without settling its sibling',
+    async (_label, range) => {
+      const { client, sent } = harness();
+      await openCompletionSession(client, 'completion-range');
+      const completer = completionClient(client);
+      const malformed = completer.complete('completion-range', 'echo foo', 4);
+      const sibling = completer.complete('completion-range', 'vit', 3);
+      const [malformedFrame, siblingFrame] = completionFrames(sent);
+      if (malformedFrame === undefined || siblingFrame === undefined) {
+        throw new Error('missing correlated completion range frames');
+      }
+
+      deliverCompletion(client, {
+        type: 'pty:complete-result',
+        sid: malformedFrame.sid,
+        opId: malformedFrame.opId,
+        ok: true,
+        result: {
+          ...range,
+          items: [{ value: 'echo ', display: 'echo' }],
+        },
+      });
+
+      await expect(malformed).rejects.toThrow(/completion range.*request/i);
+      await expect(
+        settledOr(
+          sibling.then(() => 'settled' as const),
+          'pending' as const,
+        ),
+      ).resolves.toBe('pending');
+
+      const siblingResult = {
+        start: 0,
+        end: 3,
+        items: [{ value: 'vite ', display: 'vite' }],
+      } satisfies ShellCompletionResult;
+      deliverCompletion(client, {
+        type: 'pty:complete-result',
+        sid: siblingFrame.sid,
+        opId: siblingFrame.opId,
+        ok: true,
+        result: siblingResult,
+      });
+      await expect(sibling).resolves.toEqual(siblingResult);
+    },
+  );
+
   it('bounds completion, ignores its late result, and admits the next request', async () => {
     vi.useFakeTimers();
     const { client, sent } = harness();

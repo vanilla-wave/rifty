@@ -69,9 +69,9 @@ describe('Shell command resolution and discovery', () => {
     shell.registerCommand('frobnicate', async () => 0);
 
     expect(shell.commandNames()).toContain('vite');
-    expect(await shell.run('vtei')).toMatchObject({
+    expect(await shell.run('vte')).toMatchObject({
       exitCode: 127,
-      stderr: "vtei: command not found\nDid you mean 'vite'?\n",
+      stderr: "vte: command not found\nDid you mean 'vite'?\n",
     });
     expect(shell.complete('vi', 2)).toEqual({
       start: 0,
@@ -263,9 +263,9 @@ describe('Shell command resolution and discovery', () => {
     });
     const shell = new Shell({ cwd: '/proj', fileSystem });
 
-    expect(await shell.run('vtei')).toMatchObject({
+    expect(await shell.run('vte')).toMatchObject({
       exitCode: 127,
-      stderr: "vtei: command not found\nDid you mean 'vite'?\n",
+      stderr: "vte: command not found\nDid you mean 'vite'?\n",
     });
   });
 });
