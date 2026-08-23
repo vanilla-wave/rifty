@@ -47,6 +47,14 @@ fault-labelled suite; use small boundary decorators, not one framework.
 - Second reachable instance of one axis at one boundary → one chokepoint, validation boundary, or gate.
 - Before adding correlation/FIFO/epoch/ledger/lock, inventory the class repo-wide. A third copy requires consolidation or an ADR proving separate authority.
 - A third mechanism guarding one file/key means no owner: stop and move the invariant to one serialized authority.
+- Porting a mechanism (quarry branch, extraction, revived past work) = adding it: the port re-states its forcing constraint; constraint gone → deletion, not port. Plan or quarry provenance never justifies machinery.
+
+## Seam contract
+
+Two authorities exchanging lifecycle (reserve/commit/teardown, admission/close)
+→ the seam carries one settlement contract: which peer errors are expected
+cancellation outcomes, ONE owner, one fault test crossing both sides.
+Locally-proven ends never prove the seam.
 
 ## Review convergence
 

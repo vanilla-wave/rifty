@@ -5,12 +5,12 @@ title: Bounded autonomous epic runs — orchestration, tripwire automation, esca
 created: 2026-07-22
 why: PR-176 adds frozen goal, residual accounting, one-slice budgets, and a bounded coordinator; the remaining work is adoption measurement and honest scope/mechanism detectors, not completion semantics
 sources: [workbench-retro-2026-07, PR-161, PR-162, PR-176]
-code: [tools/review/blockers.mjs, tools/checks/goal-contract.mjs]
+code: [tools/review/blockers.mjs]
 ---
 
 ## Context
 
-PR #176 owns run semantics in `decision-workflow.md` §Autonomous goals plus goal/budget/contract checks.
+PR #176 owned run semantics in `decision-workflow.md` (now §Goal runs + `rifty-goal`); the marker/budget gates retired with goal artifact v2 (2026-08, `epics/TEMPLATE.md`).
 Remaining: run one mid-size epic and compare escaped horizontal defects with the
 workbench baseline. Promote only honest detectors: scope-to-unit mapping, full
 mechanism inventory, review-count tracking, and explicit run membership. Until
@@ -33,17 +33,10 @@ net lines; 7 of 13 merged carried zero production source. Same cap, plus two
 agent over-reads (a second parallel reviewer per checkpoint; intake/ready-flip/
 lineage each given its own docs PR).
 
-## Residual — machine gates still mandate a second PR
+## Residual — resolved 2026-08
 
-§PR is canon, but gates encoded PR-as-unit-of-process. Two of four residuals
-closed by the content-anchor re-cut (gates read the aggregate merge-base→head
-diff): contract-drift now allows the in-PR `ready`→`draft` demotion, and the
-insertion band excludes `docs/backlog/**`. Remaining:
-
-- `check:budget` — epic must exist at merge-base, so a goal's bootstrap cannot
-  ride the delivering branch: first slice PR of every new goal exits 1. Keeps
-  §Autonomous goal 1–2 mandating a contract-only bootstrap PR (deliberate).
-- CI is `pull_request`/`merge_group`/`push→main` only (`.github/workflows/ci.yml:3-8`),
-  so moving PR-open to Final+GREEN would leave the branch with zero CI until the
-  merge candidate. `rifty-review` SKILL.md:6,:51 also hardcode "the PR body" as
-  checkpoint review input. PR-open timing therefore stays at first Contract+RED.
+Goal artifact v2 removed `check:budget`/`check:goal-contract` and the
+`goal_baseline` marker: a goal bootstrap rides any PR, bands live in the goal
+ledger (review-owned). Remaining draft scope = the detector ideas above
+(SHA-lineage counter, posted verdicts, falsified-on-main invariant proof) —
+promote only with field evidence.

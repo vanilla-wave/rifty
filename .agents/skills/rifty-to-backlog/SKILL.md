@@ -8,13 +8,15 @@ Capture = classify → dedup → gate → `draft`. No interview or contract comp
 ## 1. Classify
 
 Capability/test/tooling/design debt → backlog. Doc drift → fix the doc. No user
-or project impact → stop. Under `Goal-Baseline`, required work reverse-links to
-the epic; only outside-goal work enters ordinary backlog.
+or project impact → stop. Inside an active goal run, required work
+reverse-links to the goal; only outside-goal work enters ordinary backlog.
 
 ## 2. Dedup
 
-Search titles, `code:`, `## Items`, and child `epic:` links for the same
-defect/mechanism/boundary. Update a match; otherwise record the no-match source.
+Search titles, `code:`, goal `map.md` files, and child `epic:` links for the
+same defect/mechanism/boundary — and `docs/adr/README.md` §Declined concepts
+for the same idea already ruled out. Update a match; a declined match stops the
+capture (cite the row); otherwise record the no-match source.
 
 ## 3. Gate
 
@@ -33,9 +35,11 @@ Use `docs/process/fault-classes.md` §§Boundary failure models/Class-kill and
 ## 4. Mint
 
 Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md` — committed
-to the discovering unit's branch, never its own PR (`AGENTS.md` §PR): `draft`,
-observed `## Context`, honest sources, optional real-path `user_story`, and a code
-marker when anchored. Done when `pnpm backlog:check` passes.
+to the discovering unit's branch, never its own PR (`AGENTS.md` §PR). A draft is
+one of two shapes (README §Shape): **question** (`## Question`, no prescribed
+carrier) or **finding** (observed `## Context`, honest sources, compat ❌ /
+code-marker link) — never a solution without its decision. Optional real-path
+`user_story`. Done when `pnpm backlog:check` passes.
 
 After capture: `decision-workflow.md` §Backlog readiness owns draft→ready;
 verification = the unit's Contract+RED checkpoint at pickup (an unresolved

@@ -7,7 +7,7 @@ why: Preview collapses warmup into broad starting/error/unreachable states and p
 user_story: As a developer whose preview failed, I want the IDE to retain the real status, failed hop, and valid retry path, but today I see a generic overlay and must infer whether the server, bridge, or frame failed.
 epic: actionable-ide-diagnostics
 blocked_by: [playground/diagnostics-hub, service-worker/preview-blocked-host-hang, service-worker/preview-dispatch-termination-chokepoint]
-sources: [M11, docs/backlog/epics/fault-honest-sw-preview.md]
+sources: [M11, docs/backlog/epics/fault-honest-sw-preview/goal.md]
 code: [apps/playground/src/components/PreviewPanel.tsx, apps/playground/src/components/preview-panel-core.ts, packages/service-worker/src]
 ---
 

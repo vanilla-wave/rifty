@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Goal artifact v2 + `rifty-goal` skill.** An epic is a directory
+  `docs/backlog/epics/<slug>/` — frozen `goal.md`, live `map.md`, append-only
+  `ledger.md` (`epics/TEMPLATE.md`); the `goal_baseline` marker,
+  `check:goal-contract`, and `check:budget` retire — frozen-ness = file
+  immutability, bands live in the ledger, review-owned (`rifty-review` axis 5).
+  `rifty-goal` drives FIT / PICKUP / RE-CHART / CLOSE: rolling re-planning
+  inside the delivery loop (probe-or-fog, JIT bands, fog graduation) and a
+  closure ledger walk exporting knowledge before the goal dir is deleted.
+  Drafts are typed (question | finding); declined concepts get a durable table
+  (`docs/adr/README.md`); `docs/research/` gets route-or-tombstone. Active goal
+  `fault-honest-sw-preview` migrated content-identically.
+
 - **One contract gate: readiness verification = the pickup Contract+RED
   checkpoint.** The standalone fresh-context readiness judge duplicated the
   checkpoint (same fresh-context raw-contract read, weaker scope — no RED/diff)

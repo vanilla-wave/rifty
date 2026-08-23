@@ -141,7 +141,7 @@ describe('evaluate', () => {
 
   it('rejects a process referee changed anywhere in the implementation PR', () => {
     for (const path of [
-      'tools/checks/budget.mjs',
+      'tools/checks/contract-drift.mjs',
       'tools/checks/run-pickup.mjs',
       'tools/review/review-schema.json',
     ]) {

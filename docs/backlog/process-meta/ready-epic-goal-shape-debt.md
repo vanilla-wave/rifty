@@ -3,7 +3,7 @@ area: process-meta
 status: draft
 title: Ready epics carry no Invariants/tier/Budget — every hand-off starts with an unplanned refit
 created: 2026-07-30
-why: README §Shape requires numbered `## Invariants` on a ready epic, but the gate only fires once `goal_baseline` exists, so 10 of 11 ready/in-progress epics are shaped for reading, not for pickup — and the missing parts (Invariants, tier) cannot be authored by an agent
+why: legacy single-file ready epics predate goal-shape requirements, so most are shaped for reading, not pickup — re-typing them (bounded goal via `rifty-goal` FIT vs direction → ROADMAP) needs user signoff per epic
 user_story: As the repo owner handing off a ready epic, I want the hand-off to start the run, but today it starts a refit — invariants sign-off, tier call, and a Budget table before any slice can be picked
 sources: [docs/backlog/README.md §Shape, tools/backlog/check.mjs:231, M11 parallel-track sweep 2026-07-30]
 code: [docs/backlog/README.md, tools/backlog/check.mjs]
@@ -38,8 +38,8 @@ records.
 Dedup (no match): `process-meta/draft-gate-enforcement` gates implementing FROM
 a draft and the `ready-verdict:` laundering channel — a different gate family;
 `process-meta/milestone-review-ritual` sweeps stale items at milestone close;
-`process-meta/autonomous-epic-runs` §Residual lists machine gates encoding
-PR-as-unit-of-process. None covers epic goal-shape debt.
+`process-meta/autonomous-epic-runs` tracked the gate family retired by goal
+artifact v2. None covers epic goal-shape debt.
 
 ## Options or Next
 

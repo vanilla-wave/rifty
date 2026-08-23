@@ -6,7 +6,6 @@ created: 2026-07-05
 value: The preview either serves or says why — no dev-server/routing failure mode (dead worker, closed socket, misconfig) can park an iframe, an HMR socket, or a loopback http.request forever.
 user_story: As a developer, I want the preview to fail loudly with a diagnosable error when routing breaks, but today a host-check rejection reproducibly parks the iframe forever (untraced) and the bridge's termination semantics (worker death, teardown mid-request, WS upgrade) have no fault rows.
 tier: robust
-goal_baseline: 742dce2ba0fe266578aefd07cd8a07f07bfd8c23
 ---
 
 ## Outcome
@@ -48,19 +47,6 @@ A developer opens a vite preset, runs the real `npm run dev`, preview goes LIVE.
 5. I5. Wherever an upstream response exists the user sees its bytes verbatim;
    synthesized diagnostics appear only where no response will ever come.
 
-## Items
-
-1. `service-worker/preview-blocked-host-hang` — **blocked-host-diagnosis** —
-   Contract+RED diagnosis + repair of the lost Vite 403 (I1); its hop evidence
-   decides where terminal events are observable, so it leads.
-2. `service-worker/preview-dispatch-termination-chokepoint` — **termination-chokepoint** —
-   settle on every terminal event (I2, I4, I5); ONE chokepoint, parity-first
-   synthesized page only when no response exists; covers loopback
-   `http.request`. Blocked by the diagnosis.
-3. `net/preview-ws-bridge-termination` — **ws-termination** — WS/HMR sockets
-   error/close under faults and vite's own reconnect UX works (I3); reuses the
-   chokepoint's terminal-event reporting where the broker overlaps.
-
 ## Decisions (epic-level, ratified at refine 2026-07-05)
 
 - invariants-signoff: 2026-07-30 — user (I1–I5 drafted from this epic's
@@ -73,16 +59,3 @@ A developer opens a vite preset, runs the real `npm run dev`, preview goes LIVE.
   honest outcome + fault test, but no invariant spans crash/reload — the preview
   is re-established by a fresh run, so `production` would buy nothing here.
 
-## Budget
-
-- scope implemented outside `ready` items: 0
-- ready-contract edits after pickup: 0
-- new coordination mechanisms: 0 — the chokepoint reuses the existing broker
-  correlation; a second timer family per hop is the named anti-pattern
-- generated globs: `docs/public/compat/**`, `**/generated/**`
-
-| slice | band |
-|---|---|
-| blocked-host-diagnosis | 300–800 |
-| termination-chokepoint | 800–2000 |
-| ws-termination | 400–1000 |
