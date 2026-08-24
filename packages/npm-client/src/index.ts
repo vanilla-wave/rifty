@@ -43,7 +43,14 @@ export {
   EDDY_STORE_DURABLE_HEADER,
   type EddyRequestBody,
 } from './eddy-request.ts';
-export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';
+export {
+  link,
+  buildLockfile,
+  type Lockfile,
+  type NormalizedResolvedPackage,
+  type ResolvedPackage,
+} from './linker.ts';
+export type { NormalizedPackageBin, PackageBin } from './package-bin.ts';
 export { closureHashOf, canonicalClosureJson } from './closure-hash.ts';
 export { serializePackageJson } from './package-json.ts';
 // The bundle-adoption completeness gate, shared so eddy's durable store

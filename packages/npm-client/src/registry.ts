@@ -11,6 +11,7 @@ import {
   drainBodyBounded,
   fetchHeadersBounded,
 } from './bounded-fetch.ts';
+import type { PackageBin } from './package-bin.ts';
 
 export interface Packument {
   name: string;
@@ -26,7 +27,7 @@ export interface VersionManifest {
   peerDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   scripts?: Record<string, string>;
-  bin?: string | Record<string, string>;
+  bin?: PackageBin;
   /**
    * Platform constraints (npm `os`/`cpu`). Read by the native-dependency policy
    * (ADR-0051): a `cpu` array excluding `wasm` marks a compiled artifact rifty
