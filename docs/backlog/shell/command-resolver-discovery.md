@@ -254,6 +254,8 @@ allocation is:
   → `2 failed`: both paths exit 127 with exact `command not found` diagnostics.
 - Attempt 8 keeps those allocations and adds
   `pnpm exec vitest run --project unit
-  packages/workbench/src/workers/owner-child-bin-executor.test.ts`: before
-  production, the real Shell records only the bare nearest `.bin` launch, so
-  the required ordinary/explicit/bare `false/true/true` projection is RED.
+  packages/workbench/src/workers/owner-child-bin-executor.test.ts` →
+  `1 failed | 4 passed`: all siblings execute before assertion; exit codes are
+  `[127, 127, 0]`, and the real Shell records only the bare nearest `.bin`
+  launch, so the required ordinary/explicit/bare `false/true/true` projection
+  is RED.
