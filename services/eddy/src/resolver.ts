@@ -46,6 +46,9 @@ export interface EddyResolverDeps {
   /** Process-wide immutable tarball cache (ADR-0194 §2); layered under a
    *  per-request VFS cache so a shared eviction can't break the harvest. */
   tarballCache?: TarballCache;
+  /** Caller-owned request lifecycle. Disconnect aborts registry acquisition
+   *  and the remaining bundle build instead of retaining an abandoned VFS. */
+  signal?: AbortSignal;
 }
 
 export type EddyResolveResult =
@@ -64,6 +67,7 @@ export async function resolveBundle(
   req: EddyResolveRequest,
   deps: EddyResolverDeps,
 ): Promise<EddyResolveResult> {
+  throwIfAborted(deps.signal);
   const { vfs } = createMemoryFs();
   await vfs.mkdir(ROOT, { recursive: true });
   const pkgJson: Record<string, unknown> = { name: 'eddy-root', version: '0.0.0' };
@@ -90,10 +94,16 @@ export async function resolveBundle(
       registry,
       tarballCache,
       ...(packumentCache ? { packumentCache } : {}),
+      ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     });
   } catch (err) {
+    // Cancellation is lifecycle, not a typed compatibility decline. Let the
+    // cache release its admission permit and the HTTP layer stop writing to a
+    // disconnected response.
+    if (deps.signal?.aborted) throw abortReason(deps.signal);
     return declineFor(err);
   }
+  throwIfAborted(deps.signal);
 
   // One tarball per unique (name@version); harvest the original gzip bytes the
   // installer cached, keyed by the integrity it verified them under.
@@ -101,6 +111,7 @@ export async function resolveBundle(
   const entries: EddyBundleTarballEntry[] = [];
   const tarballs: Array<{ entry: EddyBundleTarballEntry; bytes: Uint8Array }> = [];
   for (const pkg of result.packages) {
+    throwIfAborted(deps.signal);
     const key = `${pkg.name}@${pkg.version}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -113,6 +124,7 @@ export async function resolveBundle(
       };
     }
     const bytes = await tarballCache.get(pkg.name, pkg.version, integrity);
+    throwIfAborted(deps.signal);
     if (!bytes) {
       return {
         kind: 'unsupported',
@@ -126,13 +138,16 @@ export async function resolveBundle(
     tarballs.push({ entry, bytes });
   }
 
+  throwIfAborted(deps.signal);
+  const closureHash = await closureHashOf(result.lockfile);
+  throwIfAborted(deps.signal);
   const manifest: EddyBundleManifestV1 = {
     format: EDDY_BUNDLE_FORMAT,
     npmClientVersion: readNpmClientVersion(),
     asOf: {
       resolvedAt: deps.now ? deps.now() : new Date().toISOString(),
       registry: deps.registryBaseUrl,
-      closureHash: await closureHashOf(result.lockfile),
+      closureHash,
     },
     tarballs: entries,
   };
@@ -142,6 +157,14 @@ export async function resolveBundle(
     tarballs,
   });
   return { kind: 'bundle', bytes, manifest };
+}
+
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason ?? new Error('eddy resolve: aborted');
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortReason(signal);
 }
 
 /** Map a resolution failure to a typed decline (client falls back to standard,

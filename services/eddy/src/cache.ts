@@ -30,6 +30,20 @@ import {
 
 const DEFAULT_TTL_SECONDS = 1800;
 const DEFAULT_MAX_ENTRIES = 256;
+const DEFAULT_MAX_CONCURRENT_RESOLVES = Number.POSITIVE_INFINITY;
+const OVERLOAD_RETRY_AFTER_SECONDS = 1;
+
+/** Typed fail-fast admission result. HTTP maps this exact class to 503; all
+ * other resolver/store failures retain their existing behavior. */
+export class EddyOverloadError extends Error {
+  override readonly name = 'EddyOverloadError';
+  readonly code = 'EEDDYOVERLOADED';
+  readonly retryAfterSeconds = OVERLOAD_RETRY_AFTER_SECONDS;
+
+  constructor(readonly maxConcurrentResolves: number) {
+    super(`eddy resolve capacity exhausted (max ${maxConcurrentResolves})`);
+  }
+}
 
 export interface EddyCacheOptions {
   resolver: EddyResolverDeps;
@@ -40,10 +54,15 @@ export interface EddyCacheOptions {
   /** Shared packument cache TTL in seconds (ADR-0194 §1). Default 300
    *  (= npmjs edge `max-age`); 0 disables. */
   packumentTtlSeconds?: number;
+  /** Shared serialized packument cache byte cap. */
+  packumentCacheMaxBytes?: number;
   /** Shared immutable tarball cache byte cap (ADR-0194 §2). */
   tarballCacheMaxBytes?: number;
   /** Immutable bundle tier (ADR-0194 §4). Default: byte-bounded memory LRU. */
   store?: BundleStore;
+  /** Process-wide distinct resolve-flight cap. No default cap preserves the
+   *  library's existing behavior; production must set an explicit envelope. */
+  maxConcurrentResolves?: number;
   /** Injectable monotonic clock (ms) for TTL. Defaults to `Date.now`. */
   clock?: () => number;
   /** Injectable resolver (defaults to {@link resolveBundle}). */
@@ -51,6 +70,17 @@ export interface EddyCacheOptions {
 }
 
 type BundleResolveResult = EddyResolveResult & { kind: 'bundle' };
+
+interface CachedFlight {
+  readonly key: string;
+  readonly controller: AbortController;
+  readonly promise: Promise<EddyResolveResult>;
+  readonly state: {
+    waiters: number;
+    accepting: boolean;
+    settled: boolean;
+  };
+}
 
 function bundleResult(bundle: CachedBundle, storeDurable: boolean): BundleResolveResult {
   return {
@@ -118,10 +148,13 @@ export class EddyCache {
   private readonly store: BundleStore;
   private readonly packuments: TtlPackumentCache;
   private readonly tarballs: MemoryTarballCache;
-  /** Cached-policy single-flight. `prefer:'online'` computes are deliberately
+  private readonly maxConcurrentResolves: number;
+  private activeResolves = 0;
+  /** Cached-policy single-flight covers the WHOLE POST path, including a
+   *  mutable-link store read. `prefer:'online'` computes are deliberately
    *  NOT joinable: a normal cached request must not inherit an online refresh's
    *  live-registry latency/failure mode. */
-  private readonly cachedInflight = new Map<string, Promise<EddyResolveResult>>();
+  private readonly cachedInflight = new Map<string, CachedFlight>();
   /** Generations of online refreshes currently in flight. Cached computes that
    * start while one is active are allowed to serve their caller, but their
    * write-throughs/publishes rank below the online refresh so stale cached
@@ -141,11 +174,21 @@ export class EddyCache {
     this.ttlMs = (opts.ttlSeconds ?? DEFAULT_TTL_SECONDS) * 1000;
     this.clock = opts.clock ?? Date.now;
     this.resolveFn = opts.resolveFn ?? resolveBundle;
+    this.maxConcurrentResolves = opts.maxConcurrentResolves ?? DEFAULT_MAX_CONCURRENT_RESOLVES;
+    if (
+      this.maxConcurrentResolves !== Number.POSITIVE_INFINITY &&
+      (!Number.isSafeInteger(this.maxConcurrentResolves) || this.maxConcurrentResolves < 1)
+    ) {
+      throw new RangeError('maxConcurrentResolves must be a positive safe integer');
+    }
     this.mutable = new Lru(opts.maxEntries ?? DEFAULT_MAX_ENTRIES);
     this.store = opts.store ?? new MemoryBundleStore();
     this.packuments = new TtlPackumentCache({
       ttlSeconds: opts.packumentTtlSeconds ?? DEFAULT_PACKUMENT_TTL_SECONDS,
       clock: this.clock,
+      ...(opts.packumentCacheMaxBytes === undefined
+        ? {}
+        : { maxBytes: opts.packumentCacheMaxBytes }),
     });
     this.tarballs = new MemoryTarballCache(
       opts.tarballCacheMaxBytes === undefined ? {} : { maxBytes: opts.tarballCacheMaxBytes },
@@ -165,52 +208,149 @@ export class EddyCache {
     return this.store.get(closureHash);
   }
 
-  async resolve(req: EddyResolveRequest): Promise<EddyResolveResult> {
+  async resolve(req: EddyResolveRequest, signal?: AbortSignal): Promise<EddyResolveResult> {
+    throwIfAborted(signal);
     const online = req.prefer === 'online';
     const key = depSetKey(req);
 
     if (!online) {
-      const link = this.mutable.get(key);
-      if (link && link.expiresAt > this.clock()) {
-        // A throwing store read (bucket down / transient 5xx) is a MISS here,
-        // never a 500: the POST path HAS the dep-set, so it can recompute and
-        // ride the existing failed-put degrade. Only the direct GET-by-hash
-        // route (getBundle — no dep-set to recompute from) surfaces the error.
-        const hit = await this.store.get(link.closureHash).catch((err) => {
-          console.error(
-            `eddy: bundle store read failed for linked ${link.closureHash}: ${err instanceof Error ? err.message : String(err)} — recomputing`,
-          );
-          return null;
-        });
-        if (hit) return bundleResult(hit, true);
-      }
-      // Thundering herd: identical cached-policy cold requests join one compute.
-      // Online refreshes are not joined by cached callers: they bypass shared
-      // packument reads and may be slow/failing while cached-policy can still
-      // make progress from warm state.
       const joined = this.cachedInflight.get(key);
-      if (joined) return joined;
+      if (joined?.state.accepting) return this.joinCachedFlight(joined, signal);
+
+      const release = this.admit();
+      const flight = this.createCachedFlight(req, key, release);
+      this.cachedInflight.set(key, flight);
+      return this.joinCachedFlight(flight, signal);
     }
 
-    const flight = this.startCompute(req, key, online);
-    if (!online) {
-      this.cachedInflight.set(key, flight);
-      void flight
-        .catch(() => undefined)
-        .then(() => {
-          if (this.cachedInflight.get(key) === flight) this.cachedInflight.delete(key);
-        });
+    const release = this.admit();
+    try {
+      return await this.startCompute(req, key, true, signal);
+    } finally {
+      release();
     }
+  }
+
+  /** One admitted cached-policy flight owns all work for a dep-set, including
+   *  the linked immutable-store lookup. Waiters have independent lifecycles;
+   *  only the LAST disconnect aborts the shared work. */
+  private createCachedFlight(
+    req: EddyResolveRequest,
+    key: string,
+    release: () => void,
+  ): CachedFlight {
+    const controller = new AbortController();
+    const state = { waiters: 0, accepting: true, settled: false };
+    const promise = this.resolveCachedPath(req, key, controller.signal).finally(() => {
+      state.settled = true;
+      state.accepting = false;
+      release();
+      if (this.cachedInflight.get(key)?.state === state) this.cachedInflight.delete(key);
+    });
+    const flight: CachedFlight = {
+      key,
+      controller,
+      promise,
+      state,
+    };
+    // Every caller gets its own derived waiter Promise. Keep the underlying
+    // rejection observed even if all callers disconnect before it settles.
+    void flight.promise.catch(() => undefined);
     return flight;
+  }
+
+  private joinCachedFlight(
+    flight: CachedFlight,
+    signal: AbortSignal | undefined,
+  ): Promise<EddyResolveResult> {
+    try {
+      throwIfAborted(signal);
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    flight.state.waiters += 1;
+    return new Promise<EddyResolveResult>((resolve, reject) => {
+      let left = false;
+      const leave = (abandoned: boolean): void => {
+        if (left) return;
+        left = true;
+        if (signal) signal.removeEventListener('abort', onAbort);
+        flight.state.waiters -= 1;
+        if (abandoned && flight.state.waiters === 0 && !flight.state.settled) {
+          // A later caller must not join work whose lifecycle has already been
+          // cancelled. Its fresh admission either starts after cleanup or gets
+          // the honest overload response while this permit is still occupied.
+          flight.state.accepting = false;
+          if (this.cachedInflight.get(flight.key) === flight) {
+            this.cachedInflight.delete(flight.key);
+          }
+          flight.controller.abort(abortReason(signal));
+        }
+      };
+      const onAbort = (): void => {
+        leave(true);
+        reject(abortReason(signal));
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      flight.promise.then(
+        (result) => {
+          leave(false);
+          resolve(result);
+        },
+        (err: unknown) => {
+          leave(false);
+          reject(err);
+        },
+      );
+    });
+  }
+
+  private async resolveCachedPath(
+    req: EddyResolveRequest,
+    key: string,
+    signal: AbortSignal,
+  ): Promise<EddyResolveResult> {
+    const link = this.mutable.get(key);
+    if (link && link.expiresAt > this.clock()) {
+      // A throwing store read (bucket down / transient 5xx) is a MISS here,
+      // never a 500: the POST path HAS the dep-set, so it can recompute and
+      // ride the existing failed-put degrade. Only the direct GET-by-hash
+      // route (getBundle — no dep-set to recompute from) surfaces the error.
+      const hit = await this.store.get(link.closureHash).catch((err) => {
+        console.error(
+          `eddy: bundle store read failed for linked ${link.closureHash}: ${err instanceof Error ? err.message : String(err)} — recomputing`,
+        );
+        return null;
+      });
+      throwIfAborted(signal);
+      if (hit) return bundleResult(hit, true);
+    }
+    // Generation is assigned only after the cache path misses, preserving the
+    // online-vs-cached ordering rules that existed before whole-path flighting.
+    return this.startCompute(req, key, false, signal);
+  }
+
+  private admit(): () => void {
+    if (this.activeResolves >= this.maxConcurrentResolves) {
+      throw new EddyOverloadError(this.maxConcurrentResolves);
+    }
+    this.activeResolves += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.activeResolves -= 1;
+    };
   }
 
   private startCompute(
     req: EddyResolveRequest,
     key: string,
     online: boolean,
+    signal: AbortSignal | undefined,
   ): Promise<EddyResolveResult> {
     const gen = this.nextGeneration(online);
-    const flight = this.compute(req, key, gen);
+    const flight = this.compute(req, key, gen, signal);
     if (online) {
       void flight
         .finally(() => {
@@ -239,7 +379,9 @@ export class EddyCache {
     req: EddyResolveRequest,
     key: string,
     gen: number,
+    signal: AbortSignal | undefined,
   ): Promise<EddyResolveResult> {
+    throwIfAborted(signal);
     // Stamp this flight's packument write-throughs with `gen` so an OLDER cached
     // flight can't roll back the shared metadata cache after a newer online
     // refresh (ADR-0194). A cached flight started DURING an online refresh gets
@@ -250,10 +392,15 @@ export class EddyCache {
       get: (name) => this.packuments.get(name),
       set: (name, packument) => this.packuments.setWithGen(name, packument, gen),
     };
-    const result = await this.resolveFn(req, { ...this.resolver, packumentCache });
+    const result = await this.resolveFn(req, {
+      ...this.resolver,
+      packumentCache,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    throwIfAborted(signal);
     if (result.kind !== 'bundle') return result; // declines are not cached
     const closureHash = result.manifest.asOf.closureHash;
-    return this.settleStore(closureHash, result, key, gen);
+    return this.settleStore(closureHash, result, key, gen, signal);
   }
 
   /** Serialize the store settle PER closureHash: concurrent computes of the same
@@ -266,9 +413,13 @@ export class EddyCache {
     result: BundleResolveResult,
     key: string,
     gen: number,
+    signal: AbortSignal | undefined,
   ): Promise<EddyResolveResult> {
     const prior = this.storeTail.get(closureHash);
-    const run = (): Promise<EddyResolveResult> => this.doSettleStore(closureHash, result, key, gen);
+    const run = (): Promise<EddyResolveResult> => {
+      throwIfAborted(signal);
+      return this.doSettleStore(closureHash, result, key, gen, signal);
+    };
     const mine = prior ? prior.then(run, run) : run();
     const tail = mine.then(
       () => undefined,
@@ -286,6 +437,7 @@ export class EddyCache {
     result: BundleResolveResult,
     key: string,
     gen: number,
+    signal: AbortSignal | undefined,
   ): Promise<EddyResolveResult> {
     // Immutable-tier BYTE stability (round 15): the closure hash addresses the
     // LOCKFILE CLOSURE, not the tar bytes — a recompute of the same closure
@@ -299,6 +451,7 @@ export class EddyCache {
     try {
       stored = await this.store.get(closureHash);
     } catch (err) {
+      throwIfAborted(signal);
       // A TRANSIENT read failure (bucket blip) must NOT read as a miss (round
       // 18): an object may already exist and be VALID, and PUTting these
       // fresh-`resolvedAt` bytes would overwrite it — breaking byte stability.
@@ -315,6 +468,7 @@ export class EddyCache {
       if (cur && gen > cur.gen) this.mutable.delete(key);
       return bundleResult(result, false);
     }
+    throwIfAborted(signal);
     if (stored) {
       // A verified GET proves the bytes, but durable-before-link also needs the
       // store's delivery metadata (S3 `immutable`) proven/repaired before this
@@ -322,6 +476,7 @@ export class EddyCache {
       try {
         await this.store.put(closureHash, { bytes: stored.bytes, manifest: stored.manifest });
       } catch (err) {
+        throwIfAborted(signal);
         console.error(
           `eddy: bundle store repair/proof failed for ${closureHash}: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -329,6 +484,7 @@ export class EddyCache {
         if (cur && gen > cur.gen) this.mutable.delete(key);
         return bundleResult(stored, false);
       }
+      throwIfAborted(signal);
       this.publishLink(key, closureHash, gen);
       return bundleResult(stored, true);
     }
@@ -341,6 +497,7 @@ export class EddyCache {
     try {
       await this.store.put(closureHash, { bytes: result.bytes, manifest: result.manifest });
     } catch (err) {
+      throwIfAborted(signal);
       // Degrade, never 500: serve the computed bundle, skip the link so the
       // next request recomputes (and retries the put).
       console.error(
@@ -356,6 +513,7 @@ export class EddyCache {
       if (cur && gen > cur.gen) this.mutable.delete(key);
       return bundleResult(result, false);
     }
+    throwIfAborted(signal);
     this.publishLink(key, closureHash, gen);
     return bundleResult(result, true);
   }
@@ -375,4 +533,12 @@ export class EddyCache {
       this.mutable.set(key, { closureHash, expiresAt: this.clock() + this.ttlMs, gen });
     }
   }
+}
+
+function abortReason(signal: AbortSignal | undefined): unknown {
+  return signal?.reason ?? new Error('eddy resolve: aborted');
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortReason(signal);
 }

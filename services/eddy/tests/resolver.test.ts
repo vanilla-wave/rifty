@@ -1,4 +1,5 @@
 import {
+  type Fetcher,
   type Lockfile,
   RegistryClient,
   computeIntegrity,
@@ -166,5 +167,38 @@ describe('eddy resolveBundle — parity with a client live-resolve (vendored tar
     const pairs = new Set(unpackEddyBundle(res.bytes).manifest.tarballs.map((t) => t.name));
     expect(pairs.has('host')).toBe(true);
     expect(pairs.has('native-opt')).toBe(false);
+  });
+
+  it('propagates cancellation through install to the active registry request', async () => {
+    let markStarted = (): void => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let registrySignal: AbortSignal | undefined;
+    const stalledFetch: Fetcher = async (_url, init) => {
+      registrySignal = init?.signal ?? undefined;
+      markStarted();
+      return await new Promise<Response>((_resolve, reject) => {
+        const signal = registrySignal as AbortSignal;
+        const onAbort = (): void => reject(signal.reason);
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+      });
+    };
+    const controller = new AbortController();
+    const reason = new Error('request disconnected');
+    const resolving = resolveBundle(
+      { dependencies: { debug: '^4.4.1' } },
+      {
+        registryBaseUrl: LOCAL_REGISTRY_BASE_URL,
+        fetch: stalledFetch,
+        signal: controller.signal,
+      },
+    );
+    await started;
+    controller.abort(reason);
+
+    await expect(resolving).rejects.toBe(reason);
+    expect(registrySignal?.aborted).toBe(true);
   });
 });

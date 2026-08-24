@@ -49,15 +49,20 @@ The published `@riftydev/eddy` package also supports a thin image:
 | `REGISTRY_BASE_URL` | `https://registry.npmjs.org` | Upstream registry eddy resolves against (rifty.dev uses direct npmjs; the browser standard path still uses the CORS registry proxy) |
 | `EDDY_TTL_SECONDS` | `1800` | Mutable-tier resolution TTL; `0` = always recompute (`--prefer-online` always) |
 | `EDDY_PACKUMENT_TTL_SECONDS` | `300` | Process-wide packument cache (ADR-0194 §1; `300` = npmjs edge `max-age`); `0` = off |
-| `EDDY_TARBALL_CACHE_MAX_BYTES` | `536870912` | Process-wide immutable tarball cache byte cap (ADR-0194 §2) |
+| `EDDY_PACKUMENT_CACHE_MAX_BYTES` | `67108864` | Exact serialized UTF-8 byte cap in addition to the packument entry cap (ADR-0363) |
+| `EDDY_TARBALL_CACHE_MAX_BYTES` | `536870912` | Process-wide immutable tarball cache byte cap; rifty.dev pins `134217728` (ADR-0194 §2, ADR-0363) |
+| `EDDY_MAX_CONCURRENT_RESOLVES` | `1` | Distinct heavy POST-flight cap; excess gets retryable 503 with no waiter queue (ADR-0363) |
 | `EDDY_BUNDLE_MEMORY_MAX_BYTES` | `536870912` | Memory bundle-store byte cap (only without `EDDY_S3_*`) |
 | `EDDY_S3_ENDPOINT` `EDDY_S3_BUCKET` `EDDY_S3_REGION` `EDDY_S3_ACCESS_KEY_ID` `EDDY_S3_SECRET_ACCESS_KEY` | unset | All-or-none: bundles live in an S3-compatible public-read bucket (ADR-0194 §4); partial config refuses to boot |
 
-Caching (ADR-0182 §6, restructured by ADR-0194): the mutable
-`dep-set → closure-hash` link honors the TTL and single-flights concurrent
-identical requests; cold resolves share process-wide packument (TTL) and
-immutable tarball caches, so an unseen-but-overlapping dep set refetches only
-its novel packages. The immutable `closure-hash → bundle` tier is a
+Caching (ADR-0182 §6, restructured by ADR-0194/0363): the mutable
+`dep-set → closure-hash` link honors the TTL and single-flights the whole
+cached POST path (linked store lookup + fallback compute). Cold resolves share
+byte-bounded process-wide packument and immutable tarball caches, so an
+unseen-but-overlapping dep set refetches only its novel packages. Different
+heavy POST flights are admitted up to `EDDY_MAX_CONCURRENT_RESOLVES`; overload
+is a retryable 503 and the optional client uses its standard verifying path.
+The immutable `closure-hash → bundle` tier is a
 **BundleStore** — byte-bounded memory by default, an Object-Storage bucket
 with `EDDY_S3_*` (below) — served content-addressed by
 **`GET /bundle/<closure-hash>`** with
@@ -403,10 +408,11 @@ first.
 ## CDN tier on rifty.dev (deployed 2026-07-01)
 
 The resources below are LIVE from the 2026-07-01 CDN setup. The running image is
-**v1.2** (tag `0.2.3`, redeployed 2026-07-08 — h3/UDP, eddy wire protocol v1.1,
-non-blocking stamp, raw-slash S3 bundle-key signing; a live POST now emits
-`x-eddy-store-durable` + a deep-canonical closure hash independent of the
-upstream registry URL). On
+**v1.2** (tag `0.2.4`, redeployed 2026-08-23 — bounded packument/tarball
+residency, full-path same-key single-flight, fail-fast admission, h3/UDP, eddy
+wire protocol v1.1, non-blocking stamp, raw-slash S3 bundle-key signing; a live
+POST emits `x-eddy-store-durable` + a deep-canonical closure hash independent
+of the upstream registry URL). On
 2026-07-07 the on-VM A/B measured direct npmjs faster than the CDN registry
 proxy for eddy cold resolves, so live `REGISTRY_BASE_URL` is
 `https://registry.npmjs.org`. S3 bundle store is live: POSTs publish durable
@@ -427,6 +433,9 @@ edge, hence the split-host shape):
 - VM Caddy serves BOTH `eddy.rifty.dev` and `eddy-origin.rifty.dev`
   (`deploy/yandex/eddy/docker-compose.coi.yml`); `eddy-origin` is now the
   rollback/smoke origin for GET-by-hash, while live CDN misses fetch the bucket.
+- The pinned Unified Agent service in the same COI compose publishes guest
+  memory/kernel/I/O metrics with the VM's narrow `monium.metrics.writer` role;
+  alerts select `service=custom`, `host=fhme5dumk6bouckm931s`.
 - Playground env (operator-set, OPT-IN — `netlify.toml` ships only
   `VITE_RIFTY_RESOLVER_URL` today): to route pinned GETs through the CDN, add
   `VITE_RIFTY_EDDY_BUNDLE_URL=https://eddy-cdn.rifty.dev`; to pin presets, add

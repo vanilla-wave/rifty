@@ -4,7 +4,7 @@ import {
   makeLocalFetcher,
 } from '../../../tests/integration/fixtures/local-registry.ts';
 import { type BundleStore, MemoryBundleStore } from '../src/bundle-store.ts';
-import { EddyCache } from '../src/cache.ts';
+import { EddyCache, EddyOverloadError } from '../src/cache.ts';
 import type { EddyResolveResult } from '../src/resolver.ts';
 import { resolveBundle } from '../src/resolver.ts';
 
@@ -485,5 +485,236 @@ describe('EddyCache — two-tier (ADR-0182 §6)', () => {
     expect(computes).toBe(3);
     // …with ZERO upstream refetch: packuments within TTL, tarballs immutable.
     expect(calls.packument + calls.tarball).toBe(trafficBefore);
+  });
+
+  it('single-flights the entire cached path, including a warm linked store GET', async () => {
+    const { fetch } = makeLocalFetcher();
+    const inner = new MemoryBundleStore({ maxBytes: 100_000 });
+    let blockGets = false;
+    let linkedGets = 0;
+    let releaseGet = (): void => {};
+    let markGetStarted = (): void => {};
+    const getGate = new Promise<void>((resolve) => {
+      releaseGet = resolve;
+    });
+    const getStarted = new Promise<void>((resolve) => {
+      markGetStarted = resolve;
+    });
+    const store: BundleStore = {
+      get: async (hash) => {
+        if (blockGets) {
+          linkedGets += 1;
+          markGetStarted();
+          await getGate;
+        }
+        return inner.get(hash);
+      },
+      put: (hash, bundle) => inner.put(hash, bundle),
+    };
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      store,
+    });
+    const request = { dependencies: { debug: '^4.4.1' } };
+    await cache.resolve(request);
+
+    blockGets = true;
+    const first = cache.resolve(request);
+    await getStarted;
+    const joined = cache.resolve(request);
+    expect(linkedGets).toBe(1);
+    releaseGet();
+    const [a, b] = await Promise.all([first, joined]);
+    expect(a.kind === 'bundle' && b.kind === 'bundle' && [...a.bytes]).toEqual(
+      b.kind === 'bundle' ? [...b.bytes] : [],
+    );
+    expect(linkedGets).toBe(1);
+  });
+
+  it('admits one distinct flight without queuing; same-key cached callers still join', async () => {
+    const { fetch } = makeLocalFetcher();
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let computes = 0;
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      maxConcurrentResolves: 1,
+      resolveFn: async () => {
+        computes += 1;
+        await gate;
+        return bundleFor('sha256-A');
+      },
+    });
+    const request = { dependencies: { a: '^1.0.0' } };
+    const first = cache.resolve(request);
+    const joined = cache.resolve(request);
+
+    const distinct = cache.resolve({ dependencies: { b: '^1.0.0' } });
+    await expect(distinct).rejects.toMatchObject({
+      name: 'EddyOverloadError',
+      code: 'EEDDYOVERLOADED',
+      maxConcurrentResolves: 1,
+      retryAfterSeconds: 1,
+    });
+    await expect(cache.resolve({ ...request, prefer: 'online' })).rejects.toBeInstanceOf(
+      EddyOverloadError,
+    );
+    expect(computes).toBe(1);
+
+    release();
+    await expect(Promise.all([first, joined])).resolves.toHaveLength(2);
+  });
+
+  it('keeps a shared cached resolve alive for remaining waiters, then aborts and releases on the last disconnect', async () => {
+    const { fetch } = makeLocalFetcher();
+    let seenSignal: AbortSignal | undefined;
+    let markResolverSettled = (): void => {};
+    const resolverSettled = new Promise<void>((resolve) => {
+      markResolverSettled = resolve;
+    });
+    let computes = 0;
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      maxConcurrentResolves: 1,
+      resolveFn: async (_req, deps) => {
+        computes += 1;
+        if (computes > 1) return bundleFor('sha256-B');
+        seenSignal = deps.signal;
+        try {
+          return await new Promise<EddyResolveResult>((_resolve, reject) => {
+            const signal = deps.signal as AbortSignal;
+            const onAbort = (): void => reject(signal.reason);
+            if (signal.aborted) onAbort();
+            else signal.addEventListener('abort', onAbort, { once: true });
+          });
+        } finally {
+          markResolverSettled();
+        }
+      },
+    });
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    const request = { dependencies: { a: '^1.0.0' } };
+    const first = cache.resolve(request, firstController.signal);
+    const second = cache.resolve(request, secondController.signal);
+    const firstReason = new Error('first caller disconnected');
+    firstController.abort(firstReason);
+    await expect(first).rejects.toBe(firstReason);
+    expect(seenSignal?.aborted).toBe(false);
+
+    const secondReason = new Error('last caller disconnected');
+    secondController.abort(secondReason);
+    await expect(second).rejects.toBe(secondReason);
+    await resolverSettled;
+    expect(seenSignal?.aborted).toBe(true);
+    expect(seenSignal?.reason).toBe(secondReason);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    const recovered = await cache.resolve({ dependencies: { b: '^1.0.0' } });
+    expect(recovered.kind === 'bundle' && recovered.manifest.asOf.closureHash).toBe('sha256-B');
+    expect(computes).toBe(2);
+  });
+
+  it('preserves the library default of unbounded distinct-flight admission', async () => {
+    const { fetch } = makeLocalFetcher();
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let computes = 0;
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      resolveFn: async (_req) => {
+        computes += 1;
+        await gate;
+        return bundleFor(`sha256-${computes}`);
+      },
+    });
+    const a = cache.resolve({ dependencies: { a: '^1.0.0' } });
+    const b = cache.resolve({ dependencies: { b: '^1.0.0' } });
+    expect(computes).toBe(2);
+    release();
+    await expect(Promise.all([a, b])).resolves.toHaveLength(2);
+  });
+
+  it('releases admission exactly once after resolver throws and after a typed decline', async () => {
+    const { fetch } = makeLocalFetcher();
+    let computes = 0;
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      maxConcurrentResolves: 1,
+      resolveFn: async () => {
+        computes += 1;
+        if (computes === 1) throw new Error('resolver exploded');
+        if (computes === 2) {
+          return { kind: 'unsupported', feature: 'fixture', message: 'fixture decline' };
+        }
+        return bundleFor('sha256-recovered');
+      },
+    });
+
+    await expect(cache.resolve({ dependencies: { a: '1' } })).rejects.toThrow('resolver exploded');
+    await expect(cache.resolve({ dependencies: { b: '1' } })).resolves.toEqual({
+      kind: 'unsupported',
+      feature: 'fixture',
+      message: 'fixture decline',
+    });
+    const recovered = await cache.resolve({ dependencies: { c: '1' } });
+    expect(recovered.kind === 'bundle' && recovered.manifest.asOf.closureHash).toBe(
+      'sha256-recovered',
+    );
+    expect(computes).toBe(3);
+  });
+
+  it('cancels an online flight directly and retains its permit until resolver cleanup settles', async () => {
+    const { fetch } = makeLocalFetcher();
+    let seenSignal: AbortSignal | undefined;
+    let markAbortSeen = (): void => {};
+    const abortSeen = new Promise<void>((resolve) => {
+      markAbortSeen = resolve;
+    });
+    let releaseCleanup = (): void => {};
+    const cleanupGate = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    const cache = new EddyCache({
+      resolver: { registryBaseUrl: LOCAL_REGISTRY_BASE_URL, fetch },
+      maxConcurrentResolves: 1,
+      resolveFn: async (req, deps) => {
+        if (req.prefer !== 'online') return bundleFor('sha256-recovered');
+        seenSignal = deps.signal;
+        try {
+          return await new Promise<EddyResolveResult>((_resolve, reject) => {
+            const signal = deps.signal as AbortSignal;
+            const onAbort = (): void => reject(signal.reason);
+            if (signal.aborted) onAbort();
+            else signal.addEventListener('abort', onAbort, { once: true });
+          });
+        } catch (err) {
+          markAbortSeen();
+          await cleanupGate;
+          throw err;
+        }
+      },
+    });
+    const controller = new AbortController();
+    const reason = new Error('online caller disconnected');
+    const online = cache.resolve({ dependencies: { a: '1' }, prefer: 'online' }, controller.signal);
+    expect(seenSignal).toBe(controller.signal);
+    controller.abort(reason);
+    await abortSeen;
+
+    await expect(cache.resolve({ dependencies: { b: '1' } })).rejects.toBeInstanceOf(
+      EddyOverloadError,
+    );
+    releaseCleanup();
+    await expect(online).rejects.toBe(reason);
+
+    const recovered = await cache.resolve({ dependencies: { b: '1' } });
+    expect(recovered.kind === 'bundle' && recovered.manifest.asOf.closureHash).toBe(
+      'sha256-recovered',
+    );
   });
 });

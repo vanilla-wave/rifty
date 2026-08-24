@@ -16,7 +16,7 @@ import type { AddressInfo } from 'node:net';
 import { EDDY_STORE_DURABLE_HEADER } from '@riftydev/npm-client';
 import type { EddyBundleManifestV1, Fetcher } from '@riftydev/npm-client';
 import type { BundleStore } from './bundle-store.ts';
-import { EddyCache } from './cache.ts';
+import { EddyCache, EddyOverloadError } from './cache.ts';
 import type { EddyResolveRequest } from './resolver.ts';
 
 export interface EddyServerOptions {
@@ -29,10 +29,15 @@ export interface EddyServerOptions {
   maxEntries?: number;
   /** Shared packument cache TTL seconds (ADR-0194 §1; default 300, 0 = off). */
   packumentTtlSeconds?: number;
+  /** Shared serialized packument cache byte cap. */
+  packumentCacheMaxBytes?: number;
   /** Shared tarball cache byte cap (ADR-0194 §2). */
   tarballCacheMaxBytes?: number;
   /** Immutable bundle tier (ADR-0194 §4). Default: byte-bounded memory LRU. */
   store?: BundleStore;
+  /** Distinct concurrent POST-flight cap. Omit for the library's historical
+   *  unbounded behavior; production should set an explicit memory envelope. */
+  maxConcurrentResolves?: number;
   /** Injectable resolution timestamp. */
   now?: () => string;
 }
@@ -53,8 +58,10 @@ export function createEddyServer(opts: EddyServerOptions): EddyServer {
     ttlSeconds: opts.ttlSeconds,
     maxEntries: opts.maxEntries,
     packumentTtlSeconds: opts.packumentTtlSeconds,
+    packumentCacheMaxBytes: opts.packumentCacheMaxBytes,
     tarballCacheMaxBytes: opts.tarballCacheMaxBytes,
     store: opts.store,
+    maxConcurrentResolves: opts.maxConcurrentResolves,
   });
   const server = createServer((req, res) => {
     void handle(req, res, cache);
@@ -207,13 +214,36 @@ async function handle(req: IncomingMessage, res: ServerResponse, cache: EddyCach
     return;
   }
 
+  // `IncomingMessage.close` now means request-body completion, not peer loss.
+  // The response's premature close is the lifecycle boundary while resolution
+  // runs after the body has been consumed.
+  const lifecycle = new AbortController();
+  const onClose = (): void => {
+    if (!res.writableFinished) lifecycle.abort(new Error('eddy request disconnected'));
+  };
+  res.once('close', onClose);
+  if (res.destroyed && !res.writableFinished) onClose();
+
   let result: Awaited<ReturnType<EddyCache['resolve']>>;
   try {
-    result = await cache.resolve(request.req);
+    result = await cache.resolve(request.req, lifecycle.signal);
   } catch (err) {
+    res.removeListener('close', onClose);
+    if (lifecycle.signal.aborted) return;
+    if (err instanceof EddyOverloadError) {
+      sendJson(
+        res,
+        503,
+        { kind: 'overloaded', error: err.message },
+        { 'retry-after': String(err.retryAfterSeconds) },
+      );
+      return;
+    }
     sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
     return;
   }
+  res.removeListener('close', onClose);
+  if (lifecycle.signal.aborted) return;
 
   if (result.kind === 'unsupported') {
     sendJson(res, 422, { kind: 'unsupported', feature: result.feature, message: result.message });
@@ -352,7 +382,7 @@ function corsHeaders(): Record<string, string> {
     'access-control-allow-headers': 'content-type',
     'access-control-max-age': '86400',
     'access-control-expose-headers':
-      'x-eddy-resolved-at, x-eddy-closure-hash, x-eddy-npm-client-version, x-eddy-store-durable',
+      'x-eddy-resolved-at, x-eddy-closure-hash, x-eddy-npm-client-version, x-eddy-store-durable, retry-after',
     'cross-origin-resource-policy': 'cross-origin',
   };
 }

@@ -152,6 +152,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0343 | Auto-injected companions do not claim package bins without ordinary demand |
 | 0344 | Exact Sass twin exposes named positive surfaces; gaps require observed unsupported behavior |
 | 0361 | Lock replay admits the attested recipe pin; request admission unchanged |
+| 0363 | Eddy memory envelope and fail-fast admission |
 | 0364 | One npm package-bin normalization authority follows active npm package-json semantics |
 
 ### playground

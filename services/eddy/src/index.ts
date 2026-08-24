@@ -12,7 +12,7 @@ export {
   type EddyResolveResult,
   type EddyResolverDeps,
 } from './resolver.ts';
-export { EddyCache, type EddyCacheOptions } from './cache.ts';
+export { EddyCache, type EddyCacheOptions, EddyOverloadError } from './cache.ts';
 export { createEddyServer, type EddyServer, type EddyServerOptions } from './server.ts';
 export {
   MemoryBundleStore,
@@ -22,6 +22,7 @@ export {
 } from './bundle-store.ts';
 export { S3BundleStore, type S3BundleStoreOptions } from './s3-bundle-store.ts';
 export {
+  DEFAULT_PACKUMENT_CACHE_MAX_BYTES,
   MemoryTarballCache,
   TtlPackumentCache,
   type MemoryTarballCacheOptions,

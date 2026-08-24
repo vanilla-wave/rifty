@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Eddy has a bounded process memory envelope.** Shared packuments now use an
+  exact serialized-byte LRU (64 MiB default) in addition to their entry/TTL
+  bounds; production tarballs are capped at 128 MiB. Cached-policy single-flight
+  covers the linked S3 lookup as well as fallback compute, so identical warm
+  POSTs no longer duplicate bundle buffers.
+- **Distinct resolver work fails fast instead of exhausting the origin.** The
+  CLI admits one heavy POST flight by default; same-key cached callers join it,
+  excess work receives retryable CORS-readable `503`, and disconnected waiters
+  cancel only the work they solely own. The standard verifying client fallback
+  remains the honest overload outcome (ADR-0363).
+
 ### Changed
 
 - Tagged GitHub releases now version, license, and publish `@riftydev/eddy`
@@ -9,6 +22,16 @@
 
 ### Deployed
 
+- **Eddy memory envelope live on rifty.dev** (2026-08-23). Image
+  `cr.yandex/…/eddy:0.2.4` (`linux/amd64`, digest `sha256:2660a912…623ce`)
+  runs with 64 MiB packument bytes, 128 MiB tarball bytes, and one admitted
+  heavy POST flight. Verified live: ordinary bundle smoke 200; a concurrent
+  distinct request returned CORS/no-store `503 Retry-After: 1` in 0.24s while
+  the admitted online resolve completed 200; disk queue returned to zero.
+- **Guest metrics live through pinned Yandex Unified Agent** (2026-08-23).
+  The VM service account has only `monium.metrics.writer`; advanced memory,
+  kernel, and I/O metrics are emitted under `service=custom`, `host=<VM id>`.
+  Verified `sys.memory.MemAvailable`/`MemTotal` at 15-second cadence.
 - **eddy.rifty.dev bundle store moved to Object Storage** (2026-07-07). The
   live VM uses secret-bearing `EDDY_S3_*` metadata (not committed) against the
   public-read `eddy-bundles` bucket. Verified live: POST emits

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseByteCount, parsePort, parseS3Config, parseTtlSeconds } from '../src/env.ts';
+import {
+  parseByteCount,
+  parsePort,
+  parsePositiveInteger,
+  parseS3Config,
+  parseTtlSeconds,
+} from '../src/env.ts';
 
 describe('parseTtlSeconds (EDDY_TTL_SECONDS env-config)', () => {
   it('returns undefined when unset → falls back to the default TTL', () => {
@@ -53,6 +59,22 @@ describe('parseByteCount (cache byte-cap env-config)', () => {
     for (const bad of ['abc', '-1', '0', '1.5', '1mb']) {
       expect(() => parseByteCount(bad, 'EDDY_BUNDLE_MEMORY_MAX_BYTES')).toThrow(
         /EDDY_BUNDLE_MEMORY_MAX_BYTES/,
+      );
+    }
+  });
+});
+
+describe('parsePositiveInteger (admission env-config)', () => {
+  it('returns undefined when unset and parses a positive safe integer', () => {
+    expect(parsePositiveInteger(undefined, 'EDDY_MAX_CONCURRENT_RESOLVES')).toBeUndefined();
+    expect(parsePositiveInteger('', 'EDDY_MAX_CONCURRENT_RESOLVES')).toBeUndefined();
+    expect(parsePositiveInteger('1', 'EDDY_MAX_CONCURRENT_RESOLVES')).toBe(1);
+  });
+
+  it('throws loudly on junk, whitespace, zero, negatives, fractions, and unsafe integers', () => {
+    for (const bad of ['abc', ' ', '0', '-1', '1.5', String(Number.MAX_SAFE_INTEGER + 1)]) {
+      expect(() => parsePositiveInteger(bad, 'EDDY_MAX_CONCURRENT_RESOLVES')).toThrow(
+        /EDDY_MAX_CONCURRENT_RESOLVES/,
       );
     }
   });

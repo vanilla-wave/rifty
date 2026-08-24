@@ -7,7 +7,7 @@
 # secret-bearing copy passed via `--metadata-from-file`; never commit that copy.
 services:
   eddy:
-    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.3
+    image: cr.yandex/crpo6kvhb4o7gv41g0s4/eddy:0.2.4
     container_name: rifty-eddy
     restart: unless-stopped
     expose:
@@ -18,6 +18,9 @@ services:
       REGISTRY_BASE_URL: "https://registry.npmjs.org"
       PORT: "8788"
       EDDY_TTL_SECONDS: "1800"
+      EDDY_PACKUMENT_CACHE_MAX_BYTES: "67108864"
+      EDDY_TARBALL_CACHE_MAX_BYTES: "134217728"
+      EDDY_MAX_CONCURRENT_RESOLVES: "1"
       # Bundle store: WITHOUT the EDDY_S3_* group below this boots the
       # byte-bounded MEMORY store (bundles die with the container) — the
       # stateless-origin story (ADR-0194 §4) holds only once an operator
@@ -29,6 +32,16 @@ services:
       # EDDY_S3_REGION: "ru-central1"
       # EDDY_S3_ACCESS_KEY_ID: "<from `yc iam access-key create`>"
       # EDDY_S3_SECRET_ACCESS_KEY: "<from `yc iam access-key create`>"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:8788',{method:'OPTIONS'}).then(r=>process.exit(r.status===204?0:1)).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   caddy:
     image: caddy:2.10.2-alpine
@@ -68,6 +81,25 @@ services:
         }
         CADDY
         exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  monitoring:
+    image: cr.yandex/yc/unified-agent@sha256:ab285672991d67a2e5d0aed426467299545b5bd3b2f3e8b02797c96c520b59e5
+    container_name: rifty-eddy-monitoring
+    restart: unless-stopped
+    uts: host
+    environment:
+      FOLDER_ID: "b1g7flke7mgq94dklalu"
+      PROC_DIRECTORY: "/ua_proc"
+      SYS_DIRECTORY: "/ua_sys"
+      UA_LINUX_RESOURCE_CPU: "basic"
+      UA_LINUX_RESOURCE_MEMORY: "advanced"
+      UA_LINUX_RESOURCE_NETWORK: "basic"
+      UA_LINUX_RESOURCE_STORAGE: "basic"
+      UA_LINUX_RESOURCE_IO: "advanced"
+      UA_LINUX_RESOURCE_KERNEL: "advanced"
+    volumes:
+      - /proc:/ua_proc:ro
+      - /sys:/ua_sys:ro
 
 volumes:
   caddy_data:
