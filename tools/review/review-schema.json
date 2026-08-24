@@ -90,9 +90,13 @@
               "properties": {
                 "severity": { "type": "string", "enum": ["blocker", "concern", "nit"] },
                 "location": { "type": "string", "description": "file:line, cited from the diff." },
-                "summary": { "type": "string", "description": "Concise defect statement." }
+                "summary": { "type": "string", "description": "Concise defect statement." },
+                "authority": {
+                  "type": "string",
+                  "description": "For blockers: the violated DECLARED authority — exact contract clause, repo rule (AGENTS.md/docs/process), active ADR, or named baseline behavior. A blocker without one is invalid. Empty for concern/nit."
+                }
               },
-              "required": ["severity", "location", "summary"]
+              "required": ["severity", "location", "summary", "authority"]
             }
           }
         },

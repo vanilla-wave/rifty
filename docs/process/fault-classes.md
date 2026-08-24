@@ -63,7 +63,7 @@ Applies to parity work and changes touching cache, persistence, network, or conc
 | Gate | Required evidence |
 |---|---|
 | Contract | Pinned oracle; acceptance/parity cases; observable identity, lifecycle, error order; loud gaps |
-| Review | Checkpoint = two exhaustive find passes (fan-out + tail vs settled list) + `coverage` row per declared obligation (Fault-matrix line, Acceptance clause, public API entry, frozen artifact) — weak/missing rows block, later gap in a `pass` cell = reviewer error; each behavioral correctness blocker: fault class + RED test + sibling sweep; goal/process blockers: violated clause/rule |
+| Review | Checkpoint = two exhaustive find passes (fan-out + tail vs settled list) + `coverage` row per declared obligation (Fault-matrix line, Acceptance clause, public API entry, frozen artifact) — weak/missing rows block, later gap in a `pass` cell = reviewer error; each behavioral correctness blocker: fault class + RED test + sibling sweep; every blocker cites its violated declared authority (contract clause / repo rule / ADR / baseline) — a blocker no declared authority requires is reviewer error, symmetric to a miss (lands concern/backlog); goal/process blockers: violated clause/rule |
 | Repeat | Same class at one boundary, or a review change adding a state owner → redesign/split |
 | External API | Proxy/wrapper semantic copy requires an ADR + differential suite |
 | Testing | Same scenario runs against reference and rifty; a fake cannot close acceptance |

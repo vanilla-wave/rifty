@@ -33,6 +33,16 @@ export function evaluateVerdict(verdict) {
       errors.push(`${row.status} coverage row without note: ${row.row}`);
     }
   }
+  for (const axis of axes ?? []) {
+    for (const finding of Array.isArray(axis?.findings) ? axis.findings : []) {
+      if (
+        finding?.severity === 'blocker' &&
+        !(typeof finding.authority === 'string' && finding.authority.length > 0)
+      ) {
+        errors.push(`blocker without declared authority: ${finding?.summary?.slice(0, 80) ?? '?'}`);
+      }
+    }
+  }
   if (!['Contract+RED', 'Final+GREEN'].includes(verdict?.checkpoint)) {
     errors.push('checkpoint missing or invalid');
   }
