@@ -105,9 +105,9 @@ completion is unwired, and the four consumers use separate inventories.
 - POSIX execute bits, native/WASI shebang dispatch, symlink permissions: the VFS
   has no mode authority. Direct regular files use the existing Node-entry
   loader; unsupported bytes fail loudly there. Compat remains ❌.
-- `which -a/-s`, shell aliases/functions, arbitrary PATH configuration, and
-  completion after unsupported grammar stay their existing named
-  `NotImplementedError`/compat ❌ surfaces.
+- `which -a/--all` retains `NotImplementedError('shell.which.-a')`; `which -s`
+  retains `NotImplementedError('shell.which.-s')`. `which.test.ts` pins both;
+  compat remains ❌.
 - Command descriptors/flag metadata remain
   `docs/backlog/shell/command-manifest-registry.md`; no speculative registry is
   added here.
@@ -120,7 +120,14 @@ completion is unwired, and the four consumers use separate inventories.
   dd1dc618aefe81619a129801d0e85ed0b4756e0b,
   07ad7789e0f73005e5da24424b2d38257f4f6054,
   9198a3aa0f4b1ac57097f5d74b7be8a7ae433630,
-  f0eafa003c3e51a67ef688bac84ec69955d09496]`.
+  f0eafa003c3e51a67ef688bac84ec69955d09496,
+  c89073e0345fe2f22525793e3af595cce31ddc1b]`.
+- Contract+RED @ `c89073e0345fe2f22525793e3af595cce31ddc1b`
+  BLOCKED: the declared public `ProjectTerminal.complete` wrapper lacked
+  success/error/close RED, while Out of scope claimed unproven named ceilings
+  for aliases/functions/PATH/completion grammar. Attempt 9 adds the wrapper
+  carrier and narrows that ceiling to the exact existing `which` tags/tests;
+  Acceptance and production remain unchanged.
 - Contract+RED @ `f0eafa003c3e51a67ef688bac84ec69955d09496`
   BLOCKED: installed Vite output plus separately constructed spawn specs did
   not prove the explicit-path→owner classification seam. Attempt 8 adds one
@@ -259,3 +266,7 @@ allocation is:
   `[127, 127, 0]`, and the real Shell records only the bare nearest `.bin`
   launch, so the required ordinary/explicit/bare `false/true/true` projection
   is RED.
+- Attempt 9 adds `project-terminal.test.ts` success/error/closed routing through
+  a structural future `complete` carrier. Before production, all three calls
+  fail because the public wrapper is absent; existing `which.test.ts` keeps the
+  exact `shell.which.-a`/`shell.which.-s` loud ceilings green.
