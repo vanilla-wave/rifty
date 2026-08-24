@@ -121,7 +121,14 @@ completion is unwired, and the four consumers use separate inventories.
   07ad7789e0f73005e5da24424b2d38257f4f6054,
   9198a3aa0f4b1ac57097f5d74b7be8a7ae433630,
   f0eafa003c3e51a67ef688bac84ec69955d09496,
-  c89073e0345fe2f22525793e3af595cce31ddc1b]`.
+  c89073e0345fe2f22525793e3af595cce31ddc1b,
+  b09f56f9c44aa5ef71e684942101f57996ff9a7f]`.
+- Contract+RED @ `b09f56f9c44aa5ef71e684942101f57996ff9a7f`
+  BLOCKED: the frozen Bash capture omitted whole-script locale and the
+  implementation/build identity of `/usr/bin/which`. Attempt 10 recaptures the
+  complete oracle under `LC_ALL=C`/`LANG=C`, pins the macOS build and every
+  invoked host binary by identity/hash, and preserves every observable row;
+  Acceptance, RED projections, and production remain unchanged.
 - Contract+RED @ `c89073e0345fe2f22525793e3af595cce31ddc1b`
   BLOCKED: the declared public `ProjectTerminal.complete` wrapper lacked
   success/error/close RED, while Out of scope claimed unproven named ceilings
@@ -272,3 +279,8 @@ allocation is:
   packages/shell/tests/which.test.ts` → `3 failed | 40 passed`: all three calls
   fail because the public wrapper is absent; all 7 `which` siblings, including
   exact `shell.which.-a`/`shell.which.-s` loud ceilings, stay green.
+- Attempt 10 recaptures
+  `docs/backlog/shell/reference/command-resolver-discovery-bash-3.2.57.md` on
+  macOS `26.3.1` build `25D2128`, Bash `3.2.57(1)`, Node `v24.16.0`, whole-script
+  locale `C`, and SHA-pinned Apple `which`/`sort`/`tr`/`echo`. Every normalized
+  selection, diagnostic/status, `which`, and sorted `compgen` row is unchanged.
