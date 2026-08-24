@@ -75,8 +75,10 @@ completion is unwired, and the four consumers use separate inventories.
 5. `tests/browser-unit/owner-shell-routing.spec.ts` RED: a direct workspace
    script runs in the real owner supervised child as `bin:false`, while an
    explicitly addressed installed Vite launcher crosses trusted package-tree
-   admission and runs its real target. `owner-child-bin-executor.test.ts`
-   discriminates the spawn metadata as `bin:true` for that exact `.bin` path.
+   admission and runs its real target. `owner-child-bin-executor.test.ts` drives
+   ordinary direct, explicit `.bin`, and bare nearest `.bin` commands through a
+   real Shell resolver into the production owner spawn-spec builder and pins
+   their launch metadata as `bin:false`, `bin:true`, `bin:true`.
 6. `tests/e2e/command-resolver-discovery.spec.ts` Chromium RED: typing installed
    bare and direct-path prefixes opens the real DOM menu; selecting the direct
    entry runs it and records exit 0.
@@ -117,7 +119,14 @@ completion is unwired, and the four consumers use separate inventories.
   d31f7615ece9cd26e3d6e613a98fc10b6daf417d,
   dd1dc618aefe81619a129801d0e85ed0b4756e0b,
   07ad7789e0f73005e5da24424b2d38257f4f6054,
-  9198a3aa0f4b1ac57097f5d74b7be8a7ae433630]`.
+  9198a3aa0f4b1ac57097f5d74b7be8a7ae433630,
+  f0eafa003c3e51a67ef688bac84ec69955d09496]`.
+- Contract+RED @ `f0eafa003c3e51a67ef688bac84ec69955d09496`
+  BLOCKED: installed Vite output plus separately constructed spawn specs did
+  not prove the explicit-path→owner classification seam. Attempt 8 adds one
+  real Shell→production spawn-spec adapter sibling sweep for ordinary direct,
+  explicit `.bin`, and bare nearest `.bin` without changing Acceptance or
+  production.
 - Contract+RED @ `9198a3aa0f4b1ac57097f5d74b7be8a7ae433630`
   PASS invalidated by a proof-carrier fault discovered during GREEN: manually
   writing `node_modules` correctly revokes package-tree readiness, so the
@@ -243,3 +252,8 @@ allocation is:
   playwright.browser-unit.config.ts tests/browser-unit/owner-shell-routing.spec.ts
   --grep "direct workspace module|explicitly addressed installed" --workers=1`
   → `2 failed`: both paths exit 127 with exact `command not found` diagnostics.
+- Attempt 8 keeps those allocations and adds
+  `pnpm exec vitest run --project unit
+  packages/workbench/src/workers/owner-child-bin-executor.test.ts`: before
+  production, the real Shell records only the bare nearest `.bin` launch, so
+  the required ordinary/explicit/bare `false/true/true` projection is RED.
