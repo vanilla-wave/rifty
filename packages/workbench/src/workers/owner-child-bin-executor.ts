@@ -20,6 +20,7 @@ import type { BinExecutor } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest, BinWorkerHandle } from '../glue/bin-executor.ts';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
 import { runForegroundChild } from '../glue/run-foreground-child.ts';
+import { isBinShimPath } from './bin-entry-path.ts';
 import {
   type ReserveOwnerChildAdmission,
   abortOwnerChildAdmissionAfterSpawn,
@@ -39,7 +40,7 @@ export function buildChildSpawnSpec(
 ): SpawnWorkerSpec {
   const entry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
     kind: 'program',
-    bin: true,
+    bin: isBinShimPath(req.shimPath),
     remoteFs: true,
     ...(req.remoteFsRoot === undefined ? {} : { remoteFsRoot: req.remoteFsRoot }),
     nodeServe: true,

@@ -478,8 +478,7 @@ export function startBrowserWorkspaceOwner(
           activeProject.acceptVfs(message);
           return;
         case 'workbench:durability-progress':
-          // Owner-level (ADR-0359 corrected 2026-08-16): the first-open drain
-          // predates any project token; health listeners are owner-scoped.
+          // Owner-level: the first-open drain predates project tokens (ADR-0359).
           // ADR-0360: arrival is the liveness proof the deadline measures.
           rearmSilenceDeadlines();
           publishHealth(
@@ -708,6 +707,7 @@ export function startBrowserWorkspaceOwner(
         pty.openSession(sid, initialState ?? { cwd: opened.projectRoot }),
       snapshot: (sid: string) =>
         projectTerminalStateFromOwner(opened.projectRoot, pty.snapshot(sid)),
+      complete: (sid: string, line: string, cursor: number) => pty.complete(sid, line, cursor),
       execResult: (sid: string, line: string, options: ProjectTerminalExecOptions) =>
         pty.execResult(sid, line, options),
       writeStdin: (sid: string, rid: string, data: Uint8Array) => pty.writeStdin(sid, rid, data),

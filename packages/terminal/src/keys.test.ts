@@ -22,6 +22,10 @@ describe('classifyKey — control bytes', () => {
     expect(classifyKey('\t')).toEqual({ kind: 'tab' });
   });
 
+  it('classifies NUL (\\x00, Ctrl+Space) as Tab completion', () => {
+    expect(classifyKey('\x00')).toEqual({ kind: 'tab' });
+  });
+
   it('classifies ETX (\\x03) as Ctrl+C', () => {
     expect(classifyKey('\x03')).toEqual({ kind: 'ctrl-c' });
   });

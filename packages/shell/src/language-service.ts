@@ -1,4 +1,5 @@
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { isOp, tokenize } from './tokenize.ts';
 
 export type ShellCompletionMode = 'repl' | 'dev' | 'real-vite';
 export type ShellInputValidation = 'complete' | 'incomplete';
@@ -42,18 +43,6 @@ const OPEN_TO_CLOSE = new Map([
 ]);
 const CLOSE = new Set(OPEN_TO_CLOSE.values());
 
-function tokenStart(line: string, cursor: number): number {
-  let start = cursor;
-  while (start > 0 && !/\s/u.test(line[start - 1] ?? '')) start--;
-  return start;
-}
-
-function tokenEnd(line: string, cursor: number): number {
-  let end = cursor;
-  while (end < line.length && !/\s/u.test(line[end] ?? '')) end++;
-  return end;
-}
-
 function isWhitespace(ch: string | undefined): boolean {
   return ch === ' ' || ch === '\t';
 }
@@ -80,15 +69,82 @@ function stringEnd(line: string, start: number, quote: '"' | "'"): number {
   return line.length;
 }
 
+function tokenRange(
+  line: string,
+  cursor: number,
+): { readonly start: number; readonly end: number } {
+  let i = 0;
+  while (i < line.length) {
+    if (isWhitespace(line[i])) {
+      i++;
+      continue;
+    }
+    const operatorLength = isOperatorAt(line, i);
+    if (operatorLength > 0) {
+      i += operatorLength;
+      continue;
+    }
+    const start = i;
+    while (i < line.length && !isWhitespace(line[i]) && isOperatorAt(line, i) === 0) {
+      const ch = line[i];
+      if (ch === '\\') {
+        i = Math.min(i + 2, line.length);
+      } else if (ch === '"' || ch === "'") {
+        i = stringEnd(line, i, ch);
+      } else {
+        i++;
+      }
+    }
+    if (cursor >= start && cursor <= i) return { start, end: i };
+  }
+  return { start: cursor, end: cursor };
+}
+
+function isEnvAssignment(value: string): boolean {
+  const equal = value.indexOf('=');
+  return equal > 0 && /^[A-Za-z_][A-Za-z0-9_]*$/u.test(value.slice(0, equal));
+}
+
+function isArgvZeroPosition(line: string, tokenStart: number): boolean {
+  let expectCommand = true;
+  let expectRedirectTarget = false;
+  for (const token of tokenize(line.slice(0, tokenStart))) {
+    if (isOp(token)) {
+      if (token.op === '>' || token.op === '>>' || token.op === '<') {
+        expectRedirectTarget = true;
+      } else {
+        expectCommand = true;
+        expectRedirectTarget = false;
+      }
+      continue;
+    }
+    if (expectRedirectTarget) {
+      expectRedirectTarget = false;
+    } else if (expectCommand && !isEnvAssignment(token.value)) {
+      expectCommand = false;
+    }
+  }
+  return expectCommand && !expectRedirectTarget;
+}
+
+function isMissingDirectory(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    return error.code === 'ENOENT' || error.code === 'ENOTDIR';
+  }
+  return error instanceof Error && /^(?:ENOENT|ENOTDIR)(?:\b|:)/u.test(error.message);
+}
+
 export function createShellCompleter(deps: ShellCompletionDeps) {
   return (line: string, cursor: number): ShellCompletionResult | null => {
     if (deps.mode() === 'repl') return null;
-    const start = tokenStart(line, cursor);
-    const end = tokenEnd(line, cursor);
+    const { start, end } = tokenRange(line, cursor);
     const fragment = line.slice(start, cursor);
-    const before = line.slice(0, start);
+    const argvZero = isArgvZeroPosition(line, start);
+    const pathLike = line.slice(start, end).includes('/');
 
-    if (before.trim().length === 0) {
+    // A slash in argv-0 is an explicit path, not a bare command lookup. Route
+    // it through the same VFS reader as argument completion (ADR-0362).
+    if (argvZero && !pathLike) {
       const items: ShellCompletionItem[] = deps
         .commandNames()
         .filter((name) => name.startsWith(fragment))
@@ -113,8 +169,9 @@ export function createShellCompleter(deps: ShellCompletionDeps) {
           display: `${entry.name}${entry.isDirectory ? '/' : ''}`,
         }));
       return { start, end, items };
-    } catch {
-      return null;
+    } catch (error) {
+      if (isMissingDirectory(error)) return null;
+      throw error;
     }
   };
 }

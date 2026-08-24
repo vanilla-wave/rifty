@@ -80,6 +80,14 @@ export function inspectPagePtyFrame(value: unknown): PageProjectPtyFrame {
       exact(frame, ['type', 'sid', 'opId'], 'pty:close frame');
       sessionOperation(frame, 'pty:close');
       break;
+    case 'pty:complete': {
+      exact(frame, ['type', 'sid', 'opId', 'line', 'cursor'], 'pty:complete frame');
+      sessionOperation(frame, 'pty:complete');
+      const line = string(frame.line, 'pty:complete line');
+      const cursor = nonNegativeInteger(frame.cursor, 'pty:complete cursor');
+      if (cursor > line.length) throw invalid('pty:complete cursor');
+      break;
+    }
     case 'pty:dev-server-req':
       exact(frame, ['type'], 'pty:dev-server-req frame');
       break;
@@ -159,6 +167,9 @@ export function inspectOwnerPtyFrame(value: unknown): OwnerProjectPtyFrame {
       nonEmptyString(frame.sid, 'pty:close-ack sid');
       nonEmptyString(frame.opId, 'pty:close-ack opId');
       break;
+    case 'pty:complete-result':
+      inspectCompletionResult(frame);
+      break;
     case 'pty:dev-server':
       inspectDevServer(frame);
       break;
@@ -171,6 +182,30 @@ export function inspectOwnerPtyFrame(value: unknown): OwnerProjectPtyFrame {
       throw invalid('owner PTY frame');
   }
   return Object.freeze(frame) as unknown as OwnerProjectPtyFrame;
+}
+
+function inspectCompletionResult(frame: Record<string, unknown>): void {
+  nonEmptyString(frame.sid, 'pty:complete-result sid');
+  nonEmptyString(frame.opId, 'pty:complete-result opId');
+  if (frame.ok === false) {
+    exact(frame, ['type', 'sid', 'opId', 'ok', 'error'], 'pty:complete-result failure frame');
+    nonEmptyString(frame.error, 'pty:complete-result error');
+    return;
+  }
+  if (frame.ok !== true) throw invalid('pty:complete-result result');
+  exact(frame, ['type', 'sid', 'opId', 'ok', 'result'], 'pty:complete-result success frame');
+  if (frame.result === null) return;
+  const result = record(frame.result, 'pty:complete-result completion');
+  exact(result, ['start', 'end', 'items'], 'pty:complete-result completion');
+  const start = nonNegativeInteger(result.start, 'pty:complete-result start');
+  const end = nonNegativeInteger(result.end, 'pty:complete-result end');
+  if (start > end || !Array.isArray(result.items)) throw invalid('pty:complete-result completion');
+  for (const value of result.items) {
+    const item = record(value, 'pty:complete-result item');
+    exact(item, optionalKeys(item, ['value'], ['display']), 'pty:complete-result item');
+    nonEmptyString(item.value, 'pty:complete-result item value');
+    if (own(item, 'display')) nonEmptyString(item.display, 'pty:complete-result item display');
+  }
 }
 
 function inspectProcessExit(value: unknown): void {

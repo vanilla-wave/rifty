@@ -1044,6 +1044,7 @@ function ownerHarness(options: OwnerHarnessOptions = {}): OwnerHarness {
         pty.openSession(sid, initialState ?? { cwd: materialized.projectRoot }),
       snapshot: (sid: string) =>
         projectTerminalStateFromOwner(materialized.projectRoot, pty.snapshot(sid)),
+      complete: pty.complete,
       execResult: pty.execResult,
       writeStdin: pty.writeStdin,
       endStdin: pty.endStdin,

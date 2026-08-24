@@ -4,6 +4,9 @@
 
 ### Added
 
+- Ctrl+Space (`NUL`) uses the existing Tab completion path while line input is
+  idle; during a foreground run the existing busy guard still forwards the raw
+  byte to child stdin without invoking completion (ADR-0362).
 - `RiftyTerminalOptions.onResize(cols, rows)` reports each live xterm grid
   change after fit/explicit resize and detaches with terminal disposal, letting
   hosts propagate real foreground TTY resize (ADR-0225).

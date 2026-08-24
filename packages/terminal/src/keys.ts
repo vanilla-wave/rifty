@@ -65,6 +65,7 @@ export function classifyKey(data: string): KeyEvent {
   if (data === '\x7f') return { kind: 'backspace' };
   if (data === '\x08') return { kind: 'backspace' };
   if (data === '\t') return { kind: 'tab' };
+  if (data === '\x00') return { kind: 'tab' }; // Ctrl+Space
   if (data === '\x03') return { kind: 'ctrl-c' };
   if (data === '\x07') return { kind: 'search-cancel' };
   if (data === '\x0b') return { kind: 'kill-after-cursor' };

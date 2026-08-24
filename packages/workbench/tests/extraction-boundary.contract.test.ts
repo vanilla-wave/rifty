@@ -329,7 +329,9 @@ describe('@riftydev/workbench extraction boundary', () => {
     // reason — open-workbench.ts sat at its exact pin, so the one options
     // validation authority moved to internal/workbench-options.ts.
     // 140 → 141 (2026-08-19, #247 item 5): emnapi install policy.
-    expect(packageProductionFiles).toHaveLength(141);
+    // 141 → 143 (2026-08-24, ADR-0362): PTY pending-authority file-size split
+    // and the owner-only `.bin` path classifier.
+    expect(packageProductionFiles).toHaveLength(143);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

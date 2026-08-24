@@ -142,14 +142,16 @@ describe('Shell — node_modules/.bin resolution', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('a name containing / is a path, never a .bin PATH lookup', async () => {
+  it('reports a directed path miss without falling back to a same-named .bin', async () => {
     seedBin('/proj', 'foo');
     const { execBin, calls } = makeExecBin();
     const sh = new Shell({ cwd: '/proj', execBin });
 
     const r = await sh.run('./foo');
-    expect(r.exitCode).toBe(127);
-    expect(r.stderr).toMatch(/command not found/);
+    expect(r).toMatchObject({
+      exitCode: 127,
+      stderr: './foo: No such file or directory\n',
+    });
     expect(calls).toHaveLength(0);
   });
 

@@ -1,20 +1,13 @@
-/**
- * PAGE-side pty channel client (ADR-0146 owner-resident shell). Mirror of the owner `pty-server`:
- * translates terminal-manager calls into `pty:*` page→owner frames over an
- * injected `send`, and correlates owner→page frames back to per-run callbacks
- * by `rid`. Pure — no Worker/kernel coupling; the Workbench browser owner wraps
- * `send` in its sealed project PTY/preview messages and feeds validated replies
- * into `onFrame`.
- *
- * `exec` first requires bounded `pty:run-ready` admission, then leaves the real
- * process lifetime unbounded until `pty:exit`; `execResult` also exposes the
- * independent physical exit. Chunks stream to the per-run
- * `onChunk` in arrival order (single channel ⇒ ordered, `seq` carried for
- * forward-compat loss-detect). cwd/env are cached from `pty:exit` so the PAGE
- * can render prompt/explorer scope without round-tripping the owner.
- */
+/** Page-side client for the owner-resident PTY shell (ADR-0146). */
 import { shellCommandExitCode } from '@riftydev/shell';
-import type { ProcessExit } from '@riftydev/shell';
+import type { ProcessExit, ShellCompletionResult } from '@riftydev/shell';
+import {
+  type AckDeadline,
+  type PendingPromise,
+  type PtyTimerHandle,
+  createPtyPendingAuthority,
+  deferred,
+} from './pty-client-pending.ts';
 import type {
   OwnerToPageFrame,
   PageToOwnerFrame,
@@ -27,21 +20,8 @@ const dec = new TextDecoder();
 const DEFAULT_ACK_TIMEOUT_MS = 60_000;
 let ridCounter = 0;
 
-type PtyTimerHandle = ReturnType<typeof setTimeout>;
-type AckDeadline = { deadline?: PtyTimerHandle };
-
-class PtyAckTimeoutError extends Error {
-  constructor(operation: string, timeoutMs: number) {
-    super(`Owner did not acknowledge ${operation} within ${timeoutMs}ms`);
-    this.name = 'PtyAckTimeoutError';
-  }
-}
-
 class PtyProtocolInvariantError extends Error {
-  constructor(frameType: OwnerToPageFrame['type'], received: string, expected: string) {
-    super(`${frameType} correlation mismatch: received ${received}; expected ${expected}`);
-    this.name = 'PtyProtocolInvariantError';
-  }
+  override name = 'PtyProtocolInvariantError';
 }
 
 export interface ExecOptions {
@@ -49,10 +29,7 @@ export interface ExecOptions {
   readonly rows: number;
   readonly isTTY: boolean;
   readonly onChunk: (chunk: string, stream: PtyStream) => void;
-  /**
-   * Fired with the run's `rid` only after the owner actor replies
-   * `pty:run-ready`. Lets the caller route controls to the admitted run.
-   */
+  /** Owner-admitted `rid`; lets the caller route controls to the live run. */
   readonly onStart?: (rid: string) => void;
 }
 
@@ -68,11 +45,7 @@ export interface PtyRunResult {
   readonly exit: ProcessExit;
 }
 
-type DeferredVoid = AckDeadline & {
-  readonly promise: Promise<void>;
-  readonly resolve: () => void;
-  readonly reject: (error: Error) => void;
-};
+type DeferredVoid = PendingPromise<void>;
 type StdinOperation = DeferredVoid &
   (
     | { readonly kind: 'data'; readonly opId: string; readonly data: Uint8Array }
@@ -100,6 +73,8 @@ type PendingResize = {
 } & AckDeadline;
 type PendingSessionResize = Omit<PendingResize, 'rid'>;
 type PendingClose = DeferredVoid & { readonly opId: string };
+type Complete = ShellCompletionResult | null;
+type PendingComplete = PendingPromise<Complete> & { sid: string; len: number; cursor: number };
 type PendingReady = DeferredVoid;
 type PendingDevConfig = {
   resolve: () => void;
@@ -141,16 +116,13 @@ export interface PtyOpenSeed {
 }
 
 export interface PtyClient {
-  /**
-   * Open a session; resolves once the owner replies `pty:ready`. An optional
-   * `seed` (persisted cwd/env) is carried to the owner's shell AND cached
-   * immediately so {@link PtyClient.snapshot} is truthful before the first run.
-   */
+  /** Opens an owner session and seeds its cached cwd/env. */
   openSession(sid: string, seed?: PtyOpenSeed): Promise<void>;
   /** Run one line; streams chunks to `onChunk`, resolves the exit code. */
   exec(sid: string, line: string, opts: ExecOptions): Promise<number>;
   /** Run one line and preserve both shell status and exact physical exit. */
   execResult(sid: string, line: string, opts: ExecOptions): Promise<PtyRunResult>;
+  complete(sid: string, line: string, cursor: number): Promise<Complete>;
   writeStdin(sid: string, rid: string, data: Uint8Array): Promise<void>;
   endStdin(sid: string, rid: string): Promise<void>;
   resizeSession(sid: string, cols: number, rows: number): Promise<void>;
@@ -171,35 +143,31 @@ export interface PtyClient {
   snapshot(sid: string): PtySessionSnapshot;
   /** Feed an owner→page frame (from `handle.on('message')`). */
   onFrame(frame: OwnerToPageFrame): void;
-  /**
-   * Owner died — reject EVERY waiter loudly so no caller hangs or mistakes a
-   * transport failure for a real process exit.
-   */
+  /** Owner died: reject every waiter so no caller hangs or reports a real exit. */
   disconnect(error?: Error): void;
 }
 
 export function createPtyClient(deps: PtyClientDeps): PtyClient {
   const ackTimeoutMs = deps.ackTimeoutMs ?? DEFAULT_ACK_TIMEOUT_MS;
-  if (!Number.isSafeInteger(ackTimeoutMs) || ackTimeoutMs <= 0) {
-    throw new RangeError(
-      `PTY ACK timeout must be a positive safe integer; received ${ackTimeoutMs}`,
-    );
-  }
   const timers = deps.timers ?? {
     setTimeout: (callback: () => void, delayMs: number) => setTimeout(callback, delayMs),
     clearTimeout: (handle: PtyTimerHandle) => clearTimeout(handle),
   };
+  const { armDeadline, disarmDeadline, rejectPending, resolvePending } = createPtyPendingAuthority(
+    ackTimeoutMs,
+    timers,
+  );
   const sessions = new Map<string, SessionState>();
   const runs = new Map<string, PendingRun>();
   const resizes = new Map<string, PendingResize>();
   const sessionResizes = new Map<string, PendingSessionResize>();
+  const completions = new Map<string, PendingComplete>();
   const devConfigs = new Map<string, PendingDevConfig>();
   // A timed-out config may still apply after a newer config; only owner restart restores ordering.
   let devConfigFence: Error | null = null;
   let devConfigSeq = 0;
   let operationSeq = 0;
-  // Flipped by disconnect() on owner death: future operations reject before
-  // posting frames the dead owner can never acknowledge.
+  // Owner death rejects future operations before posting doomed frames.
   let disconnected = false;
   let disconnectError: Error | null = null;
 
@@ -223,39 +191,6 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     return s;
   }
 
-  function armDeadline(
-    pending: AckDeadline,
-    operation: string,
-    expire: (error: Error) => void,
-  ): void {
-    const deadline = timers.setTimeout(() => {
-      if (pending.deadline !== deadline) return;
-      pending.deadline = undefined;
-      expire(new PtyAckTimeoutError(operation, ackTimeoutMs));
-    }, ackTimeoutMs);
-    pending.deadline = deadline;
-  }
-
-  function disarmDeadline(pending: AckDeadline): void {
-    const deadline = pending.deadline;
-    if (deadline === undefined) return;
-    pending.deadline = undefined;
-    timers.clearTimeout(deadline);
-  }
-
-  function rejectPending(
-    pending: AckDeadline & { readonly reject: (error: Error) => void },
-    error: Error,
-  ): void {
-    disarmDeadline(pending);
-    pending.reject(error);
-  }
-
-  function resolvePending(pending: AckDeadline & { readonly resolve: () => void }): void {
-    disarmDeadline(pending);
-    pending.resolve();
-  }
-
   function fenceSession(s: SessionState, error: Error): Error {
     s.fence ??= error;
     s.trailing = undefined;
@@ -271,18 +206,10 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     return devConfigFence;
   }
 
-  function operationId(prefix: 'resize' | 'session-resize' | 'stdin' | 'close'): string {
+  function operationId(
+    prefix: 'resize' | 'session-resize' | 'stdin' | 'close' | 'complete',
+  ): string {
     return `${prefix}${++operationSeq}`;
-  }
-
-  function deferredVoid(): DeferredVoid {
-    let resolve!: () => void;
-    let reject!: (error: Error) => void;
-    const promise = new Promise<void>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-    return { promise, resolve, reject };
   }
 
   function controlRun(sid: string, rid: string): PendingRun | undefined {
@@ -325,13 +252,23 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     return undefined;
   }
 
+  function rejectCompletions(sid: string, error: Error): void {
+    for (const [opId, pending] of completions) {
+      if (pending.sid !== sid) continue;
+      completions.delete(opId);
+      rejectPending(pending, error);
+    }
+  }
+
   function assertCorrelation(
     frameType: OwnerToPageFrame['type'],
     received: string,
     expected: string | undefined,
   ): void {
     if (expected !== undefined && received !== expected) {
-      throw new PtyProtocolInvariantError(frameType, received, expected);
+      throw new PtyProtocolInvariantError(
+        `${frameType} correlation mismatch: received ${received}; expected ${expected}`,
+      );
     }
   }
 
@@ -389,6 +326,15 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       }
       case 'pty:close-ack': {
         const pending = closeCorrelation(frame.opId);
+        assertCorrelation(
+          frame.type,
+          `${frame.sid}/${frame.opId}`,
+          pending === undefined ? undefined : `${pending.sid}/${frame.opId}`,
+        );
+        return;
+      }
+      case 'pty:complete-result': {
+        const pending = completions.get(frame.opId);
         assertCorrelation(
           frame.type,
           `${frame.sid}/${frame.opId}`,
@@ -467,7 +413,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     run: PendingRun,
     operation: { readonly kind: 'data'; readonly data: Uint8Array } | { readonly kind: 'eof' },
   ): Promise<void> {
-    const pending = deferredVoid();
+    const pending = deferred<void>();
     const queued: StdinOperation =
       operation.kind === 'data'
         ? {
@@ -496,8 +442,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         `pty:exit shell status must be a non-negative safe integer; received ${frame.code}`,
       );
     }
-    // Validates the mutually-exclusive pair and supported signal without
-    // deriving the independent shell status from it (ADR-0257).
+    // Validate physical exit without deriving independent shell status (ADR-0257).
     shellCommandExitCode(frame.exit);
     return { exitCode: frame.code, exit: frame.exit };
   }
@@ -587,7 +532,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       // command resolves (terminal-state restore on reload, ADR-0146).
       if (seed?.cwd !== undefined) s.cwd = seed.cwd;
       if (seed?.env !== undefined) s.env = seed.env;
-      const pending = deferredVoid();
+      const pending = deferred<void>();
       s.readyWaiters.push(pending);
       armDeadline(pending, `pty:ready for ${sid}`, (error) => {
         const index = s.readyWaiters.indexOf(pending);
@@ -620,6 +565,35 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     },
     execResult(sid: string, line: string, opts: ExecOptions): Promise<PtyRunResult> {
       return startExec(sid, line, opts);
+    },
+    complete(sid: string, line: string, cursor: number): Promise<Complete> {
+      if (disconnected) {
+        return Promise.reject(
+          disconnectedFailure(`ClosedHandleError: owner died before completion ${sid}`),
+        );
+      }
+      const s = sessions.get(sid);
+      if (s?.fence) return Promise.reject(s.fence);
+      if (!s?.opened || s.closed || s.close) {
+        return Promise.reject(new Error(`ClosedHandleError: pty session ${sid} is closed`));
+      }
+      const opId = operationId('complete');
+      const pending: PendingComplete = { ...deferred<Complete>(), sid, len: line.length, cursor };
+      completions.set(opId, pending);
+      armDeadline(pending, `pty:complete-result for ${sid}/${opId}`, (error) => {
+        if (completions.get(opId) !== pending) return;
+        completions.delete(opId);
+        pending.reject(error);
+      });
+      try {
+        deps.send({ type: 'pty:complete', sid, opId, line, cursor });
+      } catch (error) {
+        if (completions.get(opId) === pending) {
+          completions.delete(opId);
+          rejectPending(pending, error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+      return pending.promise;
     },
     writeStdin(sid: string, rid: string, data: Uint8Array): Promise<void> {
       if (disconnected) {
@@ -669,7 +643,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         return Promise.reject(new Error(`ClosedHandleError: pty session ${sid} is closing`));
       }
       const opId = operationId('session-resize');
-      const pending = deferredVoid();
+      const pending = deferred<void>();
       const operation: PendingSessionResize = {
         sid,
         resolve: pending.resolve,
@@ -709,7 +683,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         throw new Error(`ClosedHandleError: pty run ${sid}/${rid} is not active`);
       }
       const opId = operationId('resize');
-      const pending = deferredVoid();
+      const pending = deferred<void>();
       const operation: PendingResize = {
         sid,
         rid,
@@ -754,12 +728,13 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       if (s.closed) {
         return Promise.reject(new Error(`ClosedHandleError: pty session ${sid} is closed`));
       }
-      const pending = deferredVoid();
+      const pending = deferred<void>();
       const close: PendingClose = { ...pending, opId: operationId('close') };
       s.close = close;
       const error = cancellation ?? new Error(`ClosedHandleError: pty session ${sid} is closing`);
       for (const waiter of s.readyWaiters.splice(0)) rejectPending(waiter, error);
       rejectSessionResizes(sid, error);
+      rejectCompletions(sid, error);
       armDeadline(close, `pty:close-ack for ${sid}/${close.opId}`, (timeout) => {
         if (s.close !== close) return;
         s.close = undefined;
@@ -797,8 +772,7 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       if (devConfigFence) return Promise.reject(devConfigFence);
       const id = `dc${++devConfigSeq}`;
       return new Promise<void>((resolve, reject) => {
-        // Owner config assignment is a mutation: only ready/error or certified
-        // owner death can establish its terminal outcome.
+        // Only ready/error or certified owner death settles this mutation.
         const pending: PendingDevConfig = { resolve, reject };
         devConfigs.set(id, pending);
         armDeadline(pending, `pty:dev-config-ready for ${id}`, (error) => {
@@ -970,6 +944,26 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           else resolvePending(pending);
           return;
         }
+        case 'pty:complete-result': {
+          const pending = completions.get(frame.opId);
+          if (!pending || pending.sid !== frame.sid) return;
+          completions.delete(frame.opId);
+          disarmDeadline(pending);
+          if (!frame.ok) pending.reject(new Error(frame.error));
+          else if (
+            frame.result !== null &&
+            (frame.result.start > pending.cursor ||
+              pending.cursor > frame.result.end ||
+              frame.result.end > pending.len)
+          ) {
+            pending.reject(
+              new PtyProtocolInvariantError(
+                `completion range ${frame.result.start}..${frame.result.end} violates request ${pending.sid}/${frame.opId}: expected start <= cursor ${pending.cursor} <= end <= line length ${pending.len}`,
+              ),
+            );
+          } else pending.resolve(frame.result);
+          return;
+        }
       }
     },
     disconnect(error = new Error('ClosedHandleError: owner died')): void {
@@ -1004,6 +998,10 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       }
       for (const [id, pending] of devConfigs) {
         devConfigs.delete(id);
+        rejectPending(pending, error);
+      }
+      for (const [opId, pending] of completions) {
+        completions.delete(opId);
         rejectPending(pending, error);
       }
     },

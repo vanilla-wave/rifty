@@ -39,6 +39,7 @@ function terminalHarness() {
     write: vi.fn(async () => {}),
     end: vi.fn(async () => {}),
     resize: vi.fn(async () => {}),
+    complete: vi.fn<ProjectTerminal['complete']>(async () => null),
     attach(listener: (chunk: string, stream: 'stdout' | 'stderr') => void) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -196,7 +197,7 @@ describe('Playground semantic terminal UI adapter', () => {
     await ui.dispose();
   });
 
-  it('routes interactive line, stdin, resize and signal only through ProjectTerminal', async () => {
+  it('routes interactive line, completion, stdin, resize and signal through ProjectTerminal', async () => {
     const primary = terminalHarness();
     const interactive = terminalHarness();
     const projectRun = {
@@ -220,6 +221,16 @@ describe('Playground semantic terminal UI adapter', () => {
     await Promise.resolve();
     expect(interactive.terminal.resize).toHaveBeenCalledWith(92, 31);
     expect(interactive.terminal.run).toHaveBeenCalledWith('node cli.mjs');
+    interactive.terminal.complete.mockResolvedValueOnce({
+      start: 0,
+      end: 2,
+      items: [{ value: 'vite ', display: 'vite' }],
+    });
+    await expect(ui.complete(opened.id, 'vi', 2)).resolves.toEqual({
+      start: 0,
+      end: 2,
+      items: [{ value: 'vite ', display: 'vite' }],
+    });
     await ui.write(opened.id, 'answer\n');
     await ui.resize(opened.id, 100, 40);
     await ui.stop(opened.id);
@@ -228,6 +239,7 @@ describe('Playground semantic terminal UI adapter', () => {
 
     await expect(line).resolves.toBe(7);
     expect(interactive.terminal.write).toHaveBeenCalledWith('answer\n');
+    expect(interactive.terminal.complete).toHaveBeenCalledWith('vi', 2);
     expect(interactive.run.stop).toHaveBeenCalledTimes(1);
     expect(interactive.run.close).toHaveBeenCalledTimes(1);
     await ui.dispose();

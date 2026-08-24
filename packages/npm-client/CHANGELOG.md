@@ -96,6 +96,10 @@
 
 ### Fixed
 
+- Package `bin` string, array, and object metadata now crosses one npm 11
+  normalization authority before linker claims, install results, and lock
+  facts; sanitized commands and rooted targets match fresh/offline npm while
+  non-string array entries remain a named loud gap (ADR-0364).
 - Fresh-install lock writer records the parent's `optionalDependencies` and
   entry `cpu`/`os` from the registry manifest (previously lockfile-replay-only
   fields), so a rifty-written lock justifies every recorded optional subtree

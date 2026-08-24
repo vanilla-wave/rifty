@@ -1,5 +1,7 @@
 import { SHADOW_ASSET_PORT_CAPABILITY } from '@riftydev/npm-client/internal';
 import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { type BinExecutor, Shell } from '@riftydev/shell';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import type { BinSpawnRequest } from '../glue/bin-executor.ts';
 import {
@@ -87,6 +89,68 @@ describe('buildChildSpawnSpec', () => {
     );
   });
 
+  it('marks an ordinary direct entry as bin:false while preserving argv', () => {
+    const req: BinSpawnRequest = {
+      shimPath: '/workspace/scripts/tool.mjs',
+      args: ['first', 'second'],
+      env: {},
+      cwd: '/workspace',
+      isTTY: false,
+    };
+
+    const spec = buildChildSpawnSpec(req, 'blob:node-entry-url', NODE_WORKER_RUNTIME_ENV);
+
+    expect(spec.entry).toMatchObject({
+      bootstrap: { payload: { launch: { kind: 'program', bin: false } } },
+    });
+    expect(spec.argv).toEqual(['rifty', '/workspace/scripts/tool.mjs', 'first', 'second']);
+  });
+
+  it('projects Shell direct-entry and bin resolutions into exact child launch modes', async () => {
+    const fileSystem = new MemoryFsSync();
+    fileSystem.loadFixture({
+      '/workspace/scripts/tool.mjs': 'console.log("ordinary entry");\n',
+      '/workspace/node_modules/.bin/probe': 'console.log("bin shim");\n',
+    });
+    const specs: Array<ReturnType<typeof buildChildSpawnSpec>> = [];
+    const execBin: BinExecutor = async (shimPath, args, ctx) => {
+      const request: BinSpawnRequest = {
+        shimPath,
+        args,
+        env: ctx.env,
+        cwd: ctx.cwd,
+        isTTY: ctx.isTTY === true,
+        cols: ctx.cols,
+        rows: ctx.rows,
+      };
+      specs.push(buildChildSpawnSpec(request, 'blob:node-entry-url', NODE_WORKER_RUNTIME_ENV));
+      return 0;
+    };
+    const shell = new Shell({ cwd: '/workspace', fileSystem, execBin });
+
+    const exitCodes = [
+      (await shell.run('./scripts/tool.mjs direct')).exitCode,
+      (await shell.run('./node_modules/.bin/probe explicit')).exitCode,
+      (await shell.run('probe bare')).exitCode,
+    ];
+
+    expect(exitCodes).toEqual([0, 0, 0]);
+    expect(specs).toMatchObject([
+      {
+        entry: { bootstrap: { payload: { launch: { kind: 'program', bin: false } } } },
+        argv: ['rifty', '/workspace/scripts/tool.mjs', 'direct'],
+      },
+      {
+        entry: { bootstrap: { payload: { launch: { kind: 'program', bin: true } } } },
+        argv: ['rifty', '/workspace/node_modules/.bin/probe', 'explicit'],
+      },
+      {
+        entry: { bootstrap: { payload: { launch: { kind: 'program', bin: true } } } },
+        argv: ['rifty', '/workspace/node_modules/.bin/probe', 'bare'],
+      },
+    ]);
+  });
+
   it('attaches admitted capabilities to the URL entry before spawn', () => {
     const capability = new MessageChannel();
     const req: BinSpawnRequest = {
@@ -128,5 +192,17 @@ describe('prepareOwnerChildBinSpawnRequest', () => {
       env: { USER_VALUE: 'kept', NAPI_RS_FORCE_WASI: '1' },
       previewScope: expect.any(String),
     });
+  });
+
+  it('does not apply Vite policy to an ordinary direct entry named vite', () => {
+    const request: BinSpawnRequest = {
+      shimPath: '/workspace/scripts/vite',
+      args: ['preview'],
+      env: { NAPI_RS_FORCE_WASI: '0' },
+      cwd: '/workspace',
+      isTTY: false,
+    };
+
+    expect(prepareOwnerChildBinSpawnRequest(request)).toBe(request);
   });
 });

@@ -45,7 +45,14 @@ await sh.run('hello rifty'); // stdout: "hello rifty\n"
 - **`Shell`** — `new Shell({ cwd?, env? })`. Built-ins over the VFS (`cd`, `pwd`,
   `mkdir`, `ls`, `cat`, `echo`, `rm`, …), `&&` chaining, and `> file`
   redirection. `run(line, { onChunk? })` → `Promise<RunResult>` (`{ exitCode,
-  stdout, stderr }`). `registerCommand(name, fn)` adds your own.
+  stdout, stderr }`). `registerCommand(name, fn)` adds your own. Bare programs
+  resolve from the nearest ancestor `node_modules/.bin`; explicit relative and
+  absolute VFS files resolve as Node entries. `commandNames()` discovers live
+  installed bins, and `complete(line, cursor)` completes against the same live
+  cwd and VFS.
+- **`BinExecutor`** — historical public name for the host callback passed as
+  `execBin`; it receives the normalized absolute path of any resolved VFS Node
+  entry, not only `.bin` launchers.
 - **`tokenize(line)`** — split a command line into argv-style tokens.
 - Types: `ShellOptions`, `RunOptions`, `RunResult`, `ChunkStream`,
   `CommandContext`, `ShellCommand`, `Writer`.

@@ -25,11 +25,13 @@ import {
   normalizePath,
   syncMirror,
 } from '@riftydev/vfs';
-import { resolveBin } from './bin-resolver.ts';
 import { builtinCommands } from './builtins.ts';
+import { CommandResolver } from './command-resolver.ts';
+import { suggestCommandName } from './command-suggestion.ts';
 import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
 import type { ShellJobListItem } from './commands/jobs.ts';
+import { type ShellCompletionResult, createShellCompleter } from './language-service.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
 import type {
   CommandContext,
@@ -41,12 +43,13 @@ import type {
 } from './types.ts';
 
 /**
- * Runs a resolved `node_modules/.bin/<name>` launcher shim as a Node entry and
- * resolves its exit code (ADR-0137). Receives the absolute shim path, the
- * post-glob argv, and the command context (stdout/stderr/cwd/env/signal).
+ * Runs a resolved VFS Node entry and resolves its exit (ADR-0137/0362).
+ * Receives the normalized absolute entry path, post-glob argv, and command
+ * context (stdout/stderr/cwd/env/signal). The public name is retained for
+ * compatibility with existing hosts.
  */
 export type BinExecutor = (
-  binPath: string,
+  entryPath: string,
   args: string[],
   ctx: CommandContext,
 ) => Promise<ShellCommandResult>;
@@ -57,10 +60,10 @@ export interface ShellOptions {
   /** Instance-local file namespace; omitted calls resolve the ambient sync mirror. */
   fileSystem?: FsSync;
   /**
-   * Injected by the host to run a resolved `.bin` shim (ADR-0137). Executing a
-   * Node program needs a Worker realm the shell layer can't reach, so the
-   * playground wires it; absent ⇒ a resolved shim reports exit 126 ("installed,
-   * no Node runtime here") rather than the 127 of a genuine miss.
+   * Injected by the host to run a resolved VFS Node entry (ADR-0137/0362).
+   * Execution needs a Worker realm the shell layer can't reach, so the
+   * playground wires it; absent ⇒ a found entry reports exit 126 rather than
+   * the 127 of a genuine miss.
    */
   execBin?: BinExecutor;
   /** Host policy boundary for every authoritative VFS mutation. */
@@ -229,29 +232,6 @@ const ABORTED = Symbol('shell.aborted');
 /** Exit code for a command interrupted by SIGINT (128 + SIGINT(2)). */
 const SIGINT_EXIT = 130;
 
-/**
- * Known external tools whose names fuzzy-match a builtin (npx→npm, cut→cat,
- * sed→seq, tree→true, code→node, cls→ls, …). Suppressing the suggestion stops a
- * confidently-WRONG one-click `Run <builtin>` that would run an unrelated tool.
- */
-const SUGGESTION_DENYLIST = new Set([
-  'npx',
-  'yarn',
-  'pnpm',
-  'bun',
-  'sed',
-  'awk',
-  'cut',
-  'tree',
-  'code',
-  'vim',
-  'nano',
-  'python',
-  'cls',
-  'curl',
-  'wget',
-]);
-
 /** Package managers that get a directed npm nudge instead of `command not found`. */
 const PACKAGE_MANAGERS = new Set(['npx', 'yarn', 'pnpm', 'bun']);
 
@@ -260,38 +240,6 @@ function packageManagerNudge(cmd: string): string | null {
   return PACKAGE_MANAGERS.has(cmd)
     ? `${cmd}: not available — rifty wires npm (try: npm install …)\n`
     : null;
-}
-
-function damerauLevenshtein(a: string, b: string): number {
-  const rows = a.length + 1;
-  const cols = b.length + 1;
-  const dist: number[] = Array.from({ length: rows * cols }, () => 0);
-  const at = (row: number, col: number): number => dist[row * cols + col] ?? 0;
-  const set = (row: number, col: number, value: number): void => {
-    dist[row * cols + col] = value;
-  };
-
-  for (let row = 0; row < rows; row++) set(row, 0, row);
-  for (let col = 0; col < cols; col++) set(0, col, col);
-
-  for (let row = 1; row < rows; row++) {
-    for (let col = 1; col < cols; col++) {
-      const cost = a[row - 1] === b[col - 1] ? 0 : 1;
-      let best = Math.min(at(row - 1, col) + 1, at(row, col - 1) + 1, at(row - 1, col - 1) + cost);
-      if (row > 1 && col > 1 && a[row - 1] === b[col - 2] && a[row - 2] === b[col - 1]) {
-        best = Math.min(best, at(row - 2, col - 2) + 1);
-      }
-      set(row, col, best);
-    }
-  }
-
-  return at(a.length, b.length);
-}
-
-function suggestionThreshold(input: string): number {
-  if (input.length <= 2) return 0;
-  if (input.length <= 5) return 1;
-  return 2;
 }
 
 /**
@@ -325,6 +273,7 @@ export class Shell {
   private readonly env: Record<string, string>;
   private readonly commands: Map<string, ShellCommand> = new Map();
   private readonly customCommands: Map<string, ShellCommand> = new Map();
+  private readonly commandResolver: CommandResolver;
   private readonly backgroundJobs: BackgroundJob[] = [];
   private backgroundSeq = 0;
   private readonly execBin?: BinExecutor;
@@ -339,18 +288,16 @@ export class Shell {
     this.fileSystem = options.fileSystem;
     this.mutationGuard = options.mutationGuard;
     this.assertPortablePaths = options.assertPortablePaths;
+    this.commandResolver = new CommandResolver(this.commands, () => this.activeFileSystem());
     const builtins = builtinCommands(
       (p) => {
         this._cwd = p;
       },
-      // Lazy presence probe: `which` reads this.commands at invocation time,
-      // after every builtin + any registerCommand has populated the map.
-      (n) => this.commands.has(n),
+      // `which` projects the same live result used by execution and discovery.
+      (n) => this.commandResolver.resolve(n, this._cwd),
       () => this.listBackgroundJobs(),
-      // `which` reports installed-CLI hits at the LIVE cwd (cd mutates it).
-      (n) => resolveBin(this.activeFileSystem(), this._cwd, n),
-      // `help` lists the live registry (builtins + host-registered programs).
-      () => this.commandNames(),
+      // `help` is a synopsis of the registered registry, not installed bins.
+      () => this.registeredCommandNames(),
     );
     for (const [name, cmd] of Object.entries(builtins)) this.commands.set(name, cmd);
   }
@@ -373,10 +320,23 @@ export class Shell {
   }
 
   hasCommand(name: string): boolean {
-    return this.commands.has(name);
+    return this.commandResolver.resolve(name, this._cwd).kind !== 'miss';
   }
 
   commandNames(): readonly string[] {
+    return this.commandResolver.names(this._cwd);
+  }
+
+  complete(line: string, cursor: number): ShellCompletionResult | null {
+    return createShellCompleter({
+      mode: () => 'dev',
+      commandNames: () => this.commandResolver.names(this._cwd),
+      cwd: () => this._cwd,
+      readdirSync: (path) => this.activeFileSystem().readdirSync(path),
+    })(line, cursor);
+  }
+
+  private registeredCommandNames(): readonly string[] {
     return [...this.commands.keys()].sort();
   }
 
@@ -389,26 +349,6 @@ export class Shell {
         .map((job) => job.done)
         .filter((done): done is Promise<void> => done !== undefined),
     );
-  }
-
-  private suggestCommand(cmd: string): string | null {
-    // A known external tool fuzzy-matching a builtin is a wrong suggestion, not
-    // a typo — never offer it (the harm is a confidently-wrong one-click action).
-    if (SUGGESTION_DENYLIST.has(cmd)) return null;
-    let best: { name: string; distance: number } | null = null;
-    for (const name of this.commands.keys()) {
-      const distance = damerauLevenshtein(cmd, name);
-      if (
-        best &&
-        (distance > best.distance ||
-          (distance === best.distance && name.length <= best.name.length))
-      ) {
-        continue;
-      }
-      best = { name, distance };
-    }
-    if (!best || best.distance > suggestionThreshold(cmd)) return null;
-    return best.name;
   }
 
   /**
@@ -791,9 +731,7 @@ export class Shell {
     const cmd = cmdTok && !isOp(cmdTok) ? cmdTok.value : '';
     // Command-name token (rest[0]) stays literal; only ARGUMENTS glob-expand.
     const args = this.expandArgs(rest.slice(1));
-    // Resolution order (ADR-0137): registered (builtins + registerCommand) →
-    // walk-up `node_modules/.bin/<name>` → miss.
-    let handler = this.commands.get(cmd);
+    const resolution = this.commandResolver.resolve(cmd, this._cwd);
 
     const streamDisplayStdout = streamStdout && redirectTo === null;
     // Data plane = BYTES (ADR-0198): stdout captures Uint8Array chunks (strings
@@ -899,33 +837,43 @@ export class Shell {
       assertPortablePaths: this.assertPortablePaths,
     };
 
-    if (!handler) {
-      const binPath = resolveBin(this.activeFileSystem(), this._cwd, cmd);
-      if (binPath === null) {
-        // A recognized package manager → a directed npm nudge INSTEAD of the
-        // generic miss + a wrong `Did you mean 'npm'?`.
-        const nudge = packageManagerNudge(cmd);
-        if (nudge) {
-          emit(nudge, 'stderr');
-          return result(127);
-        }
-        emit(`${cmd}: command not found\n`, 'stderr');
-        const suggestion = this.suggestCommand(cmd);
-        if (suggestion) emit(`Did you mean '${suggestion}'?\n`, 'stderr');
+    if (resolution.kind === 'miss') {
+      if (resolution.reason === 'missing-path') {
+        emit(`${cmd}: No such file or directory\n`, 'stderr');
         return result(127);
       }
-      if (!this.execBin) {
-        // Shim present but no Node executor wired — installed, not runnable
-        // here. Exit 126 ("command found, cannot execute"), never a silent
-        // stub or a misleading 127 miss.
-        emit(`${cmd}: cannot execute ${binPath}: no Node executor configured\n`, 'stderr');
+      if (resolution.reason === 'not-directory') {
+        emit(`${cmd}: Not a directory\n`, 'stderr');
         return result(126);
       }
-      // Run the resolved shim through the normal handler path so it inherits
-      // SIGINT abort-race and `>` redirect flush for free.
-      const execBin = this.execBin;
-      handler = (a, c) => execBin(binPath, a, c);
+      if (resolution.reason === 'directory') {
+        emit(`${cmd}: is a directory\n`, 'stderr');
+        return result(126);
+      }
+      // A recognized package manager → a directed npm nudge INSTEAD of the
+      // generic miss + a wrong `Did you mean 'npm'?`.
+      const nudge = packageManagerNudge(cmd);
+      if (nudge) {
+        emit(nudge, 'stderr');
+        return result(127);
+      }
+      emit(`${cmd}: command not found\n`, 'stderr');
+      const suggestion = suggestCommandName(cmd, this.commandResolver.names(this._cwd));
+      if (suggestion) emit(`Did you mean '${suggestion}'?\n`, 'stderr');
+      return result(127);
     }
+
+    if (resolution.kind === 'file' && !this.execBin) {
+      emit(`${cmd}: cannot execute ${resolution.path}: no Node executor configured\n`, 'stderr');
+      return result(126);
+    }
+
+    // VFS programs share the normal handler path, inheriting SIGINT and
+    // redirect behavior. File resolutions always carry a normalized absolute.
+    const handler: ShellCommand =
+      resolution.kind === 'registered'
+        ? resolution.command
+        : (a, c) => this.execBin!(resolution.path, a, c);
 
     let commandResult: ShellCommandResult = 0;
     let exitCodeOverride: number | undefined;

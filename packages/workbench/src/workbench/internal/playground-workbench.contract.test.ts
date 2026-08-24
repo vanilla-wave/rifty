@@ -269,6 +269,7 @@ function createOwnerSession<TReady>(
       isAlive: () => true,
       openSession: async () => {},
       snapshot: () => ({ cwd: '/', env: {} }),
+      complete: async () => null,
       execResult: async () => {
         throw new Error('Playground companion contract did not run a terminal command');
       },

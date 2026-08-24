@@ -1,6 +1,6 @@
 // PTY frame types (ADR-0146). Structured-clone-safe only; the sealed Workbench
 // owner protocol owns transport envelopes and runtime validation.
-import type { ProcessExit } from '@riftydev/shell';
+import type { ProcessExit, ShellCompletionResult } from '@riftydev/shell';
 
 export type PtyStream = 'stdout' | 'stderr';
 
@@ -46,6 +46,13 @@ export type PtySessionResize = {
   rows: number;
 };
 export type PtyClose = { type: 'pty:close'; sid: string; opId: string };
+export type PtyComplete = {
+  type: 'pty:complete';
+  sid: string;
+  opId: string;
+  line: string;
+  cursor: number;
+};
 
 export type PtyReady = { type: 'pty:ready'; sid: string; error?: string };
 /** Owner actor accepted `rid` as this session's one active run. */
@@ -94,6 +101,21 @@ export type PtyCloseAck = {
   sid: string;
   opId: string;
 } & PtyAckResult;
+export type PtyCompleteResult =
+  | {
+      type: 'pty:complete-result';
+      sid: string;
+      opId: string;
+      ok: true;
+      result: ShellCompletionResult | null;
+    }
+  | {
+      type: 'pty:complete-result';
+      sid: string;
+      opId: string;
+      ok: false;
+      error: string;
+    };
 
 /** Co-resident dev-server lifecycle (ADR-0148, dev server runs inside the owner). */
 export type DevServerStatus = 'starting' | 'running' | 'stopped';
@@ -173,6 +195,7 @@ export type PageToOwnerFrame =
   | PtyResize
   | PtySessionResize
   | PtyClose
+  | PtyComplete
   | PtyDevServerReq
   | PtyDevConfig
   | PtyPreviewReq;
@@ -185,6 +208,7 @@ export type OwnerToPageFrame =
   | PtySessionResizeAck
   | PtyStdinAck
   | PtyCloseAck
+  | PtyCompleteResult
   | PtyDevServer
   | PtyPreview
   | PtyDevConfigReady;

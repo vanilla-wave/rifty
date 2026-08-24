@@ -18,7 +18,10 @@ import {
   createShadowSubstitutionLockfileTrace,
   registryAcquisitionInstallPath,
 } from './internal/shadow/planner.ts';
+import { type NormalizedPackageBin, type PackageBin, normalizePackageBin } from './package-bin.ts';
 import { matchesRange } from './semver.ts';
+
+export { normalizePackageBin } from './package-bin.ts';
 
 export interface ResolvedPackage {
   name: string;
@@ -26,8 +29,8 @@ export interface ResolvedPackage {
   files: Record<string, Uint8Array>;
   /** Direct dependencies (already resolved transitively elsewhere). */
   dependencies: Record<string, string>;
-  /** npm package `bin` metadata. String form uses the package basename. */
-  bin?: string | Record<string, string>;
+  /** Raw npm package `bin` metadata. */
+  bin?: PackageBin;
   /**
    * Project-root-relative write path (e.g. `node_modules/express` or
    * `node_modules/finalhandler/node_modules/ms`). Filled by `walkAndPin`
@@ -36,6 +39,10 @@ export interface ResolvedPackage {
    */
   installPath?: string;
 }
+
+export type NormalizedResolvedPackage = Omit<ResolvedPackage, 'bin'> & {
+  bin?: NormalizedPackageBin;
+};
 
 export interface PreparedInstallPackage<TPackage extends ResolvedPackage = ResolvedPackage> {
   readonly package: TPackage;
@@ -85,12 +92,12 @@ function packageBinCollisionError(input: PackageBinCollision): NotImplementedErr
 export function normalizePackageBinSource(source: PackageBinSource): readonly PackageBinClaim[] {
   const pkg = source.package;
   const claims: PackageBinClaim[] = [];
-  for (const [command, target] of Object.entries(normalizeBin(pkg.name, pkg.bin))) {
+  for (const [command, target] of Object.entries(normalizePackageBin(pkg.name, pkg.bin) ?? {})) {
     claims.push({
       nodeModulesDir: source.nodeModulesDir,
       command,
       owner: pkg.name,
-      target: normalizeBinTarget(target),
+      target,
     });
   }
   return claims;
@@ -306,31 +313,6 @@ export async function linkInstallPackageBins(
   }
 }
 
-function normalizeBin(name: string, bin: ResolvedPackage['bin']): Record<string, string> {
-  if (!bin) return {};
-  if (typeof bin === 'string') return { [defaultBinName(name)]: bin };
-  const out: Record<string, string> = {};
-  for (const [command, target] of Object.entries(bin)) {
-    if (command.includes('/') || command === '' || typeof target !== 'string' || target === '') {
-      continue;
-    }
-    out[command] = target;
-  }
-  return out;
-}
-
-function defaultBinName(name: string): string {
-  return name.startsWith('@') ? (name.split('/')[1] ?? name) : name;
-}
-
-function normalizeBinTarget(target: string): string {
-  const normalized = normalizePath(target.replace(/^\.\//, ''));
-  if (normalized.startsWith('/') || normalized === '..' || normalized.startsWith('../')) {
-    throw new Error(`Invalid package bin target: ${target}`);
-  }
-  return normalized;
-}
-
 /** Lockfile shape — npm-compatible "v3"-ish subset. */
 export interface Lockfile {
   name: string;
@@ -354,7 +336,7 @@ export interface LockfileEntry {
   os?: string[];
   bundleDependencies?: string[];
   inBundle?: boolean;
-  bin?: string | Record<string, string>;
+  bin?: NormalizedPackageBin;
   /**
    * Persisted so the fast path can run the post-install missing-peer warn
    * pass without re-fetching every packument. npm stores `peerDependencies`
@@ -441,7 +423,8 @@ function buildPreparedLockfile(
     };
     if (p.resolved) entry.resolved = p.resolved;
     if (p.integrity) entry.integrity = p.integrity;
-    if (p.bin) entry.bin = p.bin;
+    const bin = normalizePackageBin(p.name, p.bin);
+    if (bin) entry.bin = bin;
     if (p.optionalDependencies && Object.keys(p.optionalDependencies).length > 0) {
       entry.optionalDependencies = p.optionalDependencies;
     }

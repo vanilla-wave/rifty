@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Live terminal command completion (ADR-0362).** Tab completion now queries
+  the active owner Shell instead of a page-side inventory, so registered
+  commands, installed ancestor `.bin` names, cwd changes, and direct VFS paths
+  agree with execution and `which`. Superseded replies are dropped; owner
+  failure shows `Completion failed: <reason>` without a fabricated menu.
+  Foreground Tab remains child stdin, and switching sessions invalidates the
+  hidden session's pending/menu state.
 - Express, Hono, and Koa pin real `nodemon@3.1.14`; owner-VFS edits now replace
   the app Worker on the same preview port with crash recovery and teardown.
   Direct `start` and non-server templates keep their paths (ADR-0324–0327).

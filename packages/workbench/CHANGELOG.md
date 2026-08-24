@@ -22,6 +22,13 @@
 
 ### Added
 
+- **Owner-authoritative command completion and direct VFS entries (ADR-0362).**
+  `ProjectTerminal.complete()` uses a bounded, correlated PTY request against
+  the owning Shell's live cwd/VFS. Owner errors, close, timeout, and death
+  reject without a stale result; malformed ranges cannot escape their original
+  line/cursor request. The supervised entry adapter now marks only
+  `node_modules/.bin` launchers as `bin:true`; ordinary explicit paths run as
+  `bin:false`, while Vite/nodemon policy stays installed-bin-only.
 - **`deployment.ownerOperationSilenceTimeoutMs` (#255, ADR-0360).** Host budget
   of owner progress silence on `WorkbenchOptions` (and therefore
   `PlaygroundWorkbenchOptions`), validated by the same positive-finite

@@ -153,6 +153,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0344 | Exact Sass twin exposes named positive surfaces; gaps require observed unsupported behavior |
 | 0361 | Lock replay admits the attested recipe pin; request admission unchanged |
 | 0363 | Eddy memory envelope and fail-fast admission |
+| 0364 | One npm package-bin normalization authority follows active npm package-json semantics |
 
 ### playground
 
@@ -263,6 +264,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0257 | Exact process exit through shell command results |
 | 0330 | Lifecycle failures remain exceptional through Shell |
 | 0357 | Git facade carries exact storage read failures; absence is proven, never inferred |
+| 0362 | One command resolution authority across execution and owner-backed discovery |
 
 ### terminal
 

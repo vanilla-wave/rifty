@@ -475,6 +475,11 @@ describe('prepareViteBinSpawnRequest — host-only preview correlation', () => {
     const webpack = { ...request, shimPath: '/proj/node_modules/.bin/webpack' };
     expect(prepareViteBinSpawnRequest(webpack)).toBe(webpack);
   });
+
+  it('leaves an ordinary direct entry named vite unchanged', () => {
+    const direct = { ...request, shimPath: '/proj/scripts/vite' };
+    expect(prepareViteBinSpawnRequest(direct)).toBe(direct);
+  });
 });
 
 describe('Vite esbuild runtime startup policy', () => {

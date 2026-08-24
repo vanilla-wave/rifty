@@ -1,9 +1,14 @@
 /**
  * Minimal process manager: per-PID table, parent/child links, dispatch.
- * `spawn` runs a JS handler; `spawnWorker` uses a Web Worker (ADR-0011).
+ *
+ * `spawn` allocates a PID and runs a JS handler with an `IO` object;
+ * `spawnWorker` spawns into its own Web Worker realm (ADR-0011).
  * `kill(pid, signal)` emits `exit`/`close`.
- * Exit sweeps records and stdio/IPC listeners so long-lived hosts do not leak.
- * runtime-js `child_process` wires Node's API here; tests use it directly.
+ * Per-PID records are swept from `table` after `exit` fires, and the internal
+ * stdio/IPC emitters are stripped of listeners, so a long-lived host (the
+ * playground) doesn't accumulate deceased records or per-spawn listener stacks.
+ * The runtime-js `child_process` builtin wires Node's API surface to this
+ * manager; tests exercise the manager directly.
  */
 
 import { Readable, Writable } from '@riftydev/io';
@@ -33,7 +38,8 @@ export interface ProcessIO {
 }
 
 /**
- * Spawn-path discriminator; callers narrow it before reading `handle.ports`:
+ * Discriminator tagging which spawn path produced the handle. Callers MUST
+ * branch on this field rather than reaching for `handle.ports`:
  *
  *   - `'same-realm'` — produced by `ProcessManager.spawn(...)`. Runs the
  *     supplied handler in the parent realm; `ports` is always `undefined`.
@@ -1928,15 +1934,12 @@ export class ProcessManager {
   private failRecord(record: ProcessRecord, code: number): boolean {
     return this.isLive(record) && record.fail(code);
   }
-
   private peerFailRecord(record: ProcessRecord, error: Error): boolean {
     return this.isLive(record) && record.peerFail(error);
   }
-
   private retireOwnerDescendants(record: ProcessRecord, error: Error): void {
     if (record.published) this.retirePeerDescendants(record.pid, error, new Set([record]));
   }
-
   private retirePeerDescendants(
     pid: number,
     error: Error,
@@ -2075,10 +2078,8 @@ export class ProcessManager {
     this.forwardedRoutes.delete(pid);
   }
 }
-
 export const globalProcessManager = new ProcessManager();
 installProcessFederation(globalProcessManager);
-
 function processSnapshot(value: unknown): ProcessSnapshot[] {
   if (!Array.isArray(value)) throw new TypeError('process.snapshot reply must be an array');
   const seen = new Set<number>();
@@ -2097,7 +2098,6 @@ function processSnapshot(value: unknown): ProcessSnapshot[] {
     };
   });
 }
-
 export function readRootProcessSnapshot(): ProcessSnapshot[] {
   const upstream = readKernelSyncApi();
   return upstream === null || globalProcessManager[HAS_LOCAL_AUTHORITY]()
