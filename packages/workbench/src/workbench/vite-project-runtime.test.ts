@@ -71,6 +71,10 @@ class PtyBoundary {
     return { cwd: this.cwd, env: {} };
   }
 
+  complete(): Promise<null> {
+    return Promise.resolve(null);
+  }
+
   resolveOpen(sid: string): void {
     this.openGates.get(sid)?.resolve();
   }

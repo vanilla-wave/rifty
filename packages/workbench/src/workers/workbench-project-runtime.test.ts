@@ -926,6 +926,62 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     await h.runtime.close();
   });
 
+  it('keeps a direct workspace entry named nodemon outside installed-bin policy', async () => {
+    const worker = boundaryWorker();
+    const h = await harness(undefined, nodemonNodeServerPackageConfig);
+    h.authority.mkdirSync(`${ROOT}/scripts`, { recursive: true });
+    h.authority.writeFileSync(
+      `${ROOT}/scripts/nodemon`,
+      new TextEncoder().encode('console.log("direct nodemon");\n'),
+    );
+    h.runtime.handlePtyFrame({
+      type: 'pty:open',
+      sid: 'terminal-direct-nodemon',
+      env: { PORT: '9999', USER_FLAG: 'preserved' },
+    });
+
+    const running = Promise.resolve(
+      h.runtime.handlePtyFrame({
+        type: 'pty:exec',
+        sid: 'terminal-direct-nodemon',
+        rid: 'run-direct-nodemon',
+        line: '/scripts/nodemon --probe',
+        cols: 80,
+        rows: 24,
+        isTTY: true,
+      }),
+    );
+    await vi.waitFor(() => expect(worker.spec()).not.toBeNull());
+
+    expect(worker.command()).toBe('/scripts/nodemon');
+    expect(worker.spec()).toMatchObject({
+      env: { PORT: '9999', USER_FLAG: 'preserved' },
+      argv: ['rifty', '/scripts/nodemon', '--probe'],
+      entry: {
+        bootstrap: {
+          payload: {
+            launch: { bin: false },
+          },
+        },
+      },
+    });
+    const entry = worker.spec()?.entry;
+    if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
+      throw new Error('expected direct nodemon node-entry bootstrap');
+    }
+    const payload = entry.bootstrap.payload as {
+      readonly launch: { readonly previewScope?: unknown };
+    };
+    expect(payload.launch).not.toHaveProperty('previewScope');
+
+    worker.emitExit(0);
+    await running;
+    expect(h.frames).toContainEqual(
+      expect.objectContaining({ type: 'pty:exit', rid: 'run-direct-nodemon', code: 0 }),
+    );
+    await h.runtime.close();
+  });
+
   it('surfaces an unresolved nodemon launcher without a direct-node or dev-server fallback', async () => {
     const worker = boundaryWorker();
     const h = await harness(undefined, missingNodemonNodeServerPackageConfig);

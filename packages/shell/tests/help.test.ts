@@ -1,5 +1,5 @@
 /**
- * `help` builtin — lists the LIVE command registry + per-command synopsis.
+ * `help` builtin — lists the LIVE registered command registry + per-command synopsis.
  */
 import { describe, expect, it } from 'vitest';
 import { Shell } from '../src/index.ts';

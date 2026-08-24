@@ -1,6 +1,7 @@
 import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
 import type { BinSpawnRequest } from '../glue/bin-executor.ts';
+import { isBinShimPath } from './bin-entry-path.ts';
 import {
   applyViteCliActionPatch,
   applyViteRootWatchPatch,
@@ -284,7 +285,7 @@ export function createPreviewScope(): string {
 }
 
 export function prepareViteBinSpawnRequest(request: BinSpawnRequest): BinSpawnRequest {
-  if (binNameOf(request.shimPath) !== 'vite') return request;
+  if (!isBinShimPath(request.shimPath) || binNameOf(request.shimPath) !== 'vite') return request;
   const mode = viteCliMode(request.args);
   const previewMode = mode === 'dev' || mode === 'preview';
   return {

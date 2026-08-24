@@ -5,12 +5,13 @@
  * Each builtin lives in its own `commands/<cmd>.ts` module (Q-2026-06-07-407);
  * this file imports them and maps argv-0 → {@link ShellCommand}.
  *
- * `which` is a factory: it needs the shell's command-presence probe to answer
- * "is NAME a command?" without a reverse import (mirrors `cd`'s `setCwd`).
+ * `which` is a factory: it receives the shell resolver's live result without a
+ * reverse import (mirrors `cd`'s `setCwd`).
  *
  * File ops use `ctx.fileSystem`, falling back to the ambient VFS sync mirror.
  */
 
+import type { CommandResolution } from './command-resolver.ts';
 import { basename } from './commands/basename.ts';
 import { cat } from './commands/cat.ts';
 import { cd } from './commands/cd.ts';
@@ -79,10 +80,9 @@ export function coreCommandNames(): string[] {
 
 export function builtinCommands(
   setCwd: (p: string) => void,
-  hasCommand: (name: string) => boolean,
+  resolveCommand: (name: string) => CommandResolution,
   listJobs: () => readonly ShellJobListItem[],
-  resolveBinPath: (name: string) => string | null,
-  listCommandNames: () => readonly string[],
+  listRegisteredCommandNames: () => readonly string[],
 ): Record<string, ShellCommand> {
   return {
     pwd,
@@ -96,11 +96,11 @@ export function builtinCommands(
     find,
     grep,
     git,
-    which: which(hasCommand, resolveBinPath),
+    which: which(resolveCommand),
     clear,
     touch,
     head,
-    help: help(listCommandNames),
+    help: help(listRegisteredCommandNames),
     jobs: jobs(listJobs),
     tail,
     wc,

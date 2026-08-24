@@ -1,5 +1,5 @@
 import { type ProcessExit, shellCommandExitCode } from '@riftydev/shell';
-import type { TerminalRawInput } from '@riftydev/terminal';
+import type { TerminalCompletionResult, TerminalRawInput } from '@riftydev/terminal';
 import type {
   ProjectRun,
   ProjectSession,
@@ -63,6 +63,7 @@ export interface PlaygroundTerminalUi {
     line: string,
     dimensions?: { readonly cols?: number; readonly rows?: number },
   ): Promise<number>;
+  complete(id: string, line: string, cursor: number): Promise<TerminalCompletionResult | null>;
   write(id: string, data: TerminalRawInput): Promise<void>;
   resize(id: string, cols: number, rows: number): Promise<void>;
   stop(id: string): Promise<ProcessExit | undefined>;
@@ -281,6 +282,8 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       );
       return run.exitCode;
     },
+
+    complete: (id, line, cursor) => get(id).terminal.complete(line, cursor),
 
     write: (id, data) => get(id).terminal.write(data),
 

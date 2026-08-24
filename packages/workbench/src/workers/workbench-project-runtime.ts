@@ -14,6 +14,7 @@ import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { runNestedShellCommand } from '../glue/run-nested-shell-command.ts';
 import { nodeProjectRootShellCommand } from '../workbench/internal/node-command.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
+import { isBinShimPath } from './bin-entry-path.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { classifyNodeInvocation, resolveNodeEntry } from './node-entry-resolve.ts';
 import { readNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
@@ -241,6 +242,7 @@ export function createWorkbenchProjectRuntime(
         ...request,
         remoteFsRoot: projectRoot,
         ...(options.packageConfig.cfg.runtime === 'node-server' &&
+        isBinShimPath(request.shimPath) &&
         binNameOf(request.shimPath) === 'nodemon'
           ? {
               previewScope: createPreviewScope(),

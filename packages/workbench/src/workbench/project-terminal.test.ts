@@ -1,4 +1,4 @@
-import type { ProcessExit } from '@riftydev/shell';
+import type { ProcessExit, ShellCompletionResult } from '@riftydev/shell';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -52,6 +52,7 @@ class TerminalPortFixture {
   readonly closedGate = deferred<number | null>();
   readonly closed = this.closedGate.promise;
   readonly openCalls: string[] = [];
+  readonly completeCalls: Array<{ sid: string; line: string; cursor: number }> = [];
   readonly execCalls: ExecCall[] = [];
   readonly writeCalls: AckCall<{ sid: string; rid: string; data: Uint8Array }>[] = [];
   readonly eofCalls: AckCall<{ sid: string; rid: string }>[] = [];
@@ -71,6 +72,8 @@ class TerminalPortFixture {
   rejectOpenOnClose = false;
   autoAck = true;
   alive = true;
+  completionResult: ShellCompletionResult | null = null;
+  completionFailure: Error | null = null;
 
   isAlive(): boolean {
     return this.alive;
@@ -100,6 +103,13 @@ class TerminalPortFixture {
 
   setSnapshot(sid: string, cwd: string, env: Record<string, string>): void {
     this.states.set(sid, { cwd, env });
+  }
+
+  complete(sid: string, line: string, cursor: number): Promise<ShellCompletionResult | null> {
+    this.completeCalls.push({ sid, line, cursor });
+    return this.completionFailure === null
+      ? Promise.resolve(this.completionResult)
+      : Promise.reject(this.completionFailure);
   }
 
   execResult(sid: string, line: string, options: ExecOptions): Promise<ExecResult> {
@@ -171,6 +181,47 @@ class TerminalPortFixture {
 }
 
 describe('ProjectTerminal lifecycle contract', () => {
+  it('waits for owner session open and threads completion to its exact sid', async () => {
+    const port = new TerminalPortFixture();
+    port.completionResult = {
+      start: 0,
+      end: 2,
+      items: [{ value: 'vite ', display: 'vite' }],
+    };
+    const terminal = createProjectTerminal({ id: 'terminal-complete', port });
+    const result = terminal.complete('vi', 2);
+
+    expect(port.completeCalls).toEqual([]);
+    port.resolveOpen('terminal-complete');
+    await expect(result).resolves.toBe(port.completionResult);
+    expect(port.completeCalls).toEqual([{ sid: 'terminal-complete', line: 'vi', cursor: 2 }]);
+    await terminal.close();
+  });
+
+  it('preserves the exact owner completion rejection through the public wrapper', async () => {
+    const port = new TerminalPortFixture();
+    const failure = new Error('exact owner completion failure');
+    port.completionFailure = failure;
+    const terminal = createProjectTerminal({ id: 'terminal-complete-error', port });
+    port.resolveOpen('terminal-complete-error');
+
+    await expect(terminal.complete('./scripts/to', 12)).rejects.toBe(failure);
+    expect(port.completeCalls).toEqual([
+      { sid: 'terminal-complete-error', line: './scripts/to', cursor: 12 },
+    ]);
+    await terminal.close();
+  });
+
+  it('rejects completion after close without dispatching to the owner port', async () => {
+    const port = new TerminalPortFixture();
+    const terminal = createProjectTerminal({ id: 'terminal-complete-closed', port });
+    port.resolveOpen('terminal-complete-closed');
+    await terminal.close();
+
+    await expect(terminal.complete('vi', 2)).rejects.toBeInstanceOf(ClosedHandleError);
+    expect(port.completeCalls).toEqual([]);
+  });
+
   it('returns fresh frozen snapshots and commits owner state before run.exited settles', async () => {
     const port = new TerminalPortFixture();
     const terminal = createProjectTerminal({

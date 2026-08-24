@@ -56,7 +56,9 @@ export function TerminalPanel(props: {
   attach(write: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
   onLine(line: string, dims: TerminalDims): TerminalInputResult | Promise<TerminalInputResult>;
   modeHint?: TerminalModeHint;
+  active?: boolean;
   completer?: TerminalCompleter;
+  onCompletionError?(error: unknown): void;
   commandItems?: () => readonly string[];
   highlighter?: TerminalLineHighlighter;
   ghostSuggestion?: TerminalGhostSuggestionProvider;
@@ -94,6 +96,7 @@ export function TerminalPanel(props: {
   let lastSubmittedLine = '';
   let completionSeq = 0;
   let busyNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+  const isActive = () => props.active !== false;
   const paletteItems = createMemo<readonly PaletteItem[]>(() => {
     const query = paletteQuery().trim().toLowerCase();
     const actions: PaletteItem[] = [
@@ -226,20 +229,36 @@ export function TerminalPanel(props: {
     if (focusTerminal) term?.focus();
   };
 
-  const openAutocomplete = () => {
-    if (!props.completer || !term) return;
+  const menuCompleter: TerminalCompleter = async (line, cursor) => {
+    if (!props.completer || !isActive()) return null;
     const seq = ++completionSeq;
-    const state = editState();
-    void Promise.resolve(props.completer(state.line, state.cursor)).then((result) => {
-      if (seq !== completionSeq) return;
+    try {
+      const result = await props.completer(line, cursor);
+      const current = editState();
+      if (
+        !isActive() ||
+        seq !== completionSeq ||
+        current.line !== line ||
+        current.cursor !== cursor
+      ) {
+        return null;
+      }
       setAutocomplete(createAutocompleteState(result));
-      term?.focus();
-    });
+    } catch (error: unknown) {
+      if (!isActive() || seq !== completionSeq) return null;
+      setAutocomplete(null);
+      props.onCompletionError?.(error);
+    }
+    return null;
+  };
+
+  const invalidateAutocomplete = () => {
+    completionSeq++;
+    setAutocomplete(null);
   };
 
   const closeAutocomplete = () => {
-    completionSeq++;
-    setAutocomplete(null);
+    invalidateAutocomplete();
     term?.focus();
   };
 
@@ -335,7 +354,7 @@ export function TerminalPanel(props: {
         setHistoryOpen(false);
         return props.onLine(line, { cols: term?.cols ?? 80, rows: term?.rows ?? 24 });
       },
-      completer: props.completer,
+      completer: props.completer ? menuCompleter : undefined,
       highlighter: props.highlighter,
       ghostSuggestion: props.ghostSuggestion,
       inputValidator: props.inputValidator,
@@ -344,6 +363,7 @@ export function TerminalPanel(props: {
         return props.rewriteRules?.() ?? [];
       },
       onEditStateChange: (state) => {
+        completionSeq++;
         setEditState(state);
         if (autocomplete()) setAutocomplete(null);
         scheduleTerminalBufferRefresh();
@@ -368,7 +388,7 @@ export function TerminalPanel(props: {
     });
     const onKeyDown = (event: KeyboardEvent) => {
       if (findOpen() || paletteOpen() || historyOpen()) return;
-      const menu = autocomplete();
+      const menu = isActive() && terminalOwnsFocus() ? autocomplete() : null;
       if (menu) {
         if (event.key === 'ArrowDown') {
           event.preventDefault();
@@ -395,17 +415,6 @@ export function TerminalPanel(props: {
           return;
         }
       }
-      if (
-        terminalOwnsFocus() &&
-        props.completer &&
-        ((event.key === 'Tab' && !event.altKey && !event.ctrlKey && !event.metaKey) ||
-          (event.key === ' ' && (event.ctrlKey || event.metaKey)))
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        openAutocomplete();
-        return;
-      }
       if (!event.ctrlKey && !event.metaKey) return;
       const key = event.key.toLowerCase();
       if (key === 'r') {
@@ -428,8 +437,22 @@ export function TerminalPanel(props: {
         openPalette();
       }
     };
+    const terminalShell = container.parentElement;
+    const onFocusOut = () => {
+      queueMicrotask(() => {
+        if (!terminalOwnsFocus()) invalidateAutocomplete();
+      });
+    };
+    terminalShell?.addEventListener('focusout', onFocusOut);
     document.addEventListener('keydown', onKeyDown, { capture: true });
-    onCleanup(() => document.removeEventListener('keydown', onKeyDown, { capture: true }));
+    onCleanup(() => {
+      terminalShell?.removeEventListener('focusout', onFocusOut);
+      document.removeEventListener('keydown', onKeyDown, { capture: true });
+    });
+  });
+
+  createEffect(() => {
+    if (!isActive()) invalidateAutocomplete();
   });
 
   createEffect(() => {

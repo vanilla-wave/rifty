@@ -141,6 +141,10 @@ class SessionPortFixture {
     return { cwd: '/', env: {} };
   }
 
+  complete(): Promise<null> {
+    return Promise.resolve(null);
+  }
+
   resolveOpen(sid: string): void {
     this.openGates.get(sid)?.resolve();
   }
