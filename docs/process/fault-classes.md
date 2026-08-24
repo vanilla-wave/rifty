@@ -63,12 +63,12 @@ Applies to parity work and changes touching cache, persistence, network, or conc
 | Gate | Required evidence |
 |---|---|
 | Contract | Pinned oracle; acceptance/parity cases; observable identity, lifecycle, error order; loud gaps |
-| Review | Each behavioral correctness blocker: fault class + RED test + sibling sweep; goal/process blockers: violated clause/rule |
+| Review | Checkpoint = two exhaustive find passes (fan-out + tail vs settled list) + `coverage` row per declared obligation (Fault-matrix line, Acceptance clause, public API entry, frozen artifact) — weak/missing rows block, later gap in a `pass` cell = reviewer error; each behavioral correctness blocker: fault class + RED test + sibling sweep; goal/process blockers: violated clause/rule |
 | Repeat | Same class at one boundary, or a review change adding a state owner → redesign/split |
 | External API | Proxy/wrapper semantic copy requires an ADR + differential suite |
 | Testing | Same scenario runs against reference and rifty; a fake cannot close acceptance |
 | Checkpoints | Contract+RED before implementation; Final+GREEN on one checked tree — verdict binds content, not commit; blocker → re-cut in place |
 | Lineage | A blocker iterates on the SAME branch; re-cut = new unit boundary in place, attempt + checkpoint count carries; a split re-cut names its predecessor on that branch — closed attempts never orphan |
-| Contract escalation | 2nd consecutive Contract+RED blocker on one unit → the contract is wrong: split/re-refine it in place |
+| Contract escalation | 2nd consecutive Contract+RED blocker on one unit → the contract is wrong: split/re-refine it in place; an obligation review cannot pin because the contract never declared it (exactness, count, identity) → same re-refine, never another review round |
 | Unit closure | Current contract proof + empty unit residuals |
 | Goal closure | No linked children + empty goal residuals + end-to-end baseline proof; never source grep, warning, backlog record, or one green slice |

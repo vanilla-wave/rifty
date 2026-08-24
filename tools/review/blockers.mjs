@@ -23,7 +23,16 @@ export function evaluateVerdict(verdict) {
   const axes = Array.isArray(verdict?.axes) ? verdict.axes : null;
   const unitResiduals = residuals(verdict?.unit_residuals);
   const goalResiduals = residuals(verdict?.goal_residuals);
+  const coverage = Array.isArray(verdict?.coverage) ? verdict.coverage : null;
   if (!axes) errors.push('axes missing');
+  if (!coverage || coverage.length === 0) errors.push('coverage missing or empty');
+  for (const row of coverage ?? []) {
+    if (!['pass', 'weak', 'missing'].includes(row?.status)) {
+      errors.push(`coverage row without valid status: ${row?.row ?? '?'}`);
+    } else if (row.status !== 'pass' && !(typeof row.note === 'string' && row.note.length > 0)) {
+      errors.push(`${row.status} coverage row without note: ${row.row}`);
+    }
+  }
   if (!['Contract+RED', 'Final+GREEN'].includes(verdict?.checkpoint)) {
     errors.push('checkpoint missing or invalid');
   }
@@ -74,7 +83,8 @@ export function evaluateVerdict(verdict) {
   const nits = findings.filter((finding) => finding.severity === 'nit');
   const axisBlocker =
     axes.some((axis) => axis.verdict === 'blocker') || verdict.overall_verdict === 'blocker';
-  const hasBlocker = blockers.length > 0 || axisBlocker;
+  const uncovered = coverage.filter((row) => row.status !== 'pass');
+  const hasBlocker = blockers.length > 0 || axisBlocker || uncovered.length > 0;
   return {
     code: hasBlocker ? 1 : 0,
     errors,
@@ -84,6 +94,8 @@ export function evaluateVerdict(verdict) {
     goalComplete: verdict.goal_complete && !hasBlocker,
     goalResiduals,
     axes,
+    coverage,
+    uncovered,
   };
 }
 
@@ -110,6 +122,15 @@ function main() {
   console.log(`overall: ${verdict.overall_verdict}  |  merge: ${verdict.merge_call || '?'}`);
   console.log(`checkpoint: ${verdict.checkpoint}  |  unit: ${verdict.unit_goal_source}`);
   console.log(`axes: ${result.axes.map((axis) => `${axis.axis}=${axis.verdict}`).join(', ')}`);
+  const byStatus = (status) => result.coverage.filter((row) => row.status === status).length;
+  console.log(
+    `coverage: ${result.coverage.length} rows — ${byStatus('pass')} pass, ${byStatus('weak')} weak, ${byStatus('missing')} missing`,
+  );
+  if (result.uncovered.length > 0) {
+    console.log('UNCOVERED OBLIGATIONS:');
+    for (const row of result.uncovered)
+      console.log(`  - [${row.status}] (${row.source}) ${row.row} — ${row.note}`);
+  }
   console.log(
     `findings: ${result.blockers.length} blocker, ${result.concerns.length} concern, ${result.nits.length} nit`,
   );

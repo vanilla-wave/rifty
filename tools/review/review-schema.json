@@ -41,6 +41,38 @@
       "type": "boolean",
       "description": "True only when goal_residuals is empty and end-to-end goal acceptance is proven."
     },
+    "coverage": {
+      "type": "array",
+      "description": "One row per enumerable obligation of the unit: every contract `## Fault matrix` line, every Acceptance/Parity clause, every public API entry point the diff adds or changes, every frozen oracle/golden artifact the contract references.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "row": {
+            "type": "string",
+            "description": "Obligation, quoted or tightly paraphrased from its source."
+          },
+          "source": {
+            "type": "string",
+            "enum": ["fault-matrix", "acceptance", "public-api", "frozen-artifact"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pass", "weak", "missing"],
+            "description": "pass: a committed RED discriminates it (a plausible wrong implementation fails); weak: a carrier exists but a plausible wrong implementation passes (lossy/inexact assertion, non-discriminating fixture, absent count/order/identity check); missing: no carrier."
+          },
+          "citation": {
+            "type": "string",
+            "description": "file:line of the carrier, or of the obligation source when missing."
+          },
+          "note": {
+            "type": "string",
+            "description": "Why weak/missing, referencing the backing finding; empty for pass."
+          }
+        },
+        "required": ["row", "source", "status", "citation", "note"]
+      }
+    },
     "axes": {
       "type": "array",
       "description": "One entry per rifty-review rubric axis, in rubric order.",
@@ -76,6 +108,7 @@
     "unit_residuals",
     "goal_residuals",
     "goal_complete",
+    "coverage",
     "axes"
   ]
 }
