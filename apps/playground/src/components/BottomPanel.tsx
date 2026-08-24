@@ -30,7 +30,8 @@ export function BottomPanel(props: {
     line: string,
     dims: TerminalDims,
   ): TerminalInputResult | Promise<TerminalInputResult>;
-  completer?: TerminalCompleter;
+  completer?: (id: string, line: string, cursor: number) => ReturnType<TerminalCompleter>;
+  onCompletionError?(error: unknown): void;
   commandItems?: () => readonly string[];
   highlighter?: TerminalLineHighlighter;
   ghostSuggestion?: TerminalGhostSuggestionProvider;
@@ -179,6 +180,7 @@ export function BottomPanel(props: {
               >
                 <TerminalPanel
                   testId={id === props.activeSessionId ? 'terminal' : undefined}
+                  active={view() === 'terminal' && id === props.activeSessionId}
                   attach={(write) => props.attach(id, write)}
                   onSignal={() => props.onSignal?.(id)}
                   onRawInput={(data) => props.onRawInput?.(id, data)}
@@ -187,7 +189,12 @@ export function BottomPanel(props: {
                   focusEpoch={id === props.activeSessionId ? props.terminalFocusEpoch : 0}
                   onLine={(line, dims) => props.onLine(id, line, dims)}
                   modeHint={props.modeHint}
-                  completer={props.completer}
+                  completer={
+                    props.completer
+                      ? (line, cursor) => props.completer?.(id, line, cursor) ?? null
+                      : undefined
+                  }
+                  onCompletionError={props.onCompletionError}
                   commandItems={props.commandItems}
                   highlighter={props.highlighter}
                   ghostSuggestion={props.ghostSuggestion}

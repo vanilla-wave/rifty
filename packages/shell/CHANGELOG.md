@@ -97,6 +97,13 @@
 
 ### Added
 
+- **One live command resolver across execution and discovery (ADR-0362).**
+  Registered commands, explicit regular VFS files, and nearest ancestor
+  `node_modules/.bin` launchers now drive `run`, `which`, `hasCommand`,
+  `commandNames`, typo suggestions, and the new `Shell.complete`. Direct misses,
+  directories, and non-directory path components retain distinct 127/126
+  diagnostics; resolved entries reach `BinExecutor` as normalized absolute
+  paths, while `help` remains a registered-command synopsis.
 - **Instance-local filesystem (ADR-0280).** `ShellOptions.fileSystem` binds
   builtins, redirects, globs, recursive walkers, `.bin` lookup, and Git's
   derived async view to one `FsSync`; omitted callers keep the dynamically

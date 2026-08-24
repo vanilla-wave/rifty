@@ -1,51 +1,14 @@
 import type { ShellCompletionResult } from '@riftydev/shell';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPtyClient } from './pty-client.ts';
-import type { OwnerToPageFrame, PageToOwnerFrame } from './pty-protocol.ts';
+import type { PageToOwnerFrame, PtyComplete, PtyCompleteResult } from './pty-protocol.ts';
 
-type FuturePtyComplete = {
-  readonly type: 'pty:complete';
-  readonly sid: string;
-  readonly opId: string;
-  readonly line: string;
-  readonly cursor: number;
-};
-
-type FuturePtyCompleteResult =
-  | {
-      readonly type: 'pty:complete-result';
-      readonly sid: string;
-      readonly opId: string;
-      readonly ok: true;
-      readonly result: ShellCompletionResult | null;
-    }
-  | {
-      readonly type: 'pty:complete-result';
-      readonly sid: string;
-      readonly opId: string;
-      readonly ok: false;
-      readonly error: string;
-    };
-
-type CompletionPtyClient = ReturnType<typeof createPtyClient> & {
-  complete(sid: string, line: string, cursor: number): Promise<ShellCompletionResult | null>;
-};
-
-function completionClient(client: ReturnType<typeof createPtyClient>): CompletionPtyClient {
-  return client as unknown as CompletionPtyClient;
+function completionFrames(sent: readonly PageToOwnerFrame[]): readonly PtyComplete[] {
+  return sent.filter((frame): frame is PtyComplete => frame.type === 'pty:complete');
 }
 
-function completionFrames(sent: readonly PageToOwnerFrame[]): readonly FuturePtyComplete[] {
-  return (sent as readonly (PageToOwnerFrame | FuturePtyComplete)[]).filter(
-    (frame): frame is FuturePtyComplete => frame.type === 'pty:complete',
-  );
-}
-
-function deliverCompletion(
-  client: ReturnType<typeof createPtyClient>,
-  frame: FuturePtyCompleteResult,
-): void {
-  client.onFrame(frame as unknown as OwnerToPageFrame);
+function deliverCompletion(client: ReturnType<typeof createPtyClient>, frame: PtyCompleteResult) {
+  client.onFrame(frame);
 }
 
 async function openCompletionSession(
@@ -1728,7 +1691,6 @@ describe('pty-client', () => {
   it('posts exact completion requests and settles two inverted replies by opId', async () => {
     const { client, sent } = harness();
     await openCompletionSession(client, 'completion-order');
-    const completer = completionClient(client);
     const firstResult = {
       start: 0,
       end: 2,
@@ -1741,8 +1703,8 @@ describe('pty-client', () => {
     } satisfies ShellCompletionResult;
     const settlementOrder: string[] = [];
 
-    const first = completer.complete('completion-order', 'vi', 2);
-    const second = completer.complete('completion-order', 'pwd', 3);
+    const first = client.complete('completion-order', 'vi', 2);
+    const second = client.complete('completion-order', 'pwd', 3);
     void first.then(() => settlementOrder.push('first'));
     void second.then(() => settlementOrder.push('second'));
 
@@ -1813,9 +1775,8 @@ describe('pty-client', () => {
     async (_label, range) => {
       const { client, sent } = harness();
       await openCompletionSession(client, 'completion-range');
-      const completer = completionClient(client);
-      const malformed = completer.complete('completion-range', 'echo foo', 4);
-      const sibling = completer.complete('completion-range', 'vit', 3);
+      const malformed = client.complete('completion-range', 'echo foo', 4);
+      const sibling = client.complete('completion-range', 'vit', 3);
       const [malformedFrame, siblingFrame] = completionFrames(sent);
       if (malformedFrame === undefined || siblingFrame === undefined) {
         throw new Error('missing correlated completion range frames');
@@ -1832,7 +1793,10 @@ describe('pty-client', () => {
         },
       });
 
-      await expect(malformed).rejects.toThrow(/completion range.*request/i);
+      await expect(malformed).rejects.toMatchObject({
+        name: 'PtyProtocolInvariantError',
+        message: expect.stringMatching(/completion range.*request/i),
+      });
       await expect(
         settledOr(
           sibling.then(() => 'settled' as const),
@@ -1860,8 +1824,7 @@ describe('pty-client', () => {
     vi.useFakeTimers();
     const { client, sent } = harness();
     await openCompletionSession(client, 'completion-timeout');
-    const completer = completionClient(client);
-    const first = completer.complete('completion-timeout', 'vi', 2);
+    const first = client.complete('completion-timeout', 'vi', 2);
     const firstFrame = completionFrames(sent)[0]!;
     let failure: unknown;
     void first.catch((error: unknown) => {
@@ -1884,7 +1847,7 @@ describe('pty-client', () => {
       result: null,
     });
 
-    const second = completer.complete('completion-timeout', 'vit', 3);
+    const second = client.complete('completion-timeout', 'vit', 3);
     const secondFrame = completionFrames(sent)[1]!;
     const result = {
       start: 0,
@@ -1908,8 +1871,7 @@ describe('pty-client', () => {
     async (settlement) => {
       const { client, sent } = harness();
       await openCompletionSession(client, `completion-${settlement}`);
-      const completer = completionClient(client);
-      const pending = completer.complete(`completion-${settlement}`, 'vi', 2);
+      const pending = client.complete(`completion-${settlement}`, 'vi', 2);
       const outcome = pending.then(
         () => 'resolved' as const,
         (error: unknown) => error,
@@ -1919,7 +1881,7 @@ describe('pty-client', () => {
         const cause = new Error('exact completion owner disconnect');
         client.disconnect(cause);
         await expect(outcome).resolves.toBe(cause);
-        await expect(completer.complete('completion-disconnect', 'vit', 3)).rejects.toBe(cause);
+        await expect(client.complete('completion-disconnect', 'vit', 3)).rejects.toBe(cause);
       } else {
         const cause = new Error('project terminal close started exactly');
         const closing = client.closeSession('completion-close', cause);
@@ -1935,7 +1897,7 @@ describe('pty-client', () => {
           ok: true,
         });
         await closing;
-        await expect(completer.complete('completion-close', 'vit', 3)).rejects.toThrow(
+        await expect(client.complete('completion-close', 'vit', 3)).rejects.toThrow(
           /ClosedHandleError.*closed/i,
         );
       }

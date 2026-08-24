@@ -1934,15 +1934,12 @@ export class ProcessManager {
   private failRecord(record: ProcessRecord, code: number): boolean {
     return this.isLive(record) && record.fail(code);
   }
-
   private peerFailRecord(record: ProcessRecord, error: Error): boolean {
     return this.isLive(record) && record.peerFail(error);
   }
-
   private retireOwnerDescendants(record: ProcessRecord, error: Error): void {
     if (record.published) this.retirePeerDescendants(record.pid, error, new Set([record]));
   }
-
   private retirePeerDescendants(
     pid: number,
     error: Error,
@@ -2081,10 +2078,8 @@ export class ProcessManager {
     this.forwardedRoutes.delete(pid);
   }
 }
-
 export const globalProcessManager = new ProcessManager();
 installProcessFederation(globalProcessManager);
-
 function processSnapshot(value: unknown): ProcessSnapshot[] {
   if (!Array.isArray(value)) throw new TypeError('process.snapshot reply must be an array');
   const seen = new Set<number>();
@@ -2103,7 +2098,6 @@ function processSnapshot(value: unknown): ProcessSnapshot[] {
     };
   });
 }
-
 export function readRootProcessSnapshot(): ProcessSnapshot[] {
   const upstream = readKernelSyncApi();
   return upstream === null || globalProcessManager[HAS_LOCAL_AUTHORITY]()

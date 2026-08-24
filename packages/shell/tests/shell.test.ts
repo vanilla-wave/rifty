@@ -128,6 +128,13 @@ describe('Shell — builtins', () => {
     expect(r.stderr).toBe('zzzzzzzz: command not found\n');
   });
 
+  it('keeps the established one-edit threshold for short command names', async () => {
+    const sh = new Shell();
+    const r = await sh.run('gxxp');
+    expect(r.exitCode).toBe(127);
+    expect(r.stderr).toBe('gxxp: command not found\n');
+  });
+
   it('suppresses the fuzzy suggestion for denylisted external tools', async () => {
     const sh = new Shell();
     // Each of these is edit-distance ≤ threshold to a builtin (cut→cat, sed→seq,

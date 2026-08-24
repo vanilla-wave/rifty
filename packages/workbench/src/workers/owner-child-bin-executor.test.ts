@@ -89,6 +89,23 @@ describe('buildChildSpawnSpec', () => {
     );
   });
 
+  it('marks an ordinary direct entry as bin:false while preserving argv', () => {
+    const req: BinSpawnRequest = {
+      shimPath: '/workspace/scripts/tool.mjs',
+      args: ['first', 'second'],
+      env: {},
+      cwd: '/workspace',
+      isTTY: false,
+    };
+
+    const spec = buildChildSpawnSpec(req, 'blob:node-entry-url', NODE_WORKER_RUNTIME_ENV);
+
+    expect(spec.entry).toMatchObject({
+      bootstrap: { payload: { launch: { kind: 'program', bin: false } } },
+    });
+    expect(spec.argv).toEqual(['rifty', '/workspace/scripts/tool.mjs', 'first', 'second']);
+  });
+
   it('projects Shell direct-entry and bin resolutions into exact child launch modes', async () => {
     const fileSystem = new MemoryFsSync();
     fileSystem.loadFixture({
@@ -175,5 +192,17 @@ describe('prepareOwnerChildBinSpawnRequest', () => {
       env: { USER_VALUE: 'kept', NAPI_RS_FORCE_WASI: '1' },
       previewScope: expect.any(String),
     });
+  });
+
+  it('does not apply Vite policy to an ordinary direct entry named vite', () => {
+    const request: BinSpawnRequest = {
+      shimPath: '/workspace/scripts/vite',
+      args: ['preview'],
+      env: { NAPI_RS_FORCE_WASI: '0' },
+      cwd: '/workspace',
+      isTTY: false,
+    };
+
+    expect(prepareOwnerChildBinSpawnRequest(request)).toBe(request);
   });
 });

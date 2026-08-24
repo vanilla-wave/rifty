@@ -450,6 +450,31 @@ describe('owner preview producer admission capture', () => {
     expect(preview.latest().ports).toEqual([]);
   });
 
+  it('keeps an ordinary direct entry named vite on the generic node preview path', () => {
+    const preview = previewHarness();
+    const hooks = createInstalledBinPreviewHooks({
+      captureOrigin: createPreviewOriginCapture(vi.fn()),
+      allocateSid: () => 'direct-vite',
+      previews: preview.previews,
+    });
+    const ctx = producerContext();
+    const request: BinSpawnRequest = {
+      shimPath: '/workspace/scripts/vite',
+      args: ['preview'],
+      env: {},
+      cwd: ctx.cwd,
+      isTTY: false,
+    };
+
+    hooks.onStart?.(request, ctx);
+    hooks.onListening?.(request, { pid: 41, ports: [4173] }, ctx);
+
+    expect(preview.latest().ports).toEqual([
+      expect.objectContaining({ port: 4173, source: 'node' }),
+    ]);
+    hooks.onExit?.(request, ctx);
+  });
+
   it("does not let an old descendant's port removal clear its same-scope successor", () => {
     const preview = previewHarness();
     const hooks = createInstalledBinPreviewHooks({

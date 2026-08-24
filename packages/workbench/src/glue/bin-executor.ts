@@ -27,7 +27,7 @@ export interface BinWorkerHandle {
 
 /** Spawn request: the executor builds this; the host maps it to a Worker spec. */
 export interface BinSpawnRequest {
-  /** Absolute `.bin` shim path — `argv[1]`; launch metadata marks it as a bin. */
+  /** Absolute resolved Node-entry path — `argv[1]`; `.bin` paths are launcher shims. */
   readonly shimPath: string;
   readonly args: readonly string[];
   readonly env: Record<string, string>;

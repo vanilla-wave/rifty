@@ -1,18 +1,4 @@
-/**
- * Owner-side pty server (ADR-0146 — shell/npm/bin co-resident in the owner).
- * Hosts a `Shell` per session in the
- * persistent workspace-owner worker and dispatches the page's `pty:*` frames
- * against it. Streams stdout/stderr back as `pty:chunk` frames, then a single
- * `pty:exit` (carrying the post-run cwd/env so the page's prompt cache stays
- * truthful). `send`/`makeShell` are injected so this is unit-testable without a
- * Worker — the bootstrap wires `send` to the kernel fork-IPC channel and
- * `makeShell` to a Shell built with the owner's npm builtin + in-realm execBin.
- *
- * Frame ordering is guaranteed by the single channel: each `onChunk` synchronously
- * pushes a `pty:chunk` before `run` resolves, so the terminating `pty:exit`
- * always follows the run's chunks (the streaming-before-blob contract of
- * `Shell.run`). `seq` is monotonic per `rid` for loss-detect / forward-compat.
- */
+/** Owner-side session actors for the owner-resident shell (ADR-0146). */
 
 import type {
   ProcessExit,
@@ -152,24 +138,13 @@ export interface PtyServerDeps {
   readonly onDevServerReq?: () => void;
   /** Owner re-publishes the multi-port preview registry on a page request (ADR-0155). */
   readonly onPreviewReq?: () => void;
-  /**
-   * Page updated the current preset's dev-server config (ADR-0148 — owner-resident
-   * dev server) — the next
-   * co-resident dev server boots this template/runtime. Forwarded to the bootstrap.
-   */
+  /** Current preset config for the next co-resident dev server. */
   readonly onDevConfig?: (config: {
     templateId: string;
     slug: string;
     setup: 'instant' | 'from-scratch';
   }) => void | Promise<void>;
-  /**
-   * Awaited between run registration and the command itself — the bootstrap's
-   * deps gate (instant-preset snapshot restore overlaps the echoed command
-   * instead of gating the page's `$ <line>` echo). `emit` streams progress
-   * chunks into THIS run's terminal output. The run is already registered, so
-   * stdin/signal frames arriving during the gate queue instead of dropping. A
-   * rejection fails the run loudly (exit 1 + error) and the command never runs.
-   */
+  /** Owner dependency gate after run registration; `emit` streams its progress. */
   readonly beforeRun?: (emit: (chunk: string, stream: PtyStream) => void) => void | Promise<void>;
   /** Await owner-side state publication after command settlement, before `pty:exit`. */
   readonly beforeExit?: () => void | Promise<void>;
@@ -196,6 +171,20 @@ function abortSettled(signal: AbortSignal): Promise<void> {
 
 function validDimension(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
+}
+
+function sendCompletionError(
+  deps: PtyServerDeps,
+  frame: { readonly sid: string; readonly opId: string },
+  error: unknown,
+): void {
+  deps.send({
+    type: 'pty:complete-result',
+    sid: frame.sid,
+    opId: frame.opId,
+    ok: false,
+    error: error instanceof Error ? error.message : String(error),
+  });
 }
 
 class PtySessionActor {
@@ -367,6 +356,27 @@ class PtySessionActor {
 
   signal(rid: string): void {
     this.#run(rid)?.controller.abort();
+  }
+
+  complete(frame: Extract<PageToOwnerFrame, { type: 'pty:complete' }>): Promise<void> {
+    const unavailable = this.openError();
+    if (unavailable !== undefined) {
+      sendCompletionError(this.#deps, frame, unavailable);
+      return Promise.resolve();
+    }
+    return Promise.resolve()
+      .then(() => this.#shell.complete(frame.line, frame.cursor))
+      .then(
+        (result) =>
+          this.#deps.send({
+            type: 'pty:complete-result',
+            sid: this.#sid,
+            opId: frame.opId,
+            ok: true,
+            result,
+          }),
+        (error: unknown) => sendCompletionError(this.#deps, frame, error),
+      );
   }
 
   close(opId: string): Promise<void> {
@@ -586,6 +596,9 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
           error,
         });
         return;
+      case 'pty:complete':
+        sendCompletionError(deps, frame, error);
+        return;
       case 'pty:dev-config':
         deps.send({ type: 'pty:dev-config-ready', id: frame.id, error });
         return;
@@ -708,6 +721,12 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
         return actor.close(frame.opId).finally(() => {
           if (sessions.get(frame.sid) === actor) sessions.delete(frame.sid);
         });
+      }
+      case 'pty:complete': {
+        const actor = sessions.get(frame.sid);
+        if (actor) return actor.complete(frame);
+        sendCompletionError(deps, frame, `ClosedHandleError: no open pty session ${frame.sid}`);
+        return Promise.resolve();
       }
       case 'pty:dev-server-req': {
         deps.onDevServerReq?.();

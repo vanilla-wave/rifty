@@ -112,7 +112,6 @@ const EditorHost = lazy(() =>
 );
 
 let editorStackWarm: Promise<unknown> | undefined;
-
 function warmEditorStack(): void {
   if (editorStackWarm !== undefined) return;
   editorStackWarm = Promise.all([
@@ -127,7 +126,6 @@ function warmEditorStack(): void {
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-
 function catalogIndex(snapshot: PlaygroundCatalogSnapshot, hiddenProjectId?: string): ProjectIndex {
   return {
     activeId: snapshot.active?.kind === 'project' ? snapshot.active.id : ('scratch' as const),
@@ -1734,6 +1732,8 @@ export function App(props: AppProps) {
               }}
               modeHint={terminalModeHint()}
               historyRecords={terminalHistory}
+              completer={(id, line, cursor) => bound()?.terminal.complete(id, line, cursor) ?? null}
+              onCompletionError={(error) => flashError(`Completion failed: ${errorMessage(error)}`)}
               onLink={(uri) => openTerminalLink(uri)}
               onSignal={(id) => void bound()?.terminal.stop(id)}
               onRawInput={(id, data) => void bound()?.terminal.write(id, data)}

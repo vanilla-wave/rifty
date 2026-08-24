@@ -1,4 +1,4 @@
-import type { ProcessExit } from '@riftydev/shell';
+import type { ProcessExit, ShellCompletionResult } from '@riftydev/shell';
 import { ClosedHandleError, ProjectBusyError, StdinClosedError } from './errors.ts';
 import {
   type ProjectTerminalSnapshot,
@@ -25,6 +25,7 @@ export interface ProjectTerminalPort {
   isAlive(): boolean;
   openSession(sid: string, initialState?: ProjectTerminalPortState): Promise<void>;
   snapshot(sid: string): ProjectTerminalSnapshot;
+  complete(sid: string, line: string, cursor: number): Promise<ShellCompletionResult | null>;
   execResult(
     sid: string,
     line: string,
@@ -64,6 +65,7 @@ export function projectTerminalAdmission(
 
 export interface ProjectTerminal {
   snapshot(): ProjectTerminalSnapshot;
+  complete(line: string, cursor: number): Promise<ShellCompletionResult | null>;
   run(line: string): ProjectTerminalRun;
   write(data: string | Uint8Array): Promise<void>;
   end(): Promise<void>;
@@ -573,6 +575,18 @@ export function createProjectTerminal(_options: {
     snapshot() {
       assertOpen();
       return ownProjectTerminalSnapshot(port.snapshot(id));
+    },
+
+    complete(line, cursor) {
+      try {
+        assertOpen();
+      } catch (error) {
+        return Promise.reject(errorFrom(error));
+      }
+      return openPromise.then(() => {
+        assertOpen();
+        return port.complete(id, line, cursor);
+      });
     },
 
     run(line) {

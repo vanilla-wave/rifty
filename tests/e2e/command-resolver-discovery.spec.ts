@@ -4,6 +4,7 @@ import {
   expectTerminalContains,
   expectViteDevServerReady,
   openShellTerminal,
+  runTerminalLine,
   runTerminalLineSettled,
   terminalBuffer,
   terminalHistoryExitCode,
@@ -302,6 +303,43 @@ test('owner-backed completion discovers installed and direct commands, then runs
   }
 });
 
+test('foreground stdin receives Tab without issuing shell completion', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+  test.setTimeout(180_000);
+  await installCompletionBoundary(page, { holdFirst: false });
+
+  try {
+    await bootProjectFiles(page);
+    await expectViteDevServerReady(page, 5174, 90_000);
+    await openShellTerminal(page);
+    await runTerminalLineSettled(page, 'mkdir -p scripts');
+    await runTerminalLineSettled(
+      page,
+      `echo 'const timeout = setTimeout(() => { console.error("BUSY_TAB_" + "TIMEOUT"); process.exit(8); }, 3000); process.stdin.on("data", (chunk) => { clearTimeout(timeout); console.log("BUSY_TAB_BYTE:" + String(chunk[0])); process.exit(chunk[0] === 9 ? 0 : 9); });' > scripts/tab-stdin.mjs`,
+    );
+
+    const command = './scripts/tab-stdin.mjs';
+    const activeTab = page.locator('.rf-terminal-tab[data-active="true"]');
+    await runTerminalLine(page, command);
+    await expect(activeTab).toHaveAttribute('data-running', 'true', { timeout: 15_000 });
+    expect(await completionPhysicalRequestCount(page)).toBe(0);
+
+    await page.keyboard.press('Tab');
+
+    await expect(activeTab).toHaveAttribute('data-running', 'false', { timeout: 15_000 });
+    const buffer = await terminalBuffer(page);
+    expect.soft(buffer).toContain('BUSY_TAB_BYTE:9');
+    expect.soft(buffer).not.toContain('BUSY_TAB_TIMEOUT');
+    expect.soft(await terminalHistoryExitCode(page, command)).toBe(0);
+    expect.soft(await completionPhysicalRequestCount(page)).toBe(0);
+  } finally {
+    await restoreCompletionBoundary(page);
+  }
+});
+
 test('an edit superseding an inflight owner completion drops its late menu', async ({
   page,
   browserName,
@@ -333,6 +371,45 @@ test('an edit superseding an inflight owner completion drops its late menu', asy
 
     await expect(menu).toHaveCount(0);
     expect(await completionPhysicalRequestCount(page)).toBe(1);
+  } finally {
+    await restoreCompletionBoundary(page);
+  }
+});
+
+test('switching sessions invalidates pending completion before Ctrl+Space completes the active shell', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+  test.setTimeout(180_000);
+  await installCompletionBoundary(page, { holdFirst: true });
+
+  try {
+    await bootProjectFiles(page);
+    await expectViteDevServerReady(page, 5174, 90_000);
+    const original = await openShellTerminal(page);
+    const originalSlot = page.locator(`.rf-terminal-slot[data-session-id="${original.sessionId}"]`);
+    await page.keyboard.insertText('vit');
+    await page.keyboard.press('Tab');
+    await expect.poll(() => completionFaultPhase(page), { timeout: 15_000 }).toBe('held');
+    expect(await completionPhysicalRequestCount(page)).toBe(1);
+
+    const active = await openShellTerminal(page);
+    await releaseHeldCompletion(page);
+    await expect.poll(() => completionFaultPhase(page), { timeout: 15_000 }).toBe('received');
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    );
+
+    await expect(originalSlot.locator('.rf-terminal-autocomplete')).toHaveCount(0);
+    const activeSlot = page.locator(`.rf-terminal-slot[data-session-id="${active.sessionId}"]`);
+    const menu = activeSlot.locator('.rf-terminal-autocomplete');
+    await expect(menu).toHaveCount(0);
+    await page.keyboard.insertText('vit');
+    await page.keyboard.press('Control+Space');
+    await expect(menu).toBeVisible({ timeout: 15_000 });
+    await expect(menu.getByRole('button', { name: 'vite', exact: true })).toHaveCount(1);
+    expect(await completionPhysicalRequestCount(page)).toBe(2);
   } finally {
     await restoreCompletionBoundary(page);
   }

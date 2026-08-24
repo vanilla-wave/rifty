@@ -1,9 +1,13 @@
 import { EventEmitter } from 'node:events';
-import { Shell, type ShellCompletionResult } from '@riftydev/shell';
+import { Shell } from '@riftydev/shell';
 import { MemoryFsSync, resetSyncMirror } from '@riftydev/vfs/internal';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPtyClient } from '../glue/pty-client.ts';
-import type { OwnerToPageFrame, PageToOwnerFrame } from '../glue/pty-protocol.ts';
+import type {
+  OwnerToPageFrame,
+  PageToOwnerFrame,
+  PtyCompleteResult,
+} from '../glue/pty-protocol.ts';
 import { type ForegroundChildHandle, runForegroundChild } from '../glue/run-foreground-child.ts';
 import { inspectOwnerPtyFrame, inspectPagePtyFrame } from '../workbench/owner-protocol-pty.ts';
 import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
@@ -74,88 +78,8 @@ class ResizeRejectingDevChild extends EventEmitter implements DevServerChildHand
   }
 }
 
-type FutureAck =
-  | {
-      readonly type: 'pty:ready';
-      readonly sid: string;
-      readonly error?: string;
-    }
-  | {
-      readonly type: 'pty:run-ready';
-      readonly sid: string;
-      readonly rid: string;
-    }
-  | {
-      readonly type: 'pty:resize-ack';
-      readonly sid: string;
-      readonly rid: string;
-      readonly opId: string;
-      readonly ok: boolean;
-      readonly error?: string;
-    }
-  | {
-      readonly type: 'pty:session-resize-ack';
-      readonly sid: string;
-      readonly opId: string;
-      readonly ok: boolean;
-      readonly error?: string;
-    }
-  | {
-      readonly type: 'pty:close-ack';
-      readonly sid: string;
-      readonly opId: string;
-      readonly ok: boolean;
-      readonly error?: string;
-    }
-  | FuturePtyCompleteResult;
-
-type FuturePtyComplete = {
-  readonly type: 'pty:complete';
-  readonly sid: string;
-  readonly opId: string;
-  readonly line: string;
-  readonly cursor: number;
-};
-
-type FuturePtyCompleteResult =
-  | {
-      readonly type: 'pty:complete-result';
-      readonly sid: string;
-      readonly opId: string;
-      readonly ok: true;
-      readonly result: ShellCompletionResult | null;
-    }
-  | {
-      readonly type: 'pty:complete-result';
-      readonly sid: string;
-      readonly opId: string;
-      readonly ok: false;
-      readonly error: string;
-    };
-
-type CompletionPtyClient = ReturnType<typeof createPtyClient> & {
-  complete(sid: string, line: string, cursor: number): Promise<ShellCompletionResult | null>;
-};
-
-function completionClient(client: ReturnType<typeof createPtyClient>): CompletionPtyClient {
-  return client as unknown as CompletionPtyClient;
-}
-
-function wireFrames(out: readonly OwnerToPageFrame[]): readonly (OwnerToPageFrame | FutureAck)[] {
-  return out as readonly (OwnerToPageFrame | FutureAck)[];
-}
-
-function completionResults(out: readonly OwnerToPageFrame[]): readonly FuturePtyCompleteResult[] {
-  return wireFrames(out).filter(
-    (frame): frame is FuturePtyCompleteResult => frame.type === 'pty:complete-result',
-  );
-}
-
-function handleCompletion(
-  server: ReturnType<typeof createPtyServer>,
-  frame: FuturePtyComplete,
-): void | Promise<void> {
-  return server.handleFrame(frame as unknown as PageToOwnerFrame);
+function completionResults(out: readonly OwnerToPageFrame[]): readonly PtyCompleteResult[] {
+  return out.filter((frame): frame is PtyCompleteResult => frame.type === 'pty:complete-result');
 }
 
 function envelopeMutations(
@@ -292,6 +216,7 @@ describe('pty-server', () => {
       { ...success, result: { ...success.result, items: [{}] } },
       { ...success, result: { ...success.result, items: [{ value: '' }] } },
       { ...success, result: { ...success.result, items: [{ value: 1 }] } },
+      { ...success, result: { ...success.result, items: [{ value: 'vite ', display: '' }] } },
       { ...success, result: { ...success.result, items: [{ value: 'vite ', display: 1 }] } },
       { ...success, result: { ...success.result, items: [{ value: 'vite ', extra: true }] } },
       { ...failure, result: null },
@@ -320,7 +245,7 @@ describe('pty-server', () => {
       new TextEncoder().encode('#!/usr/bin/env node\n'),
     );
 
-    await handleCompletion(server, {
+    await server.handleFrame({
       type: 'pty:complete',
       sid: 'completion-live',
       opId: 'complete-live-1',
@@ -347,15 +272,12 @@ describe('pty-server', () => {
     const fileSystem = new ReaddirFailingMemoryFsSync();
     const shell = new Shell({ cwd: '/workspace/packages/app', fileSystem });
     const server = createPtyServer({
-      send: (frame) =>
-        client.onFrame(inspectOwnerPtyFrame(structuredClone(frame)) as unknown as OwnerToPageFrame),
+      send: (frame) => client.onFrame(inspectOwnerPtyFrame(structuredClone(frame))),
       makeShell: () => shell,
     });
     const client = createPtyClient({
       send: (frame) => {
-        const handled = server.handleFrame(
-          inspectPagePtyFrame(structuredClone(frame)) as unknown as PageToOwnerFrame,
-        );
+        const handled = server.handleFrame(inspectPagePtyFrame(structuredClone(frame)));
         if (handled) void handled;
       },
     });
@@ -366,23 +288,19 @@ describe('pty-server', () => {
       '/workspace/node_modules/.bin/vite',
       new TextEncoder().encode('#!/usr/bin/env node\n'),
     );
-    const completer = completionClient(client);
-
-    await expect(completer.complete('completion-loopback', 'vi', 2)).resolves.toEqual({
+    await expect(client.complete('completion-loopback', 'vi', 2)).resolves.toEqual({
       start: 0,
       end: 2,
       items: [{ value: 'vite ', display: 'vite' }],
     });
 
     fileSystem.failNextReaddir(new Error('loopback bare owner readdir failed exactly'));
-    await expect(completer.complete('completion-loopback', 'vi', 2)).rejects.toMatchObject({
+    await expect(client.complete('completion-loopback', 'vi', 2)).rejects.toMatchObject({
       message: 'loopback bare owner readdir failed exactly',
     });
 
     fileSystem.failNextReaddir(new Error('loopback path-like owner readdir failed exactly'));
-    await expect(
-      completer.complete('completion-loopback', './scripts/to', 12),
-    ).rejects.toMatchObject({
+    await expect(client.complete('completion-loopback', './scripts/to', 12)).rejects.toMatchObject({
       message: 'loopback path-like owner readdir failed exactly',
     });
   });
@@ -403,7 +321,7 @@ describe('pty-server', () => {
       cols: 100,
       rows: 30,
     });
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:session-resize-ack',
       sid: 's1',
       opId: 'idle-1',
@@ -426,7 +344,7 @@ describe('pty-server', () => {
       cols: 120,
       rows: 40,
     });
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:session-resize-ack',
       sid: 's1',
       opId: 'idle-busy',
@@ -443,7 +361,7 @@ describe('pty-server', () => {
       cols: 132,
       rows: 43,
     });
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:session-resize-ack',
       sid: 's1',
       opId: 'idle-2',
@@ -469,14 +387,14 @@ describe('pty-server', () => {
       rows: 30,
     });
 
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:session-resize-ack',
       sid: 's1',
       opId: 'invalid',
       ok: false,
       error: expect.stringMatching(/RangeError/),
     });
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:session-resize-ack',
       sid: 'missing',
       opId: 'missing',
@@ -820,10 +738,8 @@ describe('pty-server', () => {
     await Promise.resolve();
 
     expect(gateCalls).toBe(1);
-    expect(wireFrames(out)).toContainEqual({ type: 'pty:run-ready', sid: 's1', rid: 'r1' });
-    expect(
-      wireFrames(out).some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r2'),
-    ).toBe(false);
+    expect(out).toContainEqual({ type: 'pty:run-ready', sid: 's1', rid: 'r1' });
+    expect(out.some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r2')).toBe(false);
     expect(out).toContainEqual(
       expect.objectContaining({ type: 'pty:exit', sid: 's1', rid: 'r2', code: 1 }),
     );
@@ -896,9 +812,9 @@ describe('pty-server', () => {
 
     expect(initial).toEqual([{ cols: 132, rows: 43 }]);
     expect(
-      wireFrames(out)
+      out
         .filter(
-          (frame): frame is Extract<FutureAck, { type: 'pty:resize-ack' }> =>
+          (frame): frame is Extract<OwnerToPageFrame, { type: 'pty:resize-ack' }> =>
             frame.type === 'pty:resize-ack',
         )
         .map((frame) => ({ opId: frame.opId, ok: frame.ok })),
@@ -924,7 +840,7 @@ describe('pty-server', () => {
       rows: 50,
     } as never);
     expect(live).toEqual([{ cols: 140, rows: 50 }]);
-    expect(wireFrames(out)).toContainEqual(
+    expect(out).toContainEqual(
       expect.objectContaining({
         type: 'pty:resize-ack',
         opId: 'resize-stale',
@@ -1026,7 +942,7 @@ describe('pty-server', () => {
         rows: 40,
       });
 
-      expect(wireFrames(out)).toContainEqual({
+      expect(out).toContainEqual({
         type: 'pty:resize-ack',
         sid: 's1',
         rid: 'r1',
@@ -1108,7 +1024,7 @@ describe('pty-server', () => {
       rows: 40,
     });
 
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:resize-ack',
       sid: 's1',
       rid: 'r1',
@@ -1156,10 +1072,10 @@ describe('pty-server', () => {
     await Promise.resolve();
 
     const close = server.handleFrame({ type: 'pty:close', sid: 's1', opId: 'close-1' } as never);
-    expect(wireFrames(out).some((frame) => frame.type === 'pty:close-ack')).toBe(false);
+    expect(out.some((frame) => frame.type === 'pty:close-ack')).toBe(false);
     await close;
     expect(out).toContainEqual(expect.objectContaining({ type: 'pty:exit', rid: 'r1', code: 130 }));
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:close-ack',
       sid: 's1',
       opId: 'close-1',
@@ -1232,7 +1148,7 @@ describe('pty-server', () => {
     emitChildExit(null, 'SIGTERM');
     await Promise.all([run, close]);
     const exitIndex = out.findIndex((frame) => frame.type === 'pty:exit' && frame.rid === 'r1');
-    const closeIndex = wireFrames(out).findIndex(
+    const closeIndex = out.findIndex(
       (frame) => frame.type === 'pty:close-ack' && frame.opId === 'close-physical',
     );
     expect(beforePhysicalExit).toBe('pending');
@@ -1332,12 +1248,12 @@ describe('pty-server', () => {
     ).toBe('pending');
     expect(made).toEqual(['z-session', 'a-session']);
     expect(onDevConfig).not.toHaveBeenCalled();
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:ready',
       sid: 'late-session',
       error: expect.stringMatching(/ClosedHandleError.*server.*closing/i),
     });
-    expect(wireFrames(out)).toContainEqual(
+    expect(out).toContainEqual(
       expect.objectContaining({
         type: 'pty:exit',
         sid: 'late-session',
@@ -1346,7 +1262,7 @@ describe('pty-server', () => {
         error: expect.stringMatching(/ClosedHandleError.*server.*closing/i),
       }),
     );
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:dev-config-ready',
       id: 'late-config',
       error: expect.stringMatching(/ClosedHandleError.*server.*closing/i),
@@ -1364,7 +1280,7 @@ describe('pty-server', () => {
 
     server.handleFrame({ type: 'pty:open', sid: 'after-close' });
     expect(made).toEqual(['z-session', 'a-session']);
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({
       type: 'pty:ready',
       sid: 'after-close',
       error: expect.stringMatching(/ClosedHandleError.*server.*closed/i),
@@ -1497,7 +1413,7 @@ describe('pty-server', () => {
 
     const close = server.handleFrame({ type: 'pty:close', sid: 's1', opId: 'close-1' });
     server.handleFrame({ type: 'pty:open', sid: 's1' });
-    const reopen = wireFrames(out).find((frame) => frame.type === 'pty:ready');
+    const reopen = out.find((frame) => frame.type === 'pty:ready');
 
     await Promise.all([run, close]);
     expect(reopen).toEqual({
@@ -1544,11 +1460,9 @@ describe('pty-server', () => {
     });
 
     await Promise.all([first, close, rejected]);
-    expect(wireFrames(out)).toContainEqual({ type: 'pty:run-ready', sid: 's1', rid: 'r1' });
-    expect(
-      wireFrames(out).some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r2'),
-    ).toBe(false);
-    expect(wireFrames(out)).toContainEqual({
+    expect(out).toContainEqual({ type: 'pty:run-ready', sid: 's1', rid: 'r1' });
+    expect(out.some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r2')).toBe(false);
+    expect(out).toContainEqual({
       type: 'pty:session-resize-ack',
       sid: 's1',
       opId: 'resize-closing',
@@ -1701,9 +1615,7 @@ describe('pty-server', () => {
     expect(exit && exit.type === 'pty:exit').toBeTruthy();
     expect(exit && exit.type === 'pty:exit' && exit.code).not.toBe(0);
     expect(exit && exit.type === 'pty:exit' && exit.error).toBeTruthy();
-    expect(
-      wireFrames(out).some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r1'),
-    ).toBe(false);
+    expect(out.some((frame) => frame.type === 'pty:run-ready' && frame.rid === 'r1')).toBe(false);
   });
 
   it('routes pty:dev-server-req to onDevServerReq (ADR-0148)', () => {
@@ -2073,9 +1985,7 @@ describe('pty-server', () => {
               });
         await Promise.all([run, stopped]);
 
-        const acks = wireFrames(out).filter(
-          (frame) => frame.type === 'pty:stdin-ack' && frame.rid === 'r1',
-        );
+        const acks = out.filter((frame) => frame.type === 'pty:stdin-ack' && frame.rid === 'r1');
         expect(acks).toEqual([
           expect.objectContaining({
             type: 'pty:stdin-ack',

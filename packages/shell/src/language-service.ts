@@ -80,6 +80,13 @@ function stringEnd(line: string, start: number, quote: '"' | "'"): number {
   return line.length;
 }
 
+function isMissingDirectory(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    return error.code === 'ENOENT' || error.code === 'ENOTDIR';
+  }
+  return error instanceof Error && /^(?:ENOENT|ENOTDIR)(?:\b|:)/u.test(error.message);
+}
+
 export function createShellCompleter(deps: ShellCompletionDeps) {
   return (line: string, cursor: number): ShellCompletionResult | null => {
     if (deps.mode() === 'repl') return null;
@@ -88,7 +95,9 @@ export function createShellCompleter(deps: ShellCompletionDeps) {
     const fragment = line.slice(start, cursor);
     const before = line.slice(0, start);
 
-    if (before.trim().length === 0) {
+    // A slash in argv-0 is an explicit path, not a bare command lookup. Route
+    // it through the same VFS reader as argument completion (ADR-0362).
+    if (before.trim().length === 0 && !fragment.includes('/')) {
       const items: ShellCompletionItem[] = deps
         .commandNames()
         .filter((name) => name.startsWith(fragment))
@@ -113,8 +122,9 @@ export function createShellCompleter(deps: ShellCompletionDeps) {
           display: `${entry.name}${entry.isDirectory ? '/' : ''}`,
         }));
       return { start, end, items };
-    } catch {
-      return null;
+    } catch (error) {
+      if (isMissingDirectory(error)) return null;
+      throw error;
     }
   };
 }

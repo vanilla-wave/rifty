@@ -14,7 +14,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `npm` top-level command help | ✅ | `npm help` prints the browser npm subset and exits 0; bare `npm` / `-h` / `--help` print the same list with npm's usage exit 1; `npm help <topic>` is an explicit `NotImplementedError('npm.help.topic')` ceiling |
 | Package lifecycle scripts | ❌ | Root `preinstall`/`install`/`postinstall`/`prepare` and registry tarball `preinstall`/`install`/`postinstall` throw `NotImplementedError('npm-client.lifecycle.<name>')`; registry tarball `prepare` metadata is ignored like npm's prepared package install path |
 | Non-registry dependency specs | ❌ | `file:`/local paths, `workspace:`, git/GitHub shorthand, URL tarball, and npm-alias specs are explicit npm-client ceilings, not silently skipped |
-| `.bin` launcher execution | ✅ | Bare `prettier`/`eslint` resolve through `node_modules/.bin` and run in a supervised Node worker |
+| `.bin` launcher execution | ✅ | Bare and explicit-path `prettier`/`eslint` resolve through the same nearest-ancestor command authority and run their launcher target in a supervised Node worker |
+| Shell command discovery | ✅ | `which`, typo suggestions, and owner-backed Tab completion use the execution resolver's live registered + ancestor `.bin` inventory; `cd`/install changes are visible on the next request |
+| Direct VFS Node entry | ⚠️ | Relative/absolute regular VFS files such as `./scripts/tool.mjs` run in the supervised Node-entry child with exact argv/cwd/stdio/exit. VFS has no POSIX execute bits; host PATH, native/WASI shebang selection, and non-Node executable semantics are not claimed |
 | Same-command package-bin settlement | ❌ | Collision-free scopes link; ambiguous current claims or a supplied authoritative-prior collision, owner transition, or removal throw `NotImplementedError('npm-client.bin-collision-reify')` before project-tree mutation; npm's operation-sensitive ADD/CHANGE/no-op/remove/rebuild ownership lifecycle remains unsupported |
 | `npm run <script>` for non-dev scripts | ✅ | `format`, `format:check`, `lint`, typed lint, `pre<script>`/`post<script>` hooks, and forwarded args such as `npm run lint -- --fix` route through the same shell/.bin path |
 | Prettier baseline CLI | ✅ | `prettier --version`, `--write`, and `--check` over `.js`/`.ts` files |
@@ -29,6 +31,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 ## Test Sources
 
 - `tests/e2e/owner-shell-prettier-eslint.spec.ts`
+- `tests/e2e/command-resolver-discovery.spec.ts`
+- `tests/browser-unit/owner-shell-routing.spec.ts`
 - `tests/integration/npm-shell-prefix-parity.test.ts`
 - `packages/workbench/src/glue/npm-shell-command.test.ts`
 - `packages/workbench/src/workers/workbench-project-runtime.test.ts`

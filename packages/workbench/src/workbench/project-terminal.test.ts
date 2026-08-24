@@ -9,16 +9,6 @@ import {
   projectTerminalAdmission,
 } from './project-terminal.ts';
 
-type CompletionProjectTerminal = ReturnType<typeof createProjectTerminal> & {
-  complete(line: string, cursor: number): Promise<ShellCompletionResult | null>;
-};
-
-function completionTerminal(
-  terminal: ReturnType<typeof createProjectTerminal>,
-): CompletionProjectTerminal {
-  return terminal as unknown as CompletionProjectTerminal;
-}
-
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
@@ -199,7 +189,7 @@ describe('ProjectTerminal lifecycle contract', () => {
       items: [{ value: 'vite ', display: 'vite' }],
     };
     const terminal = createProjectTerminal({ id: 'terminal-complete', port });
-    const result = completionTerminal(terminal).complete('vi', 2);
+    const result = terminal.complete('vi', 2);
 
     expect(port.completeCalls).toEqual([]);
     port.resolveOpen('terminal-complete');
@@ -215,7 +205,7 @@ describe('ProjectTerminal lifecycle contract', () => {
     const terminal = createProjectTerminal({ id: 'terminal-complete-error', port });
     port.resolveOpen('terminal-complete-error');
 
-    await expect(completionTerminal(terminal).complete('./scripts/to', 12)).rejects.toBe(failure);
+    await expect(terminal.complete('./scripts/to', 12)).rejects.toBe(failure);
     expect(port.completeCalls).toEqual([
       { sid: 'terminal-complete-error', line: './scripts/to', cursor: 12 },
     ]);
@@ -228,9 +218,7 @@ describe('ProjectTerminal lifecycle contract', () => {
     port.resolveOpen('terminal-complete-closed');
     await terminal.close();
 
-    await expect(completionTerminal(terminal).complete('vi', 2)).rejects.toBeInstanceOf(
-      ClosedHandleError,
-    );
+    await expect(terminal.complete('vi', 2)).rejects.toBeInstanceOf(ClosedHandleError);
     expect(port.completeCalls).toEqual([]);
   });
 
