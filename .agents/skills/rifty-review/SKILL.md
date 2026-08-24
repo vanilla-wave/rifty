@@ -64,9 +64,12 @@ one-blocker-per-round iteration:
    It fills `coverage`: one row per contract `## Fault matrix` line,
    Acceptance/Parity clause, public API entry the diff touches, frozen
    oracle/golden. `pass` judged adversarially — a plausible wrong
-   implementation must fail the cited RED; every weak/missing row carries a
-   finding. Any weak/missing row blocks (`blockers.mjs` enforces); a later gap
-   in a `pass` cell is reviewer error.
+   implementation must fail the cited RED. `weak` is bounded: it names the
+   concrete wrong implementation AND the declared clause/failure-model row it
+   violates; a mutant beyond the obligation as declared (deeper hardening) is
+   a concern — the row stays `pass`. Every weak/missing row carries a finding.
+   Any weak/missing row blocks (`blockers.mjs` enforces); a later gap in a
+   `pass` cell is reviewer error.
 2. **Tail pass** — fresh reviewer, prior findings attached as settled (do not
    re-raise; a rephrase = failure), hunts only what is NOT on the list; own
    subagents + a dedupe adjudicator. Empty tail = found set converged.
@@ -81,7 +84,7 @@ RUN=$(mktemp -d -t rifty-review.XXXX)
 codex exec -C "$(git rev-parse --show-toplevel)" --approve-for-me \
   -c model_reasoning_effort="ultra" \
   --skip-git-repo-check --output-schema tools/review/review-schema.json -o "$RUN/verdict.json" \
-  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, the named goal directory (docs/backlog/epics/<slug>/) when declared, current-unit contract, and every changed file. Do not modify tracked files. EXHAUSTIVENESS: single-pass — enumerate EVERY blocker in this one verdict; a defect visible in this tree that would only surface in a later attempt counts as a failure of this review. Partition the review yourself and spawn parallel read-only subagents (rubric axes and the seams/boundaries you identify in the diff), then merge and dedupe their findings. COVERAGE: fill the \`coverage\` section — one row per contract \`## Fault matrix\` line, Acceptance/Parity clause, public API entry point the diff adds or changes, and frozen oracle/golden artifact; judge \`pass\` adversarially (a plausible wrong implementation must fail the cited carrier — lossy/inexact assertions, non-discriminating fixtures, absent count/order/identity checks are \`weak\`); every weak/missing row carries a finding; do not skip rows. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
+  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, the named goal directory (docs/backlog/epics/<slug>/) when declared, current-unit contract, and every changed file. Do not modify tracked files. EXHAUSTIVENESS: single-pass — enumerate EVERY blocker in this one verdict; a defect visible in this tree that would only surface in a later attempt counts as a failure of this review. Partition the review yourself and spawn parallel read-only subagents (rubric axes and the seams/boundaries you identify in the diff), then merge and dedupe their findings. COVERAGE: fill the \`coverage\` section — one row per contract \`## Fault matrix\` line, Acceptance/Parity clause, public API entry point the diff adds or changes, and frozen oracle/golden artifact; judge \`pass\` adversarially (a plausible wrong implementation must fail the cited carrier — lossy/inexact assertions, non-discriminating fixtures, absent count/order/identity checks are \`weak\`); \`weak\` must name the concrete wrong implementation AND the declared clause/failure-model row it violates — a mutant beyond the obligation as declared is a concern and leaves the row \`pass\`; every weak/missing row carries a finding; do not skip rows. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
   </dev/null >"$RUN/log" 2>&1
 node tools/review/blockers.mjs "$RUN/verdict.json"  # missing verdict → tail -n 40 "$RUN/log"
 ```

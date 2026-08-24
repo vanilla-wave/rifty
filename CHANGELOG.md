@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Review checkpoint = ultra two-pass fan-out + coverage matrix (retro of #274/#275 sessions, replay-validated on the #274 attempt-1 snapshot): reviewer runs at `model_reasoning_effort=ultra`, spawns parallel per-lens subagents, must be exhaustive in one pass; second tail pass hunts only past a settled prior-findings list; `review-schema.json` gains required `coverage` (row per Fault-matrix line / Acceptance clause / public API entry / frozen artifact, adversarial pass/weak/missing), `blockers.mjs` blocks on any non-pass row; undeclared obligation → contract re-refine, not another round (`fault-classes.md` §Review convergence).
+- Review checkpoint = ultra two-pass fan-out + coverage matrix (retro of #274/#275 sessions, replay-validated on the #274 attempt-1 snapshot): reviewer runs at `model_reasoning_effort=ultra`, spawns parallel per-lens subagents, must be exhaustive in one pass; second tail pass hunts only past a settled prior-findings list; `review-schema.json` gains required `coverage` (row per Fault-matrix line / Acceptance clause / public API entry / frozen artifact, adversarial pass/weak/missing), `blockers.mjs` blocks on any non-pass row; `weak` bounded — names the concrete wrong implementation + declared clause it violates, deeper hardening → concern, row stays `pass`; undeclared obligation → contract re-refine, not another round (`fault-classes.md` §Review convergence).
 
 ### Added
 

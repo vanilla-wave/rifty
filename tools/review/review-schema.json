@@ -59,7 +59,7 @@
           "status": {
             "type": "string",
             "enum": ["pass", "weak", "missing"],
-            "description": "pass: a committed RED discriminates it (a plausible wrong implementation fails); weak: a carrier exists but a plausible wrong implementation passes (lossy/inexact assertion, non-discriminating fixture, absent count/order/identity check); missing: no carrier."
+            "description": "pass: a committed RED discriminates it (a plausible wrong implementation fails); weak: a carrier exists but a named plausible wrong implementation passes while violating the obligation as declared (lossy/inexact assertion, non-discriminating fixture, absent count/order/identity check) — a mutant beyond the declared clause/failure-model row is a concern, not weak; missing: no carrier."
           },
           "citation": {
             "type": "string",
