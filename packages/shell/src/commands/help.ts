@@ -1,9 +1,9 @@
 /**
- * `help` — discoverability affordance: list the LIVE command registry +
+ * `help` — discoverability affordance: list the LIVE registered command registry +
  * a one-line synopsis per command.
  *
- * Lists from the live `commandNames()` (injected) so the output can't drift
- * from the actual registered set (incl. host-registered `node`/`npm`/`vite`).
+ * Lists from an injected registered-name source so output cannot drift from
+ * builtins or host registrations while installed `.bin` discovery stays out.
  * Per-command synopses are editorial text in {@link SYNOPSIS}; keep in sync
  * with `commands/` as builtins are added.
  */
@@ -48,7 +48,7 @@ const RUN_PROGRAMS_NOTE = 'node, npm and vite run programs — use `<tool> --hel
  * `help [command]`. Factory: takes the shell's live command-name lister so the
  * listing reflects every registered command at invocation time.
  */
-export function help(listCommandNames: () => readonly string[]): ShellCommand {
+export function help(listRegisteredCommandNames: () => readonly string[]): ShellCommand {
   return async (args, ctx) => {
     const topic = args[0];
     if (topic !== undefined) {
@@ -60,7 +60,7 @@ export function help(listCommandNames: () => readonly string[]): ShellCommand {
       ctx.stdout.write(`${topic} — ${synopsis}\n`);
       return 0;
     }
-    const names = [...listCommandNames()].sort();
+    const names = [...listRegisteredCommandNames()].sort();
     ctx.stdout.write(`Commands:  ${names.join('  ')}\n`);
     ctx.stdout.write(`${RUN_PROGRAMS_NOTE}\n`);
     ctx.stdout.write('Run `help <command>` for a one-line description.\n');

@@ -118,6 +118,38 @@ describe('Shell.complete', () => {
       items: [{ value: './scripts/tool.mjs ', display: 'tool.mjs' }],
     });
   });
+
+  it.each(['echo ok && vi', 'echo ok | vi', 'echo ok&&vi', 'echo ok|vi', 'echo ok;vi', 'FOO=1 vi'])(
+    'discovers a bare command at the active simple-command argv-0 in %s',
+    (line) => {
+      const fileSystem = new MemoryFsSync();
+      fileSystem.loadFixture({
+        '/workspace/node_modules/.bin/vite': 'workspace shim\n',
+      });
+      const shell = new Shell({ cwd: '/workspace', fileSystem });
+      const start = line.lastIndexOf('vi');
+
+      expect(shell.complete(line, line.length)).toEqual({
+        start,
+        end: line.length,
+        items: [{ value: 'vite ', display: 'vite' }],
+      });
+    },
+  );
+
+  it('treats the whole argv-0 token as a path when the cursor precedes its slash', () => {
+    const fileSystem = new MemoryFsSync();
+    fileSystem.loadFixture({
+      '/workspace/scripts/tool.mjs': 'console.log("tool");\n',
+    });
+    const shell = new Shell({ cwd: '/workspace', fileSystem });
+
+    expect(shell.complete('scripts/tool.mjs', 4)).toEqual({
+      start: 0,
+      end: 16,
+      items: [{ value: 'scripts/', display: 'scripts/' }],
+    });
+  });
 });
 
 describe('shellLineHighlightSpans', () => {
