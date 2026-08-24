@@ -111,10 +111,13 @@ describe('buildChildSpawnSpec', () => {
     };
     const shell = new Shell({ cwd: '/workspace', fileSystem, execBin });
 
-    expect((await shell.run('./scripts/tool.mjs direct')).exitCode).toBe(0);
-    expect((await shell.run('./node_modules/.bin/probe explicit')).exitCode).toBe(0);
-    expect((await shell.run('probe bare')).exitCode).toBe(0);
+    const exitCodes = [
+      (await shell.run('./scripts/tool.mjs direct')).exitCode,
+      (await shell.run('./node_modules/.bin/probe explicit')).exitCode,
+      (await shell.run('probe bare')).exitCode,
+    ];
 
+    expect(exitCodes).toEqual([0, 0, 0]);
     expect(specs).toMatchObject([
       {
         entry: { bootstrap: { payload: { launch: { kind: 'program', bin: false } } } },
