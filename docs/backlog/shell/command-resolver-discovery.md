@@ -267,6 +267,8 @@ allocation is:
   launch, so the required ordinary/explicit/bare `false/true/true` projection
   is RED.
 - Attempt 9 adds `project-terminal.test.ts` success/error/closed routing through
-  a structural future `complete` carrier. Before production, all three calls
-  fail because the public wrapper is absent; existing `which.test.ts` keeps the
-  exact `shell.which.-a`/`shell.which.-s` loud ceilings green.
+  a structural future `complete` carrier. `pnpm exec vitest run --project unit
+  packages/workbench/src/workbench/project-terminal.test.ts
+  packages/shell/tests/which.test.ts` → `3 failed | 40 passed`: all three calls
+  fail because the public wrapper is absent; all 7 `which` siblings, including
+  exact `shell.which.-a`/`shell.which.-s` loud ceilings, stay green.
