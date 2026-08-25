@@ -63,8 +63,8 @@ authority makes. A blocker cites its violated authority (`authority` field —
 (stricter assertion, deeper mutant, extra hardening) is a concern — batched,
 never spending an attempt — or a backlog candidate, never a checkpoint block.
 
-One checkpoint = two find passes, then one batch fix, then ONE verify pass —
-never one-blocker-per-round iteration:
+One checkpoint = two find passes, one adjudication, then one batch fix, then
+ONE verify pass — never one-blocker-per-round iteration:
 
 1. **Find pass** — exhaustive single pass: every blocker in one verdict; a
    defect visible in this tree that surfaces at a later attempt = review
@@ -82,11 +82,27 @@ never one-blocker-per-round iteration:
 2. **Tail pass** — fresh reviewer, prior findings attached as settled (do not
    re-raise; a rephrase = failure), hunts only what is NOT on the list; own
    subagents + a dedupe adjudicator. Empty tail = found set converged.
+3. **Adjudication** — BEFORE any fixing, a fresh read-only critic (light
+   subagent, not a checkpoint run; independent context — never the reviewer
+   judging its own verdict) takes the union blocker list (summary + authority
+   + location only, no reviewer reasoning) and the tree, reads each cited
+   authority in full context plus the cited carriers, and rules per blocker:
+   HOLDS (clause as written requires the demand, carrier genuinely absent),
+   STRETCH (clause broader than the demand — reviewer extrapolation), FALSE
+   (carrier exists / citation misread). Default to STRETCH when the clause
+   text does not clearly mandate the specific demand; quote the decisive
+   fragment verbatim. Output `adjudication.json`:
+   `[{"summary": "<exact finding summary>", "ruling": "HOLDS|STRETCH|FALSE",
+   "clause": "<decisive quote>"}]`. Then
+   `node tools/review/blockers.mjs "$RUN/verdict.json" "$RUN/adjudication.json"`
+   — STRETCH/FALSE demote to the concern batch; only HOLDS (plus `missing`
+   coverage rows) force the re-cut. The reviewer verdict file stays untouched
+   (lineage); the adjudication rides beside it.
 
-Fix all findings in one batch re-cut, then one verify pass on the new tree
-(same command, prior verdicts as settled). An obligation neither pass can pin
-because the contract never declared it (missing exactness, count, identity) is
-a contract hole → §Contract escalation re-refine, not another review round.
+Fix surviving blockers in one batch re-cut, then one verify pass on the new
+tree (same command, prior verdicts as settled). An obligation neither pass can
+pin because the contract never declared it (missing exactness, count, identity)
+is a contract hole → §Contract escalation re-refine, not another review round.
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
