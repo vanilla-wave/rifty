@@ -1,8 +1,11 @@
 export interface ChildFsViteSample {
+  readonly rawOutput: string;
   readonly selfTimeSeconds: number;
+  readonly transformedModules: number;
 }
 
 export interface ChildFsExpressSample {
+  readonly rawOutput: string;
   readonly startToListeningMs: number;
 }
 

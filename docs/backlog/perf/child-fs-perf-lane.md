@@ -1,15 +1,24 @@
 ---
 area: perf
 subsystem: toolchain-build
-status: ready
+status: draft
 title: Committed product-vs-in-realm perf lane for child fs anchors (vite build + express cold start)
 created: 2026-08-26
 epic: child-fs-rpc-hot-path
+blocked_by: [perf/child-fs-perf-artifact-core, perf/child-fs-perf-product-lane, perf/child-fs-perf-in-realm-lane, perf/child-fs-perf-orchestrator]
 why: all current numbers live on a throwaway spike branch; the epic's I3 needs a durable rig so every slice proves its effect on the same anchors
 user_story: As the epic's acceptance instrument, I want one committed lane that runs the 2180-module vite build and an express cold require-walk in BOTH worlds (product COI child over sync-RPC; single in-realm worker) and reports self-timed numbers, but today the harness is `prototype/` on the spike branch only.
 sources: [spike branch t3code/prototype-no-coi-agent-cycle prototype/no-coi-agent-loop/README.md + FINDINGS.md §2b]
 code: [tools/perf/child-fs.mjs, tools/perf/child-fs/, tests/browser-unit/fixtures/child-fs-in-realm-worker.ts]
 ---
+
+## Question
+
+Contract+RED attempt 2 proved this was not one reviewable unit: pure artifact
+authority, two physical browser topologies, and failure orchestration had no
+single discriminating RED boundary. Re-cut into the four `blocked_by` children;
+delete this lineage item after all four absorb it. Pre-demotion Acceptance and
+Parity remain verbatim below.
 
 ## User scenario
 
@@ -99,3 +108,6 @@ the 2180-module fixture and Express cold `require('express')` start-to-listening
 - 2026-08-26 — Contract+RED attempt 1 @ 5e025cbc8 blocked: expected RED carriers
   absent; spike reference unpinned/non-closing; robust CLI/publication rows
   missing. Re-cut in place, no implementation started.
+- 2026-08-26 — Contract+RED attempt 2 @ fb02b2c2f blocked: helper REDs cannot
+  prove either physical lane or orchestration; second consecutive blocker
+  triggers split/re-refine. Pre-demotion Acceptance/Parity preserved verbatim.

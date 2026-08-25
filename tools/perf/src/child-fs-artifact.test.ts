@@ -1,188 +1,261 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-const SCENARIO_DIGEST = 'a'.repeat(64);
-const DEPENDENCY_DIGEST = 'b'.repeat(64);
+const DEPENDENCIES = Object.freeze({
+  '@gravity-ui/icons': '2.16.0',
+  '@gravity-ui/uikit': '7.48.1',
+  'date-fns': '4.1.0',
+  express: '4.21.2',
+  react: '19.2.0',
+  'react-dom': '19.2.0',
+  vite: '7.3.6',
+});
 
-interface ViteSample {
-  readonly exitCode: number;
-  readonly transformedModules: number;
-  readonly selfTimeSeconds: number;
-  readonly marker: string;
-  readonly markerFound: boolean;
-  readonly markerCount: number;
-  readonly rawOutput: string;
+const PACKAGE_JSON = `${JSON.stringify(
+  {
+    name: 'rifty-child-fs-benchmark',
+    private: true,
+    version: '0.0.0',
+    type: 'module',
+    dependencies: DEPENDENCIES,
+  },
+  null,
+  2,
+)}\n`;
+
+const FILES = Object.freeze({
+  '/package.json': PACKAGE_JSON,
+  '/index.html':
+    '<!doctype html><div id="root"></div><script type="module" src="/src/main.jsx"></script>\n',
+  '/vite.config.js':
+    "export default { esbuild: { jsx: 'automatic' }, optimizeDeps: { noDiscovery: true, include: [] }, build: { minify: false, sourcemap: false } };\n",
+  '/src/main.jsx':
+    "import { createRoot } from 'react-dom/client'; import { ThemeProvider } from '@gravity-ui/uikit'; import '@gravity-ui/uikit/styles/styles.css'; import { App } from './App.jsx'; createRoot(document.getElementById('root')).render(<ThemeProvider theme=\"light\"><App /></ThemeProvider>);\n",
+  '/src/App.jsx':
+    "import { Button, Card, Text } from '@gravity-ui/uikit'; import { Gear } from '@gravity-ui/icons'; import { format } from 'date-fns'; import { Panel } from './Panel.jsx'; export function App(){ return <Card view=\"outlined\"><Text variant=\"header-1\">agent-loop app</Text><Text>{format(new Date(0), 'yyyy-MM-dd')}</Text><Button view=\"action\"><Gear />act</Button><Panel /></Card>; }\n",
+  '/src/Panel.jsx':
+    'import { Label, Text } from \'@gravity-ui/uikit\'; export function Panel(){ return <div><Label theme="info">bench-seed</Label><Text variant="body-1">iteration bench-seed</Text></div>; }\n',
+  '/express-anchor.cjs':
+    "const marker=process.argv[2];const started=performance.now();const express=require('express');const app=express();const server=app.listen(4197,'127.0.0.1',()=>{const elapsed=performance.now()-started;console.log(`RIFTY_EXPRESS_READY ${marker} ${elapsed}`);server.close((error)=>{if(error)throw error;console.log(`RIFTY_EXPRESS_CLOSED ${marker}`);});});\n",
+});
+
+const CANONICAL_SCENARIO = Object.freeze({
+  id: 'child-fs-hot-path-v1',
+  root: '/bench',
+  dependencies: DEPENDENCIES,
+  files: FILES,
+});
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
-interface ExpressSample {
-  readonly exitCode: number;
-  readonly startToListeningMs: number;
-  readonly freshRealm: boolean;
-  readonly clockStartedBeforeRequire: boolean;
-  readonly listened: boolean;
-  readonly closed: boolean;
-  readonly markerCount: number;
-  readonly rawOutput: string;
+function sha256(value: unknown): string {
+  return createHash('sha256').update(canonicalJson(value)).digest('hex');
 }
 
-interface BenchmarkSample {
-  readonly lane: 'product-coi' | 'in-realm';
-  readonly topology: 'owner-sync-rpc-kernel-child' | 'single-in-realm-worker';
-  readonly ordinal: number;
-  readonly scenarioDigest: string;
-  readonly dependencyDigest: string;
-  readonly ownerLoad: 'idle';
-  readonly terminalProof: boolean;
-  readonly vite: ViteSample;
-  readonly express: ExpressSample;
-}
-
-function sample(lane: 'product-coi' | 'in-realm', ordinal: number): BenchmarkSample {
+function rawSample(lane: 'product-coi' | 'in-realm', ordinal: number) {
+  const marker = `${lane}-${ordinal}`;
   return {
     lane,
     topology: lane === 'product-coi' ? 'owner-sync-rpc-kernel-child' : 'single-in-realm-worker',
     ordinal,
-    scenarioDigest: SCENARIO_DIGEST,
-    dependencyDigest: DEPENDENCY_DIGEST,
     ownerLoad: 'idle',
-    terminalProof: true,
+    terminalProof: {
+      kind: lane === 'product-coi' ? 'child-exit' : 'worker-result',
+      complete: true,
+    },
     vite: {
       exitCode: 0,
-      transformedModules: 2180,
-      selfTimeSeconds: lane === 'product-coi' ? 1.63 : 1.13,
-      marker: `run-${ordinal}`,
-      markerFound: true,
-      markerCount: 1,
-      rawOutput: `✓ 2180 modules transformed.\n✓ built in ${lane === 'product-coi' ? '1.63' : '1.13'}s`,
+      rawOutput: '✓ 2180 modules transformed.\n✓ built in 1.63s\n',
+      emittedJavaScript: `const marker = ${JSON.stringify(marker)};`,
+      marker,
     },
     express: {
       exitCode: 0,
-      startToListeningMs: lane === 'product-coi' ? 34.25 : 9.5,
-      freshRealm: true,
-      clockStartedBeforeRequire: true,
-      listened: true,
-      closed: true,
-      markerCount: 1,
-      rawOutput: `RIFTY_EXPRESS_READY run-${ordinal}`,
+      rawOutput: `RIFTY_EXPRESS_READY ${marker} 34.25\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
+      marker,
     },
   };
 }
 
-function completeSamples(runs = 2): readonly BenchmarkSample[] {
+function completeSamples(runs = 2): readonly ReturnType<typeof rawSample>[] {
   return (['product-coi', 'in-realm'] as const).flatMap((lane) =>
-    Array.from({ length: runs }, (_, index) => sample(lane, index + 1)),
+    Array.from({ length: runs }, (_, index) => rawSample(lane, index + 1)),
   );
 }
 
-type BuildArtifact = typeof import('./child-fs-artifact.mjs')['buildChildFsArtifact'];
-
-function validArtifact(buildChildFsArtifact: BuildArtifact, runs = 2): unknown {
-  return buildChildFsArtifact({
-    generatedAt: '2026-08-26T00:00:00.000Z',
-    gitSha: 'c'.repeat(40),
-    browserVersion: 'Chromium 140.0.7339.16',
-    runs,
-    samples: completeSamples(runs),
-  });
+async function subject() {
+  return Promise.all([import('../child-fs/scenario.mjs'), import('./child-fs-artifact.mjs')]);
 }
 
-describe('child fs benchmark artifact', () => {
-  it('preserves exact raw samples and all provenance without rounding or projection', async () => {
-    const { buildChildFsArtifact, validateChildFsArtifact } = await import(
-      './child-fs-artifact.mjs'
+describe('child fs canonical scenario and artifact authority', () => {
+  it('owns exact guest bytes/dependencies and derives both digests', async () => {
+    const [{ childFsScenario, childFsScenarioIdentity }] = await subject();
+    expect(childFsScenario()).toEqual(CANONICAL_SCENARIO);
+    expect(childFsScenarioIdentity()).toEqual({
+      scenarioDigest: sha256(CANONICAL_SCENARIO),
+      dependencyDigest: sha256(DEPENDENCIES),
+    });
+  });
+
+  it('derives raw anchor facts and preserves every unrounded sample/provenance field', async () => {
+    const [, { buildChildFsArtifact, validateChildFsArtifact }] = await subject();
+    const artifact = validateChildFsArtifact(
+      buildChildFsArtifact({
+        generatedAt: '2026-08-26T00:00:00.000Z',
+        gitSha: 'c'.repeat(40),
+        browserVersion: 'Chromium 140.0.7339.16',
+        runs: 2,
+        samples: completeSamples(),
+      }),
     );
-    const artifact = validateChildFsArtifact(validArtifact(buildChildFsArtifact));
     expect(artifact).toMatchObject({
       schemaVersion: 1,
       gitSha: 'c'.repeat(40),
       browserVersion: 'Chromium 140.0.7339.16',
-      scenarioDigest: SCENARIO_DIGEST,
-      dependencyDigest: DEPENDENCY_DIGEST,
       runs: 2,
+      scenarioDigest: sha256(CANONICAL_SCENARIO),
+      dependencyDigest: sha256(DEPENDENCIES),
     });
-    expect(artifact.samples).toEqual(completeSamples());
-    expect(artifact.samples[0]?.vite.selfTimeSeconds).toBe(1.63);
-    expect(artifact.samples[0]?.express.startToListeningMs).toBe(34.25);
+    expect(artifact.samples).toHaveLength(4);
+    expect(artifact.samples[0]).toMatchObject({
+      lane: 'product-coi',
+      ordinal: 1,
+      vite: { transformedModules: 2180, selfTimeSeconds: 1.63 },
+      express: { startToListeningMs: 34.25 },
+    });
+    expect(artifact.samples[0]?.vite.rawOutput).toBe(completeSamples()[0]?.vite.rawOutput);
+    expect(artifact.samples[0]?.express.rawOutput).toBe(completeSamples()[0]?.express.rawOutput);
+    expect(Object.keys(artifact).sort()).toEqual([
+      'browserVersion',
+      'dependencyDigest',
+      'generatedAt',
+      'gitSha',
+      'runs',
+      'samples',
+      'scenarioDigest',
+      'schemaVersion',
+    ]);
   });
 
-  it('rejects identity, topology, terminal, and Vite proof corruption', async () => {
-    const { buildChildFsArtifact } = await import('./child-fs-artifact.mjs');
+  it('rejects every corrupt Vite raw proof and caller-invented derived field', async () => {
+    const [, { buildChildFsArtifact }] = await subject();
+    const base = rawSample('product-coi', 1);
     const corruptions: ReadonlyArray<readonly [string, Readonly<Record<string, unknown>>]> = [
-      ['scenario digest drift', { scenarioDigest: 'd'.repeat(64) }],
-      ['dependency digest drift', { dependencyDigest: 'e'.repeat(64) }],
-      ['wrong module count', { vite: { ...sample('in-realm', 1).vite, transformedModules: 2179 } }],
-      ['stale Vite marker', { vite: { ...sample('in-realm', 1).vite, markerFound: false } }],
-      ['duplicate Vite marker', { vite: { ...sample('in-realm', 1).vite, markerCount: 2 } }],
-      ['missing terminal proof', { terminalProof: false }],
-      ['wrong topology', { topology: 'same-realm-fallback' }],
-    ];
-    for (const [label, replacement] of corruptions) {
-      const samples = completeSamples().map((entry, index) =>
-        index === 2 ? { ...entry, ...replacement } : entry,
-      );
-      expect(
-        () =>
-          buildChildFsArtifact({
-            generatedAt: '2026-08-26T00:00:00.000Z',
-            gitSha: 'c'.repeat(40),
-            browserVersion: 'Chromium 140.0.7339.16',
-            runs: 2,
-            samples,
-          }),
-        label,
-      ).toThrow();
-    }
-  });
-
-  it('rejects every incomplete Express cold-listen proof', async () => {
-    const { buildChildFsArtifact } = await import('./child-fs-artifact.mjs');
-    const corruptions: ReadonlyArray<readonly [string, Partial<ExpressSample>]> = [
-      ['clock starts after require', { clockStartedBeforeRequire: false }],
-      ['warm realm', { freshRealm: false }],
-      ['never listened', { listened: false }],
-      ['server left open', { closed: false }],
       ['non-zero exit', { exitCode: 1 }],
-      ['duplicate marker', { markerCount: 2 }],
+      ['wrong module count', { rawOutput: '✓ 2179 modules transformed.\n✓ built in 1.63s\n' }],
+      ['duplicate module count', { rawOutput: `${base.vite.rawOutput}${base.vite.rawOutput}` }],
+      ['missing self time', { rawOutput: '✓ 2180 modules transformed.\n' }],
+      ['duplicate self time', { rawOutput: `${base.vite.rawOutput}✓ built in 1.64s\n` }],
+      ['missing emitted marker', { emittedJavaScript: 'const marker = "other";' }],
+      [
+        'duplicate emitted marker',
+        { emittedJavaScript: `${base.vite.marker} ${base.vite.marker}` },
+      ],
+      ['caller-derived field', { transformedModules: 2180 }],
     ];
-    for (const [label, expressPatch] of corruptions) {
-      const samples = completeSamples().map((entry, index) =>
-        index === 0 ? { ...entry, express: { ...entry.express, ...expressPatch } } : entry,
-      );
+    for (const [label, patch] of corruptions) {
       expect(
         () =>
           buildChildFsArtifact({
             generatedAt: '2026-08-26T00:00:00.000Z',
             gitSha: 'c'.repeat(40),
             browserVersion: 'Chromium 140.0.7339.16',
-            runs: 2,
-            samples,
+            runs: 1,
+            samples: [{ ...base, vite: { ...base.vite, ...patch } }, rawSample('in-realm', 1)],
           }),
         label,
       ).toThrow();
     }
   });
 
-  it('rejects partial, duplicate, or one-lane samples instead of a thin comparison', async () => {
-    const { buildChildFsArtifact } = await import('./child-fs-artifact.mjs');
-    const corruptions: ReadonlyArray<readonly [string, readonly BenchmarkSample[]]> = [
-      ['partial sample set', completeSamples().slice(0, -1)],
+  it('rejects every corrupt Express raw proof and caller-invented derived field', async () => {
+    const [, { buildChildFsArtifact }] = await subject();
+    const base = rawSample('product-coi', 1);
+    const corruptions: ReadonlyArray<readonly [string, Readonly<Record<string, unknown>>]> = [
+      ['non-zero exit', { exitCode: 1 }],
+      ['missing ready', { rawOutput: `RIFTY_EXPRESS_CLOSED ${base.express.marker}\n` }],
+      ['missing close', { rawOutput: `RIFTY_EXPRESS_READY ${base.express.marker} 34.25\n` }],
       [
-        'duplicate ordinal',
-        completeSamples().map((entry, index) => (index === 1 ? { ...entry, ordinal: 1 } : entry)),
+        'duplicate ready',
+        { rawOutput: `${base.express.rawOutput}RIFTY_EXPRESS_READY ${base.express.marker} 1\n` },
       ],
-      ['missing lane', completeSamples().filter((entry) => entry.lane !== 'in-realm')],
+      [
+        'mismatched close',
+        {
+          rawOutput: `RIFTY_EXPRESS_READY ${base.express.marker} 34.25\nRIFTY_EXPRESS_CLOSED other\n`,
+        },
+      ],
+      [
+        'non-positive time',
+        {
+          rawOutput: `RIFTY_EXPRESS_READY ${base.express.marker} 0\nRIFTY_EXPRESS_CLOSED ${base.express.marker}\n`,
+        },
+      ],
+      ['caller-derived field', { startToListeningMs: 34.25 }],
     ];
-    for (const [label, samples] of corruptions) {
+    for (const [label, patch] of corruptions) {
       expect(
         () =>
           buildChildFsArtifact({
             generatedAt: '2026-08-26T00:00:00.000Z',
             gitSha: 'c'.repeat(40),
             browserVersion: 'Chromium 140.0.7339.16',
-            runs: 2,
-            samples,
+            runs: 1,
+            samples: [
+              { ...base, express: { ...base.express, ...patch } },
+              rawSample('in-realm', 1),
+            ],
           }),
         label,
       ).toThrow();
+    }
+  });
+
+  it('rejects partial/duplicate samples and malformed/extra artifacts through both entries', async () => {
+    const [, { buildChildFsArtifact, validateChildFsArtifact }] = await subject();
+    const buildCorruptions = [
+      completeSamples().slice(0, -1),
+      completeSamples().map((entry, index) => (index === 1 ? { ...entry, ordinal: 1 } : entry)),
+      completeSamples().filter((entry) => entry.lane !== 'in-realm'),
+      completeSamples().map((entry, index) =>
+        index === 0 ? { ...entry, unexpected: 'multiplier' } : entry,
+      ),
+    ];
+    for (const samples of buildCorruptions) {
+      expect(() =>
+        buildChildFsArtifact({
+          generatedAt: '2026-08-26T00:00:00.000Z',
+          gitSha: 'c'.repeat(40),
+          browserVersion: 'Chromium 140.0.7339.16',
+          runs: 2,
+          samples,
+        }),
+      ).toThrow();
+    }
+
+    const valid = buildChildFsArtifact({
+      generatedAt: '2026-08-26T00:00:00.000Z',
+      gitSha: 'c'.repeat(40),
+      browserVersion: 'Chromium 140.0.7339.16',
+      runs: 2,
+      samples: completeSamples(),
+    });
+    for (const corrupt of [
+      { ...valid, speedupX: 1.44 },
+      { ...valid, samples: valid.samples.slice(0, -1) },
+      { ...valid, scenarioDigest: 'd'.repeat(64) },
+      { ...valid, browserVersion: '' },
+    ]) {
+      expect(() => validateChildFsArtifact(corrupt)).toThrow();
     }
   });
 });

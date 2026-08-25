@@ -14,4 +14,11 @@ export interface ChildFsArtifactIo {
 
 export function parseChildFsArgs(argv: readonly string[]): ChildFsCliOptions;
 export function assertChildFsPortFree(port: number): Promise<void>;
+export function admitChildFsRun<T>(
+  argv: readonly string[],
+  actions: {
+    readonly assertPortFree: (port: number) => Promise<void>;
+    readonly launch: (options: ChildFsCliOptions) => Promise<T>;
+  },
+): Promise<T>;
 export function publishChildFsArtifact(path: string, json: string, io?: ChildFsArtifactIo): void;

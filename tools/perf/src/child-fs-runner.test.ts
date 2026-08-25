@@ -1,74 +1,89 @@
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
-describe('child fs benchmark CLI', () => {
-  it('accepts one exact positive run count, output path, and port', async () => {
-    const { parseChildFsArgs } = await import('./child-fs-runner.mjs');
+describe('child fs benchmark CLI admission', () => {
+  it('parses the exact public form and rejects args before port/launch side effects', async () => {
+    const { admitChildFsRun, parseChildFsArgs } = await import('./child-fs-runner.mjs');
     expect(
-      parseChildFsArgs(['--runs', '3', '--out', 'perf/child-fs.json', '--port', '5391']),
-    ).toEqual({
-      runs: 3,
-      out: 'perf/child-fs.json',
-      port: 5391,
-      ownerLoad: 'idle',
-    });
-  });
+      parseChildFsArgs(['--', '--runs', '3', '--out', 'perf/child-fs.json', '--port', '5391']),
+    ).toEqual({ runs: 3, out: 'perf/child-fs.json', port: 5391, ownerLoad: 'idle' });
 
-  it('rejects malformed arguments before launch', async () => {
-    const { parseChildFsArgs } = await import('./child-fs-runner.mjs');
-    const cases: readonly (readonly string[])[] = [
+    const invalidCases: readonly (readonly string[])[] = [
       [],
+      ['--out', 'x.json'],
       ['--runs', '0', '--out', 'x.json'],
       ['--runs', '-1', '--out', 'x.json'],
       ['--runs', '1.5', '--out', 'x.json'],
       ['--runs', 'wat', '--out', 'x.json'],
       ['--runs', '1'],
       ['--runs', '1', '--out', ''],
+      ['--runs', '1', '--runs', '2', '--out', 'x.json'],
       ['--runs', '1', '--out', 'x.json', '--port', '0'],
       ['--runs', '1', '--out', 'x.json', '--unknown', 'x'],
     ];
-    for (const argv of cases) expect(() => parseChildFsArgs(argv), JSON.stringify(argv)).toThrow();
+    for (const argv of invalidCases) {
+      const assertPortFree = vi.fn(async () => {});
+      const launch = vi.fn(async () => 'launched');
+      await expect(admitChildFsRun(argv, { assertPortFree, launch })).rejects.toThrow();
+      expect(assertPortFree, JSON.stringify(argv)).not.toHaveBeenCalled();
+      expect(launch, JSON.stringify(argv)).not.toHaveBeenCalled();
+    }
   });
 
-  it('refuses an occupied strict port instead of measuring a foreign server', async () => {
-    const { assertChildFsPortFree } = await import('./child-fs-runner.mjs');
-    const server = createServer();
+  it('probes a real free/occupied port and launches only after free admission', async () => {
+    const { admitChildFsRun, assertChildFsPortFree } = await import('./child-fs-runner.mjs');
+    const free = createServer();
     await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', resolve);
+      free.once('error', reject);
+      free.listen(0, '127.0.0.1', resolve);
     });
-    try {
-      const address = server.address();
-      if (address === null || typeof address === 'string')
-        throw new Error('test server has no TCP port');
-      await expect(assertChildFsPortFree(address.port)).rejects.toThrow(/occupied|already/u);
-    } finally {
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error === undefined ? resolve() : reject(error))),
-      );
-    }
+    const address = free.address();
+    if (address === null || typeof address === 'string')
+      throw new Error('test listener has no port');
+    const port = address.port;
+    await expect(assertChildFsPortFree(port)).rejects.toThrow(/occupied|already/u);
+    await new Promise<void>((resolve, reject) =>
+      free.close((error) => (error === undefined ? resolve() : reject(error))),
+    );
+    await expect(assertChildFsPortFree(port)).resolves.toBeUndefined();
+
+    const order: string[] = [];
+    const result = await admitChildFsRun(
+      ['--runs', '1', '--out', 'x.json', '--port', String(port)],
+      {
+        assertPortFree: async (value: number) => {
+          expect(value).toBe(port);
+          order.push('port');
+        },
+        launch: async (options: unknown) => {
+          order.push('launch');
+          return options;
+        },
+      },
+    );
+    expect(order).toEqual(['port', 'launch']);
+    expect(result).toMatchObject({ runs: 1, out: 'x.json', port });
   });
 });
 
 describe('child fs benchmark artifact publication', () => {
-  it('writes a sibling temp and renames it; never writes the success path directly', async () => {
+  it('default I/O writes exact bytes through a sibling temp and leaves only the final path', async () => {
     const { publishChildFsArtifact } = await import('./child-fs-runner.mjs');
-    const calls: string[] = [];
-    const io = {
-      mkdir: vi.fn(() => calls.push('mkdir')),
-      writeFile: vi.fn((path: string) => calls.push(`write:${path}`)),
-      rename: vi.fn((from: string, to: string) => calls.push(`rename:${from}->${to}`)),
-      unlink: vi.fn((path: string) => calls.push(`unlink:${path}`)),
-    };
-    publishChildFsArtifact('/result/child-fs.json', '{"ok":true}\n', io);
-    expect(calls).toEqual([
-      'mkdir',
-      'write:/result/.child-fs.json.tmp',
-      'rename:/result/.child-fs.json.tmp->/result/child-fs.json',
-    ]);
+    const dir = mkdtempSync(join(tmpdir(), 'rifty-child-fs-artifact-'));
+    try {
+      const out = join(dir, 'child-fs.json');
+      publishChildFsArtifact(out, '{"exact":true}\n');
+      expect(readFileSync(out, 'utf8')).toBe('{"exact":true}\n');
+      expect(readdirSync(dir)).toEqual(['child-fs.json']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  it('write/rename failure is loud, cleans the temp, and never touches the success path', async () => {
+  it('injected write/rename failures are loud, clean temp, and never touch success path', async () => {
     const { publishChildFsArtifact } = await import('./child-fs-runner.mjs');
     for (const failure of ['write', 'rename'] as const) {
       const calls: string[] = [];
