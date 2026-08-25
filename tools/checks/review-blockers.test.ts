@@ -9,6 +9,15 @@ const verdict = (overrides: Record<string, unknown> = {}) => ({
   unit_residuals: [],
   goal_residuals: [],
   goal_complete: true,
+  coverage: [
+    {
+      row: 'Acceptance 1: offline reopen restores the tree',
+      source: 'acceptance',
+      status: 'pass',
+      citation: 'a.test.ts:10',
+      note: '',
+    },
+  ],
   axes: REQUIRED_AXES.map((axis) => ({ axis, verdict: 'pass', findings: [] })),
   ...overrides,
 });
@@ -95,9 +104,81 @@ describe('evaluateVerdict', () => {
       verdict: axis === 'Bugs' ? 'blocker' : 'pass',
       findings:
         axis === 'Bugs'
-          ? [{ severity: 'blocker', location: 'x.ts:1', summary: 'Wrong bytes.' }]
+          ? [
+              {
+                severity: 'blocker',
+                location: 'x.ts:1',
+                summary: 'Wrong bytes.',
+                authority: 'docs/backlog/playground/a.md:12 — Acceptance 1 requires exact bytes',
+              },
+            ]
           : [],
     }));
     expect(evaluateVerdict(verdict({ overall_verdict: 'blocker', axes })).code).toBe(1);
+  });
+
+  it('rejects missing coverage, non-pass rows without notes, and blockers without authority', () => {
+    expect(evaluateVerdict(verdict({ coverage: [] })).code).toBe(2);
+    expect(
+      evaluateVerdict(
+        verdict({
+          coverage: [
+            { row: 'r', source: 'acceptance', status: 'weak', citation: 'a.test.ts:1', note: '' },
+          ],
+        }),
+      ).code,
+    ).toBe(2);
+    const axes = REQUIRED_AXES.map((axis) => ({
+      axis,
+      verdict: 'pass',
+      findings:
+        axis === 'Bugs' ? [{ severity: 'blocker', location: 'x.ts:1', summary: 'No cite.' }] : [],
+    }));
+    expect(evaluateVerdict(verdict({ axes })).code).toBe(2);
+  });
+
+  it('raw mode blocks on any non-pass coverage row', () => {
+    const result = evaluateVerdict(
+      verdict({
+        coverage: [
+          {
+            row: 'r',
+            source: 'fault-matrix',
+            status: 'weak',
+            citation: 'a.test.ts:1',
+            note: 'lossy assertion',
+          },
+        ],
+      }),
+    );
+    expect(result.code).toBe(1);
+  });
+
+  it('adjudication demotes STRETCH to concern and blocks only surviving HOLDS', () => {
+    const blocker = (summary: string) => ({
+      severity: 'blocker',
+      location: 'x.ts:1',
+      summary,
+      authority: 'docs/backlog/playground/a.md:12',
+    });
+    const axes = REQUIRED_AXES.map((axis) => ({
+      axis,
+      verdict: axis === 'Bugs' ? 'blocker' : 'pass',
+      findings: axis === 'Bugs' ? [blocker('Real gap.'), blocker('Taste demand.')] : [],
+    }));
+    const withBoth = verdict({ overall_verdict: 'blocker', goal_complete: false, axes });
+    const survived = evaluateVerdict(withBoth, [
+      { summary: 'Real gap.', ruling: 'HOLDS' },
+      { summary: 'Taste demand.', ruling: 'STRETCH' },
+    ]);
+    expect(survived.code).toBe(1);
+    expect(survived.blockers.map((f: { summary: string }) => f.summary)).toEqual(['Real gap.']);
+    expect(survived.demoted.map((f: { summary: string }) => f.summary)).toEqual(['Taste demand.']);
+    const allDemoted = evaluateVerdict(withBoth, [
+      { summary: 'Real gap.', ruling: 'FALSE' },
+      { summary: 'Taste demand.', ruling: 'STRETCH' },
+    ]);
+    expect(allDemoted.code).toBe(0);
+    expect(evaluateVerdict(withBoth, [{ summary: 'No such.', ruling: 'STRETCH' }]).code).toBe(2);
   });
 });
