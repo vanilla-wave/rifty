@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Child fs sync-RPC hot path — remove enumerated wire slowdowns, Node-strict freshness
 created: 2026-08-26
 value: Frequent guest fs ops from a kernel-spawned COI child stop paying avoidable double hops + JSON framing over the owner sync-RPC — vite build / CLI cold start move toward in-realm speed without any child-side cache.
@@ -60,4 +60,5 @@ Both compared against the same guest source in a single in-realm worker.
   cache/bypass excluded; escalation would be its own ADR + re-fit — user.
 - 2026-08-26 — fork D (tier): robust — user.
 - 2026-08-26 — fork E (CLI anchor): express — user.
-- signoff: pending FIT (final invariant wording; forks + tier answered above).
+- signoff: 2026-08-26 — user (invariants I1–I3 + tier robust; explicit request
+  to implement PR #279).
