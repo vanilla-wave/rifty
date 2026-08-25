@@ -19,15 +19,23 @@ kernel-spawned child over owner sync-RPC. The second lane executes the identical
 guest bytes in one in-realm Worker. Compare Vite's own `built in Xs` report for
 the 2180-module fixture and Express cold `require('express')` start-to-listening.
 
-## Reference contract
+## Evidence
 
-- Repro: `git show t3code/prototype-no-coi-agent-cycle:prototype/no-coi-agent-loop/FINDINGS.md`
-  §2b on Chromium/Playwright; recorded output is product Vite 1.63 s vs in-realm
-  1.13 s and 2180 modules in both lanes. The artifact pins the exact commit,
-  browser version, dependency identities, scenario digest, and per-run outputs.
+- Pinned observation (not acceptance proof):
+  `git show 1261339acc1d1eb3f864a9a48ed50bf067fe0f02:prototype/no-coi-agent-loop/FINDINGS.md`
+  §2b, command from that commit's `README.md`; macOS 25.3.0, bundled Chromium,
+  `@playwright/test ^1.49.0`. It records a 2180-module Vite comparison but no
+  Express anchor, exact browser version, scenario digest, or robust faults; the
+  committed lane must produce those missing proofs and does not treat the spike
+  artifact as frozen truth.
 - Carrier evidence: `tools/perf/bench.mjs` already owns an isolated strict-port
   Playwright runner and refuses false/incomplete measurements; Playwright 1.60.0,
   Node v24.16.0, pnpm 11.5.2 on 2026-08-26.
+- Expected RED: `pnpm vitest run tools/perf/src/child-fs-artifact.test.ts
+  tools/perf/src/child-fs-runner.test.ts` on Vitest 2.1.9 → 9/9 tests fail
+  because `child-fs-artifact.mjs` / `child-fs-runner.mjs` do not exist. The
+  collected tests enumerate every Acceptance/Parity/Fault rejection below;
+  implementation has not started.
 
 ## Acceptance
 
@@ -68,6 +76,8 @@ the 2180-module fixture and Express cold `require('express')` start-to-listening
 | page/Worker death (`provenance-lie`) | reject the run; never claim a topology or timing without its terminal proof | incomplete lane aggregation |
 | guest/result `corrupt-input` / `lossy-aggregate` | reject wrong digest, dependency identity, duplicate/missing markers, wrong module count, or partial N-run set | artifact verifier table |
 | strict port `concurrent-same-key` | refuse an occupied port before launch; never measure a foreign server | occupied-port runner test |
+| CLI `corrupt-input` | reject missing/malformed `--runs` or `--out` before browser/server launch | argument table |
+| artifact storage `quota-perm-fail` / `torn-state` | write a sibling temp then atomic rename; failure leaves no partial success artifact and exits non-zero | injected write/rename failures |
 
 ## Out of scope
 
@@ -86,3 +96,6 @@ the 2180-module fixture and Express cold `require('express')` start-to-listening
 - 2026-08-26 — default one complete sample keeps the lane operable; `--runs N`
   provides repeats and completeness is exact. No median is accepted from a
   partial set.
+- 2026-08-26 — Contract+RED attempt 1 @ 5e025cbc8 blocked: expected RED carriers
+  absent; spike reference unpinned/non-closing; robust CLI/publication rows
+  missing. Re-cut in place, no implementation started.
