@@ -11,6 +11,11 @@ code: [packages/runtime-js/src/ipc/fs-handlers.ts, packages/runtime-js/src/ipc/s
 
 ## Context
 
+2026-08-26: item (3)'s hot-path half (small-read double hop + probe storm)
+graduated to `epics/child-fs-rpc-hot-path` (`perf/fs-read-single-hop`, binary
+request frame, batched-probe fog). THIS item keeps only >256 KiB O(N²)
+read/write + base64 write inflation — out of that epic's scope.
+
 ADR-0150 Consequences flag these as accepted-for-v1; concrete record here. (1) `fs-handlers.readChunk` re-reads the WHOLE file per chunk (`readFileBytesSync(path)` then `subarray`) → O(N²) for a file read in K chunks. (2) `writeChunk` append reads prev+concat+writes per chunk → O(N²) multi-chunk writes; plus base64 ~33% inflation on every write request (the request frame is JSON-only, ADR-0032). (3) A child `require()` resolves node_modules via many sequential `statSyncOrNull`/read round-trips — each a blocking SAB round-trip → slow CLI startup.
 
 ## P6b amplification + feasibility (recorded 2026-06-17)

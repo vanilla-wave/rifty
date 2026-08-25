@@ -694,8 +694,7 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
       // input-keyed and cannot be pruned by module id, so ANY invalidate —
       // full OR targeted — clears them whole. A stale package.json (load-fixture
       // reload) or a stale resolution would silently mis-classify / mis-route a
-      // module. TODO(backlog: perf/loader-packagejson-parse-cache),
-      // TODO(backlog: perf/resolver-resolution-cache).
+      // module.
       resolver.clearCaches();
     },
     registry,
