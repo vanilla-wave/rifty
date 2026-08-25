@@ -53,14 +53,72 @@ the process state. Log is post-mortem: read it only if `verdict.json` is missing
 `</dev/null` is load-bearing: without a TTY (background shells) codex parks on
 "Reading additional input from stdin..." forever.
 
+Reviewer effort: ultra (`-c model_reasoning_effort="ultra"`). The reviewer
+CERTIFIES the tree against its declared authorities — unit contract
+(Acceptance/Parity/Fault matrix), repo rules (AGENTS.md, docs/process, active
+ADRs), baseline behavior. Two symmetric reviewer errors, equally serious:
+missing a declared-authority violation, and blocking on a demand no declared
+authority makes. A blocker cites its violated authority (`authority` field —
+`blockers.mjs` rejects blockers without one); strengthening beyond declaration
+(stricter assertion, deeper mutant, extra hardening) is a concern — batched,
+never spending an attempt — or a backlog candidate, never a checkpoint block.
+
+One checkpoint = two find passes, one adjudication, then one batch fix, then
+ONE verify pass — never one-blocker-per-round iteration:
+
+1. **Find pass** — exhaustive single pass: every blocker in one verdict; a
+   defect visible in this tree that surfaces at a later attempt = review
+   failure. The reviewer partitions the diff itself and spawns parallel
+   read-only subagents (rubric axes / seams it identifies), merges + dedupes.
+   It fills `coverage`: one row per contract `## Fault matrix` line,
+   Acceptance/Parity clause, public API entry the diff touches, frozen
+   oracle/golden. `pass` judged adversarially — a plausible wrong
+   implementation must fail the cited RED. `weak` is bounded: it names the
+   concrete wrong implementation AND the declared clause/failure-model row it
+   violates; a mutant beyond the obligation as declared (deeper hardening) is
+   a concern — the row stays `pass`. Every weak/missing row carries a finding.
+   Any weak/missing row blocks (`blockers.mjs` enforces); a later gap in a
+   `pass` cell is reviewer error.
+2. **Tail pass** — fresh reviewer, prior findings attached as settled (do not
+   re-raise; a rephrase = failure), hunts only what is NOT on the list; own
+   subagents + a dedupe adjudicator. Empty tail = found set converged.
+3. **Adjudication** — BEFORE any fixing, a fresh read-only critic (light
+   subagent, not a checkpoint run; independent context — never the reviewer
+   judging its own verdict) takes the union blocker list (summary + authority
+   + location only, no reviewer reasoning) and the tree, reads each cited
+   authority in full context plus the cited carriers, and rules per blocker:
+   HOLDS (clause as written requires the demand, carrier genuinely absent),
+   STRETCH (clause broader than the demand — reviewer extrapolation), FALSE
+   (carrier exists / citation misread). Default to STRETCH when the clause
+   text does not clearly mandate the specific demand; quote the decisive
+   fragment verbatim. Output `adjudication.json`:
+   `[{"summary": "<exact finding summary>", "ruling": "HOLDS|STRETCH|FALSE",
+   "clause": "<decisive quote>"}]`. Then
+   `node tools/review/blockers.mjs "$RUN/verdict.json" "$RUN/adjudication.json"`
+   — STRETCH/FALSE demote to the concern batch; only HOLDS (plus `missing`
+   coverage rows) force the re-cut. The reviewer verdict file stays untouched
+   (lineage); the adjudication rides beside it.
+
+Fix surviving blockers in one batch re-cut, then one verify pass on the new
+tree (same command, prior verdicts as settled). An obligation neither pass can
+pin because the contract never declared it (missing exactness, count, identity)
+is a contract hole → §Contract escalation re-refine, not another review round.
+
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
 codex exec -C "$(git rev-parse --show-toplevel)" --approve-for-me \
+  -c model_reasoning_effort="ultra" \
   --skip-git-repo-check --output-schema tools/review/review-schema.json -o "$RUN/verdict.json" \
-  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, the named goal directory (docs/backlog/epics/<slug>/) when declared, current-unit contract, and every changed file. Do not modify files. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
+  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, the named goal directory (docs/backlog/epics/<slug>/) when declared, current-unit contract, and every changed file. Do not modify tracked files. ROLE: certify this tree against its DECLARED authorities — the unit contract (Acceptance/Parity/Fault matrix), repo rules (AGENTS.md, docs/process, active ADRs), and existing baseline behavior. Two failure modes, equally serious: missing a declared-authority violation, and blocking on a demand no declared authority makes. A finding is a blocker ONLY with its violated authority cited in the \`authority\` field (exact clause/rule/ADR/baseline behavior); strengthening beyond declaration is a concern — batched, never blocking — and issuing it as a blocker is your error, symmetric to a miss. EXHAUSTIVENESS: single-pass — enumerate EVERY blocker in this one verdict; a defect visible in this tree that would only surface in a later attempt counts as a failure of this review. Partition the review yourself and spawn parallel read-only subagents (rubric axes and the seams/boundaries you identify in the diff), then merge and dedupe their findings. COVERAGE: fill the \`coverage\` section — one row per contract \`## Fault matrix\` line, Acceptance/Parity clause, public API entry point the diff adds or changes, and frozen oracle/golden artifact; judge \`pass\` adversarially (a plausible wrong implementation must fail the cited carrier — lossy/inexact assertions, non-discriminating fixtures, absent count/order/identity checks are \`weak\`); \`weak\` must name the concrete wrong implementation AND the declared clause/failure-model row it violates — a mutant beyond the obligation as declared is a concern and leaves the row \`pass\`; every weak/missing row carries a finding; do not skip rows. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
   </dev/null >"$RUN/log" 2>&1
 node tools/review/blockers.mjs "$RUN/verdict.json"  # missing verdict → tail -n 40 "$RUN/log"
 ```
+
+Tail pass: same command, fresh `$RUN`, prompt appended with
+`"PRIOR FINDINGS (settled, do not re-raise; report ONLY defects not covered by
+this list; if nothing new survives, say so in merge_call):"` + the pass-1
+findings list (axis-prefixed one-liners). Union of both passes = the round's
+blocker set; fix batched; verify pass reuses the same appendix with both lists.
 
 Exit 0 → unit passes (`goal_complete:false` = continue the goal); exit 1 →
 re-cut in place — same branch lineage, count carries (`fault-classes.md`

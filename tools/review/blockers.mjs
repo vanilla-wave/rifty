@@ -18,12 +18,46 @@ function residuals(value) {
   return Array.isArray(value) ? value : null;
 }
 
-export function evaluateVerdict(verdict) {
+export function evaluateVerdict(verdict, adjudication = null) {
   const errors = [];
   const axes = Array.isArray(verdict?.axes) ? verdict.axes : null;
+  const rulings = new Map();
+  if (adjudication !== null) {
+    if (!Array.isArray(adjudication)) errors.push('adjudication is not an array');
+    for (const entry of Array.isArray(adjudication) ? adjudication : []) {
+      if (!['HOLDS', 'STRETCH', 'FALSE'].includes(entry?.ruling)) {
+        errors.push(
+          `adjudication entry without valid ruling: ${entry?.summary?.slice(0, 60) ?? '?'}`,
+        );
+      } else if (typeof entry.summary !== 'string' || entry.summary.length === 0) {
+        errors.push('adjudication entry without summary');
+      } else {
+        rulings.set(entry.summary, entry.ruling);
+      }
+    }
+  }
   const unitResiduals = residuals(verdict?.unit_residuals);
   const goalResiduals = residuals(verdict?.goal_residuals);
+  const coverage = Array.isArray(verdict?.coverage) ? verdict.coverage : null;
   if (!axes) errors.push('axes missing');
+  if (!coverage || coverage.length === 0) errors.push('coverage missing or empty');
+  for (const row of coverage ?? []) {
+    if (!['pass', 'weak', 'missing'].includes(row?.status)) {
+      errors.push(`coverage row without valid status: ${row?.row ?? '?'}`);
+    } else if (row.status !== 'pass' && !(typeof row.note === 'string' && row.note.length > 0)) {
+      errors.push(`${row.status} coverage row without note: ${row.row}`);
+    }
+  }
+  for (const axis of axes ?? []) {
+    for (const finding of Array.isArray(axis?.findings) ? axis.findings : []) {
+      if (
+        finding?.severity === 'blocker' &&
+        !(typeof finding.authority === 'string' && finding.authority.length > 0)
+      ) {
+        errors.push(`blocker without declared authority: ${finding?.summary?.slice(0, 80) ?? '?'}`);
+      }
+    }
+  }
   if (!['Contract+RED', 'Final+GREEN'].includes(verdict?.checkpoint)) {
     errors.push('checkpoint missing or invalid');
   }
@@ -66,15 +100,43 @@ export function evaluateVerdict(verdict) {
       axis: axis.axis,
     })),
   );
+  const rawBlockers = findings.filter((finding) => finding.severity === 'blocker');
+  const adjudicated = adjudication !== null;
+  if (adjudicated) {
+    const summaries = new Set(rawBlockers.map((finding) => finding.summary));
+    for (const summary of rulings.keys()) {
+      if (!summaries.has(summary)) {
+        errors.push(`adjudication ruling matches no blocker: ${summary.slice(0, 80)}`);
+      }
+    }
+    if (errors.length > 0) {
+      return { code: 2, errors, blockers: [], concerns: [], nits: [], goalComplete: false, axes };
+    }
+  }
+  const demoted = adjudicated
+    ? rawBlockers
+        .filter((finding) => ['STRETCH', 'FALSE'].includes(rulings.get(finding.summary)))
+        .map((finding) => ({ ...finding, ruling: rulings.get(finding.summary) }))
+    : [];
+  const demotedSummaries = new Set(demoted.map((finding) => finding.summary));
+  // Adjudicated: residuals mirror the blocker findings and follow their rulings — the
+  // calibrated blocker set is the surviving findings; residuals stay report-only.
   const blockers = [
-    ...findings.filter((finding) => finding.severity === 'blocker'),
-    ...unitResiduals.map((residual) => ({ ...residual, axis: 'Unit residual' })),
+    ...rawBlockers.filter((finding) => !demotedSummaries.has(finding.summary)),
+    ...(adjudicated
+      ? []
+      : unitResiduals.map((residual) => ({ ...residual, axis: 'Unit residual' }))),
   ];
-  const concerns = findings.filter((finding) => finding.severity === 'concern');
+  const concerns = [...findings.filter((finding) => finding.severity === 'concern'), ...demoted];
   const nits = findings.filter((finding) => finding.severity === 'nit');
   const axisBlocker =
     axes.some((axis) => axis.verdict === 'blocker') || verdict.overall_verdict === 'blocker';
-  const hasBlocker = blockers.length > 0 || axisBlocker;
+  const uncovered = coverage.filter((row) => row.status !== 'pass');
+  // Adjudicated: stored axis/overall verdicts predate demotion; blocking power = surviving
+  // blockers + missing rows (weak rows report-only). Raw: reviewer verdict binds as-is.
+  const hasBlocker = adjudicated
+    ? blockers.length > 0 || coverage.some((row) => row.status === 'missing')
+    : blockers.length > 0 || axisBlocker || uncovered.length > 0;
   return {
     code: hasBlocker ? 1 : 0,
     errors,
@@ -84,23 +146,35 @@ export function evaluateVerdict(verdict) {
     goalComplete: verdict.goal_complete && !hasBlocker,
     goalResiduals,
     axes,
+    coverage,
+    uncovered,
+    demoted,
   };
 }
 
 function main() {
   const path = process.argv[2];
   if (!path) {
-    console.error('usage: blockers.mjs <verdict.json>');
+    console.error('usage: blockers.mjs <verdict.json> [adjudication.json]');
     process.exit(2);
   }
   let verdict;
+  let adjudication = null;
   try {
     verdict = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
     console.error(`unparseable verdict (${path}): ${error.message}`);
     process.exit(2);
   }
-  const result = evaluateVerdict(verdict);
+  if (process.argv[3]) {
+    try {
+      adjudication = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+    } catch (error) {
+      console.error(`unparseable adjudication (${process.argv[3]}): ${error.message}`);
+      process.exit(2);
+    }
+  }
+  const result = evaluateVerdict(verdict, adjudication);
   if (result.errors.length > 0) {
     for (const error of result.errors) console.error(`invalid verdict: ${error}`);
     process.exit(2);
@@ -110,6 +184,15 @@ function main() {
   console.log(`overall: ${verdict.overall_verdict}  |  merge: ${verdict.merge_call || '?'}`);
   console.log(`checkpoint: ${verdict.checkpoint}  |  unit: ${verdict.unit_goal_source}`);
   console.log(`axes: ${result.axes.map((axis) => `${axis.axis}=${axis.verdict}`).join(', ')}`);
+  const byStatus = (status) => result.coverage.filter((row) => row.status === status).length;
+  console.log(
+    `coverage: ${result.coverage.length} rows — ${byStatus('pass')} pass, ${byStatus('weak')} weak, ${byStatus('missing')} missing`,
+  );
+  if (result.uncovered.length > 0) {
+    console.log('UNCOVERED OBLIGATIONS:');
+    for (const row of result.uncovered)
+      console.log(`  - [${row.status}] (${row.source}) ${row.row} — ${row.note}`);
+  }
   console.log(
     `findings: ${result.blockers.length} blocker, ${result.concerns.length} concern, ${result.nits.length} nit`,
   );
@@ -123,6 +206,11 @@ function main() {
   if (result.concerns.length > 0) {
     console.log('CONCERNS:');
     for (const finding of result.concerns) console.log(line(finding));
+  }
+  if (result.demoted.length > 0) {
+    console.log('DEMOTED BY ADJUDICATION:');
+    for (const finding of result.demoted)
+      console.log(`  - [${finding.ruling}] ${finding.summary?.slice(0, 120)}`);
   }
   process.exit(result.code);
 }
