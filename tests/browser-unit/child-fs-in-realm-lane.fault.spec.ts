@@ -16,6 +16,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     for (const mode of [
       'reply-before-ready',
       'messageerror',
+      'messageerror-inflight',
       'duplicate-ready',
       'wrong-reply',
       'duplicate-reply',
@@ -101,6 +102,10 @@ test('protocol corruption and real Worker failures reject and terminate once', a
               postMessage(command: Record<string, unknown>) {
                 posts.push(command);
                 queueMicrotask(() => {
+                  if (mode === 'messageerror-inflight') {
+                    emit('messageerror', new MessageEvent('messageerror'));
+                    return;
+                  }
                   if (mode === 'wrong-reply') {
                     message({ kind: 'installed' });
                     return;
@@ -273,6 +278,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
   ).toEqual([
     { mode: 'reply-before-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'messageerror', posts: 0, rejected: true, terminateCalls: 1 },
+    { mode: 'messageerror-inflight', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-reply', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-reply', posts: 2, rejected: true, terminateCalls: 1 },

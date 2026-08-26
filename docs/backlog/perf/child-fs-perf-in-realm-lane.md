@@ -111,3 +111,5 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 - 2026-08-26 — Contract+RED @ 581e980fd blocked: one-shot readiness could
   ignore a duplicate before command dispatch. Duplicate-ready now rejects with
   zero posts and one terminate.
+- 2026-08-26 — Contract+RED @ 6e39e3fe7 blocked: `messageerror` after ready
+  could hang an in-flight command. Pre-ready and in-flight carriers now reject.

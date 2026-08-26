@@ -79,3 +79,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
   581e980fd: duplicate startup ready escaped command-loop duplicate carriers;
   duplicate-ready rejects before the first post
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
+  6e39e3fe7: post-ready `messageerror` could hang an in-flight phase; both
+  readiness and command-loop messageerror carriers now required
