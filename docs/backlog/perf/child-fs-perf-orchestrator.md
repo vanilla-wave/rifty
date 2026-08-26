@@ -98,3 +98,6 @@ ready-verdict: 2026-08-26 — Contract+RED @ 6bff21e2e
   carried timeout. Timeout matrix now covers both lanes at ordinal 1 and after a
   complete ordinal at ordinal 2.
 - 2026-08-26 — Contract+RED PASS @ 6bff21e2e; unit residuals empty.
+- 2026-08-26 — Final+GREEN @ a14a21e10 blocked: failed signals could win and
+  abandon an in-progress close; shutdown timeout had no forced terminal proof.
+  Handles now require graceful close, force close and `closed` settlement.

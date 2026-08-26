@@ -47,7 +47,9 @@ describe('child fs bounded two-lane orchestrator', () => {
           return {
             ready: Promise.resolve().then(() => events.push('server:ready')),
             failed: never(),
+            closed: Promise.resolve(),
             close: async () => events.push('server:close'),
+            forceClose: async () => events.push('server:force'),
           };
         },
         launchBrowser: async (baseUrl: string) => {
@@ -55,11 +57,13 @@ describe('child fs bounded two-lane orchestrator', () => {
           return {
             version: 'Chromium exact',
             failed: never(),
+            closed: Promise.resolve(),
             runSample: async (lane: 'in-realm' | 'product-coi', ordinal: number) => {
               events.push(`sample:${lane}:${ordinal}`);
               return rawSample(lane, ordinal);
             },
             close: async () => events.push('browser:close'),
+            forceClose: async () => events.push('browser:force'),
           };
         },
         publish: (path: string, json: string) => {

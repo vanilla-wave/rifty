@@ -61,14 +61,35 @@ describe('child fs orchestrator lifecycle faults', () => {
       'summary-sample',
       'browser-close',
       'browser-close-timeout',
+      'browser-force-failure',
       'page-failure-cleanup',
       'server-exit-cleanup',
       'server-close',
       'server-close-timeout',
+      'server-force-failure',
     ] as const) {
+      const serverTerminal = deferred<void>();
+      const browserTerminal = deferred<void>();
+      let serverTerminalClosed = false;
+      let browserTerminalClosed = false;
+      let serverCloseSettled = false;
+      let browserCloseSettled = false;
       const serverClose = vi.fn(async (): Promise<unknown> => {
         if (fault === 'server-close-timeout') return await new Promise<never>(() => {});
-        if (fault === 'server-close') throw new Error('injected server close failure');
+        if (fault === 'server-close' || fault === 'server-force-failure') {
+          throw new Error('injected server close failure');
+        }
+        if (fault === 'server-exit' || fault === 'server-exit-cleanup') {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        serverCloseSettled = true;
+        serverTerminalClosed = true;
+        serverTerminal.resolve();
+      });
+      const serverForceClose = vi.fn(async () => {
+        if (fault === 'server-force-failure') throw new Error('injected server force failure');
+        serverTerminalClosed = true;
+        serverTerminal.resolve();
       });
       const browserClose = vi.fn(async (): Promise<unknown> => {
         if (fault === 'browser-close-timeout') return await new Promise<never>(() => {});
@@ -78,9 +99,22 @@ describe('child fs orchestrator lifecycle faults', () => {
         }
         if (fault === 'server-exit-cleanup') {
           serverFailed.reject(new Error('injected server exit during cleanup'));
-          await Promise.resolve();
+          await new Promise((resolve) => setTimeout(resolve, 5));
         }
-        if (fault === 'browser-close') throw new Error('injected browser close failure');
+        if (fault === 'page-failure' || fault === 'page-failure-cleanup') {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        if (fault === 'browser-close' || fault === 'browser-force-failure') {
+          throw new Error('injected browser close failure');
+        }
+        browserCloseSettled = true;
+        browserTerminalClosed = true;
+        browserTerminal.resolve();
+      });
+      const browserForceClose = vi.fn(async () => {
+        if (fault === 'browser-force-failure') throw new Error('injected browser force failure');
+        browserTerminalClosed = true;
+        browserTerminal.resolve();
       });
       const publish = vi.fn();
       const serverFailed = deferred<never>();
@@ -122,7 +156,9 @@ describe('child fs orchestrator lifecycle faults', () => {
                       ? new Promise<never>(() => {})
                       : Promise.resolve(),
                 failed: serverFailed.promise,
+                closed: serverTerminal.promise,
                 close: serverClose,
+                forceClose: serverForceClose,
               };
             },
             launchBrowser: async () => {
@@ -130,8 +166,10 @@ describe('child fs orchestrator lifecycle faults', () => {
               return {
                 version: 'Chromium fault',
                 failed: pageFailed.promise,
+                closed: browserTerminal.promise,
                 runSample,
                 close: browserClose,
+                forceClose: browserForceClose,
               };
             },
             publish,
@@ -152,6 +190,32 @@ describe('child fs orchestrator lifecycle faults', () => {
           ? 0
           : 1,
       );
+      expect(browserForceClose, fault).toHaveBeenCalledTimes(
+        fault === 'browser-close' ||
+          fault === 'browser-close-timeout' ||
+          fault === 'browser-force-failure'
+          ? 1
+          : 0,
+      );
+      expect(serverForceClose, fault).toHaveBeenCalledTimes(
+        fault === 'server-close' ||
+          fault === 'server-close-timeout' ||
+          fault === 'server-force-failure'
+          ? 1
+          : 0,
+      );
+      if (fault === 'page-failure' || fault === 'page-failure-cleanup') {
+        expect(browserCloseSettled, fault).toBe(true);
+      }
+      if (fault === 'server-exit' || fault === 'server-exit-cleanup') {
+        expect(serverCloseSettled, fault).toBe(true);
+      }
+      if (fault !== 'browser-force-failure' && browserClose.mock.calls.length > 0) {
+        expect(browserTerminalClosed, fault).toBe(true);
+      }
+      if (fault !== 'server-force-failure' && serverClose.mock.calls.length > 0) {
+        expect(serverTerminalClosed, fault).toBe(true);
+      }
     }
   });
 
@@ -163,13 +227,17 @@ describe('child fs orchestrator lifecycle faults', () => {
         startServer: async () => ({
           ready: Promise.resolve(),
           failed: new Promise<never>(() => {}),
+          closed: Promise.resolve(),
           close: async () => events.push('server:close'),
+          forceClose: async () => events.push('server:force'),
         }),
         launchBrowser: async () => ({
           version: 'Chromium fault',
           failed: new Promise<never>(() => {}),
+          closed: Promise.resolve(),
           runSample: async (lane: 'in-realm' | 'product-coi') => rawSample(lane),
           close: async () => events.push('browser:close'),
+          forceClose: async () => events.push('browser:force'),
         }),
         publish: () => {
           events.push('publish');
