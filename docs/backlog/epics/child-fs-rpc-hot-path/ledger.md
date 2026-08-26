@@ -156,3 +156,4 @@
 - 2026-08-26 — ready-verdict perf/fs-read-single-hop: Contract+RED @
   c2780008a — PASS, 10 expected RED / 29 pass, sibling controls 58/58, unit
   residuals empty
+- 2026-08-26 — after single-hop f72ec428a3a646df3804bfabedd02f1564051739: product vite 6.08s express 264.69499999284744ms; in-realm vite 1.22s express 179.1799999922514ms
