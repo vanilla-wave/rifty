@@ -1,10 +1,9 @@
 ## Items
 
-1. `perf/fs-read-single-hop` — **kill the sizing hop** (I1) — wire-format
-   change (new/extended fs method) → ADR; I3 baseline is its proof anchor.
-2. `perf/syncrpc-v2-waitasync-binary-ring` — **binary REQUEST frame residual**
-   (I2) — re-cut; ADR-0084 already delivered waitAsync responder + binary
-   reply; I3 baseline is its proof anchor.
+1. `perf/syncrpc-v2-waitasync-binary-ring` — **binary REQUEST frame residual**
+   (I2) — re-cut; ADR-0084 delivered waitAsync + binary reply, ADR-0365
+   delivered one-hop read heads on protocol v4; I3 baseline/post-I1 artifacts
+   are its proof anchors.
 
 ## Open questions
 

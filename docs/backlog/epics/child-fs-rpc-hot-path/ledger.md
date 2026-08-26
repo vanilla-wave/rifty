@@ -161,3 +161,13 @@
   real JSON error transport erased `VfsError` prototype, bypassing public
   Node errno/syscall shaping; exact deserialized-error RED added at shared
   adapter boundary
+- 2026-08-26 — perf/fs-read-single-hop Final+GREEN PASS @ ba5df2a53;
+  focused unit/fault 54/54, real owner→kernel-child error carrier 1/1,
+  `pnpm pr:check` 24/24, unit residuals empty
+- 2026-08-26 — learned SyncRpc JSON errors erase prototypes; shared
+  `SyncRpcFsSync.callFs` rehydrates trusted `VfsError` code/path before every
+  public `node:fs` translation; carrier
+  `tests/browser-unit/child-fs-transport-errors.fault.spec.ts`
+- 2026-08-26 — re-chart after perf/fs-read-single-hop: 0 graduated /
+  1 invalidated (completed item deleted); I2 is the only goal residual and
+  inherits protocol v4 + baseline/post-I1 proof anchors
