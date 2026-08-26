@@ -1,22 +1,21 @@
 ---
 area: perf
 status: draft
-title: P6a child fs.* RPC chunk perf — O(N²) read re-reads + base64 write inflation + node_modules stat storms
+title: P6a child fs.* RPC chunk perf — O(N²) large-file reads + base64 write inflation
 created: 2026-06-16
-why: ADR-0150 v1 accepts these; large-file reads/writes over the per-chunk fs.* RPC are quadratic, writes carry base64 inflation, and a child require() walk is many sequential blocking round-trips; P6b's dev-server child amplifies (vite transforms + large bundles/wasm/sourcemaps + from-scratch install writes + big dep walks vs P6a's lighter CLIs)
-user_story: As a dev running a CLI that reads/writes large files or resolves a big dependency tree in a child, I want the fs.* RPC to not be O(N²) / hundreds of round-trips — without losing owner-as-SSoT coherence.
+why: ADR-0150 v1 accepts these; large-file reads/writes over the per-chunk fs.* RPC are quadratic and writes carry base64 inflation; P6b's dev-server child amplifies them through large bundles, WASM, sourcemaps, and install writes
+user_story: As a dev running a CLI that reads or writes large files, I want fs.* RPC to stay linear without losing owner-as-SSoT coherence.
 sources: [ADR-0150, ADR-0084, ADR-0072]
 code: [packages/runtime-js/src/ipc/fs-handlers.ts, packages/runtime-js/src/ipc/sync-rpc-fs.ts, packages/runtime-js/src/ipc/fs-rpc-protocol.ts]
 ---
 
 ## Context
 
-2026-08-26: item (3)'s hot-path half (small-read double hop + probe storm)
-graduated to `epics/child-fs-rpc-hot-path` (`perf/fs-read-single-hop`, binary
-request frame, batched-probe fog). THIS item keeps only >256 KiB O(N²)
-read/write + base64 write inflation — out of that epic's scope.
+2026-08-26: small-read double hops and JSON hot requests were removed; proof is
+`reference/child-fs-rpc-hot-path.md`. THIS item keeps only >256 KiB O(N²)
+read/write plus base64 write inflation.
 
-ADR-0150 Consequences flag these as accepted-for-v1; concrete record here. (1) `fs-handlers.readChunk` re-reads the WHOLE file per chunk (`readFileBytesSync(path)` then `subarray`) → O(N²) for a file read in K chunks. (2) `writeChunk` append reads prev+concat+writes per chunk → O(N²) multi-chunk writes; plus base64 ~33% inflation on every write request (the request frame is JSON-only, ADR-0032). (3) A child `require()` resolves node_modules via many sequential `statSyncOrNull`/read round-trips — each a blocking SAB round-trip → slow CLI startup.
+ADR-0150 Consequences flag these as accepted-for-v1; concrete record here. (1) `fs-handlers.readChunk` re-reads the WHOLE file per chunk (`readFileBytesSync(path)` then `subarray`) → O(N²) for a file read in K chunks. (2) `writeChunk` append reads prev+concat+writes per chunk → O(N²) multi-chunk writes; plus base64 ~33% inflation on every write request.
 
 ## P6b amplification + feasibility (recorded 2026-06-17)
 
@@ -28,10 +27,11 @@ O(N²)→O(N) is real — the quadratic is handler naivety, not inherent to chun
 
 - **Route 2 — per-transfer buffer on the owner (no contract change):** ring is single-in-flight ⇒ a file's chunks arrive sequentially; read = open/read once into a buffer (key path+mtime), serve slices, evict on last-chunk/timeout (kills #1); write = accumulate chunks, one `writeFileSync` on the final chunk (kills #2). O(N) time, O(N) transient mem, localized to fs-handlers.
 - **Route 1 — positional ops in `FsSync`:** add `readBytesAt`/`writeBytesAt`/append; OPFS `FileSystemSyncAccessHandle` does `read/write {at}` + `truncate` natively, in-memory via subarray. True O(N) streaming, O(1) extra mem — but a `vfs`-core contract change (own decision/ADR).
-- **Binary REQUEST frame** to drop base64 on writes — the request-side half of `perf/syncrpc-v2-waitasync-binary-ring` (which added the binary REPLY frame); additive + version-gated (ADR-0032/0084).
-- **Immutable node_modules direct-read** — let the child read node_modules straight from shared OPFS (P5) while the live project tree stays owner-RPC (coherent), or ship a resolver-cache image at spawn. Mind owner-SSoT + concurrent-writer coherence when bypassing RPC for reads.
+- **Binary write body on SyncRpc v5** — ADR-0366 supplied the envelope; add an
+  exact write decoder while keeping the existing owner mutation authority.
 - **Spawn amortization** is `perf/kernel-worker-prewarm-pool` (warm child + caches) — not restated here.
 
 ## Reversibility
 
-REVERSIBLE — optimizations behind the existing fs.* surface (a binary request frame is additive + versioned).
+REVERSIBLE — optimizations behind the existing fs.* surface; SyncRpc v5 is
+already version-gated by ADR-0366.

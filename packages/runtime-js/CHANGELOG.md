@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Measured child-FS sync-RPC hot path.** The completed one-hop/binary-request
+  goal carries baseline, post-I1, and post-I2 two-lane Chromium artifacts while
+  retaining strict owner freshness and no child cache.
+
 - **Binary hot owner-FS requests (ADR-0366).** `exists`, `stat`, `statOrNull`,
   `readFileHead`, and `readChunk` now send exact UTF-8 path/range payloads via
   `KernelSyncApi.callBinary`; readdir and every mutation remain JSON.
