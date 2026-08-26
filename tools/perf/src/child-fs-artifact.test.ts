@@ -178,6 +178,40 @@ describe('child fs canonical scenario and artifact authority', () => {
       'scenarioDigest',
       'schemaVersion',
     ]);
+
+    const alternateInputs = completeSamples(1).map((entry, index) => ({
+      ...entry,
+      vite: {
+        ...entry.vite,
+        rawOutput:
+          index === 0
+            ? '✓ 17 modules transformed.\n✓ built in 1.25s\n'
+            : '✓ 23 modules transformed.\n✓ built in 250ms\n',
+      },
+      express: {
+        ...entry.express,
+        rawOutput: `RIFTY_EXPRESS_READY ${entry.express.marker} ${index === 0 ? '7.75' : '8.5'}\nRIFTY_EXPRESS_CLOSED ${entry.express.marker}\n`,
+      },
+    }));
+    const alternate = validateChildFsArtifact(
+      buildChildFsArtifact({
+        generatedAt: '2026-08-26T00:00:01.000Z',
+        gitSha: 'd'.repeat(40),
+        browserVersion: 'Chromium alternate',
+        runs: 1,
+        samples: alternateInputs,
+      }),
+    );
+    expect(
+      alternate.samples.map(({ vite, express }) => ({
+        modules: vite.transformedModules,
+        viteSeconds: vite.selfTimeSeconds,
+        expressMs: express.startToListeningMs,
+      })),
+    ).toEqual([
+      { modules: 17, viteSeconds: 1.25, expressMs: 7.75 },
+      { modules: 23, viteSeconds: 0.25, expressMs: 8.5 },
+    ]);
   });
 
   it('rejects every corrupt Vite raw proof and caller-invented derived field', async () => {
@@ -186,9 +220,12 @@ describe('child fs canonical scenario and artifact authority', () => {
     const corruptions: ReadonlyArray<readonly [string, Readonly<Record<string, unknown>>]> = [
       ['non-zero exit', { exitCode: 1 }],
       ['non-positive module count', { rawOutput: '✓ 0 modules transformed.\n✓ built in 908ms\n' }],
+      ['negative module count', { rawOutput: '✓ -1 modules transformed.\n✓ built in 908ms\n' }],
       ['missing module count', { rawOutput: '✓ built in 908ms\n' }],
       ['duplicate module count', { rawOutput: `${base.vite.rawOutput}${base.vite.rawOutput}` }],
       ['missing self time', { rawOutput: '✓ 2195 modules transformed.\n' }],
+      ['zero self time', { rawOutput: '✓ 2195 modules transformed.\n✓ built in 0ms\n' }],
+      ['negative self time', { rawOutput: '✓ 2195 modules transformed.\n✓ built in -1s\n' }],
       ['duplicate self time', { rawOutput: `${base.vite.rawOutput}✓ built in 1.64s\n` }],
       ['missing emitted marker', { emittedJavaScript: 'const marker = "other";' }],
       [
@@ -240,6 +277,12 @@ describe('child fs canonical scenario and artifact authority', () => {
           rawOutput: `RIFTY_EXPRESS_READY ${base.express.marker} 0\nRIFTY_EXPRESS_CLOSED ${base.express.marker}\n`,
         },
       ],
+      [
+        'negative time',
+        {
+          rawOutput: `RIFTY_EXPRESS_READY ${base.express.marker} -1\nRIFTY_EXPRESS_CLOSED ${base.express.marker}\n`,
+        },
+      ],
       ['caller-derived field', { startToListeningMs: 34.25 }],
     ];
     for (const [label, patch] of corruptions) {
@@ -266,6 +309,7 @@ describe('child fs canonical scenario and artifact authority', () => {
       completeSamples().slice(0, -1),
       completeSamples().map((entry, index) => (index === 1 ? { ...entry, ordinal: 1 } : entry)),
       completeSamples().filter((entry) => entry.lane !== 'in-realm'),
+      [...completeSamples(), rawSample('product-coi', 3)],
       completeSamples().map((entry, index) =>
         index === 0 ? { ...entry, unexpected: 'multiplier' } : entry,
       ),
@@ -298,6 +342,7 @@ describe('child fs canonical scenario and artifact authority', () => {
     for (const corrupt of [
       { ...valid, speedupX: 1.44 },
       { ...valid, samples: valid.samples.slice(0, -1) },
+      { ...valid, samples: [...valid.samples, expectedSample('product-coi', 3)] },
       { ...valid, scenarioDigest: 'd'.repeat(64) },
       { ...valid, dependencyDigest: 'e'.repeat(64) },
       { ...valid, browserVersion: '' },

@@ -93,3 +93,5 @@ artifact with an atomic sibling-temp rename.
   darwin-arm64 node-v24.16.0`, command `vite build --clearScreen false`, exits 0
   with `2195 modules transformed` / `built in 908ms`; fixture committed at
   `tools/perf/child-fs/vite-7.3.6-node-golden.json`.
+- 2026-08-26 — Contract+RED verify 2 @ 0c0515cad blocked: alternate positive,
+  negative numeric and N+1 mutations missing; RED table extended in place.

@@ -17,3 +17,5 @@
   real Vite oracle + five remaining deep/port mutants — RED re-cut in place
 - 2026-08-26 — host Vite 7.3.6 canonical-tree probe = 2195 modules/908 ms;
   goal's 2180 count belongs to the physical Rifty lane contracts, not raw parser
+- 2026-08-26 — perf/child-fs-perf-artifact-core verify 2 BLOCKER @ 0c0515cad:
+  alternate-positive, negative numeric and N+1 RED rows missing — extended
