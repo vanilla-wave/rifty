@@ -39,3 +39,4 @@
   and atomic artifact publication; owner: `tools/perf/src/runner-io.mjs`
 - 2026-08-26 — re-chart after perf/child-fs-perf-artifact-core: 0 graduated /
   1 invalidated (completed item deleted); product + in-realm lanes unblocked
+- 2026-08-26 — perf/child-fs-perf-product-lane band 2–4 expected REDs
