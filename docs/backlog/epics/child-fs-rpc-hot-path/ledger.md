@@ -187,3 +187,12 @@
 - 2026-08-26 — after binary requests
   453517d4532f70cf8e58b38a66ae8e3c913560a1: product vite 7.21s express
   292.8649999946356ms; in-realm vite 1.5s express 168.79500000178814ms
+- 2026-08-26 — perf/syncrpc-v2-waitasync-binary-ring Final+GREEN PASS @
+  3596e3e2d; focused 45/45, real Chromium owner→kernel-child carrier 1/1,
+  affected typechecks/lint/arch/file-size green, unit residuals empty
+- 2026-08-26 — learned both JSON and binary encoders must run inside the one
+  `SyncRpcClient.exchange` forensic lifecycle; carrier
+  `packages/kernel/src/ipc/sync-client-encoding.fault.test.ts`
+- 2026-08-26 — re-chart after perf/syncrpc-v2-waitasync-binary-ring: 0
+  graduated / 1 invalidated (completed item deleted); map empty, I1–I3 proven
+  by the three committed two-lane artifacts plus behavioral/conformance suites

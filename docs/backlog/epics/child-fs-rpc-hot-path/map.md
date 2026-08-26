@@ -1,9 +1,6 @@
 ## Items
 
-1. `perf/syncrpc-v2-waitasync-binary-ring` — **binary REQUEST frame residual**
-   (I2) — re-cut; ADR-0084 delivered waitAsync + binary reply, ADR-0365
-   delivered one-hop read heads on protocol v4; I3 baseline/post-I1 artifacts
-   are its proof anchors.
+None.
 
 ## Open questions
 
