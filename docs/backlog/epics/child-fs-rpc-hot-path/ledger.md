@@ -45,3 +45,5 @@
   a real sealed-Workbench host seam + shared raw-sample verifier
 - 2026-08-26 — product pickup found Express CLOSED-before-READY accepted by the
   shared parser; fixed at artifact authority with direct raw-sample entry
+- 2026-08-26 — perf/child-fs-perf-product-lane Contract+RED verify BLOCKER @
+  20ca80cbc: projected trace hid asset/Express order + duplicate close — fixed

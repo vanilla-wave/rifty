@@ -80,3 +80,6 @@ weaker fallback.
   suites remain authority for registry/Worker internals.
 - 2026-08-26 — expected RED: browser-unit product spec + fault spec both fail
   because `fixtures/child-fs-product-lane.ts` does not exist.
+- 2026-08-26 — Contract+RED verify @ 20ca80cbc blocked: projected execute trace
+  allowed asset-read-after-Express and duplicate success close; exact phase
+  indices and close cardinality added.

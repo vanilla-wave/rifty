@@ -87,22 +87,53 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
     'vite build',
     'node express-anchor.cjs product-coi-1',
   ]);
-  expect(observed.calls.at(-1)).toEqual({ kind: 'close' });
-  for (const dependency of Object.keys(childFsScenario().dependencies)) {
-    expect(
-      observed.calls.some(
-        ({ kind, path }) => kind === 'read' && path === `/node_modules/${dependency}/package.json`,
-      ),
-    ).toBe(true);
-  }
-  expect(
-    observed.calls.some(({ kind, path }) => kind === 'readdir' && path === '/dist/assets'),
-  ).toBe(true);
-  expect(
-    observed.calls.some(
-      ({ kind, path }) => kind === 'read' && typeof path === 'string' && path.endsWith('.js'),
+  const callIndex = (predicate: (call: Record<string, unknown>) => boolean): number =>
+    observed.calls.findIndex(predicate);
+  const openIndex = callIndex(({ kind }) => kind === 'open');
+  const installIndex = callIndex(({ kind, line }) => kind === 'execute' && line === 'npm install');
+  const dependencyReadIndexes = Object.keys(childFsScenario().dependencies).map((dependency) =>
+    callIndex(
+      ({ kind, path }) => kind === 'read' && path === `/node_modules/${dependency}/package.json`,
     ),
-  ).toBe(true);
+  );
+  const markerWriteIndex = callIndex(
+    ({ kind, path }) => kind === 'write' && path === '/src/Panel.jsx',
+  );
+  const viteIndex = callIndex(({ kind, line }) => kind === 'execute' && line === 'vite build');
+  const assetsIndex = callIndex(({ kind, path }) => kind === 'readdir' && path === '/dist/assets');
+  const emittedReadIndexes = observed.calls
+    .map((call, index) => ({ call, index }))
+    .filter(
+      ({ call: { kind, path } }) =>
+        kind === 'read' &&
+        typeof path === 'string' &&
+        path.startsWith('/dist/assets/') &&
+        path.endsWith('.js'),
+    )
+    .map(({ index }) => index);
+  const expressIndex = callIndex(
+    ({ kind, line }) => kind === 'execute' && line === 'node express-anchor.cjs product-coi-1',
+  );
+  const closeIndexes = observed.calls
+    .map((call, index) => ({ call, index }))
+    .filter(({ call: { kind } }) => kind === 'close')
+    .map(({ index }) => index);
+  expect(dependencyReadIndexes.every((index) => index > installIndex)).toBe(true);
+  expect(emittedReadIndexes).not.toHaveLength(0);
+  const phaseIndexes = [
+    openIndex,
+    installIndex,
+    Math.max(...dependencyReadIndexes),
+    markerWriteIndex,
+    viteIndex,
+    assetsIndex,
+    Math.max(...emittedReadIndexes),
+    expressIndex,
+    closeIndexes[0] ?? -1,
+  ];
+  expect(phaseIndexes).toEqual(phaseIndexes.toSorted((left, right) => left - right));
+  expect(closeIndexes).toHaveLength(1);
+  expect(closeIndexes[0]).toBe(observed.calls.length - 1);
   expect(observed.result.lifecycle.vite).toEqual(executes[1]?.outcome);
   expect(observed.result.lifecycle.express).toEqual(executes[2]?.outcome);
   const sample = validateChildFsRawSample(observed.result.sample);
