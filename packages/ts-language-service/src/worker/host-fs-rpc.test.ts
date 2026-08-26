@@ -4,7 +4,7 @@
  * The fake `call` serves an in-memory fixture by answering the EXACT owner-side
  * method names + return encodings from `runtime-js/src/ipc/fs-handlers.ts`:
  *   - fs.exists       → boolean
- *   - fs.statOrNull   → { isFile, isDirectory, size?, mtime? } | null
+ *   - fs.readFileHead → binary total-size + first-chunk reply
  *   - fs.readdir      → VfsDirent[]
  *   - fs.readChunk    → Uint8Array (ranged subarray: offset .. offset+length)
  * so this asserts the adapter speaks the real contract, not a parallel one. The
@@ -13,102 +13,20 @@
  * the adapter + engine, mocked only at the unavoidable RPC boundary.
  */
 
-import type { VfsDirent } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { FS_RPC_CHUNK } from '@riftydev/runtime-js';
 import { describe, expect, it } from 'vitest';
 import { snapshotVfsFiles, writeRealWorkspaceTypeScript } from '../test-workspace-typescript.ts';
+import { type FsRpcCallRecord, makeFakeFsCall } from './fs-rpc-test-helper.ts';
 import { createRpcFsSync } from './host-fs-rpc.ts';
-
-interface StatShape {
-  isFile: boolean;
-  isDirectory: boolean;
-  size?: number;
-  mtime?: number;
-}
-
-/**
- * Build a fake sync-RPC `call` that serves `files` (path → bytes) and the
- * directory tree implied by their paths, mirroring the owner fs handlers. Throws
- * on an unknown method so a wrong method name fails loud (not silently null).
- */
-function makeFakeCall(
-  files: Map<string, Uint8Array>,
-  calls: Array<{ method: string; payload: unknown }> = [],
-): (method: string, payload: unknown) => unknown {
-  const dirs = new Set<string>(['/']);
-  for (const p of files.keys()) {
-    let dir = p.slice(0, p.lastIndexOf('/')) || '/';
-    while (dir !== '/' && !dirs.has(dir)) {
-      dirs.add(dir);
-      dir = dir.slice(0, dir.lastIndexOf('/')) || '/';
-    }
-    dirs.add(dir);
-  }
-  const statOf = (path: string): StatShape | null => {
-    const bytes = files.get(path);
-    if (bytes) return { isFile: true, isDirectory: false, size: bytes.length, mtime: 1 };
-    if (dirs.has(path)) return { isFile: false, isDirectory: true, size: 0, mtime: 1 };
-    return null;
-  };
-  return (method, payload) => {
-    calls.push({ method, payload });
-    const p = payload as Record<string, unknown>;
-    switch (method) {
-      case 'fs.exists':
-        return statOf(p.path as string) !== null;
-      case 'fs.statOrNull':
-        return statOf(p.path as string);
-      case 'fs.stat': {
-        const s = statOf(p.path as string);
-        if (s === null) throw new Error(`ENOENT: ${p.path as string}`);
-        return s;
-      }
-      case 'fs.readdir': {
-        const dir = p.path as string;
-        const prefix = dir === '/' ? '/' : `${dir}/`;
-        const seen = new Map<string, VfsDirent>();
-        for (const fp of files.keys()) {
-          if (!fp.startsWith(prefix)) continue;
-          const rest = fp.slice(prefix.length);
-          const slash = rest.indexOf('/');
-          if (slash === -1) seen.set(rest, { name: rest, isFile: true, isDirectory: false });
-          else {
-            const name = rest.slice(0, slash);
-            if (!seen.has(name)) seen.set(name, { name, isFile: false, isDirectory: true });
-          }
-        }
-        return [...seen.values()];
-      }
-      case 'fs.readChunk': {
-        const bytes = files.get(p.path as string) ?? new Uint8Array(0);
-        const offset = p.offset as number;
-        const length = p.length as number;
-        if (offset >= bytes.length) return new Uint8Array(0);
-        // Ranged subarray — exactly the owner handler's reply shape.
-        return bytes.subarray(offset, Math.min(bytes.length, offset + length));
-      }
-      case 'fs.readFileHead': {
-        const bytes = files.get(p.path as string) ?? new Uint8Array(0);
-        const first = bytes.subarray(0, FS_RPC_CHUNK);
-        const reply = new Uint8Array(8 + first.length);
-        new DataView(reply.buffer).setFloat64(0, bytes.length, true);
-        reply.set(first, 8);
-        return reply;
-      }
-      default:
-        throw new Error(`fake fs.* call: unexpected method ${method}`);
-    }
-  };
-}
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
 describe('createRpcFsSync over a fake fs.* call', () => {
   it('reads a small file back byte-for-byte (readFileBytesSync)', () => {
     const files = new Map([['/proj/a.ts', enc('const x = 1;\n')]]);
-    const calls: Array<{ method: string; payload: unknown }> = [];
-    const fs = createRpcFsSync(makeFakeCall(files, calls));
+    const calls: FsRpcCallRecord[] = [];
+    const fs = createRpcFsSync(makeFakeFsCall(files, calls));
     expect(fs.readFileBytesSync('/proj/a.ts')).toEqual(enc('const x = 1;\n'));
     expect(calls).toEqual([{ method: 'fs.readFileHead', payload: { path: '/proj/a.ts' } }]);
   });
@@ -118,8 +36,8 @@ describe('createRpcFsSync over a fake fs.* call', () => {
     const big = new Uint8Array(600 * 1024);
     for (let i = 0; i < big.length; i++) big[i] = i % 251;
     const files = new Map([['/proj/big.bin', big]]);
-    const calls: Array<{ method: string; payload: unknown }> = [];
-    const fs = createRpcFsSync(makeFakeCall(files, calls));
+    const calls: FsRpcCallRecord[] = [];
+    const fs = createRpcFsSync(makeFakeFsCall(files, calls));
     const got = fs.readFileBytesSync('/proj/big.bin');
     expect(got.length).toBe(big.length);
     expect(got).toEqual(big);
@@ -142,14 +60,14 @@ describe('createRpcFsSync over a fake fs.* call', () => {
 
   it('statSyncOrNull: file, dir, and null-on-missing', () => {
     const files = new Map([['/proj/a.ts', enc('x')]]);
-    const fs = createRpcFsSync(makeFakeCall(files));
+    const fs = createRpcFsSync(makeFakeFsCall(files));
     expect(fs.statSyncOrNull('/proj/a.ts')).toMatchObject({ isFile: true, isDirectory: false });
     expect(fs.statSyncOrNull('/proj')).toMatchObject({ isFile: false, isDirectory: true });
     expect(fs.statSyncOrNull('/proj/missing.ts')).toBeNull();
   });
 
   it('existsSync reflects presence', () => {
-    const fs = createRpcFsSync(makeFakeCall(new Map([['/proj/a.ts', enc('x')]])));
+    const fs = createRpcFsSync(makeFakeFsCall(new Map([['/proj/a.ts', enc('x')]])));
     expect(fs.existsSync('/proj/a.ts')).toBe(true);
     expect(fs.existsSync('/proj/nope.ts')).toBe(false);
   });
@@ -159,7 +77,7 @@ describe('createRpcFsSync over a fake fs.* call', () => {
       ['/proj/a.ts', enc('x')],
       ['/proj/sub/b.ts', enc('y')],
     ]);
-    const fs = createRpcFsSync(makeFakeCall(files));
+    const fs = createRpcFsSync(makeFakeFsCall(files));
     const entries = fs.readdirSync('/proj');
     const names = entries.map((e) => e.name).sort();
     expect(names).toEqual(['a.ts', 'sub']);
@@ -183,7 +101,7 @@ describe('createRpcFsSync over a fake fs.* call', () => {
 
     const { createTsLanguageService } = await import('../service.ts');
     const svc = await createTsLanguageService({
-      fsSync: createRpcFsSync(makeFakeCall(files)),
+      fsSync: createRpcFsSync(makeFakeFsCall(files)),
       projectRoot: '/proj',
     });
     const diags = svc.getSemanticDiagnostics('/proj/a.ts');

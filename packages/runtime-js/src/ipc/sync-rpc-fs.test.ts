@@ -21,6 +21,13 @@ function loopback(vfs: MemoryFsSync): (m: string, p: unknown) => unknown {
   };
 }
 
+function readHead(totalSize: number, first: Uint8Array): Uint8Array {
+  const reply = new Uint8Array(8 + first.length);
+  new DataView(reply.buffer).setFloat64(0, totalSize, true);
+  reply.set(first, 8);
+  return reply;
+}
+
 describe('installRemoteSyncFs', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -91,34 +98,42 @@ describe('SyncRpcFsSync', () => {
 
   it('throws on a short read instead of silently returning a truncated buffer (ADR-0150 never-silent-truncate)', () => {
     // The owner returns an empty chunk mid-read (file shrank below the offset
-    // after the stat snapshot) — the child MUST fail loudly, not hand the caller
+    // after the head snapshot) — the child MUST fail loudly, not hand the caller
     // a partial file presented as the whole thing.
     const N = FS_RPC_CHUNK + 100; // forces a second readChunk call
     let chunkCalls = 0;
-    const fakeCall = (method: string, _payload: unknown): unknown => {
+    const fakeCall = (method: string, payload: unknown): unknown => {
       if (method === 'fs.statOrNull') return { isFile: true, isDirectory: false, size: N };
+      if (method === 'fs.readFileHead') {
+        return readHead(N, new Uint8Array(FS_RPC_CHUNK).fill(0xcd));
+      }
       if (method === 'fs.readChunk') {
         chunkCalls += 1;
-        // First chunk full; second chunk empty (concurrent shrink) → short read.
-        return chunkCalls === 1 ? new Uint8Array(FS_RPC_CHUNK).fill(0xcd) : new Uint8Array(0);
+        // Old client asks at zero first; ADR-0365 starts after the carried head.
+        return (payload as { offset: number }).offset === 0
+          ? new Uint8Array(FS_RPC_CHUNK).fill(0xcd)
+          : new Uint8Array(0);
       }
       throw new Error(`unexpected: ${method}`);
     };
     const remote = new SyncRpcFsSync(fakeCall);
     expect(() => remote.readFileBytesSync('/f.bin')).toThrow(/short read/i);
-    expect(chunkCalls).toBe(2);
+    expect(chunkCalls).toBeGreaterThan(0);
   });
 
   it('fails loud when readChunk exceeds the remaining stat snapshot', () => {
     // The owner grew the file after statOrNull. Returning only the prefix would
     // present truncated bytes as a complete read, so the remote boundary must
     // reject the oversized chunk instead.
-    const N = 10;
+    const N = FS_RPC_CHUNK + 10;
     const extra = 5;
-    const fakeCall = (method: string, _payload: unknown): unknown => {
+    const fakeCall = (method: string, payload: unknown): unknown => {
       if (method === 'fs.statOrNull') return { isFile: true, isDirectory: false, size: N };
+      if (method === 'fs.readFileHead') {
+        return readHead(N, new Uint8Array(FS_RPC_CHUNK).fill(0xab));
+      }
       if (method === 'fs.readChunk') {
-        return new Uint8Array(N + extra).fill(0xab);
+        return new Uint8Array((payload as { length: number }).length + extra).fill(0xab);
       }
       throw new Error(`unexpected: ${method}`);
     };

@@ -149,3 +149,7 @@
   229876862: provenance assumed full history but unit CI was shallow; raw
   owner response and remaining corrupt partitions were not frozen — redesigned
   as full-history exact commit/blob/path proof + independent raw golden
+- 2026-08-26 — perf/fs-read-single-hop Contract+RED verify BLOCKER @
+  6495ce000: legacy runtime fault + TS endpoint responders copied only the old
+  stat→chunk protocol; consolidated TS fixture and dual-generation semantic
+  fault carriers before implementation
