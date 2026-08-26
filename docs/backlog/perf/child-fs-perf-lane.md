@@ -5,7 +5,7 @@ status: draft
 title: Committed product-vs-in-realm perf lane for child fs anchors (vite build + express cold start)
 created: 2026-08-26
 epic: child-fs-rpc-hot-path
-blocked_by: [perf/child-fs-perf-product-lane, perf/child-fs-perf-in-realm-lane, perf/child-fs-perf-orchestrator]
+blocked_by: [perf/child-fs-perf-in-realm-lane, perf/child-fs-perf-orchestrator]
 why: all current numbers live on a throwaway spike branch; the epic's I3 needs a durable rig so every slice proves its effect on the same anchors
 user_story: As the epic's acceptance instrument, I want one committed lane that runs the 2180-module vite build and an express cold require-walk in BOTH worlds (product COI child over sync-RPC; single in-realm worker) and reports self-timed numbers, but today the harness is `prototype/` on the spike branch only.
 sources: [spike branch t3code/prototype-no-coi-agent-cycle prototype/no-coi-agent-loop/README.md + FINDINGS.md §2b]

@@ -51,3 +51,12 @@
   BLOCKER @ dd26201f3: early emitted-read hidden by max projection — fixed
 - 2026-08-26 — ready-verdict perf/child-fs-perf-product-lane: Contract+RED @
   e633605b0 — PASS, unit residuals empty
+- 2026-08-26 — perf/child-fs-perf-product-lane Final+GREEN PASS @ 0f2d2224d;
+  artifact unit 7/7, real COI product/fault 2/2, typecheck + architecture gates,
+  unit residuals empty
+- 2026-08-26 — learned raw Vite terminal proof uses CSI `1G` line restarts;
+  artifact parsing interprets terminal display boundaries while retaining exact
+  raw bytes; carrier `tools/perf/src/child-fs-artifact.test.ts`
+- 2026-08-26 — re-chart after perf/child-fs-perf-product-lane: 0 graduated /
+  1 invalidated (completed item deleted); in-realm lane compiled ready,
+  orchestrator still blocked on it
