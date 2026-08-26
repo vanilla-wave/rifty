@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- `rifty-goal` CLOSE: ledger walk extends to `map.md` `## Open questions` fog lines (carrier or explicit drop each; fired trigger → carrier, never drop); recorded before/after numbers require a direction verdict, not a bare table (retro of #279 goal close: three fog lines died with `map.md`, after-numbers regressed with no statement). Same clause mirrored in `docs/backlog/README.md` §Goal run.
+
 - Review checkpoint = ultra two-pass fan-out + coverage matrix (retro of #274/#275 sessions, replay-validated on the #274 attempt-1 snapshot): reviewer runs at `model_reasoning_effort=ultra`, spawns parallel per-lens subagents, must be exhaustive in one pass; second tail pass hunts only past a settled prior-findings list; `review-schema.json` gains required `coverage` (row per Fault-matrix line / Acceptance clause / public API entry / frozen artifact, adversarial pass/weak/missing), `blockers.mjs` blocks on any non-pass row; `weak` bounded — names the concrete wrong implementation + declared clause it violates, deeper hardening → concern, row stays `pass`; reviewer role = certification against declared authorities with two symmetric errors (miss / over-block): blocker requires its violated authority cited (`authority` field, `blockers.mjs`-enforced), beyond-declaration strengthening lands concern/backlog; undeclared obligation → contract re-refine, not another round (`fault-classes.md` §Review convergence).
 
 ### Added

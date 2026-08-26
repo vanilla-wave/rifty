@@ -90,9 +90,9 @@ run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
   it is missing.
 - Slices land serially — never stack a slice PR on an unmerged one.
 - Close only with no linked children, empty unit/goal residuals, end-to-end
-  proof of `## Invariants`, and the ledger walk exporting every line to a
-  durable carrier or an explicit drop (`rifty-goal` CLOSE); then delete the
-  directory whole.
+  proof of `## Invariants`, and the ledger + fog walk exporting every ledger
+  and `## Open questions` line to a durable carrier or an explicit drop
+  (`rifty-goal` CLOSE); then delete the directory whole.
 
 ## Gates
 
