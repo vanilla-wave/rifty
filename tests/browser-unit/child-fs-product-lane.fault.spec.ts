@@ -79,6 +79,7 @@ test('non-COI rejects before open; every post-open failure closes once', async (
         settlements: 1,
         out,
       });
+      let ordinalOneMarkerWrite: { readonly contents: string; readonly path: string } | null = null;
       for (let failureAt = 1; failureAt <= 14; failureAt += 1) {
         let operationCalls = 0;
         let sweepCloseCalls = 0;
@@ -105,7 +106,10 @@ test('non-COI rejects before open; every post-open failure closes once', async (
               }
               return successfulOutcome('npm: installed\n');
             },
-            writeText: async () => failAtBoundary(),
+            writeText: async (path: string, contents: string) => {
+              failAtBoundary();
+              if (failureAt === 10) ordinalOneMarkerWrite = { contents, path };
+            },
             readdir: async () => {
               failAtBoundary();
               return [{ path: '/dist/assets/index.js', kind: 'file' }];
@@ -137,6 +141,7 @@ test('non-COI rejects before open; every post-open failure closes once', async (
         falseCoiRejected,
         closeCalls,
         commandRejected,
+        ordinalOneMarkerWrite,
         ownershipClosed,
       };
     },
@@ -162,4 +167,10 @@ test('non-COI rejects before open; every post-open failure closes once', async (
       rejected: true,
     })),
   );
+  const panelSeed = childFsScenario().files['/src/Panel.jsx'];
+  if (panelSeed === undefined) throw new TypeError('canonical Panel seed is missing');
+  expect(result.ordinalOneMarkerWrite).toEqual({
+    contents: panelSeed.replace('bench-seed', 'product-coi-1').replace('bench-seed', 'run-1'),
+    path: '/src/Panel.jsx',
+  });
 });
