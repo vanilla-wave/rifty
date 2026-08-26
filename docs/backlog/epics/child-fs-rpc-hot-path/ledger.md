@@ -124,3 +124,12 @@
 - 2026-08-26 — perf/child-fs-perf-orchestrator Final+GREEN BLOCKER @
   a14a21e10: cleanup raced already-failed signals and timeout left ownership
   alive; deferred close + force/terminal-proof lifecycle re-cut
+- 2026-08-26 — perf/child-fs-perf-orchestrator Final+GREEN PASS @ 0eaa5cf43;
+  real public CLI 1/1, orchestrator unit/fault 4/4, `pnpm pr:check` 24/24,
+  unit residuals empty
+- 2026-08-26 — learned benchmark ownership closes only after terminal proof;
+  graceful close escalates to process kill within one fixed cleanup deadline;
+  carrier `tools/perf/src/child-fs-orchestrator.mjs`
+- 2026-08-26 — re-chart after perf/child-fs-perf-orchestrator: 0 graduated /
+  2 invalidated (completed orchestrator and split predecessor deleted); I1 and
+  I2 now use the committed two-real-lane baseline as their proof anchor

@@ -1,14 +1,10 @@
 ## Items
 
-1. `perf/child-fs-perf-orchestrator` — bounded two-lane runner + committed
-   baseline artifact (I3); both real lanes + artifact substrate landed;
-   absorbs/deletes split predecessor
-   `perf/child-fs-perf-lane`.
-2. `perf/fs-read-single-hop` — **kill the sizing hop** (I1) — wire-format
-   change (new/extended fs method) → ADR; depends on 1 for proof.
-3. `perf/syncrpc-v2-waitasync-binary-ring` — **binary REQUEST frame residual**
+1. `perf/fs-read-single-hop` — **kill the sizing hop** (I1) — wire-format
+   change (new/extended fs method) → ADR; I3 baseline is its proof anchor.
+2. `perf/syncrpc-v2-waitasync-binary-ring` — **binary REQUEST frame residual**
    (I2) — re-cut; ADR-0084 already delivered waitAsync responder + binary
-   reply; depends on 1 for proof.
+   reply; I3 baseline is its proof anchor.
 
 ## Open questions
 
