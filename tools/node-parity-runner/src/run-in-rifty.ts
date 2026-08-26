@@ -1372,10 +1372,12 @@ async function installExecSyncMode(): Promise<() => void> {
   // Relative source imports (same `tools/`-harness precedent as `runWasi` above):
   // kernel and the runtime-js loader are not workspace deps of the runner.
   const {
+    KERNEL_SYNC_BINARY_CALL_KEY,
     KERNEL_SYNC_CALL_KEY,
     SabRing,
     createSabRing,
     getKernelWorkerUrl,
+    encodeBinaryRequest,
     encodeRequest,
     decodeReply,
     SyncRpcDispatcher,
@@ -1542,20 +1544,29 @@ async function installExecSyncMode(): Promise<() => void> {
       globalThis,
       KERNEL_SYNC_CALL_KEY,
     );
+    const previousBinarySyncCallDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      KERNEL_SYNC_BINARY_CALL_KEY,
+    );
     cleanups.defer(() => restoreGlobalDescriptor(KERNEL_SYNC_CALL_KEY, previousSyncCallDescriptor));
+    cleanups.defer(() =>
+      restoreGlobalDescriptor(KERNEL_SYNC_BINARY_CALL_KEY, previousBinarySyncCallDescriptor),
+    );
+    const exchange = (method: string, request: Uint8Array): unknown => {
+      ring.writeRequest(request);
+      dispatcher.pumpOnce(dispatcherRing); // synchronous handler writes the reply now
+      const replyBytes = ring.waitReply(2000); // reply already present → returns immediately
+      const reply = decodeReply(replyBytes);
+      if (reply.ok) return reply.value;
+      const e = reply.error ?? { name: 'Error', message: 'unknown' };
+      const err = new Error(e.message);
+      err.name = e.name;
+      if (e.code !== undefined) (err as Error & { code?: string }).code = e.code;
+      throw err;
+    };
     publishKernelSyncApi({
-      call: (method, payload) => {
-        ring.writeRequest(encodeRequest({ method, payload }));
-        dispatcher.pumpOnce(dispatcherRing); // synchronous handler writes the reply now
-        const replyBytes = ring.waitReply(2000); // reply already present → returns immediately
-        const reply = decodeReply(replyBytes);
-        if (reply.ok) return reply.value;
-        const e = reply.error ?? { name: 'Error', message: 'unknown' };
-        const err = new Error(e.message);
-        err.name = e.name;
-        if (e.code !== undefined) (err as Error & { code?: string }).code = e.code;
-        throw err;
-      },
+      call: (method, payload) => exchange(method, encodeRequest({ method, payload })),
+      callBinary: (method, payload) => exchange(method, encodeBinaryRequest(method, payload)),
     });
 
     return () => cleanups.dispose();

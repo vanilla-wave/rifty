@@ -66,7 +66,7 @@ async function bootstrapDevServerChild(): Promise<void> {
       'dev-server-child: no kernel sync call published — cannot reach the owner store',
     );
   }
-  const ownerRemoteFs = installRemoteSyncFs(syncApi.call);
+  const ownerRemoteFs = installRemoteSyncFs(syncApi.call, syncApi.callBinary);
   const remoteFs =
     c.remoteFsRoot === undefined
       ? ownerRemoteFs

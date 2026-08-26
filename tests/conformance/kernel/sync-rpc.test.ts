@@ -136,6 +136,9 @@ describe.skipIf(!hasSab)('SyncRpc — real Worker round-trip (ADR-0011 phase 3)'
     dispatcher.attach(production.ring);
     const productionWorker = new Worker(fileURLToPath(productionClientUrl), {
       workerData: { sab: production.sab, payloadCapacity },
+      // Production sources use parameter properties; Node's strip-only loader
+      // rejects those, so exercise them through the workspace's real TS loader.
+      execArgv: ['--import', 'tsx'],
     });
     const productionMessage = await new Promise<WorkerReply>((resolve, reject) => {
       productionWorker.once('message', resolve);

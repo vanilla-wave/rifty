@@ -536,8 +536,13 @@ async function realServiceClient(projectRoot: string): Promise<TsLanguageService
   seedRealTypeScriptWorkspace(fsSync, projectRoot);
   const endpoint = createServiceEndpoint({
     buildFsSync: () => fsSync,
-    call(method) {
-      throw new Error(`Unexpected real-memory endpoint RPC: ${method}`);
+    syncApi: {
+      call(method) {
+        throw new Error(`Unexpected real-memory endpoint RPC: ${method}`);
+      },
+      callBinary(method) {
+        throw new Error(`Unexpected real-memory endpoint binary RPC: ${method}`);
+      },
     },
   });
   let listener: ((message: unknown) => void) | undefined;

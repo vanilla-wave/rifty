@@ -1,12 +1,13 @@
 /**
  * Sync RPC framing on top of {@link SabRing} (ADR-0011 phase 3, version field
- * per ADR-0032, v2 binary frame per ADR-0084 #23).
+ * per ADR-0032, v2 binary replies per ADR-0084 #23, v5 binary requests per
+ * ADR-0366).
  *
  * Every frame body starts with a 1-byte discriminator (ADR-0084 #23):
  *   - {@link FRAME_JSON} (0x00) — JSON-over-UTF-8 body (the v1 shape: requests,
  *     `{ok,value|error}` replies). Used for everything except binary `ok` values.
- *   - {@link FRAME_BINARY} (0x01) — raw bytes body (`execSync` stdout carried
- *     verbatim, no TextDecoder). Decodes straight to a `Uint8Array`.
+ *   - {@link FRAME_BINARY} (0x01) — reply: raw value bytes; request: u16LE
+ *     method-name byte length + UTF-8 method + application payload.
  *
  * Each frame also carries a `u32` protocol version stamped into the SAB header
  * by `SabRing.writeRequest`/`writeReply`, validated on EVERY frame before
@@ -37,8 +38,11 @@
  *
  * v4 (ADR-0365): owner-backed fs reads add one binary total-size + first-chunk
  * application reply. Kernel + runtime-js peers recompile atomically.
+ *
+ * v5 (ADR-0366): adds binary request envelopes for hot owner-fs reads. Kernel,
+ * runtime-js, Workbench and TypeScript worker peers recompile atomically.
  */
-export const SYNC_RPC_PROTOCOL_VERSION = 4 as const;
+export const SYNC_RPC_PROTOCOL_VERSION = 5 as const;
 
 /** Frame discriminator: JSON-over-UTF-8 body (ADR-0084 #23). */
 export const FRAME_JSON = 0x00 as const;
@@ -71,6 +75,17 @@ export interface SyncRpcRequest {
   /** Method-specific payload. Must be JSON-serialisable. */
   readonly payload: unknown;
 }
+
+/** Binary request decoded from ADR-0366's method + application-payload frame. */
+export interface SyncRpcBinaryRequest {
+  readonly binary: true;
+  readonly method: string;
+  /** Owned copy: never aliases the reusable SharedArrayBuffer request slot. */
+  readonly payload: Uint8Array;
+}
+
+/** Request shape consumed by the dispatcher after wire decoding. */
+export type DecodedSyncRpcRequest = SyncRpcRequest | SyncRpcBinaryRequest;
 
 /**
  * Reply frame written by {@link SyncRpcDispatcher}, consumed by
@@ -132,6 +147,25 @@ export function encodeRequest(req: SyncRpcRequest): Uint8Array {
   return frame(FRAME_JSON, UTF8_ENCODER.encode(json));
 }
 
+/** Encode ADR-0366's binary request envelope. */
+export function encodeBinaryRequest(method: string, payload: Uint8Array): Uint8Array {
+  const methodBytes = UTF8_ENCODER.encode(method);
+  if (methodBytes.byteLength === 0) {
+    throw new TypeError('encodeBinaryRequest: method must not be empty');
+  }
+  if (methodBytes.byteLength > 0xffff) {
+    throw new TypeError(
+      `encodeBinaryRequest: method is too long (${methodBytes.byteLength} bytes; maximum 65535)`,
+    );
+  }
+  const out = new Uint8Array(3 + methodBytes.byteLength + payload.byteLength);
+  out[0] = FRAME_BINARY;
+  new DataView(out.buffer).setUint16(1, methodBytes.byteLength, true);
+  out.set(methodBytes, 3);
+  out.set(payload, 3 + methodBytes.byteLength);
+  return out;
+}
+
 /**
  * Deserialise reply-slot bytes into a {@link SyncRpcReply}. Branches on the
  * 1-byte discriminator (ADR-0084 #23): a 0x01 frame yields `{ok:true, value:
@@ -170,16 +204,38 @@ export function decodeReply(bytes: Uint8Array): SyncRpcReply {
 }
 
 /**
- * Mirror of {@link decodeReply} for the dispatcher side — reads the request
- * bytes the client wrote into the SAB request slot. Requests are JSON-only.
+ * Mirror of {@link decodeReply} for the dispatcher side — reads JSON or
+ * ADR-0366 binary request bytes from the SAB request slot.
  */
-export function decodeRequest(bytes: Uint8Array): SyncRpcRequest {
+export function decodeRequest(bytes: Uint8Array): DecodedSyncRpcRequest {
   if (bytes.byteLength === 0) {
     throw new TypeError(
       'decodeRequest: empty request frame (0 bytes) — request slot already consumed (concurrent consumer?)',
     );
   }
   const kind = bytes[0];
+  if (kind === FRAME_BINARY) {
+    if (bytes.byteLength < 3) {
+      throw new TypeError('decodeRequest: binary request is missing its u16 method length');
+    }
+    const methodLength = new DataView(bytes.buffer, bytes.byteOffset + 1, 2).getUint16(0, true);
+    if (methodLength === 0) {
+      throw new TypeError('decodeRequest: binary request method must not be empty');
+    }
+    const payloadOffset = 3 + methodLength;
+    if (bytes.byteLength < payloadOffset) {
+      throw new TypeError(
+        `decodeRequest: binary request method declares ${methodLength} bytes, frame has ${bytes.byteLength - 3}`,
+      );
+    }
+    let method: string;
+    try {
+      method = decodeUtf8FromMaybeShared(bytes.subarray(3, payloadOffset));
+    } catch {
+      throw new TypeError('decodeRequest: binary request method is not valid UTF-8');
+    }
+    return { binary: true, method, payload: bytes.subarray(payloadOffset).slice() };
+  }
   if (kind !== FRAME_JSON) {
     throw new TypeError(
       `decodeRequest: expected JSON frame, got discriminator 0x${(kind ?? -1).toString(16)} (frame ${bytes.byteLength} bytes)`,
@@ -190,7 +246,9 @@ export function decodeRequest(bytes: Uint8Array): SyncRpcRequest {
   if (!isRequest(parsed)) {
     throw new TypeError(`decodeRequest: malformed request frame: ${text}`);
   }
-  return parsed;
+  // Normalize the wire value so user JSON cannot impersonate the binary
+  // discriminator with a top-level `binary: true` field.
+  return { method: parsed.method, payload: parsed.payload };
 }
 
 /** Mirror of {@link encodeRequest} for the dispatcher side. JSON frame. */

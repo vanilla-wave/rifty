@@ -1,7 +1,7 @@
 /**
  * Child-side remote `FsSync` (ADR-0150): a supervised child worker reads the
  * single-store owner's fs over sync-RPC. Delegates each call to the owner
- * over the kernel sync-RPC ring (`KernelSyncApi.call`). Reads pull raw bytes
+ * over the kernel sync-RPC ring (`KernelSyncApi`). Reads pull raw bytes
  * (binary reply) in `FS_RPC_CHUNK` slices keyed by offset; writes push base64
  * chunks. All calls block the child via `Atomics.wait` (inside `call`); legal
  * only in a kernel-spawned Worker. fd-level ops stay client-side (`fs.ts`
@@ -16,10 +16,14 @@ import {
   type FsStatShape,
   bytesToBase64,
   decodeReadFileHead,
+  encodeFsPathRequest,
+  encodeFsReadRangeRequest,
 } from './fs-rpc-protocol.ts';
 
 /** The published in-Worker sync-call shim (`KernelSyncApi.call`). */
 export type SyncCall = (method: string, payload: unknown) => unknown;
+/** The published binary application-payload shim (`KernelSyncApi.callBinary`). */
+export type SyncBinaryCall = (method: string, payload: Uint8Array) => unknown;
 
 const VFS_ERROR_CODES = new Set<VfsErrorCode>([
   'ENOENT',
@@ -51,7 +55,17 @@ function restoreTransportVfsError(error: unknown): unknown {
 }
 
 export class SyncRpcFsSync implements FsSync {
-  constructor(private readonly call: SyncCall) {}
+  constructor(
+    private readonly call: SyncCall,
+    private readonly callBinary: SyncBinaryCall,
+  ) {
+    if (typeof call !== 'function') {
+      throw new TypeError('SyncRpcFsSync: JSON call is required');
+    }
+    if (typeof callBinary !== 'function') {
+      throw new TypeError('SyncRpcFsSync: binary callBinary is required');
+    }
+  }
 
   /** Rehydrate the owner error prototype erased by SyncRpc's JSON frame. */
   private callFs(method: string, payload: unknown): unknown {
@@ -62,16 +76,28 @@ export class SyncRpcFsSync implements FsSync {
     }
   }
 
+  /** Rehydrate errors from the binary request's ordinary JSON error reply. */
+  private callFsBinary(method: string, payload: Uint8Array): unknown {
+    try {
+      return this.callBinary(method, payload);
+    } catch (error) {
+      throw restoreTransportVfsError(error);
+    }
+  }
+
   existsSync(path: string): boolean {
-    return this.callFs(FS_METHODS.exists, { path }) as boolean;
+    return this.callFsBinary(FS_METHODS.exists, encodeFsPathRequest(path)) as boolean;
   }
 
   statSync(path: string): FsStatShape {
-    return this.callFs(FS_METHODS.stat, { path }) as FsStatShape;
+    return this.callFsBinary(FS_METHODS.stat, encodeFsPathRequest(path)) as FsStatShape;
   }
 
   statSyncOrNull(path: string): FsStatShape | null {
-    return this.callFs(FS_METHODS.statOrNull, { path }) as FsStatShape | null;
+    return this.callFsBinary(
+      FS_METHODS.statOrNull,
+      encodeFsPathRequest(path),
+    ) as FsStatShape | null;
   }
 
   readdirSync(path: string): readonly VfsDirent[] {
@@ -79,7 +105,9 @@ export class SyncRpcFsSync implements FsSync {
   }
 
   readFileBytesSync(path: string): Uint8Array {
-    const { size, firstChunk } = decodeReadFileHead(this.callFs(FS_METHODS.readFileHead, { path }));
+    const { size, firstChunk } = decodeReadFileHead(
+      this.callFsBinary(FS_METHODS.readFileHead, encodeFsPathRequest(path)),
+    );
     if (size === 0) return new Uint8Array(0);
     if (size <= FS_RPC_CHUNK) return firstChunk.slice();
     const out = new Uint8Array(size);
@@ -87,11 +115,10 @@ export class SyncRpcFsSync implements FsSync {
     let offset = firstChunk.length;
     while (offset < size) {
       const requested = Math.min(FS_RPC_CHUNK, size - offset);
-      const chunk = this.callFs(FS_METHODS.readChunk, {
-        path,
-        offset,
-        length: requested,
-      }) as Uint8Array;
+      const chunk = this.callFsBinary(
+        FS_METHODS.readChunk,
+        encodeFsReadRangeRequest(path, offset, requested),
+      ) as Uint8Array;
       // Empty chunk before the admitted size means the owner store shrank mid-read
       // (snapshot inconsistent). ADR-0150 forbids silent truncation — fail loud
       // rather than hand the caller a partial file presented as the whole thing.
@@ -166,8 +193,8 @@ export class SyncRpcFsSync implements FsSync {
  * builtins (which read `syncMirror()`) resolve against the owner store over
  * `fs.*` RPC. Returns the installed remote VFS.
  */
-export function installRemoteSyncFs(call: SyncCall): SyncRpcFsSync {
-  const vfs = new SyncRpcFsSync(call);
+export function installRemoteSyncFs(call: SyncCall, callBinary: SyncBinaryCall): SyncRpcFsSync {
+  const vfs = new SyncRpcFsSync(call, callBinary);
   setSyncMirror(vfs);
   return vfs;
 }

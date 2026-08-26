@@ -3,10 +3,9 @@
  * spawned Worker. Two pieces of state leak across module boundaries
  * (kernel worker bootstrap → runtime-js / runtime-wasi builtins, same realm):
  *
- *   1. {@link KernelSyncApi} — a thin `call(method, payload)` shim backed by
- *      a {@link SyncRpcClient}. Higher layers (e.g. `child_process.execSync`)
- *      use it to delegate sync syscalls to the parent without re-implementing
- *      the SAB framing.
+ *   1. {@link KernelSyncApi} — JSON and binary call shims backed by one
+ *      `SyncRpcClient`. Higher layers delegate sync syscalls without owning
+ *      SAB framing.
  *   2. {@link KernelProcessSpec} (ADR-0039) — typed snapshot of the
  *      kernel-owned identity the higher runtime layer needs to build its own
  *      `process`. The kernel never installs a Node-shaped `globalThis.process`;
@@ -29,14 +28,18 @@
 /** Type of the in-Worker sync call shim. Narrow so callers stay `any`-free. */
 export type KernelSyncCall = (method: string, payload: unknown) => unknown;
 
+/** Binary application payload call on the same SyncRpc ring. */
+export type KernelSyncBinaryCall = (method: string, payload: Uint8Array) => unknown;
+
 /**
  * Public surface of the sync-RPC API installed inside the spawned Worker.
- * Only verb today is `call`; future expansions can grow this without changing
- * the read/publish ABI.
+ * Both operations are required and publish transactionally (ADR-0366).
  */
 export interface KernelSyncApi {
   /** Send a sync request to the parent dispatcher and return its reply. */
   call: KernelSyncCall;
+  /** Send a binary sync request to the parent dispatcher and return its reply. */
+  callBinary: KernelSyncBinaryCall;
 }
 
 /**
@@ -91,6 +94,7 @@ export type KernelEntryCapabilityPorts = Readonly<Record<string, MessagePort>>;
 
 /** Existing hook keys exported for cross-package compatibility/tests. */
 export const KERNEL_SYNC_CALL_KEY = '__riftyKernelSyncCall' as const;
+export const KERNEL_SYNC_BINARY_CALL_KEY = '__riftyKernelSyncBinaryCall' as const;
 export const KERNEL_PROCESS_SPEC_KEY = '__riftyProcessSpec__' as const;
 export const KERNEL_ENTRY_BOOTSTRAP_KEY = '__riftyKernelEntryBootstrap__' as const;
 /** Private one-shot publication; higher runtimes receive only the consume operation. */
@@ -102,6 +106,7 @@ const EMPTY_KERNEL_ENTRY_CAPABILITY_PORTS = Object.freeze(
 
 interface GlobalWithKernelHooks {
   [KERNEL_SYNC_CALL_KEY]?: KernelSyncCall;
+  [KERNEL_SYNC_BINARY_CALL_KEY]?: KernelSyncBinaryCall;
   [KERNEL_PROCESS_SPEC_KEY]?: KernelProcessSpec;
   [KERNEL_ENTRY_BOOTSTRAP_KEY]?: KernelEntryBootstrapEnvelope | null;
   [KERNEL_ENTRY_CAPABILITY_PORTS_KEY]?: KernelEntryCapabilityPorts;
@@ -112,20 +117,25 @@ function asGlobal(): GlobalWithKernelHooks {
 }
 
 /**
- * Install the sync-call shim on this realm's globalThis as a non-enumerable
- * value. Idempotent — re-publishing overwrites (configurable: true).
- *
- * Stores the raw `call` function under the key for historical compatibility
- * (older runtime-js builds expected the bare function); {@link readKernelSyncApi}
- * re-wraps it into {@link KernelSyncApi} so future expansions stay additive.
+ * Install both sync-call shims as one publication transaction. Idempotent —
+ * re-publishing overwrites configurable non-enumerable values.
  */
 export function publishKernelSyncApi(api: KernelSyncApi): void {
-  Object.defineProperty(globalThis, KERNEL_SYNC_CALL_KEY, {
-    value: api.call,
-    writable: false,
-    configurable: true,
-    enumerable: false,
-  });
+  if (typeof api.call !== 'function' || typeof api.callBinary !== 'function') {
+    throw new TypeError('publishKernelSyncApi: JSON and binary calls are required');
+  }
+  const callBefore = Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY);
+  const binaryBefore = Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_BINARY_CALL_KEY);
+  let callPublished = false;
+  try {
+    defineSyncCall(KERNEL_SYNC_CALL_KEY, api.call);
+    callPublished = true;
+    defineSyncCall(KERNEL_SYNC_BINARY_CALL_KEY, api.callBinary);
+  } catch (err) {
+    if (callPublished) restoreProperty(KERNEL_SYNC_CALL_KEY, callBefore);
+    restoreProperty(KERNEL_SYNC_BINARY_CALL_KEY, binaryBefore);
+    throw err;
+  }
 }
 
 /**
@@ -134,9 +144,39 @@ export function publishKernelSyncApi(api: KernelSyncApi): void {
  * higher layers MUST use it, not `globalThis[KERNEL_SYNC_CALL_KEY]`.
  */
 export function readKernelSyncApi(): KernelSyncApi | null {
-  const fn = asGlobal()[KERNEL_SYNC_CALL_KEY];
-  if (fn === undefined) return null;
-  return { call: fn };
+  const call = asGlobal()[KERNEL_SYNC_CALL_KEY];
+  const callBinary = asGlobal()[KERNEL_SYNC_BINARY_CALL_KEY];
+  if (call === undefined && callBinary === undefined) return null;
+  if (call === undefined) {
+    throw new TypeError('readKernelSyncApi: partial publication (JSON call missing)');
+  }
+  if (callBinary === undefined) {
+    throw new TypeError('readKernelSyncApi: partial publication (binary call missing)');
+  }
+  if (typeof call !== 'function' || typeof callBinary !== 'function') {
+    throw new TypeError('readKernelSyncApi: published JSON and binary calls must be functions');
+  }
+  return { call, callBinary };
+}
+
+function defineSyncCall(
+  key: typeof KERNEL_SYNC_CALL_KEY | typeof KERNEL_SYNC_BINARY_CALL_KEY,
+  value: KernelSyncCall | KernelSyncBinaryCall,
+): void {
+  Object.defineProperty(globalThis, key, {
+    value,
+    writable: false,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
+function restoreProperty(key: string, descriptor: PropertyDescriptor | undefined): void {
+  if (descriptor === undefined) {
+    Reflect.deleteProperty(globalThis, key);
+    return;
+  }
+  Object.defineProperty(globalThis, key, descriptor);
 }
 
 /**

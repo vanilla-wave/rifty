@@ -89,7 +89,10 @@ describe('ADR-0366 SyncRpcFsSync binary request route', () => {
       jsonCall: typeof syncApi.call,
       binaryCall: typeof syncApi.callBinary,
     ) => SyncRpcFsSync;
-    expect(() => new SyncRpcFsSync(syncApi.call)).toThrow(/binary.*required|callBinary/i);
+    const LegacyConstructor = SyncRpcFsSync as unknown as new (
+      jsonCall: typeof syncApi.call,
+    ) => SyncRpcFsSync;
+    expect(() => new LegacyConstructor(syncApi.call)).toThrow(/binary.*required|callBinary/i);
     const remote = new Constructor(syncApi.call, syncApi.callBinary);
 
     expect(remote.existsSync('/exists')).toBe(true);

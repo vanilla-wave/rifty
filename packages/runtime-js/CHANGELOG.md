@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Binary hot owner-FS requests (ADR-0366).** `exists`, `stat`, `statOrNull`,
+  `readFileHead`, and `readChunk` now send exact UTF-8 path/range payloads via
+  `KernelSyncApi.callBinary`; readdir and every mutation remain JSON.
+
 - **Single-hop small-file owner reads (ADR-0365).** Supervised children now
   receive total size + the first 256 KiB in one binary `fs.readFileHead`
   response. Empty and small `readFileSync` calls use one sync-RPC round-trip;

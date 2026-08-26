@@ -730,7 +730,7 @@ describe('createServiceEndpoint', () => {
     };
     const endpoint = createServiceEndpoint({
       buildFsSync: buildTestFsSync,
-      call: failingCall,
+      syncApi: { call: failingCall, callBinary: failingCall },
     });
     const initP = endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
     const queryP = endpoint.dispatch({

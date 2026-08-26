@@ -21,6 +21,8 @@
  * Any thrown error is surfaced as a `TsErrorResponse`, never swallowed.
  */
 
+import type { KernelSyncApi } from '@riftydev/kernel';
+import type { SyncBinaryCall, SyncCall } from '@riftydev/runtime-js';
 import type { FsSync } from '@riftydev/vfs';
 import { createTsLanguageService } from '../service.ts';
 import type { TsLanguageService } from '../service.ts';
@@ -32,9 +34,9 @@ export interface ServiceEndpointDeps {
    * Build the engine's {@link FsSync} from the sync-RPC `call`. Production wires
    * `createRpcFsSync`; the seam lets tests inject a fake-`call`-backed FsSync.
    */
-  buildFsSync(call: (method: string, payload: unknown) => unknown): FsSync;
-  /** The in-Worker sync-call shim (`readKernelSyncApi().call`). */
-  call(method: string, payload: unknown): unknown;
+  buildFsSync(call: SyncCall, callBinary: SyncBinaryCall): FsSync;
+  /** Complete in-Worker sync API published by the kernel bootstrap. */
+  syncApi: KernelSyncApi;
   /**
    * Optional phase logger (worker stdout). The cold `ts:init` can be slow under
    * contention (a 2-core CI runner co-resident with the dev-server child); these
@@ -97,7 +99,7 @@ export function createServiceEndpoint(deps: ServiceEndpointDeps): ServiceEndpoin
         deps.log?.(`init: building service (root=${request.projectRoot})`);
         const built = (async () =>
           createTsLanguageService({
-            fsSync: deps.buildFsSync(deps.call),
+            fsSync: deps.buildFsSync(deps.syncApi.call, deps.syncApi.callBinary),
             projectRoot: request.projectRoot,
             ...(deps.log ? { log: deps.log } : {}),
           }))();

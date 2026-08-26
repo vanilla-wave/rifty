@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Supervised FS relays consume SyncRpc v5 binary requests (ADR-0366).** Node
+  entries, dev-server children, and recursive relay peers receive the complete
+  JSON + binary kernel sync API with no legacy fallback.
+
 ### Fixed
 
 - npm shell `EBROKENLOCK` stderr line surfaces the installer's message (which

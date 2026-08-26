@@ -37,10 +37,12 @@
 import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from './ipc/sab-ring.ts';
 import { SyncRpcClient } from './ipc/sync-client.ts';
 import {
+  KERNEL_SYNC_BINARY_CALL_KEY,
   KERNEL_SYNC_CALL_KEY,
   type KernelEntryBootstrapEnvelope,
   type KernelEntryCapabilityPorts,
   type KernelProcessSpec,
+  type KernelSyncBinaryCall,
   type KernelSyncCall,
   publishKernelEntryBootstrap,
   publishKernelEntryCapabilityPorts,
@@ -59,7 +61,12 @@ const scheduleWorkerMicrotask = globalThis.queueMicrotask.bind(globalThis);
 // Legacy re-exports: historical consumers (runtime-js, tests) imported these
 // from here. Canonical home is now `shared-globals.ts`; new code SHOULD prefer
 // the shared-globals publish/read helpers.
-export { KERNEL_SYNC_CALL_KEY, type KernelSyncCall };
+export {
+  KERNEL_SYNC_BINARY_CALL_KEY,
+  KERNEL_SYNC_CALL_KEY,
+  type KernelSyncBinaryCall,
+  type KernelSyncCall,
+};
 
 /**
  * Stdio + IPC channels passed to the worker. Each is a transferred
@@ -228,7 +235,8 @@ const STDIO_ENCODER = new TextEncoder();
 function publishSyncCallShim(ring: SabRing): void {
   const client = new SyncRpcClient(ring);
   const shim: KernelSyncCall = (method, payload) => client.call(method, payload);
-  publishKernelSyncApi({ call: shim });
+  const binaryShim: KernelSyncBinaryCall = (method, payload) => client.callBinary(method, payload);
+  publishKernelSyncApi({ call: shim, callBinary: binaryShim });
 }
 
 function publishProcessSpec(spec: WorkerSpawnSpec): void {
