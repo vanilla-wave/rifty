@@ -13,3 +13,7 @@
 - 2026-08-26 — perf/child-fs-perf-artifact-core Contract+RED attempt 3
   (split-unit attempt 1) BLOCKER @ 878e87a95: five porous verifier/CLI/atomic
   replacement mutants — RED re-cut in place
+- 2026-08-26 — perf/child-fs-perf-artifact-core verify BLOCKER @ f675ff5d9:
+  real Vite oracle + five remaining deep/port mutants — RED re-cut in place
+- 2026-08-26 — host Vite 7.3.6 canonical-tree probe = 2195 modules/908 ms;
+  goal's 2180 count belongs to the physical Rifty lane contracts, not raw parser

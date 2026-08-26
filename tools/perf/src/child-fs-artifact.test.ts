@@ -1,13 +1,26 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
+const VITE_GOLDEN = JSON.parse(
+  readFileSync(new URL('../child-fs/vite-7.3.6-node-golden.json', import.meta.url), 'utf8'),
+) as {
+  readonly schemaVersion: number;
+  readonly scenarioId: string;
+  readonly command: string;
+  readonly exitCode: number;
+  readonly viteVersion: string;
+  readonly dependencies: Readonly<Record<string, string>>;
+  readonly rawOutput: string;
+};
+
 const DEPENDENCIES = Object.freeze({
-  '@gravity-ui/icons': '2.16.0',
+  '@gravity-ui/icons': '2.22.0',
   '@gravity-ui/uikit': '7.48.1',
-  'date-fns': '4.1.0',
+  'date-fns': '4.4.0',
   express: '4.21.2',
-  react: '19.2.0',
-  'react-dom': '19.2.0',
+  react: '19.2.8',
+  'react-dom': '19.2.8',
   vite: '7.3.6',
 });
 
@@ -74,7 +87,7 @@ function rawSample(lane: 'product-coi' | 'in-realm', ordinal: number) {
     },
     vite: {
       exitCode: 0,
-      rawOutput: '✓ 2180 modules transformed.\n✓ built in 1.63s\n',
+      rawOutput: VITE_GOLDEN.rawOutput,
       emittedJavaScript: `const marker = ${JSON.stringify(marker)};`,
       marker,
     },
@@ -83,6 +96,15 @@ function rawSample(lane: 'product-coi' | 'in-realm', ordinal: number) {
       rawOutput: `RIFTY_EXPRESS_READY ${marker} 34.25\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
       marker,
     },
+  };
+}
+
+function expectedSample(lane: 'product-coi' | 'in-realm', ordinal: number) {
+  const input = rawSample(lane, ordinal);
+  return {
+    ...input,
+    vite: { ...input.vite, transformedModules: 2195, selfTimeSeconds: 0.908 },
+    express: { ...input.express, startToListeningMs: 34.25 },
   };
 }
 
@@ -97,6 +119,18 @@ async function subject() {
 }
 
 describe('child fs canonical scenario and artifact authority', () => {
+  it('pins real Vite 7.3.6 output for the exact canonical dependency set', () => {
+    expect(VITE_GOLDEN).toEqual({
+      schemaVersion: 1,
+      scenarioId: 'child-fs-hot-path-v1',
+      command: './node_modules/.bin/vite build --clearScreen false',
+      exitCode: 0,
+      viteVersion: 'vite/7.3.6 darwin-arm64 node-v24.16.0',
+      dependencies: DEPENDENCIES,
+      rawOutput: '✓ 2195 modules transformed.\n✓ built in 908ms\n',
+    });
+  });
+
   it('owns exact guest bytes/dependencies and derives both digests', async () => {
     const [{ childFsScenario, childFsScenarioIdentity }] = await subject();
     expect(childFsScenario()).toEqual(CANONICAL_SCENARIO);
@@ -119,34 +153,19 @@ describe('child fs canonical scenario and artifact authority', () => {
     );
     expect(artifact).toMatchObject({
       schemaVersion: 1,
+      generatedAt: '2026-08-26T00:00:00.000Z',
       gitSha: 'c'.repeat(40),
       browserVersion: 'Chromium 140.0.7339.16',
       runs: 2,
       scenarioDigest: sha256(CANONICAL_SCENARIO),
       dependencyDigest: sha256(DEPENDENCIES),
     });
-    expect(artifact.samples).toHaveLength(4);
-    expect(artifact.samples[0]).toEqual({
-      lane: 'product-coi',
-      topology: 'owner-sync-rpc-kernel-child',
-      ordinal: 1,
-      ownerLoad: 'idle',
-      terminalProof: { kind: 'child-exit', complete: true },
-      vite: {
-        exitCode: 0,
-        rawOutput: '✓ 2180 modules transformed.\n✓ built in 1.63s\n',
-        emittedJavaScript: 'const marker = "product-coi-1";',
-        marker: 'product-coi-1',
-        transformedModules: 2180,
-        selfTimeSeconds: 1.63,
-      },
-      express: {
-        exitCode: 0,
-        rawOutput: 'RIFTY_EXPRESS_READY product-coi-1 34.25\nRIFTY_EXPRESS_CLOSED product-coi-1\n',
-        marker: 'product-coi-1',
-        startToListeningMs: 34.25,
-      },
-    });
+    expect(artifact.samples).toEqual([
+      expectedSample('product-coi', 1),
+      expectedSample('product-coi', 2),
+      expectedSample('in-realm', 1),
+      expectedSample('in-realm', 2),
+    ]);
     expect(artifact.samples[0]?.vite.rawOutput).toBe(completeSamples()[0]?.vite.rawOutput);
     expect(artifact.samples[0]?.express.rawOutput).toBe(completeSamples()[0]?.express.rawOutput);
     expect(Object.keys(artifact).sort()).toEqual([
@@ -166,9 +185,10 @@ describe('child fs canonical scenario and artifact authority', () => {
     const base = rawSample('product-coi', 1);
     const corruptions: ReadonlyArray<readonly [string, Readonly<Record<string, unknown>>]> = [
       ['non-zero exit', { exitCode: 1 }],
-      ['wrong module count', { rawOutput: '✓ 2179 modules transformed.\n✓ built in 1.63s\n' }],
+      ['non-positive module count', { rawOutput: '✓ 0 modules transformed.\n✓ built in 908ms\n' }],
+      ['missing module count', { rawOutput: '✓ built in 908ms\n' }],
       ['duplicate module count', { rawOutput: `${base.vite.rawOutput}${base.vite.rawOutput}` }],
-      ['missing self time', { rawOutput: '✓ 2180 modules transformed.\n' }],
+      ['missing self time', { rawOutput: '✓ 2195 modules transformed.\n' }],
       ['duplicate self time', { rawOutput: `${base.vite.rawOutput}✓ built in 1.64s\n` }],
       ['missing emitted marker', { emittedJavaScript: 'const marker = "other";' }],
       [
@@ -281,6 +301,7 @@ describe('child fs canonical scenario and artifact authority', () => {
       { ...valid, scenarioDigest: 'd'.repeat(64) },
       { ...valid, dependencyDigest: 'e'.repeat(64) },
       { ...valid, browserVersion: '' },
+      { ...valid, generatedAt: '' },
       {
         ...valid,
         samples: valid.samples.map((entry, index) =>
@@ -290,7 +311,7 @@ describe('child fs canonical scenario and artifact authority', () => {
       {
         ...valid,
         samples: valid.samples.map((entry, index) =>
-          index === 0 ? { ...entry, topology: 'same-realm-fallback' } : entry,
+          index === 0 ? { ...entry, topology: 'single-in-realm-worker' } : entry,
         ),
       },
       {
@@ -311,6 +332,26 @@ describe('child fs canonical scenario and artifact authority', () => {
         ...valid,
         samples: valid.samples.map((entry, index) =>
           index === 0 ? { ...entry, vite: { ...entry.vite, rawOutput: 'forged' } } : entry,
+        ),
+      },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 2 ? { ...entry, vite: { ...entry.vite, selfTimeSeconds: 999 } } : entry,
+        ),
+      },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 3
+            ? { ...entry, express: { ...entry.express, startToListeningMs: 999 } }
+            : entry,
+        ),
+      },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 1 ? { ...entry, vite: { ...entry.vite, marker: 'forged' } } : entry,
         ),
       },
       {

@@ -17,3 +17,4 @@ code: [tests/browser-unit/fixtures/child-fs-in-realm-worker.ts]
 Compile after the artifact core lands: use real Memory VFS, npm tarballs,
 runtime-js loader, Vite runtime adapter, Express/http listen and one fresh Worker
 per sample. Port only mechanisms whose forcing constraints still hold.
+Assert the same canonical tree reports exactly 2180 transformed modules.

@@ -16,4 +16,5 @@ code: [tests/browser-unit/fixtures/child-fs-product-lane.ts]
 
 Compile after the artifact core lands: drive the public sealed Workbench fixture
 with canonical scenario bytes; prove topology from the physical child lifecycle,
-not a lane label; return raw Vite/Express output and emitted JS only.
+not a lane label; assert the goal's exactly 2180 transformed modules; return raw
+Vite/Express output and emitted JS only.

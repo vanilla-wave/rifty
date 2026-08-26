@@ -8,7 +8,7 @@ export interface ChildFsViteSample {
   readonly rawOutput: string;
   readonly emittedJavaScript: string;
   readonly marker: string;
-  readonly transformedModules: 2180;
+  readonly transformedModules: number;
   readonly selfTimeSeconds: number;
 }
 

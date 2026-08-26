@@ -23,6 +23,7 @@ describe('child fs benchmark CLI admission', () => {
       ['--runs', '1', '--runs', '2', '--out', 'x.json'],
       ['--runs', '1', '--out', 'a.json', '--out', 'b.json'],
       ['--runs', '1', '--out', 'x.json', '--port', '5391', '--port', '5392'],
+      ['--runs', '1', '--out', 'x.json', '--port', '-1'],
       ['--runs', '1', '--out', 'x.json', '--port', '0'],
       ['--runs', '1', '--out', 'x.json', '--port', '1.5'],
       ['--runs', '1', '--out', 'x.json', '--port', '65536'],
@@ -70,6 +71,17 @@ describe('child fs benchmark CLI admission', () => {
     );
     expect(order).toEqual(['port', 'launch']);
     expect(result).toMatchObject({ runs: 1, out: 'x.json', port });
+
+    const launch = vi.fn(async () => 'must-not-launch');
+    await expect(
+      admitChildFsRun(['--runs', '1', '--out', 'x.json', '--port', String(port)], {
+        assertPortFree: async () => {
+          throw new Error('occupied');
+        },
+        launch,
+      }),
+    ).rejects.toThrow(/occupied/u);
+    expect(launch).not.toHaveBeenCalled();
   });
 });
 
