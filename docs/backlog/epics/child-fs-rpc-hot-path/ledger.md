@@ -153,3 +153,6 @@
   6495ce000: legacy runtime fault + TS endpoint responders copied only the old
   stat→chunk protocol; consolidated TS fixture and dual-generation semantic
   fault carriers before implementation
+- 2026-08-26 — ready-verdict perf/fs-read-single-hop: Contract+RED @
+  c2780008a — PASS, 10 expected RED / 29 pass, sibling controls 58/58, unit
+  residuals empty
