@@ -72,9 +72,21 @@ describe('ADR-0366 dispatcher binary request decode seam', () => {
       ok: true,
       value: { text: 'binary' },
     });
+    expect(
+      await exchange(
+        dispatcher,
+        encodeRequest({
+          method: 'echo',
+          payload: { spoof: 'json-stays-json' },
+          binary: true,
+        } as never),
+        { callerPid: 13 },
+      ),
+    ).toEqual({ ok: true, value: { spoof: 'json-stays-json' } });
     expect(observed).toEqual([
       { payload: { n: 1 }, callerPid: 11 },
       { payload: { text: 'binary' }, callerPid: 12 },
+      { payload: { spoof: 'json-stays-json' }, callerPid: 13 },
     ]);
   });
 
