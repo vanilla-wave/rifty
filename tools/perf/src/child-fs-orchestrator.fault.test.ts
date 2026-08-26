@@ -104,8 +104,9 @@ describe('child fs orchestrator lifecycle faults', () => {
         if (fault === 'summary-sample') return { ...rawSample(lane), summary: {} };
         return rawSample(lane);
       });
-      await expect(
-        orchestrateChildFs(
+      let rejected = false;
+      try {
+        await orchestrateChildFs(
           {
             ...OPTIONS,
             runs: fault.endsWith('-2') ? 2 : 1,
@@ -136,9 +137,11 @@ describe('child fs orchestrator lifecycle faults', () => {
             publish,
           },
           { cleanupMs: 20, serverReadyMs: 20, sampleMs: 20 },
-        ),
-        fault,
-      ).rejects.toThrow();
+        );
+      } catch {
+        rejected = true;
+      }
+      expect(rejected, fault).toBe(true);
       expect(publish, fault).not.toHaveBeenCalled();
       expect(serverClose, fault).toHaveBeenCalledTimes(fault === 'server-start' ? 0 : 1);
       expect(browserClose, fault).toHaveBeenCalledTimes(
