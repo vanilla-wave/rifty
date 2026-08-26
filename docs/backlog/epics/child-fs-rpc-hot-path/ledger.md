@@ -73,3 +73,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
   9079ed68b: wrong-kind fault confounded by shape + hardcoded success ordinal;
   isolated discriminant fault and valid ordinal-3 control added
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED final verify
+  BLOCKER @ 1bf2ff23f: Express wrong discriminant survived boot/Vite examples;
+  same-shape wrong-kind sweep extended across every reply type

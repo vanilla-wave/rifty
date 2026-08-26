@@ -17,11 +17,9 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'reply-before-ready',
       'messageerror',
       'wrong-reply',
-      'wrong-kind-same-shape',
       'duplicate-reply',
       'path-mismatch',
       'asset-path-mismatch',
-      'wrong-vite',
       'duplicate-vite',
       'error-envelope',
       'invalid-sample',
@@ -31,6 +29,15 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'wrong-entries-path',
       'duplicate-entries-path',
       'non-string-entry',
+      'wrong-kind-ready',
+      'wrong-kind-booted',
+      'wrong-kind-seeded',
+      'wrong-kind-installed',
+      'wrong-kind-read',
+      'wrong-kind-written',
+      'wrong-kind-vite',
+      'wrong-kind-entries',
+      'wrong-kind-express',
       'extra-ready',
       'extra-booted',
       'extra-seeded',
@@ -54,8 +61,14 @@ test('protocol corruption and real Worker failures reject and terminate once', a
         }
       };
       const message = (data: unknown) => emit('message', new MessageEvent('message', { data }));
-      const reply = (data: Record<string, unknown>) =>
-        message(mode === `extra-${String(data.kind)}` ? { ...data, extra: true } : data);
+      const reply = (data: Record<string, unknown>) => {
+        const kind = String(data.kind);
+        if (mode === `wrong-kind-${kind}`) {
+          message({ ...data, kind: `not-${kind}` });
+          return;
+        }
+        message(mode === `extra-${kind}` ? { ...data, extra: true } : data);
+      };
       let rejected = false;
       let failure = '';
       let sample: unknown;
@@ -84,10 +97,6 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                 queueMicrotask(() => {
                   if (mode === 'wrong-reply') {
                     message({ kind: 'installed' });
-                    return;
-                  }
-                  if (mode === 'wrong-kind-same-shape') {
-                    message({ kind: 'not-booted', backend: 'memory' });
                     return;
                   }
                   if (mode === 'error-envelope') {
@@ -141,8 +150,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                           ? '✓ 1 modules transformed.\n✓ built in 1s\n'
                           : '✓ 2180 modules transformed.\n✓ built in 1s\n',
                     };
-                    if (mode === 'wrong-vite') message({ ...viteReply, kind: 'express' });
-                    else if (mode === 'duplicate-vite') {
+                    if (mode === 'duplicate-vite') {
                       message(viteReply);
                       queueMicrotask(() => message(viteReply));
                     } else reply(viteReply);
@@ -260,11 +268,9 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'reply-before-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'messageerror', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-reply', posts: 1, rejected: true, terminateCalls: 1 },
-    { mode: 'wrong-kind-same-shape', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-reply', posts: 2, rejected: true, terminateCalls: 1 },
     { mode: 'path-mismatch', posts: 4, rejected: true, terminateCalls: 1 },
     { mode: 'asset-path-mismatch', posts: 14, rejected: true, terminateCalls: 1 },
-    { mode: 'wrong-vite', posts: 12, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-vite', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'error-envelope', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'invalid-sample', posts: 15, rejected: true, terminateCalls: 1 },
@@ -274,6 +280,15 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'wrong-entries-path', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-entries-path', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'non-string-entry', posts: 13, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-ready', posts: 0, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-booted', posts: 1, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-seeded', posts: 2, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-installed', posts: 3, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-read', posts: 4, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-written', posts: 11, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-vite', posts: 12, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-entries', posts: 13, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-express', posts: 15, rejected: true, terminateCalls: 1 },
     { mode: 'extra-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'extra-booted', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'extra-seeded', posts: 2, rejected: true, terminateCalls: 1 },

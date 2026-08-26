@@ -105,3 +105,6 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 - 2026-08-26 — Contract+RED @ 9079ed68b blocked: wrong-kind carrier also had
   wrong shape; only real success ordinal was 5. Same-shape discriminant fault +
   valid ordinal-3 controlled boundary added.
+- 2026-08-26 — Contract+RED @ 1bf2ff23f blocked: terminal Express discriminant
+  survived the boot/Vite examples. Same-shape wrong-kind sweep now covers every
+  reply type.
