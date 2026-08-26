@@ -210,6 +210,23 @@ describe('child fs canonical scenario and artifact authority', () => {
     ]);
   });
 
+  it('parses real terminal CSI around Vite facts without projecting raw output', async () => {
+    const [, { validateChildFsRawSample }] = await subject();
+    const input = rawSample('product-coi', 7);
+    const rawOutput =
+      '\u001b[2K\u001b[1G\u001b[32m✓\u001b[39m 2180 modules transformed.\n' +
+      '\u001b[2K\u001b[1G\u001b[32m✓ built in 6.06s\u001b[39m\n';
+    const parsed = validateChildFsRawSample({
+      ...input,
+      vite: { ...input.vite, rawOutput },
+    });
+    expect(parsed.vite).toMatchObject({
+      rawOutput,
+      transformedModules: 2180,
+      selfTimeSeconds: 6.06,
+    });
+  });
+
   it('rejects every corrupt Vite raw proof and caller-invented derived field', async () => {
     const [, { buildChildFsArtifact }] = await subject();
     const base = rawSample('product-coi', 1);
