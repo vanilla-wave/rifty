@@ -8,7 +8,7 @@ epic: child-fs-rpc-hot-path
 why: I3 closes only when one command owns both real lanes, rejects lifecycle faults, and commits comparable baseline evidence
 user_story: As the goal runner, I want one bounded command that produces an exact two-lane artifact or no artifact, but today no durable orchestrator exists.
 sources: [perf/child-fs-perf-lane split @ fb02b2c2f]
-code: [tools/perf/child-fs.mjs, tools/perf/src/child-fs-orchestrator.mjs, tools/perf/src/child-fs-orchestrator.test.ts, tools/perf/src/child-fs-orchestrator.fault.test.ts, tests/browser-unit/fixtures/child-fs-orchestrator.ts, perf/child-fs-baseline.json]
+code: [tools/perf/child-fs.mjs, tools/perf/src/child-fs-orchestrator.mjs, tools/perf/src/child-fs-orchestrator.test.ts, tools/perf/src/child-fs-orchestrator.fault.test.ts, tests/browser-unit/fixtures/child-fs-orchestrator.ts, tests/browser-unit/child-fs-orchestrator-cli.spec.ts, perf/child-fs-baseline.json]
 ---
 
 ## User scenario
@@ -81,3 +81,7 @@ baseline records raw before-optimization evidence for I1/I2.
   commit follows it); ledger retains that provenance. No self-referential SHA.
 - 2026-08-26 — expected RED: orchestrator unit/fault tests and package-script
   smoke fail because runner/orchestrator/fixture/baseline are absent.
+- 2026-08-26 — Contract+RED @ eabdd8a25 blocked: only injected lanes, weak
+  delayed-death/shutdown/projection carriers, non-canonical JSON/baseline, and
+  injected provenance. Added real CLI browser acceptance + complete fault/byte
+  boundaries.

@@ -44,62 +44,84 @@ describe('child fs orchestrator lifecycle faults', () => {
   it('rejects every lifecycle/sample fault, cleans opened owners once, and never publishes', async () => {
     const { orchestrateChildFs } = await import('./child-fs-orchestrator.mjs');
     for (const fault of [
+      'server-start',
       'server-ready',
       'server-exit',
       'browser-launch',
+      'page-failure',
       'sample-reject',
       'sample-timeout',
       'corrupt-sample',
+      'extra-sample',
+      'digest-sample',
+      'summary-sample',
       'browser-close',
+      'browser-close-timeout',
       'server-close',
+      'server-close-timeout',
     ] as const) {
-      const serverClose = vi.fn(async () => {
+      const serverClose = vi.fn(async (): Promise<unknown> => {
+        if (fault === 'server-close-timeout') return await new Promise<never>(() => {});
         if (fault === 'server-close') throw new Error('injected server close failure');
       });
-      const browserClose = vi.fn(async () => {
+      const browserClose = vi.fn(async (): Promise<unknown> => {
+        if (fault === 'browser-close-timeout') return await new Promise<never>(() => {});
         if (fault === 'browser-close') throw new Error('injected browser close failure');
       });
       const publish = vi.fn();
       const serverFailed = deferred<never>();
-      if (fault === 'server-exit') {
-        queueMicrotask(() => serverFailed.reject(new Error('injected dev server exit')));
-      }
+      const pageFailed = deferred<never>();
       const runSample = vi.fn(async (lane: 'in-realm' | 'product-coi') => {
+        if (fault === 'server-exit') {
+          queueMicrotask(() => serverFailed.reject(new Error('injected dev server exit')));
+          return await new Promise<never>(() => {});
+        }
+        if (fault === 'page-failure') {
+          queueMicrotask(() => pageFailed.reject(new Error('injected page crash')));
+          return await new Promise<never>(() => {});
+        }
         if (fault === 'sample-reject') throw new Error('injected lane rejection');
         if (fault === 'sample-timeout') return await new Promise<never>(() => {});
         if (fault === 'corrupt-sample') return { ...rawSample(lane), ordinal: 99 };
+        if (fault === 'extra-sample') return { ...rawSample(lane), unexpected: true };
+        if (fault === 'digest-sample') return { ...rawSample(lane), scenarioDigest: 'forged' };
+        if (fault === 'summary-sample') return { ...rawSample(lane), summary: {} };
         return rawSample(lane);
       });
       await expect(
         orchestrateChildFs(
           OPTIONS,
           {
-            startServer: async () => ({
-              ready:
-                fault === 'server-ready'
-                  ? Promise.reject(new Error('injected readiness failure'))
-                  : Promise.resolve(),
-              failed: serverFailed.promise,
-              close: serverClose,
-            }),
+            startServer: async () => {
+              if (fault === 'server-start') throw new Error('injected server start failure');
+              return {
+                ready:
+                  fault === 'server-ready'
+                    ? Promise.reject(new Error('injected readiness failure'))
+                    : Promise.resolve(),
+                failed: serverFailed.promise,
+                close: serverClose,
+              };
+            },
             launchBrowser: async () => {
               if (fault === 'browser-launch') throw new Error('injected browser launch failure');
               return {
                 version: 'Chromium fault',
+                failed: pageFailed.promise,
                 runSample,
                 close: browserClose,
               };
             },
             publish,
           },
-          { serverReadyMs: 20, sampleMs: 20 },
+          { cleanupMs: 20, serverReadyMs: 20, sampleMs: 20 },
         ),
         fault,
       ).rejects.toThrow();
       expect(publish, fault).not.toHaveBeenCalled();
-      expect(serverClose, fault).toHaveBeenCalledTimes(1);
+      expect(serverClose, fault).toHaveBeenCalledTimes(fault === 'server-start' ? 0 : 1);
       expect(browserClose, fault).toHaveBeenCalledTimes(
-        fault === 'server-ready' || fault === 'browser-launch' ? 0 : 1,
+        fault === 'server-start' || fault === 'server-ready' || fault === 'browser-launch' ? 0 : 1,
       );
     }
   });
@@ -116,6 +138,7 @@ describe('child fs orchestrator lifecycle faults', () => {
         }),
         launchBrowser: async () => ({
           version: 'Chromium fault',
+          failed: new Promise<never>(() => {}),
           runSample: async (lane: 'in-realm' | 'product-coi') => rawSample(lane),
           close: async () => events.push('browser:close'),
         }),

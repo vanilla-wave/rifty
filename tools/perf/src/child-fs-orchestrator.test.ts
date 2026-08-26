@@ -54,6 +54,7 @@ describe('child fs bounded two-lane orchestrator', () => {
           events.push(`browser:launch:${baseUrl}`);
           return {
             version: 'Chromium exact',
+            failed: never(),
             runSample: async (lane: 'in-realm' | 'product-coi', ordinal: number) => {
               events.push(`sample:${lane}:${ordinal}`);
               return rawSample(lane, ordinal);
@@ -81,7 +82,7 @@ describe('child fs bounded two-lane orchestrator', () => {
       'publish',
     ]);
     expect(published?.path).toBe('/result/child-fs.json');
-    expect(published?.json.endsWith('\n')).toBe(true);
+    expect(published?.json).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
     expect(JSON.parse(published?.json ?? '')).toEqual(artifact);
     expect(validateChildFsArtifact(artifact)).toEqual(artifact);
     expect(artifact.samples.map(({ lane, ordinal }) => `${lane}:${ordinal}`)).toEqual([
@@ -93,10 +94,13 @@ describe('child fs bounded two-lane orchestrator', () => {
   });
 
   it('pins the committed one-run baseline as a strict artifact without summaries', () => {
-    const value = JSON.parse(
-      readFileSync(new URL('../../../perf/child-fs-baseline.json', import.meta.url), 'utf8'),
+    const bytes = readFileSync(
+      new URL('../../../perf/child-fs-baseline.json', import.meta.url),
+      'utf8',
     );
+    const value = JSON.parse(bytes);
     const artifact = validateChildFsArtifact(value);
+    expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
     expect(artifact.runs).toBe(1);
     expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
     expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);

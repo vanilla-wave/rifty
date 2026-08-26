@@ -106,3 +106,6 @@
   1 invalidated (completed item deleted); orchestrator compiled ready and I3 is
   its only remaining measurement dependency
 - 2026-08-26 — perf/child-fs-perf-orchestrator band 2–4 expected REDs
+- 2026-08-26 — perf/child-fs-perf-orchestrator Contract+RED BLOCKER @
+  eabdd8a25: no real CLI carrier; delayed death/shutdown/projection and exact
+  publication/provenance porous; re-cut in place
