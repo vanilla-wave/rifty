@@ -81,6 +81,7 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
       entryPath: '/express-anchor.cjs',
     },
   });
+  expect(observed.calls.filter(({ kind }) => kind === 'open')).toHaveLength(1);
   const executes = observed.calls.filter(({ kind }) => kind === 'execute');
   expect(executes.map(({ line }) => line)).toEqual([
     'npm install',
@@ -137,6 +138,42 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
   expect(closeIndexes[0]).toBe(observed.calls.length - 1);
   expect(observed.result.lifecycle.vite).toEqual(executes[1]?.outcome);
   expect(observed.result.lifecycle.express).toEqual(executes[2]?.outcome);
+  const viteOutcome = executes[1]?.outcome as
+    | { readonly exitCode: number; readonly out: string }
+    | undefined;
+  const expressOutcome = executes[2]?.outcome as
+    | { readonly exitCode: number; readonly out: string }
+    | undefined;
+  const emittedJavaScript = observed.calls
+    .filter(
+      ({ kind, path }) =>
+        kind === 'read' &&
+        typeof path === 'string' &&
+        path.startsWith('/dist/assets/') &&
+        path.endsWith('.js'),
+    )
+    .map(({ text }) => {
+      if (typeof text !== 'string') throw new TypeError('recorded emitted asset must be text');
+      return text;
+    })
+    .join('\n');
+  expect(observed.result.sample).toEqual({
+    lane: 'product-coi',
+    topology: 'owner-sync-rpc-kernel-child',
+    ordinal: 1,
+    ownerLoad: 'idle',
+    vite: {
+      exitCode: viteOutcome?.exitCode,
+      rawOutput: viteOutcome?.out,
+      emittedJavaScript,
+      marker: 'product-coi-1',
+    },
+    express: {
+      exitCode: expressOutcome?.exitCode,
+      rawOutput: expressOutcome?.out,
+      marker: 'product-coi-1',
+    },
+  });
   const sample = validateChildFsRawSample(observed.result.sample);
   expect(sample.vite.transformedModules).toBe(2180);
 });
