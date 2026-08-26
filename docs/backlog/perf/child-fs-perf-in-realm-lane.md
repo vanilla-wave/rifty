@@ -97,3 +97,6 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 - 2026-08-26 — Contract+RED @ b5cbba7e7 blocked: trace stopped at readdir,
   reply schemas/paths and `messageerror` were porous, error envelopes projected,
   URL/nested-Worker provenance weak, and ledger band absent. Re-cut in place.
+- 2026-08-26 — Contract+RED @ c4e57fef9 blocked: corrupt late Vite/
+  entries/asset/Express replies survived; real registry envelope provenance not
+  inspected. Full phase schema sweep + real error reply retained.

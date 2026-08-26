@@ -64,3 +64,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED BLOCKER @
   b5cbba7e7: porous tail alternation/reply schemas/error + Worker provenance;
   re-cut in place
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
+  c4e57fef9: late reply schema/path mutants + projected real registry envelope;
+  fixed by full phase sweep and independent error-message recording
