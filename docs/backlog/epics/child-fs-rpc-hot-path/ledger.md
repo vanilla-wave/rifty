@@ -21,3 +21,5 @@
   alternate-positive, negative numeric and N+1 RED rows missing — extended
 - 2026-08-26 — perf/child-fs-perf-artifact-core final verify BLOCKER @
   e14c22b72: 3-decimal timing-rounding mutant survived — precision RED added
+- 2026-08-26 — perf/child-fs-perf-artifact-core pass verify BLOCKER @
+  c1769da54: build-side `speedupX` extra-key mutant survived — symmetric RED

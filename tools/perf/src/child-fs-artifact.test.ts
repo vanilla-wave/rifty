@@ -337,6 +337,7 @@ describe('child fs canonical scenario and artifact authority', () => {
     expect(() =>
       buildChildFsArtifact({ ...buildInput, dependencyDigest: 'e'.repeat(64) }),
     ).toThrow();
+    expect(() => buildChildFsArtifact({ ...buildInput, speedupX: 1.44 })).toThrow();
 
     const valid = buildChildFsArtifact(buildInput);
     for (const corrupt of [
