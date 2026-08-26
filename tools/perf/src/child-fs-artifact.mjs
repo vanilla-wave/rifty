@@ -1,5 +1,8 @@
 import { childFsScenarioIdentity } from '../child-fs/scenario.mjs';
 
+const ESC = String.fromCharCode(27);
+const ANSI_CSI = new RegExp(`${ESC}\\[[0-?]*[ -/]*[@-~]`, 'gu');
+const TERMINAL_LINE_RESTART = new RegExp(`${ESC}\\[(?:1)?G`, 'gu');
 const LANES = ['product-coi', 'in-realm'];
 const TOPOLOGY = Object.freeze({
   'product-coi': 'owner-sync-rpc-kernel-child',
@@ -55,18 +58,29 @@ function countLiteral(text, value) {
   return text.split(value).length - 1;
 }
 
+function terminalProof(text) {
+  return text
+    .replace(/\r\n/gu, '\n')
+    .replaceAll('\r', '\n')
+    .replace(TERMINAL_LINE_RESTART, '\n')
+    .replace(ANSI_CSI, '');
+}
+
 function parseVite(value, label) {
   const input = exactRecord(value, ['exitCode', 'rawOutput', 'emittedJavaScript', 'marker'], label);
   const exitCode = zeroExit(input.exitCode, `${label}.exitCode`);
   const rawOutput = string(input.rawOutput, `${label}.rawOutput`);
+  const proof = terminalProof(rawOutput);
   const emittedJavaScript = string(input.emittedJavaScript, `${label}.emittedJavaScript`);
   const marker = string(input.marker, `${label}.marker`);
-  const moduleRows = matches(rawOutput, /(?:^|\n)✓\s+(-?\d+)\s+modules transformed\.\r?(?=\n|$)/gu);
-  if (moduleRows.length !== 1) throw new TypeError(`${label} must report one module count`);
+  const moduleRows = matches(proof, /(?:^|\n)✓\s+(-?\d+)\s+modules transformed\.\r?(?=\n|$)/gu);
+  if (moduleRows.length !== 1) {
+    throw new TypeError(`${label} must report one module count; found ${moduleRows.length}`);
+  }
   const transformedModules = Number(moduleRows[0]?.[1]);
   positiveInteger(transformedModules, `${label}.transformedModules`);
   const timeRows = matches(
-    rawOutput,
+    proof,
     /(?:^|\n)✓\s+built in (-?(?:\d+(?:\.\d+)?|\.\d+))(ms|s)\r?(?=\n|$)/gu,
   );
   if (timeRows.length !== 1) throw new TypeError(`${label} must report one self time`);
@@ -92,12 +106,13 @@ function parseExpress(value, label) {
   const input = exactRecord(value, ['exitCode', 'rawOutput', 'marker'], label);
   const exitCode = zeroExit(input.exitCode, `${label}.exitCode`);
   const rawOutput = string(input.rawOutput, `${label}.rawOutput`);
+  const proof = terminalProof(rawOutput);
   const marker = string(input.marker, `${label}.marker`);
   const readyRows = matches(
-    rawOutput,
+    proof,
     /(?:^|\n)RIFTY_EXPRESS_READY (\S+) (-?(?:\d+(?:\.\d+)?|\.\d+))\r?(?=\n|$)/gu,
   );
-  const closedRows = matches(rawOutput, /(?:^|\n)RIFTY_EXPRESS_CLOSED (\S+)\r?(?=\n|$)/gu);
+  const closedRows = matches(proof, /(?:^|\n)RIFTY_EXPRESS_CLOSED (\S+)\r?(?=\n|$)/gu);
   if (
     readyRows.length !== 1 ||
     closedRows.length !== 1 ||
