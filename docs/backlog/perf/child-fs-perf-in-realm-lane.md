@@ -100,3 +100,5 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 - 2026-08-26 — Contract+RED @ c4e57fef9 blocked: corrupt late Vite/
   entries/asset/Express replies survived; real registry envelope provenance not
   inspected. Full phase schema sweep + real error reply retained.
+- 2026-08-26 — Contract+RED @ 0c73c30b5 blocked: exact keys did not reject
+  wrong backend/seeded/written/entries values. Structured-value sweep added.

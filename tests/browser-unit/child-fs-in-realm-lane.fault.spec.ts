@@ -23,6 +23,12 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'duplicate-vite',
       'error-envelope',
       'invalid-sample',
+      'wrong-backend',
+      'wrong-seeded-paths',
+      'wrong-written-path',
+      'wrong-entries-path',
+      'duplicate-entries-path',
+      'non-string-entry',
       'extra-ready',
       'extra-booted',
       'extra-seeded',
@@ -92,14 +98,21 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                     queueMicrotask(() => message({ kind: 'booted', backend: 'memory' }));
                     return;
                   }
-                  if (command.kind === 'boot') reply({ kind: 'booted', backend: 'memory' });
-                  else if (command.kind === 'seed') {
+                  if (command.kind === 'boot') {
+                    reply({
+                      kind: 'booted',
+                      backend: mode === 'wrong-backend' ? 'opfs' : 'memory',
+                    });
+                  } else if (command.kind === 'seed') {
                     const files = command.files as Record<string, string>;
                     reply({
                       kind: 'seeded',
-                      paths: Object.keys(files)
-                        .map((path) => `${String(command.root)}${path}`)
-                        .toSorted(),
+                      paths:
+                        mode === 'wrong-seeded-paths'
+                          ? ['/bench/wrong.js']
+                          : Object.keys(files)
+                              .map((path) => `${String(command.root)}${path}`)
+                              .toSorted(),
                     });
                   } else if (command.kind === 'install') {
                     versions = command.dependencies as Record<string, string>;
@@ -107,7 +120,10 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                   } else if (command.kind === 'write') {
                     const match = String(command.contents).match(/in-realm-\d+/u);
                     if (match !== null) marker = match[0];
-                    reply({ kind: 'written', path: command.path });
+                    reply({
+                      kind: 'written',
+                      path: mode === 'wrong-written-path' ? '/bench/src/Wrong.jsx' : command.path,
+                    });
                   } else if (command.kind === 'vite') {
                     const viteReply = {
                       kind: 'vite',
@@ -123,7 +139,18 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                       queueMicrotask(() => message(viteReply));
                     } else reply(viteReply);
                   } else if (command.kind === 'readdir') {
-                    reply({ kind: 'entries', paths: ['/bench/dist/assets/index.js'] });
+                    const path = '/bench/dist/assets/index.js';
+                    reply({
+                      kind: 'entries',
+                      paths:
+                        mode === 'wrong-entries-path'
+                          ? ['/other/index.js']
+                          : mode === 'duplicate-entries-path'
+                            ? [path, path]
+                            : mode === 'non-string-entry'
+                              ? [1]
+                              : [path],
+                    });
                   } else if (command.kind === 'read') {
                     const path = String(command.path);
                     const dependency = path
@@ -229,6 +256,12 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'duplicate-vite', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'error-envelope', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'invalid-sample', posts: 15, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-backend', posts: 1, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-seeded-paths', posts: 2, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-written-path', posts: 11, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-entries-path', posts: 13, rejected: true, terminateCalls: 1 },
+    { mode: 'duplicate-entries-path', posts: 13, rejected: true, terminateCalls: 1 },
+    { mode: 'non-string-entry', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'extra-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'extra-booted', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'extra-seeded', posts: 2, rejected: true, terminateCalls: 1 },

@@ -67,3 +67,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
   c4e57fef9: late reply schema/path mutants + projected real registry envelope;
   fixed by full phase sweep and independent error-message recording
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED final verify
+  BLOCKER @ 0c73c30b5: wrong structured reply values survived exact-key checks;
+  backend/seed/write/entries value sweep added
