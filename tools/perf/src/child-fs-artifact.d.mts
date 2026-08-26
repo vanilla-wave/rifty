@@ -36,3 +36,4 @@ export interface ChildFsArtifact {
 
 export function buildChildFsArtifact(input: Readonly<Record<string, unknown>>): ChildFsArtifact;
 export function validateChildFsArtifact(input: unknown): ChildFsArtifact;
+export function validateChildFsRawSample(input: unknown): ChildFsArtifactSample;

@@ -40,3 +40,8 @@
 - 2026-08-26 — re-chart after perf/child-fs-perf-artifact-core: 0 graduated /
   1 invalidated (completed item deleted); product + in-realm lanes unblocked
 - 2026-08-26 — perf/child-fs-perf-product-lane band 2–4 expected REDs
+- 2026-08-26 — perf/child-fs-perf-product-lane Contract+RED BLOCKER @
+  1730d0573: opaque fixture self-attested product path/output/cleanup; re-cut to
+  a real sealed-Workbench host seam + shared raw-sample verifier
+- 2026-08-26 — product pickup found Express CLOSED-before-READY accepted by the
+  shared parser; fixed at artifact authority with direct raw-sample entry

@@ -8,67 +8,75 @@ epic: child-fs-rpc-hot-path
 why: the benchmark needs raw Vite and Express samples from the actual playground owner fs served to a supervised child
 user_story: As the child-fs measurement rig, I want both anchors executed through the real COI owner→kernel child topology, but today only a throwaway spike drives it.
 sources: [perf/child-fs-perf-lane split @ fb02b2c2f, ADR-0150, ADR-0196, browser-unit owner-node-stdio-control]
-code: [tests/browser-unit/fixtures/child-fs-product-lane.ts, tests/browser-unit/child-fs-product-lane.spec.ts]
+code: [tests/browser-unit/fixtures/child-fs-product-lane.ts, tests/browser-unit/child-fs-product-lane.spec.ts, tests/browser-unit/child-fs-product-lane.fault.spec.ts]
 ---
 
 ## User scenario
 
-Open the real sealed Workbench on the browser-unit COI page with the canonical
-child-fs scenario. Install its exact dependencies, then run `vite build` and
-`node express-anchor.cjs <run-marker>` through the public project terminal. Both
-commands execute as supervised children reading the owner store through ADR-0150
-sync-FS; return their raw output and emitted JS for the shared artifact verifier.
+On the real browser-unit COI page, pass a recording decorator over the sealed
+Workbench fixture into `runChildFsProductLane`. It opens the canonical plan,
+installs exact dependencies, then runs `vite build` and
+`node express-anchor.cjs <run-marker>` through the public terminal. The test
+independently observes every real host call/result, owner file read and close;
+the returned raw sample must also pass the shared artifact verifier.
 
 ## Acceptance
 
-- The lane runs only when `crossOriginIsolated === true`, seeds exactly
-  `childFsScenario()`, performs the real install, and returns the canonical
-  scenario/dependency identity with lane `product-coi`, topology
-  `owner-sync-rpc-kernel-child`, ordinal, and owner-load `idle`.
-- Vite runs through the public Workbench terminal. Its physical lifecycle
-  settles exactly once; exited/close outcomes are identical exit 0; raw output
-  reports exactly 2180 transformed modules and one self-time; emitted JS contains
-  the unique run marker exactly once.
-- Express runs in a fresh subsequent child. Its physical lifecycle settles
-  exactly once; exited/close outcomes are identical exit 0; raw output contains
-  exactly one matching READY and CLOSED line from the canonical clock-before-
-  require source.
-- The function returns no sample until both commands and emitted-asset read pass.
-  Success and every failure path close terminal/project/Workbench ownership.
+- The runner rejects a non-COI host before opening. On the real COI host it
+  passes one plan whose files/dependencies equal `childFsScenario()`, executes
+  real `npm install`, and reads every direct dependency's installed package.json
+  version back from the owner project.
+- The host-call trace proves the organic order: open → install → marker write →
+  Vite terminal run → emitted-asset readdir/read → Express terminal run → close.
+  The returned lifecycle values equal the independently recorded real terminal
+  outcomes; each outcome has one settlement, shared close, equal exit/close tuple
+  and exit 0. ADR-0150 plus the existing physical browser baselines establish
+  that each terminal Node/bin run is a supervised owner-sync-FS child.
+- The returned sample has product lane/topology/ordinal/idle-owner identity,
+  reports exactly 2180 Vite modules, and passes `validateChildFsRawSample` — one
+  positive self-time, unique emitted marker, then one positive matching Express
+  READY before CLOSED.
+- The runner settles only after the emitted JS read and Express close. A single
+  `finally` calls host close after any post-open success or failure; a real-open
+  injected command failure proves rejection and released sealed ownership.
 
 ## Parity cases
 
-- `product-vite-2180`: canonical bytes and exact dependency versions → exit 0,
-  one `2180 modules transformed`, one `built in`, one emitted marker.
-- `product-express-cold`: canonical source → exit 0, one positive READY duration
-  followed by one CLOSED marker; command uses a fresh physical child after Vite.
-- `physical-settlement`: each command exposes one exited settlement, shared
-  close promise, and byte-identical exited/close tuple through the public
-  Workbench terminal (ADR-0150/physical browser-unit baseline).
+- `product-vite-2180`: exact canonical owner tree/install + public terminal →
+  exit 0, exactly 2180 modules, positive self-time, one fresh emitted marker.
+- `product-express-cold`: a later public terminal call of canonical source →
+  exit 0, positive matching READY before CLOSED.
+- `organic-order`: independently recorded sealed-Workbench calls/results equal
+  the runner result and place asset read/command settlement before final close.
 
 ## Fault matrix
 
 | Boundary / axis | Required outcome | RED target |
 |---|---|---|
-| registry `unbounded-read` / failure | Workbench install rejects within its shipped bound; no sample; fixture closes | aborted real `/npm-registry` request + subsequent reopen |
-| child `provenance-lie` / death | nonzero/signal or mismatched settlement rejects; no sample | physical lifecycle assertions + existing real-worker/stdio browser suites |
-| owner/result `corrupt-input` / `lossy-aggregate` | wrong count/marker/output cannot become a sample | exact product assertions then shared artifact verifier suite |
+| host command `provenance-lie` / failure | a real-open injected install rejection produces no result and calls close once | fault-labelled real sealed-host decorator |
+| result `corrupt-input` / `lossy-aggregate` | wrong exit/count/time/marker/order cannot become a sample | shared raw-sample verifier + exact 2180 assertion |
+| realm `provenance-lie` | `coi:false` rejects before host open | fault-labelled host snapshot |
+
+Inherited registry/Worker/terminal deadlines and physical-death behavior stay at
+their existing Workbench/kernel fault suites; this fixture adds no boundary or
+weaker fallback.
 
 ## Out of scope
 
 - In-realm Worker execution, two-lane aggregation, artifact publication, and
   orchestration deadlines.
+- A new child identity/debug API; the organic public terminal path + ADR-0150
+  and its browser baselines are the topology authority.
 - Loaded-owner stress and performance thresholds.
-- New Workbench or runtime public API; this is a test fixture over existing
-  public project/terminal/files handles.
 
 ## Decisions
 
-- 2026-08-26 — public sealed Workbench fixture is the organic product path;
-  direct kernel spawn would bypass owner/project behavior and cannot close I3.
-- 2026-08-26 — physical topology is inherited from ADR-0150 and already proven
-  by browser-unit real-worker + owner-node-stdio-control suites; this slice adds
-  the exact Vite/Express scenario and settlement proof, not a second worker hook.
-- 2026-08-26 — expected RED: `pnpm exec playwright test --config
-  playwright.browser-unit.config.ts tests/browser-unit/child-fs-product-lane.spec.ts`
-  → 2 tests fail because `fixtures/child-fs-product-lane.ts` does not exist.
+- 2026-08-26 — Contract+RED attempt 1 @ 1730d0573 blocked: opaque fixture
+  self-attested COI/seed/install/topology/output/cleanup and mis-owned registry
+  fault. Re-cut to a caller-supplied recording decorator over the real sealed
+  Workbench plus shared raw verifier.
+- 2026-08-26 — the runner owns only orchestration over an injected host seam;
+  tests wrap the real sibling fixture rather than mock it. Existing Workbench
+  suites remain authority for registry/Worker internals.
+- 2026-08-26 — expected RED: browser-unit product spec + fault spec both fail
+  because `fixtures/child-fs-product-lane.ts` does not exist.

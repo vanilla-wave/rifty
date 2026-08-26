@@ -254,6 +254,12 @@ describe('child fs canonical scenario and artifact authority', () => {
       ['missing ready', { rawOutput: `RIFTY_EXPRESS_CLOSED ${base.express.marker}\n` }],
       ['missing close', { rawOutput: `RIFTY_EXPRESS_READY ${base.express.marker} 34.25\n` }],
       [
+        'close before ready',
+        {
+          rawOutput: `RIFTY_EXPRESS_CLOSED ${base.express.marker}\nRIFTY_EXPRESS_READY ${base.express.marker} 34.25\n`,
+        },
+      ],
+      [
         'duplicate ready',
         { rawOutput: `${base.express.rawOutput}RIFTY_EXPRESS_READY ${base.express.marker} 1\n` },
       ],
@@ -308,7 +314,11 @@ describe('child fs canonical scenario and artifact authority', () => {
   });
 
   it('rejects partial/duplicate samples and malformed/extra artifacts through both entries', async () => {
-    const [, { buildChildFsArtifact, validateChildFsArtifact }] = await subject();
+    const [, { buildChildFsArtifact, validateChildFsArtifact, validateChildFsRawSample }] =
+      await subject();
+    expect(validateChildFsRawSample(rawSample('product-coi', 1))).toEqual(
+      expectedSample('product-coi', 1),
+    );
     const buildCorruptions = [
       completeSamples().slice(0, -1),
       completeSamples().map((entry, index) => (index === 1 ? { ...entry, ordinal: 1 } : entry)),

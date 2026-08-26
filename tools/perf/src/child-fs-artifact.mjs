@@ -102,7 +102,9 @@ function parseExpress(value, label) {
     readyRows.length !== 1 ||
     closedRows.length !== 1 ||
     readyRows[0]?.[1] !== marker ||
-    closedRows[0]?.[1] !== marker
+    closedRows[0]?.[1] !== marker ||
+    (readyRows[0]?.index ?? Number.POSITIVE_INFINITY) >=
+      (closedRows[0]?.index ?? Number.NEGATIVE_INFINITY)
   ) {
     throw new TypeError(`${label} must report one ready and one close proof`);
   }
@@ -223,6 +225,10 @@ function parseArtifactSample(value, label) {
     throw new TypeError(`${label} derived values do not match raw output`);
   }
   return parsed;
+}
+
+export function validateChildFsRawSample(value) {
+  return parseRawSample(value, 'child-fs lane sample');
 }
 
 export function buildChildFsArtifact(value) {
