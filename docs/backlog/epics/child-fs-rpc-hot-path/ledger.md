@@ -10,3 +10,6 @@
 - 2026-08-26 — split perf/child-fs-perf-lane into artifact-core → product-lane
   + in-realm-lane → orchestrator; original remains draft lineage until absorbed
 - 2026-08-26 — perf/child-fs-perf-artifact-core band 8–12 expected REDs
+- 2026-08-26 — perf/child-fs-perf-artifact-core Contract+RED attempt 3
+  (split-unit attempt 1) BLOCKER @ 878e87a95: five porous verifier/CLI/atomic
+  replacement mutants — RED re-cut in place

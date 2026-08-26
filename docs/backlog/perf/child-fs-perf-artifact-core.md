@@ -76,4 +76,7 @@ artifact with an atomic sibling-temp rename.
   never caller assertions; artifact schema is exact (unknown keys reject).
 - 2026-08-26 — expected RED command `pnpm vitest run
   tools/perf/src/child-fs-artifact.test.ts tools/perf/src/child-fs-runner.test.ts`
-  on Vitest 2.1.9; 9 tests target the absent substrate modules.
+  on Vitest 2.1.9; 10 tests target the absent substrate modules.
+- 2026-08-26 — Contract+RED attempt 3 (split-unit attempt 1) @ 878e87a95
+  blocked: digest override, raw-proof uniqueness/deep identity, strict CLI and
+  atomic replacement mutants survived; RED re-cut in place.

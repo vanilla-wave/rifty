@@ -126,11 +126,26 @@ describe('child fs canonical scenario and artifact authority', () => {
       dependencyDigest: sha256(DEPENDENCIES),
     });
     expect(artifact.samples).toHaveLength(4);
-    expect(artifact.samples[0]).toMatchObject({
+    expect(artifact.samples[0]).toEqual({
       lane: 'product-coi',
+      topology: 'owner-sync-rpc-kernel-child',
       ordinal: 1,
-      vite: { transformedModules: 2180, selfTimeSeconds: 1.63 },
-      express: { startToListeningMs: 34.25 },
+      ownerLoad: 'idle',
+      terminalProof: { kind: 'child-exit', complete: true },
+      vite: {
+        exitCode: 0,
+        rawOutput: '✓ 2180 modules transformed.\n✓ built in 1.63s\n',
+        emittedJavaScript: 'const marker = "product-coi-1";',
+        marker: 'product-coi-1',
+        transformedModules: 2180,
+        selfTimeSeconds: 1.63,
+      },
+      express: {
+        exitCode: 0,
+        rawOutput: 'RIFTY_EXPRESS_READY product-coi-1 34.25\nRIFTY_EXPRESS_CLOSED product-coi-1\n',
+        marker: 'product-coi-1',
+        startToListeningMs: 34.25,
+      },
     });
     expect(artifact.samples[0]?.vite.rawOutput).toBe(completeSamples()[0]?.vite.rawOutput);
     expect(artifact.samples[0]?.express.rawOutput).toBe(completeSamples()[0]?.express.rawOutput);
@@ -161,6 +176,7 @@ describe('child fs canonical scenario and artifact authority', () => {
         { emittedJavaScript: `${base.vite.marker} ${base.vite.marker}` },
       ],
       ['caller-derived field', { transformedModules: 2180 }],
+      ['caller-derived self time', { selfTimeSeconds: 1.63 }],
     ];
     for (const [label, patch] of corruptions) {
       expect(
@@ -187,6 +203,10 @@ describe('child fs canonical scenario and artifact authority', () => {
       [
         'duplicate ready',
         { rawOutput: `${base.express.rawOutput}RIFTY_EXPRESS_READY ${base.express.marker} 1\n` },
+      ],
+      [
+        'duplicate close',
+        { rawOutput: `${base.express.rawOutput}RIFTY_EXPRESS_CLOSED ${base.express.marker}\n` },
       ],
       [
         'mismatched close',
@@ -242,18 +262,63 @@ describe('child fs canonical scenario and artifact authority', () => {
       ).toThrow();
     }
 
-    const valid = buildChildFsArtifact({
+    const buildInput = {
       generatedAt: '2026-08-26T00:00:00.000Z',
       gitSha: 'c'.repeat(40),
       browserVersion: 'Chromium 140.0.7339.16',
       runs: 2,
       samples: completeSamples(),
-    });
+    };
+    expect(() => buildChildFsArtifact({ ...buildInput, scenarioDigest: 'd'.repeat(64) })).toThrow();
+    expect(() =>
+      buildChildFsArtifact({ ...buildInput, dependencyDigest: 'e'.repeat(64) }),
+    ).toThrow();
+
+    const valid = buildChildFsArtifact(buildInput);
     for (const corrupt of [
       { ...valid, speedupX: 1.44 },
       { ...valid, samples: valid.samples.slice(0, -1) },
       { ...valid, scenarioDigest: 'd'.repeat(64) },
+      { ...valid, dependencyDigest: 'e'.repeat(64) },
       { ...valid, browserVersion: '' },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 1 ? { ...entry, ordinal: 1 } : entry,
+        ),
+      },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 0 ? { ...entry, topology: 'same-realm-fallback' } : entry,
+        ),
+      },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 0 ? { ...entry, ownerLoad: 'busy-but-labelled-idle' } : entry,
+        ),
+      },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 0
+            ? { ...entry, terminalProof: { kind: 'child-exit', complete: false } }
+            : entry,
+        ),
+      },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 0 ? { ...entry, vite: { ...entry.vite, rawOutput: 'forged' } } : entry,
+        ),
+      },
+      {
+        ...valid,
+        samples: valid.samples.map((entry, index) =>
+          index === 0 ? { ...entry, express: { ...entry.express, extra: true } } : entry,
+        ),
+      },
     ]) {
       expect(() => validateChildFsArtifact(corrupt)).toThrow();
     }

@@ -21,7 +21,11 @@ describe('child fs benchmark CLI admission', () => {
       ['--runs', '1'],
       ['--runs', '1', '--out', ''],
       ['--runs', '1', '--runs', '2', '--out', 'x.json'],
+      ['--runs', '1', '--out', 'a.json', '--out', 'b.json'],
+      ['--runs', '1', '--out', 'x.json', '--port', '5391', '--port', '5392'],
       ['--runs', '1', '--out', 'x.json', '--port', '0'],
+      ['--runs', '1', '--out', 'x.json', '--port', '1.5'],
+      ['--runs', '1', '--out', 'x.json', '--port', '65536'],
       ['--runs', '1', '--out', 'x.json', '--unknown', 'x'],
     ];
     for (const argv of invalidCases) {
@@ -87,23 +91,50 @@ describe('child fs benchmark artifact publication', () => {
     const { publishChildFsArtifact } = await import('./child-fs-runner.mjs');
     for (const failure of ['write', 'rename'] as const) {
       const calls: string[] = [];
+      const files = new Map<string, string>([['/result/child-fs.json', 'previous-good\n']]);
       const io = {
         mkdir: vi.fn(() => calls.push('mkdir')),
-        writeFile: vi.fn((path: string) => {
+        writeFile: vi.fn((path: string, contents: string) => {
           calls.push(`write:${path}`);
           if (failure === 'write') throw new Error('ENOSPC');
+          files.set(path, contents);
         }),
         rename: vi.fn((from: string, to: string) => {
           calls.push(`rename:${from}->${to}`);
           if (failure === 'rename') throw new Error('EPERM');
+          const contents = files.get(from);
+          if (contents === undefined) throw new Error('ENOENT');
+          files.set(to, contents);
+          files.delete(from);
         }),
-        unlink: vi.fn((path: string) => calls.push(`unlink:${path}`)),
+        unlink: vi.fn((path: string) => {
+          calls.push(`unlink:${path}`);
+          files.delete(path);
+        }),
       };
       expect(() => publishChildFsArtifact('/result/child-fs.json', '{}\n', io)).toThrow(
         failure === 'write' ? /ENOSPC/u : /EPERM/u,
       );
       expect(calls).toContain('unlink:/result/.child-fs.json.tmp');
       expect(calls.some((call) => call === 'write:/result/child-fs.json')).toBe(false);
+      expect(calls).not.toContain('unlink:/result/child-fs.json');
+      expect(files.get('/result/child-fs.json')).toBe('previous-good\n');
     }
+  });
+
+  it('injected success is exactly mkdir → write sibling temp → atomic rename', async () => {
+    const { publishChildFsArtifact } = await import('./child-fs-runner.mjs');
+    const calls: string[] = [];
+    publishChildFsArtifact('/result/child-fs.json', '{"ok":true}\n', {
+      mkdir: vi.fn(() => calls.push('mkdir:/result')),
+      writeFile: vi.fn((path: string) => calls.push(`write:${path}`)),
+      rename: vi.fn((from: string, to: string) => calls.push(`rename:${from}->${to}`)),
+      unlink: vi.fn((path: string) => calls.push(`unlink:${path}`)),
+    });
+    expect(calls).toEqual([
+      'mkdir:/result',
+      'write:/result/.child-fs.json.tmp',
+      'rename:/result/.child-fs.json.tmp->/result/child-fs.json',
+    ]);
   });
 });

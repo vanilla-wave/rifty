@@ -1,22 +1,37 @@
+export interface ChildFsTerminalProof {
+  readonly kind: 'child-exit' | 'worker-result';
+  readonly complete: true;
+}
+
 export interface ChildFsViteSample {
+  readonly exitCode: 0;
   readonly rawOutput: string;
+  readonly emittedJavaScript: string;
+  readonly marker: string;
+  readonly transformedModules: 2180;
   readonly selfTimeSeconds: number;
-  readonly transformedModules: number;
 }
 
 export interface ChildFsExpressSample {
+  readonly exitCode: 0;
   readonly rawOutput: string;
+  readonly marker: string;
   readonly startToListeningMs: number;
 }
 
 export interface ChildFsArtifactSample {
+  readonly lane: 'product-coi' | 'in-realm';
+  readonly topology: 'owner-sync-rpc-kernel-child' | 'single-in-realm-worker';
+  readonly ordinal: number;
+  readonly ownerLoad: 'idle';
+  readonly terminalProof: ChildFsTerminalProof;
   readonly vite: ChildFsViteSample;
   readonly express: ChildFsExpressSample;
-  readonly [key: string]: unknown;
 }
 
 export interface ChildFsArtifact {
   readonly schemaVersion: 1;
+  readonly generatedAt: string;
   readonly gitSha: string;
   readonly browserVersion: string;
   readonly scenarioDigest: string;
