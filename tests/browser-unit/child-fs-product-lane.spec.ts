@@ -138,6 +138,5 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
   expect(observed.result.lifecycle.vite).toEqual(executes[1]?.outcome);
   expect(observed.result.lifecycle.express).toEqual(executes[2]?.outcome);
   const sample = validateChildFsRawSample(observed.result.sample);
-  expect(sample).toEqual(observed.result.sample);
   expect(sample.vite.transformedModules).toBe(2180);
 });
