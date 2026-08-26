@@ -81,6 +81,8 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 
 ## Decisions
 
+ready-verdict: 2026-08-26 — Contract+RED @ 9d6afb8ce
+
 - 2026-08-26 — one fresh Worker performs install + both anchors, then terminates;
   no page-side execution and no nested Worker. One Worker is the comparison
   topology, not a reusable pool.
@@ -122,3 +124,4 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 - 2026-08-26 — Contract+RED @ 8084fe65c blocked: duplicate terminal Express
   could be ignored during resolve/terminate. Synchronous duplicate-Express now
   rejects before completion.
+- 2026-08-26 — Contract+RED PASS @ 9d6afb8ce; unit residuals empty.

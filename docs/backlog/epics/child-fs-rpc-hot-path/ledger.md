@@ -91,3 +91,5 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
   8084fe65c: terminal duplicate Express could escape during termination;
   synchronous terminal duplicate now rejects before completion
+- 2026-08-26 — ready-verdict perf/child-fs-perf-in-realm-lane: Contract+RED @
+  9d6afb8ce — PASS, unit residuals empty
