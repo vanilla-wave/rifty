@@ -150,16 +150,16 @@ describe('child fs bounded two-lane orchestrator', () => {
     expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
     expect(artifact.gitSha).not.toBe(baseline.gitSha);
     const repoRoot = new URL('../../..', import.meta.url);
-    const additions = execFileSync(
+    const artifactCommits = execFileSync(
       'git',
-      ['log', '--diff-filter=A', '--format=%H', '--', 'perf/child-fs-after-single-hop.json'],
+      ['log', '--format=%H', '--', 'perf/child-fs-after-single-hop.json'],
       { cwd: repoRoot, encoding: 'utf8' },
     )
       .trim()
       .split('\n')
       .filter(Boolean);
-    expect(additions).toHaveLength(1);
-    const artifactCommit = additions[0] as string;
+    expect(artifactCommits).toHaveLength(1);
+    const artifactCommit = artifactCommits[0] as string;
     expect(artifact.gitSha).not.toBe(artifactCommit);
     execFileSync('git', ['merge-base', '--is-ancestor', artifact.gitSha, artifactCommit], {
       cwd: repoRoot,
@@ -167,25 +167,32 @@ describe('child fs bounded two-lane orchestrator', () => {
     execFileSync('git', ['merge-base', '--is-ancestor', artifactCommit, 'HEAD'], {
       cwd: repoRoot,
     });
-    execFileSync(
-      'git',
+    expect(
+      execFileSync('git', ['rev-list', '--count', `${artifact.gitSha}..${artifactCommit}`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe('1');
+    expect(
+      execFileSync('git', ['show', `${artifactCommit}:perf/child-fs-after-single-hop.json`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    ).toBe(bytes);
+    expect(
+      execFileSync('git', ['diff', '--name-only', artifact.gitSha, artifactCommit], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      })
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .toSorted(),
+    ).toEqual(
       [
-        'diff',
-        '--quiet',
-        artifact.gitSha,
-        artifactCommit,
-        '--',
-        'packages/runtime-js/src/ipc/fs-rpc-protocol.ts',
-        'packages/runtime-js/src/ipc/fs-handlers.ts',
-        'packages/runtime-js/src/ipc/sync-rpc-fs.ts',
-        'packages/kernel/src/ipc/sync-rpc.ts',
-        'packages/runtime-js/src/ipc/sync-rpc-fs-single-hop.test.ts',
-        'packages/runtime-js/src/ipc/sync-rpc-fs-single-hop.fault.test.ts',
-        'packages/kernel/src/ipc/sync-rpc.test.ts',
-        'packages/ts-language-service/src/worker/host-fs-rpc.test.ts',
-        'tools/perf/src/child-fs-orchestrator.test.ts',
-      ],
-      { cwd: repoRoot },
+        'docs/backlog/epics/child-fs-rpc-hot-path/ledger.md',
+        'perf/child-fs-after-single-hop.json',
+      ].toSorted(),
     );
     expect(artifact.runs).toBe(1);
     expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);

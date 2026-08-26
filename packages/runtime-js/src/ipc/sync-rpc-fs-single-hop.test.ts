@@ -11,7 +11,7 @@ interface CallRecord {
   payload: unknown;
 }
 
-function loopback(vfs: MemoryFsSync, calls: CallRecord[]) {
+function handlersOf(vfs: MemoryFsSync) {
   const handlers = new Map<string, (payload: unknown) => unknown>();
   installRuntimeJsFsHandlers(
     {
@@ -20,12 +20,27 @@ function loopback(vfs: MemoryFsSync, calls: CallRecord[]) {
     } as never,
     () => vfs,
   );
+  return handlers;
+}
+
+function loopback(
+  handlers: ReadonlyMap<string, (payload: unknown) => unknown>,
+  calls: CallRecord[],
+) {
   return (method: string, payload: unknown): unknown => {
     calls.push({ method, payload });
     const handler = handlers.get(method);
     if (handler === undefined) throw new Error(`missing owner handler: ${method}`);
     return handler(payload);
   };
+}
+
+function expectedReadHead(bytes: Uint8Array): Uint8Array {
+  const first = bytes.subarray(0, FS_RPC_CHUNK);
+  const reply = new Uint8Array(8 + first.length);
+  new DataView(reply.buffer).setFloat64(0, bytes.length, true);
+  reply.set(first, 8);
+  return reply;
 }
 
 function caught(read: () => unknown): VfsError {
@@ -47,7 +62,8 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
     const ownerStat = vi.spyOn(owner, 'statSync');
     const ownerStatOrNull = vi.spyOn(owner, 'statSyncOrNull');
     const calls: CallRecord[] = [];
-    const remote = new SyncRpcFsSync(loopback(owner, calls));
+    const handlers = handlersOf(owner);
+    const remote = new SyncRpcFsSync(loopback(handlers, calls));
     const sizes = [0, 1, FS_RPC_CHUNK, FS_RPC_CHUNK + 1];
 
     for (const size of sizes) {
@@ -55,6 +71,23 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
       const bytes = Uint8Array.from({ length: size }, (_, index) => index % 251);
       owner.writeFileSync(path, bytes);
       calls.length = 0;
+      const headReadsBefore = ownerRead.mock.calls.length;
+      const headProbesBefore =
+        ownerExists.mock.calls.length +
+        ownerReaddir.mock.calls.length +
+        ownerStat.mock.calls.length +
+        ownerStatOrNull.mock.calls.length;
+      const readHead = handlers.get('fs.readFileHead');
+      expect(readHead).toBeDefined();
+      expect(readHead?.({ path })).toEqual(expectedReadHead(bytes));
+      expect(ownerRead.mock.calls.length - headReadsBefore).toBe(1);
+      expect(
+        ownerExists.mock.calls.length +
+          ownerReaddir.mock.calls.length +
+          ownerStat.mock.calls.length +
+          ownerStatOrNull.mock.calls.length -
+          headProbesBefore,
+      ).toBe(0);
       const readsBefore = ownerRead.mock.calls.length;
       const probesBefore =
         ownerExists.mock.calls.length +
@@ -90,7 +123,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
     owner.mkdirSync('/dir', { recursive: true });
     owner.writeFileSync('/plain.txt', new TextEncoder().encode('old'));
     const calls: CallRecord[] = [];
-    const remote = new SyncRpcFsSync(loopback(owner, calls));
+    const remote = new SyncRpcFsSync(loopback(handlersOf(owner), calls));
     const ownerRead = vi.spyOn(owner, 'readFileBytesSync');
     const ownerExists = vi.spyOn(owner, 'existsSync');
     const ownerReaddir = vi.spyOn(owner, 'readdirSync');

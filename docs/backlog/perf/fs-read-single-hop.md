@@ -122,10 +122,12 @@ Exact raw artifact and commit identity are
 - The existing 256 KiB chunk is retained; changing capacity is not needed to
   deliver the contract.
 - After the second Contract+RED blocker, provenance is re-refined in place:
-  the artifact's measured SHA precedes the unique artifact-add commit, and
-  every I1 production + focused-RED path is byte-identical between those two
-  commits. This binds the real CLI's SHA to the exact tested implementation
-  without a forbidden source grep and remains stable after later goal slices.
+  the artifact's measured SHA immediately precedes the unique commit touching
+  that artifact; the committed artifact blob equals the tested bytes and the
+  complete changed-path set is exactly artifact + ledger. This binds the real
+  CLI's SHA to the exact tested tree without a forbidden source grep and
+  remains stable after later goal slices. The unit CI checkout carries full
+  history for this provenance gate.
 - Expected RED band: 8–10 failing cases across five focused files: wire
   codec/call trace, owner error/fault behavior, exact v3→v4 rejection, shared
   adapter traces, and the absent post-I1 artifact. The two-peer wire plus the

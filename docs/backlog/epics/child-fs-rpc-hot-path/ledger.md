@@ -145,3 +145,7 @@
 - 2026-08-26 — second consecutive Contract+RED blocker: re-refined the
   post-artifact contract carrier in place to exact measured-SHA→publish-commit
   tree identity; observable Acceptance/Parity unchanged
+- 2026-08-26 — perf/fs-read-single-hop Contract+RED final BLOCKER @
+  229876862: provenance assumed full history but unit CI was shallow; raw
+  owner response and remaining corrupt partitions were not frozen — redesigned
+  as full-history exact commit/blob/path proof + independent raw golden

@@ -23,17 +23,26 @@ function caught(read: () => unknown): Error {
 describe('ADR-0365 read-head fault boundary', () => {
   it('rejects every malformed head before allocation or continuation', () => {
     const corrupt: ReadonlyArray<[string, unknown]> = [
+      ['undefined', undefined],
       ['non-bytes', null],
+      ['boolean', true],
+      ['number', 8],
+      ['string', 'bytes'],
+      ['array', [0, 0, 0, 0, 0, 0, 0, 0]],
       ['object', {}],
       ['array buffer', new ArrayBuffer(HEAD_BYTES)],
       ['truncated header', new Uint8Array(HEAD_BYTES - 1)],
       ['NaN size', head(Number.NaN)],
+      ['infinite size', head(Number.POSITIVE_INFINITY)],
       ['fractional size', head(1.5, new Uint8Array(1))],
       ['negative size', head(-1)],
       ['unsafe size', head(Number.MAX_SAFE_INTEGER + 1)],
       ['safe enormous short body', head(Number.MAX_SAFE_INTEGER)],
+      ['zero extra body', head(0, new Uint8Array(1))],
       ['short body', head(2, new Uint8Array(1))],
       ['extra body', head(1, new Uint8Array(2))],
+      ['short boundary head', head(FS_RPC_CHUNK, new Uint8Array(FS_RPC_CHUNK - 1))],
+      ['extra boundary head', head(FS_RPC_CHUNK, new Uint8Array(FS_RPC_CHUNK + 1))],
       ['short full head', head(FS_RPC_CHUNK + 1, new Uint8Array(FS_RPC_CHUNK - 1))],
       ['extra full head', head(FS_RPC_CHUNK + 1, new Uint8Array(FS_RPC_CHUNK + 1))],
     ];
