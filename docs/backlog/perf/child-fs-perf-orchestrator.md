@@ -73,6 +73,8 @@ baseline records raw before-optimization evidence for I1/I2.
 
 ## Decisions
 
+ready-verdict: 2026-08-26 — Contract+RED @ 6bff21e2e
+
 - 2026-08-26 — one programmatic Playwright/Vite CLI, not a generated spec or a
   second test config. One page runs lanes serially; the command itself owns
   process/browser deadlines and cleanup.
@@ -95,3 +97,4 @@ baseline records raw before-optimization evidence for I1/I2.
 - 2026-08-26 — Contract+RED @ 77a961196 blocked: only first product sample
   carried timeout. Timeout matrix now covers both lanes at ordinal 1 and after a
   complete ordinal at ordinal 2.
+- 2026-08-26 — Contract+RED PASS @ 6bff21e2e; unit residuals empty.

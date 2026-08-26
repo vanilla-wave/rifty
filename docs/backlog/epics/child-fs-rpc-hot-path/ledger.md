@@ -118,3 +118,5 @@
 - 2026-08-26 — perf/child-fs-perf-orchestrator Contract+RED verify BLOCKER @
   77a961196: deadline could cover only first product sample; lane×ordinal timeout
   matrix now covers product/in-realm at ordinals 1 and 2
+- 2026-08-26 — ready-verdict perf/child-fs-perf-orchestrator: Contract+RED @
+  6bff21e2e — PASS, unit residuals empty
