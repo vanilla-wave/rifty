@@ -63,21 +63,26 @@ export class SyncRpcClient {
    * format carries no type info, so the caller asserts the shape.
    */
   call<T>(method: string, payload: unknown, timeoutMs?: number): T {
-    return this.exchange(method, encodeRequest({ method, payload }), timeoutMs);
+    return this.exchange(method, () => encodeRequest({ method, payload }), timeoutMs);
   }
 
   /** Send an ADR-0366 binary request through the same claimed ring lifecycle. */
   callBinary<T>(method: string, payload: Uint8Array, timeoutMs?: number): T {
-    return this.exchange(method, encodeBinaryRequest(method, payload), timeoutMs);
+    return this.exchange(method, () => encodeBinaryRequest(method, payload), timeoutMs);
   }
 
-  private exchange<T>(method: string, request: Uint8Array, timeoutMs?: number): T {
+  private exchange<T>(
+    method: string,
+    encode: () => Uint8Array,
+    timeoutMs?: number,
+  ): T {
     // Trail captured BEFORE this exchange mutates it — the wedge context is
     // the PREVIOUS call, not the current one.
     const prevMethod = this.lastMethod;
     const prevCompleted = this.lastCompleted;
     let replyBytes: Uint8Array;
     try {
+      const request = encode();
       this.ring.writeRequest(request);
       this.lastMethod = method;
       this.lastCompleted = false;
