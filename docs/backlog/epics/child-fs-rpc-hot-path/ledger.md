@@ -19,3 +19,5 @@
   goal's 2180 count belongs to the physical Rifty lane contracts, not raw parser
 - 2026-08-26 — perf/child-fs-perf-artifact-core verify 2 BLOCKER @ 0c0515cad:
   alternate-positive, negative numeric and N+1 RED rows missing — extended
+- 2026-08-26 — perf/child-fs-perf-artifact-core final verify BLOCKER @
+  e14c22b72: 3-decimal timing-rounding mutant survived — precision RED added

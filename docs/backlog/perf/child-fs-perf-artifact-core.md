@@ -95,3 +95,5 @@ artifact with an atomic sibling-temp rename.
   `tools/perf/child-fs/vite-7.3.6-node-golden.json`.
 - 2026-08-26 — Contract+RED verify 2 @ 0c0515cad blocked: alternate positive,
   negative numeric and N+1 mutations missing; RED table extended in place.
+- 2026-08-26 — Contract+RED final verify @ e14c22b72 blocked: all positive
+  timing fixtures survived a 3-decimal rounding mutant; precision RED added.

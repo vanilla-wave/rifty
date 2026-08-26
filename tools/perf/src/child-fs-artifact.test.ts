@@ -185,12 +185,12 @@ describe('child fs canonical scenario and artifact authority', () => {
         ...entry.vite,
         rawOutput:
           index === 0
-            ? '✓ 17 modules transformed.\n✓ built in 1.25s\n'
-            : '✓ 23 modules transformed.\n✓ built in 250ms\n',
+            ? '✓ 17 modules transformed.\n✓ built in 1.234567s\n'
+            : '✓ 23 modules transformed.\n✓ built in 250.123ms\n',
       },
       express: {
         ...entry.express,
-        rawOutput: `RIFTY_EXPRESS_READY ${entry.express.marker} ${index === 0 ? '7.75' : '8.5'}\nRIFTY_EXPRESS_CLOSED ${entry.express.marker}\n`,
+        rawOutput: `RIFTY_EXPRESS_READY ${entry.express.marker} ${index === 0 ? '7.654321' : '8.987654'}\nRIFTY_EXPRESS_CLOSED ${entry.express.marker}\n`,
       },
     }));
     const alternate = validateChildFsArtifact(
@@ -209,8 +209,8 @@ describe('child fs canonical scenario and artifact authority', () => {
         expressMs: express.startToListeningMs,
       })),
     ).toEqual([
-      { modules: 17, viteSeconds: 1.25, expressMs: 7.75 },
-      { modules: 23, viteSeconds: 0.25, expressMs: 8.5 },
+      { modules: 17, viteSeconds: 1.234567, expressMs: 7.654321 },
+      { modules: 23, viteSeconds: 0.250123, expressMs: 8.987654 },
     ]);
   });
 
