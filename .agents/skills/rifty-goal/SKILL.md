@@ -17,7 +17,7 @@ Detect the mode from state; run exactly one mode per invocation:
 | No goal dir — a hand-off naming an outcome, or a legacy single-file epic | [FIT](FIT.md) |
 | Ready goal with an open frontier (unblocked, unpicked children) | [PICKUP](PICKUP.md) |
 | A slice of this goal just merged, or new facts landed | [RECHART](RECHART.md) |
-| Map empty and invariants provable | [CLOSE](CLOSE.md) |
+| Map `## Items` empty and invariants provable (fog lines disposition inside CLOSE) | [CLOSE](CLOSE.md) |
 
 Standing rules: a ready `goal.md` never changes (amend = CLOSE + fresh FIT);
 `ledger.md` only grows; `map.md` is yours to edit — but it is an index, not a
