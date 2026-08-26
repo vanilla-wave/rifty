@@ -177,6 +177,7 @@ describe('child fs bounded two-lane orchestrator', () => {
       execFileSync('git', ['show', `${artifactCommit}:perf/child-fs-after-single-hop.json`], {
         cwd: repoRoot,
         encoding: 'utf8',
+        maxBuffer: Buffer.byteLength(bytes) + 1,
       }),
     ).toBe(bytes);
     expect(
