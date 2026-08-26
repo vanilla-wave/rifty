@@ -214,8 +214,8 @@ describe('child fs canonical scenario and artifact authority', () => {
     const [, { validateChildFsRawSample }] = await subject();
     const input = rawSample('product-coi', 7);
     const rawOutput =
-      '\u001b[2K\u001b[1G\u001b[32m✓\u001b[39m 2180 modules transformed.\n' +
-      '\u001b[2K\u001b[1G\u001b[32m✓ built in 6.06s\u001b[39m\n';
+      'transforming (2160) dependency.js\u001b[2K\u001b[1G\u001b[32m✓\u001b[39m 2180 modules transformed.\n' +
+      'rendering chunks (1)...\u001b[2K\u001b[1G\u001b[32m✓ built in 6.06s\u001b[39m\n';
     const parsed = validateChildFsRawSample({
       ...input,
       vite: { ...input.vite, rawOutput },
