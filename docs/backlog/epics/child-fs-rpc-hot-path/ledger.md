@@ -139,3 +139,6 @@
 - 2026-08-26 — perf/fs-read-single-hop Contract+RED BLOCKER @ f34647a62:
   hidden owner stat, exact v3 admission and post-artifact commit provenance
   survived; original 3–5 case band was also dishonest — re-cut in place
+- 2026-08-26 — perf/fs-read-single-hop Contract+RED verify BLOCKER @
+  97aed68de: parent readdir probe, allocation-before-validation, large extra
+  head body and forbidden source-grep provenance survived — re-cut in place

@@ -43,6 +43,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
     const owner = new MemoryFsSync();
     const ownerRead = vi.spyOn(owner, 'readFileBytesSync');
     const ownerExists = vi.spyOn(owner, 'existsSync');
+    const ownerReaddir = vi.spyOn(owner, 'readdirSync');
     const ownerStat = vi.spyOn(owner, 'statSync');
     const ownerStatOrNull = vi.spyOn(owner, 'statSyncOrNull');
     const calls: CallRecord[] = [];
@@ -57,6 +58,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
       const readsBefore = ownerRead.mock.calls.length;
       const probesBefore =
         ownerExists.mock.calls.length +
+        ownerReaddir.mock.calls.length +
         ownerStat.mock.calls.length +
         ownerStatOrNull.mock.calls.length;
 
@@ -64,6 +66,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
       expect(ownerRead.mock.calls.length - readsBefore).toBe(size > FS_RPC_CHUNK ? 2 : 1);
       expect(
         ownerExists.mock.calls.length +
+          ownerReaddir.mock.calls.length +
           ownerStat.mock.calls.length +
           ownerStatOrNull.mock.calls.length -
           probesBefore,
@@ -90,6 +93,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
     const remote = new SyncRpcFsSync(loopback(owner, calls));
     const ownerRead = vi.spyOn(owner, 'readFileBytesSync');
     const ownerExists = vi.spyOn(owner, 'existsSync');
+    const ownerReaddir = vi.spyOn(owner, 'readdirSync');
     const ownerStat = vi.spyOn(owner, 'statSync');
     const ownerStatOrNull = vi.spyOn(owner, 'statSyncOrNull');
 
@@ -114,6 +118,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
       expect(calls.splice(0)).toEqual([{ method: 'fs.readFileHead', payload: { path } }]);
     }
     expect(ownerExists).not.toHaveBeenCalled();
+    expect(ownerReaddir).not.toHaveBeenCalled();
     expect(ownerStat).not.toHaveBeenCalled();
     expect(ownerStatOrNull).not.toHaveBeenCalled();
   });

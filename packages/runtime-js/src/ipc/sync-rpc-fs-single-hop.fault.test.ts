@@ -31,9 +31,11 @@ describe('ADR-0365 read-head fault boundary', () => {
       ['fractional size', head(1.5, new Uint8Array(1))],
       ['negative size', head(-1)],
       ['unsafe size', head(Number.MAX_SAFE_INTEGER + 1)],
+      ['safe enormous short body', head(Number.MAX_SAFE_INTEGER)],
       ['short body', head(2, new Uint8Array(1))],
       ['extra body', head(1, new Uint8Array(2))],
       ['short full head', head(FS_RPC_CHUNK + 1, new Uint8Array(FS_RPC_CHUNK - 1))],
+      ['extra full head', head(FS_RPC_CHUNK + 1, new Uint8Array(FS_RPC_CHUNK + 1))],
     ];
 
     for (const [label, reply] of corrupt) {
