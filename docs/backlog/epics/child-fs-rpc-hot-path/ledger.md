@@ -120,3 +120,4 @@
   matrix now covers product/in-realm at ordinals 1 and 2
 - 2026-08-26 — ready-verdict perf/child-fs-perf-orchestrator: Contract+RED @
   6bff21e2e — PASS, unit residuals empty
+- 2026-08-26 — baseline c87bc54fea0e4cfab42254bfd373ab72088f323f: product vite 6.08s express 277.6600000113249ms; in-realm vite 1.22s express 199.53499999642372ms
