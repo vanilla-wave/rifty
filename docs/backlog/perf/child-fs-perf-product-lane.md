@@ -71,6 +71,8 @@ weaker fallback.
 
 ## Decisions
 
+ready-verdict: 2026-08-26 — Contract+RED @ e633605b0
+
 - 2026-08-26 — Contract+RED attempt 1 @ 1730d0573 blocked: opaque fixture
   self-attested COI/seed/install/topology/output/cleanup and mis-owned registry
   fault. Re-cut to a caller-supplied recording decorator over the real sealed
@@ -86,3 +88,6 @@ weaker fallback.
 - 2026-08-26 — Contract+RED final verify @ dd26201f3 blocked: a JS read before
   readdir survived the max-read projection; minimum emitted-read index now must
   follow readdir.
+- 2026-08-26 — final re-cuts bind raw fields to observed bytes, exact open/
+  lifecycle/install provenance, both ordinals, sole canonical write, and every
+  post-open cleanup boundary; Contract+RED PASS @ e633605b0.

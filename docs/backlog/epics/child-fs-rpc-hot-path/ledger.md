@@ -49,3 +49,5 @@
   20ca80cbc: projected trace hid asset/Express order + duplicate close — fixed
 - 2026-08-26 — perf/child-fs-perf-product-lane Contract+RED final verify
   BLOCKER @ dd26201f3: early emitted-read hidden by max projection — fixed
+- 2026-08-26 — ready-verdict perf/child-fs-perf-product-lane: Contract+RED @
+  e633605b0 — PASS, unit residuals empty
