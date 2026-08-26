@@ -1340,33 +1340,11 @@ async function runRiftyNodeCliEvalInvocation(
 
 /**
  * Install the opt-in `kind: 'exec-sync'` mode (ADR-0084 #23, ADR-0137).
- * `execSync` is SAB-only by design (ADR-0011 removed the in-realm fallback as a
- * silent stub), so the default loader path throws `NotImplementedError`. To
- * exercise the v2 binary-frame round-trip head-to-head against real Node's
- * byte-exact `execSync`, this wires a REAL kernel `SabRing` + the genuine
- * encode/decodeReply framing and a SYNCHRONOUS in-realm child runner that
- * captures stdout BYTES, then publishes the `__riftyKernelSyncCall` shim the
- * runtime-js `execSync` reads.
+ * Wires a real ring/dispatcher and publishes both v5 call operations. The
+ * synchronous handler loader-runs CJS so byte replies, shebangs, relatives,
+ * sibling reads, and error framing exercise the production seams against Node.
  *
- * The child runner LOADER-RUNS the script through the REAL rifty module loader
- * (ADR-0137) — `loader.require` for a CJS entry — so the child's `#!` shebang is
- * stripped (the resolver's strip, `resolver.ts`), its relative `require('./x')`
- * resolves against the sync mirror, and a sibling `fs.readFileSync('./y')` reads
- * the mirror (the rifty `node:fs` builtin). This is the same loader path the
- * browser `kind:'url'` child uses — the OLD `new Function` runner could do NONE
- * of these (it threw on `#!`, could not resolve relatives), so it silently
- * diverged from real Node for any shebang'd / relative-import child. Closing
- * that is the whole point of this item (Fidelity).
- *
- * Synchronous by design: `execSync`'s `api.call(...)` must return without
- * yielding (it is the synchronous child-execution contract). `loader.require`
- * runs a CJS entry to completion synchronously, so `pumpOnce` services the
- * request and `waitReply` finds the reply immediately — matching the OLD mock's
- * synchronous shape, now over the loader instead of `new Function`. (An ESM
- * execSync child is async-only; the in-process-runner unit test + the browser
- * e2e cover the ESM/`kind:'url'` paths — this synchronous parity mock pins the
- * CJS shebang/relative/sibling-read behaviors head-to-head against Node.)
- * Returns a teardown that clears the published shim + the host-capability stubs.
+ * Returns teardown for both published hooks and host capability stubs.
  */
 async function installExecSyncMode(): Promise<() => void> {
   // Relative source imports (same `tools/`-harness precedent as `runWasi` above):
