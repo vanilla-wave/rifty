@@ -9,14 +9,18 @@ export interface ChildFsOrchestratorOptions extends ChildFsCliOptions {
 export interface ChildFsServerHandle {
   readonly ready: Promise<unknown>;
   readonly failed: Promise<never>;
+  readonly closed: Promise<unknown>;
   readonly close: () => Promise<unknown>;
+  readonly forceClose: () => Promise<unknown>;
 }
 
 export interface ChildFsBrowserHandle {
   readonly version: string;
   readonly failed: Promise<never>;
+  readonly closed: Promise<unknown>;
   readonly runSample: (lane: 'product-coi' | 'in-realm', ordinal: number) => Promise<unknown>;
   readonly close: () => Promise<unknown>;
+  readonly forceClose: () => Promise<unknown>;
 }
 
 export interface ChildFsOrchestratorActions {

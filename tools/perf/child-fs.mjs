@@ -68,6 +68,7 @@ function startServer(port) {
   return Promise.resolve({
     ready: waitForHttp(`${baseUrl}/unit-harness.html`, () => stopped),
     failed,
+    closed: exited,
     async close() {
       closing = true;
       stopped = true;
@@ -75,17 +76,41 @@ function startServer(port) {
       child.kill('SIGTERM');
       await exited;
     },
+    async forceClose() {
+      closing = true;
+      stopped = true;
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await exited;
+    },
   });
 }
 
 async function launchBrowser(baseUrl) {
-  const browser = await chromium.launch({ headless: true });
+  const browserServer = await chromium.launchServer({ headless: true });
+  const browserProcess = browserServer.process();
   let closing = false;
   let rejectFailed;
   const failed = new Promise((_, reject) => {
     rejectFailed = reject;
   });
+  const closed = new Promise((resolveClosed) => {
+    if (browserProcess.exitCode !== null || browserProcess.signalCode !== null) {
+      resolveClosed();
+      return;
+    }
+    browserProcess.once('exit', resolveClosed);
+  });
+  browserProcess.once('error', (error) => {
+    if (!closing) rejectFailed(error);
+  });
+  browserProcess.once('exit', (code, signal) => {
+    if (!closing) {
+      rejectFailed(new Error(`child fs Chromium exited (${String(code)}/${String(signal)})`));
+    }
+  });
+  let browser;
   try {
+    browser = await chromium.connect(browserServer.wsEndpoint());
     const page = await browser.newPage();
     page.on('crash', () => rejectFailed(new Error('child fs browser page crashed')));
     page.on('close', () => {
@@ -98,6 +123,7 @@ async function launchBrowser(baseUrl) {
     return {
       version: browser.version(),
       failed,
+      closed,
       runSample: (lane, ordinal) =>
         page.evaluate(
           async ({ fixtureUrl, lane: requestedLane, ordinal: requestedOrdinal }) => {
@@ -108,12 +134,20 @@ async function launchBrowser(baseUrl) {
         ),
       async close() {
         closing = true;
-        await browser.close();
+        await browserServer.close();
+        await closed;
+      },
+      async forceClose() {
+        closing = true;
+        await browserServer.kill();
+        await closed;
       },
     };
   } catch (error) {
     closing = true;
-    await browser.close().catch(() => {});
+    await browser?.close().catch(() => {});
+    await browserServer.kill().catch(() => {});
+    await closed.catch(() => {});
     throw error;
   }
 }

@@ -51,14 +51,33 @@ function guarded(operation, timeoutMs, label, failureSignals) {
   );
 }
 
-async function closeGuarded(close, timeoutMs, label, failureSignals) {
-  let closing;
+function invoke(operation) {
   try {
-    closing = Promise.resolve(close());
+    return Promise.resolve(operation());
   } catch (error) {
-    throw inspectedError(error);
+    return Promise.reject(error);
   }
-  return await guarded(closing, timeoutMs, label, failureSignals);
+}
+
+async function settleOwner(handle, timeoutMs, label) {
+  let gracefulFailure;
+  try {
+    await deadline(invoke(handle.close), timeoutMs, `${label} graceful close`);
+    await deadline(handle.closed, timeoutMs, `${label} terminal proof`);
+    return;
+  } catch (error) {
+    gracefulFailure = inspectedError(error);
+  }
+  try {
+    await deadline(invoke(handle.forceClose), timeoutMs, `${label} forced close`);
+    await deadline(handle.closed, timeoutMs, `${label} forced terminal proof`);
+  } catch (forceError) {
+    throw new AggregateError(
+      [gracefulFailure, inspectedError(forceError)],
+      `${label} graceful and forced close failed`,
+    );
+  }
+  throw gracefulFailure;
 }
 
 function throwFailures(primary, cleanupFailures) {
@@ -124,10 +143,7 @@ export async function orchestrateChildFs(options, actions, deadlineOverrides = {
   const cleanupFailures = [];
   if (browser !== undefined) {
     try {
-      await closeGuarded(browser.close, deadlines.cleanupMs, 'child fs browser cleanup', [
-        { signal: browser.failed, label: 'child fs browser page' },
-        ...(server === undefined ? [] : [{ signal: server.failed, label: 'child fs dev server' }]),
-      ]);
+      await settleOwner(browser, deadlines.cleanupMs, 'child fs browser cleanup');
     } catch (error) {
       cleanupFailures.push(error);
     }
@@ -136,9 +152,7 @@ export async function orchestrateChildFs(options, actions, deadlineOverrides = {
   }
   if (server !== undefined) {
     try {
-      await closeGuarded(server.close, deadlines.cleanupMs, 'child fs dev server cleanup', [
-        { signal: server.failed, label: 'child fs dev server' },
-      ]);
+      await settleOwner(server, deadlines.cleanupMs, 'child fs dev server cleanup');
     } catch (error) {
       cleanupFailures.push(error);
     }
