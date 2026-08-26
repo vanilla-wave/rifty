@@ -8,10 +8,15 @@
  * fdTable) — this implements only the 13 `FsSync` methods.
  */
 
-import { VfsError } from '@riftydev/vfs';
 import type { FsSync, VfsDirent } from '@riftydev/vfs';
 import { setSyncMirror } from '../builtins/fs-sync-mirror.ts';
-import { FS_METHODS, FS_RPC_CHUNK, type FsStatShape, bytesToBase64 } from './fs-rpc-protocol.ts';
+import {
+  FS_METHODS,
+  FS_RPC_CHUNK,
+  type FsStatShape,
+  bytesToBase64,
+  decodeReadFileHead,
+} from './fs-rpc-protocol.ts';
 
 /** The published in-Worker sync-call shim (`KernelSyncApi.call`). */
 export type SyncCall = (method: string, payload: unknown) => unknown;
@@ -36,14 +41,12 @@ export class SyncRpcFsSync implements FsSync {
   }
 
   readFileBytesSync(path: string): Uint8Array {
-    const stat = this.call(FS_METHODS.statOrNull, { path }) as FsStatShape | null;
-    if (stat === null || !stat.isFile) {
-      throw new VfsError('ENOENT', path);
-    }
-    const size = stat.size ?? 0;
+    const { size, firstChunk } = decodeReadFileHead(this.call(FS_METHODS.readFileHead, { path }));
     if (size === 0) return new Uint8Array(0);
+    if (size <= FS_RPC_CHUNK) return firstChunk.slice();
     const out = new Uint8Array(size);
-    let offset = 0;
+    out.set(firstChunk);
+    let offset = firstChunk.length;
     while (offset < size) {
       const requested = Math.min(FS_RPC_CHUNK, size - offset);
       const chunk = this.call(FS_METHODS.readChunk, {
@@ -51,7 +54,7 @@ export class SyncRpcFsSync implements FsSync {
         offset,
         length: requested,
       }) as Uint8Array;
-      // Empty chunk before the stat'd size means the owner store shrank mid-read
+      // Empty chunk before the admitted size means the owner store shrank mid-read
       // (snapshot inconsistent). ADR-0150 forbids silent truncation — fail loud
       // rather than hand the caller a partial file presented as the whole thing.
       if (chunk.length === 0) {
@@ -61,7 +64,7 @@ export class SyncRpcFsSync implements FsSync {
       }
       if (chunk.length > requested) {
         throw new Error(
-          `sync-rpc-fs: oversized read for ${path} — ${chunk.length} bytes exceeds ${requested} remaining in the stat snapshot`,
+          `sync-rpc-fs: oversized read for ${path} — ${chunk.length} bytes exceeds ${requested} remaining in the head snapshot`,
         );
       }
       out.set(chunk, offset);

@@ -34,8 +34,11 @@
  *
  * v3: REQ_STATE is a claimed exchange lifecycle
  * IDLE→WRITING→READY→HANDLING→IDLE. Both peers must recompile atomically.
+ *
+ * v4 (ADR-0365): owner-backed fs reads add one binary total-size + first-chunk
+ * application reply. Kernel + runtime-js peers recompile atomically.
  */
-export const SYNC_RPC_PROTOCOL_VERSION = 3 as const;
+export const SYNC_RPC_PROTOCOL_VERSION = 4 as const;
 
 /** Frame discriminator: JSON-over-UTF-8 body (ADR-0084 #23). */
 export const FRAME_JSON = 0x00 as const;

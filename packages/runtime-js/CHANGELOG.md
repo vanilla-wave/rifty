@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Single-hop small-file owner reads (ADR-0365).** Supervised children now
+  receive total size + the first 256 KiB in one binary `fs.readFileHead`
+  response. Empty and small `readFileSync` calls use one sync-RPC round-trip;
+  larger reads continue from the first unread offset, with no cache or bypass.
+
 - **Node 24 synchronous `require(ESM)` (ADR-0348).** Plain-JS graphs now share
   one import/require job with Node namespace, `"module.exports"`, TLA, cycle,
   race, resolver, and statically detected CJS re-export semantics;

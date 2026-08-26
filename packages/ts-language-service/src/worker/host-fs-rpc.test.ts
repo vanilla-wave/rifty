@@ -13,8 +13,8 @@
  * the adapter + engine, mocked only at the unavoidable RPC boundary.
  */
 
-import { createMemoryFs } from '@riftydev/vfs/internal';
 import { FS_RPC_CHUNK } from '@riftydev/runtime-js';
+import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { snapshotVfsFiles, writeRealWorkspaceTypeScript } from '../test-workspace-typescript.ts';
 import { type FsRpcCallRecord, makeFakeFsCall } from './fs-rpc-test-helper.ts';

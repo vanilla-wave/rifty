@@ -16,7 +16,12 @@ import {
   type VfsMutationIntent,
   guardVfsMutations,
 } from '@riftydev/vfs';
-import { FS_METHODS, type FsStatShape, base64ToBytes } from './fs-rpc-protocol.ts';
+import {
+  FS_METHODS,
+  type FsStatShape,
+  base64ToBytes,
+  encodeReadFileHead,
+} from './fs-rpc-protocol.ts';
 
 export type VfsAccessor = () => FsSync;
 
@@ -72,6 +77,12 @@ export function installRuntimeJsFsHandlers(
   dispatcher.register(FS_METHODS.readdir, (p): VfsDirent[] => [
     ...getVfs().readdirSync(str(obj(p), 'path')),
   ]);
+
+  // One current owner read carries total size + first chunk (ADR-0365).
+  dispatcher.register(
+    FS_METHODS.readFileHead,
+    (p): Uint8Array => encodeReadFileHead(getVfs().readFileBytesSync(str(obj(p), 'path'))),
+  );
 
   // Binary reply: ranged slice of the cached buffer (O(1) subarray reference).
   // TODO(backlog: perf/fs-rpc-chunk-perf) — readFileBytesSync re-reads the whole file per chunk → O(N²)

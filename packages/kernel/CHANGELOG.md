@@ -4,6 +4,10 @@
 
 ### Added
 
+- **SyncRpc v4 (ADR-0365).** The atomic kernel/runtime-js peer contract admits
+  the owner-FS binary size + first-chunk reply used by single-hop small-file
+  reads; v3 peers fail through the existing `EPROTOVERSION` guard.
+
 - **One federated Worker process tree (ADR-0326).** The owner-root
   `ProcessManager` owns recursive PID/PPID state over the trusted SAB chain;
   fork JSON IPC, worker-thread messages, and private lifecycle control stay
