@@ -5,7 +5,6 @@ status: draft
 title: Child fs perf real product-COI owner-to-kernel-child lane
 created: 2026-08-26
 epic: child-fs-rpc-hot-path
-blocked_by: [perf/child-fs-perf-artifact-core]
 why: the benchmark needs raw Vite and Express samples from the actual playground owner fs served to a supervised child
 user_story: As the child-fs measurement rig, I want both anchors executed through the real COI owner→kernel child topology, but today only a throwaway spike drives it.
 sources: [perf/child-fs-perf-lane split @ fb02b2c2f, ADR-0150, ADR-0196]

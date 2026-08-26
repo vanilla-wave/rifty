@@ -1,19 +1,17 @@
 ## Items
 
-1. `perf/child-fs-perf-artifact-core` — **measurement authority first** —
-   canonical scenario, raw-output verifier, exact artifact/CLI substrate.
-2. `perf/child-fs-perf-product-lane` — real playground COI owner→kernel child
-   lane; depends on 1.
-3. `perf/child-fs-perf-in-realm-lane` — real single in-realm Worker lane;
-   depends on 1.
-4. `perf/child-fs-perf-orchestrator` — bounded two-lane runner + committed
-   baseline artifact (I3); depends on 2 and 3; absorbs/deletes split predecessor
+1. `perf/child-fs-perf-product-lane` — real playground COI owner→kernel child
+   lane; canonical artifact/CLI substrate landed.
+2. `perf/child-fs-perf-in-realm-lane` — real single in-realm Worker lane;
+   canonical artifact/CLI substrate landed.
+3. `perf/child-fs-perf-orchestrator` — bounded two-lane runner + committed
+   baseline artifact (I3); depends on 1 and 2; absorbs/deletes split predecessor
    `perf/child-fs-perf-lane`.
-5. `perf/fs-read-single-hop` — **kill the sizing hop** (I1) — wire-format
-   change (new/extended fs method) → ADR; depends on 4 for proof.
-6. `perf/syncrpc-v2-waitasync-binary-ring` — **binary REQUEST frame residual**
+4. `perf/fs-read-single-hop` — **kill the sizing hop** (I1) — wire-format
+   change (new/extended fs method) → ADR; depends on 3 for proof.
+5. `perf/syncrpc-v2-waitasync-binary-ring` — **binary REQUEST frame residual**
    (I2) — re-cut; ADR-0084 already delivered waitAsync responder + binary
-   reply; depends on 4 for proof.
+   reply; depends on 3 for proof.
 
 ## Open questions
 

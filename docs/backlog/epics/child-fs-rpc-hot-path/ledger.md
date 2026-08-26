@@ -30,3 +30,12 @@
   mechanisms — fixed in one batch, shared owner `tools/perf/src/runner-io.mjs`
 - 2026-08-26 — perf/child-fs-perf-artifact-core Final+GREEN verify BLOCKER @
   44a550f43: `localhost` IPv6 occupied port escaped IPv4-only guard — fixed
+- 2026-08-26 — perf/child-fs-perf-artifact-core Final+GREEN PASS @ deb9e6eb5;
+  `pnpm pr:check` 24/24, unit residuals empty
+- 2026-08-26 — learned canonical host Vite 7.3.6 graph = 2195 modules while
+  physical Rifty spike = 2180; raw parser stays generic, both lane contracts own
+  the Rifty-specific count; full carrier: `tools/perf/child-fs/`
+- 2026-08-26 — learned all perf runners now share strict localhost admission
+  and atomic artifact publication; owner: `tools/perf/src/runner-io.mjs`
+- 2026-08-26 — re-chart after perf/child-fs-perf-artifact-core: 0 graduated /
+  1 invalidated (completed item deleted); product + in-realm lanes unblocked

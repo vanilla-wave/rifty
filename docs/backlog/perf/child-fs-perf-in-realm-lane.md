@@ -5,7 +5,6 @@ status: draft
 title: Child fs perf real single in-realm Worker lane
 created: 2026-08-26
 epic: child-fs-rpc-hot-path
-blocked_by: [perf/child-fs-perf-artifact-core]
 why: the comparison anchor needs identical guest bytes executed with fs and loader in one real Worker, without SAB RPC or a child-side cache
 user_story: As the child-fs measurement rig, I want both anchors executed in one real in-realm Worker, but today that topology exists only as throwaway spike code.
 sources: [perf/child-fs-perf-lane split @ fb02b2c2f, spike 1261339acc1d1eb3f864a9a48ed50bf067fe0f02, ADR-0196]
