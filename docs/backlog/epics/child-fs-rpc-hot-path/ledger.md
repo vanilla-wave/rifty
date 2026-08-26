@@ -96,3 +96,12 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Final+GREEN BLOCKER @
   5b2c95c6c: terminal Worker task could arrive after listener disposal; explicit
   `finish→finished` self-close proof now gates settlement
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Final+GREEN PASS @ b9a073480;
+  real/fault browser 2/2, lint + typecheck + architecture gates, unit residuals
+  empty
+- 2026-08-26 — learned one Worker sample needs an explicit closure proof:
+  `finish→finished`, then Worker `self.close()`, then host terminate; this keeps
+  terminal errors/duplicates observable without a timing grace period
+- 2026-08-26 — re-chart after perf/child-fs-perf-in-realm-lane: 0 graduated /
+  1 invalidated (completed item deleted); orchestrator compiled ready and I3 is
+  its only remaining measurement dependency
