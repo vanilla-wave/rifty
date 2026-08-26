@@ -15,6 +15,11 @@ test('non-COI rejects before open; post-open command failure closes real sealed 
         import(/* @vite-ignore */ sealedUrl),
       ]);
       let falseCoiOpenCalls = 0;
+      let falseCoiOtherCalls = 0;
+      const rejectFalseCoiCall = async () => {
+        falseCoiOtherCalls += 1;
+        throw new Error('non-COI host method must not be called');
+      };
       let falseCoiRejected = false;
       try {
         await lane.runChildFsProductLane(1, {
@@ -22,6 +27,11 @@ test('non-COI rejects before open; post-open command failure closes real sealed 
           open: async () => {
             falseCoiOpenCalls += 1;
           },
+          writeText: rejectFalseCoiCall,
+          execute: rejectFalseCoiCall,
+          readdir: rejectFalseCoiCall,
+          readText: rejectFalseCoiCall,
+          close: rejectFalseCoiCall,
         });
       } catch {
         falseCoiRejected = true;
@@ -57,6 +67,7 @@ test('non-COI rejects before open; post-open command failure closes real sealed 
       }
       return {
         falseCoiOpenCalls,
+        falseCoiOtherCalls,
         falseCoiRejected,
         closeCalls,
         commandRejected,
@@ -68,6 +79,7 @@ test('non-COI rejects before open; post-open command failure closes real sealed 
 
   expect(result).toEqual({
     falseCoiOpenCalls: 0,
+    falseCoiOtherCalls: 0,
     falseCoiRejected: true,
     closeCalls: 1,
     commandRejected: true,

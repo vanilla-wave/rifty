@@ -97,6 +97,15 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
       ({ kind, path }) => kind === 'read' && path === `/node_modules/${dependency}/package.json`,
     ),
   );
+  for (const [dependency, version] of Object.entries(childFsScenario().dependencies)) {
+    const manifestRead = observed.calls.find(
+      ({ kind, path }) => kind === 'read' && path === `/node_modules/${dependency}/package.json`,
+    );
+    if (typeof manifestRead?.text !== 'string') {
+      throw new TypeError(`missing recorded manifest text for ${dependency}`);
+    }
+    expect(JSON.parse(manifestRead.text)).toMatchObject({ version });
+  }
   const markerWriteIndex = callIndex(
     ({ kind, path }) => kind === 'write' && path === '/src/Panel.jsx',
   );
@@ -138,12 +147,26 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
   expect(closeIndexes[0]).toBe(observed.calls.length - 1);
   expect(observed.result.lifecycle.vite).toEqual(executes[1]?.outcome);
   expect(observed.result.lifecycle.express).toEqual(executes[2]?.outcome);
-  const viteOutcome = executes[1]?.outcome as
-    | { readonly exitCode: number; readonly out: string }
-    | undefined;
-  const expressOutcome = executes[2]?.outcome as
-    | { readonly exitCode: number; readonly out: string }
-    | undefined;
+  type RecordedOutcome = {
+    readonly exitCode: number;
+    readonly exit: { readonly code: number | null; readonly signal: string | null };
+    readonly closeExit: { readonly code: number | null; readonly signal: string | null };
+    readonly closeShared: boolean;
+    readonly settlements: number;
+    readonly out: string;
+  };
+  const viteOutcome = executes[1]?.outcome as RecordedOutcome | undefined;
+  const expressOutcome = executes[2]?.outcome as RecordedOutcome | undefined;
+  for (const outcome of [viteOutcome, expressOutcome]) {
+    expect(outcome).toMatchObject({
+      exitCode: 0,
+      exit: { code: 0, signal: null },
+      closeExit: { code: 0, signal: null },
+      closeShared: true,
+      settlements: 1,
+    });
+    expect(outcome?.exit).toEqual(outcome?.closeExit);
+  }
   const emittedJavaScript = observed.calls
     .filter(
       ({ kind, path }) =>
