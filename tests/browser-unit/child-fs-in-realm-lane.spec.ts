@@ -72,7 +72,7 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
   const replyKinds = replies.map(({ kind }) => kind);
   expect(replyKinds[0]).toBe('ready');
   expect(replies[0]).toEqual({ kind: 'ready' });
-  expect(replyKinds.at(-1)).toBe('express');
+  expect(replyKinds.slice(-2)).toEqual(['express', 'finished']);
 
   const scenario = childFsScenario();
   expect(posts[0]).toEqual({ kind: 'boot' });
@@ -129,15 +129,16 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
   );
   expect(emittedPaths).toBeDefined();
   expect(emittedPaths).not.toHaveLength(0);
-  expect(posts.slice(writeIndex + 3, -1)).toEqual(
+  expect(posts.slice(writeIndex + 3, -2)).toEqual(
     emittedPaths?.map((path) => ({ kind: 'read', path })),
   );
-  expect(posts.at(-1)).toEqual({
+  expect(posts.at(-2)).toEqual({
     kind: 'express',
     entryPath: `${scenario.root}/express-anchor.cjs`,
     marker,
     root: scenario.root,
   });
+  expect(posts.at(-1)).toEqual({ kind: 'finish' });
 
   const traceKinds = observed.trace.map(({ kind, message }) =>
     kind === 'post' || kind === 'worker-message'
@@ -150,6 +151,7 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
     if (postKind === 'install') return 'installed';
     if (postKind === 'write') return 'written';
     if (postKind === 'readdir') return 'entries';
+    if (postKind === 'finish') return 'finished';
     return String(postKind);
   };
   expect(traceKinds).toEqual([
@@ -184,6 +186,7 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
     kind: 'written',
     path: `${scenario.root}/src/Panel.jsx`,
   });
+  expect(replies.find(({ kind }) => kind === 'finished')).toEqual({ kind: 'finished' });
 
   const viteReply = replies.find(({ kind }) => kind === 'vite');
   const expressReply = replies.find(({ kind }) => kind === 'express');

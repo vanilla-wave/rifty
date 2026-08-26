@@ -26,9 +26,11 @@ the Worker never self-attests a finished sample.
 - The runner opens exactly one real module Worker from the pinned fixture URL,
   accepts one ready, then sends exactly boot → seed → install → marker
   manifest reads → marker write → Vite → assets readdir/read → Express
-  commands, one at a time. Every command accepts one exact-schema typed reply
-  whose path echoes the request; error, malformed, duplicate or out-of-order
-  messages reject and still terminate once.
+  → finish commands, one at a time. Every command accepts one exact-schema
+  typed reply whose path echoes the request; error, malformed, duplicate or
+  out-of-order messages before the final `finished` reject and still terminate
+  once. Worker posts `finished` immediately before `self.close()`; only then may
+  the runner dispose listeners and terminate its handle.
 - Inside that Worker, `installMemoryFs()` supplies the one shared async/sync
   store. The runner sends exact `childFsScenario()` files/dependencies; the
   Worker seeds them at `/bench`, uses real `RegistryClient` + `install`, then the
@@ -46,8 +48,9 @@ the Worker never self-attests a finished sample.
   Express READY before CLOSED.
 - Worker setup/run failures are serialized with name/message/stack; page-side
   Worker `error`/`messageerror`, protocol corruption, and result validation are
-  loud. The runner settles only after termination; it never converts a partial
-  log/phase trace into a sample.
+  loud through the finish handshake. The runner settles only after the Worker
+  closure proof and handle termination; it never converts a partial log/phase
+  trace into a sample.
 
 ## Parity cases
 
@@ -56,9 +59,10 @@ the Worker never self-attests a finished sample.
 - `in-realm-express-cold`: later canonical loader run in the same Worker →
   exit 0, positive matching READY before CLOSED.
 - `single-worker-topology`: caller records one module Worker, exact sequential
-  command/reply trace, no second command in flight, and one final terminate; no
-  page FS proxy or Worker-produced aggregate sample. Playwright's independent
-  page Worker inventory contains that exact fixture URL and no nested Worker.
+  command/reply trace through `finish→finished`, no second command in flight,
+  and one final terminate; no page FS proxy or Worker-produced aggregate sample.
+  Playwright's independent page Worker inventory contains that exact fixture
+  URL and no nested Worker.
 
 ## Fault matrix
 
@@ -125,3 +129,7 @@ ready-verdict: 2026-08-26 — Contract+RED @ 9d6afb8ce
   could be ignored during resolve/terminate. Synchronous duplicate-Express now
   rejects before completion.
 - 2026-08-26 — Contract+RED PASS @ 9d6afb8ce; unit residuals empty.
+- 2026-08-26 — Final+GREEN @ 5b2c95c6c blocked: real Worker events are
+  separate tasks, so immediate listener disposal could lose a terminal
+  duplicate/error. Added explicit `finish→finished` self-close handshake;
+  terminal fault carriers run while that reply is pending.

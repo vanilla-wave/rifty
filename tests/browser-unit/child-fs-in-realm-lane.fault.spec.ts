@@ -26,6 +26,8 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'asset-path-mismatch',
       'duplicate-vite',
       'duplicate-express',
+      'terminal-error',
+      'terminal-messageerror',
       'error-envelope',
       'invalid-sample',
       'wrong-backend',
@@ -44,6 +46,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'wrong-kind-vite',
       'wrong-kind-entries',
       'wrong-kind-express',
+      'wrong-kind-finished',
       'extra-ready',
       'extra-booted',
       'extra-seeded',
@@ -53,6 +56,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'extra-vite',
       'extra-entries',
       'extra-express',
+      'extra-finished',
       'success',
     ]) {
       const listeners = new Map<string, Set<Listener>>();
@@ -226,10 +230,25 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                       exitCode: 0,
                       rawOutput: `RIFTY_EXPRESS_READY ${marker} 1\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
                     };
+                    reply(expressReply);
+                  } else if (command.kind === 'finish') {
                     if (mode === 'duplicate-express') {
-                      message(expressReply);
-                      message(expressReply);
-                    } else reply(expressReply);
+                      message({
+                        kind: 'express',
+                        exitCode: 0,
+                        rawOutput: `RIFTY_EXPRESS_READY ${marker} 1\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
+                      });
+                    } else if (mode === 'terminal-error') {
+                      emit(
+                        'error',
+                        new ErrorEvent('error', {
+                          error: new Error('injected terminal Worker crash'),
+                          message: 'injected terminal Worker crash',
+                        }),
+                      );
+                    } else if (mode === 'terminal-messageerror') {
+                      emit('messageerror', new MessageEvent('messageerror'));
+                    } else reply({ kind: 'finished' });
                   }
                 });
               },
@@ -317,9 +336,11 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'path-mismatch', posts: 4, rejected: true, terminateCalls: 1 },
     { mode: 'asset-path-mismatch', posts: 14, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-vite', posts: 12, rejected: true, terminateCalls: 1 },
-    { mode: 'duplicate-express', posts: 15, rejected: true, terminateCalls: 1 },
+    { mode: 'duplicate-express', posts: 16, rejected: true, terminateCalls: 1 },
+    { mode: 'terminal-error', posts: 16, rejected: true, terminateCalls: 1 },
+    { mode: 'terminal-messageerror', posts: 16, rejected: true, terminateCalls: 1 },
     { mode: 'error-envelope', posts: 1, rejected: true, terminateCalls: 1 },
-    { mode: 'invalid-sample', posts: 15, rejected: true, terminateCalls: 1 },
+    { mode: 'invalid-sample', posts: 16, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-backend', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-seeded-paths', posts: 2, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-written-path', posts: 11, rejected: true, terminateCalls: 1 },
@@ -336,6 +357,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'wrong-kind-vite', posts: 12, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-kind-entries', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-kind-express', posts: 15, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-finished', posts: 16, rejected: true, terminateCalls: 1 },
     { mode: 'extra-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'extra-booted', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'extra-seeded', posts: 2, rejected: true, terminateCalls: 1 },
@@ -345,7 +367,8 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'extra-vite', posts: 12, rejected: true, terminateCalls: 1 },
     { mode: 'extra-entries', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'extra-express', posts: 15, rejected: true, terminateCalls: 1 },
-    { mode: 'success', posts: 15, rejected: false, terminateCalls: 1 },
+    { mode: 'extra-finished', posts: 16, rejected: true, terminateCalls: 1 },
+    { mode: 'success', posts: 16, rejected: false, terminateCalls: 1 },
   ]);
   const envelope = observed.controlled.find(({ mode }) => mode === 'error-envelope')?.failure;
   expect(envelope).toContain('InjectedWorkerError');
