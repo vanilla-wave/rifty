@@ -121,6 +121,11 @@ Exact raw artifact and commit identity are
   invalidation, alternate store authority, or correlation mechanism ships.
 - The existing 256 KiB chunk is retained; changing capacity is not needed to
   deliver the contract.
+- After the second Contract+RED blocker, provenance is re-refined in place:
+  the artifact's measured SHA precedes the unique artifact-add commit, and
+  every I1 production + focused-RED path is byte-identical between those two
+  commits. This binds the real CLI's SHA to the exact tested implementation
+  without a forbidden source grep and remains stable after later goal slices.
 - Expected RED band: 8–10 failing cases across five focused files: wire
   codec/call trace, owner error/fault behavior, exact v3→v4 rejection, shared
   adapter traces, and the absent post-I1 artifact. The two-peer wire plus the

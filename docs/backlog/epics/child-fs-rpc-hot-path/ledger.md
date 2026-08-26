@@ -142,3 +142,6 @@
 - 2026-08-26 — perf/fs-read-single-hop Contract+RED verify BLOCKER @
   97aed68de: parent readdir probe, allocation-before-validation, large extra
   head body and forbidden source-grep provenance survived — re-cut in place
+- 2026-08-26 — second consecutive Contract+RED blocker: re-refined the
+  post-artifact contract carrier in place to exact measured-SHA→publish-commit
+  tree identity; observable Acceptance/Parity unchanged
