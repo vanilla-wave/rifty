@@ -1,7 +1,7 @@
-import { type VfsErrorCode, VfsError } from '@riftydev/vfs';
+import { VfsError, type VfsErrorCode } from '@riftydev/vfs';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readFileSync } from '../builtins/fs.ts';
 import { resetSyncMirror } from '../builtins/fs-sync-mirror.ts';
+import { readFileSync } from '../builtins/fs.ts';
 import { FS_RPC_CHUNK } from './fs-rpc-protocol.ts';
 import { SyncRpcFsSync, installRemoteSyncFs } from './sync-rpc-fs.ts';
 

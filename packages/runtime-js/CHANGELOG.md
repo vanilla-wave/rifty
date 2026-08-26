@@ -53,6 +53,11 @@
 
 ### Fixed
 
+- Owner-backed `fs.*` calls now rehydrate the `VfsError` prototype erased by
+  SyncRpc's JSON error frame before reaching `node:fs`, preserving exact Node
+  `code`/`errno`/`syscall`/`path` shaping for missing, directory, and
+  traversal-through-file reads.
+
 - Kernel-backed `worker_threads.Worker.terminate()` now uses an immediate
   physical kill, preventing emnapi pthreads from running after their creator
   has torn down shared N-API state during a failed Vite build.

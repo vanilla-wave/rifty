@@ -8,7 +8,7 @@
  * fdTable) — this implements only the 13 `FsSync` methods.
  */
 
-import type { FsSync, VfsDirent } from '@riftydev/vfs';
+import { type FsSync, type VfsDirent, VfsError, type VfsErrorCode } from '@riftydev/vfs';
 import { setSyncMirror } from '../builtins/fs-sync-mirror.ts';
 import {
   FS_METHODS,
@@ -21,27 +21,65 @@ import {
 /** The published in-Worker sync-call shim (`KernelSyncApi.call`). */
 export type SyncCall = (method: string, payload: unknown) => unknown;
 
+const VFS_ERROR_CODES = new Set<VfsErrorCode>([
+  'ENOENT',
+  'EEXIST',
+  'EISDIR',
+  'ENOTDIR',
+  'ENOTEMPTY',
+  'EPERM',
+  'EINVAL',
+  'EACCES',
+  'EDQUOT',
+  'EIO',
+]);
+
+function restoreTransportVfsError(error: unknown): unknown {
+  if (error instanceof VfsError) return error;
+  if (!(error instanceof Error) || error.name !== 'VfsError') return error;
+  const transported = error as Error & { code?: unknown; path?: unknown };
+  if (
+    typeof transported.code !== 'string' ||
+    !VFS_ERROR_CODES.has(transported.code as VfsErrorCode) ||
+    typeof transported.path !== 'string'
+  ) {
+    return error;
+  }
+  return new VfsError(transported.code as VfsErrorCode, transported.path, transported.message, {
+    cause: error,
+  });
+}
+
 export class SyncRpcFsSync implements FsSync {
   constructor(private readonly call: SyncCall) {}
 
+  /** Rehydrate the owner error prototype erased by SyncRpc's JSON frame. */
+  private callFs(method: string, payload: unknown): unknown {
+    try {
+      return this.call(method, payload);
+    } catch (error) {
+      throw restoreTransportVfsError(error);
+    }
+  }
+
   existsSync(path: string): boolean {
-    return this.call(FS_METHODS.exists, { path }) as boolean;
+    return this.callFs(FS_METHODS.exists, { path }) as boolean;
   }
 
   statSync(path: string): FsStatShape {
-    return this.call(FS_METHODS.stat, { path }) as FsStatShape;
+    return this.callFs(FS_METHODS.stat, { path }) as FsStatShape;
   }
 
   statSyncOrNull(path: string): FsStatShape | null {
-    return this.call(FS_METHODS.statOrNull, { path }) as FsStatShape | null;
+    return this.callFs(FS_METHODS.statOrNull, { path }) as FsStatShape | null;
   }
 
   readdirSync(path: string): readonly VfsDirent[] {
-    return this.call(FS_METHODS.readdir, { path }) as VfsDirent[];
+    return this.callFs(FS_METHODS.readdir, { path }) as VfsDirent[];
   }
 
   readFileBytesSync(path: string): Uint8Array {
-    const { size, firstChunk } = decodeReadFileHead(this.call(FS_METHODS.readFileHead, { path }));
+    const { size, firstChunk } = decodeReadFileHead(this.callFs(FS_METHODS.readFileHead, { path }));
     if (size === 0) return new Uint8Array(0);
     if (size <= FS_RPC_CHUNK) return firstChunk.slice();
     const out = new Uint8Array(size);
@@ -49,7 +87,7 @@ export class SyncRpcFsSync implements FsSync {
     let offset = firstChunk.length;
     while (offset < size) {
       const requested = Math.min(FS_RPC_CHUNK, size - offset);
-      const chunk = this.call(FS_METHODS.readChunk, {
+      const chunk = this.callFs(FS_METHODS.readChunk, {
         path,
         offset,
         length: requested,
@@ -75,14 +113,14 @@ export class SyncRpcFsSync implements FsSync {
 
   writeFileSync(path: string, data: Uint8Array): void {
     if (data.length === 0) {
-      this.call(FS_METHODS.writeChunk, { path, b64: '', offset: 0, truncate: true });
+      this.callFs(FS_METHODS.writeChunk, { path, b64: '', offset: 0, truncate: true });
       return;
     }
     let offset = 0;
     let first = true;
     while (offset < data.length) {
       const slice = data.subarray(offset, offset + FS_RPC_CHUNK);
-      this.call(FS_METHODS.writeChunk, {
+      this.callFs(FS_METHODS.writeChunk, {
         path,
         b64: bytesToBase64(slice),
         offset,
@@ -94,11 +132,11 @@ export class SyncRpcFsSync implements FsSync {
   }
 
   mkdirSync(path: string, options: { recursive?: boolean }): void {
-    this.call(FS_METHODS.mkdir, { path, recursive: options.recursive === true });
+    this.callFs(FS_METHODS.mkdir, { path, recursive: options.recursive === true });
   }
 
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void {
-    this.call(FS_METHODS.rm, {
+    this.callFs(FS_METHODS.rm, {
       path,
       recursive: options.recursive === true,
       force: options.force === true,
@@ -106,19 +144,19 @@ export class SyncRpcFsSync implements FsSync {
   }
 
   renameSync(src: string, dst: string): void {
-    this.call(FS_METHODS.rename, { src, dst });
+    this.callFs(FS_METHODS.rename, { src, dst });
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
-    this.call(FS_METHODS.utimes, { path, atimeMs, mtimeMs });
+    this.callFs(FS_METHODS.utimes, { path, atimeMs, mtimeMs });
   }
 
   copyFileSync(src: string, dst: string): void {
-    this.call(FS_METHODS.copyFile, { src, dst });
+    this.callFs(FS_METHODS.copyFile, { src, dst });
   }
 
   cpSync(src: string, dst: string, options?: { recursive?: boolean }): void {
-    this.call(FS_METHODS.cp, { src, dst, recursive: options?.recursive === true });
+    this.callFs(FS_METHODS.cp, { src, dst, recursive: options?.recursive === true });
   }
 }
 
