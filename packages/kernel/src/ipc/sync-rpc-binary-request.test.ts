@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME_BINARY, FRAME_JSON, decodeRequest, encodeRequest } from './sync-rpc.ts';
+import { FRAME_BINARY, FRAME_JSON, decodeRequest, encodeReply, encodeRequest } from './sync-rpc.ts';
 
 const enc = new TextEncoder();
 
@@ -10,6 +10,14 @@ function binaryFrame(method: string, payload: Uint8Array): Uint8Array {
   new DataView(frame.buffer).setUint16(1, methodBytes.length, true);
   frame.set(methodBytes, 3);
   frame.set(payload, 3 + methodBytes.length);
+  return frame;
+}
+
+function jsonFrame(value: unknown): Uint8Array {
+  const body = enc.encode(JSON.stringify(value));
+  const frame = new Uint8Array(body.length + 1);
+  frame[0] = FRAME_JSON;
+  frame.set(body, 1);
   return frame;
 }
 
@@ -38,6 +46,23 @@ describe('ADR-0366 SyncRpc v5 binary request envelope', () => {
     });
     expect(() => encode('', payload)).toThrow(/method.*empty|method.*byte/i);
     expect(() => encode('x'.repeat(65_536), payload)).toThrow(/method.*65535|method.*long/i);
+    expect(encodeRequest({ method: 'x', payload: { n: 1 } })).toEqual(
+      jsonFrame({ method: 'x', payload: { n: 1 } }),
+    );
+    expect(encodeReply({ ok: true, value: { n: 1 } })).toEqual(
+      jsonFrame({ ok: true, value: { n: 1 } }),
+    );
+    expect(
+      encodeReply({
+        ok: false,
+        error: { name: 'Error', message: 'boom', code: 'EBOOM' },
+      }),
+    ).toEqual(
+      jsonFrame({
+        ok: false,
+        error: { name: 'Error', message: 'boom', code: 'EBOOM' },
+      }),
+    );
   });
 
   it('decodes JSON and SAB-backed binary requests with an owned payload copy', () => {
