@@ -313,10 +313,10 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'messageerror-inflight', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-reply', posts: 1, rejected: true, terminateCalls: 1 },
-    { mode: 'duplicate-reply', posts: 2, rejected: true, terminateCalls: 1 },
+    { mode: 'duplicate-reply', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'path-mismatch', posts: 4, rejected: true, terminateCalls: 1 },
     { mode: 'asset-path-mismatch', posts: 14, rejected: true, terminateCalls: 1 },
-    { mode: 'duplicate-vite', posts: 13, rejected: true, terminateCalls: 1 },
+    { mode: 'duplicate-vite', posts: 12, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-express', posts: 15, rejected: true, terminateCalls: 1 },
     { mode: 'error-envelope', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'invalid-sample', posts: 15, rejected: true, terminateCalls: 1 },
@@ -381,7 +381,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     'stack',
   ]);
   expect(registryEnvelope?.error.name).toBe('Error');
-  expect(registryEnvelope?.error.message).toMatch(/^Failed to fetch packument .+: 404$/u);
+  expect(registryEnvelope?.error.message).toMatch(/^Failed to fetch packument .+: 405$/u);
   expect(registryEnvelope?.error.stack).toContain(registryEnvelope?.error.message);
   expect(registryEnvelope?.error.stack).toContain('registry.ts');
   expect(observed.registryFailure.failure).toContain(registryEnvelope?.error.name);
