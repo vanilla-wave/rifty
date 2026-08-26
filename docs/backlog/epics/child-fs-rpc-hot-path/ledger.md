@@ -112,3 +112,6 @@
 - 2026-08-26 — perf/child-fs-perf-orchestrator Contract+RED verify BLOCKER @
   4d3c53180: readiness hang, public admission bypass and cleanup-time page/
   server death survived; carriers added at exact entry/lifecycle seams
+- 2026-08-26 — perf/child-fs-perf-orchestrator Contract+RED verify BLOCKER @
+  07f5b9196: sample rounding/projection and baseline→ledger timing provenance
+  survived; independent expected artifact + exact ledger line required

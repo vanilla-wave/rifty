@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { validateChildFsArtifact } from './child-fs-artifact.mjs';
+import { buildChildFsArtifact, validateChildFsArtifact } from './child-fs-artifact.mjs';
 
 function rawSample(lane: 'in-realm' | 'product-coi', ordinal: number) {
   const marker = `${lane}-${ordinal}`;
@@ -82,6 +82,19 @@ describe('child fs bounded two-lane orchestrator', () => {
       'publish',
     ]);
     expect(published?.path).toBe('/result/child-fs.json');
+    const expected = buildChildFsArtifact({
+      generatedAt: '2026-08-26T00:00:00.000Z',
+      gitSha: 'a'.repeat(40),
+      browserVersion: 'Chromium exact',
+      runs: 2,
+      samples: [
+        rawSample('product-coi', 1),
+        rawSample('in-realm', 1),
+        rawSample('product-coi', 2),
+        rawSample('in-realm', 2),
+      ],
+    });
+    expect(artifact).toEqual(expected);
     expect(published?.json).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
     expect(JSON.parse(published?.json ?? '')).toEqual(artifact);
     expect(validateChildFsArtifact(artifact)).toEqual(artifact);
@@ -106,5 +119,15 @@ describe('child fs bounded two-lane orchestrator', () => {
     expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
     expect(Object.keys(artifact).toSorted()).not.toContain('summary');
     expect(Object.keys(artifact).toSorted()).not.toContain('speedupX');
+    const product = artifact.samples.find(({ lane }) => lane === 'product-coi');
+    const inRealm = artifact.samples.find(({ lane }) => lane === 'in-realm');
+    if (product === undefined || inRealm === undefined) throw new Error('baseline lanes missing');
+    const ledger = readFileSync(
+      new URL('../../../docs/backlog/epics/child-fs-rpc-hot-path/ledger.md', import.meta.url),
+      'utf8',
+    );
+    expect(ledger).toContain(
+      `baseline ${artifact.gitSha}: product vite ${product.vite.selfTimeSeconds}s express ${product.express.startToListeningMs}ms; in-realm vite ${inRealm.vite.selfTimeSeconds}s express ${inRealm.express.startToListeningMs}ms`,
+    );
   });
 });
