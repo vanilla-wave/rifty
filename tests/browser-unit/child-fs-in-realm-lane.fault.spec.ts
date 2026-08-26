@@ -15,6 +15,8 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     const controlled = [];
     for (const mode of [
       'reply-before-ready',
+      'error-before-ready',
+      'error-inflight',
       'messageerror',
       'messageerror-inflight',
       'duplicate-ready',
@@ -79,6 +81,16 @@ test('protocol corruption and real Worker failures reject and terminate once', a
         const result = await lane.runChildFsInRealmLane(3, {
           open: () => {
             queueMicrotask(() => {
+              if (mode === 'error-before-ready') {
+                emit(
+                  'error',
+                  new ErrorEvent('error', {
+                    error: new Error('injected pre-ready Worker crash'),
+                    message: 'injected pre-ready Worker crash',
+                  }),
+                );
+                return;
+              }
               if (mode === 'messageerror') {
                 emit('messageerror', new MessageEvent('messageerror'));
                 return;
@@ -103,6 +115,16 @@ test('protocol corruption and real Worker failures reject and terminate once', a
               postMessage(command: Record<string, unknown>) {
                 posts.push(command);
                 queueMicrotask(() => {
+                  if (mode === 'error-inflight') {
+                    emit(
+                      'error',
+                      new ErrorEvent('error', {
+                        error: new Error('injected in-flight Worker crash'),
+                        message: 'injected in-flight Worker crash',
+                      }),
+                    );
+                    return;
+                  }
                   if (mode === 'messageerror-inflight') {
                     emit('messageerror', new MessageEvent('messageerror'));
                     return;
@@ -280,6 +302,8 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     observed.controlled.map(({ failure: _failure, sample: _sample, ...entry }) => entry),
   ).toEqual([
     { mode: 'reply-before-ready', posts: 0, rejected: true, terminateCalls: 1 },
+    { mode: 'error-before-ready', posts: 0, rejected: true, terminateCalls: 1 },
+    { mode: 'error-inflight', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'messageerror', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'messageerror-inflight', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-ready', posts: 0, rejected: true, terminateCalls: 1 },

@@ -85,3 +85,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
   00f768d02: valid + foreign entries survived lossy filtering; mixed entry set
   now rejects before asset reads
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
+  730e19ff6: Worker `error` covered only module-load readiness; controlled
+  pre-ready + in-flight error carriers added beside messageerror

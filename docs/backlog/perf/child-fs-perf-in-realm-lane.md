@@ -116,3 +116,6 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 - 2026-08-26 — Contract+RED @ 00f768d02 blocked: a mixed valid + foreign
   entries set could be lossy-filtered. Every returned path must be an exact
   direct child before JS selection.
+- 2026-08-26 — Contract+RED @ 730e19ff6 blocked: Worker `error` was real only
+  before ready. Controlled pre-ready + in-flight `error` now mirror the
+  `messageerror` lifecycle sweep.
