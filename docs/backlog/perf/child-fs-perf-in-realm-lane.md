@@ -113,3 +113,6 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
   zero posts and one terminate.
 - 2026-08-26 — Contract+RED @ 6e39e3fe7 blocked: `messageerror` after ready
   could hang an in-flight command. Pre-ready and in-flight carriers now reject.
+- 2026-08-26 — Contract+RED @ 00f768d02 blocked: a mixed valid + foreign
+  entries set could be lossy-filtered. Every returned path must be an exact
+  direct child before JS selection.

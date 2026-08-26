@@ -29,6 +29,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'wrong-seeded-paths',
       'wrong-written-path',
       'wrong-entries-path',
+      'mixed-foreign-entry',
       'duplicate-entries-path',
       'non-string-entry',
       'wrong-kind-ready',
@@ -172,11 +173,13 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                       paths:
                         mode === 'wrong-entries-path'
                           ? ['/other/index.js']
-                          : mode === 'duplicate-entries-path'
-                            ? [path, path]
-                            : mode === 'non-string-entry'
-                              ? [1]
-                              : [path],
+                          : mode === 'mixed-foreign-entry'
+                            ? [path, '/other/index.js']
+                            : mode === 'duplicate-entries-path'
+                              ? [path, path]
+                              : mode === 'non-string-entry'
+                                ? [1]
+                                : [path],
                     });
                   } else if (command.kind === 'read') {
                     const path = String(command.path);
@@ -291,6 +294,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'wrong-seeded-paths', posts: 2, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-written-path', posts: 11, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-entries-path', posts: 13, rejected: true, terminateCalls: 1 },
+    { mode: 'mixed-foreign-entry', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-entries-path', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'non-string-entry', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-kind-ready', posts: 0, rejected: true, terminateCalls: 1 },

@@ -82,3 +82,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
   6e39e3fe7: post-ready `messageerror` could hang an in-flight phase; both
   readiness and command-loop messageerror carriers now required
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
+  00f768d02: valid + foreign entries survived lossy filtering; mixed entry set
+  now rejects before asset reads
