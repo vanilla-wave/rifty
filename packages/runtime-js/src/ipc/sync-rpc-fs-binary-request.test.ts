@@ -163,6 +163,20 @@ describe('ADR-0366 SyncRpcFsSync binary request route', () => {
       ok: true,
       value: Uint8Array.from([20, 30]),
     });
+    expect(await ownerExchange(owner, 'fs.readChunk', rangePayload(path, 0, 0))).toEqual({
+      ok: true,
+      value: new Uint8Array(0),
+    });
+    expect(await ownerExchange(owner, 'fs.readChunk', rangePayload(path, 0, FS_RPC_CHUNK))).toEqual(
+      { ok: true, value: Uint8Array.from([10, 20, 30, 40]) },
+    );
+    expect(
+      await ownerExchange(
+        owner,
+        'fs.readChunk',
+        rangePayload(path, Number.MAX_SAFE_INTEGER, FS_RPC_CHUNK),
+      ),
+    ).toEqual({ ok: true, value: new Uint8Array(0) });
     const callsAfterValid = probes.map(({ mock }) => mock.calls.length);
 
     const invalidRangeNumbers = [

@@ -131,6 +131,23 @@ describe('ADR-0366 dispatcher binary request decode seam', () => {
       await exchange(handlerFailure, binaryFrame('handler-failure', Uint8Array.from([1]))),
     ).toMatchObject({ ok: false, error: { code: 'EHANDLER' } });
 
+    const asyncFailure = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    registerBinary(
+      asyncFailure,
+      'async-failure',
+      async () => {
+        handlerCalls += 1;
+        await Promise.resolve();
+        throw Object.assign(new Error('injected async binary handler failure'), {
+          code: 'EASYNCBINARY',
+        });
+      },
+      (payload) => payload,
+    );
+    expect(
+      await exchange(asyncFailure, binaryFrame('async-failure', Uint8Array.from([1]))),
+    ).toMatchObject({ ok: false, error: { code: 'EASYNCBINARY' } });
+
     const replaced = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
     registerBinary(
       replaced,
@@ -146,6 +163,6 @@ describe('ADR-0366 dispatcher binary request decode seam', () => {
       ok: false,
       error: { code: 'ERPCBINARYUNSUPPORTED' },
     });
-    expect(handlerCalls).toBe(1);
+    expect(handlerCalls).toBe(2);
   });
 });

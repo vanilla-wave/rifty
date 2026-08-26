@@ -29,6 +29,8 @@ describe('ADR-0366 SyncRpc v5 binary request envelope', () => {
     const encode = encodeBinaryRequest as (method: string, body: Uint8Array) => Uint8Array;
     expect(encode('fs.stat', payload)).toEqual(binaryFrame('fs.stat', payload));
     expect(encode('fs.stát.文件', payload)).toEqual(binaryFrame('fs.stát.文件', payload));
+    const maxMethod = 'x'.repeat(65_535);
+    expect(encode(maxMethod, payload)).toEqual(binaryFrame(maxMethod, payload));
     expect(() => encode('', payload)).toThrow(/method.*empty|method.*byte/i);
     expect(() => encode('x'.repeat(65_536), payload)).toThrow(/method.*65535|method.*long/i);
   });
