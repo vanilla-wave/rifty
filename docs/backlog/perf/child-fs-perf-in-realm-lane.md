@@ -17,28 +17,32 @@ On the real browser-unit page, pass a recording host into
 `runChildFsInRealmLane`. It creates one fresh module Worker for the sample. That
 Worker owns one Memory VFS, installs the exact canonical npm tree from the real
 registry route, activates the shipped Vite/esbuild adapters, then loader-runs
-Vite and Express in that same realm. The page independently records the Worker
-URL/messages/termination; the returned raw sample passes the shared verifier.
+Vite and Express in that same realm. A strict single-flight command protocol
+lets the page independently record every input/result and build the raw sample;
+the Worker never self-attests a finished sample.
 
 ## Acceptance
 
 - The runner opens exactly one real module Worker from the pinned fixture URL,
-  sends one `{ordinal, registryUrl:'/npm-registry'}` start, accepts one ready and
-  one result for that ordinal, then terminates once. Error, malformed, duplicate
-  or out-of-order messages reject without a sample and still terminate once.
+  accepts one ready, then sends exactly boot → seed → install → marker
+  write → Vite → assets readdir/read → Express commands, one at a time.
+  Every command accepts exactly its next typed reply; error, malformed,
+  duplicate or out-of-order messages reject and still terminate once.
 - Inside that Worker, `installMemoryFs()` supplies the one shared async/sync
-  store. It seeds the exact `childFsScenario()` files at `/bench`, uses real
-  `RegistryClient` + `install`, reads every direct installed package version,
-  and activates the real shadow-asset esbuild runtime plus Vite acquisition/run
-  preparation. No kernel Worker, sync-RPC FS, OPFS, or child cache participates.
+  store. The runner sends exact `childFsScenario()` files/dependencies; the
+  Worker seeds them at `/bench`, uses real `RegistryClient` + `install`, reads
+  every direct installed package version, and activates the real shadow-asset
+  esbuild runtime plus Vite acquisition/run preparation. No kernel Worker,
+  sync-RPC FS, OPFS, or child cache participates.
 - After install/preparation, the Worker writes exactly one run-specific Panel
   marker, loader-runs `/bench/node_modules/.bin/vite build`, reads every emitted
   JS asset, then loader-runs canonical `/bench/express-anchor.cjs <marker>` with
   real net/http builtins and waits through READY→CLOSED before reporting.
-- The raw result has in-realm topology/ordinal/idle-owner identity, equals the
-  independently recorded result message, passes `validateChildFsRawSample`, and
-  reports exactly 2180 Vite modules, one positive self-time, one emitted marker,
-  and one positive matching Express READY before CLOSED.
+- The runner builds the raw result only from independently recorded Vite,
+  emitted-read and Express replies. It has in-realm topology/ordinal/idle-owner
+  identity, passes `validateChildFsRawSample`, and reports exactly 2180 Vite
+  modules, one positive self-time, one emitted marker, and one positive matching
+  Express READY before CLOSED.
 - Worker setup/run failures are serialized with name/message/stack; page-side
   Worker `error`/`messageerror`, protocol corruption, and result validation are
   loud. The runner settles only after termination; it never converts a partial
@@ -50,14 +54,15 @@ URL/messages/termination; the returned raw sample passes the shared verifier.
   exit 0, exactly 2180 modules, positive self-time, fresh emitted marker.
 - `in-realm-express-cold`: later canonical loader run in the same Worker →
   exit 0, positive matching READY before CLOSED.
-- `single-worker-topology`: caller records one module Worker, ordered ready/result
-  messages, exact ordinal/sample, and one final terminate; no page FS proxy.
+- `single-worker-topology`: caller records one module Worker, exact sequential
+  command/reply trace, no second command in flight, and one final terminate; no
+  page FS proxy or Worker-produced aggregate sample.
 
 ## Fault matrix
 
 | Boundary / axis | Required outcome | RED target |
 |---|---|---|
-| Worker protocol `corrupt-input` / `lossy-aggregate` | reject wrong ordinal/type, result before ready, duplicate result, invalid raw sample | recording host table + shared verifier |
+| Worker protocol `corrupt-input` / `lossy-aggregate` | reject reply-before-ready, wrong/duplicate reply type and invalid raw facts | recording host table + shared verifier |
 | Worker lifecycle `provenance-lie` / failure | real failing Worker error rejects; terminate exactly once; no result | fault-labelled injected Worker URL |
 | registry/runtime `provenance-lie` / failure | worker error envelope preserves the real failure; no sample | failed real registry route or runtime setup |
 
@@ -82,5 +87,8 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
   forcing constraint here and does not port from the prototype.
 - 2026-08-26 — reuse shipped adapter/preparation modules from test-only wiring;
   do not widen public APIs for a benchmark.
+- 2026-08-26 — strict single-flight typed messages, no request ids/correlation
+  map: the lane has one Worker and one outstanding phase. Page runner, not
+  Worker, owns aggregation and shared verification.
 - 2026-08-26 — expected RED: both browser-unit specs import absent
   `fixtures/child-fs-in-realm-lane.ts` / Worker fixture.
