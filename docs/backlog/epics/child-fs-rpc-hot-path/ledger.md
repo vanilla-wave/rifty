@@ -184,3 +184,6 @@
   payloads and bounded binary settlements
 - 2026-08-26 — ready-verdict perf/syncrpc-v2-waitasync-binary-ring:
   Contract+RED @ 3c89756f9 — PASS, 20 expected RED / 72 pass, unit residuals empty
+- 2026-08-26 — after binary requests
+  453517d4532f70cf8e58b38a66ae8e3c913560a1: product vite 7.21s express
+  292.8649999946356ms; in-realm vite 1.5s express 168.79500000178814ms
