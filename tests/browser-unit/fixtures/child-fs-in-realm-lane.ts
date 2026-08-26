@@ -322,6 +322,7 @@ export async function runChildFsInRealmLane(ordinal: number, host: ChildFsInReal
         };
       },
     );
+    await session.send({ kind: 'finish' }, (value) => exactKind(value, 'finished'));
     session.assertHealthy();
     const sample = {
       lane: 'in-realm' as const,

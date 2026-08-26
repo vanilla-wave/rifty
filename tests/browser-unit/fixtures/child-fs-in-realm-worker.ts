@@ -43,6 +43,7 @@ type Phase =
   | 'written'
   | 'vited'
   | 'listed'
+  | 'expressed'
   | 'done'
   | 'failed';
 
@@ -347,8 +348,14 @@ async function dispatch(value: unknown): Promise<unknown> {
     }
     const marker = nonEmptyString(input.marker, 'Express marker');
     const outcome = await capturedNodeRun({ args: [marker], bin: false, entryPath, root });
-    phase = 'done';
+    phase = 'expressed';
     return { kind: 'express', ...outcome };
+  }
+  if (kind === 'finish') {
+    command(value, 'finish');
+    requirePhase('expressed', 'finish');
+    phase = 'done';
+    return { kind: 'finished' };
   }
   throw new TypeError(`unsupported in-realm Worker command ${JSON.stringify(kind)}`);
 }
@@ -377,6 +384,13 @@ self.addEventListener('message', (event: MessageEvent<unknown>) => {
     (reply) => {
       busy = false;
       post(reply);
+      if (
+        typeof reply === 'object' &&
+        reply !== null &&
+        Reflect.get(reply, 'kind') === 'finished'
+      ) {
+        self.close();
+      }
     },
     (error: unknown) => {
       busy = false;
