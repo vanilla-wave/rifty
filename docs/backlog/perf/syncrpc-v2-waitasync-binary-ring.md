@@ -109,6 +109,8 @@ pnpm vitest run tests/conformance/kernel/sync-rpc.test.ts
 
 ## Decisions
 
+ready-verdict: 2026-08-26 — Contract+RED @ 3c89756f9 — PASS, unit residuals empty
+
 - ADR-0366 chooses the two-operation `KernelSyncApi` deep seam and string-method
   binary envelope; it rejects dual semantic payloads and global opcodes.
 - Protocol version 4→5; all kernel/runtime/workbench/TS peers compile together.

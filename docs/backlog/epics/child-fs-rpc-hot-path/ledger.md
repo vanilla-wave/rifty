@@ -178,3 +178,9 @@
   6e7d390f7: SAB alias, mixed production lifecycle, dispatcher/fs partitions,
   strict consumer transaction and three-artifact provenance survived; re-cut
   in place with complete sibling fixtures before implementation
+- 2026-08-26 — perf/syncrpc-v2-waitasync-binary-ring Contract+RED re-cut @
+  1b5bf72d4–3c89756f9: prewired every strict consumer, pinned numeric and UTF-8
+  boundaries, JSON discriminator authority, exact legacy JSON bytes, owned SAB
+  payloads and bounded binary settlements
+- 2026-08-26 — ready-verdict perf/syncrpc-v2-waitasync-binary-ring:
+  Contract+RED @ 3c89756f9 — PASS, 20 expected RED / 72 pass, unit residuals empty
