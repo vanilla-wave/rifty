@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { type VfsErrorCode, VfsError } from '@riftydev/vfs';
+import { afterEach, describe, expect, it } from 'vitest';
+import { readFileSync } from '../builtins/fs.ts';
+import { resetSyncMirror } from '../builtins/fs-sync-mirror.ts';
 import { FS_RPC_CHUNK } from './fs-rpc-protocol.ts';
-import { SyncRpcFsSync } from './sync-rpc-fs.ts';
+import { SyncRpcFsSync, installRemoteSyncFs } from './sync-rpc-fs.ts';
 
 const HEAD_BYTES = 8;
 
@@ -19,6 +22,16 @@ function caught(read: () => unknown): Error {
   }
   throw new Error('expected read to reject');
 }
+
+function transportedVfsError(code: VfsErrorCode, path: string): Error {
+  return Object.assign(new Error(`${code}: ${path}`), {
+    name: 'VfsError',
+    code,
+    path,
+  });
+}
+
+afterEach(() => resetSyncMirror());
 
 describe('ADR-0365 read-head fault boundary', () => {
   it('rejects every malformed head before allocation or continuation', () => {
@@ -87,4 +100,65 @@ describe('ADR-0365 read-head fault boundary', () => {
       ]);
     },
   );
+
+  it('rehydrates transport VfsError identity before public node:fs shaping', () => {
+    const cases: ReadonlyArray<{
+      code: VfsErrorCode;
+      path: string;
+      errno: number;
+      syscall: string;
+      publicPath?: string;
+      publicMessage: string;
+    }> = [
+      {
+        code: 'ENOENT',
+        path: '/missing.txt',
+        errno: -2,
+        syscall: 'open',
+        publicPath: '/missing.txt',
+        publicMessage: "ENOENT: no such file or directory, open '/missing.txt'",
+      },
+      {
+        code: 'EISDIR',
+        path: '/dir',
+        errno: -21,
+        syscall: 'read',
+        publicMessage: 'EISDIR: illegal operation on a directory, read',
+      },
+      {
+        code: 'ENOTDIR',
+        path: '/plain.txt/child',
+        errno: -20,
+        syscall: 'open',
+        publicPath: '/plain.txt/child',
+        publicMessage: "ENOTDIR: not a directory, open '/plain.txt/child'",
+      },
+    ];
+
+    for (const fixture of cases) {
+      const call = (): never => {
+        throw transportedVfsError(fixture.code, fixture.path);
+      };
+      const remoteError = caught(() => new SyncRpcFsSync(call).readFileBytesSync(fixture.path));
+      expect(remoteError).toBeInstanceOf(VfsError);
+      expect(remoteError).toMatchObject({
+        name: 'VfsError',
+        code: fixture.code,
+        path: fixture.path,
+        message: `${fixture.code}: ${fixture.path}`,
+      });
+
+      installRemoteSyncFs(call);
+      const publicError = caught(() => readFileSync(fixture.path));
+      expect(publicError).not.toBeInstanceOf(VfsError);
+      expect(publicError).toMatchObject({
+        name: 'Error',
+        code: fixture.code,
+        errno: fixture.errno,
+        syscall: fixture.syscall,
+        message: fixture.publicMessage,
+      });
+      expect((publicError as NodeJS.ErrnoException).path).toBe(fixture.publicPath);
+    }
+  });
 });
