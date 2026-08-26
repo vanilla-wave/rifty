@@ -112,8 +112,7 @@ Exact raw artifact and commit identity are
 
 ## Decisions
 
-- ready-verdict: 2026-08-26 — Contract+RED @ c2780008a — PASS, unit
-  residuals empty
+ready-verdict: 2026-08-26 — Contract+RED @ c2780008a — PASS, unit residuals empty
 - ADR-0365 selects one additive `fs.readFileHead` binary success shape:
   little-endian float64 safe-integer size + exact first chunk; owner errors use
   the existing JSON error reply.
