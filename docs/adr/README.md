@@ -34,6 +34,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0333 | Descendant settlement barrier preserves recursive teardown ordering |
 | 0340 | Sequenced worker stdio reconstructs cross-port write order |
 | 0347 | Idempotent process-manager kill during settlement |
+| 0366 | Binary request frames for hot fs sync-RPC |
 
 ### runtime-js
 

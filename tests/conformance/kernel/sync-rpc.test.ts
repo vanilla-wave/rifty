@@ -73,6 +73,38 @@ describe.skipIf(!hasSab)('SyncRpc — real Worker round-trip (ADR-0011 phase 3)'
     ]);
   });
 
+  it('client completes a hand-written binary request through the registered decoder', async () => {
+    const payloadCapacity = 1024;
+    const { sab, ring } = createSabRing({ payloadCapacity });
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
+    const register = dispatcher.register as unknown as (
+      method: string,
+      handler: (payload: unknown) => unknown,
+      options: { decodeBinaryRequest: (payload: Uint8Array) => unknown },
+    ) => void;
+    register.call(dispatcher, 'binary-echo', (payload) => payload, {
+      decodeBinaryRequest: (payload) => ({ bytes: [...payload] }),
+    });
+    dispatcher.attach(ring);
+    const worker = new Worker(fileURLToPath(fixtureUrl), {
+      workerData: {
+        sab,
+        payloadCapacity,
+        method: 'binary-echo',
+        binaryPayload: [0xff, 0x00, 0x7f],
+        timeoutMs: 2000,
+        protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
+      },
+    });
+    const msg = await new Promise<WorkerReply>((resolve, reject) => {
+      worker.once('message', resolve);
+      worker.once('error', reject);
+    });
+    dispatcher.detachAll();
+    await worker.terminate();
+    expect(msg.reply).toEqual({ ok: true, value: { bytes: [0xff, 0x00, 0x7f] } });
+  });
+
   it('dispatcher reports unknown method as ok=false with ERPCNOHANDLER', async () => {
     const payloadCapacity = 256;
     const { sab, ring } = createSabRing({ payloadCapacity });

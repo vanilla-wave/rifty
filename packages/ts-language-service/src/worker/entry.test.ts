@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   createServiceEndpoint: vi.fn(),
   dispatch: vi.fn(),
   readKernelSyncApi: vi.fn(),
+  syncCallBinary: vi.fn(),
   syncCall: vi.fn(),
 }));
 
@@ -49,7 +50,11 @@ beforeEach(() => {
   mocks.dispatch.mockReset();
   mocks.readKernelSyncApi.mockReset();
   mocks.syncCall.mockReset();
-  mocks.readKernelSyncApi.mockReturnValue({ call: mocks.syncCall });
+  mocks.syncCallBinary.mockReset();
+  mocks.readKernelSyncApi.mockReturnValue({
+    call: mocks.syncCall,
+    callBinary: mocks.syncCallBinary,
+  });
   mocks.createServiceEndpoint.mockReturnValue({ dispatch: mocks.dispatch });
 });
 

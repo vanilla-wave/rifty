@@ -10,8 +10,15 @@ interface StatShape {
 }
 
 export interface FsRpcCallRecord {
+  format: 'binary' | 'json';
   method: string;
   payload: unknown;
+}
+
+export interface FakeFsSyncApi {
+  (method: string, payload: unknown): unknown;
+  call(method: string, payload: unknown): unknown;
+  callBinary(method: string, payload: Uint8Array): unknown;
 }
 
 function readHead(bytes: Uint8Array): Uint8Array {
@@ -26,7 +33,7 @@ function readHead(bytes: Uint8Array): Uint8Array {
 export function makeFakeFsCall(
   files: Map<string, Uint8Array>,
   calls: FsRpcCallRecord[] = [],
-): (method: string, payload: unknown) => unknown {
+): FakeFsSyncApi {
   const dirs = new Set<string>(['/']);
   for (const path of files.keys()) {
     let dir = path.slice(0, path.lastIndexOf('/')) || '/';
@@ -44,8 +51,8 @@ export function makeFakeFsCall(
     if (dirs.has(path)) return { isFile: false, isDirectory: true, size: 0, mtime: 1 };
     return null;
   };
-  return (method, payload) => {
-    calls.push({ method, payload });
+  const dispatch = (format: 'binary' | 'json', method: string, payload: unknown) => {
+    calls.push({ format, method, payload });
     const request = payload as Record<string, unknown>;
     const path = request.path as string;
     switch (method) {
@@ -94,4 +101,22 @@ export function makeFakeFsCall(
         throw new Error(`fake fs.* call: unexpected method ${method}`);
     }
   };
+  const call = (method: string, payload: unknown): unknown => dispatch('json', method, payload);
+  return Object.assign(call, {
+    call,
+    callBinary(method: string, payload: Uint8Array): unknown {
+      if (method === 'fs.readChunk') {
+        if (payload.length < 16) throw new TypeError('fake fs binary range is truncated');
+        const view = new DataView(payload.buffer, payload.byteOffset, 16);
+        return dispatch('binary', method, {
+          path: new TextDecoder('utf-8', { fatal: true }).decode(payload.subarray(16)),
+          offset: view.getFloat64(0, true),
+          length: view.getFloat64(8, true),
+        });
+      }
+      return dispatch('binary', method, {
+        path: new TextDecoder('utf-8', { fatal: true }).decode(payload),
+      });
+    },
+  });
 }

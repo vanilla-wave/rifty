@@ -171,3 +171,6 @@
 - 2026-08-26 — re-chart after perf/fs-read-single-hop: 0 graduated /
   1 invalidated (completed item deleted); I2 is the only goal residual and
   inherits protocol v4 + baseline/post-I1 proof anchors
+- 2026-08-26 — perf/syncrpc-v2-waitasync-binary-ring band 12–16 expected
+  failing cases; ADR-0366 selects explicit `KernelSyncApi.callBinary`, one
+  registered handler/decoder, string-method envelope, protocol v5

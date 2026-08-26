@@ -43,6 +43,11 @@ function buildFixture(): Map<string, Uint8Array> {
   return snapshotVfsFiles(mem, '/proj');
 }
 
+function endpointFsDeps(files: Map<string, Uint8Array>) {
+  const syncApi = makeFakeFsCall(files);
+  return { call: syncApi, syncApi };
+}
+
 function diags(r: Awaited<ReturnType<ReturnType<typeof createServiceEndpoint>['dispatch']>>) {
   expect(r.ok).toBe(true);
   expect(r.kind).toBe('diagnostics');
@@ -53,7 +58,7 @@ describe('createServiceEndpoint', () => {
   it('init → query → open/update flow drives diagnostics through response frames', async () => {
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(buildFixture()),
+      ...endpointFsDeps(buildFixture()),
     });
 
     // init
@@ -113,7 +118,7 @@ describe('createServiceEndpoint', () => {
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(files),
+      ...endpointFsDeps(files),
     });
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
     const r = await endpoint.dispatch({
@@ -137,7 +142,7 @@ describe('createServiceEndpoint', () => {
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(files),
+      ...endpointFsDeps(files),
     });
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
     const r = await endpoint.dispatch({ id: 2, type: 'ts:getConfigFileDiagnostics' });
@@ -168,7 +173,7 @@ describe('createServiceEndpoint', () => {
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(files),
+      ...endpointFsDeps(files),
     });
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
 
@@ -266,7 +271,7 @@ describe('createServiceEndpoint', () => {
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(files),
+      ...endpointFsDeps(files),
     });
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
 
@@ -367,7 +372,7 @@ describe('createServiceEndpoint', () => {
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(files),
+      ...endpointFsDeps(files),
     });
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
 
@@ -465,7 +470,7 @@ describe('createServiceEndpoint', () => {
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(files),
+      ...endpointFsDeps(files),
     });
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
 
@@ -573,7 +578,7 @@ describe('createServiceEndpoint', () => {
   it('a query before init returns an error frame (not a silent empty)', async () => {
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(buildFixture()),
+      ...endpointFsDeps(buildFixture()),
     });
     const r = await endpoint.dispatch({
       id: 1,
@@ -587,7 +592,7 @@ describe('createServiceEndpoint', () => {
   it('an unavailable refactor edit returns a successful null edit, not a transport error', async () => {
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(buildFixture()),
+      ...endpointFsDeps(buildFixture()),
     });
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
 
@@ -608,7 +613,7 @@ describe('createServiceEndpoint', () => {
   it('serializes NotImplementedError feature ids across the endpoint boundary', async () => {
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(buildFixture()),
+      ...endpointFsDeps(buildFixture()),
     });
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
 
@@ -635,7 +640,7 @@ describe('createServiceEndpoint', () => {
         buildFsSync: (): never => {
           throw thrown;
         },
-        call: makeFakeFsCall(buildFixture()),
+        ...endpointFsDeps(buildFixture()),
       });
 
       const r = await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
@@ -654,7 +659,7 @@ describe('createServiceEndpoint', () => {
       buildFsSync: (): never => {
         throw new Error('sync fs bridge unavailable');
       },
-      call: makeFakeFsCall(buildFixture()),
+      ...endpointFsDeps(buildFixture()),
     });
 
     const initP = endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
@@ -680,7 +685,7 @@ describe('createServiceEndpoint', () => {
     // MUST queue behind the in-flight init (the page never re-sends), not fail.
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
-      call: makeFakeFsCall(buildFixture()),
+      ...endpointFsDeps(buildFixture()),
     });
     // Fire init WITHOUT awaiting it, then a query in the SAME tick — the query's
     // dispatch runs before init's build promise resolves.

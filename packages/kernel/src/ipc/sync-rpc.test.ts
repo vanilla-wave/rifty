@@ -136,9 +136,9 @@ describe('SyncRpc protocol version — consumer-side rejection (ADR-0032)', () =
 });
 
 describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
-  it('v4 dispatcher rejects malformed v3 bytes before decode or handler dispatch', async () => {
+  it('v5 dispatcher rejects malformed v4 bytes before decode or handler dispatch', async () => {
     const { sab, ring } = createSabRing({ payloadCapacity: 256 });
-    const legacyVersion = 3;
+    const legacyVersion = 4;
     const caller = SabRing.attach(sab, 256, { expectedVersion: legacyVersion });
 
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
@@ -165,9 +165,9 @@ describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
   });
 });
 
-describe('SyncRpc v4 binary frame (ADR-0084 #23, ADR-0365)', () => {
-  it('SYNC_RPC_PROTOCOL_VERSION is 4 for single-hop fs read heads', () => {
-    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(4);
+describe('SyncRpc v5 binary frame (ADR-0084 #23, ADR-0365/0366)', () => {
+  it('SYNC_RPC_PROTOCOL_VERSION is 5 for binary request frames', () => {
+    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(5);
   });
 
   it('encodeBinaryReply → decodeReply round-trips arbitrary bytes byte-exact (incl 0xff/0xfe/0x00)', () => {

@@ -28,7 +28,9 @@ describe('createRpcFsSync over a fake fs.* call', () => {
     const calls: FsRpcCallRecord[] = [];
     const fs = createRpcFsSync(makeFakeFsCall(files, calls));
     expect(fs.readFileBytesSync('/proj/a.ts')).toEqual(enc('const x = 1;\n'));
-    expect(calls).toEqual([{ method: 'fs.readFileHead', payload: { path: '/proj/a.ts' } }]);
+    expect(calls).toEqual([
+      { format: 'binary', method: 'fs.readFileHead', payload: { path: '/proj/a.ts' } },
+    ]);
   });
 
   it('reassembles a multi-chunk file (> FS_RPC_CHUNK) correctly', () => {
@@ -42,12 +44,18 @@ describe('createRpcFsSync over a fake fs.* call', () => {
     expect(got.length).toBe(big.length);
     expect(got).toEqual(big);
     expect(calls).toEqual([
-      { method: 'fs.readFileHead', payload: { path: '/proj/big.bin' } },
       {
+        format: 'binary',
+        method: 'fs.readFileHead',
+        payload: { path: '/proj/big.bin' },
+      },
+      {
+        format: 'binary',
         method: 'fs.readChunk',
         payload: { path: '/proj/big.bin', offset: FS_RPC_CHUNK, length: FS_RPC_CHUNK },
       },
       {
+        format: 'binary',
         method: 'fs.readChunk',
         payload: {
           path: '/proj/big.bin',

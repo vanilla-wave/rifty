@@ -124,19 +124,9 @@ describe('child fs bounded two-lane orchestrator', () => {
     expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
     expect(Object.keys(artifact).toSorted()).not.toContain('summary');
     expect(Object.keys(artifact).toSorted()).not.toContain('speedupX');
-    const product = artifact.samples.find(({ lane }) => lane === 'product-coi');
-    const inRealm = artifact.samples.find(({ lane }) => lane === 'in-realm');
-    if (product === undefined || inRealm === undefined) throw new Error('baseline lanes missing');
-    const ledger = readFileSync(
-      new URL('../../../docs/backlog/epics/child-fs-rpc-hot-path/ledger.md', import.meta.url),
-      'utf8',
-    );
-    expect(ledger).toContain(
-      `baseline ${artifact.gitSha}: product vite ${product.vite.selfTimeSeconds}s express ${product.express.startToListeningMs}ms; in-realm vite ${inRealm.vite.selfTimeSeconds}s express ${inRealm.express.startToListeningMs}ms`,
-    );
   });
 
-  it('pins the post-single-hop two-lane artifact and its exact ledger provenance', () => {
+  it('pins the post-single-hop two-lane artifact and its exact publication provenance', () => {
     const bytes = readFileSync(
       new URL('../../../perf/child-fs-after-single-hop.json', import.meta.url),
       'utf8',
@@ -198,15 +188,57 @@ describe('child fs bounded two-lane orchestrator', () => {
     expect(artifact.runs).toBe(1);
     expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
     expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
-    const product = artifact.samples.find(({ lane }) => lane === 'product-coi');
-    const inRealm = artifact.samples.find(({ lane }) => lane === 'in-realm');
-    if (product === undefined || inRealm === undefined) throw new Error('post-I1 lanes missing');
-    const ledger = readFileSync(
-      new URL('../../../docs/backlog/epics/child-fs-rpc-hot-path/ledger.md', import.meta.url),
-      'utf8',
+  });
+
+  it('pins the post-binary-request artifact without depending on the goal ledger', () => {
+    const path = 'perf/child-fs-after-binary-requests.json';
+    const bytes = readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
+    const artifact = validateChildFsArtifact(JSON.parse(bytes));
+    const prior = validateChildFsArtifact(
+      JSON.parse(
+        readFileSync(
+          new URL('../../../perf/child-fs-after-single-hop.json', import.meta.url),
+          'utf8',
+        ),
+      ),
     );
-    expect(ledger).toContain(
-      `after single-hop ${artifact.gitSha}: product vite ${product.vite.selfTimeSeconds}s express ${product.express.startToListeningMs}ms; in-realm vite ${inRealm.vite.selfTimeSeconds}s express ${inRealm.express.startToListeningMs}ms`,
-    );
+    expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
+    expect(artifact.gitSha).not.toBe(prior.gitSha);
+    expect(artifact.runs).toBe(1);
+    expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
+    expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
+    const repoRoot = new URL('../../..', import.meta.url);
+    const commits = execFileSync('git', ['log', '--format=%H', '--', path], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    expect(commits).toHaveLength(1);
+    const artifactCommit = commits[0] as string;
+    expect(
+      execFileSync('git', ['rev-list', '--count', `${artifact.gitSha}..${artifactCommit}`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe('1');
+    expect(
+      execFileSync('git', ['show', `${artifactCommit}:${path}`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        maxBuffer: Buffer.byteLength(bytes) + 1,
+      }),
+    ).toBe(bytes);
+    expect(
+      execFileSync('git', ['diff', '--name-only', artifact.gitSha, artifactCommit], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      })
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .toSorted(),
+    ).toEqual(['docs/backlog/epics/child-fs-rpc-hot-path/ledger.md', path].toSorted());
   });
 });
