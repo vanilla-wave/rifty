@@ -25,3 +25,6 @@
   c1769da54: build-side `speedupX` extra-key mutant survived — symmetric RED
 - 2026-08-26 — ready-verdict perf/child-fs-perf-artifact-core: Contract+RED @
   f446f8abf — PASS, unit residuals empty
+- 2026-08-26 — perf/child-fs-perf-artifact-core Final+GREEN BLOCKER @
+  7f03b918c: 3 verifier gaps + terminal self-attestation + duplicate port/write
+  mechanisms — fixed in one batch, shared owner `tools/perf/src/runner-io.mjs`

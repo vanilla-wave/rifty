@@ -81,10 +81,6 @@ function rawSample(lane: 'product-coi' | 'in-realm', ordinal: number) {
     topology: lane === 'product-coi' ? 'owner-sync-rpc-kernel-child' : 'single-in-realm-worker',
     ordinal,
     ownerLoad: 'idle',
-    terminalProof: {
-      kind: lane === 'product-coi' ? 'child-exit' : 'worker-result',
-      complete: true,
-    },
     vite: {
       exitCode: 0,
       rawOutput: VITE_GOLDEN.rawOutput,
@@ -271,6 +267,14 @@ describe('child fs canonical scenario and artifact authority', () => {
           rawOutput: `RIFTY_EXPRESS_READY ${base.express.marker} 34.25\nRIFTY_EXPRESS_CLOSED other\n`,
         },
       ],
+      ['foreign ready', { rawOutput: `${base.express.rawOutput}RIFTY_EXPRESS_READY other 1\n` }],
+      ['foreign close', { rawOutput: `${base.express.rawOutput}RIFTY_EXPRESS_CLOSED other\n` }],
+      [
+        'foreign full pair',
+        {
+          rawOutput: `${base.express.rawOutput}RIFTY_EXPRESS_READY other 1\nRIFTY_EXPRESS_CLOSED other\n`,
+        },
+      ],
       [
         'non-positive time',
         {
@@ -310,6 +314,20 @@ describe('child fs canonical scenario and artifact authority', () => {
       completeSamples().map((entry, index) => (index === 1 ? { ...entry, ordinal: 1 } : entry)),
       completeSamples().filter((entry) => entry.lane !== 'in-realm'),
       [...completeSamples(), rawSample('product-coi', 3)],
+      completeSamples().map((entry, index, samples) => {
+        if (index !== 1) return entry;
+        const marker = samples[0]?.vite.marker;
+        if (marker === undefined) throw new Error('fixture marker missing');
+        return {
+          ...entry,
+          vite: { ...entry.vite, marker, emittedJavaScript: `const marker = "${marker}";` },
+          express: {
+            ...entry.express,
+            marker,
+            rawOutput: `RIFTY_EXPRESS_READY ${marker} 34.25\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
+          },
+        };
+      }),
       completeSamples().map((entry, index) =>
         index === 0 ? { ...entry, unexpected: 'multiplier' } : entry,
       ),
@@ -338,10 +356,12 @@ describe('child fs canonical scenario and artifact authority', () => {
       buildChildFsArtifact({ ...buildInput, dependencyDigest: 'e'.repeat(64) }),
     ).toThrow();
     expect(() => buildChildFsArtifact({ ...buildInput, speedupX: 1.44 })).toThrow();
+    expect(() => buildChildFsArtifact({ ...buildInput, summary: {} })).toThrow();
 
     const valid = buildChildFsArtifact(buildInput);
     for (const corrupt of [
       { ...valid, speedupX: 1.44 },
+      { ...valid, summary: {} },
       { ...valid, samples: valid.samples.slice(0, -1) },
       { ...valid, samples: [...valid.samples, expectedSample('product-coi', 3)] },
       { ...valid, scenarioDigest: 'd'.repeat(64) },
@@ -368,11 +388,20 @@ describe('child fs canonical scenario and artifact authority', () => {
       },
       {
         ...valid,
-        samples: valid.samples.map((entry, index) =>
-          index === 0
-            ? { ...entry, terminalProof: { kind: 'child-exit', complete: false } }
-            : entry,
-        ),
+        samples: valid.samples.map((entry, index) => {
+          if (index !== 1) return entry;
+          const marker = valid.samples[0]?.vite.marker;
+          if (marker === undefined) throw new Error('fixture marker missing');
+          return {
+            ...entry,
+            vite: { ...entry.vite, marker, emittedJavaScript: `const marker = "${marker}";` },
+            express: {
+              ...entry.express,
+              marker,
+              rawOutput: `RIFTY_EXPRESS_READY ${marker} 34.25\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
+            },
+          };
+        }),
       },
       {
         ...valid,

@@ -37,11 +37,11 @@
  * `auto` (default) records evidence without pinning.
  */
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { buildArtifact, verifyEddyInstallProof, verifyTransportPin } from './src/aggregate.mjs';
+import { assertPerfPortFree, publishPerfArtifact } from './src/runner-io.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../..');
@@ -167,26 +167,6 @@ async function waitForHttp(url, timeoutMs) {
   throw new Error(
     `dev server not ready at ${url} after ${timeoutMs}ms: ${lastErr?.message ?? 'timeout'}`,
   );
-}
-
-/**
- * Fail fast if the strict port is already serving: `pnpm dev` uses strictPort, so
- * a stale/foreign server on this port makes the spawned dev server crash on bind
- * while `waitForHttp` happily measures the WRONG server (the stale-port trap).
- * The harness OWNS its port — an occupied one is an operator error, not a result.
- */
-async function assertPortFree() {
-  try {
-    const res = await fetch(`${BASE}/`, { redirect: 'manual' });
-    if (res.status > 0) {
-      throw new Error(
-        `port ${PORT} is already serving (a stale/foreign dev server?) — the harness would measure it, not a fresh one. Kill it or set a unique RIFTY_PLAYGROUND_PORT.`,
-      );
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('already serving')) throw err;
-    /* connection refused → port free, good */
-  }
 }
 
 async function terminalText(page) {
@@ -708,7 +688,7 @@ async function main() {
   console.log(
     `bench: ${RUNS} run(s), port ${PORT}, transport ${TRANSPORT_ARG}, install ${measureInstall ? `via ${REGISTRY_URL}` : 'SKIPPED (no VITE_RIFTY_REGISTRY_URL → requires proxy)'}${measureEddy ? ` — standard baseline + eddy fast path (${RESOLVER_URL})` : ''}`,
   );
-  await assertPortFree();
+  await assertPerfPortFree(PORT);
 
   const transportRows = {};
   let coldSamples;
@@ -741,8 +721,7 @@ async function main() {
     presetBoot,
   });
 
-  mkdirSync(dirname(OUT), { recursive: true });
-  writeFileSync(OUT, `${JSON.stringify(artifact, null, 2)}\n`);
+  publishPerfArtifact(OUT, `${JSON.stringify(artifact, null, 2)}\n`);
   console.log(`\nartifact → ${OUT}\n${JSON.stringify(artifact.metrics, null, 2)}`);
 }
 

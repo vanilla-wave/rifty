@@ -1,8 +1,3 @@
-export interface ChildFsTerminalProof {
-  readonly kind: 'child-exit' | 'worker-result';
-  readonly complete: true;
-}
-
 export interface ChildFsViteSample {
   readonly exitCode: 0;
   readonly rawOutput: string;
@@ -24,7 +19,6 @@ export interface ChildFsArtifactSample {
   readonly topology: 'owner-sync-rpc-kernel-child' | 'single-in-realm-worker';
   readonly ordinal: number;
   readonly ownerLoad: 'idle';
-  readonly terminalProof: ChildFsTerminalProof;
   readonly vite: ChildFsViteSample;
   readonly express: ChildFsExpressSample;
 }

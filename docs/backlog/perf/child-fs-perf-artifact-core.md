@@ -8,7 +8,7 @@ epic: child-fs-rpc-hot-path
 why: the two physical benchmark lanes need one exact scenario/result authority before either topology can report comparable numbers
 user_story: As the child-fs goal's measurement author, I want canonical guest bytes and one strict artifact verifier, so a lane cannot claim parity with invented digests, self-attested booleans, partial samples, or rounded projections.
 sources: [split predecessor perf/child-fs-perf-lane attempts 1-2 @ fb02b2c2f, spike 1261339acc1d1eb3f864a9a48ed50bf067fe0f02]
-code: [tools/perf/child-fs/scenario.mjs, tools/perf/src/child-fs-artifact.mjs, tools/perf/src/child-fs-runner.mjs]
+code: [tools/perf/child-fs/scenario.mjs, tools/perf/src/child-fs-artifact.mjs, tools/perf/src/child-fs-runner.mjs, tools/perf/src/runner-io.mjs]
 ---
 
 ## User scenario
@@ -101,3 +101,8 @@ ready-verdict: 2026-08-26 — Contract+RED @ f446f8abf
   timing fixtures survived a 3-decimal rounding mutant; precision RED added.
 - 2026-08-26 — Contract+RED pass verify @ c1769da54 blocked: top-level
   `speedupX` extra-key covered only at validate, not build; symmetric RED added.
+- 2026-08-26 — Final+GREEN @ 7f03b918c blocked: replayed run markers,
+  foreign Express sentinels and `summary` extra-key lacked proof; caller
+  `terminalProof` removed as self-attestation. Existing benchmark port guard and
+  direct artifact write consolidated into shared `tools/perf/src/runner-io.mjs`
+  per Class-kill.

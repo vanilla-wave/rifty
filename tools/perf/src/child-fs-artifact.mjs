@@ -88,50 +88,35 @@ function parseVite(value, label) {
   };
 }
 
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-}
-
 function parseExpress(value, label) {
   const input = exactRecord(value, ['exitCode', 'rawOutput', 'marker'], label);
   const exitCode = zeroExit(input.exitCode, `${label}.exitCode`);
   const rawOutput = string(input.rawOutput, `${label}.rawOutput`);
   const marker = string(input.marker, `${label}.marker`);
-  const escaped = escapeRegExp(marker);
   const readyRows = matches(
     rawOutput,
-    new RegExp(
-      `(?:^|\\n)RIFTY_EXPRESS_READY ${escaped} (-?(?:\\d+(?:\\.\\d+)?|\\.\\d+))\\r?(?=\\n|$)`,
-      'gu',
-    ),
+    /(?:^|\n)RIFTY_EXPRESS_READY (\S+) (-?(?:\d+(?:\.\d+)?|\.\d+))\r?(?=\n|$)/gu,
   );
-  const closedRows = matches(
-    rawOutput,
-    new RegExp(`(?:^|\\n)RIFTY_EXPRESS_CLOSED ${escaped}\\r?(?=\\n|$)`, 'gu'),
-  );
-  if (readyRows.length !== 1 || closedRows.length !== 1) {
+  const closedRows = matches(rawOutput, /(?:^|\n)RIFTY_EXPRESS_CLOSED (\S+)\r?(?=\n|$)/gu);
+  if (
+    readyRows.length !== 1 ||
+    closedRows.length !== 1 ||
+    readyRows[0]?.[1] !== marker ||
+    closedRows[0]?.[1] !== marker
+  ) {
     throw new TypeError(`${label} must report one ready and one close proof`);
   }
-  const startToListeningMs = Number(readyRows[0]?.[1]);
+  const startToListeningMs = Number(readyRows[0]?.[2]);
   if (!Number.isFinite(startToListeningMs) || startToListeningMs <= 0) {
     throw new TypeError(`${label}.startToListeningMs must be positive`);
   }
   return { exitCode, rawOutput, marker, startToListeningMs };
 }
 
-function parseTerminalProof(value, lane, label) {
-  const proof = exactRecord(value, ['kind', 'complete'], label);
-  const kind = lane === 'product-coi' ? 'child-exit' : 'worker-result';
-  if (proof.kind !== kind || proof.complete !== true) {
-    throw new TypeError(`${label} does not prove completed ${lane} execution`);
-  }
-  return { kind, complete: true };
-}
-
 function parseRawSample(value, label) {
   const input = exactRecord(
     value,
-    ['lane', 'topology', 'ordinal', 'ownerLoad', 'terminalProof', 'vite', 'express'],
+    ['lane', 'topology', 'ordinal', 'ownerLoad', 'vite', 'express'],
     label,
   );
   if (!LANES.includes(input.lane)) throw new TypeError(`${label}.lane is invalid`);
@@ -141,14 +126,18 @@ function parseRawSample(value, label) {
   }
   const ordinal = positiveInteger(input.ordinal, `${label}.ordinal`);
   if (input.ownerLoad !== 'idle') throw new TypeError(`${label}.ownerLoad must be idle`);
+  const vite = parseVite(input.vite, `${label}.vite`);
+  const express = parseExpress(input.express, `${label}.express`);
+  if (vite.marker !== express.marker) {
+    throw new TypeError(`${label} Vite and Express markers must match`);
+  }
   return {
     lane,
     topology: TOPOLOGY[lane],
     ordinal,
     ownerLoad: 'idle',
-    terminalProof: parseTerminalProof(input.terminalProof, lane, `${label}.terminalProof`),
-    vite: parseVite(input.vite, `${label}.vite`),
-    express: parseExpress(input.express, `${label}.express`),
+    vite,
+    express,
   };
 }
 
@@ -159,6 +148,8 @@ function validateSampleSet(samples, runs, label, parser) {
   const parsed = samples.map((sample, index) => parser(sample, `${label}[${index}]`));
   const keys = new Set(parsed.map(({ lane, ordinal }) => `${lane}:${ordinal}`));
   if (keys.size !== parsed.length) throw new TypeError(`${label} contains duplicate ordinals`);
+  const markers = new Set(parsed.map(({ vite }) => vite.marker));
+  if (markers.size !== parsed.length) throw new TypeError(`${label} contains replayed markers`);
   for (const lane of LANES) {
     for (let ordinal = 1; ordinal <= runs; ordinal += 1) {
       if (!keys.has(`${lane}:${ordinal}`)) {
@@ -187,7 +178,7 @@ function validateGitSha(value) {
 function parseArtifactSample(value, label) {
   const input = exactRecord(
     value,
-    ['lane', 'topology', 'ordinal', 'ownerLoad', 'terminalProof', 'vite', 'express'],
+    ['lane', 'topology', 'ordinal', 'ownerLoad', 'vite', 'express'],
     label,
   );
   const vite = exactRecord(
