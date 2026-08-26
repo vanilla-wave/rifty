@@ -115,3 +115,6 @@
 - 2026-08-26 — perf/child-fs-perf-orchestrator Contract+RED verify BLOCKER @
   07f5b9196: sample rounding/projection and baseline→ledger timing provenance
   survived; independent expected artifact + exact ledger line required
+- 2026-08-26 — perf/child-fs-perf-orchestrator Contract+RED verify BLOCKER @
+  77a961196: deadline could cover only first product sample; lane×ordinal timeout
+  matrix now covers product/in-realm at ordinals 1 and 2

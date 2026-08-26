@@ -51,7 +51,10 @@ describe('child fs orchestrator lifecycle faults', () => {
       'browser-launch',
       'page-failure',
       'sample-reject',
-      'sample-timeout',
+      'sample-timeout-product-coi-1',
+      'sample-timeout-in-realm-1',
+      'sample-timeout-product-coi-2',
+      'sample-timeout-in-realm-2',
       'corrupt-sample',
       'extra-sample',
       'digest-sample',
@@ -82,7 +85,7 @@ describe('child fs orchestrator lifecycle faults', () => {
       const publish = vi.fn();
       const serverFailed = deferred<never>();
       const pageFailed = deferred<never>();
-      const runSample = vi.fn(async (lane: 'in-realm' | 'product-coi') => {
+      const runSample = vi.fn(async (lane: 'in-realm' | 'product-coi', ordinal: number) => {
         if (fault === 'server-exit') {
           queueMicrotask(() => serverFailed.reject(new Error('injected dev server exit')));
           return await new Promise<never>(() => {});
@@ -92,7 +95,9 @@ describe('child fs orchestrator lifecycle faults', () => {
           return await new Promise<never>(() => {});
         }
         if (fault === 'sample-reject') throw new Error('injected lane rejection');
-        if (fault === 'sample-timeout') return await new Promise<never>(() => {});
+        if (fault === `sample-timeout-${lane}-${ordinal}`) {
+          return await new Promise<never>(() => {});
+        }
         if (fault === 'corrupt-sample') return { ...rawSample(lane), ordinal: 99 };
         if (fault === 'extra-sample') return { ...rawSample(lane), unexpected: true };
         if (fault === 'digest-sample') return { ...rawSample(lane), scenarioDigest: 'forged' };
@@ -101,7 +106,10 @@ describe('child fs orchestrator lifecycle faults', () => {
       });
       await expect(
         orchestrateChildFs(
-          OPTIONS,
+          {
+            ...OPTIONS,
+            runs: fault.endsWith('-2') ? 2 : 1,
+          },
           {
             startServer: async () => {
               if (fault === 'server-start') throw new Error('injected server start failure');

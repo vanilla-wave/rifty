@@ -92,3 +92,6 @@ baseline records raw before-optimization evidence for I1/I2.
 - 2026-08-26 — Contract+RED @ 07f5b9196 blocked: success could round/project
   raw fields before builder and baseline was unlinked from ledger. Independent
   expected artifact + exact SHA/timing ledger line added.
+- 2026-08-26 — Contract+RED @ 77a961196 blocked: only first product sample
+  carried timeout. Timeout matrix now covers both lanes at ordinal 1 and after a
+  complete ordinal at ordinal 2.
