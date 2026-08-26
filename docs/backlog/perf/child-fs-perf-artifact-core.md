@@ -75,6 +75,8 @@ artifact with an atomic sibling-temp rename.
 
 ## Decisions
 
+ready-verdict: 2026-08-26 — Contract+RED @ f446f8abf
+
 - 2026-08-26 — split predecessor `perf/child-fs-perf-lane` after Contract+RED
   attempts 1–2; this smallest substrate owns no browser lifecycle.
 - 2026-08-26 — digests and parsed timing/result fields are derived authorities,

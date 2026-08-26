@@ -23,3 +23,5 @@
   e14c22b72: 3-decimal timing-rounding mutant survived — precision RED added
 - 2026-08-26 — perf/child-fs-perf-artifact-core pass verify BLOCKER @
   c1769da54: build-side `speedupX` extra-key mutant survived — symmetric RED
+- 2026-08-26 — ready-verdict perf/child-fs-perf-artifact-core: Contract+RED @
+  f446f8abf — PASS, unit residuals empty
