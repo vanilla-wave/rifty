@@ -1,15 +1,14 @@
 import { expect, test } from '@playwright/test';
+import { childFsScenario } from '../../tools/perf/child-fs/scenario.mjs';
 import { gotoHarness, sealedWorkbenchFixtureUrl } from './fixtures.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const laneFixtureUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/child-fs-product-lane.ts`;
 
-test('non-COI rejects before open; post-open command failure closes real sealed ownership', async ({
-  page,
-}) => {
+test('non-COI rejects before open; every post-open failure closes once', async ({ page }) => {
   await gotoHarness(page);
   const result = await page.evaluate(
-    async ({ laneUrl, sealedUrl }) => {
+    async ({ dependencies, laneUrl, sealedUrl }) => {
       const [lane, sealed] = await Promise.all([
         import(/* @vite-ignore */ laneUrl),
         import(/* @vite-ignore */ sealedUrl),
@@ -65,7 +64,74 @@ test('non-COI rejects before open; post-open command failure closes real sealed 
       } catch {
         ownershipClosed = true;
       }
+
+      const cleanupSweep: Array<{
+        readonly closeCalls: number;
+        readonly failureAt: number;
+        readonly rejected: boolean;
+      }> = [];
+      const marker = 'product-coi-1';
+      const successfulOutcome = (out: string) => ({
+        exitCode: 0,
+        exit: { code: 0, signal: null },
+        closeExit: { code: 0, signal: null },
+        closeShared: true,
+        settlements: 1,
+        out,
+      });
+      for (let failureAt = 1; failureAt <= 14; failureAt += 1) {
+        let operationCalls = 0;
+        let sweepCloseCalls = 0;
+        const failAtBoundary = () => {
+          operationCalls += 1;
+          if (operationCalls === failureAt) throw new Error(`injected boundary ${failureAt}`);
+        };
+        let rejected = false;
+        try {
+          await lane.runChildFsProductLane(1, {
+            coi: true,
+            open: async () => {},
+            execute: async (line: string) => {
+              failAtBoundary();
+              if (line === 'vite build') {
+                return successfulOutcome('✓ 2180 modules transformed.\n✓ built in 1s\n');
+              }
+              if (line.startsWith('node express-anchor.cjs ')) {
+                return successfulOutcome(
+                  failureAt === 14
+                    ? 'corrupt express proof\n'
+                    : `RIFTY_EXPRESS_READY ${marker} 1\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
+                );
+              }
+              return successfulOutcome('npm: installed\n');
+            },
+            writeText: async () => failAtBoundary(),
+            readdir: async () => {
+              failAtBoundary();
+              return [{ path: '/dist/assets/index.js', kind: 'file' }];
+            },
+            readText: async (path: string) => {
+              failAtBoundary();
+              if (path === '/dist/assets/index.js') return `const marker="${marker}";\n`;
+              const prefix = '/node_modules/';
+              const suffix = '/package.json';
+              const dependency = path.slice(prefix.length, -suffix.length);
+              return `${JSON.stringify({ version: dependencies[dependency] })}\n`;
+            },
+            close: async () => {
+              sweepCloseCalls += 1;
+            },
+          });
+        } catch (error) {
+          rejected =
+            failureAt === 14
+              ? String(error).includes('ready and one close proof')
+              : String(error).includes(`injected boundary ${failureAt}`);
+        }
+        cleanupSweep.push({ closeCalls: sweepCloseCalls, failureAt, rejected });
+      }
       return {
+        cleanupSweep,
         falseCoiOpenCalls,
         falseCoiOtherCalls,
         falseCoiRejected,
@@ -74,10 +140,14 @@ test('non-COI rejects before open; post-open command failure closes real sealed 
         ownershipClosed,
       };
     },
-    { laneUrl: laneFixtureUrl, sealedUrl: sealedWorkbenchFixtureUrl },
+    {
+      dependencies: childFsScenario().dependencies,
+      laneUrl: laneFixtureUrl,
+      sealedUrl: sealedWorkbenchFixtureUrl,
+    },
   );
 
-  expect(result).toEqual({
+  expect(result).toMatchObject({
     falseCoiOpenCalls: 0,
     falseCoiOtherCalls: 0,
     falseCoiRejected: true,
@@ -85,4 +155,11 @@ test('non-COI rejects before open; post-open command failure closes real sealed 
     commandRejected: true,
     ownershipClosed: true,
   });
+  expect(result.cleanupSweep).toEqual(
+    Array.from({ length: 14 }, (_, index) => ({
+      closeCalls: 1,
+      failureAt: index + 1,
+      rejected: true,
+    })),
+  );
 });

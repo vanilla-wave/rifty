@@ -10,9 +10,10 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
   page,
 }) => {
   test.setTimeout(600_000);
+  const ordinal = 7;
   await gotoHarness(page);
   const observed = await page.evaluate(
-    async ({ laneUrl, sealedUrl }) => {
+    async ({ laneUrl, ordinal, sealedUrl }) => {
       const [lane, sealed] = await Promise.all([
         import(/* @vite-ignore */ laneUrl),
         import(/* @vite-ignore */ sealedUrl),
@@ -53,7 +54,7 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
           await sealed.closeSealedWorkbenchFixture();
         },
       };
-      const result = await lane.runChildFsProductLane(1, host);
+      const result = await lane.runChildFsProductLane(ordinal, host);
       let closed = false;
       try {
         sealed.currentProject();
@@ -62,7 +63,7 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
       }
       return { result, calls, closed, actualCoi: globalThis.crossOriginIsolated === true };
     },
-    { laneUrl: laneFixtureUrl, sealedUrl: sealedWorkbenchFixtureUrl },
+    { laneUrl: laneFixtureUrl, ordinal, sealedUrl: sealedWorkbenchFixtureUrl },
   );
 
   expect(observed.actualCoi).toBe(true);
@@ -86,7 +87,7 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
   expect(executes.map(({ line }) => line)).toEqual([
     'npm install',
     'vite build',
-    'node express-anchor.cjs product-coi-1',
+    `node express-anchor.cjs product-coi-${ordinal}`,
   ]);
   const callIndex = (predicate: (call: Record<string, unknown>) => boolean): number =>
     observed.calls.findIndex(predicate);
@@ -106,9 +107,15 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
     }
     expect(JSON.parse(manifestRead.text)).toMatchObject({ version });
   }
-  const markerWriteIndex = callIndex(
-    ({ kind, path }) => kind === 'write' && path === '/src/Panel.jsx',
-  );
+  const marker = `product-coi-${ordinal}`;
+  const panelSeed = childFsScenario().files['/src/Panel.jsx'];
+  if (panelSeed === undefined) throw new TypeError('canonical Panel seed is missing');
+  const markerSource = panelSeed
+    .replace('bench-seed', marker)
+    .replace('bench-seed', `run-${ordinal}`);
+  const writes = observed.calls.filter(({ kind }) => kind === 'write');
+  expect(writes).toEqual([{ kind: 'write', path: '/src/Panel.jsx', contents: markerSource }]);
+  const markerWriteIndex = callIndex(({ kind }) => kind === 'write');
   const viteIndex = callIndex(({ kind, line }) => kind === 'execute' && line === 'vite build');
   const assetsIndex = callIndex(({ kind, path }) => kind === 'readdir' && path === '/dist/assets');
   const emittedReadIndexes = observed.calls
@@ -122,7 +129,8 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
     )
     .map(({ index }) => index);
   const expressIndex = callIndex(
-    ({ kind, line }) => kind === 'execute' && line === 'node express-anchor.cjs product-coi-1',
+    ({ kind, line }) =>
+      kind === 'execute' && line === `node express-anchor.cjs product-coi-${ordinal}`,
   );
   const closeIndexes = observed.calls
     .map((call, index) => ({ call, index }))
@@ -183,18 +191,18 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
   expect(observed.result.sample).toEqual({
     lane: 'product-coi',
     topology: 'owner-sync-rpc-kernel-child',
-    ordinal: 1,
+    ordinal,
     ownerLoad: 'idle',
     vite: {
       exitCode: viteOutcome?.exitCode,
       rawOutput: viteOutcome?.out,
       emittedJavaScript,
-      marker: 'product-coi-1',
+      marker,
     },
     express: {
       exitCode: expressOutcome?.exitCode,
       rawOutput: expressOutcome?.out,
-      marker: 'product-coi-1',
+      marker,
     },
   });
   const sample = validateChildFsRawSample(observed.result.sample);
