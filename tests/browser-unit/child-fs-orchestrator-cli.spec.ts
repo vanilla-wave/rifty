@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,6 +24,21 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
+async function rejectedCli(args: readonly string[]): Promise<string> {
+  try {
+    await execute('pnpm', ['bench:child-fs', '--', ...args], {
+      cwd: process.cwd(),
+      env: process.env,
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 30_000,
+    });
+  } catch (error) {
+    const inspected = error as { readonly stdout?: string; readonly stderr?: string };
+    return `${inspected.stdout ?? ''}\n${inspected.stderr ?? ''}`;
+  }
+  throw new Error('invalid child-fs CLI unexpectedly succeeded');
+}
+
 test('bench:child-fs CLI runs both real lanes and publishes canonical evidence', async ({
   browser,
 }) => {
@@ -34,6 +49,42 @@ test('bench:child-fs CLI runs both real lanes and publishes canonical evidence',
   const gitSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   const startedAt = Date.now();
   try {
+    const invalidPort = await freePort();
+    const invalidOut = join(directory, 'invalid.json');
+    expect(
+      await rejectedCli(['--runs', '0', '--out', invalidOut, '--port', String(invalidPort)]),
+    ).toContain('--runs must be a positive integer');
+    expect(existsSync(invalidOut)).toBe(false);
+    await expect(assertChildFsPortFree(invalidPort)).resolves.toBeUndefined();
+
+    const occupied = createServer();
+    await new Promise<void>((resolve, reject) => {
+      occupied.once('error', reject);
+      occupied.listen(0, 'localhost', resolve);
+    });
+    const occupiedAddress = occupied.address();
+    if (occupiedAddress === null || typeof occupiedAddress === 'string') {
+      throw new Error('occupied-port fixture failed');
+    }
+    const occupiedOut = join(directory, 'occupied.json');
+    try {
+      expect(
+        await rejectedCli([
+          '--runs',
+          '1',
+          '--out',
+          occupiedOut,
+          '--port',
+          String(occupiedAddress.port),
+        ]),
+      ).toContain(`port ${occupiedAddress.port} is already occupied`);
+      expect(existsSync(occupiedOut)).toBe(false);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        occupied.close((error) => (error === undefined ? resolve() : reject(error))),
+      );
+    }
+
     await execute(
       'pnpm',
       ['bench:child-fs', '--', '--runs', '1', '--out', out, '--port', String(port)],

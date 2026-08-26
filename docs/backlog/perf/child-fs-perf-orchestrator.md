@@ -85,3 +85,6 @@ baseline records raw before-optimization evidence for I1/I2.
   delayed-death/shutdown/projection carriers, non-canonical JSON/baseline, and
   injected provenance. Added real CLI browser acceptance + complete fault/byte
   boundaries.
+- 2026-08-26 — Contract+RED @ 4d3c53180 blocked: readiness hang, public CLI
+  admission bypass and post-sample cleanup crashes survived. Added actual
+  invalid/occupied CLI plus readiness/post-sample lifecycle carriers.

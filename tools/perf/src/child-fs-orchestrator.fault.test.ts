@@ -46,6 +46,7 @@ describe('child fs orchestrator lifecycle faults', () => {
     for (const fault of [
       'server-start',
       'server-ready',
+      'server-ready-timeout',
       'server-exit',
       'browser-launch',
       'page-failure',
@@ -57,6 +58,8 @@ describe('child fs orchestrator lifecycle faults', () => {
       'summary-sample',
       'browser-close',
       'browser-close-timeout',
+      'page-failure-cleanup',
+      'server-exit-cleanup',
       'server-close',
       'server-close-timeout',
     ] as const) {
@@ -66,6 +69,14 @@ describe('child fs orchestrator lifecycle faults', () => {
       });
       const browserClose = vi.fn(async (): Promise<unknown> => {
         if (fault === 'browser-close-timeout') return await new Promise<never>(() => {});
+        if (fault === 'page-failure-cleanup') {
+          pageFailed.reject(new Error('injected page crash during cleanup'));
+          await Promise.resolve();
+        }
+        if (fault === 'server-exit-cleanup') {
+          serverFailed.reject(new Error('injected server exit during cleanup'));
+          await Promise.resolve();
+        }
         if (fault === 'browser-close') throw new Error('injected browser close failure');
       });
       const publish = vi.fn();
@@ -98,7 +109,9 @@ describe('child fs orchestrator lifecycle faults', () => {
                 ready:
                   fault === 'server-ready'
                     ? Promise.reject(new Error('injected readiness failure'))
-                    : Promise.resolve(),
+                    : fault === 'server-ready-timeout'
+                      ? new Promise<never>(() => {})
+                      : Promise.resolve(),
                 failed: serverFailed.promise,
                 close: serverClose,
               };
@@ -121,7 +134,12 @@ describe('child fs orchestrator lifecycle faults', () => {
       expect(publish, fault).not.toHaveBeenCalled();
       expect(serverClose, fault).toHaveBeenCalledTimes(fault === 'server-start' ? 0 : 1);
       expect(browserClose, fault).toHaveBeenCalledTimes(
-        fault === 'server-start' || fault === 'server-ready' || fault === 'browser-launch' ? 0 : 1,
+        fault === 'server-start' ||
+          fault === 'server-ready' ||
+          fault === 'server-ready-timeout' ||
+          fault === 'browser-launch'
+          ? 0
+          : 1,
       );
     }
   });

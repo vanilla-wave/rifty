@@ -109,3 +109,6 @@
 - 2026-08-26 — perf/child-fs-perf-orchestrator Contract+RED BLOCKER @
   eabdd8a25: no real CLI carrier; delayed death/shutdown/projection and exact
   publication/provenance porous; re-cut in place
+- 2026-08-26 — perf/child-fs-perf-orchestrator Contract+RED verify BLOCKER @
+  4d3c53180: readiness hang, public admission bypass and cleanup-time page/
+  server death survived; carriers added at exact entry/lifecycle seams
