@@ -60,3 +60,7 @@
 - 2026-08-26 — re-chart after perf/child-fs-perf-product-lane: 0 graduated /
   1 invalidated (completed item deleted); in-realm lane compiled ready,
   orchestrator still blocked on it
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane band 2–4 expected REDs
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED BLOCKER @
+  b5cbba7e7: porous tail alternation/reply schemas/error + Worker provenance;
+  re-cut in place

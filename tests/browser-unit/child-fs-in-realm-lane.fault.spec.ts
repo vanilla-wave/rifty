@@ -11,16 +11,29 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     const lane = await import(/* @vite-ignore */ laneUrl);
 
     type Listener = EventListenerOrEventListenerObject;
-    type Mode = 'duplicate-reply' | 'invalid-sample' | 'reply-before-ready' | 'wrong-reply';
+    type Mode =
+      | 'duplicate-reply'
+      | 'error-envelope'
+      | 'invalid-sample'
+      | 'malformed-reply'
+      | 'messageerror'
+      | 'path-mismatch'
+      | 'reply-before-ready'
+      | 'wrong-reply';
     const controlled = [];
     for (const mode of [
       'reply-before-ready',
+      'messageerror',
       'wrong-reply',
+      'malformed-reply',
       'duplicate-reply',
+      'path-mismatch',
+      'error-envelope',
       'invalid-sample',
     ] as const satisfies readonly Mode[]) {
       const listeners = new Map<string, Set<Listener>>();
       let marker = 'in-realm-3';
+      let versions: Record<string, string> = {};
       let terminateCalls = 0;
       const posts: unknown[] = [];
       const emit = (type: string, event: Event) => {
@@ -31,12 +44,17 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       };
       const message = (data: unknown) => emit('message', new MessageEvent('message', { data }));
       let rejected = false;
+      let failure = '';
       try {
         await lane.runChildFsInRealmLane(3, {
           open: () => {
-            queueMicrotask(() =>
-              message({ kind: mode === 'reply-before-ready' ? 'booted' : 'ready' }),
-            );
+            queueMicrotask(() => {
+              if (mode === 'messageerror') {
+                emit('messageerror', new MessageEvent('messageerror'));
+                return;
+              }
+              message({ kind: mode === 'reply-before-ready' ? 'booted' : 'ready' });
+            });
             return {
               addEventListener(type: string, listener: Listener) {
                 const entries = listeners.get(type) ?? new Set<Listener>();
@@ -50,7 +68,22 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                 posts.push(command);
                 queueMicrotask(() => {
                   if (mode === 'wrong-reply') {
-                    message({ kind: 'installed', versions: {} });
+                    message({ kind: 'installed' });
+                    return;
+                  }
+                  if (mode === 'malformed-reply') {
+                    message({ kind: 'booted', backend: 'memory', extra: true });
+                    return;
+                  }
+                  if (mode === 'error-envelope') {
+                    message({
+                      kind: 'error',
+                      error: {
+                        name: 'InjectedWorkerError',
+                        message: 'injected worker message',
+                        stack: 'INJECTED_WORKER_STACK',
+                      },
+                    });
                     return;
                   }
                   if (mode === 'duplicate-reply' && command.kind === 'boot') {
@@ -61,9 +94,15 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                   if (command.kind === 'boot') message({ kind: 'booted', backend: 'memory' });
                   else if (command.kind === 'seed') {
                     const files = command.files as Record<string, string>;
-                    message({ kind: 'seeded', paths: Object.keys(files).toSorted() });
+                    message({
+                      kind: 'seeded',
+                      paths: Object.keys(files)
+                        .map((path) => `${String(command.root)}${path}`)
+                        .toSorted(),
+                    });
                   } else if (command.kind === 'install') {
-                    message({ kind: 'installed', versions: command.dependencies });
+                    versions = command.dependencies as Record<string, string>;
+                    message({ kind: 'installed' });
                   } else if (command.kind === 'write') {
                     const match = String(command.contents).match(/in-realm-\d+/u);
                     if (match !== null) marker = match[0];
@@ -77,7 +116,17 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                   } else if (command.kind === 'readdir') {
                     message({ kind: 'entries', paths: ['/bench/dist/assets/index.js'] });
                   } else if (command.kind === 'read') {
-                    message({ kind: 'read', path: command.path, text: `const x="${marker}";\n` });
+                    const path = String(command.path);
+                    const dependency = path
+                      .slice('/bench/node_modules/'.length)
+                      .replace(/\/package\.json$/u, '');
+                    message({
+                      kind: 'read',
+                      path: mode === 'path-mismatch' ? `${path}.wrong` : path,
+                      text: path.startsWith('/bench/dist/assets/')
+                        ? `const x="${marker}";\n`
+                        : `${JSON.stringify({ version: versions[dependency] })}\n`,
+                    });
                   } else if (command.kind === 'express') {
                     message({
                       kind: 'express',
@@ -93,15 +142,18 @@ test('protocol corruption and real Worker failures reject and terminate once', a
             };
           },
         });
-      } catch {
+      } catch (error) {
         rejected = true;
+        const inspected = error instanceof Error ? error : new Error(String(error));
+        failure = `${inspected.name}\n${inspected.message}\n${inspected.stack ?? ''}`;
       }
-      controlled.push({ mode, posts: posts.length, rejected, terminateCalls });
+      controlled.push({ failure, mode, posts: posts.length, rejected, terminateCalls });
     }
 
     const runRealFailure = async (registryFailure: boolean) => {
       let rejected = false;
       let terminateCalls = 0;
+      let failure = '';
       try {
         await lane.runChildFsInRealmLane(1, {
           open(url: string) {
@@ -136,10 +188,12 @@ test('protocol corruption and real Worker failures reject and terminate once', a
             };
           },
         });
-      } catch {
+      } catch (error) {
         rejected = true;
+        const inspected = error instanceof Error ? error : new Error(String(error));
+        failure = `${inspected.name}\n${inspected.message}\n${inspected.stack ?? ''}`;
       }
-      return { rejected, terminateCalls };
+      return { failure, rejected, terminateCalls };
     };
 
     return {
@@ -149,12 +203,22 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     };
   }, laneFixtureUrl);
 
-  expect(observed.controlled).toEqual([
+  expect(observed.controlled.map(({ failure: _failure, ...entry }) => entry)).toEqual([
     { mode: 'reply-before-ready', posts: 0, rejected: true, terminateCalls: 1 },
+    { mode: 'messageerror', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-reply', posts: 1, rejected: true, terminateCalls: 1 },
+    { mode: 'malformed-reply', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-reply', posts: 2, rejected: true, terminateCalls: 1 },
-    { mode: 'invalid-sample', posts: 8, rejected: true, terminateCalls: 1 },
+    { mode: 'path-mismatch', posts: 4, rejected: true, terminateCalls: 1 },
+    { mode: 'error-envelope', posts: 1, rejected: true, terminateCalls: 1 },
+    { mode: 'invalid-sample', posts: 15, rejected: true, terminateCalls: 1 },
   ]);
-  expect(observed.missingWorker).toEqual({ rejected: true, terminateCalls: 1 });
-  expect(observed.registryFailure).toEqual({ rejected: true, terminateCalls: 1 });
+  const envelope = observed.controlled.find(({ mode }) => mode === 'error-envelope')?.failure;
+  expect(envelope).toContain('InjectedWorkerError');
+  expect(envelope).toContain('injected worker message');
+  expect(envelope).toContain('INJECTED_WORKER_STACK');
+  expect(observed.missingWorker).toMatchObject({ rejected: true, terminateCalls: 1 });
+  expect(observed.missingWorker.failure).not.toBe('');
+  expect(observed.registryFailure).toMatchObject({ rejected: true, terminateCalls: 1 });
+  expect(observed.registryFailure.failure).toContain('/missing-npm-registry');
 });

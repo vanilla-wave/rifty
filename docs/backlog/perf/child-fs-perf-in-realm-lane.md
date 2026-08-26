@@ -25,15 +25,16 @@ the Worker never self-attests a finished sample.
 
 - The runner opens exactly one real module Worker from the pinned fixture URL,
   accepts one ready, then sends exactly boot → seed → install → marker
-  write → Vite → assets readdir/read → Express commands, one at a time.
-  Every command accepts exactly its next typed reply; error, malformed,
-  duplicate or out-of-order messages reject and still terminate once.
+  manifest reads → marker write → Vite → assets readdir/read → Express
+  commands, one at a time. Every command accepts one exact-schema typed reply
+  whose path echoes the request; error, malformed, duplicate or out-of-order
+  messages reject and still terminate once.
 - Inside that Worker, `installMemoryFs()` supplies the one shared async/sync
   store. The runner sends exact `childFsScenario()` files/dependencies; the
-  Worker seeds them at `/bench`, uses real `RegistryClient` + `install`, reads
-  every direct installed package version, and activates the real shadow-asset
-  esbuild runtime plus Vite acquisition/run preparation. No kernel Worker,
-  sync-RPC FS, OPFS, or child cache participates.
+  Worker seeds them at `/bench`, uses real `RegistryClient` + `install`, then the
+  runner separately reads every direct installed package version. The Worker
+  activates the real shadow-asset esbuild runtime plus Vite acquisition/run
+  preparation. No kernel Worker, sync-RPC FS, OPFS, or child cache participates.
 - After install/preparation, the Worker writes exactly one run-specific Panel
   marker, loader-runs `/bench/node_modules/.bin/vite build`, reads every emitted
   JS asset, then loader-runs canonical `/bench/express-anchor.cjs <marker>` with
@@ -56,7 +57,8 @@ the Worker never self-attests a finished sample.
   exit 0, positive matching READY before CLOSED.
 - `single-worker-topology`: caller records one module Worker, exact sequential
   command/reply trace, no second command in flight, and one final terminate; no
-  page FS proxy or Worker-produced aggregate sample.
+  page FS proxy or Worker-produced aggregate sample. Playwright's independent
+  page Worker inventory contains that exact fixture URL and no nested Worker.
 
 ## Fault matrix
 
@@ -92,3 +94,6 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
   Worker, owns aggregation and shared verification.
 - 2026-08-26 — expected RED: both browser-unit specs import absent
   `fixtures/child-fs-in-realm-lane.ts` / Worker fixture.
+- 2026-08-26 — Contract+RED @ b5cbba7e7 blocked: trace stopped at readdir,
+  reply schemas/paths and `messageerror` were porous, error envelopes projected,
+  URL/nested-Worker provenance weak, and ledger band absent. Re-cut in place.

@@ -10,6 +10,8 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
   test.setTimeout(600_000);
   const ordinal = 5;
   await gotoHarness(page);
+  const pageWorkerUrls: string[] = [];
+  page.on('worker', (worker) => pageWorkerUrls.push(worker.url()));
   const observed = await page.evaluate(
     async ({ laneUrl, ordinal }) => {
       const lane = await import(/* @vite-ignore */ laneUrl);
@@ -55,7 +57,11 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
 
   const opens = observed.trace.filter(({ kind }) => kind === 'open');
   expect(opens).toHaveLength(1);
-  expect(String(opens[0]?.url)).toContain('child-fs-in-realm-worker.ts');
+  const openedWorkerUrl = new URL(String(opens[0]?.url), page.url());
+  expect(openedWorkerUrl.pathname).toBe(
+    `/@fs${workspacePath}/tests/browser-unit/fixtures/child-fs-in-realm-worker.ts`,
+  );
+  expect(pageWorkerUrls).toEqual([openedWorkerUrl.href]);
   expect(observed.trace.filter(({ kind }) => kind === 'terminate')).toHaveLength(1);
   expect(observed.trace.at(-1)).toEqual({ kind: 'terminate' });
 
@@ -65,15 +71,7 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
   const replies = observed.messages.map((message) => message as Record<string, unknown>);
   const replyKinds = replies.map(({ kind }) => kind);
   expect(replyKinds[0]).toBe('ready');
-  expect(replyKinds.slice(0, 7)).toEqual([
-    'ready',
-    'booted',
-    'seeded',
-    'installed',
-    'written',
-    'vite',
-    'entries',
-  ]);
+  expect(replies[0]).toEqual({ kind: 'ready' });
   expect(replyKinds.at(-1)).toBe('express');
 
   const scenario = childFsScenario();
@@ -85,8 +83,18 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
     registryUrl: '/npm-registry',
     root: scenario.root,
   });
-  const installed = replies.find(({ kind }) => kind === 'installed');
-  expect(installed?.versions).toEqual(scenario.dependencies);
+  const manifestPaths = Object.keys(scenario.dependencies).map(
+    (dependency) => `${scenario.root}/node_modules/${dependency}/package.json`,
+  );
+  expect(posts.slice(3, 3 + manifestPaths.length)).toEqual(
+    manifestPaths.map((path) => ({ kind: 'read', path })),
+  );
+  for (const [dependency, version] of Object.entries(scenario.dependencies)) {
+    const path = `${scenario.root}/node_modules/${dependency}/package.json`;
+    const read = replies.find((reply) => reply.kind === 'read' && reply.path === path);
+    if (typeof read?.text !== 'string') throw new TypeError(`missing manifest read ${path}`);
+    expect(JSON.parse(read.text)).toMatchObject({ version });
+  }
 
   const marker = `in-realm-${ordinal}`;
   const panelSeed = scenario.files['/src/Panel.jsx'];
@@ -94,15 +102,25 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
   const markerSource = panelSeed
     .replace('bench-seed', marker)
     .replace('bench-seed', `run-${ordinal}`);
-  expect(posts[3]).toEqual({
+  const writeIndex = 3 + manifestPaths.length;
+  expect(posts[writeIndex]).toEqual({
     kind: 'write',
     contents: markerSource,
     path: `${scenario.root}/src/Panel.jsx`,
   });
-  expect(posts[4]).toEqual({ kind: 'vite', root: scenario.root });
-  expect(posts[5]).toEqual({ kind: 'readdir', path: `${scenario.root}/dist/assets` });
+  expect(posts[writeIndex + 1]).toEqual({
+    kind: 'vite',
+    args: ['build'],
+    entryPath: `${scenario.root}/node_modules/.bin/vite`,
+    root: scenario.root,
+  });
+  expect(posts[writeIndex + 2]).toEqual({
+    kind: 'readdir',
+    path: `${scenario.root}/dist/assets`,
+  });
 
   const entriesReply = replies.find(({ kind }) => kind === 'entries');
+  expect(Object.keys(entriesReply ?? {}).toSorted()).toEqual(['kind', 'paths']);
   const emittedPaths = (entriesReply?.paths as unknown[] | undefined)?.filter(
     (path): path is string =>
       typeof path === 'string' &&
@@ -111,7 +129,9 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
   );
   expect(emittedPaths).toBeDefined();
   expect(emittedPaths).not.toHaveLength(0);
-  expect(posts.slice(6, -1)).toEqual(emittedPaths?.map((path) => ({ kind: 'read', path })));
+  expect(posts.slice(writeIndex + 3, -1)).toEqual(
+    emittedPaths?.map((path) => ({ kind: 'read', path })),
+  );
   expect(posts.at(-1)).toEqual({
     kind: 'express',
     entryPath: `${scenario.root}/express-anchor.cjs`,
@@ -124,29 +144,57 @@ test('canonical anchors run through one recorded real in-realm Worker', async ({
       ? `${kind}:${String((message as Record<string, unknown>).kind)}`
       : String(kind),
   );
-  expect(traceKinds.slice(0, 14)).toEqual([
+  const replyKind = (postKind: unknown): string => {
+    if (postKind === 'boot') return 'booted';
+    if (postKind === 'seed') return 'seeded';
+    if (postKind === 'install') return 'installed';
+    if (postKind === 'write') return 'written';
+    if (postKind === 'readdir') return 'entries';
+    return String(postKind);
+  };
+  expect(traceKinds).toEqual([
     'open',
     'worker-message:ready',
-    'post:boot',
-    'worker-message:booted',
-    'post:seed',
-    'worker-message:seeded',
-    'post:install',
-    'worker-message:installed',
-    'post:write',
-    'worker-message:written',
-    'post:vite',
-    'worker-message:vite',
-    'post:readdir',
-    'worker-message:entries',
+    ...posts.flatMap((post) => [
+      `post:${String(post.kind)}`,
+      `worker-message:${replyKind(post.kind)}`,
+    ]),
+    'terminate',
   ]);
-  expect(traceKinds.at(-1)).toBe('terminate');
+
+  const phaseReplies = replies.slice(1);
+  expect(phaseReplies).toHaveLength(posts.length);
+  for (const [index, post] of posts.entries()) {
+    const reply = phaseReplies[index];
+    expect(reply?.kind).toBe(replyKind(post.kind));
+    if (post.kind === 'read') expect(reply?.path).toBe(post.path);
+  }
+  expect(replies.find(({ kind }) => kind === 'booted')).toEqual({
+    kind: 'booted',
+    backend: 'memory',
+  });
+  expect(replies.find(({ kind }) => kind === 'seeded')).toEqual({
+    kind: 'seeded',
+    paths: Object.keys(scenario.files)
+      .map((path) => `${scenario.root}${path}`)
+      .toSorted(),
+  });
+  expect(replies.find(({ kind }) => kind === 'installed')).toEqual({ kind: 'installed' });
+  expect(replies.find(({ kind }) => kind === 'written')).toEqual({
+    kind: 'written',
+    path: `${scenario.root}/src/Panel.jsx`,
+  });
 
   const viteReply = replies.find(({ kind }) => kind === 'vite');
   const expressReply = replies.find(({ kind }) => kind === 'express');
+  expect(Object.keys(viteReply ?? {}).toSorted()).toEqual(['exitCode', 'kind', 'rawOutput']);
+  expect(Object.keys(expressReply ?? {}).toSorted()).toEqual(['exitCode', 'kind', 'rawOutput']);
+  for (const reply of phaseReplies.filter(({ kind }) => kind === 'read')) {
+    expect(Object.keys(reply).toSorted()).toEqual(['kind', 'path', 'text']);
+  }
   const emittedJavaScript = emittedPaths
     ?.map((path) => {
-      const read = replies.find((reply) => reply.kind === 'read' && reply.path === path);
+      const read = phaseReplies.find((reply) => reply?.kind === 'read' && reply.path === path);
       if (typeof read?.text !== 'string') throw new TypeError(`missing emitted read ${path}`);
       return read.text;
     })
