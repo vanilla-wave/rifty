@@ -108,3 +108,6 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 - 2026-08-26 — Contract+RED @ 1bf2ff23f blocked: terminal Express discriminant
   survived the boot/Vite examples. Same-shape wrong-kind sweep now covers every
   reply type.
+- 2026-08-26 — Contract+RED @ 581e980fd blocked: one-shot readiness could
+  ignore a duplicate before command dispatch. Duplicate-ready now rejects with
+  zero posts and one terminate.

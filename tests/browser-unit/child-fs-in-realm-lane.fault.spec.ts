@@ -16,6 +16,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     for (const mode of [
       'reply-before-ready',
       'messageerror',
+      'duplicate-ready',
       'wrong-reply',
       'duplicate-reply',
       'path-mismatch',
@@ -78,6 +79,11 @@ test('protocol corruption and real Worker failures reject and terminate once', a
             queueMicrotask(() => {
               if (mode === 'messageerror') {
                 emit('messageerror', new MessageEvent('messageerror'));
+                return;
+              }
+              if (mode === 'duplicate-ready') {
+                message({ kind: 'ready' });
+                message({ kind: 'ready' });
                 return;
               }
               if (mode === 'reply-before-ready') message({ kind: 'booted' });
@@ -267,6 +273,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
   ).toEqual([
     { mode: 'reply-before-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'messageerror', posts: 0, rejected: true, terminateCalls: 1 },
+    { mode: 'duplicate-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-reply', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-reply', posts: 2, rejected: true, terminateCalls: 1 },
     { mode: 'path-mismatch', posts: 4, rejected: true, terminateCalls: 1 },

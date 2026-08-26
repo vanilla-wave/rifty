@@ -76,3 +76,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED final verify
   BLOCKER @ 1bf2ff23f: Express wrong discriminant survived boot/Vite examples;
   same-shape wrong-kind sweep extended across every reply type
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
+  581e980fd: duplicate startup ready escaped command-loop duplicate carriers;
+  duplicate-ready rejects before the first post
