@@ -106,3 +106,6 @@ ready-verdict: 2026-08-26 — Contract+RED @ f446f8abf
   `terminalProof` removed as self-attestation. Existing benchmark port guard and
   direct artifact write consolidated into shared `tools/perf/src/runner-io.mjs`
   per Class-kill.
+- 2026-08-26 — Final+GREEN verify @ 44a550f43 blocked: shared port guard checked
+  only IPv4 while Vite `localhost` resolves to IPv6 here; authority now probes
+  every resolved localhost address with a physical occupied-listener RED.

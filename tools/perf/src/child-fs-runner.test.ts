@@ -83,6 +83,26 @@ describe('child fs benchmark CLI admission', () => {
     ).rejects.toThrow(/occupied/u);
     expect(launch).not.toHaveBeenCalled();
   });
+
+  it('rejects an occupied localhost address family used by the Vite benchmark', async () => {
+    const { assertChildFsPortFree } = await import('./child-fs-runner.mjs');
+    const server = createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, 'localhost', resolve);
+    });
+    try {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        throw new Error('localhost test listener has no TCP port');
+      }
+      await expect(assertChildFsPortFree(address.port)).rejects.toThrow(/occupied|already/u);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error === undefined ? resolve() : reject(error))),
+      );
+    }
+  });
 });
 
 describe('child fs benchmark artifact publication', () => {

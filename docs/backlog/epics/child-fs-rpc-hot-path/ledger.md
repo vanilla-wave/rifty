@@ -28,3 +28,5 @@
 - 2026-08-26 — perf/child-fs-perf-artifact-core Final+GREEN BLOCKER @
   7f03b918c: 3 verifier gaps + terminal self-attestation + duplicate port/write
   mechanisms — fixed in one batch, shared owner `tools/perf/src/runner-io.mjs`
+- 2026-08-26 — perf/child-fs-perf-artifact-core Final+GREEN verify BLOCKER @
+  44a550f43: `localhost` IPv6 occupied port escaped IPv4-only guard — fixed

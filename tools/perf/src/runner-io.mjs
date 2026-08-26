@@ -1,10 +1,11 @@
+import { lookup } from 'node:dns/promises';
 import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { basename, dirname, join } from 'node:path';
 
-export function assertPerfPortFree(port) {
+function assertAddressPortFree(address, port) {
   return new Promise((resolve, reject) => {
-    const socket = createConnection({ host: '127.0.0.1', port });
+    const socket = createConnection({ host: address, port });
     let settled = false;
     const finish = (action) => {
       if (settled) return;
@@ -24,6 +25,13 @@ export function assertPerfPortFree(port) {
       finish(() => reject(error));
     });
   });
+}
+
+export async function assertPerfPortFree(port) {
+  const addresses = await lookup('localhost', { all: true });
+  const unique = [...new Set(addresses.map(({ address }) => address))];
+  if (unique.length === 0) throw new Error('localhost resolved to no addresses');
+  await Promise.all(unique.map((address) => assertAddressPortFree(address, port)));
 }
 
 const DEFAULT_IO = Object.freeze({
