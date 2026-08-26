@@ -133,3 +133,5 @@
 - 2026-08-26 — re-chart after perf/child-fs-perf-orchestrator: 0 graduated /
   2 invalidated (completed orchestrator and split predecessor deleted); I1 and
   I2 now use the committed two-real-lane baseline as their proof anchor
+- 2026-08-26 — perf/fs-read-single-hop band 3–5 expected REDs; ADR-0365 fixes
+  one `size + head` binary reply, protocol v4, no cache/state owner

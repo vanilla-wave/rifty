@@ -160,9 +160,9 @@ describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
   });
 });
 
-describe('SyncRpc v2 binary frame (ADR-0084 #23)', () => {
-  it('SYNC_RPC_PROTOCOL_VERSION is 3 for the claimed request lifecycle', () => {
-    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(3);
+describe('SyncRpc v4 binary frame (ADR-0084 #23, ADR-0365)', () => {
+  it('SYNC_RPC_PROTOCOL_VERSION is 4 for single-hop fs read heads', () => {
+    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(4);
   });
 
   it('encodeBinaryReply → decodeReply round-trips arbitrary bytes byte-exact (incl 0xff/0xfe/0x00)', () => {

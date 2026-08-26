@@ -15,6 +15,7 @@
 
 import type { VfsDirent } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
+import { FS_RPC_CHUNK } from '@riftydev/runtime-js';
 import { describe, expect, it } from 'vitest';
 import { snapshotVfsFiles, writeRealWorkspaceTypeScript } from '../test-workspace-typescript.ts';
 import { createRpcFsSync } from './host-fs-rpc.ts';
@@ -33,6 +34,7 @@ interface StatShape {
  */
 function makeFakeCall(
   files: Map<string, Uint8Array>,
+  calls: Array<{ method: string; payload: unknown }> = [],
 ): (method: string, payload: unknown) => unknown {
   const dirs = new Set<string>(['/']);
   for (const p of files.keys()) {
@@ -50,6 +52,7 @@ function makeFakeCall(
     return null;
   };
   return (method, payload) => {
+    calls.push({ method, payload });
     const p = payload as Record<string, unknown>;
     switch (method) {
       case 'fs.exists':
@@ -85,6 +88,14 @@ function makeFakeCall(
         // Ranged subarray — exactly the owner handler's reply shape.
         return bytes.subarray(offset, Math.min(bytes.length, offset + length));
       }
+      case 'fs.readFileHead': {
+        const bytes = files.get(p.path as string) ?? new Uint8Array(0);
+        const first = bytes.subarray(0, FS_RPC_CHUNK);
+        const reply = new Uint8Array(8 + first.length);
+        new DataView(reply.buffer).setFloat64(0, bytes.length, true);
+        reply.set(first, 8);
+        return reply;
+      }
       default:
         throw new Error(`fake fs.* call: unexpected method ${method}`);
     }
@@ -96,8 +107,10 @@ const enc = (s: string) => new TextEncoder().encode(s);
 describe('createRpcFsSync over a fake fs.* call', () => {
   it('reads a small file back byte-for-byte (readFileBytesSync)', () => {
     const files = new Map([['/proj/a.ts', enc('const x = 1;\n')]]);
-    const fs = createRpcFsSync(makeFakeCall(files));
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const fs = createRpcFsSync(makeFakeCall(files, calls));
     expect(fs.readFileBytesSync('/proj/a.ts')).toEqual(enc('const x = 1;\n'));
+    expect(calls).toEqual([{ method: 'fs.readFileHead', payload: { path: '/proj/a.ts' } }]);
   });
 
   it('reassembles a multi-chunk file (> FS_RPC_CHUNK) correctly', () => {
@@ -105,10 +118,26 @@ describe('createRpcFsSync over a fake fs.* call', () => {
     const big = new Uint8Array(600 * 1024);
     for (let i = 0; i < big.length; i++) big[i] = i % 251;
     const files = new Map([['/proj/big.bin', big]]);
-    const fs = createRpcFsSync(makeFakeCall(files));
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const fs = createRpcFsSync(makeFakeCall(files, calls));
     const got = fs.readFileBytesSync('/proj/big.bin');
     expect(got.length).toBe(big.length);
     expect(got).toEqual(big);
+    expect(calls).toEqual([
+      { method: 'fs.readFileHead', payload: { path: '/proj/big.bin' } },
+      {
+        method: 'fs.readChunk',
+        payload: { path: '/proj/big.bin', offset: FS_RPC_CHUNK, length: FS_RPC_CHUNK },
+      },
+      {
+        method: 'fs.readChunk',
+        payload: {
+          path: '/proj/big.bin',
+          offset: FS_RPC_CHUNK * 2,
+          length: big.length - FS_RPC_CHUNK * 2,
+        },
+      },
+    ]);
   });
 
   it('statSyncOrNull: file, dir, and null-on-missing', () => {

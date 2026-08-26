@@ -79,6 +79,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0342 | Release pending eval drain ownership when server branch wins |
 | 0345 | Expose exact Node 24.0.0 process.release identity |
 | 0348 | Synchronous require(ESM) on Node 24 |
+| 0365 | Single-hop small-file sync-RPC reads |
 
 ### runtime-wasi
 

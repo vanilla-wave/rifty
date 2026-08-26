@@ -134,4 +134,26 @@ describe('child fs bounded two-lane orchestrator', () => {
       `baseline ${artifact.gitSha}: product vite ${product.vite.selfTimeSeconds}s express ${product.express.startToListeningMs}ms; in-realm vite ${inRealm.vite.selfTimeSeconds}s express ${inRealm.express.startToListeningMs}ms`,
     );
   });
+
+  it('pins the post-single-hop two-lane artifact and its exact ledger provenance', () => {
+    const bytes = readFileSync(
+      new URL('../../../perf/child-fs-after-single-hop.json', import.meta.url),
+      'utf8',
+    );
+    const artifact = validateChildFsArtifact(JSON.parse(bytes));
+    expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
+    expect(artifact.runs).toBe(1);
+    expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
+    expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
+    const product = artifact.samples.find(({ lane }) => lane === 'product-coi');
+    const inRealm = artifact.samples.find(({ lane }) => lane === 'in-realm');
+    if (product === undefined || inRealm === undefined) throw new Error('post-I1 lanes missing');
+    const ledger = readFileSync(
+      new URL('../../../docs/backlog/epics/child-fs-rpc-hot-path/ledger.md', import.meta.url),
+      'utf8',
+    );
+    expect(ledger).toContain(
+      `after single-hop ${artifact.gitSha}: product vite ${product.vite.selfTimeSeconds}s express ${product.express.startToListeningMs}ms; in-realm vite ${inRealm.vite.selfTimeSeconds}s express ${inRealm.express.startToListeningMs}ms`,
+    );
+  });
 });
