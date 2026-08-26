@@ -8,7 +8,7 @@ epic: child-fs-rpc-hot-path
 why: I3 closes only when one command owns both real lanes, rejects lifecycle faults, and commits comparable baseline evidence
 user_story: As the goal runner, I want one bounded command that produces an exact two-lane artifact or no artifact, but today no durable orchestrator exists.
 sources: [perf/child-fs-perf-lane split @ fb02b2c2f]
-code: [tools/perf/child-fs.mjs, tools/perf/src/child-fs-orchestrator.mjs, tools/perf/src/child-fs-orchestrator.test.ts, tests/browser-unit/fixtures/child-fs-orchestrator.ts, perf/child-fs-baseline.json]
+code: [tools/perf/child-fs.mjs, tools/perf/src/child-fs-orchestrator.mjs, tools/perf/src/child-fs-orchestrator.test.ts, tools/perf/src/child-fs-orchestrator.fault.test.ts, tests/browser-unit/fixtures/child-fs-orchestrator.ts, perf/child-fs-baseline.json]
 ---
 
 ## User scenario

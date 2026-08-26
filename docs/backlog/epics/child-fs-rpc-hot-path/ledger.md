@@ -105,3 +105,4 @@
 - 2026-08-26 — re-chart after perf/child-fs-perf-in-realm-lane: 0 graduated /
   1 invalidated (completed item deleted); orchestrator compiled ready and I3 is
   its only remaining measurement dependency
+- 2026-08-26 — perf/child-fs-perf-orchestrator band 2–4 expected REDs

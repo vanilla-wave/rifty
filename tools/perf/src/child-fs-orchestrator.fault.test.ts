@@ -1,0 +1,130 @@
+import { describe, expect, it, vi } from 'vitest';
+
+const OPTIONS = Object.freeze({
+  runs: 1,
+  out: '/result/child-fs.json',
+  port: 5391,
+  ownerLoad: 'idle' as const,
+  generatedAt: '2026-08-26T00:00:00.000Z',
+  gitSha: 'b'.repeat(40),
+});
+
+function rawSample(lane: 'in-realm' | 'product-coi', ordinal = 1) {
+  const marker = `${lane}-${ordinal}`;
+  return {
+    lane,
+    topology: lane === 'product-coi' ? 'owner-sync-rpc-kernel-child' : 'single-in-realm-worker',
+    ordinal,
+    ownerLoad: 'idle',
+    vite: {
+      exitCode: 0,
+      rawOutput: '✓ 2180 modules transformed.\n✓ built in 1s\n',
+      emittedJavaScript: marker,
+      marker,
+    },
+    express: {
+      exitCode: 0,
+      rawOutput: `RIFTY_EXPRESS_READY ${marker} 1\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
+      marker,
+    },
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+describe('child fs orchestrator lifecycle faults', () => {
+  it('rejects every lifecycle/sample fault, cleans opened owners once, and never publishes', async () => {
+    const { orchestrateChildFs } = await import('./child-fs-orchestrator.mjs');
+    for (const fault of [
+      'server-ready',
+      'server-exit',
+      'browser-launch',
+      'sample-reject',
+      'sample-timeout',
+      'corrupt-sample',
+      'browser-close',
+      'server-close',
+    ] as const) {
+      const serverClose = vi.fn(async () => {
+        if (fault === 'server-close') throw new Error('injected server close failure');
+      });
+      const browserClose = vi.fn(async () => {
+        if (fault === 'browser-close') throw new Error('injected browser close failure');
+      });
+      const publish = vi.fn();
+      const serverFailed = deferred<never>();
+      if (fault === 'server-exit') {
+        queueMicrotask(() => serverFailed.reject(new Error('injected dev server exit')));
+      }
+      const runSample = vi.fn(async (lane: 'in-realm' | 'product-coi') => {
+        if (fault === 'sample-reject') throw new Error('injected lane rejection');
+        if (fault === 'sample-timeout') return await new Promise<never>(() => {});
+        if (fault === 'corrupt-sample') return { ...rawSample(lane), ordinal: 99 };
+        return rawSample(lane);
+      });
+      await expect(
+        orchestrateChildFs(
+          OPTIONS,
+          {
+            startServer: async () => ({
+              ready:
+                fault === 'server-ready'
+                  ? Promise.reject(new Error('injected readiness failure'))
+                  : Promise.resolve(),
+              failed: serverFailed.promise,
+              close: serverClose,
+            }),
+            launchBrowser: async () => {
+              if (fault === 'browser-launch') throw new Error('injected browser launch failure');
+              return {
+                version: 'Chromium fault',
+                runSample,
+                close: browserClose,
+              };
+            },
+            publish,
+          },
+          { serverReadyMs: 20, sampleMs: 20 },
+        ),
+        fault,
+      ).rejects.toThrow();
+      expect(publish, fault).not.toHaveBeenCalled();
+      expect(serverClose, fault).toHaveBeenCalledTimes(1);
+      expect(browserClose, fault).toHaveBeenCalledTimes(
+        fault === 'server-ready' || fault === 'browser-launch' ? 0 : 1,
+      );
+    }
+  });
+
+  it('publishes only after cleanup and keeps publication failure loud', async () => {
+    const { orchestrateChildFs } = await import('./child-fs-orchestrator.mjs');
+    const events: string[] = [];
+    await expect(
+      orchestrateChildFs(OPTIONS, {
+        startServer: async () => ({
+          ready: Promise.resolve(),
+          failed: new Promise<never>(() => {}),
+          close: async () => events.push('server:close'),
+        }),
+        launchBrowser: async () => ({
+          version: 'Chromium fault',
+          runSample: async (lane: 'in-realm' | 'product-coi') => rawSample(lane),
+          close: async () => events.push('browser:close'),
+        }),
+        publish: () => {
+          events.push('publish');
+          throw new Error('injected publication failure');
+        },
+      }),
+    ).rejects.toThrow(/publication failure/u);
+    expect(events).toEqual(['browser:close', 'server:close', 'publish']);
+  });
+});

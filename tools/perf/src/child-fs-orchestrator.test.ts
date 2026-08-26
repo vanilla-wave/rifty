@@ -1,0 +1,106 @@
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { validateChildFsArtifact } from './child-fs-artifact.mjs';
+
+function rawSample(lane: 'in-realm' | 'product-coi', ordinal: number) {
+  const marker = `${lane}-${ordinal}`;
+  return {
+    lane,
+    topology: lane === 'product-coi' ? 'owner-sync-rpc-kernel-child' : 'single-in-realm-worker',
+    ordinal,
+    ownerLoad: 'idle',
+    vite: {
+      exitCode: 0,
+      rawOutput: '✓ 2180 modules transformed.\n✓ built in 1.234567s\n',
+      emittedJavaScript: `const marker=${JSON.stringify(marker)};`,
+      marker,
+    },
+    express: {
+      exitCode: 0,
+      rawOutput: `RIFTY_EXPRESS_READY ${marker} 7.654321\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
+      marker,
+    },
+  };
+}
+
+function never(): Promise<never> {
+  return new Promise(() => {});
+}
+
+describe('child fs bounded two-lane orchestrator', () => {
+  it('runs exact lane ordinals, cleans ownership, then publishes exact artifact bytes', async () => {
+    const { orchestrateChildFs } = await import('./child-fs-orchestrator.mjs');
+    const events: string[] = [];
+    let published: { path: string; json: string } | undefined;
+    const artifact = await orchestrateChildFs(
+      {
+        runs: 2,
+        out: '/result/child-fs.json',
+        port: 5391,
+        ownerLoad: 'idle',
+        generatedAt: '2026-08-26T00:00:00.000Z',
+        gitSha: 'a'.repeat(40),
+      },
+      {
+        startServer: async (port: number) => {
+          events.push(`server:start:${port}`);
+          return {
+            ready: Promise.resolve().then(() => events.push('server:ready')),
+            failed: never(),
+            close: async () => events.push('server:close'),
+          };
+        },
+        launchBrowser: async (baseUrl: string) => {
+          events.push(`browser:launch:${baseUrl}`);
+          return {
+            version: 'Chromium exact',
+            runSample: async (lane: 'in-realm' | 'product-coi', ordinal: number) => {
+              events.push(`sample:${lane}:${ordinal}`);
+              return rawSample(lane, ordinal);
+            },
+            close: async () => events.push('browser:close'),
+          };
+        },
+        publish: (path: string, json: string) => {
+          events.push('publish');
+          published = { path, json };
+        },
+      },
+    );
+
+    expect(events).toEqual([
+      'server:start:5391',
+      'server:ready',
+      'browser:launch:http://localhost:5391',
+      'sample:product-coi:1',
+      'sample:in-realm:1',
+      'sample:product-coi:2',
+      'sample:in-realm:2',
+      'browser:close',
+      'server:close',
+      'publish',
+    ]);
+    expect(published?.path).toBe('/result/child-fs.json');
+    expect(published?.json.endsWith('\n')).toBe(true);
+    expect(JSON.parse(published?.json ?? '')).toEqual(artifact);
+    expect(validateChildFsArtifact(artifact)).toEqual(artifact);
+    expect(artifact.samples.map(({ lane, ordinal }) => `${lane}:${ordinal}`)).toEqual([
+      'product-coi:1',
+      'in-realm:1',
+      'product-coi:2',
+      'in-realm:2',
+    ]);
+  });
+
+  it('pins the committed one-run baseline as a strict artifact without summaries', () => {
+    const value = JSON.parse(
+      readFileSync(new URL('../../../perf/child-fs-baseline.json', import.meta.url), 'utf8'),
+    );
+    const artifact = validateChildFsArtifact(value);
+    expect(artifact.runs).toBe(1);
+    expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
+    expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
+    expect(Object.keys(artifact).toSorted()).not.toContain('summary');
+    expect(Object.keys(artifact).toSorted()).not.toContain('speedupX');
+  });
+});
