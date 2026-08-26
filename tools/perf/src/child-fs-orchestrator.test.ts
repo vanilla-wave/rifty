@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { buildChildFsArtifact, validateChildFsArtifact } from './child-fs-artifact.mjs';
@@ -141,7 +142,40 @@ describe('child fs bounded two-lane orchestrator', () => {
       'utf8',
     );
     const artifact = validateChildFsArtifact(JSON.parse(bytes));
+    const baseline = validateChildFsArtifact(
+      JSON.parse(
+        readFileSync(new URL('../../../perf/child-fs-baseline.json', import.meta.url), 'utf8'),
+      ),
+    );
     expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
+    expect(artifact.gitSha).not.toBe(baseline.gitSha);
+    const repoRoot = new URL('../../..', import.meta.url);
+    execFileSync('git', ['merge-base', '--is-ancestor', artifact.gitSha, 'HEAD'], {
+      cwd: repoRoot,
+    });
+    expect(
+      execFileSync(
+        'git',
+        ['show', `${artifact.gitSha}:packages/runtime-js/src/ipc/sync-rpc-fs.ts`],
+        { cwd: repoRoot, encoding: 'utf8' },
+      ),
+    ).toContain('FS_METHODS.readFileHead');
+    expect(
+      execFileSync(
+        'git',
+        ['show', `${artifact.gitSha}:packages/runtime-js/src/ipc/fs-handlers.ts`],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+        },
+      ),
+    ).toContain('FS_METHODS.readFileHead');
+    expect(
+      execFileSync('git', ['show', `${artifact.gitSha}:packages/kernel/src/ipc/sync-rpc.ts`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    ).toContain('SYNC_RPC_PROTOCOL_VERSION = 4');
     expect(artifact.runs).toBe(1);
     expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
     expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);

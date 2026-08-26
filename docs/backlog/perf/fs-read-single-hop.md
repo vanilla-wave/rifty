@@ -121,9 +121,11 @@ Exact raw artifact and commit identity are
   invalidation, alternate store authority, or correlation mechanism ships.
 - The existing 256 KiB chunk is retained; changing capacity is not needed to
   deliver the contract.
-- Expected RED band: 3–5 focused tests across wire codec/call trace, owner
-  error/fault behavior, protocol-version rejection, shared adapter, and the
-  absent post-I1 artifact.
+- Expected RED band: 8–10 failing cases across five focused files: wire
+  codec/call trace, owner error/fault behavior, exact v3→v4 rejection, shared
+  adapter traces, and the absent post-I1 artifact. The two-peer wire plus the
+  already-public benchmark proof require all five seams in this one atomic
+  unit; no child can deliver a reviewable behavior independently.
 
 ## Reversibility
 

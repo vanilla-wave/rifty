@@ -24,6 +24,8 @@ describe('ADR-0365 read-head fault boundary', () => {
   it('rejects every malformed head before allocation or continuation', () => {
     const corrupt: ReadonlyArray<[string, unknown]> = [
       ['non-bytes', null],
+      ['object', {}],
+      ['array buffer', new ArrayBuffer(HEAD_BYTES)],
       ['truncated header', new Uint8Array(HEAD_BYTES - 1)],
       ['NaN size', head(Number.NaN)],
       ['fractional size', head(1.5, new Uint8Array(1))],

@@ -136,13 +136,17 @@ describe('SyncRpc protocol version — consumer-side rejection (ADR-0032)', () =
 });
 
 describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
-  it('dispatcher writes a versioned error reply when a request arrives with a wrong version', async () => {
+  it('v4 dispatcher rejects malformed v3 bytes before decode or handler dispatch', async () => {
     const { sab, ring } = createSabRing({ payloadCapacity: 256 });
-    const legacyVersion = 2;
+    const legacyVersion = 3;
     const caller = SabRing.attach(sab, 256, { expectedVersion: legacyVersion });
 
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
-    dispatcher.register('echo', (p) => p);
+    let handlerCalls = 0;
+    dispatcher.register('echo', (p) => {
+      handlerCalls += 1;
+      return p;
+    });
     dispatcher.attach(ring);
 
     // Caller writes a request with a bogus version — the dispatcher must
@@ -157,6 +161,7 @@ describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
     const reply = decodeReply(replyBytes);
     expect(reply.ok).toBe(false);
     expect((reply.error as { code?: string } | undefined)?.code).toBe('EPROTOVERSION');
+    expect(handlerCalls).toBe(0);
   });
 });
 

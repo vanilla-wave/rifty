@@ -42,6 +42,9 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
   it('uses one head request through the chunk boundary and only continues after its first bytes', () => {
     const owner = new MemoryFsSync();
     const ownerRead = vi.spyOn(owner, 'readFileBytesSync');
+    const ownerExists = vi.spyOn(owner, 'existsSync');
+    const ownerStat = vi.spyOn(owner, 'statSync');
+    const ownerStatOrNull = vi.spyOn(owner, 'statSyncOrNull');
     const calls: CallRecord[] = [];
     const remote = new SyncRpcFsSync(loopback(owner, calls));
     const sizes = [0, 1, FS_RPC_CHUNK, FS_RPC_CHUNK + 1];
@@ -52,9 +55,19 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
       owner.writeFileSync(path, bytes);
       calls.length = 0;
       const readsBefore = ownerRead.mock.calls.length;
+      const probesBefore =
+        ownerExists.mock.calls.length +
+        ownerStat.mock.calls.length +
+        ownerStatOrNull.mock.calls.length;
 
       expect(remote.readFileBytesSync(path)).toEqual(bytes);
       expect(ownerRead.mock.calls.length - readsBefore).toBe(size > FS_RPC_CHUNK ? 2 : 1);
+      expect(
+        ownerExists.mock.calls.length +
+          ownerStat.mock.calls.length +
+          ownerStatOrNull.mock.calls.length -
+          probesBefore,
+      ).toBe(0);
       expect(calls).toEqual(
         size > FS_RPC_CHUNK
           ? [
@@ -75,6 +88,10 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
     owner.writeFileSync('/plain.txt', new TextEncoder().encode('old'));
     const calls: CallRecord[] = [];
     const remote = new SyncRpcFsSync(loopback(owner, calls));
+    const ownerRead = vi.spyOn(owner, 'readFileBytesSync');
+    const ownerExists = vi.spyOn(owner, 'existsSync');
+    const ownerStat = vi.spyOn(owner, 'statSync');
+    const ownerStatOrNull = vi.spyOn(owner, 'statSyncOrNull');
 
     expect(new TextDecoder().decode(remote.readFileBytesSync('/plain.txt'))).toBe('old');
     owner.writeFileSync('/plain.txt', new TextEncoder().encode('new bytes'));
@@ -86,14 +103,19 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
 
     for (const path of ['/missing.txt', '/dir', '/plain.txt/child']) {
       const ownerError = caught(() => owner.readFileBytesSync(path));
+      const readsBeforeRemote = ownerRead.mock.calls.length;
       const remoteError = caught(() => remote.readFileBytesSync(path));
       expect({ name: remoteError.name, code: remoteError.code, path: remoteError.path }).toEqual({
         name: ownerError.name,
         code: ownerError.code,
         path: ownerError.path,
       });
+      expect(ownerRead.mock.calls.length - readsBeforeRemote).toBe(1);
       expect(calls.splice(0)).toEqual([{ method: 'fs.readFileHead', payload: { path } }]);
     }
+    expect(ownerExists).not.toHaveBeenCalled();
+    expect(ownerStat).not.toHaveBeenCalled();
+    expect(ownerStatOrNull).not.toHaveBeenCalled();
   });
 
   it('pins the Node 24 byte lengths and read error codes used by the remote parity case', () => {
