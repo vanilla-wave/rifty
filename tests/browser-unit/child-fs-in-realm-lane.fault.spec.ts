@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { validateChildFsRawSample } from '../../tools/perf/src/child-fs-artifact.mjs';
 import { gotoHarness } from './fixtures.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
@@ -16,6 +17,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'reply-before-ready',
       'messageerror',
       'wrong-reply',
+      'wrong-kind-same-shape',
       'duplicate-reply',
       'path-mismatch',
       'asset-path-mismatch',
@@ -38,6 +40,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'extra-vite',
       'extra-entries',
       'extra-express',
+      'success',
     ]) {
       const listeners = new Map<string, Set<Listener>>();
       let marker = 'in-realm-3';
@@ -55,8 +58,9 @@ test('protocol corruption and real Worker failures reject and terminate once', a
         message(mode === `extra-${String(data.kind)}` ? { ...data, extra: true } : data);
       let rejected = false;
       let failure = '';
+      let sample: unknown;
       try {
-        await lane.runChildFsInRealmLane(3, {
+        const result = await lane.runChildFsInRealmLane(3, {
           open: () => {
             queueMicrotask(() => {
               if (mode === 'messageerror') {
@@ -80,6 +84,10 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                 queueMicrotask(() => {
                   if (mode === 'wrong-reply') {
                     message({ kind: 'installed' });
+                    return;
+                  }
+                  if (mode === 'wrong-kind-same-shape') {
+                    message({ kind: 'not-booted', backend: 'memory' });
                     return;
                   }
                   if (mode === 'error-envelope') {
@@ -133,7 +141,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                           ? '✓ 1 modules transformed.\n✓ built in 1s\n'
                           : '✓ 2180 modules transformed.\n✓ built in 1s\n',
                     };
-                    if (mode === 'wrong-vite') message({ kind: 'express' });
+                    if (mode === 'wrong-vite') message({ ...viteReply, kind: 'express' });
                     else if (mode === 'duplicate-vite') {
                       message(viteReply);
                       queueMicrotask(() => message(viteReply));
@@ -182,12 +190,13 @@ test('protocol corruption and real Worker failures reject and terminate once', a
             };
           },
         });
+        sample = result.sample;
       } catch (error) {
         rejected = true;
         const inspected = error instanceof Error ? error : new Error(String(error));
         failure = `${inspected.name}\n${inspected.message}\n${inspected.stack ?? ''}`;
       }
-      controlled.push({ failure, mode, posts: posts.length, rejected, terminateCalls });
+      controlled.push({ failure, mode, posts: posts.length, rejected, sample, terminateCalls });
     }
 
     const runRealFailure = async (registryFailure: boolean) => {
@@ -245,10 +254,13 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     };
   }, laneFixtureUrl);
 
-  expect(observed.controlled.map(({ failure: _failure, ...entry }) => entry)).toEqual([
+  expect(
+    observed.controlled.map(({ failure: _failure, sample: _sample, ...entry }) => entry),
+  ).toEqual([
     { mode: 'reply-before-ready', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'messageerror', posts: 0, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-reply', posts: 1, rejected: true, terminateCalls: 1 },
+    { mode: 'wrong-kind-same-shape', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-reply', posts: 2, rejected: true, terminateCalls: 1 },
     { mode: 'path-mismatch', posts: 4, rejected: true, terminateCalls: 1 },
     { mode: 'asset-path-mismatch', posts: 14, rejected: true, terminateCalls: 1 },
@@ -271,11 +283,21 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'extra-vite', posts: 12, rejected: true, terminateCalls: 1 },
     { mode: 'extra-entries', posts: 13, rejected: true, terminateCalls: 1 },
     { mode: 'extra-express', posts: 15, rejected: true, terminateCalls: 1 },
+    { mode: 'success', posts: 15, rejected: false, terminateCalls: 1 },
   ]);
   const envelope = observed.controlled.find(({ mode }) => mode === 'error-envelope')?.failure;
   expect(envelope).toContain('InjectedWorkerError');
   expect(envelope).toContain('injected worker message');
   expect(envelope).toContain('INJECTED_WORKER_STACK');
+  const controlledSuccess = observed.controlled.find(({ mode }) => mode === 'success')?.sample;
+  expect(controlledSuccess).toMatchObject({
+    lane: 'in-realm',
+    topology: 'single-in-realm-worker',
+    ordinal: 3,
+    vite: { marker: 'in-realm-3' },
+    express: { marker: 'in-realm-3' },
+  });
+  expect(validateChildFsRawSample(controlledSuccess).vite.transformedModules).toBe(2180);
   expect(observed.missingWorker).toMatchObject({ rejected: true, terminateCalls: 1 });
   expect(observed.missingWorker.failure).not.toBe('');
   expect(observed.registryFailure).toMatchObject({ rejected: true, terminateCalls: 1 });

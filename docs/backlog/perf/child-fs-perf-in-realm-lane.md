@@ -102,3 +102,6 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
   inspected. Full phase schema sweep + real error reply retained.
 - 2026-08-26 — Contract+RED @ 0c73c30b5 blocked: exact keys did not reject
   wrong backend/seeded/written/entries values. Structured-value sweep added.
+- 2026-08-26 — Contract+RED @ 9079ed68b blocked: wrong-kind carrier also had
+  wrong shape; only real success ordinal was 5. Same-shape discriminant fault +
+  valid ordinal-3 controlled boundary added.

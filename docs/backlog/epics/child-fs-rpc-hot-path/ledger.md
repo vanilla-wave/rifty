@@ -70,3 +70,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED final verify
   BLOCKER @ 0c73c30b5: wrong structured reply values survived exact-key checks;
   backend/seed/write/entries value sweep added
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
+  9079ed68b: wrong-kind fault confounded by shape + hardcoded success ordinal;
+  isolated discriminant fault and valid ordinal-3 control added
