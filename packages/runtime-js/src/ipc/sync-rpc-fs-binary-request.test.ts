@@ -44,6 +44,23 @@ function binaryFrame(method: string, payload: Uint8Array): Uint8Array {
   return frame;
 }
 
+async function ownerExchange(
+  owner: MemoryFsSync,
+  method: string,
+  payload: Uint8Array,
+): Promise<ReturnType<typeof decodeReply>> {
+  const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+  installRuntimeJsFsHandlers(dispatcher, () => owner);
+  const { sab, ring } = createSabRing({ payloadCapacity: 512 });
+  const caller = SabRing.attach(sab, 512);
+  dispatcher.attach(ring);
+  caller.writeRequest(binaryFrame(method, payload));
+  dispatcher.pumpOnce(ring);
+  const reply = decodeReply(await caller.waitReplyAsync(2_000));
+  dispatcher.detachAll();
+  return reply;
+}
+
 describe('ADR-0366 SyncRpcFsSync binary request route', () => {
   it('uses binary for five hot methods and JSON for readdir plus every mutation', () => {
     const jsonCalls: Array<{ method: string; payload: unknown }> = [];
@@ -68,10 +85,15 @@ describe('ADR-0366 SyncRpcFsSync binary request route', () => {
         throw new Error(`unexpected binary method ${method}`);
       },
     };
-    const remote = new SyncRpcFsSync(syncApi as never);
+    const Constructor = SyncRpcFsSync as unknown as new (
+      jsonCall: typeof syncApi.call,
+      binaryCall: typeof syncApi.callBinary,
+    ) => SyncRpcFsSync;
+    expect(() => new SyncRpcFsSync(syncApi.call)).toThrow(/binary.*required|callBinary/i);
+    const remote = new Constructor(syncApi.call, syncApi.callBinary);
 
     expect(remote.existsSync('/exists')).toBe(true);
-    expect(remote.statSync('/stat')).toMatchObject({ isFile: true, size: 5 });
+    expect(remote.statSync('/stát/文件')).toMatchObject({ isFile: true, size: 5 });
     expect(remote.statSyncOrNull('/missing')).toBeNull();
     expect(remote.readFileBytesSync('/small')).toEqual(small);
     expect(remote.readFileBytesSync('/large')).toEqual(large);
@@ -86,7 +108,7 @@ describe('ADR-0366 SyncRpcFsSync binary request route', () => {
 
     expect(binaryCalls).toEqual([
       { method: 'fs.exists', payload: pathPayload('/exists') },
-      { method: 'fs.stat', payload: pathPayload('/stat') },
+      { method: 'fs.stat', payload: pathPayload('/stát/文件') },
       { method: 'fs.statOrNull', payload: pathPayload('/missing') },
       { method: 'fs.readFileHead', payload: pathPayload('/small') },
       { method: 'fs.readFileHead', payload: pathPayload('/large') },
@@ -107,37 +129,80 @@ describe('ADR-0366 SyncRpcFsSync binary request route', () => {
     ]);
   });
 
-  it('rejects malformed fs binary payloads before any owner VFS method', async () => {
+  it('decodes five valid owner requests and rejects every corrupt/control binary payload', async () => {
     const owner = new MemoryFsSync();
+    const path = '/ünicode/文件.txt';
+    owner.mkdirSync('/ünicode', { recursive: true });
+    owner.writeFileSync(path, Uint8Array.from([10, 20, 30, 40]));
     const probes = [
       vi.spyOn(owner, 'existsSync'),
       vi.spyOn(owner, 'statSync'),
       vi.spyOn(owner, 'statSyncOrNull'),
       vi.spyOn(owner, 'readFileBytesSync'),
+      vi.spyOn(owner, 'readdirSync'),
+      vi.spyOn(owner, 'mkdirSync'),
     ];
-    const corrupt: ReadonlyArray<[string, Uint8Array, RegExp]> = [
+
+    expect(await ownerExchange(owner, 'fs.exists', pathPayload(path))).toEqual({
+      ok: true,
+      value: true,
+    });
+    expect(await ownerExchange(owner, 'fs.stat', pathPayload(path))).toMatchObject({
+      ok: true,
+      value: { isFile: true, isDirectory: false, size: 4 },
+    });
+    expect(await ownerExchange(owner, 'fs.statOrNull', pathPayload('/missing'))).toEqual({
+      ok: true,
+      value: null,
+    });
+    expect(await ownerExchange(owner, 'fs.readFileHead', pathPayload(path))).toEqual({
+      ok: true,
+      value: readHead(Uint8Array.from([10, 20, 30, 40])),
+    });
+    expect(await ownerExchange(owner, 'fs.readChunk', rangePayload(path, 1, 2))).toEqual({
+      ok: true,
+      value: Uint8Array.from([20, 30]),
+    });
+    const callsAfterValid = probes.map(({ mock }) => mock.calls.length);
+
+    const invalidRangeNumbers = [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      -1,
+      1.5,
+      Number.MAX_SAFE_INTEGER + 1,
+    ];
+    const corrupt: ReadonlyArray<readonly [string, Uint8Array, RegExp]> = [
       ['fs.stat', Uint8Array.from([0xff]), /fs binary path.*utf/i],
       ['fs.readChunk', new Uint8Array(15), /fs binary range.*16/i],
-      ['fs.readChunk', rangePayload('/x', Number.NaN, 1), /offset.*safe integer/i],
+      ...invalidRangeNumbers.map(
+        (value) => ['fs.readChunk', rangePayload('/x', value, 1), /offset.*safe integer/i] as const,
+      ),
+      ...invalidRangeNumbers.map(
+        (value) => ['fs.readChunk', rangePayload('/x', 0, value), /length.*safe integer/i] as const,
+      ),
       [
         'fs.readChunk',
         rangePayload('/x', 0, FS_RPC_CHUNK + 1),
         /length.*FS_RPC_CHUNK|length.*262144/i,
       ],
+      [
+        'fs.readChunk',
+        Uint8Array.from([...rangePayload('', 0, 1).subarray(0, 16), 0xff]),
+        /fs binary range.*utf|path.*utf/i,
+      ],
     ];
     for (const [method, payload, message] of corrupt) {
-      const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
-      installRuntimeJsFsHandlers(dispatcher, () => owner);
-      const { sab, ring } = createSabRing({ payloadCapacity: 512 });
-      const caller = SabRing.attach(sab, 512);
-      dispatcher.attach(ring);
-      caller.writeRequest(binaryFrame(method, payload));
-      dispatcher.pumpOnce(ring);
-      const reply = decodeReply(await caller.waitReplyAsync(2_000));
-      dispatcher.detachAll();
+      const reply = await ownerExchange(owner, method, payload);
       expect(reply).toMatchObject({ ok: false, error: { name: 'TypeError' } });
       expect(reply.error?.message).toMatch(message);
     }
-    for (const probe of probes) expect(probe).not.toHaveBeenCalled();
+    for (const method of ['fs.readdir', 'fs.mkdir']) {
+      expect(await ownerExchange(owner, method, pathPayload('/control'))).toMatchObject({
+        ok: false,
+        error: { code: 'ERPCBINARYUNSUPPORTED' },
+      });
+    }
+    expect(probes.map(({ mock }) => mock.calls.length)).toEqual(callsAfterValid);
   });
 });

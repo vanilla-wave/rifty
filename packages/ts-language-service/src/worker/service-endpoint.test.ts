@@ -45,7 +45,7 @@ function buildFixture(): Map<string, Uint8Array> {
 
 function endpointFsDeps(files: Map<string, Uint8Array>) {
   const syncApi = makeFakeFsCall(files);
-  return { call: syncApi, syncApi };
+  return { call: syncApi.call, syncApi };
 }
 
 function diags(r: Awaited<ReturnType<ReturnType<typeof createServiceEndpoint>['dispatch']>>) {

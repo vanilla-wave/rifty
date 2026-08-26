@@ -26,25 +26,27 @@ describe('ADR-0366 SyncRpc v5 binary request envelope', () => {
     const encodeBinaryRequest = Reflect.get(protocol, 'encodeBinaryRequest');
     expect(encodeBinaryRequest).toBeTypeOf('function');
     const payload = Uint8Array.from([0xff, 0x00, 0x7f]);
-    expect(
-      (encodeBinaryRequest as (method: string, body: Uint8Array) => Uint8Array)('fs.stat', payload),
-    ).toEqual(binaryFrame('fs.stat', payload));
+    const encode = encodeBinaryRequest as (method: string, body: Uint8Array) => Uint8Array;
+    expect(encode('fs.stat', payload)).toEqual(binaryFrame('fs.stat', payload));
+    expect(encode('fs.stát.文件', payload)).toEqual(binaryFrame('fs.stát.文件', payload));
+    expect(() => encode('', payload)).toThrow(/method.*empty|method.*byte/i);
+    expect(() => encode('x'.repeat(65_536), payload)).toThrow(/method.*65535|method.*long/i);
   });
 
   it('decodes JSON and SAB-backed binary requests with an owned payload copy', () => {
     expect(decodeRequest(encodeRequest({ method: 'echo', payload: { n: 1 } }))).toEqual({
-      format: 'json',
       method: 'echo',
       payload: { n: 1 },
     });
     const raw = binaryFrame('fs.readFileHead', Uint8Array.from([1, 2, 3]));
-    const decoded = decodeRequest(shared(raw));
+    const sharedRaw = shared(raw);
+    const decoded = decodeRequest(sharedRaw);
     expect(decoded).toEqual({
-      format: 'binary',
+      binary: true,
       method: 'fs.readFileHead',
       payload: Uint8Array.from([1, 2, 3]),
     });
-    raw[raw.length - 1] = 99;
+    sharedRaw[sharedRaw.length - 1] = 99;
     expect(decoded.payload).toEqual(Uint8Array.from([1, 2, 3]));
   });
 

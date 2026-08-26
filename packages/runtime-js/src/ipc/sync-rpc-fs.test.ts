@@ -5,7 +5,8 @@ import { resetSyncMirror, syncMirror } from '../builtins/fs-sync-mirror.ts';
 import { watch } from '../builtins/fs-watch.ts';
 import { installRuntimeJsFsHandlers } from './fs-handlers.ts';
 import { FS_RPC_CHUNK } from './fs-rpc-protocol.ts';
-import { SyncRpcFsSync, installRemoteSyncFs } from './sync-rpc-fs.ts';
+import { createTestSyncRpcFs, installTestSyncRpcFs } from './sync-rpc-fs-test-api.ts';
+import { SyncRpcFsSync } from './sync-rpc-fs.ts';
 
 /** Synchronous loopback: route client `call(method,payload)` to the owner handlers. */
 function loopback(vfs: MemoryFsSync): (m: string, p: unknown) => unknown {
@@ -38,7 +39,7 @@ describe('installRemoteSyncFs', () => {
   it('installs the remote VFS as the realm sync mirror', () => {
     const ownerStore = new MemoryFsSync();
     const call = loopback(ownerStore);
-    const remote = installRemoteSyncFs(call);
+    const remote = installTestSyncRpcFs(call);
 
     // confirm the returned instance is a SyncRpcFsSync
     expect(remote).toBeInstanceOf(SyncRpcFsSync);
@@ -55,7 +56,7 @@ describe('installRemoteSyncFs', () => {
     const ownerStore = new MemoryFsSync();
     ownerStore.mkdirSync('/workspace/src', { recursive: true });
     ownerStore.writeFileSync('/workspace/src/main.js', new TextEncoder().encode('one'));
-    installRemoteSyncFs(loopback(ownerStore));
+    installTestSyncRpcFs(loopback(ownerStore));
 
     const events: Array<[string, string | null]> = [];
     const watcher = watch('/workspace', { recursive: true, interval: 50 }, (event, name) => {
@@ -74,7 +75,7 @@ describe('installRemoteSyncFs', () => {
 describe('SyncRpcFsSync', () => {
   it('reads back a small file written through it', () => {
     const vfs = new MemoryFsSync();
-    const remote = new SyncRpcFsSync(loopback(vfs));
+    const remote = createTestSyncRpcFs(loopback(vfs));
     remote.writeFileSync('/a.txt', new TextEncoder().encode('hello'));
     expect(remote.existsSync('/a.txt')).toBe(true);
     expect(new TextDecoder().decode(remote.readFileBytesSync('/a.txt'))).toBe('hello');
@@ -84,7 +85,7 @@ describe('SyncRpcFsSync', () => {
 
   it('chunks a file larger than one ring frame', () => {
     const vfs = new MemoryFsSync();
-    const remote = new SyncRpcFsSync(loopback(vfs));
+    const remote = createTestSyncRpcFs(loopback(vfs));
     const big = new Uint8Array(FS_RPC_CHUNK * 2 + 123).map((_, i) => i % 251);
     remote.writeFileSync('/big.bin', big);
     const got = remote.readFileBytesSync('/big.bin');
@@ -92,7 +93,7 @@ describe('SyncRpcFsSync', () => {
   });
 
   it('statSyncOrNull returns null on a miss', () => {
-    const remote = new SyncRpcFsSync(loopback(new MemoryFsSync()));
+    const remote = createTestSyncRpcFs(loopback(new MemoryFsSync()));
     expect(remote.statSyncOrNull('/nope')).toBeNull();
   });
 
@@ -116,7 +117,7 @@ describe('SyncRpcFsSync', () => {
       }
       throw new Error(`unexpected: ${method}`);
     };
-    const remote = new SyncRpcFsSync(fakeCall);
+    const remote = createTestSyncRpcFs(fakeCall);
     expect(() => remote.readFileBytesSync('/f.bin')).toThrow(/short read/i);
     expect(chunkCalls).toBeGreaterThan(0);
   });
@@ -137,7 +138,7 @@ describe('SyncRpcFsSync', () => {
       }
       throw new Error(`unexpected: ${method}`);
     };
-    const remote = new SyncRpcFsSync(fakeCall);
+    const remote = createTestSyncRpcFs(fakeCall);
     expect(() => remote.readFileBytesSync('/f.bin')).toThrow(
       /oversized|exceeds|larger than|remaining/i,
     );
@@ -149,7 +150,7 @@ describe('SyncRpcFsSync', () => {
     const vfs = new MemoryFsSync();
     vfs.writeFileSync('/hello.txt', new TextEncoder().encode('world'));
     vfs.mkdirSync('/mydir', { recursive: false });
-    const remote = new SyncRpcFsSync(loopback(vfs));
+    const remote = createTestSyncRpcFs(loopback(vfs));
     const fileStat = remote.statSync('/hello.txt');
     expect(fileStat.isFile).toBe(true);
     expect(fileStat.isDirectory).toBe(false);
@@ -163,7 +164,7 @@ describe('SyncRpcFsSync', () => {
     // RED: current impl throws a hand-rolled Error{code:'ENOENT'}, not VfsError.
     // This test FAILS pre-fix because instanceof VfsError is false.
     const vfs = new MemoryFsSync();
-    const remote = new SyncRpcFsSync(loopback(vfs));
+    const remote = createTestSyncRpcFs(loopback(vfs));
     let remoteErr: unknown;
     let backendErr: unknown;
     try {

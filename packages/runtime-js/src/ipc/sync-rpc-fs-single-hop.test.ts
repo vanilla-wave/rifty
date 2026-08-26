@@ -4,7 +4,7 @@ import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import { installRuntimeJsFsHandlers } from './fs-handlers.ts';
 import { FS_RPC_CHUNK } from './fs-rpc-protocol.ts';
-import { SyncRpcFsSync } from './sync-rpc-fs.ts';
+import { createTestSyncRpcFs } from './sync-rpc-fs-test-api.ts';
 
 interface CallRecord {
   method: string;
@@ -63,7 +63,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
     const ownerStatOrNull = vi.spyOn(owner, 'statSyncOrNull');
     const calls: CallRecord[] = [];
     const handlers = handlersOf(owner);
-    const remote = new SyncRpcFsSync(loopback(handlers, calls));
+    const remote = createTestSyncRpcFs(loopback(handlers, calls));
     const sizes = [0, 1, FS_RPC_CHUNK, FS_RPC_CHUNK + 1];
 
     for (const size of sizes) {
@@ -123,7 +123,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
     owner.mkdirSync('/dir', { recursive: true });
     owner.writeFileSync('/plain.txt', new TextEncoder().encode('old'));
     const calls: CallRecord[] = [];
-    const remote = new SyncRpcFsSync(loopback(handlersOf(owner), calls));
+    const remote = createTestSyncRpcFs(loopback(handlersOf(owner), calls));
     const ownerRead = vi.spyOn(owner, 'readFileBytesSync');
     const ownerExists = vi.spyOn(owner, 'existsSync');
     const ownerReaddir = vi.spyOn(owner, 'readdirSync');

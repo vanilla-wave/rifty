@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SabRing, createSabRing } from './sab-ring.ts';
-import { SyncRpcDispatcher } from './sync-dispatch.ts';
+import { type SyncRpcCallerContext, SyncRpcDispatcher } from './sync-dispatch.ts';
 import { FRAME_BINARY, decodeReply, encodeRequest } from './sync-rpc.ts';
 
 function binaryFrame(method: string, payload: Uint8Array): Uint8Array {
@@ -16,10 +16,11 @@ function binaryFrame(method: string, payload: Uint8Array): Uint8Array {
 async function exchange(
   dispatcher: SyncRpcDispatcher,
   frame: Uint8Array,
+  context: SyncRpcCallerContext = {},
 ): Promise<ReturnType<typeof decodeReply>> {
   const { sab, ring } = createSabRing({ payloadCapacity: 512 });
   const caller = SabRing.attach(sab, 512);
-  dispatcher.attach(ring);
+  dispatcher.attach(ring, context);
   caller.writeRequest(frame);
   dispatcher.pumpOnce(ring);
   const reply = decodeReply(await caller.waitReplyAsync(2_000));
@@ -30,12 +31,12 @@ async function exchange(
 function registerBinary(
   dispatcher: SyncRpcDispatcher,
   method: string,
-  handler: (payload: unknown) => unknown,
+  handler: (payload: unknown, context?: SyncRpcCallerContext) => unknown,
   decodeBinaryRequest: (payload: Uint8Array) => unknown,
 ): void {
   const register = dispatcher.register as unknown as (
     name: string,
-    semanticHandler: (payload: unknown) => unknown,
+    semanticHandler: (payload: unknown, context?: SyncRpcCallerContext) => unknown,
     options: { decodeBinaryRequest: (payload: Uint8Array) => unknown },
   ) => void;
   register.call(dispatcher, method, handler, { decodeBinaryRequest });
@@ -44,29 +45,37 @@ function registerBinary(
 describe('ADR-0366 dispatcher binary request decode seam', () => {
   it('routes JSON and binary payloads through one registered semantic handler', async () => {
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
-    const observed: unknown[] = [];
+    const observed: Array<{ payload: unknown; callerPid: number | undefined }> = [];
     registerBinary(
       dispatcher,
       'echo',
-      (payload) => {
-        observed.push(payload);
+      async (payload, context) => {
+        observed.push({ payload, callerPid: context?.callerPid });
+        await Promise.resolve();
         return payload;
       },
       (payload) => ({ text: new TextDecoder().decode(payload) }),
     );
     expect(
-      await exchange(dispatcher, encodeRequest({ method: 'echo', payload: { n: 1 } })),
+      await exchange(dispatcher, encodeRequest({ method: 'echo', payload: { n: 1 } }), {
+        callerPid: 11,
+      }),
     ).toEqual({
       ok: true,
       value: { n: 1 },
     });
     expect(
-      await exchange(dispatcher, binaryFrame('echo', new TextEncoder().encode('binary'))),
+      await exchange(dispatcher, binaryFrame('echo', new TextEncoder().encode('binary')), {
+        callerPid: 12,
+      }),
     ).toEqual({
       ok: true,
       value: { text: 'binary' },
     });
-    expect(observed).toEqual([{ n: 1 }, { text: 'binary' }]);
+    expect(observed).toEqual([
+      { payload: { n: 1 }, callerPid: 11 },
+      { payload: { text: 'binary' }, callerPid: 12 },
+    ]);
   });
 
   it('rejects missing/throwing binary decoders before the semantic handler', async () => {
@@ -79,6 +88,14 @@ describe('ADR-0366 dispatcher binary request decode seam', () => {
     expect(await exchange(missing, binaryFrame('json-only', new Uint8Array(0)))).toMatchObject({
       ok: false,
       error: { code: 'ERPCBINARYUNSUPPORTED' },
+    });
+    expect(await exchange(missing, binaryFrame('unknown', new Uint8Array(0)))).toMatchObject({
+      ok: false,
+      error: { code: 'ERPCNOHANDLER' },
+    });
+    expect(await exchange(missing, Uint8Array.from([FRAME_BINARY]))).toMatchObject({
+      ok: false,
+      error: { name: 'TypeError', message: expect.stringMatching(/binary request/i) },
     });
 
     const corrupt = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
@@ -99,6 +116,36 @@ describe('ADR-0366 dispatcher binary request decode seam', () => {
       ok: false,
       error: { name: 'TypeError', code: 'EBADPAYLOAD' },
     });
-    expect(handlerCalls).toBe(0);
+
+    const handlerFailure = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    registerBinary(
+      handlerFailure,
+      'handler-failure',
+      () => {
+        handlerCalls += 1;
+        throw Object.assign(new Error('injected binary handler failure'), { code: 'EHANDLER' });
+      },
+      (payload) => payload,
+    );
+    expect(
+      await exchange(handlerFailure, binaryFrame('handler-failure', Uint8Array.from([1]))),
+    ).toMatchObject({ ok: false, error: { code: 'EHANDLER' } });
+
+    const replaced = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    registerBinary(
+      replaced,
+      'replace',
+      () => null,
+      (payload) => payload,
+    );
+    replaced.register('replace', () => {
+      handlerCalls += 1;
+      return null;
+    });
+    expect(await exchange(replaced, binaryFrame('replace', new Uint8Array(0)))).toMatchObject({
+      ok: false,
+      error: { code: 'ERPCBINARYUNSUPPORTED' },
+    });
+    expect(handlerCalls).toBe(1);
   });
 });

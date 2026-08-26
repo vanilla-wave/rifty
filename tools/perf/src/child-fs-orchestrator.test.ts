@@ -119,6 +119,7 @@ describe('child fs bounded two-lane orchestrator', () => {
     const value = JSON.parse(bytes);
     const artifact = validateChildFsArtifact(value);
     expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
+    expect(artifact.gitSha).toBe('c7e19f249e6ae6131449048b6bee050f10372fb0');
     expect(artifact.runs).toBe(1);
     expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
     expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
@@ -194,6 +195,11 @@ describe('child fs bounded two-lane orchestrator', () => {
     const path = 'perf/child-fs-after-binary-requests.json';
     const bytes = readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
     const artifact = validateChildFsArtifact(JSON.parse(bytes));
+    const baseline = validateChildFsArtifact(
+      JSON.parse(
+        readFileSync(new URL('../../../perf/child-fs-baseline.json', import.meta.url), 'utf8'),
+      ),
+    );
     const prior = validateChildFsArtifact(
       JSON.parse(
         readFileSync(
@@ -204,6 +210,7 @@ describe('child fs bounded two-lane orchestrator', () => {
     );
     expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
     expect(artifact.gitSha).not.toBe(prior.gitSha);
+    expect(artifact.gitSha).not.toBe(baseline.gitSha);
     expect(artifact.runs).toBe(1);
     expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
     expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
@@ -217,6 +224,12 @@ describe('child fs bounded two-lane orchestrator', () => {
       .filter(Boolean);
     expect(commits).toHaveLength(1);
     const artifactCommit = commits[0] as string;
+    execFileSync('git', ['merge-base', '--is-ancestor', artifact.gitSha, artifactCommit], {
+      cwd: repoRoot,
+    });
+    execFileSync('git', ['merge-base', '--is-ancestor', artifactCommit, 'HEAD'], {
+      cwd: repoRoot,
+    });
     expect(
       execFileSync('git', ['rev-list', '--count', `${artifact.gitSha}..${artifactCommit}`], {
         cwd: repoRoot,

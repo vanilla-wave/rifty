@@ -16,7 +16,6 @@ export interface FsRpcCallRecord {
 }
 
 export interface FakeFsSyncApi {
-  (method: string, payload: unknown): unknown;
   call(method: string, payload: unknown): unknown;
   callBinary(method: string, payload: Uint8Array): unknown;
 }
@@ -101,9 +100,8 @@ export function makeFakeFsCall(
         throw new Error(`fake fs.* call: unexpected method ${method}`);
     }
   };
-  const call = (method: string, payload: unknown): unknown => dispatch('json', method, payload);
-  return Object.assign(call, {
-    call,
+  return {
+    call: (method, payload) => dispatch('json', method, payload),
     callBinary(method: string, payload: Uint8Array): unknown {
       if (method === 'fs.readChunk') {
         if (payload.length < 16) throw new TypeError('fake fs binary range is truncated');
@@ -118,5 +116,5 @@ export function makeFakeFsCall(
         path: new TextDecoder('utf-8', { fatal: true }).decode(payload),
       });
     },
-  });
+  };
 }

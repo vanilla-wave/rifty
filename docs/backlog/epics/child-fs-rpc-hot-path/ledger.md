@@ -171,6 +171,10 @@
 - 2026-08-26 — re-chart after perf/fs-read-single-hop: 0 graduated /
   1 invalidated (completed item deleted); I2 is the only goal residual and
   inherits protocol v4 + baseline/post-I1 proof anchors
-- 2026-08-26 — perf/syncrpc-v2-waitasync-binary-ring band 12–16 expected
+- 2026-08-26 — perf/syncrpc-v2-waitasync-binary-ring band 20–22 expected
   failing cases; ADR-0366 selects explicit `KernelSyncApi.callBinary`, one
   registered handler/decoder, string-method envelope, protocol v5
+- 2026-08-26 — perf/syncrpc-v2-waitasync-binary-ring Contract+RED BLOCKER @
+  6e7d390f7: SAB alias, mixed production lifecycle, dispatcher/fs partitions,
+  strict consumer transaction and three-artifact provenance survived; re-cut
+  in place with complete sibling fixtures before implementation

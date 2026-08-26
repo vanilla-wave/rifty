@@ -66,8 +66,9 @@ pnpm vitest run tests/conformance/kernel/sync-rpc.test.ts
    chunking, and public Node error shapes remain unchanged.
 5. Product CLI/dev-server/recursive children and the TypeScript worker consume
    the same complete `KernelSyncApi`; test responders share one exact adapter.
-   No optional fallback, opcode registry, cache, second handler, or binary
-   frame construction outside kernel ships.
+   `SyncRpcFsSync` requires both transport functions and rejects a bare legacy
+   call. No optional fallback, opcode registry, cache, second handler, or
+   binary frame construction outside kernel ships.
 6. The unchanged public `bench:child-fs` rig records
    `perf/child-fs-after-binary-requests.json` from the implementation commit.
    Baseline, post-I1, and post-I2 artifact tests are strict and independent of
@@ -118,7 +119,7 @@ pnpm vitest run tests/conformance/kernel/sync-rpc.test.ts
   explicit JSON control in RED.
 - The three raw measurement artifacts are the durable before/after carriers;
   tests must not depend on the goal ledger that CLOSE deletes.
-- Expected RED band: 12–16 failing cases across kernel wire/client/dispatcher/
+- Expected RED band: 20–22 failing cases across kernel wire/client/dispatcher/
   globals/conformance, runtime fs route/fault, shared consumers, and the absent
   post-I2 artifact. This is one atomic two-peer behavior; substrate alone has
   no user-observable delivery and cannot be split into a reviewable PR.

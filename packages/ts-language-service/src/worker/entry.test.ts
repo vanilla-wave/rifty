@@ -72,6 +72,11 @@ describe('bootTsLanguageServiceWorker', () => {
 
     restoreProcess();
     expect(mocks.createServiceEndpoint).toHaveBeenCalledTimes(1);
+    expect(mocks.createServiceEndpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        syncApi: { call: mocks.syncCall, callBinary: mocks.syncCallBinary },
+      }),
+    );
     expect(fake.on).toHaveBeenCalledTimes(1);
     expect(fake.on).toHaveBeenCalledWith('message', expect.any(Function));
     expect(fake.stdout.write).toHaveBeenCalledTimes(1);

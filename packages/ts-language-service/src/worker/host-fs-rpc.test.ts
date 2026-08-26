@@ -22,11 +22,23 @@ import { createRpcFsSync } from './host-fs-rpc.ts';
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
+function createTestRpcFs(
+  files: Map<string, Uint8Array>,
+  calls: FsRpcCallRecord[] = [],
+): ReturnType<typeof createRpcFsSync> {
+  const api = makeFakeFsCall(files, calls);
+  const create = createRpcFsSync as unknown as (
+    jsonCall: typeof api.call,
+    binaryCall: typeof api.callBinary,
+  ) => ReturnType<typeof createRpcFsSync>;
+  return create(api.call, api.callBinary);
+}
+
 describe('createRpcFsSync over a fake fs.* call', () => {
   it('reads a small file back byte-for-byte (readFileBytesSync)', () => {
     const files = new Map([['/proj/a.ts', enc('const x = 1;\n')]]);
     const calls: FsRpcCallRecord[] = [];
-    const fs = createRpcFsSync(makeFakeFsCall(files, calls));
+    const fs = createTestRpcFs(files, calls);
     expect(fs.readFileBytesSync('/proj/a.ts')).toEqual(enc('const x = 1;\n'));
     expect(calls).toEqual([
       { format: 'binary', method: 'fs.readFileHead', payload: { path: '/proj/a.ts' } },
@@ -39,7 +51,7 @@ describe('createRpcFsSync over a fake fs.* call', () => {
     for (let i = 0; i < big.length; i++) big[i] = i % 251;
     const files = new Map([['/proj/big.bin', big]]);
     const calls: FsRpcCallRecord[] = [];
-    const fs = createRpcFsSync(makeFakeFsCall(files, calls));
+    const fs = createTestRpcFs(files, calls);
     const got = fs.readFileBytesSync('/proj/big.bin');
     expect(got.length).toBe(big.length);
     expect(got).toEqual(big);
@@ -68,14 +80,14 @@ describe('createRpcFsSync over a fake fs.* call', () => {
 
   it('statSyncOrNull: file, dir, and null-on-missing', () => {
     const files = new Map([['/proj/a.ts', enc('x')]]);
-    const fs = createRpcFsSync(makeFakeFsCall(files));
+    const fs = createTestRpcFs(files);
     expect(fs.statSyncOrNull('/proj/a.ts')).toMatchObject({ isFile: true, isDirectory: false });
     expect(fs.statSyncOrNull('/proj')).toMatchObject({ isFile: false, isDirectory: true });
     expect(fs.statSyncOrNull('/proj/missing.ts')).toBeNull();
   });
 
   it('existsSync reflects presence', () => {
-    const fs = createRpcFsSync(makeFakeFsCall(new Map([['/proj/a.ts', enc('x')]])));
+    const fs = createTestRpcFs(new Map([['/proj/a.ts', enc('x')]]));
     expect(fs.existsSync('/proj/a.ts')).toBe(true);
     expect(fs.existsSync('/proj/nope.ts')).toBe(false);
   });
@@ -85,7 +97,7 @@ describe('createRpcFsSync over a fake fs.* call', () => {
       ['/proj/a.ts', enc('x')],
       ['/proj/sub/b.ts', enc('y')],
     ]);
-    const fs = createRpcFsSync(makeFakeFsCall(files));
+    const fs = createTestRpcFs(files);
     const entries = fs.readdirSync('/proj');
     const names = entries.map((e) => e.name).sort();
     expect(names).toEqual(['a.ts', 'sub']);
@@ -109,7 +121,7 @@ describe('createRpcFsSync over a fake fs.* call', () => {
 
     const { createTsLanguageService } = await import('../service.ts');
     const svc = await createTsLanguageService({
-      fsSync: createRpcFsSync(makeFakeFsCall(files)),
+      fsSync: createTestRpcFs(files),
       projectRoot: '/proj',
     });
     const diags = svc.getSemanticDiagnostics('/proj/a.ts');

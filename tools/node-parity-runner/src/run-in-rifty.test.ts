@@ -33,6 +33,7 @@ import type { ParityCase } from './types.ts';
 
 // Leave room for runInRifty's 30s diagnostic deadline under loaded CI Workers.
 const REAL_WORKER_TEST_TIMEOUT_MS = 35_000;
+const KERNEL_SYNC_BINARY_CALL_KEY = '__riftyKernelSyncBinaryCall';
 
 function restoreGlobalDescriptor(name: string, descriptor: PropertyDescriptor | undefined): void {
   if (descriptor) Object.defineProperty(globalThis, name, descriptor);
@@ -128,7 +129,7 @@ describe('runInRifty', () => {
         setup: {
           files: {
             'project/sync-api-probe.cjs':
-              "process.stdout.write('sync-api:' + Object.hasOwn(globalThis, '__riftyKernelSyncCall') + '\\n');\n",
+              "process.stdout.write('sync-api:' + Object.hasOwn(globalThis, '__riftyKernelSyncCall') + ':' + Object.hasOwn(globalThis, '__riftyKernelSyncBinaryCall') + '\\n');\n",
           },
         },
         code: `
@@ -142,7 +143,7 @@ describe('runInRifty', () => {
         `,
       });
 
-      expect(stdout).toBe('sync-api:false\n');
+      expect(stdout).toBe('sync-api:false:false\n');
     },
     REAL_WORKER_TEST_TIMEOUT_MS,
   );
@@ -532,6 +533,19 @@ describe('runInRifty', () => {
     expect(stdout).toBe('ENOENT\n');
   });
 
+  it('exec-sync mode publishes the complete JSON + binary sync transport transaction', async () => {
+    const stdout = await runInRifty({
+      kind: 'exec-sync',
+      code: `
+        console.log(
+          Object.hasOwn(globalThis, '__riftyKernelSyncCall'),
+          Object.hasOwn(globalThis, '__riftyKernelSyncBinaryCall'),
+        );
+      `,
+    });
+    expect(stdout).toBe('true true\n');
+  });
+
   it('feeds stdin concurrently with ESM top-level evaluation', async () => {
     const stdout = await runInRifty({
       kind: 'esm',
@@ -804,10 +818,15 @@ describe('runInRifty', () => {
     const priorProcess = Object.getOwnPropertyDescriptor(globalThis, 'process');
     const priorCrossOrigin = Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated');
     const priorSyncCall = Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY);
+    const priorBinaryCall = Object.getOwnPropertyDescriptor(
+      globalThis,
+      KERNEL_SYNC_BINARY_CALL_KEY,
+    );
     const priorKernelUrl = getKernelWorkerUrl();
     const priorRiftyEnv = riftyProcess.env;
     const sentinelEnv = { RIFTY_TEST_SENTINEL: '1' };
     const sentinelCall = (): null => null;
+    const sentinelBinaryCall = (): null => null;
     const crossOriginDescriptor: PropertyDescriptor = {
       value: false,
       writable: true,
@@ -819,6 +838,7 @@ describe('runInRifty', () => {
           process: PropertyDescriptor | undefined;
           crossOrigin: PropertyDescriptor | undefined;
           syncCall: PropertyDescriptor | undefined;
+          binaryCall: PropertyDescriptor | undefined;
           kernelUrl: string | URL | null;
           riftyEnv: Record<string, string | undefined>;
         }
@@ -828,6 +848,12 @@ describe('runInRifty', () => {
       Object.defineProperty(globalThis, 'crossOriginIsolated', crossOriginDescriptor);
       Object.defineProperty(globalThis, KERNEL_SYNC_CALL_KEY, {
         value: sentinelCall,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+      Object.defineProperty(globalThis, KERNEL_SYNC_BINARY_CALL_KEY, {
+        value: sentinelBinaryCall,
         writable: true,
         enumerable: true,
         configurable: true,
@@ -848,6 +874,7 @@ describe('runInRifty', () => {
         process: Object.getOwnPropertyDescriptor(globalThis, 'process'),
         crossOrigin: Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated'),
         syncCall: Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY),
+        binaryCall: Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_BINARY_CALL_KEY),
         kernelUrl: getKernelWorkerUrl(),
         riftyEnv: riftyProcess.env,
       };
@@ -855,6 +882,7 @@ describe('runInRifty', () => {
       restoreGlobalDescriptor('process', priorProcess);
       restoreGlobalDescriptor('crossOriginIsolated', priorCrossOrigin);
       restoreGlobalDescriptor(KERNEL_SYNC_CALL_KEY, priorSyncCall);
+      restoreGlobalDescriptor(KERNEL_SYNC_BINARY_CALL_KEY, priorBinaryCall);
       restoreKernelWorkerUrl(priorKernelUrl);
       riftyProcess.env = priorRiftyEnv;
       refreshRuntimeJsProcessBuiltin();
@@ -868,6 +896,12 @@ describe('runInRifty', () => {
       enumerable: true,
       configurable: true,
     });
+    expect(observed?.binaryCall).toEqual({
+      value: sentinelBinaryCall,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
     expect(observed?.kernelUrl).toBe('https://host.test/original-kernel-worker.js');
     expect(observed?.riftyEnv).toBe(sentinelEnv);
   });
@@ -876,6 +910,10 @@ describe('runInRifty', () => {
     const priorProcess = Object.getOwnPropertyDescriptor(globalThis, 'process');
     const priorCrossOrigin = Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated');
     const priorSyncCall = Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY);
+    const priorBinaryCall = Object.getOwnPropertyDescriptor(
+      globalThis,
+      KERNEL_SYNC_BINARY_CALL_KEY,
+    );
     const priorKernelUrl = getKernelWorkerUrl();
     const priorCwd = getProcessCwd();
     const priorSyncMirror = syncMirror();
@@ -892,6 +930,7 @@ describe('runInRifty', () => {
           process: PropertyDescriptor | undefined;
           crossOrigin: PropertyDescriptor | undefined;
           syncCall: PropertyDescriptor | undefined;
+          binaryCall: PropertyDescriptor | undefined;
           kernelUrl: string | URL | null;
           cwd: string;
           mirror: ReturnType<typeof syncMirror>;
@@ -920,6 +959,7 @@ describe('runInRifty', () => {
         process: Object.getOwnPropertyDescriptor(globalThis, 'process'),
         crossOrigin: Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated'),
         syncCall: Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_CALL_KEY),
+        binaryCall: Object.getOwnPropertyDescriptor(globalThis, KERNEL_SYNC_BINARY_CALL_KEY),
         kernelUrl: getKernelWorkerUrl(),
         cwd: getProcessCwd(),
         mirror: syncMirror(),
@@ -927,6 +967,7 @@ describe('runInRifty', () => {
       restoreGlobalDescriptor('process', priorProcess);
       restoreGlobalDescriptor('crossOriginIsolated', priorCrossOrigin);
       restoreGlobalDescriptor(KERNEL_SYNC_CALL_KEY, priorSyncCall);
+      restoreGlobalDescriptor(KERNEL_SYNC_BINARY_CALL_KEY, priorBinaryCall);
       restoreKernelWorkerUrl(priorKernelUrl);
       setProcessCwd(priorCwd);
       setSyncMirror(priorSyncMirror, priorAsyncVfs ? { async: priorAsyncVfs } : {});
@@ -946,6 +987,7 @@ describe('runInRifty', () => {
     expect(observed?.process).toEqual(priorProcess);
     expect(observed?.crossOrigin).toEqual(priorCrossOrigin);
     expect(observed?.syncCall).toEqual(priorSyncCall);
+    expect(observed?.binaryCall).toEqual(priorBinaryCall);
     expect(observed?.kernelUrl).toBe(priorKernelUrl);
     expect(observed?.cwd).toBe(priorCwd);
     expect(observed?.mirror).toBe(priorSyncMirror);

@@ -72,8 +72,10 @@ JSON error reply. There is no second handler registry or opcode authority.
 
 ### Runtime fs codec
 
-`SyncRpcFsSync` accepts the whole `KernelSyncApi` adapter. The five hot methods
-always use `callBinary`; there is no JSON fallback:
+`SyncRpcFsSync` requires both operations from the `KernelSyncApi` adapter as
+two constructor arguments (`call`, `callBinary`). Omitting the binary operation
+throws at construction; there is no legacy-function overload or JSON fallback.
+The five hot methods always use `callBinary`:
 
 - `exists`, `stat`, `statOrNull`, `readFileHead`: payload = path UTF-8 bytes.
 - `readChunk`: 8-byte float64 LE offset + 8-byte float64 LE length + path UTF-8.

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from '../builtins/fs-sync-mirror.ts';
 import { readFileSync } from '../builtins/fs.ts';
 import { FS_RPC_CHUNK } from './fs-rpc-protocol.ts';
-import { SyncRpcFsSync, installRemoteSyncFs } from './sync-rpc-fs.ts';
+import { createTestSyncRpcFs, installTestSyncRpcFs } from './sync-rpc-fs-test-api.ts';
 
 const HEAD_BYTES = 8;
 
@@ -62,7 +62,7 @@ describe('ADR-0365 read-head fault boundary', () => {
 
     for (const [label, reply] of corrupt) {
       const calls: string[] = [];
-      const remote = new SyncRpcFsSync((method) => {
+      const remote = createTestSyncRpcFs((method) => {
         calls.push(method);
         if (method !== 'fs.readFileHead') throw new Error(`unexpected method ${method}`);
         return reply;
@@ -81,7 +81,7 @@ describe('ADR-0365 read-head fault boundary', () => {
     'rejects a %s continuation after one valid full head',
     (_label, continuation, message) => {
       const calls: Array<{ method: string; payload: unknown }> = [];
-      const remote = new SyncRpcFsSync((method, payload) => {
+      const remote = createTestSyncRpcFs((method, payload) => {
         calls.push({ method, payload });
         if (method === 'fs.readFileHead') {
           return head(FS_RPC_CHUNK + 5, new Uint8Array(FS_RPC_CHUNK));
@@ -139,7 +139,7 @@ describe('ADR-0365 read-head fault boundary', () => {
       const call = (): never => {
         throw transportedVfsError(fixture.code, fixture.path);
       };
-      const remoteError = caught(() => new SyncRpcFsSync(call).readFileBytesSync(fixture.path));
+      const remoteError = caught(() => createTestSyncRpcFs(call).readFileBytesSync(fixture.path));
       expect(remoteError).toBeInstanceOf(VfsError);
       expect(remoteError).toMatchObject({
         name: 'VfsError',
@@ -148,7 +148,7 @@ describe('ADR-0365 read-head fault boundary', () => {
         message: `${fixture.code}: ${fixture.path}`,
       });
 
-      installRemoteSyncFs(call);
+      installTestSyncRpcFs(call);
       const publicError = caught(() => readFileSync(fixture.path));
       expect(publicError).not.toBeInstanceOf(VfsError);
       expect(publicError).toMatchObject({
