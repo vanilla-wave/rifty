@@ -160,6 +160,24 @@ describe('ADR-0366 dispatcher binary request decode seam', () => {
       await exchange(asyncFailure, binaryFrame('async-failure', Uint8Array.from([1]))),
     ).toMatchObject({ ok: false, error: { code: 'EASYNCBINARY' } });
 
+    const oversizedResult = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    registerBinary(
+      oversizedResult,
+      'oversized-result',
+      () => new Uint8Array(2_048),
+      (payload) => payload,
+    );
+    expect(
+      await exchange(oversizedResult, binaryFrame('oversized-result', new Uint8Array(0))),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        name: 'RingPayloadTooLargeError',
+        code: 'ERINGPAYLOAD',
+        message: expect.stringMatching(/exceeds capacity/i),
+      },
+    });
+
     const replaced = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
     registerBinary(
       replaced,
