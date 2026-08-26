@@ -119,3 +119,6 @@ with `perf/child-fs-perf-orchestrator`; this lane owns one sample lifecycle only
 - 2026-08-26 — Contract+RED @ 730e19ff6 blocked: Worker `error` was real only
   before ready. Controlled pre-ready + in-flight `error` now mirror the
   `messageerror` lifecycle sweep.
+- 2026-08-26 — Contract+RED @ 8084fe65c blocked: duplicate terminal Express
+  could be ignored during resolve/terminate. Synchronous duplicate-Express now
+  rejects before completion.

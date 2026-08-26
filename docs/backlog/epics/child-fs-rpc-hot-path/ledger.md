@@ -88,3 +88,6 @@
 - 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
   730e19ff6: Worker `error` covered only module-load readiness; controlled
   pre-ready + in-flight error carriers added beside messageerror
+- 2026-08-26 — perf/child-fs-perf-in-realm-lane Contract+RED verify BLOCKER @
+  8084fe65c: terminal duplicate Express could escape during termination;
+  synchronous terminal duplicate now rejects before completion

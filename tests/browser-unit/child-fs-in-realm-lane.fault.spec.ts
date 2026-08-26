@@ -25,6 +25,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
       'path-mismatch',
       'asset-path-mismatch',
       'duplicate-vite',
+      'duplicate-express',
       'error-envelope',
       'invalid-sample',
       'wrong-backend',
@@ -220,11 +221,15 @@ test('protocol corruption and real Worker failures reject and terminate once', a
                         : `${JSON.stringify({ version: versions[dependency] })}\n`,
                     });
                   } else if (command.kind === 'express') {
-                    reply({
+                    const expressReply = {
                       kind: 'express',
                       exitCode: 0,
                       rawOutput: `RIFTY_EXPRESS_READY ${marker} 1\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
-                    });
+                    };
+                    if (mode === 'duplicate-express') {
+                      message(expressReply);
+                      message(expressReply);
+                    } else reply(expressReply);
                   }
                 });
               },
@@ -312,6 +317,7 @@ test('protocol corruption and real Worker failures reject and terminate once', a
     { mode: 'path-mismatch', posts: 4, rejected: true, terminateCalls: 1 },
     { mode: 'asset-path-mismatch', posts: 14, rejected: true, terminateCalls: 1 },
     { mode: 'duplicate-vite', posts: 13, rejected: true, terminateCalls: 1 },
+    { mode: 'duplicate-express', posts: 15, rejected: true, terminateCalls: 1 },
     { mode: 'error-envelope', posts: 1, rejected: true, terminateCalls: 1 },
     { mode: 'invalid-sample', posts: 15, rejected: true, terminateCalls: 1 },
     { mode: 'wrong-backend', posts: 1, rejected: true, terminateCalls: 1 },
