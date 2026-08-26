@@ -120,6 +120,7 @@ test('canonical anchors follow the recorded real sealed-Workbench product path',
     .map(({ index }) => index);
   expect(dependencyReadIndexes.every((index) => index > installIndex)).toBe(true);
   expect(emittedReadIndexes).not.toHaveLength(0);
+  expect(Math.min(...emittedReadIndexes)).toBeGreaterThan(assetsIndex);
   const phaseIndexes = [
     openIndex,
     installIndex,

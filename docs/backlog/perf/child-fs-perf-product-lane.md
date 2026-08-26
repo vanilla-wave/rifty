@@ -83,3 +83,6 @@ weaker fallback.
 - 2026-08-26 — Contract+RED verify @ 20ca80cbc blocked: projected execute trace
   allowed asset-read-after-Express and duplicate success close; exact phase
   indices and close cardinality added.
+- 2026-08-26 — Contract+RED final verify @ dd26201f3 blocked: a JS read before
+  readdir survived the max-read projection; minimum emitted-read index now must
+  follow readdir.

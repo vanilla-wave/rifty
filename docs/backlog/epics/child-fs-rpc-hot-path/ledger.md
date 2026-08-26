@@ -47,3 +47,5 @@
   shared parser; fixed at artifact authority with direct raw-sample entry
 - 2026-08-26 — perf/child-fs-perf-product-lane Contract+RED verify BLOCKER @
   20ca80cbc: projected trace hid asset/Express order + duplicate close — fixed
+- 2026-08-26 — perf/child-fs-perf-product-lane Contract+RED final verify
+  BLOCKER @ dd26201f3: early emitted-read hidden by max projection — fixed
