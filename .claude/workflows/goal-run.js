@@ -3,7 +3,7 @@ export const meta = {
   description:
     'Drive one ready rifty goal to close: slice loop (PICKUP → Contract+RED → implement → Final+GREEN → RECHART) until the map is empty, then CLOSE; structured stop on any user-owned decision.',
   whenToUse:
-    'Explicit whole-ready-goal hand-off in a Claude session. Canon stays in .agents/skills/rifty-goal + docs/process; this script owns only order, gates, bookkeeping. Re-entrant: re-invoke after a stop — done stages skip off disk state.',
+    'Explicit whole-ready-goal hand-off in a Claude session. Canon stays in .agents/skills/rifty-goal + docs/process; this script owns only order, gates, bookkeeping. Re-entrant: re-invoke after a stop — done stages skip off disk state. The invoking session is an observer while the run is live: relay statuses/stops in brief, never edit tracked files (a hand edit voids tree-bound checkpoint verdicts); sole exception — resolving a stop with the user via rifty-refine, then re-invoke (decision-workflow.md §Goal runs).',
   phases: [
     { title: 'Preflight', detail: 'goal ready, tree clean, re-chart debt' },
     { title: 'Slices', detail: 'pickup → Contract+RED → implement → Final+GREEN → re-chart, looped' },
