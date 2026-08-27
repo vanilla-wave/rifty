@@ -3,7 +3,7 @@ name: rifty-to-backlog
 description: Capture a new rifty finding or idea as a deduplicated, gated backlog draft. Invoke for first-time audit/review/post-merge intake or explicit filing; excludes existing-contract edits, refinement, and planned work.
 ---
 
-Capture = classify → dedup → gate → `draft`. No interview or contract compilation.
+Capture = classify → dedup → gate → `draft` → challenge. No interview or contract compilation.
 
 ## 1. Classify
 
@@ -40,6 +40,15 @@ one of two shapes (README §Shape): **question** (`## Question`, no prescribed
 carrier) or **finding** (observed `## Context`, honest sources, compat ❌ /
 code-marker link) — never a solution without its decision. Optional real-path
 `user_story`. Done when `pnpm backlog:check` passes.
+
+## 5. Challenge
+
+One fresh read-only critic per minted doc (`docs/backlog/README.md`
+§Challenge): raw file only — no author framing; it attacks the premise, sizes
+the impact claim against the whole, and names problems — especially user
+experience and project direction. Verdict verbatim into `## Challenge`.
+Advisory — problems never block the capture; they ride verbatim in the
+capturing PR body.
 
 After capture: `decision-workflow.md` §Backlog readiness owns draft→ready;
 verification = the unit's Contract+RED checkpoint at pickup (an unresolved

@@ -34,9 +34,15 @@ tier: <works|robust|production — required at ready>
 
 - I1. <user-observable statement>
 
+## Challenge
+
+<!-- Advisory: fresh critic attacks invariants⇒value before signoff — README §Challenge. -->
+
+challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
+
 ## Decisions
 
-- signoff: <YYYY-MM-DD> — user (invariants + tier)
+- signoff: <YYYY-MM-DD> — user (invariants + tier + challenge)
 ```
 
 ## `map.md` — live plan (freely edited at every re-chart)

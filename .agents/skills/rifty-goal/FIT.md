@@ -28,8 +28,13 @@ recorded decisions.
    maximal case). A child whose contract depends on an open question stays
    unseeded; don't pre-slice the fog. Add `## Out of scope`.
 6. **Ledger.** Create `ledger.md` with one header line.
-7. **Signoff.** Put invariants AND tier to the user; on approval add
-   `signoff: <date> — user (invariants + tier)` to `## Decisions` and flip
+7. **Challenge.** One fresh independent critic on the raw `goal.md` + `map.md`
+   (`docs/backlog/README.md` §Challenge — no author framing): attack the
+   invariants⇒value link, size the causal claim against the whole, name
+   problems — especially user experience and project direction. Verdict
+   verbatim into goal `## Challenge`. Advisory — never blocks.
+8. **Signoff.** Put invariants, tier AND the challenge verdict to the user; on approval add
+   `signoff: <date> — user (invariants + tier + challenge)` to `## Decisions` and flip
    `status: ready`. A missing signature blocks the RUN, never this write-up —
    leave the goal `draft` and report.
 

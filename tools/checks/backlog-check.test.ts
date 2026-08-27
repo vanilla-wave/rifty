@@ -108,4 +108,48 @@ Install and run the package.
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('requires ## Challenge with a verdict line on items created at/after the cutoff', () => {
+    const root = mkdtempSync(join(tmpdir(), 'rifty-backlog-check-'));
+    try {
+      const areaDir = join(root, 'docs/backlog/perf');
+      mkdirSync(areaDir, { recursive: true });
+      const item = join(areaDir, 'x.md');
+      const frontmatter = `---
+area: perf
+status: draft
+title: X
+created: 2026-08-27
+why: something slow
+---
+
+## Context
+
+Slow.
+`;
+      writeFileSync(item, frontmatter);
+
+      const missing = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toContain("requires '## Challenge'");
+
+      writeFileSync(item, `${frontmatter}\n## Challenge\n\nlooks fine\n`);
+      const noVerdict = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
+      expect(noVerdict.status).toBe(1);
+      expect(noVerdict.stderr).toContain("missing 'challenge: <YYYY-MM-DD> — <verdict>' line");
+
+      writeFileSync(item, `${frontmatter}\n## Challenge\n\nchallenge: 2026-08-27 — clear\n`);
+      const green = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
+      expect(green.stderr).toBe('');
+      expect(green.status).toBe(0);
+
+      // grandfathered: created before the cutoff needs no challenge
+      writeFileSync(item, frontmatter.replace('created: 2026-08-27', 'created: 2026-08-26'));
+      const old = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
+      expect(old.stderr).toBe('');
+      expect(old.status).toBe(0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

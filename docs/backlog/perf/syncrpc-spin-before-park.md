@@ -26,6 +26,14 @@ appear, not as a standalone slice. Numbers are Node-on-macOS; Chromium absolute
 scripts pattern — production `SyncRpcDispatcher` + client Worker via tsx,
 stage stamps through a shared BigInt64Array of hrtime.
 
+## Challenge
+
+challenge: 2026-08-27 — 4 problems
+- sizing — headline "wake = 62–65% of a ~10 µs hop" and the −6.0 µs are Node-on-macOS `worker_threads` numbers, but the sibling draft from the same run/commit (docs/backlog/perf/child-fs-write-publication-coalescing.md) measures the shipped product-lane hop at 18 µs; the doc only asserts "relative shares transfer" to Chromium with no measurement, so the actual share and saving in the topology users run are unknown.
+- premise — the macro sizing (16.5 k hops × 6 µs) silently assumes every hop is an idle-owner hop, while the same instrumented run records probe latency inflating 5–70× and a 2.1 s stat-latency term under owner publication work (child-fs-write-publication-coalescing.md, child-fs-loaded-owner.md); in that regime a 10–20 µs spin burns its budget and parks anyway, and the doc never sizes the idle-hop share of real workload hops.
+- ux — no named scenario changes perceptibly: ≤0.1 s off a ~6 s `vite build` and ~20 ms off a ~277 ms express run (per the doc's own anchors in reference/child-fs-rpc-hot-path.md), yet the `user_story` still claims user value in mechanism terms ("hop latency near the ring's floor"); the doc's own promotion trigger is a hop-latency-sensitive path that it admits does not exist today.
+- direction — CLAUDE.md lists "production perf" as an explicit non-goal and ROADMAP M11 (the active focus) is usage ergonomics, and a cheaper route to the same user-visible value already exists and is equally REVERSIBLE: child-fs-write-publication-coalescing targets 4.4 s of the same ~6 s build (~44×) versus this lever's ≤0.1 s, so spending a slice here is straight opportunity cost.
+
 ## Options / Next
 
 - `SabRing.waitReply`: spin on REP_STATE with bounded budget, then

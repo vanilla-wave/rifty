@@ -8,8 +8,8 @@ The map is a live hypothesis; only `goal.md` is frozen.
    observation with no carrier yet gets a `reference/` file now; ready
    contracts are never edited in place to hold it.
 2. **Graduate.** Fog lines the new facts made phrasable → mint draft children
-   (`rifty-to-backlog` shape, `epic:` link) and delete those fog lines — fog
-   lives only as its new item.
+   (`rifty-to-backlog` shape incl. `## Challenge` — README §Challenge,
+   `epic:` link) and delete those fog lines — fog lives only as its new item.
 3. **Invalidate.** Unpicked items the new facts contradict: drafts re-cut or
    delete freely; a `ready` item weakens only through demotion with its fork
    recorded (§Backlog readiness 5); mis-scoped work → one `## Out of scope`

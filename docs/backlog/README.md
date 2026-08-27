@@ -59,9 +59,27 @@ Infra work also needs `## Fault matrix`: each reachable axis × operation →
 fallback, visible degradation, or loud throw; each row is a fault-test target.
 Use `docs/process/fault-classes.md`. Template: `TEMPLATE.md`.
 
+## Challenge
+
+Every new item and epic (`created` ≥ 2026-08-27) carries `## Challenge` before
+merge: one fresh independent critic (never the author's context — raw doc only,
+no author framing; frame-then-validate voids it) attacks the premise: does the
+claimed value follow from the proposed work; is the causal/impact claim sized
+against the whole (share of the real user-visible cost/gap, evidenced in the
+doc); is there a cheaper route to the same value. It names problems explicitly,
+especially **user experience** (which real user scenario benefits, and does it
+materially) and **project direction** (mission/ROADMAP fit, opportunity cost).
+Verdict verbatim: `challenge: <date> — clear` or `challenge: <date> — N
+problems` + one grounded line each. **Advisory** — never blocks capture,
+draft→ready, or signoff; but problems surface verbatim wherever the doc is put
+to the user (FIT signoff, refine) and in the capturing PR body. Fabricated
+speculative doubt = failure symmetric to missing a rotten premise.
+`backlog:check` enforces presence + verdict line only.
+
 A ready goal (`goal.md`) needs `## Outcome`, end-to-end `## User scenario`,
 numbered checkable `## Invariants` (each false on current main, evidence
-recorded), `tier`, and a user `signoff:` line covering invariants AND tier.
+recorded), `tier`, and a user `signoff:` line covering invariants, tier, and
+the challenge verdict (§Challenge).
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
 `ledger.md` opens empty. Seed order proves the minimal pattern first (the
 null/install-only case of a shared mechanism lands before machinery for the
@@ -98,7 +116,7 @@ run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
 
 | Owner | Enforces |
 |---|---|
-| `backlog:check` | schema, ready sections, links, markers, goal-dir shape |
+| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence |
 | `check:contract-drift` | ready item contracts vs merge-base beside source |
 | Final review | frozen goal, append-only ledger, run membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
 
