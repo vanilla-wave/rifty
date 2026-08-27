@@ -23,6 +23,8 @@ test-results/
 !.claude/skills/**
 !.claude/commands/
 !.claude/commands/**
+!.claude/workflows/
+!.claude/workflows/**
 docs/superpowers/
 /vite-iframe-*.png
 /vite-running-in-browser.png
