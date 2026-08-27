@@ -18,6 +18,7 @@
       "**/.tsbuildinfo",
       "**/pnpm-lock.yaml",
       "perf/benchmarks.json",
+      "perf/child-fs-*.json",
       "**/examples/npm-pkg-fixtures/**/node_modules/**",
       "apps/playground/public/sw.js",
       "tools/integration-fixtures/**",

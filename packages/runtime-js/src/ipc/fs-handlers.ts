@@ -16,7 +16,14 @@ import {
   type VfsMutationIntent,
   guardVfsMutations,
 } from '@riftydev/vfs';
-import { FS_METHODS, type FsStatShape, base64ToBytes } from './fs-rpc-protocol.ts';
+import {
+  FS_METHODS,
+  type FsStatShape,
+  base64ToBytes,
+  decodeFsPathRequest,
+  decodeFsReadRangeRequest,
+  encodeReadFileHead,
+} from './fs-rpc-protocol.ts';
 
 export type VfsAccessor = () => FsSync;
 
@@ -60,30 +67,45 @@ export function installRuntimeJsFsHandlers(
   getVfs: VfsAccessor,
   mutationGuard?: VfsMutationGuard,
 ): void {
-  dispatcher.register(FS_METHODS.exists, (p) => getVfs().existsSync(str(obj(p), 'path')));
+  dispatcher.register(FS_METHODS.exists, (p) => getVfs().existsSync(str(obj(p), 'path')), {
+    decodeBinaryRequest: decodeFsPathRequest,
+  });
   dispatcher.register(
     FS_METHODS.stat,
     (p) => getVfs().statSync(str(obj(p), 'path')) as FsStatShape,
+    { decodeBinaryRequest: decodeFsPathRequest },
   );
   dispatcher.register(
     FS_METHODS.statOrNull,
     (p) => getVfs().statSyncOrNull(str(obj(p), 'path')) as FsStatShape | null,
+    { decodeBinaryRequest: decodeFsPathRequest },
   );
   dispatcher.register(FS_METHODS.readdir, (p): VfsDirent[] => [
     ...getVfs().readdirSync(str(obj(p), 'path')),
   ]);
 
+  // One current owner read carries total size + first chunk (ADR-0365).
+  dispatcher.register(
+    FS_METHODS.readFileHead,
+    (p): Uint8Array => encodeReadFileHead(getVfs().readFileBytesSync(str(obj(p), 'path'))),
+    { decodeBinaryRequest: decodeFsPathRequest },
+  );
+
   // Binary reply: ranged slice of the cached buffer (O(1) subarray reference).
   // TODO(backlog: perf/fs-rpc-chunk-perf) — readFileBytesSync re-reads the whole file per chunk → O(N²)
-  dispatcher.register(FS_METHODS.readChunk, (p): Uint8Array => {
-    const r = obj(p);
-    const path = str(r, 'path');
-    const offset = num(r, 'offset');
-    const length = num(r, 'length');
-    const bytes = getVfs().readFileBytesSync(path);
-    if (offset >= bytes.length) return new Uint8Array(0);
-    return bytes.subarray(offset, Math.min(bytes.length, offset + length));
-  });
+  dispatcher.register(
+    FS_METHODS.readChunk,
+    (p): Uint8Array => {
+      const r = obj(p);
+      const path = str(r, 'path');
+      const offset = num(r, 'offset');
+      const length = num(r, 'length');
+      const bytes = getVfs().readFileBytesSync(path);
+      if (offset >= bytes.length) return new Uint8Array(0);
+      return bytes.subarray(offset, Math.min(bytes.length, offset + length));
+    },
+    { decodeBinaryRequest: decodeFsReadRangeRequest },
+  );
 
   // Write: truncate creates/replaces; subsequent chunks append.
   // TODO(backlog: perf/fs-rpc-chunk-perf) — append reads prev+concat+writes per chunk → O(N²); base64 inflation

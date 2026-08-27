@@ -10,6 +10,7 @@ import { setSyncMirror } from '@riftydev/vfs/internal';
 import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from '../../../packages/kernel/src/ipc/sab-ring.ts';
 import { SyncRpcClient } from '../../../packages/kernel/src/ipc/sync-client.ts';
 import {
+  type KernelSyncApi,
   publishKernelProcessSpec,
   publishKernelSyncApi,
 } from '../../../packages/kernel/src/shared-globals.ts';
@@ -131,10 +132,17 @@ const onUncaughtException = (error: unknown): void => {
 hostProcess.on('uncaughtException', onUncaughtException);
 let childLocalVfsAuditReported = false;
 
-function createSyncCall(spec: WorkerSpawnSpec): (method: string, payload: unknown) => unknown {
+function createSyncApi(spec: WorkerSpawnSpec): KernelSyncApi {
   const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
   const syncClient = new SyncRpcClient(ring);
-  return (method: string, payload: unknown): unknown => syncClient.call(method, payload);
+  return {
+    call: (method, payload) => syncClient.call(method, payload),
+    callBinary: (method, payload) => syncClient.callBinary(method, payload),
+  };
+}
+
+function createSyncCall(spec: WorkerSpawnSpec): (method: string, payload: unknown) => unknown {
+  return createSyncApi(spec).call;
 }
 
 function reportChildLocalVfsAudit(syncCall: (method: string, payload: unknown) => unknown): void {
@@ -214,10 +222,9 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     throw new TypeError('node-cli-eval VFS fault requires an eval launch');
   }
   if (launchKind === 'eval') {
-    const syncCall = createSyncCall(spec);
-    publishKernelSyncApi({
-      call: syncCall,
-    });
+    const syncApi = createSyncApi(spec);
+    const syncCall = syncApi.call;
+    publishKernelSyncApi(syncApi);
     if (
       request.nodeCliEvalVfsFault === 'child-local-transient-source-file' ||
       request.nodeCliEvalVfsFault === 'sab-remote-transient-source-file'
@@ -235,7 +242,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
         }
         syncCall(NODE_CLI_EVAL_VFS_CARRIER_COMPLETE, { actor: 'child-local' });
       } else {
-        const remoteFs = new SyncRpcFsSync(syncCall);
+        const remoteFs = new SyncRpcFsSync(syncApi.call, syncApi.callBinary);
         remoteFs.writeFileSync(
           NODE_CLI_EVAL_TRANSIENT_SOURCE_PATH,
           new TextEncoder().encode(source),

@@ -29,6 +29,25 @@ afterEach(() => {
 });
 
 describe('SyncRpcClient — call context on ring errors', () => {
+  it('callBinary writes the exact v5 request before the ordinary timeout lifecycle', () => {
+    const { sab, ring } = createSabRing({ payloadCapacity: 256 });
+    const responder = SabRing.attach(sab, 256);
+    const client = new SyncRpcClient(ring) as SyncRpcClient & {
+      callBinary(method: string, payload: Uint8Array, timeoutMs?: number): unknown;
+    };
+    const payload = Uint8Array.from([0xff, 0x00, 0x7f]);
+    expect(() => client.callBinary('fs.stat', payload, 1)).toThrow(
+      /sync-rpc call 'fs\.stat' failed: .*timed out after 1ms/,
+    );
+    const method = new TextEncoder().encode('fs.stat');
+    const expected = new Uint8Array(3 + method.length + payload.length);
+    expected[0] = 0x01;
+    new DataView(expected.buffer).setUint16(1, method.length, true);
+    expected.set(method, 3);
+    expected.set(payload, 3 + method.length);
+    expect(responder.readRequest()).toEqual(expected);
+  });
+
   it('a wedged ring (stale unread reply) error names the failing method', () => {
     const { sab, ring } = createSabRing({ payloadCapacity: 256 });
     const responder = SabRing.attach(sab, 256);

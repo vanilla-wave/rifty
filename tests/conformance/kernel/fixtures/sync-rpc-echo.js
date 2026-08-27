@@ -5,7 +5,7 @@
  * buffer + payload capacity, then drives the protocol exactly as the
  * production `SyncRpcClient` does:
  *
- *   1. Encode a request frame via `JSON.stringify` + `TextEncoder`.
+ *   1. Encode a JSON or ADR-0366 binary request frame by hand.
  *   2. Write the bytes into the request slot (manual mirror of
  *      `SabRing.writeRequest` — kept hand-written so the fixture also
  *      catches any drift in the protocol layout).
@@ -19,7 +19,7 @@
  * stamped on every write; the production reader validates and the
  * dispatcher rejects mismatched frames with a typed error reply.
  *
- * Wire (ADR-0084 #23, v2): each frame body starts with a 1-byte discriminator
+ * Wire (ADR-0084 #23 / ADR-0366): each frame body starts with a 1-byte discriminator
  * — 0x00 = JSON, 0x01 = BINARY. This fixture writes a JSON request (0x00 +
  * JSON) and decodes the reply by branching on byte[0]. The SAB header stays
  * 20 bytes (the discriminator lives in the payload body, not the header).
@@ -28,7 +28,16 @@ import { parentPort, workerData } from 'node:worker_threads';
 
 if (!parentPort) throw new Error('sync-rpc-echo: must run inside a Worker');
 
-const { sab, payloadCapacity, method, payload, requests, timeoutMs, protocolVersion } = workerData;
+const {
+  sab,
+  payloadCapacity,
+  method,
+  payload,
+  binaryPayload,
+  requests,
+  timeoutMs,
+  protocolVersion,
+} = workerData;
 
 const HEADER_BYTES = 20;
 const VERSION_INDEX = 0;
@@ -51,15 +60,28 @@ const STATE_IDLE = 0;
 const STATE_READY = 1;
 const STATE_HANDLING = 2;
 const STATE_WRITING = 3;
-const calls = requests ?? [{ method, payload }];
+const calls = requests ?? [
+  { method, payload, ...(binaryPayload === undefined ? {} : { binaryPayload }) },
+];
 const replies = [];
 
 for (const call of calls) {
-  // Build the request bytes — 1-byte JSON discriminator + request JSON.
-  const jsonBytes = encoder.encode(JSON.stringify(call));
-  const reqBytes = new Uint8Array(jsonBytes.byteLength + 1);
-  reqBytes[0] = FRAME_JSON;
-  reqBytes.set(jsonBytes, 1);
+  let reqBytes;
+  if (call.binaryPayload !== undefined) {
+    const methodBytes = encoder.encode(call.method);
+    const payloadBytes = Uint8Array.from(call.binaryPayload);
+    reqBytes = new Uint8Array(3 + methodBytes.length + payloadBytes.length);
+    reqBytes[0] = FRAME_BINARY;
+    new DataView(reqBytes.buffer).setUint16(1, methodBytes.length, true);
+    reqBytes.set(methodBytes, 3);
+    reqBytes.set(payloadBytes, 3 + methodBytes.length);
+  } else {
+    // 1-byte JSON discriminator + request JSON.
+    const jsonBytes = encoder.encode(JSON.stringify(call));
+    reqBytes = new Uint8Array(jsonBytes.byteLength + 1);
+    reqBytes[0] = FRAME_JSON;
+    reqBytes.set(jsonBytes, 1);
+  }
   if (reqBytes.byteLength > payloadCapacity) {
     throw new Error(
       `sync-rpc-echo: request (${reqBytes.byteLength}B) exceeds capacity (${payloadCapacity}B)`,
@@ -102,7 +124,7 @@ for (const call of calls) {
     );
   }
 
-  // Branch on the v2 body discriminator. v3 changes only ring lifecycle.
+  // Branch on the body discriminator. v3/v4/v5 keep the reply encoding.
   if (replyBytes[0] === FRAME_BINARY) {
     replies.push({ ok: true, value: replyBytes.slice(1) });
   } else {

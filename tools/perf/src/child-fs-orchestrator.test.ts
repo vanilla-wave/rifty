@@ -1,0 +1,257 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { buildChildFsArtifact, validateChildFsArtifact } from './child-fs-artifact.mjs';
+
+function rawSample(lane: 'in-realm' | 'product-coi', ordinal: number) {
+  const marker = `${lane}-${ordinal}`;
+  return {
+    lane,
+    topology: lane === 'product-coi' ? 'owner-sync-rpc-kernel-child' : 'single-in-realm-worker',
+    ordinal,
+    ownerLoad: 'idle',
+    vite: {
+      exitCode: 0,
+      rawOutput: '✓ 2180 modules transformed.\n✓ built in 1.234567s\n',
+      emittedJavaScript: `const marker=${JSON.stringify(marker)};`,
+      marker,
+    },
+    express: {
+      exitCode: 0,
+      rawOutput: `RIFTY_EXPRESS_READY ${marker} 7.654321\nRIFTY_EXPRESS_CLOSED ${marker}\n`,
+      marker,
+    },
+  };
+}
+
+function never(): Promise<never> {
+  return new Promise(() => {});
+}
+
+describe('child fs bounded two-lane orchestrator', () => {
+  it('runs exact lane ordinals, cleans ownership, then publishes exact artifact bytes', async () => {
+    const { orchestrateChildFs } = await import('./child-fs-orchestrator.mjs');
+    const events: string[] = [];
+    let published: { path: string; json: string } | undefined;
+    const artifact = await orchestrateChildFs(
+      {
+        runs: 2,
+        out: '/result/child-fs.json',
+        port: 5391,
+        ownerLoad: 'idle',
+        generatedAt: '2026-08-26T00:00:00.000Z',
+        gitSha: 'a'.repeat(40),
+      },
+      {
+        startServer: async (port: number) => {
+          events.push(`server:start:${port}`);
+          return {
+            ready: Promise.resolve().then(() => events.push('server:ready')),
+            failed: never(),
+            closed: Promise.resolve(),
+            close: async () => events.push('server:close'),
+            forceClose: async () => events.push('server:force'),
+          };
+        },
+        launchBrowser: async (baseUrl: string) => {
+          events.push(`browser:launch:${baseUrl}`);
+          return {
+            version: 'Chromium exact',
+            failed: never(),
+            closed: Promise.resolve(),
+            runSample: async (lane: 'in-realm' | 'product-coi', ordinal: number) => {
+              events.push(`sample:${lane}:${ordinal}`);
+              return rawSample(lane, ordinal);
+            },
+            close: async () => events.push('browser:close'),
+            forceClose: async () => events.push('browser:force'),
+          };
+        },
+        publish: (path: string, json: string) => {
+          events.push('publish');
+          published = { path, json };
+        },
+      },
+    );
+
+    expect(events).toEqual([
+      'server:start:5391',
+      'server:ready',
+      'browser:launch:http://localhost:5391',
+      'sample:product-coi:1',
+      'sample:in-realm:1',
+      'sample:product-coi:2',
+      'sample:in-realm:2',
+      'browser:close',
+      'server:close',
+      'publish',
+    ]);
+    expect(published?.path).toBe('/result/child-fs.json');
+    const expected = buildChildFsArtifact({
+      generatedAt: '2026-08-26T00:00:00.000Z',
+      gitSha: 'a'.repeat(40),
+      browserVersion: 'Chromium exact',
+      runs: 2,
+      samples: [
+        rawSample('product-coi', 1),
+        rawSample('in-realm', 1),
+        rawSample('product-coi', 2),
+        rawSample('in-realm', 2),
+      ],
+    });
+    expect(artifact).toEqual(expected);
+    expect(published?.json).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
+    expect(JSON.parse(published?.json ?? '')).toEqual(artifact);
+    expect(validateChildFsArtifact(artifact)).toEqual(artifact);
+    expect(artifact.samples.map(({ lane, ordinal }) => `${lane}:${ordinal}`)).toEqual([
+      'product-coi:1',
+      'in-realm:1',
+      'product-coi:2',
+      'in-realm:2',
+    ]);
+  });
+
+  it('pins the committed one-run baseline as a strict artifact without summaries', () => {
+    const bytes = readFileSync(
+      new URL('../../../perf/child-fs-baseline.json', import.meta.url),
+      'utf8',
+    );
+    const value = JSON.parse(bytes);
+    const artifact = validateChildFsArtifact(value);
+    expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
+    expect(artifact.gitSha).toBe('c7e19f249e6ae6131449048b6bee050f10372fb0');
+    expect(artifact.runs).toBe(1);
+    expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
+    expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
+    expect(Object.keys(artifact).toSorted()).not.toContain('summary');
+    expect(Object.keys(artifact).toSorted()).not.toContain('speedupX');
+  });
+
+  it('pins the post-single-hop two-lane artifact and its exact publication provenance', () => {
+    const bytes = readFileSync(
+      new URL('../../../perf/child-fs-after-single-hop.json', import.meta.url),
+      'utf8',
+    );
+    const artifact = validateChildFsArtifact(JSON.parse(bytes));
+    const baseline = validateChildFsArtifact(
+      JSON.parse(
+        readFileSync(new URL('../../../perf/child-fs-baseline.json', import.meta.url), 'utf8'),
+      ),
+    );
+    expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
+    expect(artifact.gitSha).not.toBe(baseline.gitSha);
+    const repoRoot = new URL('../../..', import.meta.url);
+    const artifactCommits = execFileSync(
+      'git',
+      ['log', '--format=%H', '--', 'perf/child-fs-after-single-hop.json'],
+      { cwd: repoRoot, encoding: 'utf8' },
+    )
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    expect(artifactCommits).toHaveLength(1);
+    const artifactCommit = artifactCommits[0] as string;
+    expect(artifact.gitSha).not.toBe(artifactCommit);
+    execFileSync('git', ['merge-base', '--is-ancestor', artifact.gitSha, artifactCommit], {
+      cwd: repoRoot,
+    });
+    execFileSync('git', ['merge-base', '--is-ancestor', artifactCommit, 'HEAD'], {
+      cwd: repoRoot,
+    });
+    expect(
+      execFileSync('git', ['rev-list', '--count', `${artifact.gitSha}..${artifactCommit}`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe('1');
+    expect(
+      execFileSync('git', ['show', `${artifactCommit}:perf/child-fs-after-single-hop.json`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        maxBuffer: Buffer.byteLength(bytes) + 1,
+      }),
+    ).toBe(bytes);
+    expect(
+      execFileSync('git', ['diff', '--name-only', artifact.gitSha, artifactCommit], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      })
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .toSorted(),
+    ).toEqual(
+      [
+        'docs/backlog/epics/child-fs-rpc-hot-path/ledger.md',
+        'perf/child-fs-after-single-hop.json',
+      ].toSorted(),
+    );
+    expect(artifact.runs).toBe(1);
+    expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
+    expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
+  });
+
+  it('pins the post-binary-request artifact without depending on the goal ledger', () => {
+    const path = 'perf/child-fs-after-binary-requests.json';
+    const bytes = readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
+    const artifact = validateChildFsArtifact(JSON.parse(bytes));
+    const baseline = validateChildFsArtifact(
+      JSON.parse(
+        readFileSync(new URL('../../../perf/child-fs-baseline.json', import.meta.url), 'utf8'),
+      ),
+    );
+    const prior = validateChildFsArtifact(
+      JSON.parse(
+        readFileSync(
+          new URL('../../../perf/child-fs-after-single-hop.json', import.meta.url),
+          'utf8',
+        ),
+      ),
+    );
+    expect(bytes).toBe(`${JSON.stringify(artifact, null, 2)}\n`);
+    expect(artifact.gitSha).not.toBe(prior.gitSha);
+    expect(artifact.gitSha).not.toBe(baseline.gitSha);
+    expect(artifact.runs).toBe(1);
+    expect(artifact.samples.map(({ lane }) => lane)).toEqual(['product-coi', 'in-realm']);
+    expect(artifact.samples.map(({ vite }) => vite.transformedModules)).toEqual([2180, 2180]);
+    const repoRoot = new URL('../../..', import.meta.url);
+    const commits = execFileSync('git', ['log', '--format=%H', '--', path], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n')
+      .filter(Boolean);
+    expect(commits).toHaveLength(1);
+    const artifactCommit = commits[0] as string;
+    execFileSync('git', ['merge-base', '--is-ancestor', artifact.gitSha, artifactCommit], {
+      cwd: repoRoot,
+    });
+    execFileSync('git', ['merge-base', '--is-ancestor', artifactCommit, 'HEAD'], {
+      cwd: repoRoot,
+    });
+    expect(
+      execFileSync('git', ['rev-list', '--count', `${artifact.gitSha}..${artifactCommit}`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe('1');
+    expect(
+      execFileSync('git', ['show', `${artifactCommit}:${path}`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        maxBuffer: Buffer.byteLength(bytes) + 1,
+      }),
+    ).toBe(bytes);
+    expect(
+      execFileSync('git', ['diff', '--name-only', artifact.gitSha, artifactCommit], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      })
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .toSorted(),
+    ).toEqual(['docs/backlog/epics/child-fs-rpc-hot-path/ledger.md', path].toSorted());
+  });
+});

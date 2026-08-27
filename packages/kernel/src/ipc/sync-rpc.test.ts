@@ -136,13 +136,17 @@ describe('SyncRpc protocol version — consumer-side rejection (ADR-0032)', () =
 });
 
 describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
-  it('dispatcher writes a versioned error reply when a request arrives with a wrong version', async () => {
+  it('v5 dispatcher rejects malformed v4 bytes before decode or handler dispatch', async () => {
     const { sab, ring } = createSabRing({ payloadCapacity: 256 });
-    const legacyVersion = 2;
+    const legacyVersion = 4;
     const caller = SabRing.attach(sab, 256, { expectedVersion: legacyVersion });
 
     const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 1 });
-    dispatcher.register('echo', (p) => p);
+    let handlerCalls = 0;
+    dispatcher.register('echo', (p) => {
+      handlerCalls += 1;
+      return p;
+    });
     dispatcher.attach(ring);
 
     // Caller writes a request with a bogus version — the dispatcher must
@@ -157,12 +161,13 @@ describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
     const reply = decodeReply(replyBytes);
     expect(reply.ok).toBe(false);
     expect((reply.error as { code?: string } | undefined)?.code).toBe('EPROTOVERSION');
+    expect(handlerCalls).toBe(0);
   });
 });
 
-describe('SyncRpc v2 binary frame (ADR-0084 #23)', () => {
-  it('SYNC_RPC_PROTOCOL_VERSION is 3 for the claimed request lifecycle', () => {
-    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(3);
+describe('SyncRpc v5 binary frame (ADR-0084 #23, ADR-0365/0366)', () => {
+  it('SYNC_RPC_PROTOCOL_VERSION is 5 for binary request frames', () => {
+    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(5);
   });
 
   it('encodeBinaryReply → decodeReply round-trips arbitrary bytes byte-exact (incl 0xff/0xfe/0x00)', () => {

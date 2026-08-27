@@ -23,11 +23,10 @@
  * stands in for the owner (the only mocked boundary).
  */
 
-import { SyncRpcFsSync } from '@riftydev/runtime-js';
+import { type SyncBinaryCall, type SyncCall, SyncRpcFsSync } from '@riftydev/runtime-js';
 import type { FsSync } from '@riftydev/vfs';
 
-/** The published in-Worker sync-call shim (`KernelSyncApi.call`). */
-export type SyncCall = (method: string, payload: unknown) => unknown;
+export type { SyncBinaryCall, SyncCall } from '@riftydev/runtime-js';
 
 /**
  * A synchronous {@link FsSync} whose every method translates to an `fs.*`
@@ -37,6 +36,6 @@ export type SyncCall = (method: string, payload: unknown) => unknown;
  * parity-tested {@link SyncRpcFsSync} so there is ONE implementation of the
  * `fs.*` contract, not two.
  */
-export function createRpcFsSync(call: SyncCall): FsSync {
-  return new SyncRpcFsSync(call);
+export function createRpcFsSync(call: SyncCall, callBinary: SyncBinaryCall): FsSync {
+  return new SyncRpcFsSync(call, callBinary);
 }

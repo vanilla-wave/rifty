@@ -27,9 +27,10 @@
 
 import { RingCorruptRequestError, type SabRing } from './sab-ring.ts';
 import {
+  type DecodedSyncRpcRequest,
+  type SyncRpcBinaryRequest,
   SyncRpcProtocolMismatchError,
   type SyncRpcReply,
-  type SyncRpcRequest,
   decodeRequest,
   encodeBinaryReply,
   encodeReply,
@@ -57,6 +58,19 @@ export type SyncRpcHandler<T = unknown> = (
   payload: unknown,
   context?: SyncRpcCallerContext,
 ) => T | Promise<T>;
+
+/** Decode one method's ADR-0366 application payload before semantic dispatch. */
+export type SyncRpcBinaryRequestDecoder = (payload: Uint8Array) => unknown;
+
+/** Per-method binary request support; absent keeps the method JSON-only. */
+export interface SyncRpcRegistrationOptions {
+  readonly decodeBinaryRequest?: SyncRpcBinaryRequestDecoder;
+}
+
+interface SyncRpcRegistration {
+  readonly handler: SyncRpcHandler;
+  readonly decodeBinaryRequest?: SyncRpcBinaryRequestDecoder;
+}
 
 /** Options accepted by {@link SyncRpcDispatcher}. */
 export interface SyncRpcDispatcherOptions {
@@ -100,7 +114,7 @@ function hasWaitAsync(): boolean {
  * `setInterval(pollIntervalMs)` busy-poll (the timer then iterates every ring).
  */
 export class SyncRpcDispatcher {
-  private readonly handlers = new Map<string, SyncRpcHandler>();
+  private readonly handlers = new Map<string, SyncRpcRegistration>();
   private readonly pollIntervalMs: number;
   private readonly attachments = new Set<SabRing>();
   private readonly callerContexts = new WeakMap<SabRing, SyncRpcCallerContext>();
@@ -138,8 +152,17 @@ export class SyncRpcDispatcher {
    * replaces the previous handler (idempotent — useful for tests that
    * tear down and recreate the dispatcher).
    */
-  register<T = unknown>(method: string, handler: SyncRpcHandler<T>): void {
-    this.handlers.set(method, handler as SyncRpcHandler);
+  register<T = unknown>(
+    method: string,
+    handler: SyncRpcHandler<T>,
+    options: SyncRpcRegistrationOptions = {},
+  ): void {
+    this.handlers.set(method, {
+      handler: handler as SyncRpcHandler,
+      ...(options.decodeBinaryRequest !== undefined && {
+        decodeBinaryRequest: options.decodeBinaryRequest,
+      }),
+    });
   }
 
   /** Remove a previously-registered handler. No-op if absent. */
@@ -286,15 +309,15 @@ export class SyncRpcDispatcher {
       throw err;
     }
     if (bytes === null) return;
-    let req: SyncRpcRequest;
+    let req: DecodedSyncRpcRequest;
     try {
       req = decodeRequest(bytes);
     } catch (err) {
       this.writeError(ring, err, '<decodeRequest>');
       return;
     }
-    const handler = this.handlers.get(req.method);
-    if (!handler) {
+    const registration = this.handlers.get(req.method);
+    if (!registration) {
       this.writeError(
         ring,
         Object.assign(new Error(`SyncRpcDispatcher: no handler for '${req.method}'`), {
@@ -304,9 +327,29 @@ export class SyncRpcDispatcher {
       );
       return;
     }
+    let payload: unknown = req.payload;
+    if (isBinaryRequest(req)) {
+      if (registration.decodeBinaryRequest === undefined) {
+        this.writeError(
+          ring,
+          Object.assign(
+            new TypeError(`SyncRpcDispatcher: '${req.method}' does not accept binary requests`),
+            { code: 'ERPCBINARYUNSUPPORTED' },
+          ),
+          req.method,
+        );
+        return;
+      }
+      try {
+        payload = registration.decodeBinaryRequest(req.payload);
+      } catch (err) {
+        this.writeError(ring, err, req.method);
+        return;
+      }
+    }
     let result: unknown;
     try {
-      result = handler(req.payload, this.callerContexts.get(ring) ?? {});
+      result = registration.handler(payload, this.callerContexts.get(ring) ?? {});
     } catch (err) {
       this.writeError(ring, err, req.method);
       return;
@@ -369,6 +412,10 @@ export class SyncRpcDispatcher {
       );
     }
   }
+}
+
+function isBinaryRequest(req: DecodedSyncRpcRequest): req is SyncRpcBinaryRequest {
+  return 'binary' in req && req.binary === true;
 }
 
 function isThenable<T>(v: unknown): v is PromiseLike<T> {

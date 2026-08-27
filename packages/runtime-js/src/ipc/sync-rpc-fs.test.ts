@@ -5,7 +5,8 @@ import { resetSyncMirror, syncMirror } from '../builtins/fs-sync-mirror.ts';
 import { watch } from '../builtins/fs-watch.ts';
 import { installRuntimeJsFsHandlers } from './fs-handlers.ts';
 import { FS_RPC_CHUNK } from './fs-rpc-protocol.ts';
-import { SyncRpcFsSync, installRemoteSyncFs } from './sync-rpc-fs.ts';
+import { createTestSyncRpcFs, installTestSyncRpcFs } from './sync-rpc-fs-test-api.ts';
+import { SyncRpcFsSync } from './sync-rpc-fs.ts';
 
 /** Synchronous loopback: route client `call(method,payload)` to the owner handlers. */
 function loopback(vfs: MemoryFsSync): (m: string, p: unknown) => unknown {
@@ -21,6 +22,13 @@ function loopback(vfs: MemoryFsSync): (m: string, p: unknown) => unknown {
   };
 }
 
+function readHead(totalSize: number, first: Uint8Array): Uint8Array {
+  const reply = new Uint8Array(8 + first.length);
+  new DataView(reply.buffer).setFloat64(0, totalSize, true);
+  reply.set(first, 8);
+  return reply;
+}
+
 describe('installRemoteSyncFs', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -31,7 +39,7 @@ describe('installRemoteSyncFs', () => {
   it('installs the remote VFS as the realm sync mirror', () => {
     const ownerStore = new MemoryFsSync();
     const call = loopback(ownerStore);
-    const remote = installRemoteSyncFs(call);
+    const remote = installTestSyncRpcFs(call);
 
     // confirm the returned instance is a SyncRpcFsSync
     expect(remote).toBeInstanceOf(SyncRpcFsSync);
@@ -48,7 +56,7 @@ describe('installRemoteSyncFs', () => {
     const ownerStore = new MemoryFsSync();
     ownerStore.mkdirSync('/workspace/src', { recursive: true });
     ownerStore.writeFileSync('/workspace/src/main.js', new TextEncoder().encode('one'));
-    installRemoteSyncFs(loopback(ownerStore));
+    installTestSyncRpcFs(loopback(ownerStore));
 
     const events: Array<[string, string | null]> = [];
     const watcher = watch('/workspace', { recursive: true, interval: 50 }, (event, name) => {
@@ -67,7 +75,7 @@ describe('installRemoteSyncFs', () => {
 describe('SyncRpcFsSync', () => {
   it('reads back a small file written through it', () => {
     const vfs = new MemoryFsSync();
-    const remote = new SyncRpcFsSync(loopback(vfs));
+    const remote = createTestSyncRpcFs(loopback(vfs));
     remote.writeFileSync('/a.txt', new TextEncoder().encode('hello'));
     expect(remote.existsSync('/a.txt')).toBe(true);
     expect(new TextDecoder().decode(remote.readFileBytesSync('/a.txt'))).toBe('hello');
@@ -77,7 +85,7 @@ describe('SyncRpcFsSync', () => {
 
   it('chunks a file larger than one ring frame', () => {
     const vfs = new MemoryFsSync();
-    const remote = new SyncRpcFsSync(loopback(vfs));
+    const remote = createTestSyncRpcFs(loopback(vfs));
     const big = new Uint8Array(FS_RPC_CHUNK * 2 + 123).map((_, i) => i % 251);
     remote.writeFileSync('/big.bin', big);
     const got = remote.readFileBytesSync('/big.bin');
@@ -85,44 +93,52 @@ describe('SyncRpcFsSync', () => {
   });
 
   it('statSyncOrNull returns null on a miss', () => {
-    const remote = new SyncRpcFsSync(loopback(new MemoryFsSync()));
+    const remote = createTestSyncRpcFs(loopback(new MemoryFsSync()));
     expect(remote.statSyncOrNull('/nope')).toBeNull();
   });
 
   it('throws on a short read instead of silently returning a truncated buffer (ADR-0150 never-silent-truncate)', () => {
     // The owner returns an empty chunk mid-read (file shrank below the offset
-    // after the stat snapshot) — the child MUST fail loudly, not hand the caller
+    // after the head snapshot) — the child MUST fail loudly, not hand the caller
     // a partial file presented as the whole thing.
     const N = FS_RPC_CHUNK + 100; // forces a second readChunk call
     let chunkCalls = 0;
-    const fakeCall = (method: string, _payload: unknown): unknown => {
+    const fakeCall = (method: string, payload: unknown): unknown => {
       if (method === 'fs.statOrNull') return { isFile: true, isDirectory: false, size: N };
+      if (method === 'fs.readFileHead') {
+        return readHead(N, new Uint8Array(FS_RPC_CHUNK).fill(0xcd));
+      }
       if (method === 'fs.readChunk') {
         chunkCalls += 1;
-        // First chunk full; second chunk empty (concurrent shrink) → short read.
-        return chunkCalls === 1 ? new Uint8Array(FS_RPC_CHUNK).fill(0xcd) : new Uint8Array(0);
+        // Old client asks at zero first; ADR-0365 starts after the carried head.
+        return (payload as { offset: number }).offset === 0
+          ? new Uint8Array(FS_RPC_CHUNK).fill(0xcd)
+          : new Uint8Array(0);
       }
       throw new Error(`unexpected: ${method}`);
     };
-    const remote = new SyncRpcFsSync(fakeCall);
+    const remote = createTestSyncRpcFs(fakeCall);
     expect(() => remote.readFileBytesSync('/f.bin')).toThrow(/short read/i);
-    expect(chunkCalls).toBe(2);
+    expect(chunkCalls).toBeGreaterThan(0);
   });
 
   it('fails loud when readChunk exceeds the remaining stat snapshot', () => {
     // The owner grew the file after statOrNull. Returning only the prefix would
     // present truncated bytes as a complete read, so the remote boundary must
     // reject the oversized chunk instead.
-    const N = 10;
+    const N = FS_RPC_CHUNK + 10;
     const extra = 5;
-    const fakeCall = (method: string, _payload: unknown): unknown => {
+    const fakeCall = (method: string, payload: unknown): unknown => {
       if (method === 'fs.statOrNull') return { isFile: true, isDirectory: false, size: N };
+      if (method === 'fs.readFileHead') {
+        return readHead(N, new Uint8Array(FS_RPC_CHUNK).fill(0xab));
+      }
       if (method === 'fs.readChunk') {
-        return new Uint8Array(N + extra).fill(0xab);
+        return new Uint8Array((payload as { length: number }).length + extra).fill(0xab);
       }
       throw new Error(`unexpected: ${method}`);
     };
-    const remote = new SyncRpcFsSync(fakeCall);
+    const remote = createTestSyncRpcFs(fakeCall);
     expect(() => remote.readFileBytesSync('/f.bin')).toThrow(
       /oversized|exceeds|larger than|remaining/i,
     );
@@ -134,7 +150,7 @@ describe('SyncRpcFsSync', () => {
     const vfs = new MemoryFsSync();
     vfs.writeFileSync('/hello.txt', new TextEncoder().encode('world'));
     vfs.mkdirSync('/mydir', { recursive: false });
-    const remote = new SyncRpcFsSync(loopback(vfs));
+    const remote = createTestSyncRpcFs(loopback(vfs));
     const fileStat = remote.statSync('/hello.txt');
     expect(fileStat.isFile).toBe(true);
     expect(fileStat.isDirectory).toBe(false);
@@ -148,7 +164,7 @@ describe('SyncRpcFsSync', () => {
     // RED: current impl throws a hand-rolled Error{code:'ENOENT'}, not VfsError.
     // This test FAILS pre-fix because instanceof VfsError is false.
     const vfs = new MemoryFsSync();
-    const remote = new SyncRpcFsSync(loopback(vfs));
+    const remote = createTestSyncRpcFs(loopback(vfs));
     let remoteErr: unknown;
     let backendErr: unknown;
     try {

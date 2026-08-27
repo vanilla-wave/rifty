@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "child-fs-hot-path-v1",
+  "command": "./node_modules/.bin/vite build --clearScreen false",
+  "exitCode": 0,
+  "viteVersion": "vite/7.3.6 darwin-arm64 node-v24.16.0",
+  "dependencies": {
+    "@gravity-ui/icons": "2.22.0",
+    "@gravity-ui/uikit": "7.48.1",
+    "date-fns": "4.4.0",
+    "express": "4.21.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vite": "7.3.6"
+  },
+  "rawOutput": "✓ 2195 modules transformed.\n✓ built in 908ms\n"
+}

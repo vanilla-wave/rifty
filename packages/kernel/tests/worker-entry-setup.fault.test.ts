@@ -19,6 +19,7 @@ import {
 } from '../src/worker-stdio-drain.ts';
 
 const KERNEL_ENTRY_CAPABILITY_PORTS_KEY = '__riftyKernelEntryCapabilityPorts__';
+const KERNEL_SYNC_BINARY_CALL_KEY = '__riftyKernelSyncBinaryCall';
 const ORIGINAL_DEFINE_PROPERTY = Object.defineProperty;
 
 function fakePort(): MessagePort & {
@@ -131,6 +132,7 @@ describe('worker-entry setup transaction', () => {
     vi.unstubAllGlobals();
     for (const key of [
       KERNEL_SYNC_CALL_KEY,
+      KERNEL_SYNC_BINARY_CALL_KEY,
       KERNEL_PROCESS_SPEC_KEY,
       KERNEL_ENTRY_BOOTSTRAP_KEY,
       KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
@@ -248,6 +250,7 @@ describe('worker-entry setup transaction', () => {
 
   it.each([
     KERNEL_SYNC_CALL_KEY,
+    KERNEL_SYNC_BINARY_CALL_KEY,
     KERNEL_PROCESS_SPEC_KEY,
     KERNEL_ENTRY_BOOTSTRAP_KEY,
     KERNEL_ENTRY_CAPABILITY_PORTS_KEY,

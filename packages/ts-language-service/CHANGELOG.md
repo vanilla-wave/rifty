@@ -4,6 +4,10 @@
 
 ### Changed
 
+- **Owner-FS relay consumes the complete SyncRpc v5 API (ADR-0366).** The
+  language-service worker passes both JSON and binary calls to the shared
+  runtime-js adapter; its hot read/probe requests no longer JSON-frame paths.
+
 - **Workspace compiler located via Node resolution semantics.** The compiler
   entry now resolves through rifty's module resolver (package.json
   `exports`/`main`, node_modules walk-up, Node-parity-tested vs

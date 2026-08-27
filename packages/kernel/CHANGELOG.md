@@ -4,6 +4,15 @@
 
 ### Added
 
+- **SyncRpc v5 binary requests (ADR-0366).** One claimed ring now carries
+  exact JSON or binary request frames through `KernelSyncApi.call` /
+  `callBinary`; dispatcher registrations optionally decode binary application
+  payloads before the same semantic handler.
+
+- **SyncRpc v4 (ADR-0365).** The atomic kernel/runtime-js peer contract admits
+  the owner-FS binary size + first-chunk reply used by single-hop small-file
+  reads; v3 peers fail through the existing `EPROTOVERSION` guard.
+
 - **One federated Worker process tree (ADR-0326).** The owner-root
   `ProcessManager` owns recursive PID/PPID state over the trusted SAB chain;
   fork JSON IPC, worker-thread messages, and private lifecycle control stay

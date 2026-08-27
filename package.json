@@ -47,6 +47,7 @@
     "test:e2e:webkit": "playwright test --project=webkit",
     "test:all": "pnpm test:run && pnpm test:parity && pnpm test:e2e",
     "bench": "node tools/perf/bench.mjs",
+    "bench:child-fs": "node tools/perf/child-fs.mjs",
     "compat:generate": "node tools/compat-matrix-generator/cli.js",
     "artifacts:generate": "pnpm shadow-catalog:generate && tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --write",
     "shadow-catalog:generate": "tsx tools/shadow-registry/tools/generate-shadow-substitution-catalog.ts --write",

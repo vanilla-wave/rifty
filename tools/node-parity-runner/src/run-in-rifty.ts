@@ -1340,42 +1340,22 @@ async function runRiftyNodeCliEvalInvocation(
 
 /**
  * Install the opt-in `kind: 'exec-sync'` mode (ADR-0084 #23, ADR-0137).
- * `execSync` is SAB-only by design (ADR-0011 removed the in-realm fallback as a
- * silent stub), so the default loader path throws `NotImplementedError`. To
- * exercise the v2 binary-frame round-trip head-to-head against real Node's
- * byte-exact `execSync`, this wires a REAL kernel `SabRing` + the genuine
- * encode/decodeReply framing and a SYNCHRONOUS in-realm child runner that
- * captures stdout BYTES, then publishes the `__riftyKernelSyncCall` shim the
- * runtime-js `execSync` reads.
+ * Wires a real ring/dispatcher and publishes both v5 call operations. The
+ * synchronous handler loader-runs CJS so byte replies, shebangs, relatives,
+ * sibling reads, and error framing exercise the production seams against Node.
  *
- * The child runner LOADER-RUNS the script through the REAL rifty module loader
- * (ADR-0137) — `loader.require` for a CJS entry — so the child's `#!` shebang is
- * stripped (the resolver's strip, `resolver.ts`), its relative `require('./x')`
- * resolves against the sync mirror, and a sibling `fs.readFileSync('./y')` reads
- * the mirror (the rifty `node:fs` builtin). This is the same loader path the
- * browser `kind:'url'` child uses — the OLD `new Function` runner could do NONE
- * of these (it threw on `#!`, could not resolve relatives), so it silently
- * diverged from real Node for any shebang'd / relative-import child. Closing
- * that is the whole point of this item (Fidelity).
- *
- * Synchronous by design: `execSync`'s `api.call(...)` must return without
- * yielding (it is the synchronous child-execution contract). `loader.require`
- * runs a CJS entry to completion synchronously, so `pumpOnce` services the
- * request and `waitReply` finds the reply immediately — matching the OLD mock's
- * synchronous shape, now over the loader instead of `new Function`. (An ESM
- * execSync child is async-only; the in-process-runner unit test + the browser
- * e2e cover the ESM/`kind:'url'` paths — this synchronous parity mock pins the
- * CJS shebang/relative/sibling-read behaviors head-to-head against Node.)
- * Returns a teardown that clears the published shim + the host-capability stubs.
+ * Returns teardown for both published hooks and host capability stubs.
  */
 async function installExecSyncMode(): Promise<() => void> {
   // Relative source imports (same `tools/`-harness precedent as `runWasi` above):
   // kernel and the runtime-js loader are not workspace deps of the runner.
   const {
+    KERNEL_SYNC_BINARY_CALL_KEY,
     KERNEL_SYNC_CALL_KEY,
     SabRing,
     createSabRing,
     getKernelWorkerUrl,
+    encodeBinaryRequest,
     encodeRequest,
     decodeReply,
     SyncRpcDispatcher,
@@ -1542,20 +1522,29 @@ async function installExecSyncMode(): Promise<() => void> {
       globalThis,
       KERNEL_SYNC_CALL_KEY,
     );
+    const previousBinarySyncCallDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      KERNEL_SYNC_BINARY_CALL_KEY,
+    );
     cleanups.defer(() => restoreGlobalDescriptor(KERNEL_SYNC_CALL_KEY, previousSyncCallDescriptor));
+    cleanups.defer(() =>
+      restoreGlobalDescriptor(KERNEL_SYNC_BINARY_CALL_KEY, previousBinarySyncCallDescriptor),
+    );
+    const exchange = (method: string, request: Uint8Array): unknown => {
+      ring.writeRequest(request);
+      dispatcher.pumpOnce(dispatcherRing); // synchronous handler writes the reply now
+      const replyBytes = ring.waitReply(2000); // reply already present → returns immediately
+      const reply = decodeReply(replyBytes);
+      if (reply.ok) return reply.value;
+      const e = reply.error ?? { name: 'Error', message: 'unknown' };
+      const err = new Error(e.message);
+      err.name = e.name;
+      if (e.code !== undefined) (err as Error & { code?: string }).code = e.code;
+      throw err;
+    };
     publishKernelSyncApi({
-      call: (method, payload) => {
-        ring.writeRequest(encodeRequest({ method, payload }));
-        dispatcher.pumpOnce(dispatcherRing); // synchronous handler writes the reply now
-        const replyBytes = ring.waitReply(2000); // reply already present → returns immediately
-        const reply = decodeReply(replyBytes);
-        if (reply.ok) return reply.value;
-        const e = reply.error ?? { name: 'Error', message: 'unknown' };
-        const err = new Error(e.message);
-        err.name = e.name;
-        if (e.code !== undefined) (err as Error & { code?: string }).code = e.code;
-        throw err;
-      },
+      call: (method, payload) => exchange(method, encodeRequest({ method, payload })),
+      callBinary: (method, payload) => exchange(method, encodeBinaryRequest(method, payload)),
     });
 
     return () => cleanups.dispose();

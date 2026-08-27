@@ -34,6 +34,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0333 | Descendant settlement barrier preserves recursive teardown ordering |
 | 0340 | Sequenced worker stdio reconstructs cross-port write order |
 | 0347 | Idempotent process-manager kill during settlement |
+| 0366 | Binary request frames for hot fs sync-RPC |
 
 ### runtime-js
 
@@ -79,6 +80,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0342 | Release pending eval drain ownership when server branch wins |
 | 0345 | Expose exact Node 24.0.0 process.release identity |
 | 0348 | Synchronous require(ESM) on Node 24 |
+| 0365 | Single-hop small-file sync-RPC reads |
 
 ### runtime-wasi
 
@@ -518,3 +520,4 @@ here.
 | Spike-harness branches with contract pointers | 2026-08 | ownerless git-ref artifacts rot (`refs:check` cannot validate branches); inline the minimal repro command in the evidence block instead |
 | Marker/merge-base goal gates (`goal_baseline`, `check:goal-contract`, `check:budget`) | 2026-08 | goal/map/ledger split makes frozen-ness = file immutability; bands live in the ledger, review-owned — the gate code priced more than it caught |
 | Shadow-registry debug-disable flag (`disableShadowRegistry` / env switch) | 2026-08-23 | all substituted packages are native and cannot run in-browser regardless; behavioral comparison lives in Node parity oracles; SCSS comparison exists via unsubstituted pure-JS `sass`; install-artifact audit does not justify a public surface. Record: git history of the `npm-client/shadow-registry-disable-flag` draft + ADR-0006 correction |
+| Child-side project-FS cache or owner sync-RPC bypass | 2026-08-26 | violates ADR-0150 owner-SSoT freshness; the completed hot-path goal removed one hop and JSON framing without a second state owner. Record: `docs/backlog/perf/reference/child-fs-rpc-hot-path.md` + ADR-0365/0366 |

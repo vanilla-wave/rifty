@@ -68,6 +68,7 @@ describe('makeRecursiveRunner', () => {
   afterEach(() => {
     Reflect.deleteProperty(globalThis, KERNEL_PROCESS_SPEC_KEY);
     Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
+    Reflect.deleteProperty(globalThis, '__riftyKernelSyncBinaryCall');
     resetNodeEntryWorkerUrl();
     vi.restoreAllMocks();
   });
@@ -214,11 +215,14 @@ describe('makeRecursiveRunner', () => {
     const calls: Array<{ method: string; payload: unknown }> = [];
     const closeIdentity = publishProcessIdentity(7);
     publishKernelSyncApi({
-      call(method, payload) {
+      callBinary() {
+        throw new Error('process federation must stay on JSON call');
+      },
+      call(method: string, payload: unknown) {
         calls.push({ method, payload });
         return method === 'process.reserve' ? 41 : null;
       },
-    });
+    } as never);
     const restoreWorker = installKernelWorkerBoundary(closeKernelWorkerPeer);
     setKernelWorkerUrl('https://host.test/kernel-worker.js');
     configureNodeEntryWorker('https://host.test/node.js', {

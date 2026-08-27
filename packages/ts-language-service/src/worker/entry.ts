@@ -80,7 +80,7 @@ export function bootTsLanguageServiceWorker(): void {
 
   const endpoint = createServiceEndpoint({
     buildFsSync: createRpcFsSync,
-    call: syncApi.call,
+    syncApi,
     // Route cold-`ts:init` phase timings to stdout (owner → page console). The
     // first build is slow under contention (a 2-core CI runner co-resident with
     // the dev-server child); these make a slow/wedged boot observable end-to-end.

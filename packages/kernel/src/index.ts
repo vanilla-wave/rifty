@@ -73,8 +73,11 @@ export { clearKernelDispatcher, getKernelDispatcher } from './ipc/kernel-dispatc
 // ADR-0011 phase 3 — sync RPC framing, dispatcher, in-Worker client.
 // ADR-0032 — protocol-version constant + typed mismatch error.
 export {
+  type DecodedSyncRpcRequest,
+  type SyncRpcBinaryRequest,
   type SyncRpcRequest,
   type SyncRpcReply,
+  encodeBinaryRequest,
   encodeRequest,
   decodeReply,
   decodeRequest,
@@ -90,6 +93,8 @@ export {
   type SyncRpcCallerContext,
   type SyncRpcDispatcherOptions,
   type SyncRpcHandler,
+  type SyncRpcBinaryRequestDecoder,
+  type SyncRpcRegistrationOptions,
 } from './ipc/sync-dispatch.ts';
 export { SyncRpcClient, type SyncRpcClientOptions } from './ipc/sync-client.ts';
 // ADR-0019/P1 follow-up — typed publish/read for the cross-realm globals
@@ -100,6 +105,7 @@ export { SyncRpcClient, type SyncRpcClientOptions } from './ipc/sync-client.ts';
 export {
   KERNEL_ENTRY_BOOTSTRAP_KEY,
   KERNEL_PROCESS_SPEC_KEY,
+  KERNEL_SYNC_BINARY_CALL_KEY,
   KERNEL_SYNC_CALL_KEY,
   type KernelEntryBootstrapEnvelope,
   type KernelEntryCapabilityPorts,
@@ -107,6 +113,7 @@ export {
   type KernelProcessStdioPorts,
   type KernelStdioOutputWriter,
   type KernelSyncApi,
+  type KernelSyncBinaryCall,
   type KernelSyncCall,
   consumeKernelEntryCapabilityPorts,
   publishKernelEntryBootstrap,

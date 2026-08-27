@@ -87,7 +87,7 @@ export type {
 // FsSync adapter + protocol + endpoint) are public; the side-effectful boot is
 // referenced separately (the `./worker/entry` subpath / by URL).
 export { createRpcFsSync } from './worker/host-fs-rpc.ts';
-export type { SyncCall } from './worker/host-fs-rpc.ts';
+export type { SyncBinaryCall, SyncCall } from './worker/host-fs-rpc.ts';
 export { createServiceEndpoint } from './worker/service-endpoint.ts';
 export type { ServiceEndpoint, ServiceEndpointDeps } from './worker/service-endpoint.ts';
 export {

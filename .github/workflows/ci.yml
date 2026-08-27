@@ -83,6 +83,8 @@ jobs:
         suite: [run, parity]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # committed perf provenance resolves measured + artifact commits
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
       - uses: actions/setup-node@v4
         with:

@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Measured child-FS sync-RPC hot path.** The completed one-hop/binary-request
+  goal carries baseline, post-I1, and post-I2 two-lane Chromium artifacts while
+  retaining strict owner freshness and no child cache.
+
+- **Binary hot owner-FS requests (ADR-0366).** `exists`, `stat`, `statOrNull`,
+  `readFileHead`, and `readChunk` now send exact UTF-8 path/range payloads via
+  `KernelSyncApi.callBinary`; readdir and every mutation remain JSON.
+
+- **Single-hop small-file owner reads (ADR-0365).** Supervised children now
+  receive total size + the first 256 KiB in one binary `fs.readFileHead`
+  response. Empty and small `readFileSync` calls use one sync-RPC round-trip;
+  larger reads continue from the first unread offset, with no cache or bypass.
+
 - **Node 24 synchronous `require(ESM)` (ADR-0348).** Plain-JS graphs now share
   one import/require job with Node namespace, `"module.exports"`, TLA, cycle,
   race, resolver, and statically detected CJS re-export semantics;
@@ -47,6 +60,11 @@
   object (ADR-0226).
 
 ### Fixed
+
+- Owner-backed `fs.*` calls now rehydrate the `VfsError` prototype erased by
+  SyncRpc's JSON error frame before reaching `node:fs`, preserving exact Node
+  `code`/`errno`/`syscall`/`path` shaping for missing, directory, and
+  traversal-through-file reads.
 
 - Kernel-backed `worker_threads.Worker.terminate()` now uses an immediate
   physical kill, preventing emnapi pthreads from running after their creator

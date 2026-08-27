@@ -8,6 +8,7 @@ type ProcessGlobal = { process?: unknown };
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
+  Reflect.deleteProperty(globalThis, '__riftyKernelSyncBinaryCall');
   (globalThis as Coi).crossOriginIsolated = false;
   setProcessCwd('/workspace');
   vi.restoreAllMocks();
@@ -76,12 +77,15 @@ function installExecSyncCapture(payloads: unknown[]): void {
   (globalThis as Coi).crossOriginIsolated = true;
   setKernelWorkerUrl('https://host.test/kernel-worker.js');
   publishKernelSyncApi({
-    call(method, payload) {
+    callBinary() {
+      throw new Error('execSync must stay on JSON call');
+    },
+    call(method: string, payload: unknown) {
       expect(method).toBe('execSync');
       payloads.push(payload);
       return new Uint8Array();
     },
-  });
+  } as never);
 }
 
 function withProcessGlobal<T>(process: NodeProcess | undefined, run: () => T): T {

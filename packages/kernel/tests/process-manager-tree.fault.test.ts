@@ -32,6 +32,17 @@ import {
 } from '../src/worker-stdio-drain.ts';
 import { attestedExit } from './attested-exit.ts';
 
+function publishJsonKernelSyncApi(api: {
+  readonly call: (method: string, payload: unknown) => unknown;
+}): void {
+  publishKernelSyncApi({
+    ...api,
+    callBinary() {
+      throw new Error('process federation must stay on JSON call');
+    },
+  } as never);
+}
+
 class BoundaryWorker implements WorkerLike {
   readonly terminate = vi.fn();
   readonly posted: unknown[] = [];
@@ -156,6 +167,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   afterEach(() => {
     Reflect.deleteProperty(globalThis, KERNEL_PROCESS_SPEC_KEY);
     Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
+    Reflect.deleteProperty(globalThis, '__riftyKernelSyncBinaryCall');
     clearWorkerFactoryForTests();
     clearKernelWorkerUrl();
     clearKernelDispatcher();
@@ -305,7 +317,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
         ipc: channel.port1,
       },
     });
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method, payload) {
         calls.push({ method, payload });
         if (method === 'process.reserve') return 41;
@@ -344,7 +356,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     const calls: Array<{ method: string; payload: unknown }> = [];
     const worker = new BoundaryWorker();
     let outputState: WorkerOutputState | null = null;
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method, payload) {
         calls.push({ method, payload });
         if (method === 'process.reserve') return 41;
@@ -401,7 +413,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
         ipc: channel.port1,
       },
     });
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method) {
         calls.push(method);
         return method === 'process.reserve' ? 41 : null;
@@ -419,7 +431,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it('settles a federated same-realm descendant that publishes its own exit code', async () => {
     const calls: Array<{ method: string; payload: unknown }> = [];
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method, payload) {
         calls.push({ method, payload });
         return method === 'process.reserve' ? 41 : null;
@@ -451,7 +463,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it('publishes a federated same-realm settle after close-listener microtasks', async () => {
     const events: string[] = [];
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method) {
         if (method === 'process.reserve') return 41;
         events.push(method);
@@ -481,7 +493,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it('publishes a federated Worker settle only after close listeners and their microtasks', async () => {
     const events: string[] = [];
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method) {
         if (method === 'process.reserve') return 41;
         events.push(method);
@@ -508,7 +520,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   });
 
   it('reads nested ps state from one exact owner-root snapshot RPC', () => {
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method, payload) {
         expect({ method, payload }).toEqual({ method: 'process.snapshot', payload: {} });
         return [
@@ -902,7 +914,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   it('relays multi-hop listening removal before retiring the forwarded route', async () => {
     const relayed: Array<{ method: string; payload: unknown }> = [];
     let reserveCount = 0;
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method, payload) {
         relayed.push({ method, payload });
         return method === 'process.reserve' ? (++reserveCount === 1 ? 7 : 41) : null;
@@ -963,7 +975,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     'releases a forwarded owner barrier after an upstream %s failure',
     async (terminal) => {
       let reserveCount = 0;
-      publishKernelSyncApi({
+      publishJsonKernelSyncApi({
         call(method, payload) {
           if (method === 'process.reserve') return ++reserveCount === 1 ? 7 : 41;
           if (
@@ -1017,7 +1029,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it('drops a forwarded reservation after an upstream abort failure', async () => {
     let reserveCount = 0;
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method, payload) {
         if (method === 'process.reserve') return ++reserveCount === 1 ? 7 : 41;
         if (method === 'process.abort' && (payload as { readonly pid?: number }).pid === 41) {
@@ -1052,7 +1064,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it('waits for every postorder multi-hop kill route before cutting its physical owner', async () => {
     const relayed: string[] = [];
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method) {
         relayed.push(method);
         return method === 'process.reserve' ? 7 : null;
@@ -1104,7 +1116,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   it('cancels admitted reservations and rejects late commit or reserve after owner kill', async () => {
     const upstream: Array<{ method: string; payload: unknown }> = [];
     const reservedPids = [7, 41, 42];
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method, payload) {
         upstream.push({ method, payload });
         if (method === 'process.reserve') return reservedPids.shift();
@@ -1169,7 +1181,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
   });
 
   it('fails loud but still retires a terminal owner without upstream authority', async () => {
-    publishKernelSyncApi({ call: (method) => (method === 'process.reserve' ? 7 : null) });
+    publishJsonKernelSyncApi({ call: (method) => (method === 'process.reserve' ? 7 : null) });
     const manager = new ProcessManager();
     const worker = new BoundaryWorker();
     setWorkerFactoryForTests(() => worker);
@@ -1181,6 +1193,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
     manager.commitRemoteProcess(41, owner.pid);
 
     Reflect.deleteProperty(globalThis, KERNEL_SYNC_CALL_KEY);
+    Reflect.deleteProperty(globalThis, '__riftyKernelSyncBinaryCall');
     const microtasks: (() => void)[] = [];
     vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => microtasks.push(task));
     expect(owner.kill()).toBe(true);
@@ -1198,7 +1211,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it('aggregates independent upstream teardown failures after local close', async () => {
     let failUpstream = false;
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method) {
         if (method === 'process.reserve') return 7;
         if (failUpstream) throw new Error(`${method}: injected upstream failure`);
@@ -1233,7 +1246,7 @@ describe('ProcessManager owner-root process tree (ADR-0326)', () => {
 
   it('validates reserve/commit before upstream and aborts a rejected relayed PID', async () => {
     const calls: Array<{ method: string; payload: unknown }> = [];
-    publishKernelSyncApi({
+    publishJsonKernelSyncApi({
       call(method, payload) {
         calls.push({ method, payload });
         return method === 'process.reserve' ? 7 : null;

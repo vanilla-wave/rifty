@@ -11,6 +11,11 @@ code: [packages/runtime-js/src/builtins/node-entry-runtime-config.ts, packages/r
 
 ## Context
 
+2026-08 probe (`reference/no-coi-degradation-probes.md`): product COI
+`worker_threads.Worker(file)` throws `NotImplementedError:
+worker_threads.Worker.execArgv` while the same-realm no-COI fallback completes
+exit=0 — this item is what makes the capable tier worse than the degraded one.
+
 Node v24.16.0 path Workers created under `node -e` inherit the original
 source-bearing `process.execArgv`, including recursively. Mutating the public
 parent array before construction does not change that trusted snapshot;
