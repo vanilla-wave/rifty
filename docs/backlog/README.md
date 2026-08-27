@@ -93,7 +93,9 @@ probe-or-fog and signoff: `rifty-goal` FIT.
 An explicit whole-ready-goal hand-off starts a run; the goal directory is the
 run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
 
-- A slice PR names its goal and its ledger band row in the body
+- One draft PR per goal by default — opened at the goal's first Contract+RED,
+  carrying every slice; splitting into several PRs is allowed, never required.
+  The PR body names the goal and each carried slice's ledger band row
   (convention, review-checked — `rifty-review` axis 5).
 - Review-owned rules: scope outside `ready` items: 0; ready-contract edits
   after pickup: 0 (items: `check:contract-drift`); new coordination
@@ -103,10 +105,13 @@ run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
 - A ready `goal.md` never changes — amend = close + re-fit. `ledger.md` only
   grows. `map.md` is live: RE-CHART graduates fog into drafts, re-cuts or
   deletes unpicked items, reorders; weakening a `ready` item stays a demotion
-  with its fork recorded (§Backlog readiness 5). Every merged slice gets a
+  with its fork recorded (§Backlog readiness 5). Every landed slice gets a
   `re-chart after <slice>` ledger line; the next PICKUP and CLOSE refuse while
   it is missing.
-- Slices land serially — never stack a slice PR on an unmerged one.
+- A slice lands when its Final+GREEN passes on the goal branch; merge is the
+  goal PR's, at the end by default. Slices land serially — the next PICKUP
+  waits for the prior slice's Final+GREEN; with split PRs, never stack one on
+  an unmerged other.
 - Close only with no linked children, empty unit/goal residuals, end-to-end
   proof of `## Invariants`, and the ledger + fog walk exporting every ledger
   and `## Open questions` line to a durable carrier or an explicit drop

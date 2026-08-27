@@ -1,6 +1,6 @@
 # PICKUP — compile and gate the next slice
 
-0. **Re-chart debt.** Read the ledger tail: a previously merged slice without
+0. **Re-chart debt.** Read the ledger tail: a previously landed slice without
    its `re-chart after <slice>` line means the map may be stale — run
    [RECHART](RECHART.md) first; pickup on re-chart debt compounds a stale map.
 1. **Choose.** The user-named child, else the first frontier child (open,

@@ -10,9 +10,9 @@ Report these axes once, in order:
 
 1. **Completeness** — every unit clause covered; no required deferral.
 2. **Mission and architecture** — fits rifty's mission and boundaries.
-3. **Goal drift** — delivery matches the named goal (`docs/backlog/epics/<slug>/goal.md`), else ready contract; a ready `goal.md` never changes and `ledger.md` only grows; a `draft→ready` flip in the diff carries its `ready-verdict:` line; every previously merged slice carries its `re-chart after <slice>` ledger line.
+3. **Goal drift** — delivery matches the named goal (`docs/backlog/epics/<slug>/goal.md`), else ready contract; a ready `goal.md` never changes and `ledger.md` only grows; a `draft→ready` flip in the diff carries its `ready-verdict:` line; every previously landed slice carries its `re-chart after <slice>` ledger line.
 4. **Approach cost** — identify removable machinery: contract deliverable without it → blocker, first instance and ported/carried machinery included (a port re-states its forcing constraint — §Class-kill); pure code shrinkage → goal residual (in a run) or capture, never a checkpoint condition. Apply §Class-kill.
-5. **Budget** — one declared slice with its band in the goal's `ledger.md`; inspect modified files against it.
+5. **Budget** — every carried slice declared with its band in the goal's `ledger.md`; inspect modified files against them.
 6. **Bugs** — no correctness defect.
 7. **Regressions** — existing behavior holds.
 8. **Ecosystem UX** — observable behavior matches real Node software.
@@ -37,8 +37,10 @@ view <arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`;
 without one — Contract+RED runs locally: `BASE=origin/main` (or the declared
 base), the goal named by its directory. A PR is never a prerequisite
 for Contract+RED; attempts count per unit either way — keep every verdict.
-Refuse a dirty tree; name `CHECKPOINT` (ambiguity stops). Open the unit's single
-draft PR at the first Contract+RED pass — never one per attempt; it lives
+Refuse a dirty tree; name `CHECKPOINT` (ambiguity stops). Open the run's single
+draft PR at the first Contract+RED pass — goal runs default to one PR per goal
+carrying all slices, splitting allowed, never required (`AGENTS.md` §PR);
+outside a run, per unit; never one per attempt; it lives
 through every later checkpoint, blocker, and re-cut until merge (checkpoints
 spend attempts, never the PR — `fault-classes.md` Lineage row), its body naming
 prior local verdict SHAs. Final+GREEN requires the PR and first runs
