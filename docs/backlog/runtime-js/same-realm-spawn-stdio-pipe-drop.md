@@ -5,6 +5,7 @@ title: Same-realm spawn ignores stdio 'pipe' — child exits 0 with EMPTY stdout
 created: 2026-08-26
 why: worst failure shape — success with missing data; an agent/toolchain reading a child's stdout (linter, typechecker, codegen, test runner) silently concludes "no output" and proceeds; direct Fidelity violation (no silent stubs)
 user_story: As a dev (or agent) running `spawn('node',['./lint.js'])` without COI and reading `child.stdout` to decide the next step, I want the child's output on the pipe like Node, but today the same-realm fallback closes with code 0 and an empty stdout — the output went to the parent realm's console instead.
+epic: no-coi-sandbox-tier
 sources: [docs/backlog/runtime-js/reference/no-coi-degradation-probes.md]
 code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/child_process-exec.ts]
 ---
