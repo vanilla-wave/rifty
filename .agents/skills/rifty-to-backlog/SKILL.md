@@ -3,7 +3,7 @@ name: rifty-to-backlog
 description: Capture a new rifty finding or idea as a deduplicated, gated backlog draft. Invoke for first-time audit/review/post-merge intake or explicit filing; excludes existing-contract edits, refinement, and planned work.
 ---
 
-Capture = classify → dedup → gate → `draft` → challenge. No interview or contract compilation.
+Capture = classify → dedup → gate → `draft` → challenge → report. No interview or contract compilation.
 
 ## 1. Classify
 
@@ -49,6 +49,13 @@ the impact claim against the whole, and names problems — especially user
 experience and project direction. Verdict verbatim into `## Challenge`.
 Advisory — problems never block the capture; they ride verbatim in the
 capturing PR body.
+
+## 6. Report
+
+End with the user-facing completion report (`docs/backlog/README.md` §Report):
+a FRESH subagent with clean context writes it from the minted docs alone
+(§Report form, user's language); relay it in the conversation. A report,
+not an approval ask.
 
 After capture: `decision-workflow.md` §Backlog readiness owns draft→ready;
 verification = the unit's Contract+RED checkpoint at pickup (an unresolved

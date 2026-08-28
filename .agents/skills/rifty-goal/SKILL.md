@@ -4,7 +4,7 @@ description: Drive one rifty goal (epic) through its lifecycle — fit an outcom
 ---
 
 Owns transitions of ONE goal directory `docs/backlog/epics/<slug>/` — shape:
-`docs/backlog/README.md` §Shape, template `epics/TEMPLATE.md`. Plan, don't
+`docs/backlog/README.md` §Epic fit, template `epics/TEMPLATE.md`. Plan, don't
 build: every mode ends where implementation begins and resumes after merge.
 Review (`rifty-review`), the user interview (`rifty-refine`), unplanned defects
 (`rifty-fix`), and intake (`rifty-to-backlog`) are other actors — hand off,

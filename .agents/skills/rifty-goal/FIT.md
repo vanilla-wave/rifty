@@ -33,10 +33,12 @@ recorded decisions.
    invariants⇒value link, size the causal claim against the whole, name
    problems — especially user experience and project direction. Verdict
    verbatim into goal `## Challenge`. Advisory — never blocks.
-8. **Signoff.** Put invariants, tier AND the challenge verdict to the user; on approval add
-   `signoff: <date> — user (invariants + tier + challenge)` to `## Decisions` and flip
-   `status: ready`. A missing signature blocks the RUN, never this write-up —
-   leave the goal `draft` and report.
+8. **Report.** Flip `status: ready`, then spawn a FRESH report subagent —
+   clean context, given only the recorded docs (goal/map/ledger, children) and
+   the §Report form — and relay its report to the user in the conversation
+   (backlog README §Report). No approval gate — the goal is runnable
+   immediately. User pushback before the first PICKUP re-fits the goal in
+   place; after a run has started — close + re-fit (README §Goal run).
 
 Done when `pnpm backlog:check` passes and every fit-time decision lives in
 `goal.md`, `map.md`, or a ledger line — nothing only in conversation.

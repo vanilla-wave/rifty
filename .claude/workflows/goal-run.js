@@ -24,7 +24,7 @@ const STATE = {
   type: 'object',
   required: ['goalReady', 'treeClean', 'rechartDebt', 'mapEmpty', 'frontierChild', 'pickedChildReady'],
   properties: {
-    goalReady: { type: 'boolean' }, // goal.md status:ready with signoff line
+    goalReady: { type: 'boolean' }, // goal.md status:ready
     treeClean: { type: 'boolean' },
     rechartDebt: { type: 'boolean' }, // last landed slice missing its re-chart ledger line
     mapEmpty: { type: 'boolean' }, // map.md ## Items empty
@@ -50,7 +50,7 @@ const VERDICT = {
 
 const state = (label) =>
   agent(
-    `Read-only. Inspect goal ${DIR} and git in this repo. Report facts per the schema: goal.md is status:ready with a signoff line (goalReady); working tree clean (treeClean); ledger tail shows a landed slice without its 're-chart after <slice>' line (rechartDebt); map.md '## Items' is empty (mapEmpty); first frontier child — open, unblocked by blocked_by, in seed order (frontierChild, null if none); that child already carries a 'ready-verdict:' line (pickedChildReady).`,
+    `Read-only. Inspect goal ${DIR} and git in this repo. Report facts per the schema: goal.md is status:ready (goalReady); working tree clean (treeClean); ledger tail shows a landed slice without its 're-chart after <slice>' line (rechartDebt); map.md '## Items' is empty (mapEmpty); first frontier child — open, unblocked by blocked_by, in seed order (frontierChild, null if none); that child already carries a 'ready-verdict:' line (pickedChildReady).`,
     { schema: STATE, label, phase: 'Preflight' },
   )
 
@@ -80,7 +80,7 @@ const rechart = (after) =>
 phase('Preflight')
 let st = await state('state:initial')
 if (!st) return { stop: 'state agent failed' }
-if (!st.goalReady) return { stop: 'goal not ready — FIT + user signoff first (outside this workflow)' }
+if (!st.goalReady) return { stop: 'goal not ready — FIT first (outside this workflow)' }
 if (!st.treeClean) return { stop: 'dirty tree — commit or drop local changes first' }
 
 phase('Slices')

@@ -3,9 +3,9 @@ area: process-meta
 status: draft
 title: Legacy ready epics carry no Invariants/tier — every hand-off starts with an unplanned refit
 created: 2026-07-30
-why: legacy single-file ready epics predate goal-shape requirements, so most are shaped for reading, not pickup — re-typing them (bounded goal via `rifty-goal` FIT vs direction → ROADMAP) needs user signoff per epic
-user_story: As the repo owner handing off a ready epic, I want the hand-off to start the run, but today it starts a refit — invariants sign-off and tier call before any slice can be picked (bands are JIT since goal artifact v2)
-sources: [docs/backlog/README.md §Shape, tools/backlog/check.mjs:231, M11 parallel-track sweep 2026-07-30]
+why: legacy single-file ready epics predate goal-shape requirements, so most are shaped for reading, not pickup — re-typing them (bounded goal via `rifty-goal` FIT vs direction → ROADMAP) is a user-owned fork per epic
+user_story: As the repo owner handing off a ready epic, I want the hand-off to start the run, but today it starts a refit — an invariants/tier fit before any slice can be picked (bands are JIT since goal artifact v2)
+sources: [docs/backlog/README.md §Epic fit, tools/backlog/check.mjs:231, M11 parallel-track sweep 2026-07-30]
 code: [docs/backlog/README.md, tools/backlog/check.mjs]
 ---
 
@@ -24,13 +24,13 @@ checked false on `14b0dad99`, carrying the user's sign-off), leaving 8:
 
 Not a validation hole by accident: `tools/backlog/check.mjs:231` demands
 `## Invariants` on legacy single-file epics never (dir-format goals require them at ready), so `backlog:check` reports
-17 epics / 0 invalid. README §Shape states the requirement for every ready epic
+17 epics / 0 invalid. README §Epic fit states the requirement for every ready epic
 and defers it ("legacy epics add them at next refine"); nothing measures the
 deferral, so the cost lands at hand-off time.
 
-The refit is not mechanical: `epics/TEMPLATE.md` says invariants are authored
-WITH the user (refine interview or direct sign-off) and the run only proves
-them, and `process-meta/autonomous-epic-runs.md` adds a falsified-on-main proof
+The refit is not mechanical: `epics/TEMPLATE.md` says invariants come out of the user's decisions (refine
+interview) and are reported at FIT completion (README §Report); the run only
+proves them, and `process-meta/autonomous-epic-runs.md` adds a falsified-on-main proof
 per invariant. `tier` is a fidelity call. So a hand-off that reads "run this
 ready epic" silently means "interview me first" — the exact surprise this item
 records.

@@ -5,6 +5,7 @@ title: worker-realm-compat TextDecoder shim throws ReferenceError in realms with
 created: 2026-08-26
 why: without COI Chromium defines NO `SharedArrayBuffer` global; the shim's bare references make EVERY decode() in that realm throw ReferenceError — crashes unrelated code paths in the no-COI tier
 user_story: As a dev on the no-COI fallback tier, I want TextDecoder to keep working, but today `installSharedMemoryTolerantTextDecoder`'s patched decode references bare `SharedArrayBuffer` and throws `ReferenceError` on every call in a realm where the global is absent.
+epic: no-coi-sandbox-tier
 sources: [docs/backlog/runtime-js/reference/no-coi-degradation-probes.md]
 code: [packages/runtime-js/src/ipc/worker-realm-compat.ts]
 ---
