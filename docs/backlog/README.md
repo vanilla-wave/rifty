@@ -71,22 +71,36 @@ especially **user experience** (which real user scenario benefits, and does it
 materially) and **project direction** (mission/ROADMAP fit, opportunity cost).
 Verdict verbatim: `challenge: <date> — clear` or `challenge: <date> — N
 problems` + one grounded line each. **Advisory** — never blocks capture,
-draft→ready, or signoff; but problems surface verbatim wherever the doc is put
-to the user (FIT signoff, refine) and in the capturing PR body. Fabricated
+draft→ready, or a run start; but problems surface verbatim in the completion
+report (§Report), in refine, and in the capturing PR body. Fabricated
 speculative doubt = failure symmetric to missing a rotten premise.
 `backlog:check` enforces presence + verdict line only.
 
+## Epic fit
+
 A ready goal (`goal.md`) needs `## Outcome`, end-to-end `## User scenario`,
 numbered checkable `## Invariants` (each false on current main, evidence
-recorded), `tier`, and a user `signoff:` line covering invariants, tier, and
-the challenge verdict (§Challenge).
+recorded), and `tier`. No approval gate: FIT flips `status: ready` itself and
+ends with the completion report (§Report) — a ready goal is immediately
+runnable.
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
 `ledger.md` opens empty. Seed order proves the minimal pattern first (the
 null/install-only case of a shared mechanism lands before machinery for the
 maximal case); a child whose contract depends on an open question is not
 seeded. A mechanism shared by two children needs an existing owner, a first
 substrate item, or an ADR explaining separation. Procedure, incl.
-probe-or-fog and signoff: `rifty-goal` FIT.
+probe-or-fog and the completion report: `rifty-goal` FIT.
+
+## Report
+
+Every backlog write-up (capture, FIT, re-fit) ends with a user-facing report,
+not an approval ask: what was recorded (files, decisions, invariants, tier),
+challenge problems verbatim, and what happens next (seed order, first slice,
+what a run will change). Replaces the former `signoff:` gate (removed
+2026-08-28): the user reacts to the report if the destination is wrong —
+pushback re-opens FIT; nothing waits on a reply. Inside a goal run,
+RECHART-minted drafts ride the run's status relay and ledger — no separate
+report per graduation.
 
 ## Goal run
 
@@ -102,7 +116,9 @@ run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
   mechanisms: 0 unless a named substrate item owns one; hand-written insertions
   far above the declared band, or an expected-RED batch far above it → the unit
   is too big: re-cut/split before implementation.
-- A ready `goal.md` never changes — amend = close + re-fit. `ledger.md` only
+- A ready `goal.md` never changes once a run has started — amend = close +
+  re-fit. Before the first PICKUP, report-driven user pushback re-fits it in
+  place (no run state to protect yet). `ledger.md` only
   grows. `map.md` is live: RE-CHART graduates fog into drafts, re-cuts or
   deletes unpicked items, reorders; weakening a `ready` item stays a demotion
   with its fork recorded (§Backlog readiness 5). Every landed slice gets a

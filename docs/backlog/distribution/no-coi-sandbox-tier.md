@@ -126,6 +126,6 @@ challenge: 2026-08-28 — 6 problems
 - The why header still leads with '~2x faster per cycle than the product path' although the doc's own staleness note disavows the speedup as pre-#279-stale and states the value rests on hosting/embed unlock — the premise line advertises a claim the body retracts.
 
 (Post-challenge edits: problem 5 → direction-fork section added + item in sources; problem 6 → why
-rewritten to lead with the hosting unlock. Problems 1-4 stand as advisory input for FIT signoff:
+rewritten to lead with the hosting unlock. Problems 1-4 stand as advisory input for the FIT report:
 1 (coi-serviceworker shim) and 2 (unsized adopter share) challenge the premise the owner must weigh;
 3 restates Decision 1's own-origin scope honestly; 4 is the recorded Vite-7 pin.)

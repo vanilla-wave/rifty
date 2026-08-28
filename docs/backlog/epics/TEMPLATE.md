@@ -29,20 +29,20 @@ tier: <works|robust|production — required at ready>
 
 <!-- Drafted at FIT from Outcome/User scenario/Decisions — never new scope.
      Each checked false on current main (evidence comment above the list).
-     Signed off by the user together with tier: `signoff:` in ## Decisions.
+     Reported to the user at FIT completion (README §Report).
      A run only proves them. Amending a ready goal = close + re-fit. -->
 
 - I1. <user-observable statement>
 
 ## Challenge
 
-<!-- Advisory: fresh critic attacks invariants⇒value before signoff — README §Challenge. -->
+<!-- Advisory: fresh critic attacks invariants⇒value at FIT — README §Challenge. -->
 
 challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
 ## Decisions
 
-- signoff: <YYYY-MM-DD> — user (invariants + tier + challenge)
+- <fit-time decisions; one line each>
 ```
 
 ## `map.md` — live plan (freely edited at every re-chart)
