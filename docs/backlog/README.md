@@ -93,14 +93,24 @@ probe-or-fog and the completion report: `rifty-goal` FIT.
 
 ## Report
 
-Every backlog write-up (capture, FIT, re-fit) ends with a user-facing report,
-not an approval ask: what was recorded (files, decisions, invariants, tier),
-challenge problems verbatim, and what happens next (seed order, first slice,
-what a run will change). Replaces the former `signoff:` gate (removed
-2026-08-28): the user reacts to the report if the destination is wrong —
-pushback re-opens FIT; nothing waits on a reply. Inside a goal run,
-RECHART-minted drafts ride the run's status relay and ledger — no separate
-report per graduation.
+Every backlog write-up (capture, FIT, re-fit) ends with a user-facing report
+delivered in the conversation — not an approval ask, not a PR comment, not a
+file. A FRESH subagent with clean context writes it from the recorded docs
+alone (no author framing — same independence as §Challenge: a report the docs
+cannot support proves the write-up incomplete; fix the docs, never pad the
+report). User's language; fixed form, five numbered sections:
+
+1. Recorded — files created / updated / deleted, one line each.
+2. Contract — decisions, invariants, tier in plain words: what works, what
+   degrades loudly, what throws.
+3. Challenge — verdict line + problems verbatim (or `clear`).
+4. Next — slice order, first slice, what a run will change, who acts next.
+5. Open — fog / open questions left for the user.
+
+Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
+the destination is wrong — pushback re-opens FIT; nothing waits on a reply.
+Inside a goal run, RECHART-minted drafts ride the run's status relay and
+ledger — no separate report per graduation.
 
 ## Goal run
 

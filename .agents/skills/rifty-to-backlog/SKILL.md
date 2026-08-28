@@ -53,8 +53,8 @@ capturing PR body.
 ## 6. Report
 
 End with the user-facing completion report (`docs/backlog/README.md` §Report):
-what was recorded (files, shape, key decisions), challenge problems verbatim,
-and what happens next (who picks it up, what a fix/run would change). A report,
+a FRESH subagent with clean context writes it from the minted docs alone
+(five-section form, user's language); relay it in the conversation. A report,
 not an approval ask.
 
 After capture: `decision-workflow.md` §Backlog readiness owns draft→ready;
