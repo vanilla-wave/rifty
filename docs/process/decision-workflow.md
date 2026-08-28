@@ -103,3 +103,18 @@ ordinary items, single fixes, or process/docs/skill work:
    delete the goal directory whole.
 
 Show any conflict with the destination against its exact clause.
+
+Claude sessions may execute steps 2–6 deterministically via the `goal-run`
+workflow (`.claude/workflows/goal-run.js`): slice loop until the map is empty,
+then CLOSE; any user-owned decision (fork → `rifty-refine`, missing signoff,
+attempt/slice cap) returns a structured stop — resolve it and re-invoke, done
+stages skip off disk state. The skills stay canon — the script owns only
+order, gates, and bookkeeping checks, its prompts point at the skill files.
+FIT stays an inline skill (interactive: forks, signoff).
+
+While a goal is in a run the invoking session is an observer: it launches or
+re-invokes the run and relays statuses/stops in brief; it never edits tracked
+files — a hand edit bypasses checkpoint lineage and voids tree-bound verdicts.
+Sole exception: executing the named stop-resolution with the user
+(`rifty-refine`); everything else is a re-invoke — the run's agents do the
+work.

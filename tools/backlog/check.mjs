@@ -107,6 +107,22 @@ function hasSection(text, name) {
   return new RegExp(`^##\\s+${escaped}\\b`, 'm').test(text);
 }
 
+// Advisory premise challenge — README §Challenge. Presence-only gate on docs
+// created at/after the cutoff; earlier docs grandfathered.
+const CHALLENGE_SINCE = '2026-08-27';
+const CHALLENGE_LINE_RE = /^challenge: \d{4}-\d{2}-\d{2} — /m;
+
+function checkChallenge(rel, fm, text) {
+  if (typeof fm?.created !== 'string' || fm.created < CHALLENGE_SINCE) return;
+  if (!hasSection(text, 'Challenge')) {
+    errors.push(
+      `${rel}: created ${fm.created} requires '## Challenge' (advisory premise challenge — README §Challenge)`,
+    );
+  } else if (!CHALLENGE_LINE_RE.test(text)) {
+    errors.push(`${rel}: '## Challenge' missing 'challenge: <YYYY-MM-DD> — <verdict>' line`);
+  }
+}
+
 // --- Pass 1: collect files, split items vs epics ----------------------------
 
 const mdFiles = walk(
@@ -210,6 +226,7 @@ for (const { rel, area, fm, text } of itemRecords) {
         errors.push(`${rel}: blocked_by '${dep}' — no item docs/backlog/${dep}.md`);
     }
   }
+  checkChallenge(rel, fm, text);
 
   const a = KNOWN_AREAS.has(area) ? area : area || '(none)';
   const bucket = ITEM_STATUS_SET.has(fm?.status) ? fm.status : 'invalid';
@@ -258,6 +275,7 @@ for (const { rel, fm, text } of epicRecords) {
       if (!hasSection(text, s)) errors.push(`${rel}: ${fm.status} epic missing '## ${s}' section`);
     }
   }
+  checkChallenge(rel, fm, text);
   epicCounts[EPIC_STATUS_SET.has(fm?.status) ? fm.status : 'invalid'] += 1;
 }
 
@@ -312,6 +330,7 @@ for (const record of dirEpics.values()) {
       }
     }
   }
+  checkChallenge(record.goal.rel, fm, text);
   epicCounts[DIR_EPIC_STATUSES.has(fm?.status) ? fm.status : 'invalid'] += 1;
 }
 

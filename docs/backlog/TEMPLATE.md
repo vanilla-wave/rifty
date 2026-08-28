@@ -15,6 +15,12 @@ code: []
 
 <Situation. What's missing / wrong / deferred.>
 
+## Challenge
+
+<!-- Advisory premise challenge, fresh independent critic — README §Challenge. -->
+
+challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
+
 <!-- A draft stops here. Ready rules: README + decision-workflow §Backlog readiness. -->
 
 ## User scenario

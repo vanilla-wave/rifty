@@ -53,6 +53,7 @@ Explicit whole-ready-goal hand-off → run loop: `rifty-goal` skill +
 One PR = one reviewable delivered behavior. Never a workspace, hypothesis probe, or vehicle for process state.
 - Everything the unit discovers commits into its branch: contract flips, demotions, re-cuts, splits, intake drafts, lineage. A finding never opens a second PR.
 - Too small to review alone → rides with the next delivery, never its own PR.
+- Goal run: the goal is the delivered behavior — slices ride the goal's single draft PR by default; one or several PRs, splitting allowed, never required (`docs/backlog/README.md` §Goal run).
 - A rule demanding a separate PR holds only if it names the gate forcing it (today: none). Unnamed → apply this one and quote both clauses in the PR.
 - Binds PRs an agent opens on its own judgment. A PR the user explicitly asks for is their call: open it, name what it carries (zero source, docs-only, process state), never refuse or re-litigate.
 
