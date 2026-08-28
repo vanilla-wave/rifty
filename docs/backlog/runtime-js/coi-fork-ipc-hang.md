@@ -20,6 +20,15 @@ worker boundary, fork control frames (ADR-0150 P6b fork-control), exit/close
 ordering. Needs root-cause before any contract (`rifty-fix` shape at pickup:
 RED e2e first).
 
+Contradicting evidence (independent challenge 2026-08-28): main CI has a GREEN
+fork+IPC e2e — `tests/browser-unit/recursive-node-sqlite.spec.ts:227` ("real
+fork Worker crosses owner FS, launch context, recursive IPC, and disconnect
+control", blocking browser-unit-chromium job) asserts exit 0 with messages
+delivered through the sealed workbench terminal path. The spike probe ran on a
+modified prototype branch; the hang may be a spike-branch artifact, not a
+product defect. First pickup step: run the standing repro on main — a green run
+dissolves this item.
+
 ## Options or Next
 
 - Minimal RED: e2e fork+IPC round-trip on the COI path with a bounded timeout.
