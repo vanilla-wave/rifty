@@ -98,14 +98,21 @@ delivered in the conversation — not an approval ask, not a PR comment, not a
 file. A FRESH subagent with clean context writes it from the recorded docs
 alone (no author framing — same independence as §Challenge: a report the docs
 cannot support proves the write-up incomplete; fix the docs, never pad the
-report). User's language; fixed form, five numbered sections:
+report). User's language, ONE screen, no file paths, no process internals;
+fixed form:
 
-1. Recorded — files created / updated / deleted, one line each.
-2. Contract — decisions, invariants, tier in plain words: what works, what
-   degrades loudly, what throws.
-3. Challenge — verdict line + problems verbatim (or `clear`).
-4. Next — slice order, first slice, what a run will change, who acts next.
-5. Open — fog / open questions left for the user.
+1. Plan — 2-4 plain sentences: what the user gets and why now, tied to user
+   experience and project direction (mission/milestone). Never mechanics.
+2. What changes — experience-level: what starts working, what will loudly
+   degrade (warn) or throw. Never file lists.
+3. Steps — ordered slices, ONE line each ending with the observable result
+   once that slice lands ("after this: X works / X visible").
+4. Risks — ONLY challenge problems that could change the user's decision to
+   proceed, translated into plain risk statements ("if this is acceptable,
+   nothing to do"); problems already fixed in the docs are omitted, verbatim
+   text stays in the doc's `## Challenge`.
+5. Your decisions — questions that WILL come back to the user, each phrased
+   as the actual future question + when it fires. None → say so in one line.
 
 Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
 the destination is wrong — pushback re-opens FIT; nothing waits on a reply.
