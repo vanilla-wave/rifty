@@ -3,37 +3,47 @@
  * (backlog: playground/cold-restore-progress-visibility).
  *
  * Contract: every path where a baked-snapshot restore runs >250ms shows a
- * user-visible indicator for the WHOLE window (snapshot request → trusted
- * stamp). Slow delivery is injected server-side via the dev-only
+ * user-visible indicator for the WHOLE window [snapshot request start,
+ * publication). Slow delivery is injected server-side via the dev-only
  * `rifty-e2e-snapshot-fault` cookie seam (vite.config.ts) — the fetch is
  * SW-mediated, playwright route() cannot reach it.
  *
- * Window sampling: an in-page 100ms sampler records rendered-text indicator
- * markers + OPFS stamp appearance (wall-clocked); the gz request wall times
- * come from playwright network events. A single flash cannot pass: every
- * sample inside the window must carry an indicator, and the window must
- * actually be slow (≥ SLOW_FLOOR_MS) or the seam itself regressed.
+ * Carrier discrimination (Contract+RED attempt-2 re-cut):
+ * - the sampler is an init script — armed at document-start, BEFORE the app
+ *   can issue the snapshot request, so the request prefix is observed;
+ * - `visible` accepts only RENDERED semantic carriers: the launcher progress
+ *   status (`.rf-launcher__progress`, role=status) or the live pill in its
+ *   switching state (`.rf-livepill[data-state="switching"]`) — never a bare
+ *   launcher, free text, or an unpainted element;
+ * - the window ends at PUBLICATION (terminal mounts or the pill leaves
+ *   switching into starting/running), not at stamp-file existence;
+ * - the slow-window floor asserts the RESPONSE duration (`gz.end - gz.start`)
+ *   against the injected stall — an immediate response fails even if local
+ *   restore work happens to be slow;
+ * - the reopen test writes an OPFS sentinel into the persisted tree and
+ *   requires it to survive: a reopen that reseeds a fresh Scratch fails.
  */
 import { type BrowserContext, type Page, type Request, expect, test } from '@playwright/test';
 
 const STAMP_PATH =
   '/.rifty/workbench/v1/projects/scratch/tree/node_modules/.rifty-install-stamp.json';
+const SENTINEL_PATH = '/.rifty/workbench/v1/projects/scratch/tree/e2e-reopen-sentinel.txt';
 const FAULT_COOKIE = 'rifty-e2e-snapshot-fault';
 const DELAY_MS = 4_000;
-const SLOW_FLOOR_MS = 3_000;
+const RESPONSE_FLOOR_MS = DELAY_MS - 500;
 const BOOT_TIMEOUT = 120_000;
+
+test.skip(({ browserName }) => browserName !== 'chromium', 'chromium-only (project scope)');
 
 interface WindowSample {
   readonly w: number;
   readonly visible: boolean;
-  /** Publish already happened: terminal mounted or run pill left SWITCHING. */
   readonly postPublish: boolean;
   readonly markers: string;
 }
 
 interface SamplerData {
   readonly samples: readonly WindowSample[];
-  readonly stampAt: number | null;
 }
 
 declare global {
@@ -41,12 +51,34 @@ declare global {
   var __restoreSampler:
     | {
         samples: WindowSample[];
-        stampAt: number | null;
         iv: ReturnType<typeof setInterval>;
-        opfsIv: ReturnType<typeof setInterval>;
       }
     | undefined;
 }
+
+/** Armed at document-start on every page of the context (init script). */
+const SAMPLER_INIT = `(() => {
+  const rendered = (el) => {
+    if (!el) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  };
+  const S = { samples: [], iv: 0 };
+  globalThis.__restoreSampler = S;
+  S.iv = setInterval(() => {
+    const progress = document.querySelector('.rf-launcher__progress');
+    const pill = document.querySelector('.rf-livepill');
+    const pillState = pill ? pill.getAttribute('data-state') : null;
+    const markers = [
+      rendered(progress) ? 'launcher-progress' : '',
+      rendered(pill) && pillState === 'switching' ? 'pill-switching' : '',
+    ].filter(Boolean).join('+');
+    const postPublish =
+      document.querySelector('.xterm') !== null ||
+      (rendered(pill) && (pillState === 'starting' || pillState === 'running'));
+    S.samples.push({ w: Date.now(), visible: markers.length > 0, postPublish, markers });
+  }, 100);
+})();`;
 
 async function armSlowSnapshots(context: BrowserContext, baseURL: string): Promise<void> {
   await context.addCookies([{ name: FAULT_COOKIE, value: `delay:${DELAY_MS}`, url: baseURL }]);
@@ -62,56 +94,36 @@ function watchSnapshotFetch(page: Page): { first: () => { start: number; end: nu
   return { first: () => first };
 }
 
-async function startSampler(page: Page): Promise<void> {
-  await page.evaluate((stampPath: string) => {
-    const S: NonNullable<typeof globalThis.__restoreSampler> = {
-      samples: [],
-      stampAt: null,
-      iv: 0 as unknown as ReturnType<typeof setInterval>,
-      opfsIv: 0 as unknown as ReturnType<typeof setInterval>,
-    };
-    globalThis.__restoreSampler = S;
-    const probe = (): void => {
-      const text = document.body ? document.body.innerText : '';
-      const markers = [
-        text.includes('Preparing instant project') ? 'preparing' : '',
-        /SWITCHING|switching/.test(text) ? 'switching' : '',
-        /restor/i.test(text) ? 'restoring' : '',
-        document.querySelector('[data-testid="launcher"]') ? 'launcher' : '',
-      ]
-        .filter(Boolean)
-        .join('+');
-      const postPublish =
-        document.querySelector('.xterm') !== null || /STARTING|RUNNING|LIVE :/.test(text);
-      S.samples.push({ w: Date.now(), visible: markers.length > 0, postPublish, markers });
-    };
-    S.iv = setInterval(probe, 100);
-    probe();
-    const checkStamp = async (): Promise<void> => {
-      if (S.stampAt !== null) return;
-      try {
-        const segs = stampPath.split('/').filter(Boolean);
-        let dir = await navigator.storage.getDirectory();
-        for (const seg of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
-        await dir.getFileHandle(segs[segs.length - 1] as string);
-        S.stampAt = Date.now();
-      } catch {
-        // stamp not there yet
-      }
-    };
-    S.opfsIv = setInterval(() => void checkStamp(), 100);
-    void checkStamp();
-  }, STAMP_PATH);
+async function waitForPublication(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () => page.evaluate(() => globalThis.__restoreSampler?.samples.some((s) => s.postPublish)),
+      { timeout: BOOT_TIMEOUT },
+    )
+    .toBe(true);
 }
 
 async function collectSampler(page: Page): Promise<SamplerData> {
   return page.evaluate(() => {
     const S = globalThis.__restoreSampler;
-    if (!S) throw new Error('sampler was never started');
+    if (!S) throw new Error('sampler was never armed');
     clearInterval(S.iv);
-    clearInterval(S.opfsIv);
-    return { samples: S.samples, stampAt: S.stampAt };
+    return { samples: S.samples };
   });
+}
+
+async function opfsFileExists(page: Page, path: string): Promise<boolean> {
+  return page.evaluate(async (target: string) => {
+    try {
+      const segs = target.split('/').filter(Boolean);
+      let dir = await navigator.storage.getDirectory();
+      for (const seg of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
+      await dir.getFileHandle(segs[segs.length - 1] as string);
+      return true;
+    } catch {
+      return false;
+    }
+  }, path);
 }
 
 async function waitForTrustedBoot(page: Page): Promise<void> {
@@ -121,23 +133,20 @@ async function waitForTrustedBoot(page: Page): Promise<void> {
       timeout: BOOT_TIMEOUT,
     })
     .toBe(true);
-  await expect
-    .poll(
-      () =>
-        page.evaluate(async (stampPath: string) => {
-          try {
-            const segs = stampPath.split('/').filter(Boolean);
-            let dir = await navigator.storage.getDirectory();
-            for (const seg of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
-            await dir.getFileHandle(segs[segs.length - 1] as string);
-            return true;
-          } catch {
-            return false;
-          }
-        }, STAMP_PATH),
-      { timeout: BOOT_TIMEOUT },
-    )
-    .toBe(true);
+  // Stamp presence = restore writes drained; safe to mutate OPFS afterwards.
+  await expect.poll(() => opfsFileExists(page, STAMP_PATH), { timeout: BOOT_TIMEOUT }).toBe(true);
+}
+
+async function writeSentinel(page: Page): Promise<void> {
+  await page.evaluate(async (target: string) => {
+    const segs = target.split('/').filter(Boolean);
+    let dir = await navigator.storage.getDirectory();
+    for (const seg of segs.slice(0, -1)) dir = await dir.getDirectoryHandle(seg);
+    const file = await dir.getFileHandle(segs[segs.length - 1] as string, { create: true });
+    const writable = await file.createWritable();
+    await writable.write('persisted-reopen-sentinel');
+    await writable.close();
+  }, SENTINEL_PATH);
 }
 
 async function evictNodeModules(page: Page): Promise<void> {
@@ -151,23 +160,25 @@ async function evictNodeModules(page: Page): Promise<void> {
 
 function assertVisibleWindow(data: SamplerData, gz: { start: number; end: number } | null): void {
   expect(gz, 'snapshot restore must actually re-run (gz fetch observed)').not.toBeNull();
-  expect(data.stampAt, 'restore must complete (stamp appears)').not.toBeNull();
-  const start = (gz as { start: number }).start;
-  const stampAt = data.stampAt as number;
-  expect(stampAt - start, 'window must be slow — seam regressed otherwise').toBeGreaterThanOrEqual(
-    SLOW_FLOOR_MS,
-  );
-  // The obligation ends at publish; sampling/stamp-poll granularity can lag it,
-  // so trim the window at the first post-publish sample (publish-after-restore
-  // guarantees it never precedes restore completion).
-  const firstPostPublish = data.samples.find((s) => s.postPublish && s.w >= start)?.w;
-  const end = firstPostPublish === undefined ? stampAt : Math.min(stampAt, firstPostPublish);
-  const inWindow = data.samples.filter((s) => s.w >= start && s.w < end);
+  const { start, end: responseEnd } = gz as { start: number; end: number };
+  expect(
+    responseEnd - start,
+    'response duration must carry the injected stall — seam regressed otherwise',
+  ).toBeGreaterThanOrEqual(RESPONSE_FLOOR_MS);
+  const firstSample = data.samples[0];
+  expect(firstSample, 'sampler produced no samples').toBeDefined();
+  expect(
+    (firstSample as WindowSample).w,
+    'sampler must be armed before the snapshot request starts',
+  ).toBeLessThanOrEqual(start);
+  const publishAt = data.samples.find((s) => s.postPublish)?.w;
+  expect(publishAt, 'project must publish after restore').toBeDefined();
+  const inWindow = data.samples.filter((s) => s.w >= start && s.w < (publishAt as number));
   expect(inWindow.length, 'sampler must cover the window').toBeGreaterThan(5);
   const silent = inWindow.filter((s) => !s.visible);
   expect(
     silent.map((s) => `+${s.w - start}ms`),
-    'every sample inside the restore window must show an indicator',
+    'every sample inside [request start, publication) must show a semantic indicator',
   ).toEqual([]);
 }
 
@@ -178,15 +189,11 @@ test.describe('cold snapshot restore visibility', () => {
     baseURL,
   }) => {
     test.setTimeout(BOOT_TIMEOUT + 60_000);
+    await context.addInitScript(SAMPLER_INIT);
     await armSlowSnapshots(context, baseURL as string);
     const gz = watchSnapshotFetch(page);
-    await page.goto('/?preset=vite8&autorun=1', { waitUntil: 'domcontentloaded' });
-    await startSampler(page);
-    await expect
-      .poll(() => page.evaluate(() => globalThis.__restoreSampler?.stampAt !== null), {
-        timeout: BOOT_TIMEOUT,
-      })
-      .toBe(true);
+    await page.goto('/?preset=vite8&autorun=1', { waitUntil: 'commit' });
+    await waitForPublication(page);
     const data = await collectSampler(page);
     assertVisibleWindow(data, gz.first());
   });
@@ -201,19 +208,22 @@ test.describe('cold snapshot restore visibility', () => {
     baseURL,
   }) => {
     test.setTimeout(BOOT_TIMEOUT * 2 + 60_000);
+    await context.addInitScript(SAMPLER_INIT);
     await page.goto('/?preset=vite8&autorun=1', { waitUntil: 'domcontentloaded' });
     await waitForTrustedBoot(page);
+    await writeSentinel(page);
     await evictNodeModules(page);
     await armSlowSnapshots(context, baseURL as string);
     const gz = watchSnapshotFetch(page);
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await startSampler(page);
-    await expect
-      .poll(() => page.evaluate(() => globalThis.__restoreSampler?.stampAt !== null), {
-        timeout: BOOT_TIMEOUT,
-      })
-      .toBe(true);
+    await page.goto('/', { waitUntil: 'commit' });
+    await waitForPublication(page);
     const data = await collectSampler(page);
     assertVisibleWindow(data, gz.first());
+    // The reopened project must BE the persisted one: reseeding a fresh
+    // Scratch (which would also repaint progress) loses the user's tree.
+    expect(
+      await opfsFileExists(page, SENTINEL_PATH),
+      'persisted tree must survive the reopen',
+    ).toBe(true);
   });
 });

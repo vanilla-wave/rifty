@@ -1,6 +1,6 @@
 ---
 area: playground
-status: ready
+status: draft
 title: Cold snapshot restore visibility — silent openActive reopen, pinned indicator, dead #167 wiring removed
 created: 2026-08-29
 why: PR #167 (merge 7828b058, claimed mechanical) dropped the grey «restoring project dependencies…» wiring + flipped its e2e assert; measured 2026-08-30 — deep-link/transition paths stay visible via projectBusy carriers (unpinned), but the no-query persisted reopen (openActive) restores in FULL silence; beforeRun is dead machinery.
@@ -63,9 +63,9 @@ the SW-mediated fetch; blocking the SW kills boot entirely.
   console) and reaches LIVE — never a silent absent tree. The ADR-0278:183
   printed-reason/visible-install transcript was NOT observable in the terminal
   viewport (scrollback unverified) → recorded in
-  `[[owner-restore-diagnostics-unread]]`, not this unit.
+  `[[structured-execution-diagnostics]]`, not this unit.
 - Diagnostics side-finding (out of scope here): restore/promotion log lines
-  reach no console on any path → `[[owner-restore-diagnostics-unread]]`.
+  reach no console on any path → `[[structured-execution-diagnostics]]`.
 
 ## Challenge
 
@@ -89,20 +89,27 @@ pinned so the next mechanical refactor cannot silently drop them.
 ## Acceptance
 
 Committed carrier: `tests/e2e/restore-progress-visibility.spec.ts`
-(chromium-heavy lane) + dev-only cookie seam `rifty-e2e-snapshot-fault`
-(vite.config.ts) stalling `*node-modules.json.gz` server-side. Both tests
-sample every 100ms and reject ANY silent sample inside
-[gz request start, publish); a single flash cannot pass; a ≥3s window floor
-guards seam regression.
+(chromium-heavy lane; chromium-only guard) + dev-only cookie seam
+`rifty-e2e-snapshot-fault` (vite.config.ts) stalling `*node-modules.json.gz`
+server-side. Discrimination (attempt-2 re-cut): the sampler is a
+document-start init script (the request prefix is observed — first sample ≤
+request start); `visible` accepts only RENDERED semantic carriers
+(`.rf-launcher__progress` role=status, `.rf-livepill[data-state="switching"]`
+with a non-empty box) — never a bare launcher, free text, or an unpainted
+element; the window is [gz request start, publication) where publication =
+terminal mount or the pill leaving switching for starting/running; the slow
+floor asserts the gz RESPONSE duration (≥3.5s of the injected 4s stall), so
+an immediate response fails even when local restore work is slow.
 
 1. **Pin, deep-link** (GREEN today): cold `?preset=vite8&autorun=1`, delivery
-   stalled 4s → indicator (SWITCHING pill / «Preparing instant project»)
-   present in every in-window sample.
+   stalled 4s → semantic indicator present in every in-window sample.
 2. **No-query persisted reopen** (RED today — the unit's fix): boot, evict
    OPFS `<root>/node_modules` (stamp included; localStorage hint survives),
-   goto `/` → same every-sample indicator invariant through the re-restore.
-   Carrier for the indicator is agent-owned (refine decision); the committed
-   test pins only the observable.
+   goto `/` → same every-sample indicator invariant through the re-restore,
+   AND the persisted tree survives: an OPFS sentinel file written into the
+   project tree before eviction still exists after publication (a reopen that
+   reseeds a fresh Scratch fails). Carrier for the indicator is agent-owned
+   (refine decision); the committed test pins only the observable.
 3. **Dead machinery gone**: `beforeRun` deleted from pty-server deps + gate
    (line 148/412) with its tests-only harness; `slow-progress.ts` keeps only
    prod-consumed paths. `pnpm pr:check` green.
@@ -118,9 +125,9 @@ Network); operations are the two dependency-arrival entries this item pins.
 
 | Boundary × fault | Operation | Honest outcome | Carrier |
 | --- | --- | --- | --- |
-| Storage (OPFS): tree+stamp evicted, localStorage survives | no-query reopen (`openActive`) | restore re-runs; indicator every in-window sample | Acceptance 2 e2e (RED today) |
-| Network (snapshot asset): stall ≥2s | deep-link boot / no-query reopen | indicator every in-window sample until publish | Acceptance 1–2 e2e via cookie seam |
-| Network (snapshot asset): unavailable (HTTP error) | first materialization | declared: rejected probe prints its recorded reason, then the same visible real install (ADR-0278:183); never a silent absent tree | seam `status:<code>` + Evidence artifact (install ran, tree arrived; reason/transcript visibility gap → `[[owner-restore-diagnostics-unread]]`); degradation logic untouched here |
+| Storage (OPFS): tree+stamp evicted, localStorage survives | no-query reopen (`openActive`) | restore re-runs on the SAME persisted project (sentinel survives); indicator every in-window sample | Acceptance 2 e2e (RED today) |
+| Network (snapshot asset): stall ≥2s | deep-link boot / no-query reopen | indicator every in-window sample until publication; stall proven on gz response duration | Acceptance 1–2 e2e via cookie seam |
+| Network (snapshot asset): unavailable (HTTP error) | first materialization | declared: rejected probe prints its recorded reason, then the same visible real install (ADR-0278:183); never a silent absent tree | seam `status:<code>` + Evidence artifact (install ran, tree arrived; reason/transcript visibility gap → `[[structured-execution-diagnostics]]`); degradation logic untouched here |
 | Network (snapshot asset): stale identity / corrupt body | first materialization | distinct rejection reasons preserved (`snapshot-template-mismatch`, `snapshot-restore-failed:*`), same visible-install outcome | existing unit coverage project-deps.test.ts; behavior untouched here |
 
 ## Out of scope
@@ -128,7 +135,7 @@ Network); operations are the two dependency-arrival entries this item pins.
 - Resurrecting the grey terminal line / streaming restore progress into a
   terminal (declined in refine; publish-after-restore stands).
 - Diagnostics read surface for restore/promotion log lines —
-  `[[owner-restore-diagnostics-unread]]` (adjudicated out: attempt-1
+  `[[structured-execution-diagnostics]]` (adjudicated out: attempt-1
   Goal-drift blocker; refine chose visibility + existing failure surfaces).
 - Changing snapshot degradation behavior (unavailable/stale/failed) — rows
   above pin the declared ADR-0278 outcome, delivered elsewhere.
@@ -158,10 +165,20 @@ Network); operations are the two dependency-arrival entries this item pins.
   «already holds on main» was measured on the query-contaminated reload; the
   no-query `openActive` reopen is fully silent and is the unit's RED;
   (b) devtools-diagnostics acceptance removed — outside the recorded refine
-  scope → `[[owner-restore-diagnostics-unread]]`; (c) `beforeRun` fork
+  scope → `[[structured-execution-diagnostics]]`; (c) `beforeRun` fork
   resolved to DELETE — reviving it would stream into terminal command output,
   contradicting the declined pin; (d) fault rows re-expressed as boundary ×
   operation with ADR-0278:183 outcomes — no undifferentiated «install/absent».
 - Slow-window seam is server-side (`rifty-e2e-snapshot-fault` cookie,
   dev-only): the snapshot fetch is SW-mediated — playwright `route()` cannot
   reach it; SW-block kills boot (spike-verified).
+- Contract+RED attempt 2 (verify) @ 90aee3e2f: blocker — 6 findings,
+  adjudicated 5 HOLDS / 1 FALSE (persisted-identity demand — contract had
+  disclaimed it); 2nd consecutive blocker → §Contract escalation re-refine in
+  place: carrier discrimination declared in Acceptance (semantic rendered
+  markers, document-start sampling, publication window end, response-duration
+  floor) and the persisted-tree sentinel added to Acceptance 2 as a declared
+  obligation. Diagnostics side-draft withdrawn as duplicate — evidence folded
+  into `[[structured-execution-diagnostics]]` (its stale code refs refreshed);
+  chromium-only guard added (Regressions concern: firefox weekly lane
+  timeout).
