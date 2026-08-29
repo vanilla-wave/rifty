@@ -138,7 +138,12 @@ describe('CI change scope', () => {
       expect(packageJson.scripts['test:docs-contract'], contract).toContain(contract);
     }
 
-    for (const job of ['unit-and-conformance', 'e2e-chromium', 'browser-unit-chromium']) {
+    for (const job of [
+      'unit-and-conformance',
+      'e2e-chromium',
+      'browser-unit-chromium',
+      'no-coi-chromium',
+    ]) {
       const block = jobBlock(workflow, job);
       expect(block, job).toContain('needs: change-scope');
       // A bare `needs.*` condition implies success() and silently skips the
@@ -159,6 +164,7 @@ describe('CI change scope', () => {
       'unit-and-conformance',
       'e2e-chromium',
       'browser-unit-chromium',
+      'no-coi-chromium',
     ]) {
       expect(gate, dependency).toContain(`- ${dependency}`);
     }

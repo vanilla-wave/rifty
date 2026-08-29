@@ -69,7 +69,8 @@ function makeSentinelSab(): { sab: SharedArrayBuffer; view: Uint8Array; dataView
   return { sab, view: new Uint8Array(sab, 3, 5), dataView: new DataView(sab, 3, 5) };
 }
 
-/** A decoder recording the EXACT argument objects of every call (parity 9). */
+/** A decoder recording the EXACT argument objects of every call and returning
+ * a UNIQUE sentinel per call (parity 9 — returns must pass through unchanged). */
 function makeSpyDecoder(): {
   Dec: typeof TextDecoder;
   calls: { input: unknown; opts: unknown }[];
@@ -78,7 +79,7 @@ function makeSpyDecoder(): {
   class SpyDecoder {
     decode(...args: unknown[]): string {
       calls.push({ input: args[0], opts: args[1] });
-      return 'spy';
+      return `spy-${calls.length}`;
     }
   }
   return { Dec: SpyDecoder as unknown as typeof TextDecoder, calls };
@@ -110,7 +111,7 @@ describe('COI-realm exactness pins — parity 8 (offset/length against sentinel 
 });
 
 describe('COI-realm identity pins — parity 9 (exact input/opts objects, exact thrown error)', () => {
-  it('non-shared typed view / DataView / ArrayBuffer / no-arg pass the EXACT input and opts objects', () => {
+  it('non-shared typed view / DataView / ArrayBuffer / no-arg pass the EXACT input and opts objects AND return the decoder sentinel unchanged', () => {
     const { Dec, calls } = makeSpyDecoder();
     installSharedMemoryTolerantTextDecoder(Dec);
     const d = new Dec();
@@ -119,16 +120,18 @@ describe('COI-realm identity pins — parity 9 (exact input/opts objects, exact 
     const dataView = new DataView(new ArrayBuffer(4));
     const buf = new ArrayBuffer(2);
 
-    d.decode(view, opts);
+    // Unique sentinel per call: a wrapper that hands the original the exact
+    // objects then fabricates its own output fails the return assertions.
+    expect(d.decode(view, opts)).toBe('spy-1');
     expect(calls.at(-1)?.input).toBe(view);
     expect(calls.at(-1)?.opts).toBe(opts);
-    d.decode(dataView, opts);
+    expect(d.decode(dataView, opts)).toBe('spy-2');
     expect(calls.at(-1)?.input).toBe(dataView);
     expect(calls.at(-1)?.opts).toBe(opts);
-    d.decode(buf, opts);
+    expect(d.decode(buf, opts)).toBe('spy-3');
     expect(calls.at(-1)?.input).toBe(buf);
     expect(calls.at(-1)?.opts).toBe(opts);
-    d.decode();
+    expect(d.decode()).toBe('spy-4');
     expect(calls.at(-1)?.input).toBeUndefined();
     expect(calls.at(-1)?.opts).toBeUndefined();
   });
@@ -158,6 +161,121 @@ describe('COI-realm identity pins — parity 9 (exact input/opts objects, exact 
       caught = err;
     }
     expect(caught).toBe(sentinel);
+  });
+});
+
+/** Sharedness + bytes of whatever object reached the original decoder. */
+function receivedShape(input: unknown): { shared: boolean; bytes: number[] } {
+  if (ArrayBuffer.isView(input)) {
+    return {
+      shared: input.buffer instanceof SharedArrayBuffer,
+      bytes: Array.from(new Uint8Array(input.buffer, input.byteOffset, input.byteLength)),
+    };
+  }
+  if (input instanceof SharedArrayBuffer) {
+    return { shared: true, bytes: Array.from(new Uint8Array(input)) };
+  }
+  if (input instanceof ArrayBuffer) {
+    return { shared: false, bytes: Array.from(new Uint8Array(input)) };
+  }
+  throw new Error('unexpected original-decoder input');
+}
+
+describe('ordered exact-call log — parity 13 (original decoder invoked EXACTLY once; only the shared-path call gets a private copy)', () => {
+  // Output and error-identity rows alone admit a try-native/catch/copy-retry
+  // wrapper that invokes the ORIGINAL decoder on the shared input first. The
+  // ordered log kills it: one original call per decode, and the one call on a
+  // shared source carries a private (non-shared) copy with the exact bytes.
+  const HELLO = [104, 101, 108, 108, 111];
+  const SENTINEL_SAB_BYTES = [0xff, 0xff, 0xff, ...HELLO, 0xff, 0xff];
+
+  function assertOrderedLog(
+    log: { input: unknown; opts: unknown }[],
+    returns: string[],
+    sources: { priv: Uint8Array; view: Uint8Array; dataView: DataView; sab: SharedArrayBuffer },
+    opts: object,
+  ): void {
+    // EXACTLY one original call per decode, in order — no retry, no extra call.
+    expect(log).toHaveLength(4);
+    expect(returns).toEqual(['ret-1', 'ret-2', 'ret-3', 'ret-4']);
+    // Non-shared: the EXACT source object straight through.
+    expect(log[0]?.input).toBe(sources.priv);
+    expect(log[0]?.opts).toBe(opts);
+    // Shared classes: never the source object, never shared-backed, bytes exact.
+    const sharedRows: [number, unknown, number[]][] = [
+      [1, sources.view, HELLO],
+      [2, sources.dataView, HELLO],
+      [3, sources.sab, SENTINEL_SAB_BYTES],
+    ];
+    for (const [i, source, bytes] of sharedRows) {
+      const entry = log[i];
+      expect(entry?.input).not.toBe(source);
+      const shape = receivedShape(entry?.input);
+      expect(shape.shared).toBe(false);
+      expect(shape.bytes).toEqual(bytes);
+      expect(entry?.opts).toBe(opts);
+    }
+  }
+
+  it('direct install: ordered log across priv view / shared view / shared DataView / raw SAB', () => {
+    const log: { input: unknown; opts: unknown }[] = [];
+    class LoggingDecoder {
+      decode(...args: unknown[]): string {
+        log.push({ input: args[0], opts: args[1] });
+        return `ret-${log.length}`;
+      }
+    }
+    const Dec = LoggingDecoder as unknown as typeof TextDecoder;
+    installSharedMemoryTolerantTextDecoder(Dec);
+    const d = new Dec();
+    const { sab, view, dataView } = makeSentinelSab();
+    const priv = new TextEncoder().encode('plain');
+    const opts = { stream: false };
+    const returns = [
+      d.decode(priv, opts),
+      d.decode(view, opts),
+      d.decode(dataView, opts),
+      d.decode(sab as unknown as ArrayBuffer, opts),
+    ];
+    assertOrderedLog(log, returns, { priv, view, dataView, sab }, opts);
+  });
+
+  it('aggregate install (installWorkerRealmCompat): same log through the realm TextDecoder', () => {
+    const realDecode = TextDecoder.prototype.decode;
+    const hadSelf = 'self' in globalThis;
+    const savedSelf = (globalThis as { self?: unknown }).self;
+    const log: { input: unknown; opts: unknown }[] = [];
+    // The "original" the aggregate captures is this logging fn — every call
+    // the patched realm decode makes lands in the ordered log.
+    TextDecoder.prototype.decode = ((...args: unknown[]): string => {
+      log.push({ input: args[0], opts: args[1] });
+      return `ret-${log.length}`;
+    }) as typeof TextDecoder.prototype.decode;
+    try {
+      installWorkerRealmCompat();
+      const d = new TextDecoder();
+      const { sab, view, dataView } = makeSentinelSab();
+      const priv = new TextEncoder().encode('plain');
+      const opts = { stream: false };
+      const returns = [
+        d.decode(priv, opts),
+        d.decode(view, opts),
+        d.decode(dataView, opts),
+        d.decode(sab as unknown as ArrayBuffer, opts),
+      ];
+      assertOrderedLog(log, returns, { priv, view, dataView, sab }, opts);
+    } finally {
+      TextDecoder.prototype.decode = realDecode;
+      if (hadSelf) {
+        Object.defineProperty(globalThis, 'self', {
+          value: savedSelf,
+          writable: true,
+          configurable: true,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'self');
+      }
+    }
   });
 });
 

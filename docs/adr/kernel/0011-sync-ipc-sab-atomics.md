@@ -34,6 +34,13 @@ One process model: each Node-style process runs in its own Worker realm hosted b
 - Stdio is binary `Uint8Array` over `MessagePort`, transferable; text decoding lives in the consumer.
 - Same-realm `new Function`-in-realm path stays as a fallback behind a capability gate (`crossOriginIsolated === false` or `RIFTY_FALLBACK_NO_SAB=1`), marked deprecated in TSDoc — for non-isolated test environments only.
 
+> Correction 2026-08-30 (ADR-0367 §4): the fallback's "non-isolated test
+> environments only" boundary is superseded for the no-COI sandbox tier —
+> there the same-realm path is a supported PRODUCT mode, warned-once +
+> capability-reported, never masquerading as isolated. Retiring the fallback
+> in COI realms stays `kernel/process-equals-web-worker` scope. SAB ring and
+> Worker-as-process decisions stand.
+
 ## Consequences
 
 - A-021, A-023, A-026 unblock mechanically once `kernel.spawn` exists.

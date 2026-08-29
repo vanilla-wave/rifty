@@ -58,8 +58,10 @@ body, transcript `nodeOracle.binding-intact-direct`; absent-binding sim =
 | 9 | `installWorkerRealmCompat()` → `global === globalThis`; `self = globalThis` assignment | `true`; assign ok, `self === globalThis` | — |
 | 10 | built util-types: `isSharedArrayBuffer(new ArrayBuffer(1))` / `isAnyArrayBuffer(…)` | `false` / `true`, no throw | same — REAL `node:util/types`, same inputs (transcript `utilTypesNative`; binding intact AND deleted) |
 | 11 | built util-types on shared wasm buffer: `isSharedArrayBuffer` / `isAnyArrayBuffer` | `true` / `true`, no throw | same — REAL `node:util/types` (transcript `utilTypesNative`) |
-| 12 | kernel PUBLIC entry (bundled `kernel/src/index.ts` — a removed export fails here): `createSabRing()`, `spawnKernelWorker()` (dies at its FIRST constructor, `spawn-worker.ts:395`, before any Worker exists), plus retained private `createWorkerOutputState()` (`worker-stdio-drain.ts:119`, bundled `worker-stdio-drain.ts`) | ALL `ReferenceError: SharedArrayBuffer is not defined` (transcript `kernelPublicEntry`) | — |
+| 12 | kernel PUBLIC entry (bundled `kernel/src/index.ts` — a removed export fails here): `createSabRing()`, `spawnKernelWorker()`, plus retained private `createWorkerOutputState()` (`worker-stdio-drain.ts:119`, bundled `worker-stdio-drain.ts`); a counting `Worker` constructor wraps the sweep — the driver fails LOUD on any nonzero count | ALL `ReferenceError: SharedArrayBuffer is not defined` with `workerConstructions: 0` per call — `spawnKernelWorker` PROVABLY dies at its FIRST constructor (`spawn-worker.ts:395`) before any Worker exists (transcript `kernelPublicEntry`) | — |
 | 13 | poisoned binding: `SharedArrayBuffer` redefined as a counting+throwing accessor AFTER install, then the full patched-decode sweep of row 8 (transcript `poisonedBinding`, all four realm×install combos) | count **6** — EVERY class trips `POISON: bare SharedArrayBuffer binding evaluated`; contract target after fix: count 0, outputs of rows 5–8 intact | count 6 (binding intact AND deleted sims — same patched body) |
+| 14 | mixed install sequence (direct-mode realms): direct helper install FIRST, then the realm's FIRST `installWorkerRealmCompat()` — snapshot immediately (transcript `mixedDirectThenAggregate`) | decoder identity kept (`=== captured` patched fn), marker, `global` alias, own-writable-data `self` all `true`; `decode(bytes)` `ReferenceError` (today) — an aggregate early return keyed on the decoder marker would skip global/self here | decoder identity + siblings same; decode `"hello"` (binding-deleted sim: same ReferenceError) |
+| 15 | non-shared sibling classes through the REALM decoder, both install modes: `decode(new DataView(bytes('hello').buffer))` / `decode(bytes('hello').buffer)` (transcript `patched.privDataView`/`patched.privArrayBuffer`) | `ReferenceError` (today; target `"hello"` each) | `"hello"` each |
 
 Kills the 2026-08-26 frozen assumption "nothing can be shared in a SAB-less
 realm": Chromium does NOT gate shared `WebAssembly.Memory` on COI — shared
@@ -78,9 +80,14 @@ then a decode (today: siblings green, decode ReferenceError);
 sentinel-laid shared wasm buffer ('hello' at offset 3, 0xFF elsewhere) — Node
 oracle decodes EXACTLY the view bytes ('hello' per view class; raw buffer
 length+SHA-256 above — projections dropped checkpoint 3); `identity.*` — spy
-decoder receives the EXACT input/opts objects, a sentinel error propagates as
-the SAME object (Node oracle all `true`; Chromium no-COI today:
-ReferenceError / `false` — flips with the fix).
+decoder receives the EXACT input/opts objects AND its UNIQUE per-call sentinel
+comes back unchanged (fabricated-output wrappers fail); error identity: a
+sentinel propagates as the SAME object, and on SHARED-wasm input a
+fresh-error-per-call decoder proves the propagated error is the FIRST thrown
+with throw count EXACTLY 1 (`identity.errorIdentitySharedFirst` — a
+try-native/catch/copy-retry wrapper throws twice and propagates the second;
+Node oracle `{first: true, throwCount: 1}`; Chromium no-COI today
+ReferenceError → `{first: false, throwCount: 0}` — flips with the fix).
 
 Blast-radius observation (driver development, Node absent-binding sim): after
 install the patched decode poisons the HOST's own decodes too — Node's ESM

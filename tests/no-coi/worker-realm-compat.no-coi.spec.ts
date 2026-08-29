@@ -1,10 +1,10 @@
 /**
  * RED-first no-COI substrate — contract
  * `docs/backlog/runtime-js/worker-realm-compat-bare-sab-referenceerror.md`.
- * Expected RED today: parity 1–7 (every failure `ReferenceError:
- * SharedArrayBuffer is not defined`) + parity 12 (every poisoned decode trips
- * the counting accessor). Green pins: preconditions + parity 10.
- * Parity 8–9 exactness/identity pins are COI vitest
+ * Expected RED today: parity 1–7, 9, 14, 15 (every decode failure
+ * `ReferenceError: SharedArrayBuffer is not defined`) + parity 12 (every
+ * poisoned decode trips the counting accessor). Green pins: preconditions +
+ * parity 10. Parity 8/13 exactness/call-log pins are COI vitest
  * (`packages/runtime-js/src/ipc/worker-realm-compat.test.ts`).
  */
 import { createHash } from 'node:crypto';
@@ -40,12 +40,30 @@ interface ProbeResult {
   marker: boolean;
   repeatDirectReturned: boolean;
   repeatIdentity: boolean;
+  // Direct only: FIRST aggregate call lands on an already-marked decoder.
+  mixedDirectThenAggregate?: {
+    decoderIdentity: boolean;
+    marker: boolean;
+    globalAlias: boolean;
+    self: SelfSnapshot;
+    decodeBytes: Attempt;
+  };
   patched: Record<
-    'bytes' | 'noArg' | 'sharedView' | 'sharedDataView' | 'rawShared' | 'streaming',
+    | 'bytes'
+    | 'noArg'
+    | 'sharedView'
+    | 'sharedDataView'
+    | 'rawShared'
+    | 'streaming'
+    | 'privDataView'
+    | 'privArrayBuffer',
     Attempt
   >;
   utilTypes: Attempt;
-  identity: Record<'view' | 'dataView' | 'arrayBuffer' | 'noArg' | 'errorIdentity', Attempt>;
+  identity: Record<
+    'view' | 'dataView' | 'arrayBuffer' | 'noArg' | 'errorIdentity' | 'errorIdentitySharedFirst',
+    Attempt
+  >;
   poisonedBinding: {
     count: number;
     sweep: Record<
@@ -183,6 +201,46 @@ test('parity 7: repeat install → false AND strict-identity patched fn AND shar
     expect(r.repeatIdentity, combo).toBe(true);
     // Booleans alone don't close this: decode must still work after repeats.
     expect(r.patched.sharedView, combo).toEqual({ ok: true, value: 'hello' });
+  });
+});
+
+test('parity 9: spy identity + unique sentinel returns per non-shared class; thrown error = the FIRST error object, throw count 1, shared-wasm input included', () => {
+  each((combo, r) => {
+    // Exact input/opts objects AND the spy's unique sentinel returned unchanged
+    // — a wrapper passing exact objects but fabricating output fails here.
+    expect(r.identity.view, combo).toEqual({ ok: true, value: true });
+    expect(r.identity.dataView, combo).toEqual({ ok: true, value: true });
+    expect(r.identity.arrayBuffer, combo).toEqual({ ok: true, value: true });
+    expect(r.identity.noArg, combo).toEqual({ ok: true, value: true });
+    expect(r.identity.errorIdentity, combo).toEqual({ ok: true, value: true });
+    // Shared-wasm input, fresh error per call: the propagated error must be
+    // the FIRST thrown object with throw count EXACTLY 1 — a try-native/
+    // catch/copy-retry wrapper throws twice and propagates the second.
+    expect(r.identity.errorIdentitySharedFirst, combo).toEqual({
+      ok: true,
+      value: { first: true, throwCount: 1 },
+    });
+  });
+});
+
+test('parity 14: direct helper install THEN first aggregate call — decoder identity kept AND global/self siblings still install (no marker early-return)', () => {
+  each((combo, r) => {
+    if (r.mode !== 'direct') return;
+    const m = r.mixedDirectThenAggregate;
+    expect(m, combo).toBeDefined();
+    if (m === undefined) return;
+    expect(m.decoderIdentity, combo).toBe(true);
+    expect(m.marker, combo).toBe(true);
+    expect(m.globalAlias, combo).toBe(true);
+    expect(m.self, combo).toEqual({ isGlobalThis: true, hasOwn: true, ownWritableData: true });
+    expect(m.decodeBytes, combo).toEqual({ ok: true, value: 'hello' });
+  });
+});
+
+test('parity 15: non-shared DataView / ArrayBuffer through the realm decoder → "hello" (direct+aggregate)', () => {
+  each((combo, r) => {
+    expect(r.patched.privDataView, combo).toEqual({ ok: true, value: 'hello' });
+    expect(r.patched.privArrayBuffer, combo).toEqual({ ok: true, value: 'hello' });
   });
 });
 

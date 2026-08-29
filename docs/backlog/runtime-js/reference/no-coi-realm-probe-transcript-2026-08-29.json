@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-29T21:49:14.074Z",
+  "generated": "2026-08-29T23:40:04.789Z",
   "command": "node tools/probes/no-coi-realm-probe.mjs",
   "chromium": "148.0.7778.96",
   "node": "v24.16.0",
@@ -46,6 +46,21 @@
       "marker": true,
       "repeatDirectReturned": false,
       "repeatIdentity": true,
+      "mixedDirectThenAggregate": {
+        "decoderIdentity": true,
+        "marker": true,
+        "globalAlias": true,
+        "self": {
+          "isGlobalThis": true,
+          "hasOwn": true,
+          "ownWritableData": true
+        },
+        "decodeBytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
       "patched": {
         "bytes": {
           "ok": false,
@@ -73,6 +88,16 @@
           "errMsg": "SharedArrayBuffer is not defined"
         },
         "streaming": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privArrayBuffer": {
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
@@ -146,6 +171,13 @@
         "errorIdentity": {
           "ok": true,
           "value": false
+        },
+        "errorIdentitySharedFirst": {
+          "ok": true,
+          "value": {
+            "first": false,
+            "throwCount": 0
+          }
         }
       }
     },
@@ -237,6 +269,16 @@
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privArrayBuffer": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
         }
       },
       "poisonedBinding": {
@@ -307,6 +349,13 @@
         "errorIdentity": {
           "ok": true,
           "value": false
+        },
+        "errorIdentitySharedFirst": {
+          "ok": true,
+          "value": {
+            "first": false,
+            "throwCount": 0
+          }
         }
       }
     },
@@ -350,6 +399,21 @@
       "marker": true,
       "repeatDirectReturned": false,
       "repeatIdentity": true,
+      "mixedDirectThenAggregate": {
+        "decoderIdentity": true,
+        "marker": true,
+        "globalAlias": true,
+        "self": {
+          "isGlobalThis": true,
+          "hasOwn": true,
+          "ownWritableData": true
+        },
+        "decodeBytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
       "patched": {
         "bytes": {
           "ok": false,
@@ -377,6 +441,16 @@
           "errMsg": "SharedArrayBuffer is not defined"
         },
         "streaming": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privArrayBuffer": {
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
@@ -450,6 +524,13 @@
         "errorIdentity": {
           "ok": true,
           "value": false
+        },
+        "errorIdentitySharedFirst": {
+          "ok": true,
+          "value": {
+            "first": false,
+            "throwCount": 0
+          }
         }
       }
     },
@@ -541,6 +622,16 @@
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privArrayBuffer": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
         }
       },
       "poisonedBinding": {
@@ -611,6 +702,13 @@
         "errorIdentity": {
           "ok": true,
           "value": false
+        },
+        "errorIdentitySharedFirst": {
+          "ok": true,
+          "value": {
+            "first": false,
+            "throwCount": 0
+          }
         }
       }
     },
@@ -618,17 +716,20 @@
       "createSabRing": {
         "ok": false,
         "errName": "ReferenceError",
-        "errMsg": "SharedArrayBuffer is not defined"
+        "errMsg": "SharedArrayBuffer is not defined",
+        "workerConstructions": 0
       },
       "spawnKernelWorker": {
         "ok": false,
         "errName": "ReferenceError",
-        "errMsg": "SharedArrayBuffer is not defined"
+        "errMsg": "SharedArrayBuffer is not defined",
+        "workerConstructions": 0
       },
       "retainedCreateWorkerOutputState": {
         "ok": false,
         "errName": "ReferenceError",
-        "errMsg": "SharedArrayBuffer is not defined"
+        "errMsg": "SharedArrayBuffer is not defined",
+        "workerConstructions": 0
       }
     }
   },
@@ -664,16 +765,27 @@
         },
         "streaming": {
           "ok": true,
-          "value": [
-            "",
-            "é"
-          ]
+          "value": ["", "é"]
         }
       },
       "firstInstall": true,
       "marker": true,
       "repeatDirectReturned": false,
       "repeatIdentity": true,
+      "mixedDirectThenAggregate": {
+        "decoderIdentity": true,
+        "marker": true,
+        "globalAlias": true,
+        "self": {
+          "isGlobalThis": true,
+          "hasOwn": true,
+          "ownWritableData": true
+        },
+        "decodeBytes": {
+          "ok": true,
+          "value": "hello"
+        }
+      },
       "patched": {
         "bytes": {
           "ok": true,
@@ -700,10 +812,15 @@
         },
         "streaming": {
           "ok": true,
-          "value": [
-            "",
-            "é"
-          ]
+          "value": ["", "é"]
+        },
+        "privDataView": {
+          "ok": true,
+          "value": "hello"
+        },
+        "privArrayBuffer": {
+          "ok": true,
+          "value": "hello"
         }
       },
       "poisonedBinding": {
@@ -779,6 +896,13 @@
         "errorIdentity": {
           "ok": true,
           "value": true
+        },
+        "errorIdentitySharedFirst": {
+          "ok": true,
+          "value": {
+            "first": true,
+            "throwCount": 1
+          }
         }
       }
     },
@@ -813,16 +937,28 @@
         },
         "streaming": {
           "ok": true,
-          "value": [
-            "",
-            "é"
-          ]
+          "value": ["", "é"]
         }
       },
       "firstInstall": true,
       "marker": true,
       "repeatDirectReturned": false,
       "repeatIdentity": true,
+      "mixedDirectThenAggregate": {
+        "decoderIdentity": true,
+        "marker": true,
+        "globalAlias": true,
+        "self": {
+          "isGlobalThis": true,
+          "hasOwn": true,
+          "ownWritableData": true
+        },
+        "decodeBytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
       "patched": {
         "bytes": {
           "ok": false,
@@ -850,6 +986,16 @@
           "errMsg": "SharedArrayBuffer is not defined"
         },
         "streaming": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "privArrayBuffer": {
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
@@ -932,6 +1078,13 @@
         "errorIdentity": {
           "ok": true,
           "value": false
+        },
+        "errorIdentitySharedFirst": {
+          "ok": true,
+          "value": {
+            "first": false,
+            "throwCount": 0
+          }
         }
       }
     }

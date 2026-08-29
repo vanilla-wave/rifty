@@ -7,7 +7,9 @@
  *
  * `mode`: 'direct' = installSharedMemoryTolerantTextDecoder() alone;
  * 'aggregate' = installWorkerRealmCompat() — sibling effects snapshot at
- * call ONE (a later call must not be what makes them observable).
+ * call ONE (a later call must not be what makes them observable). Direct mode
+ * additionally runs the realm's FIRST aggregate call AFTER the helper install
+ * (parity 14 mixed sequence — sibling installers must still run).
  */
 
 const HELLO = [104, 101, 108, 108, 111]; // 'hello'
@@ -114,13 +116,15 @@ async function poisonedBindingSweep(mem) {
   }
 }
 
-/** Parity 9 identity pins via an injected spy decoder (exact-object capture). */
+/** Parity 9 identity pins via an injected spy decoder: exact-object capture AND
+ * unique-sentinel RETURN pass-through (a wrapper that hands the original the
+ * exact objects then fabricates its own output must fail — `lossy-aggregate`). */
 async function identityChecks(installShim) {
   const seen = [];
   class SpyDecoder {
     decode(...args) {
       seen.push({ input: args[0], opts: args[1], argc: args.length });
-      return 'spy';
+      return `spy-${seen.length}`;
     }
   }
   installShim(SpyDecoder);
@@ -130,26 +134,16 @@ async function identityChecks(installShim) {
   const ab = new ArrayBuffer(2);
   const opts = { stream: true };
   const out = {};
-  out.view = await attempt(() => {
-    d.decode(view, opts);
-    const s = seen.pop();
-    return s.input === view && s.opts === opts;
-  });
-  out.dataView = await attempt(() => {
-    d.decode(dv, opts);
-    const s = seen.pop();
-    return s.input === dv && s.opts === opts;
-  });
-  out.arrayBuffer = await attempt(() => {
-    d.decode(ab, opts);
-    const s = seen.pop();
-    return s.input === ab && s.opts === opts;
-  });
-  out.noArg = await attempt(() => {
-    d.decode();
-    const s = seen.pop();
-    return s.input === undefined && s.opts === undefined;
-  });
+  const identityRow = (call, expectInput, expectOpts) =>
+    attempt(() => {
+      const ret = call();
+      const s = seen[seen.length - 1];
+      return s.input === expectInput && s.opts === expectOpts && ret === `spy-${seen.length}`;
+    });
+  out.view = await identityRow(() => d.decode(view, opts), view, opts);
+  out.dataView = await identityRow(() => d.decode(dv, opts), dv, opts);
+  out.arrayBuffer = await identityRow(() => d.decode(ab, opts), ab, opts);
+  out.noArg = await identityRow(() => d.decode(), undefined, undefined);
   // Error-object identity: a sentinel thrown by the spy propagates as-is.
   const sentinelErr = new Error('sentinel');
   class ThrowingDecoder {
@@ -164,6 +158,27 @@ async function identityChecks(installShim) {
       return 'no-throw';
     } catch (err) {
       return err === sentinelErr;
+    }
+  });
+  // Shared-wasm input, FIRST error identity + throw count: a fresh error per
+  // call exposes a try-native/catch/copy-retry wrapper (it propagates the
+  // SECOND thrown object with count 2) where a single reused sentinel passes.
+  const thrown = [];
+  class FreshThrowingDecoder {
+    decode() {
+      const err = new Error(`fresh-sentinel-${thrown.length}`);
+      thrown.push(err);
+      throw err;
+    }
+  }
+  installShim(FreshThrowingDecoder);
+  out.errorIdentitySharedFirst = await attempt(() => {
+    const sharedView = new Uint8Array(makeSharedWasmMemory().buffer, 0, 4);
+    try {
+      new FreshThrowingDecoder().decode(sharedView);
+      return 'no-throw';
+    } catch (err) {
+      return { first: thrown.length > 0 && err === thrown[0], throwCount: thrown.length };
     }
   });
   return out;
@@ -244,6 +259,21 @@ export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = 
   r.repeatDirectReturned = shim.installSharedMemoryTolerantTextDecoder();
   r.repeatIdentity = TextDecoder.prototype.decode === captured;
 
+  // Parity 14 (observable-order): in direct mode the realm decoder is ALREADY
+  // marked when the FIRST installWorkerRealmCompat() arrives — an aggregate
+  // early return keyed on that marker would skip global/self here while every
+  // clean aggregate combo (fresh realm) still passes. Snapshot immediately.
+  if (mode === 'direct') {
+    shim.installWorkerRealmCompat();
+    r.mixedDirectThenAggregate = {
+      decoderIdentity: TextDecoder.prototype.decode === captured,
+      marker: markerOf(),
+      globalAlias: globalThis.global === globalThis,
+      self: selfSnapshot(),
+      decodeBytes: await attempt(() => new TextDecoder().decode(enc.encode('hello'))),
+    };
+  }
+
   r.patched = {
     bytes: await attempt(() => new TextDecoder().decode(enc.encode('hello'))),
     noArg: await attempt(() => new TextDecoder().decode()),
@@ -251,6 +281,12 @@ export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = 
     sharedDataView: await attempt(() => new TextDecoder().decode(new DataView(mem.buffer, 3, 5))),
     rawShared: await attempt(() => exactTextRecord(new TextDecoder().decode(mem.buffer))),
     streaming: await attempt(() => streamingParts(TextDecoder)),
+    // Parity 15: non-shared sibling classes through the REALM decoder — actual
+    // Node outputs, both install modes (the injected-spy sweep is direct-only).
+    privDataView: await attempt(() =>
+      new TextDecoder().decode(new DataView(enc.encode('hello').buffer)),
+    ),
+    privArrayBuffer: await attempt(() => new TextDecoder().decode(enc.encode('hello').buffer)),
   };
 
   // Parity 12: poisoned-binding sweep on the patched realm decoder — decode

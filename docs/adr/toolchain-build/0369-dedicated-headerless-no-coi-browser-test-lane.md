@@ -42,7 +42,11 @@ Chromium realm — kept only as a transcript differential).
 
 - Two Playwright configs to maintain; acceptable — the header split is the
   entire point.
-- RED-first substrates can live in the lane before their fix lands
-  (`pnpm test:no-coi` is not part of `pr:check` until the goal's I8 slice
-  wires it green).
+- The lane is a REQUIRED CI job from its first consumer's PR onward
+  (`no-coi-chromium` + `CI gate` in `ci.yml`, wired at bare-sab-guard
+  Contract+RED): RED-first substrates keep that draft PR red until the fix
+  flips them green — an opt-in lane never closes acceptance (DoD). Local
+  `pr:check` stays browser-lane-free like every Playwright lane
+  (`tools/checks/pr-check.mjs` boundary). Goal I8 extends the lane's coverage
+  to I1–I7; it does not first wire it.
 - Later slices inherit server/fixture plumbing instead of re-deciding it.

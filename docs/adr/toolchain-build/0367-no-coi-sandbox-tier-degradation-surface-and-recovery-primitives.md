@@ -46,7 +46,11 @@ it; full sandbox re-create ~18s).
    or loud throw (`execSync` stays `NotImplementedError`); console-swap
    mandatory. Never a quiet subset — same-realm fallback never masquerades as
    isolated (resolves `kernel/process-equals-web-worker` fork FOR THIS TIER;
-   retiring the fallback under COI stays that item's scope).
+   retiring the fallback under COI stays that item's scope). SUPERSEDES
+   ADR-0011's same-realm-fallback boundary clause ("for non-isolated test
+   environments only", deprecated): in this tier the fallback is a warned +
+   capability-reported product mode — dated correction note on ADR-0011 +
+   README Corrections row.
 
 Rejected: reusing/extending `CapabilityCheck` for the semantic report (mixes
 platform facts with composition policy); heartbeat wedge detection (cannot

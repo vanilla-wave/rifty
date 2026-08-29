@@ -85,12 +85,15 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   this Contract+RED (checkpoint-2 C1): `playwright.no-coi.config.ts` +
   `tests/no-coi/` (server without COOP/COEP, esbuild of the prod sources,
   probe body shared with the replayable evidence driver); run
-  `pnpm test:no-coi` — today 8 RED (parity 1–7, every failure
-  `ReferenceError: SharedArrayBuffer is not defined`; parity 12, every poisoned
-  decode trips the counting accessor) + 2 green pins (preconditions,
-  parity 10), inside the declared 5–8 band. Substrate = the goal's first no-COI
-  test lane (ADR-0369), reusable by later slices; flips GREEN in the fix PR,
-  never edited to pass.
+  `pnpm test:no-coi` — today 11 RED (parity 1–7, 9, 14, 15 — every decode
+  failure `ReferenceError: SharedArrayBuffer is not defined`; parity 12, every
+  poisoned decode trips the counting accessor) + 2 green pins (preconditions,
+  parity 10), inside the re-declared 8–12 band (checkpoint 5). Substrate = the
+  goal's first no-COI test lane (ADR-0369), reusable by later slices; flips
+  GREEN in the fix PR, never edited to pass. The lane is a REQUIRED CI job
+  from THIS PR (`no-coi-chromium` + `CI gate`, wired checkpoint 5 — an opt-in
+  lane never closes acceptance per DoD): red on the draft until the fix, green
+  to merge; goal I8 extends its coverage, it does not first wire it.
 - After install (direct or via `installWorkerRealmCompat()`) in that realm,
   decode NEVER evaluates the absent binding — every input class:
   `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm
@@ -123,8 +126,9 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   inherited setter) closes nothing.
 - COI-realm exactness pins (unit, injected decoders): copy path respects
   byteOffset/byteLength against sentinel bytes; non-shared path passes the
-  EXACT input and opts objects and propagates the exact thrown error object
-  (Parity 8–9). COMMITTED (checkpoint-2 C2/C3): added describes in
+  EXACT input and opts objects, RETURNS the decoder's unique per-call sentinel
+  unchanged, and propagates the exact thrown error object (Parity 8–9).
+  COMMITTED (checkpoint-2 C2/C3): added describes in
   `worker-realm-compat.test.ts` — sentinel/nonzero-offset Uint8Array, DataView
   over shared buffer, raw-SharedArrayBuffer whole-buffer exactness, exact
   input/opts identity (view/DataView/ArrayBuffer/no-arg), sentinel-error
@@ -135,6 +139,24 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   installWritableSelf strengthened-pin test (ownership/descriptor/pre-write
   value) — checkpoint 4 (B4) restored the pre-existing installWritableSelf
   test byte-identical to main; it is the unmodified-baseline carrier.
+- Ordered exact-call log (parity 13, COI unit, green pins guarding the fix —
+  output and error-identity rows alone admit a try-native/catch/copy-retry
+  wrapper that invokes the ORIGINAL decoder on the shared input first): with a
+  logging decoder as the original, a decode sweep across private view /
+  shared Uint8Array view / shared DataView / raw SAB — direct AND aggregate
+  installs — invokes the original EXACTLY once per decode, in order; the ONLY
+  call on a shared source receives a private (non-shared) input that is never
+  the source object, bytes exact against sentinels, opts object exact; unique
+  sentinel returns come back unchanged. Sibling first-error pin in the realm
+  probe (parity 9): on shared-wasm input a fresh-error-per-call decoder
+  propagates the FIRST thrown object with throw count EXACTLY 1, browser AND
+  Node (a retry wrapper throws twice and propagates the second).
+- Mixed install order (parity 14): a direct helper install FIRST, then the
+  realm's FIRST `installWorkerRealmCompat()` — decoder identity stays the
+  captured patched fn AND global/self siblings still install AND decode green
+  at that call; an aggregate-level early return keyed on the decoder marker
+  passes every clean-aggregate combo but fails here. Today the decode is the
+  ReferenceError RED; siblings green (probe row 14).
 - COI behavior unchanged: every pre-existing test in
   `worker-realm-compat.test.ts` stays green and byte-identical to main (the
   branch diff of that file is additions only); strengthened pins are ADDED,
@@ -146,12 +168,14 @@ Oracles per Reference contract; every row's artifact is REPLAYABLE
 (checkpoint-2 C4): `node tools/probes/no-coi-realm-probe.mjs` regenerates the
 whole probe table (Chromium 148.0.7778.96 page+Worker × direct/aggregate,
 node v24.16.0 oracle + absent-binding sim + real `node:util/types`
-differential, kernel PUBLIC-entry bundle); raw output committed at
+differential, kernel PUBLIC-entry bundle under a counting Worker
+constructor); raw output committed at
 `reference/no-coi-realm-probe-transcript-2026-08-29.json`. Committed test
-carriers: parity 1–7, 10, 12 → `tests/no-coi/worker-realm-compat.no-coi.spec.ts`
-(8 RED / 2 green today); parity 6 call-one sibling snapshot + parity 7
-(direct+aggregate), 8, 9 → `worker-realm-compat.test.ts` added pins (green);
-parity 11 → existing suite unmodified. RED target unless marked pin/green.
+carriers: parity 1–7, 9, 10, 12, 14, 15 →
+`tests/no-coi/worker-realm-compat.no-coi.spec.ts` (11 RED / 2 green today);
+parity 6 call-one sibling snapshot + parity 7 (direct+aggregate), 8, 9, 13 →
+`worker-realm-compat.test.ts` added pins (green); parity 11 → existing suite
+unmodified. RED target unless marked pin/green.
 
 1. no-COI page+worker: `decode(bytes('hello'))` → `'hello'`; today
    `ReferenceError: SharedArrayBuffer is not defined` — probe row 8.
@@ -181,10 +205,17 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
    bytes, view at offset 3 len 5 → decoded text = exactly the view's 5 bytes,
    sentinels never included; same sweep for DataView over shared buffer and
    the raw-SharedArrayBuffer branch — offset/length exactness pin.
-9. COI/unit, spy decoder: non-shared typed view / DataView / ArrayBuffer /
-   no-arg → spy receives the EXACT same input object and opts object (`===`);
-   a sentinel error thrown by the spy propagates as the SAME object (shared
-   path post-copy too) — identity + error-propagation pins.
+9. COI/unit AND no-COI page+worker probe, spy decoder returning UNIQUE
+   per-call sentinels: non-shared typed view / DataView / ArrayBuffer /
+   no-arg → spy receives the EXACT same input object and opts object (`===`)
+   AND the wrapper returns the sentinel unchanged (exact objects to the
+   original + fabricated output = fail); a sentinel error thrown by the spy
+   propagates as the SAME object (shared path post-copy too); on SHARED-wasm
+   input a fresh-error-per-call decoder propagates the FIRST thrown error
+   with throw count EXACTLY 1 (browser + Node — probe
+   `identity.errorIdentitySharedFirst`; today no-COI every row
+   ReferenceError / `{first:false, throwCount:0}` — RED in the substrate,
+   green COI pins).
 10. no-COI page+worker, built util-types:
     `isSharedArrayBuffer(new ArrayBuffer(1))` → `false`,
     `isAnyArrayBuffer(…)` → `true`, shared-wasm buffer → `true`/`true`, no
@@ -201,6 +232,24 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
     state restored. Today count 6, every decode
     `POISON: bare SharedArrayBuffer binding evaluated` (probe row 13) — a
     try/catch-over-bare-reference implementation passes 1–5 but fails here.
+13. COI/unit, logging decoder as the original, direct AND aggregate installs:
+    ordered exact-call log across priv view / shared Uint8Array view / shared
+    DataView / raw SAB — original invoked EXACTLY once per decode, in order;
+    the ONLY shared-source call carries a private non-shared input (never the
+    source object, bytes exact vs sentinels, opts exact); unique sentinel
+    returns unchanged — green pin guarding the fix (kills
+    try-native/catch/copy-retry, which parity 8–9 outputs alone admit).
+14. no-COI page+worker (direct-mode realms): direct helper install FIRST,
+    then the realm's FIRST `installWorkerRealmCompat()` → decoder strictly
+    `===` the captured patched fn AND marker AND `global` alias AND own
+    writable-data `self` AND `decode(bytes('hello'))` → `'hello'`, snapshot
+    immediately after that call. Today siblings green, decode ReferenceError
+    (probe row 14) — an aggregate early return on the already-marked decoder
+    passes clean aggregate combos but fails here.
+15. no-COI page+worker, direct AND aggregate, realm decoder, non-shared
+    sibling classes: `decode(new DataView(bytes('hello').buffer))` AND
+    `decode(bytes('hello').buffer)` → `'hello'` each (Node probe row 15);
+    today ReferenceError.
 
 ## Fault matrix
 
@@ -210,7 +259,9 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
 | no-SAB-binding realm × decode(shared-wasm Uint8Array/DataView/raw buffer, nonzero offset, streaming) | copy-into-private, Node-identical: 'hello' per view class (`sibling-drift` killed on DataView), raw buffer exact length+SHA-256 (`lossy-aggregate` killed), streaming state kept | parity 3–5 REDs |
 | no-SAB-binding realm × decode(non-shared / no-arg) | pass-through, Node-identical | parity 1–2 REDs |
 | SAB realm, native rejects shared × decode(shared view/DataView/raw SAB) | copy path, EXACT view bytes — sentinel + nonzero offset (`lossy-aggregate` killed) | parity 8 pin |
-| SAB realm × decode(non-shared) | exact input/opts object identity through; thrown error object identity through (`lossy-aggregate` killed) | parity 9 pins |
+| SAB realm × decode(non-shared) | exact input/opts object identity through; unique sentinel RETURN through unchanged; thrown error object identity through (`lossy-aggregate` killed twice — objects AND returns) | parity 9 pins |
+| any realm × decode(any class) through the patched fn | original decoder invoked EXACTLY once, ordered log; shared-source call = private copy, never the original on shared input; shared-input first-error identity with throw count 1 (`observable-order` try-native-retry killed) | parity 13 pins + parity 9 shared-first-error |
+| no-SAB realm × direct install then FIRST aggregate call | sibling installers still run (global alias, own writable `self`), decoder identity kept, decode green (`observable-order` marker-early-return killed) | parity 14 RED |
 | any realm × repeat install | `false`, strict-identity patched fn, shared decode intact (`lossy-aggregate` killed) | parity 7 pin |
 
 ## Out of scope
@@ -221,8 +272,12 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
 - Kernel direct SAB constructors ARE reachable no-COI via public exports:
   `createSabRing` (kernel `index.ts:32` → `sab-ring.ts:136`),
   `spawnKernelWorker` (dies at its FIRST constructor, `spawn-worker.ts:395`,
-  before any Worker exists) and the retained second constructor
-  `createWorkerOutputState` (`worker-stdio-drain.ts:119`) ALL throw raw
+  with EXACTLY ZERO `Worker` constructions — checkpoint 5: a counting `Worker`
+  constructor wraps the probe sweep, every call records
+  `workerConstructions: 0` and the replay driver fails LOUD on nonzero, so
+  Worker construction cannot silently move ahead of the SAB throw) and the
+  retained second constructor `createWorkerOutputState`
+  (`worker-stdio-drain.ts:119`) ALL throw raw
   `ReferenceError: SharedArrayBuffer is not defined` in the real no-COI page —
   probe row 12 sweeps them through a bundle of the PUBLIC
   `kernel/src/index.ts` entry (checkpoint-4 B5: a removed public export or
@@ -353,6 +408,46 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
   previously declared decode outcome, identity pin, and error identity kept
   verbatim; no user-observable fork, no demotion. Now 8 RED + 2 green, inside
   the declared 5–8 band.
+
+- Re-cut 2026-08-30 (5th) in place after Contract+RED checkpoint 5 (9-blocker
+  batch; same branch, attempt 6, lineage carries; no split — one behavior,
+  blockers were wrapper-shaped holes in the pins, provenance gaps, and
+  authority/process corrections). Pre-re-cut clauses quoted for the checkpoint
+  diff: parity 8–9 pinned outputs and object/error identity only — a
+  try-native/catch/copy-retry wrapper (original invoked on the SHARED input
+  first) and an exact-objects-in/fabricated-output wrapper both passed → parity
+  13 ordered exact-call log (exactly one original call per decode; only the
+  shared-source call gets a private copy; Uint8Array/DataView/raw SAB ×
+  direct/aggregate) + unique-sentinel returns in parity 9 COI and no-COI +
+  realm-decoder privDataView/privArrayBuffer rows (parity 15)
+  (`observable-order`, `lossy-aggregate`); the probe's ONLY errorIdentity row
+  used non-shared input, leaving a shared-path error wrapper invisible →
+  shared-wasm FIRST-error identity + throw-count-1 row, browser AND Node
+  (`provenance-lie`); every aggregate carrier started unpatched, so a
+  marker-keyed aggregate early return passed → parity 14 mixed
+  direct-then-first-aggregate sequence, page+worker, clean aggregate combos
+  retained (`observable-order`); probe row 12 recorded only the eventual
+  ReferenceError, letting Worker construction move before the SAB throw
+  unobserved → counting Worker constructor, `workerConstructions: 0` per
+  public-entry call, replay fails loud on nonzero
+  (`provenance-lie`/`observable-order`); ADR-0369 consequence "`pnpm
+  test:no-coi` is not part of `pr:check` until the goal's I8 slice wires it
+  green" left the unit's only Final+GREEN carrier opt-in → lane wired as
+  REQUIRED CI job `no-coi-chromium` + CI gate this checkpoint (DoD: opt-in
+  lanes never close acceptance); `workers: 1` + `fullyParallel: false` had no
+  no-COI forcing constraint → cut (§Simplicity); ADR-0367 §4 promoted
+  ADR-0011's deprecated "non-isolated test environments only" same-realm
+  fallback into a warned product tier without recording the supersession →
+  §4 names the superseded clause + dated correction note on ADR-0011 + README
+  Corrections row; goal.md had been edited after ledger pickup (ADR citations,
+  disposition-comment rewrite) — the goal is user-owned
+  (decision-workflow §Goal runs: "re-cut them, never the goal") → restored
+  byte-identical to main; ADR/citation carriers live on the map, the ADRs and
+  this ledger. Every previously declared decode outcome, identity pin, and
+  error identity kept verbatim — pins only STRENGTHENED under the same
+  oracles; no user-observable fork, no demotion. Now 11 RED + 2 green; band
+  re-declared 8–12 (was 5–8; three added RED carriers: parity 9 substrate,
+  14, 15).
 
 ## Reversibility
 

@@ -10,8 +10,6 @@ const port = Number(process.env.RIFTY_NO_COI_PORT ?? 5307);
 export default defineConfig({
   testDir: './tests/no-coi',
   globalSetup: './tests/no-coi/global-setup.ts',
-  fullyParallel: false,
-  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: [['list'], ['html', { outputFolder: 'playwright-report/no-coi', open: 'never' }]],

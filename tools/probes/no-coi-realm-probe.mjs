@@ -4,7 +4,8 @@
  * regenerates the whole evidence table as raw JSON on stdout — real built shim
  * in no-COI Chromium (page + Worker × direct/aggregate), the kernel PUBLIC
  * entry (`createSabRing()` + `spawnKernelWorker()` via a bundle of
- * `kernel/src/index.ts` — a removed public export fails HERE, never silently)
+ * `kernel/src/index.ts` — a removed public export fails HERE, never silently;
+ * a counting `Worker` constructor pins EXACTLY zero constructions per call)
  * plus the retained private constructor `createWorkerOutputState()`, and the
  * Node oracle (binding intact + deleted, plus the REAL `node:util/types`
  * differential). Durable record:
@@ -106,43 +107,74 @@ try {
 
   // Row 12: kernel constructor sites in the no-COI page realm, swept via the
   // PUBLIC entry (`createSabRing`, `spawnKernelWorker` — dies at its first
-  // constructor, spawn-worker.ts:395, before any Worker exists) plus the
-  // retained private `createWorkerOutputState` (worker-stdio-drain.ts:119).
+  // constructor, spawn-worker.ts:395) plus the retained private
+  // `createWorkerOutputState` (worker-stdio-drain.ts:119). "Before any Worker
+  // exists" is PROVEN, not narrated: a counting `Worker` constructor wraps the
+  // sweep and every call must record EXACTLY zero constructions — the eventual
+  // ReferenceError alone would not change if a Worker were constructed first.
   {
     const page = await browser.newPage();
     try {
       await page.goto(`http://localhost:${port}/index.html`);
       transcript.chromiumNoCoi.kernelPublicEntry = await page.evaluate(async () => {
-        const attempt = (fn) => {
-          try {
-            fn();
-            return { ok: true };
-          } catch (err) {
-            return { ok: false, errName: err.name, errMsg: err.message };
+        const RealWorker = globalThis.Worker;
+        let constructions = 0;
+        globalThis.Worker = class extends RealWorker {
+          constructor(...args) {
+            constructions += 1;
+            super(...args);
           }
         };
-        const kernel = await import('/dist/kernel-public.mjs');
-        const drain = await import('/dist/kernel-stdio-drain.mjs');
-        const createSabRing = attempt(() => kernel.createSabRing());
-        // Never fetched: the throw fires before the Worker is constructed.
-        kernel.setKernelWorkerUrl('/probe-worker.mjs');
-        const spawnKernelWorker = attempt(() =>
-          kernel.spawnKernelWorker(
-            {
-              entry: { kind: 'source', code: '', sourceUrl: 'rifty-probe://empty' },
-              argv: [],
-              env: {},
-              cwd: '/',
-            },
-            { pid: 9001, ppid: 1 },
-          ),
-        );
-        return {
-          createSabRing,
-          spawnKernelWorker,
-          retainedCreateWorkerOutputState: attempt(() => drain.createWorkerOutputState()),
+        const attempt = (fn) => {
+          const before = constructions;
+          try {
+            fn();
+            return { ok: true, workerConstructions: constructions - before };
+          } catch (err) {
+            return {
+              ok: false,
+              errName: err.name,
+              errMsg: err.message,
+              workerConstructions: constructions - before,
+            };
+          }
         };
+        try {
+          const kernel = await import('/dist/kernel-public.mjs');
+          const drain = await import('/dist/kernel-stdio-drain.mjs');
+          const createSabRing = attempt(() => kernel.createSabRing());
+          // A real URL is installed: were spawnKernelWorker to reach
+          // `new Worker`, the counting constructor would record it.
+          kernel.setKernelWorkerUrl('/probe-worker.mjs');
+          const spawnKernelWorker = attempt(() =>
+            kernel.spawnKernelWorker(
+              {
+                entry: { kind: 'source', code: '', sourceUrl: 'rifty-probe://empty' },
+                argv: [],
+                env: {},
+                cwd: '/',
+              },
+              { pid: 9001, ppid: 1 },
+            ),
+          );
+          return {
+            createSabRing,
+            spawnKernelWorker,
+            retainedCreateWorkerOutputState: attempt(() => drain.createWorkerOutputState()),
+          };
+        } finally {
+          globalThis.Worker = RealWorker;
+        }
       });
+      // Zero-construction pin — replay fails LOUD if any public entry
+      // constructs a Worker around its SAB throw.
+      for (const [name, row] of Object.entries(transcript.chromiumNoCoi.kernelPublicEntry)) {
+        if (row.workerConstructions !== 0) {
+          throw new Error(
+            `kernel sweep ${name}: expected 0 Worker constructions, got ${row.workerConstructions}`,
+          );
+        }
+      }
     } finally {
       await page.close();
     }

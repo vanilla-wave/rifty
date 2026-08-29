@@ -25,8 +25,7 @@ quiet subset (`distribution/iframe-embed` fork (b) position).
 An agent platform serves its page with NO COOP/COEP headers on its own origin:
 
 1. `createSandbox({requireCrossOriginIsolation:false})` boots; capability report enumerates
-   working / degraded(warn) / throwing surfaces (NEW additive Sandbox surface — public
-   `checkCapabilities()` platform probe unchanged; ADR-0367 §1).
+   working / degraded(warn) / throwing surfaces.
 2. Agent writes a real Vite 7.3.6 project; `npm install` completes (react-class dep set).
 3. `vite build` via `node_modules/.bin/vite`; agent reads `dist/` — artifacts byte-identical
    to the COI product.
@@ -57,24 +56,20 @@ Done when a no-COI CI lane (no COOP/COEP served) proves all of the above in real
      I8 — zero browser lanes serve without COI headers except tests/landing (no runtime). -->
 
 1. I1. On a real no-COI Chromium page (`crossOriginIsolated===false`), `createSandbox` boots
-   and its capability report enumerates working / degraded(warn) / throwing surfaces
-   (ADR-0367 §1 — additive; `checkCapabilities` platform probe untouched).
+   and its capability report enumerates working / degraded(warn) / throwing surfaces.
 2. I2. `npm install` of a real Vite 7 dependency set completes in that sandbox.
 3. I3. Agent write → `vite build` (`node_modules/.bin/vite`) → `dist/` read back, artifacts
    byte-identical to the COI product for the same project.
 4. I4. `vite dev` boots no-COI; agent write + flush → HMR update visible in the SW-served
    preview iframe with stable bootId (no hidden full reload).
 5. I5. Acknowledged flush → full page reload → project tree survives byte-for-byte (OPFS,
-   no COI — ADR-0368 supersedes the ADR-0072 COI backend-selection clause).
+   no COI).
 6. I6. The sandbox surface exposes a restart primitive (terminate + reboot + iframe reload)
    that recovers dev + preview from a wedged (alive-but-blocked) worker, and an actual worker
-   death surfaces as an event; wedge DETECTION stays agent-owned (timeout) — heartbeat declined
-   (ADR-0367 §2).
+   death surfaces as an event; wedge DETECTION stays agent-owned (timeout) — heartbeat declined.
 7. I7. Same-realm spawn child `console.*` reaches the child stdout pipe; spawn warns once;
-   `execSync` stays a loud NotImplementedError; `os.cpus()`/`availableParallelism` report 1
-   (ADR-0367 §3).
-8. I8. A no-COI CI lane (page served with no COOP/COEP — the ADR-0369 lane) proves I1-I7 in
-   real Chromium.
+   `execSync` stays a loud NotImplementedError; `os.cpus()`/`availableParallelism` report 1.
+8. I8. A no-COI CI lane (page served with no COOP/COEP) proves I1-I7 in real Chromium.
 
 ## Challenge
 
@@ -87,9 +82,9 @@ challenge: 2026-08-28 — 5 problems
 - Declared durability hazard has no covering invariant: goal.md admits forced kill before flush leaves 5/10 trees silently crossing generations, yet I5 tests only the acknowledged-flush path and no invariant makes the mixed-generation state detectable at reboot (journal declined at works) — for the claimed user (agent platform whose end-users close tabs at will) the hazard is 'declared loudly' only in a doc while the runtime path passes quietly, which CLAUDE.md Fidelity forbids ('never hidden behind a passing path').
 - I7 ships fabricated values as contract, in tension with mission text 'maximally faithful to real Node ... never approximated; gaps stay honest loud throws': os.cpus() would report 1 where the epic's own probe record calls host-12 'faithful to host' (no-coi-degradation-probes.md), and same-realm spawn (shared globals, one event loop — the very infidelity M6's open kernel/process-equals-web-worker item exists to remove) becomes a supported warned mode; the Decisions block resolves this by user fiat ('direction conflict → resolved above'), not by showing a warned approximation meets the fidelity bar CLAUDE.md defines only as throws.
 
-<!-- Post-challenge dispositions: P1 → shim probe is a hard prerequisite of slicing the
-     composition fog (map I1/I3/I8; collapsing answer = re-fit trigger). P4 → dirty-flag
-     detectability = fog gate for the dev+HMR fog (user decision; journal stays declined).
+<!-- Post-challenge dispositions: P1 → shim probe is now a hard PICKUP prerequisite of
+     build-loop (map item 4 + fog line; collapsing answer = re-fit trigger). P4 → dirty-flag
+     detectability added as fog for dev-hmr pickup (user decision; journal stays declined).
      P2 (adopter share), P3 (Vite-7 shelf life) — accepted premise risks, user-owned.
      P5 — user-decided degradation shape; the report/warn surface is the honest carrier. -->
 
@@ -101,14 +96,12 @@ challenge: 2026-08-28 — 5 problems
 - Acceptance = agent headless SDK loop on own origin; third-party iframe without origin out
   (SW registration impossible there) — user decision 2026-08-25.
 - OPFS in tier: boot.ts:23 gate is policy, not platform (spike-proven); reload durability
-  green in HMR spike — user decision 2026-08-25/28. ADR carrier: ADR-0368 (supersedes the
-  ADR-0072 `crossOriginIsolated &&` clause — recorded 2026-08-29, not postponed).
+  green in HMR spike — user decision 2026-08-25/28.
 - Degradation = warn-once + capability report; execSync stays throw; console-swap mandatory
-  (no silent lie at any tier); cpus→1 — user decisions 2026-08-25/28. ADR carrier: ADR-0367.
+  (no silent lie at any tier); cpus→1 — user decisions 2026-08-25/28.
 - dev+HMR in tier, build+extract slices first — user decision 2026-08-28 on HMR-spike data.
 - Preview after worker death = explicit reload policy (died-event + restore primitive);
-  auto-reconnect epoch/heartbeat mechanism declined — user decision 2026-08-28. ADR carrier:
-  ADR-0367 §2 (public Sandbox surface today is dispose()-only; restart/died-event additive).
+  auto-reconnect epoch/heartbeat mechanism declined — user decision 2026-08-28.
 - Durability contract = acknowledged flush() boundary; forced kill before flush does not
   promise tree consistency (5/10 trees crossed generations silently, per-file old-or-new
   held 120/120) — declared loudly; workspace journal declined — user decision 2026-08-28.
@@ -118,7 +111,3 @@ challenge: 2026-08-28 — 5 problems
 - Draft-stage challenge (2026-08-28, 6 problems) dispositions: coi-serviceworker shim → fog
   probe (map); adopter-share unsized + Vite-7 pin + own-origin embed scope → recorded here as
   accepted premise risks; direction conflict → resolved above; stale speed claim → dropped.
-- ADR carriers authored 2026-08-29 (bare-sab-guard checkpoint 4 — goal text alone cannot
-  settle IRREVERSIBLE choices): ADR-0367 (capability report + restart/died-event + cpus→1 +
-  degradation shape), ADR-0368 (OPFS selection drops COI clause of ADR-0072), ADR-0369
-  (headerless no-COI Playwright lane).

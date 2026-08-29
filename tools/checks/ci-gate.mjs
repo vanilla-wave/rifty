@@ -6,7 +6,7 @@ import { realpathSync } from 'node:fs';
 // dependency instead of miscalling its empty output an invalid classification.
 import { fileURLToPath } from 'node:url';
 
-export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit }) {
+export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit, noCoi }) {
   const errors = [];
   const require = (name, actual, expected) => {
     if (actual !== expected) errors.push(`${name} concluded '${actual}'; expected '${expected}'`);
@@ -30,6 +30,7 @@ export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit }
   require('unit-and-conformance', unit, heavyExpected);
   require('e2e-chromium', e2e, heavyExpected);
   require('browser-unit-chromium', browserUnit, heavyExpected);
+  require('no-coi-chromium', noCoi, heavyExpected);
   return errors;
 }
 
@@ -41,6 +42,7 @@ function main() {
     unit: process.env.UNIT_RESULT ?? '',
     e2e: process.env.E2E_RESULT ?? '',
     browserUnit: process.env.BROWSER_UNIT_RESULT ?? '',
+    noCoi: process.env.NO_COI_RESULT ?? '',
   });
   for (const error of errors) process.stdout.write(`::error::${error}\n`);
   if (errors.length > 0) process.exit(1);
