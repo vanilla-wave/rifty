@@ -112,8 +112,11 @@ fixed form:
    proceed, translated into plain risk statements ("if this is acceptable,
    nothing to do"); problems already fixed in the docs are omitted, verbatim
    text stays in the doc's `## Challenge`.
-5. Your decisions — questions that WILL come back to the user, each phrased
-   as the actual future question + when it fires. None → say so in one line.
+5. Open questions for you — ONLY genuinely undecided points: when it fires +
+   the exact question + the default if you stay silent. Already-decided
+   checks/probes are NOT questions — they ride their Step, with a conditional
+   spelled out there ("if the probe shows X, we return with question Y").
+   None → say so in one line.
 6. How to start — one line: the exact hand-off that begins the work (ready
    goal: "goal-run epics/<slug>"; single item: the pickup ask). Nothing
    starts without it.
