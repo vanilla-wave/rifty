@@ -95,37 +95,9 @@ probe-or-fog and the completion report: `rifty-goal` FIT.
 
 Every backlog write-up (capture, FIT, re-fit) ends with a user-facing report
 delivered in the conversation — not an approval ask, not a PR comment, not a
-file. A FRESH subagent with clean context writes it from the recorded docs
-alone (no author framing — same independence as §Challenge: a report the docs
-cannot support proves the write-up incomplete; fix the docs, never pad the
-report). User's language, ONE screen, no file paths, no process internals;
-fixed form:
-
-1. Plan — 2-4 plain sentences: what the user gets and why now, tied to user
-   experience and project direction (mission/milestone). Never mechanics.
-2. What changes — experience-level: what starts working, what will loudly
-   degrade (warn) or throw. Never file lists.
-3. Steps — name the epic once (`epics/<slug>`), then ordered slices, ONE line
-   each: the item id (`area/slug`) + what it is in plain words, ending with
-   the observable result once that slice lands ("after this: X works").
-4. Risks — ONLY challenge problems that could change the user's decision to
-   proceed, translated into plain risk statements ("if this is acceptable,
-   nothing to do"); problems already fixed in the docs are omitted, verbatim
-   text stays in the doc's `## Challenge`. Each entry opens with its origin —
-   why it exists despite refinement ("critic finding — axis your interview
-   never covered", "probe result", …).
-5. Open questions for you — ONLY genuinely undecided points: origin (who found
-   it and why it is NOT re-opening something you decided — e.g. "critic found
-   a middle option between your two decided poles") + when it fires + the
-   exact question + the default if you stay silent. Already-decided
-   checks/probes are NOT questions — they ride their Step, with a conditional
-   spelled out there ("if the probe shows X, we return with question Y").
-   None → say so in one line.
-6. How to start — one line: the exact hand-off that begins the work (ready
-   goal: "goal-run epics/<slug>"; single item: the pickup ask). Nothing
-   starts without it.
-
-Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
+file. Form and producer procedure (fresh clean-context subagent, six
+sections): `rifty-to-backlog` §6 Report — the single canon for capture AND
+FIT. Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
 the destination is wrong — pushback re-opens FIT; nothing waits on a reply.
 Inside a goal run, RECHART-minted drafts ride the run's status relay and
 ledger — no separate report per graduation.
