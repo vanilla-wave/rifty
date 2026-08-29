@@ -1,12 +1,12 @@
 ---
 area: playground
 status: ready
-title: Cold snapshot restore visibility — pin surviving indicator, rewire/remove dead #167 carriers
+title: Cold snapshot restore visibility — silent openActive reopen, pinned indicator, dead #167 wiring removed
 created: 2026-08-29
-why: PR #167 (merge 7828b058, claimed mechanical) dropped the grey «restoring project dependencies…» wiring + flipped its e2e assert; measured 2026-08-29 — visible progress SURVIVES via projectBusy carriers, but nothing pins it, restore diagnostics reach no surface, beforeRun is dead machinery.
-user_story: As a developer opening a shared deep-link on a slow network (or reloading after storage eviction), I want restore progress visibly indicated and regression-pinned, but today the surviving indicator is unpinned (a #167-class refactor can silently drop it again) and restore/promotion diagnostics are swallowed.
-sources: [PR #167 (merge 7828b058), commit 682ec23e4 (progress line), commit 246a40e25 (per-run deps gate), tests/browser-unit/owner-shell-routing.spec.ts:247 (assert flipped to not.toContain), spike 2026-08-29 (Evidence below)]
-code: [packages/workbench/src/workers/pty-server.ts, packages/workbench/src/workers/workbench-owner-runtime.ts, packages/workbench/src/glue/project-deps.ts, apps/playground/src/glue/slow-progress.ts, apps/playground/src/adapters/playground-app.tsx, tests/browser-unit/owner-shell-routing.spec.ts]
+why: PR #167 (merge 7828b058, claimed mechanical) dropped the grey «restoring project dependencies…» wiring + flipped its e2e assert; measured 2026-08-30 — deep-link/transition paths stay visible via projectBusy carriers (unpinned), but the no-query persisted reopen (openActive) restores in FULL silence; beforeRun is dead machinery.
+user_story: As a developer reopening my persisted project (plain URL) after storage eviction on a slow network, I want restore progress visibly indicated, but today the whole restore window shows nothing — no pill, no launcher, no terminal (openActive bypasses projectBusy).
+sources: [PR #167 (merge 7828b058), commit 682ec23e4 (progress line), commit 246a40e25 (per-run deps gate), tests/browser-unit/owner-shell-routing.spec.ts:247 (assert flipped to not.toContain), ADR-0278:180-186 (first-materialization install visibility), Contract+RED attempt-1 verdict + adjudication 2026-08-30, spike artifacts (## Evidence)]
+code: [apps/playground/src/adapters/playground-app.tsx, packages/workbench/src/workers/pty-server.ts, packages/workbench/src/glue/project-deps.ts, apps/playground/src/glue/slow-progress.ts, apps/playground/vite.config.ts, tests/e2e/restore-progress-visibility.spec.ts]
 ---
 
 ## Context
@@ -24,38 +24,48 @@ item is that record.
 
 Today on main: `pty-server.ts` `beforeRun` (line 148, consumed 412) has zero
 prod callers — tests only; `slow-progress.ts` live only in the launcher
-instant-prepare label (`playground-app.tsx:680`); owner restore/promotion log
-sink is `process.stdout.write` (workbench-owner-runtime.ts:343) with no prod
-reader. Cold payloads `apps/playground/public/snapshots/`: vite 3.2MB,
-typescript 10.3MB, vite8 18MB gz.
+instant-prepare label; the ordinary persisted reopen path calls
+`runtime.openActive` (playground-app.tsx:773) with NO `projectBusy` bracket
+(setters live only on the transition paths: 662/899/988) — the SWITCHING
+pill, launcher, and terminal are all absent for the whole restore window.
+Cold payloads `apps/playground/public/snapshots/`: vite 3.2MB, typescript
+10.3MB, vite8 18MB gz.
 
 ## Evidence
 
-spike 2026-08-29 — local vite dev + `@playwright/test` headless Chromium,
-100–150ms UI sampler (rendered-text markers + OPFS stamp poller), restore
-window = snapshot gz request start → `.rifty-install-stamp.json` appears.
-Slow network simulated by 6s dev-middleware delay on `*node-modules.json.gz`.
+Spikes 2026-08-29/30 — vite dev (`RIFTY_PLAYGROUND_PORT=5391 pnpm --dir
+apps/playground dev`, vite 5.4.21) + `@playwright/test` 1.60.0 headless
+chromium 148.0.7778.96, node v24.16.0, darwin-25.3.0. 100–150ms rendered-text
+sampler + OPFS stamp poller; restore window = snapshot gz request (network
+event, wall) → `.rifty-install-stamp.json` appears. Slow delivery = dev
+middleware stall on `*node-modules.json.gz` (now the committed cookie seam
+`rifty-e2e-snapshot-fault`, vite.config.ts) — playwright `route()` never sees
+the SW-mediated fetch; blocking the SW kills boot entirely.
 
-- Cold deep-link `?preset=vite8&autorun=1` (chooser closed,
-  `shouldOpenInstantProjectChoice`): window 6509ms, 44 samples, **0 silent** —
-  livepill `SWITCHING` from +301ms and launcher «Preparing instant project»
-  from +601ms persist до publish (+6904ms). Terminal absent the whole window.
-- Stamp+tree eviction (OPFS `<root>/node_modules` removed, localStorage
-  catalog+hint survive), reload: window 6533ms, 43 samples, **0 silent** —
-  `SWITCHING` pill + status bar `switching`. Terminal appears after stamp.
-- Unthrottled windows: 720ms / 688ms — >250ms even on localhost.
-- Mid-window screenshot: amber `● SWITCHING` pill in header + status bar
-  «Vite dev server · switching», workbench otherwise empty.
-- `[real-vite/worker] baked node_modules restored…` reached **no console** in
-  any run — owner stdout sink is unread; promotion WARNING/CRITICAL lines
-  (project-deps.ts reportPromotion) share it.
-- Carrier fact: snapshot fetch is SW-mediated — playwright `route()` never
-  sees it; blocking SW kills boot entirely. Slow-window seam must be
-  server-side (vite/e2e-fixture middleware).
-
-Conclusion: the refine contract (visible progress on every >250ms restore
-path) already holds on main via `projectBusy` carriers. The actual #167 loss:
-pinned coverage, diagnostics sink, dead `beforeRun` machinery.
+- **RED — no-query persisted reopen** (boot vite8 deep-link → settle → remove
+  OPFS `<root>/node_modules` incl stamp, localStorage hint survives → goto
+  `/`): window 454ms unthrottled, `samples=5 SILENT=5` — no pill, no
+  launcher, no banner; terminal mounts only after the stamp (+800ms).
+  Reproduce: e2e below (fails today, full-window silence ~4.7s under the
+  seam).
+- **Deep-link `?preset=vite8&autorun=1`** (chooser closed): stretched window
+  6509ms, 44 samples, 0 silent — SWITCHING pill +301ms и «Preparing instant
+  project» +601ms persist до publish; unthrottled window 720ms. Covered, was
+  UNPINNED (the #167 assert flip removed the only guard).
+- **Transition reload with query** (createScratch path): 6533ms window, 0
+  silent — SWITCHING + status-bar `switching`.
+- Correction of the 2026-08-29 compile: its «reload» kept the deep-link query
+  → went through `createScratch` (playground-app.tsx:763), not `openActive`;
+  «contract already holds on main» was measured on the wrong path. The
+  attempt-1 reviewer caught this (Ecosystem UX blocker).
+- **Snapshot unavailable (seam `status:404`)**: single 404 on the gz, boot
+  degrades to a real install (npm-client peer/optional-dep resolver lines in
+  console) and reaches LIVE — never a silent absent tree. The ADR-0278:183
+  printed-reason/visible-install transcript was NOT observable in the terminal
+  viewport (scrollback unverified) → recorded in
+  `[[owner-restore-diagnostics-unread]]`, not this unit.
+- Diagnostics side-finding (out of scope here): restore/promotion log lines
+  reach no console on any path → `[[owner-restore-diagnostics-unread]]`.
 
 ## Challenge
 
@@ -64,37 +74,38 @@ challenge: 2026-08-29 — 3 problems
 2. The 3.2–18MB "slow network = seconds of dead terminal" evidence attaches to the covered path: project-deps.ts priority 1 (slug-keyed OPFS stamp) makes direct reload into a persisted project skip the snapshot fetch entirely, so the truly silent paths (localStorage catalog survives while OPFS stamp gone; closed-launcher deep-link into unstamped starter) pay the cost only in an eviction-divergence scenario the doc gives no occurrence evidence for.
 3. Framing/fork padding: by the draft's own architectural note no terminal session exists during restore post-#167, so "silent terminal" (title, `terminal/` area) misnames a pre-session boot-feedback/UI gap, and fork option "exact pre-#167 per-run gate semantics" re-opens the landed sealed-companion decision the same paragraph admits it contradicts — a dead option inflating the refine.
 
-(Problems 1–2 confirmed and sharpened by Evidence: the "truly silent" residual
-paths measured NOT silent.)
+(2026-08-30: problems 1–2 stand for the launcher/deep-link paths; the truly
+silent path turned out to be the no-query `openActive` reopen — measured, see
+Evidence.)
 
 ## User scenario
 
-Developer opens a shared `?preset=vite8&autorun=1` link on a slow network, or
-reloads after divergent storage eviction. Expected: continuously visible
-restore indication; restore/promotion diagnostics findable in devtools.
-Guarded so the next mechanical refactor cannot silently drop it.
+Developer's browser evicts OPFS under pressure (localStorage survives); they
+reopen `https://…/` (plain URL, persisted project) on a slow network. Expected:
+visible restore indication until the project publishes. Today: dead empty
+workbench for the whole window. Deep-link/launcher paths stay visible and get
+pinned so the next mechanical refactor cannot silently drop them.
 
 ## Acceptance
 
-Slow window in tests: server-side delay seam on `*node-modules.json.gz`
-(Evidence: playwright route cannot intercept the SW-mediated fetch).
+Committed carrier: `tests/e2e/restore-progress-visibility.spec.ts`
+(chromium-heavy lane) + dev-only cookie seam `rifty-e2e-snapshot-fault`
+(vite.config.ts) stalling `*node-modules.json.gz` server-side. Both tests
+sample every 100ms and reject ANY silent sample inside
+[gz request start, publish); a single flash cannot pass; a ≥3s window floor
+guards seam regression.
 
-1. **Pin, deep-link**: e2e — cold storage, `?preset=vite8&autorun=1`,
-   snapshot delivery stretched ≥2s → a user-visible restore indicator
-   (livepill SWITCHING / launcher preparing label) present throughout
-   snapshot-request→publish (sampled); terminal MAY be absent. Test fails if
-   the indicator machinery is dropped (#167-class regression).
-2. **Pin, evicted reload**: same invariant after removing OPFS
-   `<root>/node_modules` (incl `.rifty-install-stamp.json`) while
-   localStorage catalog+hint survive, then reload.
-3. **Diagnostics sink (RED today)**: owner restore/promotion lines
-   (`baked node_modules restored…`, reportPromotion WARNING/CRITICAL) reach a
-   read surface — devtools console (precedent: console.warn
-   owner-package-state.ts ~656). Browser-unit/e2e asserts the restore line
-   lands. No terminal streaming (declined pin stands).
-4. **Dead machinery gone**: `beforeRun` dep removed from pty-server deps (or
-   gains the prod caller row 3 chooses — never left tests-only);
-   `slow-progress.ts` keeps only live paths. `pnpm pr:check` green.
+1. **Pin, deep-link** (GREEN today): cold `?preset=vite8&autorun=1`, delivery
+   stalled 4s → indicator (SWITCHING pill / «Preparing instant project»)
+   present in every in-window sample.
+2. **No-query persisted reopen** (RED today — the unit's fix): boot, evict
+   OPFS `<root>/node_modules` (stamp included; localStorage hint survives),
+   goto `/` → same every-sample indicator invariant through the re-restore.
+   Carrier for the indicator is agent-owned (refine decision); the committed
+   test pins only the observable.
+3. **Dead machinery gone**: `beforeRun` deleted from pty-server deps + gate
+   (line 148/412) with its tests-only harness; `slow-progress.ts` keeps only
+   prod-consumed paths. `pnpm pr:check` green.
 
 ## Parity cases
 
@@ -102,19 +113,27 @@ None — own-product UI visibility, no Node oracle; parity-runner n/a.
 
 ## Fault matrix
 
-| Fault | Path | Outcome |
-| --- | --- | --- |
-| OPFS tree+stamp evicted, catalog survives | reload | restore re-runs, indicator visible (Acceptance 2) |
-| Snapshot slow (≥2s) | deep-link / reload | indicator persists whole window (Acceptance 1–2) |
-| Snapshot unavailable/stale/restore-failed | boot | existing degradation to install/absent; log line lands on read surface (Acceptance 3) |
+Boundary rows per `fault-classes.md` §Boundary failure models (Storage,
+Network); operations are the two dependency-arrival entries this item pins.
+
+| Boundary × fault | Operation | Honest outcome | Carrier |
+| --- | --- | --- | --- |
+| Storage (OPFS): tree+stamp evicted, localStorage survives | no-query reopen (`openActive`) | restore re-runs; indicator every in-window sample | Acceptance 2 e2e (RED today) |
+| Network (snapshot asset): stall ≥2s | deep-link boot / no-query reopen | indicator every in-window sample until publish | Acceptance 1–2 e2e via cookie seam |
+| Network (snapshot asset): unavailable (HTTP error) | first materialization | declared: rejected probe prints its recorded reason, then the same visible real install (ADR-0278:183); never a silent absent tree | seam `status:<code>` + Evidence artifact (install ran, tree arrived; reason/transcript visibility gap → `[[owner-restore-diagnostics-unread]]`); degradation logic untouched here |
+| Network (snapshot asset): stale identity / corrupt body | first materialization | distinct rejection reasons preserved (`snapshot-template-mismatch`, `snapshot-restore-failed:*`), same visible-install outcome | existing unit coverage project-deps.test.ts; behavior untouched here |
 
 ## Out of scope
 
 - Resurrecting the grey terminal line / streaming restore progress into a
   terminal (declined in refine; publish-after-restore stands).
-- New progress UI — surviving carriers suffice (Evidence).
+- Diagnostics read surface for restore/promotion log lines —
+  `[[owner-restore-diagnostics-unread]]` (adjudicated out: attempt-1
+  Goal-drift blocker; refine chose visibility + existing failure surfaces).
+- Changing snapshot degradation behavior (unavailable/stale/failed) — rows
+  above pin the declared ADR-0278 outcome, delivered elsewhere.
 - Shadow-asset prefetch visibility (`primePrefetch`) — background, not the
-  decided restore contract; separate finding if gating is ever observed.
+  decided restore contract.
 - Eviction-divergence frequency instrumentation.
 
 ## Decisions
@@ -132,9 +151,17 @@ None — own-product UI visibility, no Node oracle; parity-runner n/a.
   line rides the implementing PR.
 - On restore failure the indicator yields to the existing error surface — no
   new fault machinery in this item.
-- compile 2026-08-29 (evidence-driven, scope unchanged): spike proves the
-  contract already holds on main — surviving `projectBusy` carriers accepted
-  as the chosen carriers (agent-owned per refine). Deliverable re-cut to
-  pin (Acceptance 1–2) + diagnostics sink (3) + dead-machinery cleanup (4);
-  RED today = Acceptance 3. Slow-window seam is server-side (SW-mediated
-  fetch, spike-verified).
+- Contract+RED attempt 1 @ b994a9a19: blocker — 9 findings, adjudicated
+  7 HOLDS / 2 STRETCH; batch re-cut in place (this commit), attempt count
+  carries.
+- Re-cut per adjudication 2026-08-30: (a) Evidence corrected — the compile's
+  «already holds on main» was measured on the query-contaminated reload; the
+  no-query `openActive` reopen is fully silent and is the unit's RED;
+  (b) devtools-diagnostics acceptance removed — outside the recorded refine
+  scope → `[[owner-restore-diagnostics-unread]]`; (c) `beforeRun` fork
+  resolved to DELETE — reviving it would stream into terminal command output,
+  contradicting the declined pin; (d) fault rows re-expressed as boundary ×
+  operation with ADR-0278:183 outcomes — no undifferentiated «install/absent».
+- Slow-window seam is server-side (`rifty-e2e-snapshot-fault` cookie,
+  dev-only): the snapshot fetch is SW-mediated — playwright `route()` cannot
+  reach it; SW-block kills boot (spike-verified).
