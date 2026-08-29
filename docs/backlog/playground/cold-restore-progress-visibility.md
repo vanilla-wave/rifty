@@ -110,9 +110,12 @@ an immediate response fails even when local restore work is slow.
    project tree before eviction still exists after publication (a reopen that
    reseeds a fresh Scratch fails). Carrier for the indicator is agent-owned
    (refine decision); the committed test pins only the observable.
-3. **Dead machinery gone**: `beforeRun` deleted from pty-server deps + gate
-   (line 148/412) with its tests-only harness; `slow-progress.ts` keeps only
-   prod-consumed paths. `pnpm pr:check` green.
+3. **Dead machinery gone** (RED today): `beforeRun` deleted from pty-server
+   deps + gate (line 148/412) with its tests-only harness; `slow-progress.ts`
+   keeps only prod-consumed options (`delayMs`, `onSlow`). Committed carrier:
+   the source-shape test in the same spec («dead #167 machinery is removed»)
+   — the obligation IS source removal, so source shape is its honest
+   observable; `pnpm pr:check` stays green.
 
 ## Parity cases
 
@@ -172,6 +175,43 @@ Network); operations are the two dependency-arrival entries this item pins.
 - Slow-window seam is server-side (`rifty-e2e-snapshot-fault` cookie,
   dev-only): the snapshot fetch is SW-mediated — playwright `route()` cannot
   reach it; SW-block kills boot (spike-verified).
+- Demotion record (2026-08-30, §Backlog readiness step 5): the attempt-2
+  re-cut demoted the 90aee3e2f `ready` contract to `draft` and re-refined the
+  carrier obligations; recorded fork = carrier discrimination (which
+  observables the committed tests must reject), resolved in the same re-cut.
+  Pre-demotion sections VERBATIM:
+
+  > ## Acceptance
+  >
+  > Committed carrier: `tests/e2e/restore-progress-visibility.spec.ts`
+  > (chromium-heavy lane) + dev-only cookie seam `rifty-e2e-snapshot-fault`
+  > (vite.config.ts) stalling `*node-modules.json.gz` server-side. Both tests
+  > sample every 100ms and reject ANY silent sample inside
+  > [gz request start, publish); a single flash cannot pass; a ≥3s window floor
+  > guards seam regression.
+  >
+  > 1. **Pin, deep-link** (GREEN today): cold `?preset=vite8&autorun=1`, delivery
+  >    stalled 4s → indicator (SWITCHING pill / «Preparing instant project»)
+  >    present in every in-window sample.
+  > 2. **No-query persisted reopen** (RED today — the unit's fix): boot, evict
+  >    OPFS `<root>/node_modules` (stamp included; localStorage hint survives),
+  >    goto `/` → same every-sample indicator invariant through the re-restore.
+  >    Carrier for the indicator is agent-owned (refine decision); the committed
+  >    test pins only the observable.
+  > 3. **Dead machinery gone**: `beforeRun` deleted from pty-server deps + gate
+  >    (line 148/412) with its tests-only harness; `slow-progress.ts` keeps only
+  >    prod-consumed paths. `pnpm pr:check` green.
+  >
+  > ## Parity cases
+  >
+  > None — own-product UI visibility, no Node oracle; parity-runner n/a.
+
+- Contract+RED attempt 3 (verify) @ 673b81915: blocker — 2 substantive
+  findings, both accepted WITHOUT a separate adjudication pass (recorded
+  rationale: an Acceptance-3 `missing` coverage row forces a carrier under any
+  ruling, and §Backlog readiness step 5 quotes the verbatim-record obligation
+  directly); fixed in this batch — Acceptance-3 source-shape RED committed,
+  this demotion record added.
 - Contract+RED attempt 2 (verify) @ 90aee3e2f: blocker — 6 findings,
   adjudicated 5 HOLDS / 1 FALSE (persisted-identity demand — contract had
   disclaimed it); 2nd consecutive blocker → §Contract escalation re-refine in

@@ -23,6 +23,8 @@
  * - the reopen test writes an OPFS sentinel into the persisted tree and
  *   requires it to survive: a reopen that reseeds a fresh Scratch fails.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type Page, type Request, expect, test } from '@playwright/test';
 
 const STAMP_PATH =
@@ -225,5 +227,23 @@ test.describe('cold snapshot restore visibility', () => {
       await opfsFileExists(page, SENTINEL_PATH),
       'persisted tree must survive the reopen',
     ).toBe(true);
+  });
+
+  // RED (backlog: playground/cold-restore-progress-visibility Acceptance 3):
+  // the obligation IS source removal — the honest carrier is source shape.
+  // #167 left `beforeRun` as tests-only machinery in pty-server and
+  // `onSettledAfterSlow` as a tests-only seam in slow-progress; a UI-only fix
+  // that leaves them intact must fail here.
+  test('dead #167 machinery is removed', () => {
+    const source = (rel: string): string =>
+      readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), 'utf8');
+    expect(
+      source('packages/workbench/src/workers/pty-server.ts'),
+      'pty-server must not carry the prod-unconsumed beforeRun dep/gate',
+    ).not.toContain('beforeRun');
+    expect(
+      source('apps/playground/src/glue/slow-progress.ts'),
+      'slow-progress must keep only prod-consumed options (delayMs, onSlow)',
+    ).not.toContain('onSettledAfterSlow');
   });
 });
