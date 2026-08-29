@@ -30,6 +30,14 @@ worker-stdio-drain.ts:119) — the capability gate/report here must turn these r
 crashes into named loud outcomes (evidence:
 `runtime-js/reference/no-coi-degradation-probes.md` §2026-08-29 row 12).
 
+Reachability obligation (bare-sab-guard checkpoint-2 G1, 2026-08-29): the public
+`@riftydev/runtime-js/worker` entry installs NEITHER `installNodeRuntime` NOR
+`installWorkerRealmCompat` (kernel pre-entry hook only — install-process.ts:125,
+workbench kernel-worker-entry). This slice's composition installs the Node
+runtime in the tier's realm; its Contract+RED must certify the ORGANIC
+`createSandbox`→npm-install path exercises the (fixed) realm-compat shims —
+the helper-level probe alone never proves SDK reachability.
+
 ## Challenge
 
 challenge: 2026-08-28 — 1 problem

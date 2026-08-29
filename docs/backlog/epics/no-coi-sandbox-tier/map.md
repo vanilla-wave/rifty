@@ -5,8 +5,16 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 ## Items
 
 1. `runtime-js/worker-realm-compat-bare-sab-referenceerror` — **bare-sab-guard** —
-   RED-first in a real no-COI browser context (first no-COI test substrate);
-   unblocks every other slice (I2 prerequisite).
+   RED-first in a real no-COI browser context (first no-COI test substrate,
+   committed: `playwright.no-coi.config.ts` + `tests/no-coi/`); unblocks the
+   sibling slices' no-COI lane. I2 mapping corrected (checkpoint-2 G1): the
+   shim installs only via the kernel pre-entry hook — the public
+   `@riftydev/runtime-js/worker` entry `createSandbox` boots installs neither
+   `installNodeRuntime` nor `installWorkerRealmCompat`, so today's SDK no-COI
+   path never reaches the defect organically; it becomes I2-load-bearing when
+   build-loop's composition installs the Node runtime in the tier's realm —
+   organic-reachability certification rides build-loop Contract+RED (recorded
+   there).
 2. `runtime-js/same-realm-spawn-stdio-pipe-drop` — **console-swap** — per-child
    console over childProcess.stdout/stderr (I7 pipe half); declared microtask
    residual stays.

@@ -1,0 +1,669 @@
+{
+  "generated": "2026-08-29T12:44:41.871Z",
+  "command": "node tools/probes/no-coi-realm-probe.mjs",
+  "chromium": "148.0.7778.96",
+  "node": "v24.16.0",
+  "server": "http://localhost:5309/ (plain node:http, NO COOP/COEP — tests/no-coi/server.mjs)",
+  "probeBody": "tests/no-coi/fixtures/probe-lib.mjs (imports esbuild of the real prod sources)",
+  "chromiumNoCoi": {
+    "page-direct": {
+      "mode": "direct",
+      "crossOriginIsolated": false,
+      "sabBindingTypeof": "undefined",
+      "wasmSharedBrand": "[object SharedArrayBuffer]",
+      "wasmSharedInstanceofArrayBuffer": false,
+      "native": {
+        "bytes": {
+          "ok": true,
+          "value": "hello"
+        },
+        "noArg": {
+          "ok": true,
+          "value": ""
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': parameter 1 is not of type 'ArrayBuffer'."
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        }
+      },
+      "firstInstall": true,
+      "marker": true,
+      "repeatDirectReturned": false,
+      "repeatIdentity": true,
+      "patched": {
+        "bytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "globalAlias": false,
+      "selfWritable": {
+        "ok": true,
+        "value": true
+      },
+      "utilTypes": {
+        "ok": true,
+        "value": {
+          "privateIsShared": false,
+          "privateIsAny": true,
+          "sharedWasmIsShared": true,
+          "sharedWasmIsAny": true
+        }
+      },
+      "identity": {
+        "view": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "dataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "arrayBuffer": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "errorIdentity": {
+          "ok": true,
+          "value": false
+        }
+      }
+    },
+    "page-aggregate": {
+      "mode": "aggregate",
+      "crossOriginIsolated": false,
+      "sabBindingTypeof": "undefined",
+      "wasmSharedBrand": "[object SharedArrayBuffer]",
+      "wasmSharedInstanceofArrayBuffer": false,
+      "native": {
+        "bytes": {
+          "ok": true,
+          "value": "hello"
+        },
+        "noArg": {
+          "ok": true,
+          "value": ""
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': parameter 1 is not of type 'ArrayBuffer'."
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        }
+      },
+      "firstInstall": true,
+      "marker": true,
+      "repeatDirectReturned": false,
+      "repeatIdentity": true,
+      "patched": {
+        "bytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "globalAlias": true,
+      "selfWritable": {
+        "ok": true,
+        "value": true
+      },
+      "utilTypes": {
+        "ok": true,
+        "value": {
+          "privateIsShared": false,
+          "privateIsAny": true,
+          "sharedWasmIsShared": true,
+          "sharedWasmIsAny": true
+        }
+      },
+      "identity": {
+        "view": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "dataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "arrayBuffer": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "errorIdentity": {
+          "ok": true,
+          "value": false
+        }
+      }
+    },
+    "worker-direct": {
+      "mode": "direct",
+      "crossOriginIsolated": false,
+      "sabBindingTypeof": "undefined",
+      "wasmSharedBrand": "[object SharedArrayBuffer]",
+      "wasmSharedInstanceofArrayBuffer": false,
+      "native": {
+        "bytes": {
+          "ok": true,
+          "value": "hello"
+        },
+        "noArg": {
+          "ok": true,
+          "value": ""
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': parameter 1 is not of type 'ArrayBuffer'."
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        }
+      },
+      "firstInstall": true,
+      "marker": true,
+      "repeatDirectReturned": false,
+      "repeatIdentity": true,
+      "patched": {
+        "bytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "globalAlias": false,
+      "selfWritable": {
+        "ok": false,
+        "errName": "TypeError",
+        "errMsg": "Cannot set property self of #<WorkerGlobalScope> which has only a getter"
+      },
+      "utilTypes": {
+        "ok": true,
+        "value": {
+          "privateIsShared": false,
+          "privateIsAny": true,
+          "sharedWasmIsShared": true,
+          "sharedWasmIsAny": true
+        }
+      },
+      "identity": {
+        "view": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "dataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "arrayBuffer": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "errorIdentity": {
+          "ok": true,
+          "value": false
+        }
+      }
+    },
+    "worker-aggregate": {
+      "mode": "aggregate",
+      "crossOriginIsolated": false,
+      "sabBindingTypeof": "undefined",
+      "wasmSharedBrand": "[object SharedArrayBuffer]",
+      "wasmSharedInstanceofArrayBuffer": false,
+      "native": {
+        "bytes": {
+          "ok": true,
+          "value": "hello"
+        },
+        "noArg": {
+          "ok": true,
+          "value": ""
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': parameter 1 is not of type 'ArrayBuffer'."
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        }
+      },
+      "firstInstall": true,
+      "marker": true,
+      "repeatDirectReturned": false,
+      "repeatIdentity": true,
+      "patched": {
+        "bytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "globalAlias": true,
+      "selfWritable": {
+        "ok": true,
+        "value": true
+      },
+      "utilTypes": {
+        "ok": true,
+        "value": {
+          "privateIsShared": false,
+          "privateIsAny": true,
+          "sharedWasmIsShared": true,
+          "sharedWasmIsAny": true
+        }
+      },
+      "identity": {
+        "view": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "dataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "arrayBuffer": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "errorIdentity": {
+          "ok": true,
+          "value": false
+        }
+      }
+    },
+    "createSabRing": {
+      "ok": false,
+      "errName": "ReferenceError",
+      "errMsg": "SharedArrayBuffer is not defined"
+    }
+  },
+  "nodeOracle": {
+    "binding-intact-direct": {
+      "mode": "direct",
+      "sabBindingTypeof": "function",
+      "wasmSharedBrand": "[object SharedArrayBuffer]",
+      "wasmSharedInstanceofArrayBuffer": false,
+      "native": {
+        "bytes": {
+          "ok": true,
+          "value": "hello"
+        },
+        "noArg": {
+          "ok": true,
+          "value": ""
+        },
+        "sharedView": {
+          "ok": true,
+          "value": "hello"
+        },
+        "rawShared": {
+          "ok": true,
+          "value": {
+            "length": 65536,
+            "atOffset": "hello",
+            "nonNul": 4
+          }
+        },
+        "streaming": {
+          "ok": true,
+          "value": [
+            "",
+            "é"
+          ]
+        }
+      },
+      "firstInstall": true,
+      "marker": true,
+      "repeatDirectReturned": false,
+      "repeatIdentity": true,
+      "patched": {
+        "bytes": {
+          "ok": true,
+          "value": "hello"
+        },
+        "noArg": {
+          "ok": true,
+          "value": ""
+        },
+        "sharedView": {
+          "ok": true,
+          "value": "hello"
+        },
+        "sharedDataView": {
+          "ok": true,
+          "value": "hello"
+        },
+        "rawShared": {
+          "ok": true,
+          "value": {
+            "length": 65536,
+            "atOffset": "hello",
+            "nonNul": 4
+          }
+        },
+        "streaming": {
+          "ok": true,
+          "value": [
+            "",
+            "é"
+          ]
+        }
+      },
+      "globalAlias": true,
+      "selfWritable": {
+        "ok": true,
+        "value": true
+      },
+      "utilTypes": {
+        "ok": true,
+        "value": {
+          "privateIsShared": false,
+          "privateIsAny": true,
+          "sharedWasmIsShared": true,
+          "sharedWasmIsAny": true
+        }
+      },
+      "identity": {
+        "view": {
+          "ok": true,
+          "value": true
+        },
+        "dataView": {
+          "ok": true,
+          "value": true
+        },
+        "arrayBuffer": {
+          "ok": true,
+          "value": true
+        },
+        "noArg": {
+          "ok": true,
+          "value": true
+        },
+        "errorIdentity": {
+          "ok": true,
+          "value": true
+        }
+      }
+    },
+    "binding-deleted-direct": {
+      "mode": "direct",
+      "sabBindingTypeof": "undefined",
+      "wasmSharedBrand": "[object SharedArrayBuffer]",
+      "wasmSharedInstanceofArrayBuffer": false,
+      "native": {
+        "bytes": {
+          "ok": true,
+          "value": "hello"
+        },
+        "noArg": {
+          "ok": true,
+          "value": ""
+        },
+        "sharedView": {
+          "ok": true,
+          "value": "hello"
+        },
+        "rawShared": {
+          "ok": true,
+          "value": {
+            "length": 65536,
+            "atOffset": "hello",
+            "nonNul": 4
+          }
+        },
+        "streaming": {
+          "ok": true,
+          "value": [
+            "",
+            "é"
+          ]
+        }
+      },
+      "firstInstall": true,
+      "marker": true,
+      "repeatDirectReturned": false,
+      "repeatIdentity": true,
+      "patched": {
+        "bytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "sharedDataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "rawShared": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "streaming": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "globalAlias": true,
+      "selfWritable": {
+        "ok": true,
+        "value": true
+      },
+      "utilTypes": {
+        "ok": true,
+        "value": {
+          "privateIsShared": false,
+          "privateIsAny": true,
+          "sharedWasmIsShared": true,
+          "sharedWasmIsAny": true
+        }
+      },
+      "identity": {
+        "view": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "dataView": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "arrayBuffer": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "noArg": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "errorIdentity": {
+          "ok": true,
+          "value": false
+        }
+      }
+    }
+  }
+}

@@ -30,15 +30,19 @@ warn-once+capability-report plan covered `worker_threads` only).
 
 ## 2026-08-29 — real no-COI Chromium 148 realm probe (bare-sab-guard re-cut)
 
-Mechanism (disposable spike, evidence kept per decision-workflow §Refine
-altitude): built REAL shim + util-types via
-`npx esbuild packages/runtime-js/src/ipc/worker-realm-compat.ts --format=esm`
-(same for `builtins/util-types.ts`; `kernel/src/ipc/sab-ring.ts` with
-`--bundle`); page + dedicated MODULE Worker served by a plain `node:http`
-static server with NO COOP/COEP headers; driven by Playwright
-`chromium.launch()` — **Chromium 148.0.7778.96**. Results IDENTICAL in page
-and Worker realms. Oracle column: **node v24.16.0**, same checks inline
-(`node --input-type=module -e …`).
+REPLAYABLE — one command regenerates every row from the real built shim:
+`node tools/probes/no-coi-realm-probe.mjs`. Raw output committed:
+`no-coi-realm-probe-transcript-2026-08-29.json` (this dir). Mechanism (the
+committed driver, formerly a disposable spike): esbuild of the REAL prod
+sources (`ipc/worker-realm-compat.ts`, `builtins/util-types.ts`,
+`kernel/src/ipc/sab-ring.ts` bundled); page + dedicated MODULE Worker served
+by `tests/no-coi/server.mjs` (plain `node:http`, NO COOP/COEP); probe body
+`tests/no-coi/fixtures/probe-lib.mjs` (same body the no-COI substrate lane
+runs); Playwright `chromium.launch()` — **Chromium 148.0.7778.96**. Results
+IDENTICAL in page and Worker realms (transcript keys `page-*`/`worker-*` ×
+`direct`/`aggregate` install). Oracle column: **node v24.16.0** — same probe
+body, transcript `nodeOracle.binding-intact-direct`; absent-binding sim =
+`nodeOracle.binding-deleted-direct` (`delete globalThis.SharedArrayBuffer`).
 
 | # | check (both realms) | Chromium 148 no-COI | node v24.16.0 |
 |---|---|---|---|
@@ -60,3 +64,19 @@ realm": Chromium does NOT gate shared `WebAssembly.Memory` on COI — shared
 BufferSource EXISTS in no-COI pages and Workers; only the `SharedArrayBuffer`
 global binding is absent. A no-op TextDecoder guard would leave native decode
 throwing (row 3) where Node decodes.
+
+Parity 7–9 evidence rows (same transcript, per realm/oracle):
+`firstInstall`/`repeatDirectReturned`/`repeatIdentity` — repeat install
+returns `false` AND `proto.decode` strictly `===` the first patched fn (row 7
+strengthened past booleans); `patched.sharedView`/`patched.rawShared` over a
+sentinel-laid shared wasm buffer ('hello' at offset 3, 0xFF elsewhere) — Node
+oracle decodes EXACTLY the view bytes (`atOffset:'hello'`, `nonNul:4`);
+`identity.*` — spy decoder receives the EXACT input/opts objects, a sentinel
+error propagates as the SAME object (Node oracle all `true`; Chromium no-COI
+today: ReferenceError / `false` — flips with the fix).
+
+Blast-radius observation (driver development, Node absent-binding sim): after
+install the patched decode poisons the HOST's own decodes too — Node's ESM
+loader crashed loading the NEXT module (`import()` → TextDecoder →
+ReferenceError). "EVERY decode in the realm" includes loader/infra decodes,
+not just guest calls.

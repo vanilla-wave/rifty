@@ -6,7 +6,7 @@ created: 2026-08-26
 why: without COI Chromium defines NO `SharedArrayBuffer` global binding; the shim's bare references make EVERY decode() in that realm throw ReferenceError — yet shared `WebAssembly.Memory` views EXIST there and Node decodes them, so the patch is needed, realm-safe
 user_story: As a dev on the no-COI fallback tier, I want TextDecoder to keep working, but today `installSharedMemoryTolerantTextDecoder`'s patched decode references bare `SharedArrayBuffer` and throws `ReferenceError` on every call in a realm where the binding is absent.
 epic: no-coi-sandbox-tier
-sources: [docs/backlog/runtime-js/reference/no-coi-degradation-probes.md]
+sources: [docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, docs/backlog/runtime-js/reference/no-coi-realm-probe-transcript-2026-08-29.json, tools/probes/no-coi-realm-probe.mjs]
 code: [packages/runtime-js/src/ipc/worker-realm-compat.ts, packages/runtime-js/src/ipc/install-process.ts]
 ---
 
@@ -18,11 +18,21 @@ dedicated Worker; command + output + version:
 Node v24.16.0 oracle:
 
 1. `installSharedMemoryTolerantTextDecoder` patches `TextDecoder.prototype.decode`
-   with bare `SharedArrayBuffer` references (worker-realm-compat.ts:75,80);
-   `installNodeRuntime` (install-process.ts:117) runs it in every Node realm.
-   No-COI Chromium has no `SharedArrayBuffer` binding (probe row 1) → after
-   install EVERY `decode()` throws `ReferenceError: SharedArrayBuffer is not
-   defined` — bytes, no-arg, shared inputs alike (probe row 8, both realms).
+   with bare `SharedArrayBuffer` references (worker-realm-compat.ts:75,80).
+   Install carrier — narrower than previously claimed (checkpoint-2 G1
+   correction): `installNodeRuntime` (install-process.ts:117) runs it ONLY as
+   the kernel pre-entry hook in kernel-spawned Node workers; the PUBLIC
+   `@riftydev/runtime-js/worker` entry (worker-entry.ts — what
+   `createSandbox`→`spawnRuntime` boots) installs NEITHER it NOR
+   `installWorkerRealmCompat`, so today's SDK no-COI path never installs the
+   shim organically. It becomes I2-load-bearing when build-loop's composition
+   installs the Node runtime in the tier's realm (organic-reachability
+   certification recorded on that item). The defect itself is helper-level and
+   certain: no-COI Chromium has no `SharedArrayBuffer` binding (probe row 1) →
+   wherever the shim installs in such a realm EVERY `decode()` throws
+   `ReferenceError: SharedArrayBuffer is not defined` — bytes, no-arg, shared
+   inputs alike (probe row 8, both realms) — including the host's own
+   loader/infra decodes (reference doc §Blast-radius).
 2. Absent binding ≠ no shared input: `new WebAssembly.Memory({shared:true})`
    constructs no-COI and its `buffer` IS a SharedArrayBuffer (brand-verified,
    probe row 2); native decode rejects its views (`TypeError: … must not be
@@ -68,9 +78,15 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
 
 - RED-first on a real no-COI Chromium substrate — headerless page AND dedicated
   module Worker, exercising the real built shim (not a source copy), both
-  asserting the Reference-contract preconditions before acting. Substrate =
-  the goal's first no-COI test lane, reusable by later slices; committed in
-  the same PR as the fix.
+  asserting the Reference-contract preconditions before acting. COMMITTED at
+  this Contract+RED (checkpoint-2 C1): `playwright.no-coi.config.ts` +
+  `tests/no-coi/` (server without COOP/COEP, esbuild of the prod sources,
+  probe body shared with the replayable evidence driver); run
+  `pnpm test:no-coi` — today 7 RED (parity 1–7, every failure
+  `ReferenceError: SharedArrayBuffer is not defined`) + 2 green pins
+  (preconditions, parity 10), inside the declared 5–8 band. Substrate = the
+  goal's first no-COI test lane, reusable by later slices; flips GREEN in the
+  fix PR, never edited to pass.
 - After install (direct or via `installWorkerRealmCompat()`) in that realm,
   decode NEVER evaluates the absent binding — every input class:
   `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm view
@@ -90,15 +106,26 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
 - COI-realm exactness pins (unit, injected decoders): copy path respects
   byteOffset/byteLength against sentinel bytes; non-shared path passes the
   EXACT input and opts objects and propagates the exact thrown error object
-  (Parity 8–9).
+  (Parity 8–9). COMMITTED (checkpoint-2 C2/C3): added describes in
+  `worker-realm-compat.test.ts` — sentinel/nonzero-offset Uint8Array, DataView
+  over shared buffer, raw-SharedArrayBuffer whole-buffer exactness, exact
+  input/opts identity (view/DataView/ArrayBuffer/no-arg), sentinel-error
+  identity (non-shared AND shared post-copy), repeat-install identity for
+  direct AND aggregate sequences — all green pins guarding the fix.
 - COI behavior unchanged: existing `worker-realm-compat.test.ts` stays green
   unmodified; strengthened pins are ADDED, never edited-to-pass.
 
 ## Parity cases
 
-Oracles per Reference contract; every row's artifact = probe §2026-08-29 row
-(command + output + Chromium 148.0.7778.96 / node v24.16.0). RED target unless
-marked pin/green.
+Oracles per Reference contract; every row's artifact is REPLAYABLE
+(checkpoint-2 C4): `node tools/probes/no-coi-realm-probe.mjs` regenerates the
+whole probe table (Chromium 148.0.7778.96 page+Worker × direct/aggregate,
+node v24.16.0 oracle + absent-binding sim); raw output committed at
+`reference/no-coi-realm-probe-transcript-2026-08-29.json`. Committed test
+carriers: parity 1–7, 10 → `tests/no-coi/worker-realm-compat.no-coi.spec.ts`
+(7 RED / 2 green today); parity 7 (direct+aggregate), 8, 9 →
+`worker-realm-compat.test.ts` added pins (green); parity 11 → existing suite
+unmodified. RED target unless marked pin/green.
 
 1. no-COI page+worker: `decode(bytes('hello'))` → `'hello'`; today
    `ReferenceError: SharedArrayBuffer is not defined` — probe row 8.
@@ -203,9 +230,25 @@ marked pin/green.
   see Out of scope). Prior "kernel sites worker-spawn-only behind the typeof
   capability gate" held only for the runtime-js spawn path, not direct public
   entries.
-- RED substrate carrier (which lane / how the headerless page is served) is
-  implementation-owned; the contract pins only observables: real Chromium,
-  both realm preconditions, real built shim, page + dedicated Worker.
+- RED substrate carrier (which lane / how the headerless page is served) was
+  implementation-owned; settled by the checkpoint-2 re-cut: dedicated
+  Playwright lane `playwright.no-coi.config.ts` + `tests/no-coi/` (plain
+  `node:http` headerless server). Observables unchanged: real Chromium, both
+  realm preconditions, real built shim, page + dedicated Worker.
+- Re-cut 2026-08-29 (2nd) in place after Contract+RED checkpoint 2 (5
+  blockers: C1–C4 + G1; same branch, attempt 3, lineage carries).
+  fault-classes §Contract escalation applied — 2nd consecutive Contract+RED
+  blocker → re-refine in place; NO split: one behavior, one fix carrier, the
+  blockers were missing committed carriers/artifacts + one provenance claim,
+  not a scope fork. Pre-re-cut clauses quoted for the checkpoint diff:
+  Context `installNodeRuntime (install-process.ts:117) runs it in every Node
+  realm` → corrected to kernel-pre-entry-only + public-worker-entry-never
+  (G1); Parity intro `every row's artifact = probe §2026-08-29 row (command +
+  output …)` → replayable driver + committed transcript (C4); Acceptance
+  `committed in the same PR as the fix` → substrate + COI pins committed at
+  this checkpoint (C1–C3). No observable promise weakened — every previously
+  declared decode outcome, identity pin, and error identity kept verbatim; no
+  demotion (no user-observable fork).
 
 ## Reversibility
 
