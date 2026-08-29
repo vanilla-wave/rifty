@@ -114,6 +114,9 @@ fixed form:
    text stays in the doc's `## Challenge`.
 5. Your decisions — questions that WILL come back to the user, each phrased
    as the actual future question + when it fires. None → say so in one line.
+6. How to start — one line: the exact hand-off that begins the work (ready
+   goal: "goal-run epics/<slug>"; single item: the pickup ask). Nothing
+   starts without it.
 
 Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
 the destination is wrong — pushback re-opens FIT; nothing waits on a reply.
