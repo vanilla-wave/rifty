@@ -140,13 +140,20 @@ verify): `SASS_FORBIDDEN_SURFACE.catalogConsumers` aliases the whole
 already receives the Sass scan — a mutant CANNOT distinguish
 "GENERIC-listed + provenance-omitted" from "GENERIC-listed +
 provenance-listed" (both flag pair-B-style). Provenance-list membership for
-the extracted carriers (sources, walk, eddy fast path, shadow substitution)
+the extracted carriers (sources, walk, eddy fast path, shadow substitution,
+bin claims)
 is therefore the Acceptance-4 declaration obligation with a structural
 oracle: list content in the check + mirror equality asserted by
 `tools/checks/runtime-adapter-boundary.test.ts:69,74`. The row closes when
 every extracted module is GENERIC-listed, provenance carriers are declared in
 `registrySourceProvenance`, both frozen mirrors carry the same append-only
-entries, and the gate flags both planted mutants in a listed module.
+entries, and the gate flags both planted mutants in a listed module. The
+declared provenance carriers are `installer-sources.ts`, `installer-walk.ts`,
+`eddy-fast-path.ts`, `internal/shadow/substitution.ts`, and
+`installer-bin-claims.ts` (its `lockfilePackageBinSources` branches on
+registry acquisition and derives `registryAcquisitionInstallPath` —
+installer.ts:809-810 at base); `installer-request.ts`, `installer-peers.ts`,
+and `utils/abort-signal.ts` carry no acquisition reference.
 
 ## Parity 4 — ratchet identity (full partition transcript)
 

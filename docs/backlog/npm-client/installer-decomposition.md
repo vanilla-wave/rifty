@@ -76,8 +76,10 @@ whole in one call.
 4. Every module extracted from `installer.ts` is added to
    `GENERIC_RUNTIME_ADAPTER_MODULES` in `tools/checks/runtime-adapter-boundary.mjs`
    — and to `SASS_FORBIDDEN_SURFACE.registrySourceProvenance` when it carries
-   registry-source provenance (the source, walk, eddy, and shadow-substitution
-   carriers do; arg validation and leaf diagnostics do not). A module absent
+   registry-source provenance (the source, walk, eddy, shadow-substitution,
+   and bin-claims carriers do — `lockfilePackageBinSources` branches on
+   registry acquisition and derives `registryAcquisitionInstallPath`; arg
+   validation and leaf diagnostics do not). A module absent
    from every applicable list is silently outside the ADR-0335 boundary; that
    is the failure Parity 3 rejects behaviorally. Provenance membership for a
    GENERIC-listed module is a DECLARATION obligation, not a behavioral one:
@@ -183,9 +185,12 @@ assertion cannot close any row.
   `analyzeLockfileRequest` + ownership merge — their only callers are the two
   Eddy gates), `installer-walk.ts` (+ `lockfileReuseDecision`,
   `rangeIsUnconstrained`, shared resolution types), `installer-sources.ts`,
-  `installer-request.ts`, `installer-peers.ts`, `installer-bin-claims.ts`,
+  `installer-request.ts`, `installer-peers.ts`, `installer-bin-claims.ts`
+  (a registry-source-provenance carrier, Acceptance 4),
   `internal/shadow/substitution.ts` (substitution + replay/embedded asserts —
-  same owner per §Context), `utils/abort-signal.ts` (shared abort helpers).
+  ONE module because the §Context table declares the replay group "same owner
+  as shadow substitution"; the rows are separate only because their line
+  ranges are non-contiguous), `utils/abort-signal.ts` (shared abort helpers).
 - **Bin claims + link targets get a dedicated `installer-bin-claims.ts`, not
   `linker.ts`.** Forcing fact (2026-08-29, live gate measure): `linker.ts` is
   604 lines at `686b650a4`; +191 group lines + imports ≈ 800+ breaches the
