@@ -95,26 +95,9 @@ probe-or-fog and the completion report: `rifty-goal` FIT.
 
 Every backlog write-up (capture, FIT, re-fit) ends with a user-facing report
 delivered in the conversation — not an approval ask, not a PR comment, not a
-file. A FRESH subagent with clean context writes it from the recorded docs
-alone (no author framing — same independence as §Challenge: a report the docs
-cannot support proves the write-up incomplete; fix the docs, never pad the
-report). User's language, ONE screen, no file paths, no process internals;
-fixed form:
-
-1. Plan — 2-4 plain sentences: what the user gets and why now, tied to user
-   experience and project direction (mission/milestone). Never mechanics.
-2. What changes — experience-level: what starts working, what will loudly
-   degrade (warn) or throw. Never file lists.
-3. Steps — ordered slices, ONE line each ending with the observable result
-   once that slice lands ("after this: X works / X visible").
-4. Risks — ONLY challenge problems that could change the user's decision to
-   proceed, translated into plain risk statements ("if this is acceptable,
-   nothing to do"); problems already fixed in the docs are omitted, verbatim
-   text stays in the doc's `## Challenge`.
-5. Your decisions — questions that WILL come back to the user, each phrased
-   as the actual future question + when it fires. None → say so in one line.
-
-Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
+file. Form and producer procedure (fresh clean-context subagent, six
+sections): `rifty-to-backlog` §6 Report — the single canon for capture AND
+FIT. Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
 the destination is wrong — pushback re-opens FIT; nothing waits on a reply.
 Inside a goal run, RECHART-minted drafts ride the run's status relay and
 ledger — no separate report per graduation.

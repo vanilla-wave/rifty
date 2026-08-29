@@ -52,10 +52,39 @@ capturing PR body.
 
 ## 6. Report
 
-End with the user-facing completion report (`docs/backlog/README.md` §Report):
-a FRESH subagent with clean context writes it from the minted docs alone
-(§Report form, user's language); relay it in the conversation. A report,
-not an approval ask.
+Canon for EVERY backlog write-up report (capture here, FIT via
+`rifty-goal` FIT step 8). A FRESH subagent with clean context writes it from
+the recorded docs alone (no author framing — same independence as README
+§Challenge: a report the docs cannot support proves the write-up incomplete;
+fix the docs, never pad the report). Relay it in the conversation. User's
+language, ONE screen, no file paths beyond required item ids, no process
+internals; fixed form:
+
+1. Plan — 2-4 plain sentences: what the user gets and why now, tied to user
+   experience and project direction (mission/milestone). Never mechanics.
+2. What changes — experience-level: what starts working, what will loudly
+   degrade (warn) or throw. Never file lists.
+3. Steps — name the epic once (`epics/<slug>`), then ordered slices, ONE line
+   each: the item id (`area/slug`) + what it is in plain words, ending with
+   the observable result once that slice lands ("after this: X works").
+4. Risks — ONLY challenge problems that could change the user's decision to
+   proceed, translated into plain risk statements ("if this is acceptable,
+   nothing to do"); problems already fixed in the docs are omitted, verbatim
+   text stays in the doc's `## Challenge`. Each entry opens with its origin —
+   why it exists despite refinement ("critic finding — axis your interview
+   never covered", "probe result", …).
+5. Open questions for you — ONLY genuinely undecided points: origin (who found
+   it and why it is NOT re-opening something you decided — e.g. "critic found
+   a middle option between your two decided poles") + when it fires + the
+   exact question + the default if you stay silent. Already-decided
+   checks/probes are NOT questions — they ride their Step, with a conditional
+   spelled out there ("if the probe shows X, we return with question Y").
+   None → say so in one line.
+6. How to start — one line: the exact hand-off that begins the work (ready
+   goal: "goal-run epics/<slug>"; single item: the pickup ask). Nothing
+   starts without it.
+
+A report, not an approval ask.
 
 After capture: `decision-workflow.md` §Backlog readiness owns draft→ready;
 verification = the unit's Contract+RED checkpoint at pickup (an unresolved
