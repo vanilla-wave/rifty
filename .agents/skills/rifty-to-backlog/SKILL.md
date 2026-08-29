@@ -1,9 +1,12 @@
 ---
 name: rifty-to-backlog
-description: Capture a new rifty finding or idea as a deduplicated, gated backlog draft. Invoke for first-time audit/review/post-merge intake or explicit filing; excludes existing-contract edits, refinement, and planned work.
+description: Formalize a rifty finding or idea into a deduplicated, gated backlog draft. Direct invocation = mid-task/agent intake only (audit/review/post-merge discoveries, no user in session); user-brought input enters via rifty-refine, which runs this formalization as its final step. Excludes existing-contract edits and planned work.
 ---
 
-Capture = classify → dedup → gate → `draft` → challenge → report. No interview or contract compilation.
+Capture = classify → dedup → gate → `draft` → challenge → report. Never an
+interview or contract compilation: mid-task an observable fork is recorded in
+the draft + manual `rifty-refine` requested; invoked as the `rifty-refine`
+formalize tail, forks arrive already settled and mint with their evidence.
 
 ## 1. Classify
 
