@@ -236,3 +236,24 @@ graph stays acyclic: every back-reference to `installer.ts` or between
 donor modules is type-only, erased (`arch-rules.cjs` no-circular binds the
 runtime graph). Ported coordination carries its forcing constraints in the
 contract's §Decisions; nothing new is introduced.
+
+## Implementation and closure — 2026-08-29
+
+Ready/pickup verdict `ready-verdict: 2026-08-29 — Contract+RED @ 40e816021`
+precedes the implementation tree. The move landed exactly the settled
+carriers: `installer-walk.ts` (741), `eddy-fast-path.ts` (609),
+`installer-sources.ts` (502), `internal/shadow/substitution.ts` (328),
+`installer-request.ts` (229), `installer-bin-claims.ts` (216),
+`installer-peers.ts` (48), `utils/abort-signal.ts` (31); `installer.ts`
+retains the `install` overloads, orchestration, public types, and the
+Parity-2 forwarding re-export at **530 lines** — every module reads in one
+call. `src/index.ts` is byte-identical to the base (empty diff);
+`installer.ts` exports exactly the base manifest. The `BASELINE` pin is
+deleted and `pnpm check:file-size` holds; both boundary inventories and both
+frozen mirrors carry the same append-only entries (25 generic modules,
+provenance carriers incl. `installer-bin-claims.ts`); `check:arch` reports no
+runtime cycles. The frozen 18-suite batch is **404/404 GREEN unedited**
+(Vitest 2.1.9, Node v24.16.0) — identical to the baseline artifact — and the
+boundary mirror suite is 8/8. No test file changed except the two sanctioned
+mirror arrays; no behavior change rode along. Closure deletes the completed
+item per delete-on-done; this reference stays as checkpoint lineage.
