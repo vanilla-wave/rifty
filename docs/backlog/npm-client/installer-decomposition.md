@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: draft
+status: ready
 title: Decompose installer.ts along its existing seams until it reads in one call
 created: 2026-08-09
 why: installer.ts is 3066 lines — 213 reads and 12.5% of every source-read token in a measured agent session, because no reader gets it in one call
@@ -175,6 +175,8 @@ assertion cannot close any row.
   an ADR, not part of this unit.
 
 ## Decisions
+
+ready-verdict: 2026-08-29 — Contract+RED @ 40e816021f6991f36375ddec837f323d5cfc0bf1
 
 - **Where the seams run is settled here, from code, not left to pickup.** The
   groups in §Context are contiguous top-level declaration ranges with single
