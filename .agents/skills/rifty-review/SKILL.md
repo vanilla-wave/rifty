@@ -54,6 +54,10 @@ Never poll or read reviewer stdout — the verdict is the `-o` JSON, liveness is
 the process state. Log is post-mortem: read it only if `verdict.json` is missing.
 `</dev/null` is load-bearing: without a TTY (background shells) codex parks on
 "Reading additional input from stdin..." forever.
+Run the reviewer (and any test battery) as a background task with a completion
+notification — never fixed-interval `sleep`/poll loops. While it runs, work:
+next-slice prep, re-chart, PR text. Idle waiting is a defect (retro #256:
+10.8h of 22h slept in polls).
 
 Reviewer effort: ultra (`-c model_reasoning_effort="ultra"`). The reviewer
 CERTIFIES the tree against its declared authorities — unit contract

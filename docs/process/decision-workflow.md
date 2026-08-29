@@ -85,7 +85,8 @@ ordinary items, single fixes, or process/docs/skill work:
 
 1. FIT (or inherit a ready goal): destination (invariants + tier, delivered to
    the user as the completion report — backlog README §Report), probe-or-fog
-   over external-semantics assumptions, specifiable children only.
+   over every encoded assumption (external semantics + internal scope-carrying
+   mappings), specifiable children only.
 2. PICKUP one dependency-ready child: compile per §Backlog readiness above;
    declare its ledger band; Contract+RED (fresh isolated reviewer —
    `rifty-review` §Checkpoint run; never the implementer's own pass); then
