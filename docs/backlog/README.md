@@ -111,9 +111,13 @@ fixed form:
 4. Risks — ONLY challenge problems that could change the user's decision to
    proceed, translated into plain risk statements ("if this is acceptable,
    nothing to do"); problems already fixed in the docs are omitted, verbatim
-   text stays in the doc's `## Challenge`.
-5. Open questions for you — ONLY genuinely undecided points: when it fires +
-   the exact question + the default if you stay silent. Already-decided
+   text stays in the doc's `## Challenge`. Each entry opens with its origin —
+   why it exists despite refinement ("critic finding — axis your interview
+   never covered", "probe result", …).
+5. Open questions for you — ONLY genuinely undecided points: origin (who found
+   it and why it is NOT re-opening something you decided — e.g. "critic found
+   a middle option between your two decided poles") + when it fires + the
+   exact question + the default if you stay silent. Already-decided
    checks/probes are NOT questions — they ride their Step, with a conditional
    spelled out there ("if the probe shows X, we return with question Y").
    None → say so in one line.
