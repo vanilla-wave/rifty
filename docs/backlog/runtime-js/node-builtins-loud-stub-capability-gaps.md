@@ -15,6 +15,12 @@ Confirmed throwing feature-ids (honest loud stubs per the no-silent-stubs rule):
 
 **Absent — not even a loud throw (a raw `TypeError: … is not a function`, WORSE than a NotImplementedError) — surfaced by the ADR-0150 child-fs audit:** `accessSync` (only the callback/promise `access` exist), callback-form `fs.rm` (only `rmSync`/`promises.rm`), `chmod`/`chown`/`lchmod`/`lchown`, `symlink`/`link` (symlink stays governed by ADR-0050's no-symlink model — `readlink` exists), `statfs`/`statvfs`, `readv`/`writev`. Per the no-silent-stub rule these should at least throw `NotImplementedError('fs.<name>')` (+ compat ❌); `accessSync` + callback `rm` are cheap + common → implement on demand. (Reachability rose with ADR-0150 — arbitrary CLIs now run in a child and hit these.)
 
+Same absent class, surfaced by the no-coi-sandbox-tier bare-sab-guard sweep
+(2026-08-29): `child_process.spawnSync`/`execFileSync` — the sync family
+exports only `execSync` (`child_process.ts:664`: spawn, exec, execFile, fork,
+execSync); the other two are `undefined` → raw call-site TypeError, no compat
+❌ row. Should throw `NotImplementedError('child_process.<name>')` + compat ❌.
+
 ## Options or Next
 
 Parked by design: "Full Node compat" and native modules are explicit non-goals (`AGENTS.md` §Mission). Default is to keep these as honest loud throws, not to build them. Promote a specific feature to its own active impl item only on concrete consumer demand; `dns.resolve*` has a dedicated backlog file and the first readline subset is delivered. Networked implementations still need an ADR when they extend ADR-0010's loud-throw stance. Per feature, write a failing parity/ceiling case pinning the current throw shape first, then implement the subset. Keep the compat ❌ rows (`process-meta/compat-matrix-coverage-debt`) in sync so the public matrix matches these throws.

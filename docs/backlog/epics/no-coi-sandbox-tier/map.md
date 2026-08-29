@@ -33,12 +33,18 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
   "unflushed writes were pending at last termination" (dirty flag, NOT a
   journal)? Kill-before-flush leaves silently mixed-generation trees (spike
   record); user decision at dev-hmr pickup.
-- util-types.ts:27,31 bare-SAB sibling — reachable from a no-COI realm via
-  util.types.*? Settle inside bare-sab-guard sweep.
+
+Settled: util-types.ts:27,31 bare-SAB sibling — brand-based, zero runtime SAB
+refs, Node-identical in real no-COI Chromium 148 incl. shared-wasm buffers
+(bare-sab-guard sweep 2026-08-29; evidence:
+`runtime-js/reference/no-coi-degradation-probes.md` §2026-08-29 rows 10–11).
 
 ## Out of scope
 
-- execSync/spawnSync no-COI (loud NotImplementedError stays — correct as-is).
+- execSync no-COI (loud NotImplementedError naming SAB/COI stays — correct
+  as-is). spawnSync/execFileSync are ABSENT exports (raw call-site TypeError,
+  verified 2026-08-29) — tracked in
+  `runtime-js/node-builtins-loud-stub-capability-gaps`, not this goal.
 - Vite 8 / Rolldown and any threaded-wasm guest (platform: pthread shared
   memory needs COI) — loud named error only.
 - Kernel no-COI protocol redesign (ring-less spawn, async remote-fs, snapshot

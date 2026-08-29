@@ -3,8 +3,8 @@ area: runtime-js
 status: ready
 title: worker-realm-compat TextDecoder shim throws ReferenceError in realms without SharedArrayBuffer
 created: 2026-08-26
-why: without COI Chromium defines NO `SharedArrayBuffer` global; the shim's bare references make EVERY decode() in that realm throw ReferenceError — crashes unrelated code paths in the no-COI tier
-user_story: As a dev on the no-COI fallback tier, I want TextDecoder to keep working, but today `installSharedMemoryTolerantTextDecoder`'s patched decode references bare `SharedArrayBuffer` and throws `ReferenceError` on every call in a realm where the global is absent.
+why: without COI Chromium defines NO `SharedArrayBuffer` global binding; the shim's bare references make EVERY decode() in that realm throw ReferenceError — yet shared `WebAssembly.Memory` views EXIST there and Node decodes them, so the patch is needed, realm-safe
+user_story: As a dev on the no-COI fallback tier, I want TextDecoder to keep working, but today `installSharedMemoryTolerantTextDecoder`'s patched decode references bare `SharedArrayBuffer` and throws `ReferenceError` on every call in a realm where the binding is absent.
 epic: no-coi-sandbox-tier
 sources: [docs/backlog/runtime-js/reference/no-coi-degradation-probes.md]
 code: [packages/runtime-js/src/ipc/worker-realm-compat.ts, packages/runtime-js/src/ipc/install-process.ts]
@@ -12,19 +12,28 @@ code: [packages/runtime-js/src/ipc/worker-realm-compat.ts, packages/runtime-js/s
 
 ## Context
 
-`installSharedMemoryTolerantTextDecoder` patches `TextDecoder.prototype.decode`
-with a body referencing `SharedArrayBuffer` bare (worker-realm-compat.ts:75,80).
-`installNodeRuntime` (install-process.ts:117) runs it unconditionally in every
-Node realm. No-COI Chromium defines no `SharedArrayBuffer` global at all
-(spike-observed, probes record) → every `decode()` after install throws
-`ReferenceError` — including no-arg `decode()` (line 80 path). Nothing can be
-shared in such a realm, so the correct behavior is a no-op install. A verified
-guard existed as a spike patch (throwaway branch, not carried over) — it landed
-without a RED test; the fix re-lands failing-test-first (repo rule: no fix
-without its regression test). Realm-sensitivity class:
-`toolchain-build/worker-realm-conformance-harness` (tested-realm ≠ ships-realm).
+Two verified halves — real no-COI Chromium 148.0.7778.96 probe (page AND
+dedicated Worker; command + output + version:
+`reference/no-coi-degradation-probes.md` §2026-08-29, "probe row N" below) +
+Node v24.16.0 oracle:
 
-Repro from real source (node v24.16.0, worktree 2026-08-29):
+1. `installSharedMemoryTolerantTextDecoder` patches `TextDecoder.prototype.decode`
+   with bare `SharedArrayBuffer` references (worker-realm-compat.ts:75,80);
+   `installNodeRuntime` (install-process.ts:117) runs it in every Node realm.
+   No-COI Chromium has no `SharedArrayBuffer` binding (probe row 1) → after
+   install EVERY `decode()` throws `ReferenceError: SharedArrayBuffer is not
+   defined` — bytes, no-arg, shared inputs alike (probe row 8, both realms).
+2. Absent binding ≠ no shared input: `new WebAssembly.Memory({shared:true})`
+   constructs no-COI and its `buffer` IS a SharedArrayBuffer (brand-verified,
+   probe row 2); native decode rejects its views (`TypeError: … must not be
+   shared`, probe row 3) where Node v24.16.0 decodes. So the spike-era "no-op
+   install" guard was WRONG (frozen assumption killed by row 2): the patch is
+   NEEDED in SAB-less realms; the fix is realm-safe shared detection inside the
+   patched body — never a bare binding reference, never a skipped install.
+   ADR-0162 decision 3 ("patched UNCONDITIONALLY") stands.
+
+Node-sim repro from real source (secondary — real-realm evidence is the probe;
+node v24.16.0, worktree 2026-08-29):
 
 ```
 npx esbuild packages/runtime-js/src/ipc/worker-realm-compat.ts --format=esm --outfile=/tmp/wrc-spike.mjs
@@ -38,89 +47,167 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
 # same with no-arg new Dec().decode()
 ```
 
+## Reference contract
+
+- Decode-behavior oracle: **Node v24.16.0 `TextDecoder`** (probe table Node
+  column): shared-wasm view at nonzero offset → its bytes' text; raw shared
+  buffer → whole-buffer text; multibyte split across shared views with
+  `{stream:true}` on one decoder → exact char; non-shared and no-arg unchanged.
+- Realm reference: **real no-COI Chromium 148.0.7778.96** (Playwright-pinned
+  build); mechanism: page served over plain HTTP with NO COOP/COEP + a
+  dedicated module Worker on it (probe §2026-08-29). Every substrate test
+  asserts `crossOriginIsolated === false` AND
+  `typeof SharedArrayBuffer === 'undefined'` before acting — a future Chromium
+  change fails loud, never silently re-scopes the test.
+- Approximation rejected: stubbing `SharedArrayBuffer = undefined` in a
+  COI/Node realm is NOT this realm (`instanceof undefined` TypeError, not the
+  absent-binding ReferenceError); the RED must run in the real no-COI browser
+  realm with the real built shim.
+
 ## Acceptance
 
-- RED-first in a real no-COI Chromium context — page served with no COOP/COEP;
-  test asserts `crossOriginIsolated === false` AND
-  `typeof SharedArrayBuffer === 'undefined'` before acting, and exercises the
-  real built shim (not a source copy). This page/harness is the goal's first
-  no-COI test substrate, reusable by later slices.
-- After `installWorkerRealmCompat()` in that realm:
-  `new TextDecoder().decode(new TextEncoder().encode('hello'))` → `'hello'`,
-  `new TextDecoder().decode()` → `''`. On current main both throw
-  `ReferenceError` (artifact above).
-- `installSharedMemoryTolerantTextDecoder` there returns `false` and leaves
-  `TextDecoder.prototype.decode` untouched (no `__riftyShared` marker).
-- COI behavior unchanged: existing shared-copy / pass-through / idempotence
-  unit tests (`worker-realm-compat.test.ts`) stay green unmodified.
-- Approximation rejected: stubbing `SharedArrayBuffer = undefined` in a
-  COI/Node realm does NOT satisfy the RED (a stubbed binding gives
-  `instanceof undefined` TypeError, not the absent-binding ReferenceError);
-  the RED must run in the real no-COI browser realm.
+- RED-first on a real no-COI Chromium substrate — headerless page AND dedicated
+  module Worker, exercising the real built shim (not a source copy), both
+  asserting the Reference-contract preconditions before acting. Substrate =
+  the goal's first no-COI test lane, reusable by later slices; committed in
+  the same PR as the fix.
+- After install (direct or via `installWorkerRealmCompat()`) in that realm,
+  decode NEVER evaluates the absent binding — every input class:
+  `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm view
+  ('hello' bytes at offset 3) → `'hello'`; raw shared-wasm buffer →
+  Node-identical whole-buffer text; `é` split across two shared-backed views
+  with `{stream:true}` on ONE decoder → `'é'`. Today ALL throw
+  `ReferenceError` (probe row 8).
+- `installSharedMemoryTolerantTextDecoder` returns `true` and marks the patched
+  fn there too (unconditional patch retained — ADR-0162); repeat install
+  (direct AND via aggregate) → `false` AND `proto.decode` strictly `===` the
+  captured first patched function AND shared decode still green — booleans
+  alone don't close this.
+- Aggregate in the no-COI WORKER realm pins ALL sibling effects together:
+  `global === globalThis`, own writable `self` (assignment doesn't throw,
+  `self === globalThis`), decode green, marker present — no guard at helper or
+  aggregate level may skip a sibling installer.
+- COI-realm exactness pins (unit, injected decoders): copy path respects
+  byteOffset/byteLength against sentinel bytes; non-shared path passes the
+  EXACT input and opts objects and propagates the exact thrown error object
+  (Parity 8–9).
+- COI behavior unchanged: existing `worker-realm-compat.test.ts` stays green
+  unmodified; strengthened pins are ADDED, never edited-to-pass.
 
 ## Parity cases
 
-Oracle: native no-COI Chromium `TextDecoder` (nothing shared can exist there —
-unpatched native decode is exact). Each row a failing-test-first target unless
-marked green.
+Oracles per Reference contract; every row's artifact = probe §2026-08-29 row
+(command + output + Chromium 148.0.7778.96 / node v24.16.0). RED target unless
+marked pin/green.
 
-1. no-COI realm, `decode(bytes('hello'))` → `'hello'`; today `ReferenceError:
-   SharedArrayBuffer is not defined` — artifact: Context repro, node v24.16.0.
-2. no-COI realm, `decode()` (no arg) → `''`; today same ReferenceError via
-   line 80 `input instanceof SharedArrayBuffer` — artifact: same run.
-3. no-COI realm, `installSharedMemoryTolerantTextDecoder(Dec)` → `false`, no
-   patch; today `true` + patch — artifact: same run, `install: true`.
-4. no-COI realm, `util.types.isSharedArrayBuffer(new ArrayBuffer(1))` →
-   `false`, `isAnyArrayBuffer(...)` → `true`, no throw — GREEN already (type
-   positions erase; see Decisions); pin in the same substrate.
-5. COI/SAB realm: shared-backed view decodes via private copy; second install
-   → `false` — existing green tests, unmodified.
+1. no-COI page+worker: `decode(bytes('hello'))` → `'hello'`; today
+   `ReferenceError: SharedArrayBuffer is not defined` — probe row 8.
+2. same: `decode()` → `''`; today same ReferenceError — probe row 8.
+3. same: shared-wasm view, 'hello' bytes at offset 3, len 5 → `'hello'` (Node
+   probe row 3); today ReferenceError patched / `TypeError: … must not be
+   shared` native — probe rows 3, 8.
+4. same: raw shared-wasm buffer → whole-buffer text, Node-identical (65536
+   chars, probe row 4); today ReferenceError patched / `TypeError: … parameter
+   1 is not of type 'ArrayBuffer'` native.
+5. same: `é` split across two shared-backed views, `{stream:true}` then final,
+   ONE decoder → `'é'` (Node probe row 6); today ReferenceError — probe row 8.
+6. no-COI worker: `installWorkerRealmCompat()` → `global === globalThis`, own
+   writable `self`, decode green, `decode.__riftyShared === true` —
+   global/self green today (probe row 9), decode RED (row 8).
+7. install idempotence: first direct install `true` (green today, probe row 7);
+   second call (direct and aggregate repeat) → `false` AND strict-identity
+   patched fn AND shared decode still green — identity pin (today only
+   booleans are checked).
+8. COI/unit, injected rejecting decoder: shared buffer filled with sentinel
+   bytes, view at offset 3 len 5 → decoded text = exactly the view's 5 bytes,
+   sentinels never included; same sweep for DataView over shared buffer and
+   the raw-SharedArrayBuffer branch — offset/length exactness pin.
+9. COI/unit, spy decoder: non-shared typed view / DataView / ArrayBuffer /
+   no-arg → spy receives the EXACT same input object and opts object (`===`);
+   a sentinel error thrown by the spy propagates as the SAME object (shared
+   path post-copy too) — identity + error-propagation pins.
+10. no-COI page+worker, built util-types:
+    `isSharedArrayBuffer(new ArrayBuffer(1))` → `false`,
+    `isAnyArrayBuffer(…)` → `true`, shared-wasm buffer → `true`/`true`, no
+    throw — GREEN (probe rows 10–11, matches Node); pin in the substrate.
+11. COI/SAB realm: existing shared-copy / pass-through / idempotence tests
+    stay green unmodified.
 
 ## Fault matrix
 
 | axis × operation | honest outcome | fault target |
 |---|---|---|
-| realm lacks SAB global × install/decode | install → `false`, prototype untouched; native decode fully faithful (no shared input physically possible: Chromium gates SAB and wasm shared memory on COI) | no-COI browser RED (rows 1–3) |
-| realm has SAB, decoder rejects shared views (older Chromium) × decode(shared view) | copy-into-private path, same bytes | existing unit test |
-| realm has SAB × decode(non-shared) | pass-through unchanged | existing unit test |
+| no-SAB-binding realm × install (direct/aggregate) | patch installs (`true`), marker set; aggregate also global alias + writable self; nothing gates on the absent binding (`frozen-assumption` killed by probe row 2) | parity 1–2, 6–7 substrate REDs |
+| no-SAB-binding realm × decode(shared-wasm view/buffer, nonzero offset, streaming) | copy-into-private, Node-identical text incl. offset/length + streaming state | parity 3–5 REDs |
+| no-SAB-binding realm × decode(non-shared / no-arg) | pass-through, Node-identical | parity 1–2 REDs |
+| SAB realm, native rejects shared × decode(shared view/DataView/raw SAB) | copy path, EXACT view bytes — sentinel + nonzero offset (`lossy-aggregate` killed) | parity 8 pin |
+| SAB realm × decode(non-shared) | exact input/opts object identity through; thrown error object identity through (`lossy-aggregate` killed) | parity 9 pins |
+| any realm × repeat install | `false`, strict-identity patched fn, shared decode intact (`lossy-aggregate` killed) | parity 7 pin |
 
 ## Out of scope
 
-- No warn and no capability-report row for the no-op install — nothing is
-  degraded (see Fault matrix row 1); the capability report surface is the
-  `build-loop` slice.
-- Kernel `new SharedArrayBuffer` sites (`worker-stdio-drain.ts:119`,
-  `sab-ring.ts:136`) — worker-spawn path only, behind `isSabIpcSupported()`
-  `typeof`-gate (`kernel/src/ipc/capabilities.ts`); unreachable no-COI;
-  unchanged.
-- `execSync`/`spawnSync` loud `NotImplementedError` naming SAB/COI — stays
-  (map Out of scope).
+- No warn and no capability-report row for this shim — decode is fully
+  Node-faithful post-fix, nothing degraded; the report surface is `build-loop`.
+- Kernel direct SAB constructors ARE reachable no-COI via public exports:
+  `createSabRing` (kernel `index.ts:32` → `sab-ring.ts:136`) throws raw
+  `ReferenceError: SharedArrayBuffer is not defined` in the real no-COI page
+  (probe row 12); same class `spawnKernelWorker` (`spawn-worker.ts:395`) +
+  `createWorkerOutputState` (`worker-stdio-drain.ts:119`). Loud crash, wrong
+  name: the NAMED loud capability gate/report is `build-loop`'s deliverable
+  (map item 4, goal I1) — recorded on that item this commit. Prior sweep claim
+  "unreachable behind the typeof gate" corrected (`provenance-lie` killed).
+- child_process sync family no-COI: ONLY `execSync` carries the named loud
+  `NotImplementedError` (`child_process-sync.ts:65`; its
+  `isSabIpcSupported()` gate is absent-binding-safe — `capabilities.ts:25`
+  typeof). `spawnSync`/`execFileSync` are ABSENT exports
+  (`child_process.ts:664` exports spawn, exec, execFile, fork, execSync only)
+  → call-site `TypeError: … is not a function`, no compat ❌ row — recorded in
+  `runtime-js/node-builtins-loud-stub-capability-gaps` absent list this
+  commit. Prior "execSync/spawnSync loud error stays" claim corrected
+  (`provenance-lie` killed); map Out of scope line fixed same commit.
 - Other no-COI degradations (spawn stdio pipe, cpus→1, worker_threads
   warn-once) — sibling slices.
 
 ## Decisions
 
-- Guard = feature-detect at install: `typeof SharedArrayBuffer !== 'function'`
-  → return `false`, never patch. Not a degradation — a SAB-less realm can hold
-  no shared-backed input, so unpatched native decode is exact; silent no-op is
-  the faithful behavior (no warn, no capability row).
-- File-header "patched UNCONDITIONALLY" rationale guards against probing
-  shared-DECODE tolerance (false-negative risk); constructor-absence detection
-  has no false-negative mode — rationale intact for realms WITH SAB.
-- Map open question 3 settled: `util-types.ts:27,31` SAB refs are TS type
-  positions + string literals, erased in emitted JS
+- Re-cut 2026-08-29 in place after Contract+RED checkpoint 1 (14-blocker
+  batch; same branch, lineage carries). Pre-re-cut clauses quoted for the
+  checkpoint diff: Decisions `Guard = feature-detect at install: typeof
+  SharedArrayBuffer !== 'function' → return false, never patch`; Acceptance
+  `installSharedMemoryTolerantTextDecoder there returns false and leaves
+  TextDecoder.prototype.decode untouched (no __riftyShared marker)`; Fault row
+  `no shared input physically possible: Chromium gates SAB and wasm shared
+  memory on COI`. All rested on one frozen assumption the real probe killed:
+  Chromium 148 does NOT gate shared `WebAssembly.Memory` on COI (probe rows
+  2–4). The correction STRENGTHENS the contract under the Node oracle (patch
+  installs everywhere; more input classes decode; every previously promised
+  observable — 'hello', '' — kept) — no user-observable fork, no demotion.
+- Fix carrier = realm-safe shared-input detection inside the patched body (no
+  bare `SharedArrayBuffer` evaluation on any path); exact mechanism (brand
+  check / `!(buf instanceof ArrayBuffer)` complement / captured constructor)
+  is implementation-owned; the contract pins observables only.
+- ADR-0162 decision 3 (TextDecoder patch UNCONDITIONAL, feature-detect probe
+  rejected) unchanged and re-affirmed — the prior re-cut's conditional no-op
+  would have contradicted it without a successor; this contract doesn't. No
+  ADR needed: internal patched-body fix.
+- Map open question 3 settled (map edited same commit): util-types is
+  brand-based (`Object.prototype.toString`), zero runtime SAB references
   (`npx esbuild packages/runtime-js/src/builtins/util-types.ts --format=esm |
-  grep SharedArrayBuffer` → string literals/identifiers only; runtime call with
-  deleted SAB global: `isSharedArrayBuffer(new ArrayBuffer(1))` → `false`, no
-  throw, node v24.16.0). No guard needed there.
-- Sweep (2026-08-29, prod `packages/*/src` grep): the only runtime-evaluated
-  bare `SharedArrayBuffer` reachable from a no-COI realm is
-  `worker-realm-compat.ts:75,80`; kernel constructor sites are
-  worker-spawn-only behind the `typeof` capability gate.
+  grep SharedArrayBuffer` → type positions/string literals only); real no-COI
+  Chromium behavior Node-identical incl. shared-wasm buffer (probe rows
+  10–11). No guard needed; parity 10 pins it in the substrate.
+- Prod-source sweep corrected (2026-08-29): runtime-evaluated bare
+  `SharedArrayBuffer` reachable from a no-COI realm = worker-realm-compat.ts
+  75,80 (this unit) AND kernel constructor sites via PUBLIC
+  `createSabRing`/`spawnKernelWorker` (probe row 12 — routed to build-loop,
+  see Out of scope). Prior "kernel sites worker-spawn-only behind the typeof
+  capability gate" held only for the runtime-js spawn path, not direct public
+  entries.
 - RED substrate carrier (which lane / how the headerless page is served) is
   implementation-owned; the contract pins only observables: real Chromium,
-  `crossOriginIsolated === false`, absent `SharedArrayBuffer`, real built shim.
+  both realm preconditions, real built shim, page + dedicated Worker.
 
 ## Reversibility
 
-REVERSIBLE — internal shim guard, no public surface.
+REVERSIBLE — internal patched-body fix, no public surface, no ADR
+contradiction (ADR-0162's unconditional stance kept).

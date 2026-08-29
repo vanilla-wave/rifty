@@ -23,6 +23,13 @@ vehicle for the whole epic. Degradation shape is user-decided (epic goal.md Deci
 fidelity rule: no silent lie — the report is the single place an embedder/agent reads the
 tier contract from.
 
+Verified 2026-08-29 (real no-COI Chromium 148, bare-sab-guard sweep): kernel PUBLIC
+`createSabRing()` throws raw `ReferenceError: SharedArrayBuffer is not defined`
+(same class: `spawnKernelWorker` → spawn-worker.ts:395, `createWorkerOutputState` →
+worker-stdio-drain.ts:119) — the capability gate/report here must turn these raw
+crashes into named loud outcomes (evidence:
+`runtime-js/reference/no-coi-degradation-probes.md` §2026-08-29 row 12).
+
 ## Challenge
 
 challenge: 2026-08-28 — 1 problem
