@@ -5,7 +5,7 @@
  * conflicting versions (M11, 2026-05-27). Each `ResolvedPackage` carries its
  * `installPath` (hoisted `node_modules/<name>` or nested
  * `<parent>/.../node_modules/<name>`); the linker just writes the tarball
- * there. Placement is decided in `installer.ts` (`walkAndPin`), not here.
+ * there. Placement is decided in `installer-walk.ts` (`walkAndPin`), not here.
  */
 
 import { NotImplementedError } from '@riftydev/io';
