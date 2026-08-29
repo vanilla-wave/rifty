@@ -77,11 +77,17 @@ whole in one call.
    `GENERIC_RUNTIME_ADAPTER_MODULES` in `tools/checks/runtime-adapter-boundary.mjs`
    — and to `SASS_FORBIDDEN_SURFACE.registrySourceProvenance` when it carries
    registry-source provenance (the source, walk, eddy, and shadow-substitution
-   carriers do; arg validation and leaf diagnostics do not). An extracted
-   module absent from either applicable list is silently outside the ADR-0335
-   boundary; that is the failure Parity 3 rejects. The frozen mirror arrays in
-   `tools/checks/runtime-adapter-boundary.test.ts` are extended with exactly
-   the same entries (Acceptance 5 carve-out).
+   carriers do; arg validation and leaf diagnostics do not). A module absent
+   from every applicable list is silently outside the ADR-0335 boundary; that
+   is the failure Parity 3 rejects behaviorally. Provenance membership for a
+   GENERIC-listed module is a DECLARATION obligation, not a behavioral one:
+   `SASS_FORBIDDEN_SURFACE.catalogConsumers` aliases the whole GENERIC array,
+   so every GENERIC-listed module already receives the Sass scan and
+   provenance-list omission cannot be isolated by any mutant — its oracle is
+   list content plus mirror-array equality
+   (`tools/checks/runtime-adapter-boundary.test.ts:69,74`), checked in review.
+   The frozen mirror arrays are extended with exactly the same entries
+   (Acceptance 5 carve-out).
 5. No behavior test is edited to make the move pass. Import-path updates in
    test files are allowed, EXCEPT the frozen module-identity carrier
    `import * as installer from './installer.ts'` in
@@ -125,16 +131,21 @@ assertion cannot close any row.
    `./installer.ts`, frozen by Acceptance 5) and absent from the package root.
    The move must preserve both halves; re-exporting it from `src/index.ts`, or
    retargeting the namespace import, is a regression this row catches.
-3. **ADR-0335 boundary coverage, BOTH inventories** — RED targets recorded in
-   the reference doc: (a) generic — an extracted module carrying a concrete
-   consumer literal in a control-flow branch passes the gate while unlisted
-   and is flagged once listed in `GENERIC_RUNTIME_ADAPTER_MODULES`; (b)
-   provenance — a runtime `sass*` identifier outside control flow passes the
-   generic scan and is caught ONLY by the `registrySourceProvenance` scan, so
-   omitting a provenance-carrying module from that list is silent. The row
-   closes when both lists (and their frozen test mirrors) name every
-   applicable extracted module and the gate flags both planted mutants in one
-   of them.
+3. **ADR-0335 boundary coverage** — RED targets recorded in the reference doc
+   with runnable harness commands and tool versions: (a) generic — an
+   extracted module carrying a concrete consumer literal in a control-flow
+   branch passes the gate while listed in NO inventory and is flagged once
+   listed in `GENERIC_RUNTIME_ADAPTER_MODULES`; (b) Sass-scan reach — a
+   runtime `sass*` identifier outside control flow is invisible to the
+   generic scan and caught only by the Sass scan, which reaches a module via
+   `registrySourceProvenance` OR via the `catalogConsumers` alias of the
+   GENERIC array — so the behavioral hole is a module in NEITHER list, and
+   provenance-list membership for GENERIC-listed modules is the Acceptance-4
+   declaration obligation with a structural oracle (list content + mirror
+   equality), not a mutant target. The row closes when every extracted module
+   is GENERIC-listed, the provenance carriers are additionally declared in
+   `registrySourceProvenance`, both frozen mirrors carry the same entries,
+   and the gate flags both planted mutants in a listed module.
 4. **Ratchet identity** — full `evaluate()` partition at the base `BASELINE`
    (transcript + runnable command in the reference doc): 3067 → grew-refusal;
    3066–2917 with the old pin → SILENT (the `RECORD_DELTA = 150` slack band —
@@ -145,24 +156,6 @@ assertion cannot close any row.
    refusal; entry deleted + ≤800 → OK; entry retained + file gone → stale-entry
    refusal. The delete/lower messages plus the deleted-entry loud refusal are
    the acceptance signals.
-
-## Fault matrix
-
-Move-only: no new axis × operation becomes reachable. Every already-reachable
-axis keeps its existing fault suite, unedited, inside the Parity-1 batch:
-
-| Axis × operation | Honest outcome | Fault carrier (frozen, in batch) |
-|---|---|---|
-| network × packument/tarball header stall, body stall, runaway body, retry/final non-OK | loud fail, cancelled bodies | `registry.fault.test.ts` (8/8 at base) |
-| cache/persistence × missing/corrupt pinned shadow replay bytes | `EBROKENLOCK` before any mutation | `internal/shadow/source.fault.test.ts` |
-| concurrency × parallel fetch dedup + placement ordering | identical tree at any concurrency | `installer-concurrency.test.ts` |
-| persistence × lockfile replay coverage, optional-skip preservation | refuse orphaned entries pre-mutation | `installer-lockfile.test.ts`, `installer-peer-optional.test.ts` |
-| network/cache × eddy adoption faults (stall, integrity mismatch, non-retentive cache, decline fallback) | warn + standard verifying install, never a provenance lie | `installer.test.ts` eddy rows |
-| persistence × facade/bin publication faults (torn-state, ENOSPC, EACCES) | loud, unpublished, exact on retry | `installer-sass-embedded-substitution.contract.test.ts` fault rows |
-
-Shared mutable state moved by this unit keeps its single writer:
-`pinnedShadowSubstitutions` is written only by `pinToPackage` (walk) and read
-by orchestration and bin-claim assembly (§Decisions, ported-mechanism record).
 
 ## Out of scope
 
@@ -218,11 +211,26 @@ by orchestration and bin-claim assembly (§Decisions, ported-mechanism record).
   persistence, and concurrency paths, so per `fault-classes.md` §Review
   convergence this unit takes Contract+RED before implementation and Final+GREEN
   on one SHA — even though the diff is move-only.
-- **Fault matrix is preservation-only** (§Fault matrix): a move-only unit
-  reaches no new axis × operation; the frozen fault suites are part of the
-  Parity-1 batch. Should any extraction turn out to require a behavior change,
-  that is a fork: stop, demote to `draft` recording the fork and this
-  Acceptance verbatim (§Backlog readiness 5).
+- **No `## Fault matrix`.** A move-only unit reaches no new axis × operation;
+  the AGENTS.md DoD row binds newly-touched fault surface, and the attempt-1
+  adjudication ruled the matrix demand STRETCH for this unit ("neither clearly
+  mandates an axis × operation enumeration for a move-only unit … whose
+  existing fault suites stay unedited and green"). The attempt-2 re-cut
+  volunteered a matrix anyway and thereby manufactured mutant-grade
+  discrimination obligations (cancellation spies, completion-order inversion,
+  mutation ledgers, adoption mutants) that no existing suite carries and that
+  a move-only unit cannot honestly add — new fault tests are new
+  behavior-verification work, exactly what §Out of scope excludes. The fault
+  floors remain what they were on `main`: `registry.fault.test.ts` (8/8),
+  `internal/shadow/source.fault.test.ts`, and every fault row inside the
+  18-suite Parity-1 batch, frozen bit-for-bit as preservation oracles — their
+  depth is main's depth, deepening them is its own backlog item, never a
+  checkpoint condition here. Shared mutable state moved by this unit keeps its
+  single writer: `pinnedShadowSubstitutions` is written only by `pinToPackage`
+  (walk), read by orchestration and bin-claim assembly. Should any extraction
+  turn out to require a behavior change, that is a fork: stop, demote to
+  `draft` recording the fork and this Acceptance verbatim (§Backlog
+  readiness 5).
 - **Order is free.** The groups are independent; an agent may extract them in
   any order, but the unit closes only when `installer.ts` reaches the shape in
   Acceptance 1 — a partial extraction leaves either the `BASELINE` entry (or
@@ -275,6 +283,10 @@ and Parity, verbatim:
 >
 > ## Parity cases
 >
+> This unit ships no new observable behavior, so every row pins **preservation**.
+> The oracle is the pre-move suite at the base SHA; a fake or a rewritten
+> assertion cannot close any row.
+>
 > 1. **Install behavior identity** — the 13 suites importing `installer.ts`
 >    (`installer.test.ts`, `installer-pipeline`, `installer-lockfile`,
 >    `installer-concurrency`, `installer-native-policy`, `installer-peer-optional`,
@@ -302,3 +314,25 @@ of them pin row 1; rows 2–4 gained discrimination, not different behavior; the
 carve-out permits only the append the pre-demotion contract already required
 via its own row 3 ("The row closes when the list names every extracted
 module").
+
+**Attempt-2 re-refine (2026-08-29, §Contract escalation — 2nd consecutive
+Contract+RED blocker, checkpoint tree `7626d25ae`):** the verify pass blocked
+on (a) the attempt-2-volunteered `## Fault matrix`, whose rows demanded
+mutant-grade fault discrimination (cancellation spies, completion-order
+inversion, VFS mutation ledgers, Eddy adoption mutants) beyond anything the
+frozen suites carry and one mis-mapped carrier (`source.fault.test.ts` asserts
+`ESHADOWASSET` acquisition faults, not pinned-replay `EBROKENLOCK` — that row
+lives in `installer-shadow-recipe-v2-replay-authority.contract.test.ts`); (b)
+evidence-precision gaps (artifact claimed Vitest 4, actual 2.1.9; boundary and
+ratchet transcripts lacked runnable commands/versions; the pre-demotion Parity
+preamble was omitted from this record); (c) a frozen-assumption in Parity 3:
+`SASS_FORBIDDEN_SURFACE.catalogConsumers` aliases the GENERIC array, so
+provenance-list omission for a GENERIC-listed module is not behaviorally
+isolable. Re-refined in place: the matrix is withdrawn (restoring the
+adjudicated attempt-1 STRETCH position — fault floors stay preservation
+oracles inside the Parity-1 batch at main's depth), Acceptance 4 / Parity 3
+now declare the alias fact and a structural oracle for provenance membership,
+the demotion record is verbatim-complete, and every transcript carries its
+exact runnable command and tool versions. No pre-demotion observable
+obligation weakened; deepening the fault suites is separate backlog work,
+routed via `rifty-to-backlog`, not this unit.

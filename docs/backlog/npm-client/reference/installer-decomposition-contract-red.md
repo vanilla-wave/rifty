@@ -1,15 +1,16 @@
 # installer-decomposition Contract+RED
 
-## Baseline — 2026-08-29 (re-cut after attempt-1 blockers)
+## Baseline — 2026-08-29 (re-refined after attempt-2 escalation)
 
 Fresh source baseline is `main@686b650a402ef03ecd378a1df347623d5933ad91`.
 Unit: `docs/backlog/npm-client/installer-decomposition.md` (standalone — no
 goal directory). Move-only: every Parity row pins preservation against this
-baseline; no production source differs from it at this checkpoint. Attempt-1
-checkpoint tree `0af1f503d` was blocked (find + tail + adjudication: 5 HOLDS,
-3 STRETCH → concerns, 1 FALSE); the item's §Demotion record carries the
-blockers and pre-demotion contract verbatim. This document is the attempt-2
-evidence for the re-cut.
+baseline; no production source differs from it at this checkpoint. Lineage:
+attempt-1 checkpoint tree `0af1f503d` blocked (find + tail + adjudication:
+5 HOLDS, 3 STRETCH → concerns, 1 FALSE); attempt-2 verify on re-cut tree
+`7626d25ae` blocked again → §Contract escalation re-refine in place (the
+item's §Demotion record carries both attempts and the pre-demotion contract
+verbatim). This document is the attempt-3 evidence.
 
 Gate-facts at this baseline: `installer.ts` = 3064 gate-lines (pin 3066);
 `linker.ts` = 604 gate-lines (not grandfathered — headroom 196 <
@@ -42,7 +43,8 @@ pnpm --filter @riftydev/npm-client exec vitest run \
   src/installer-package-bin-normalization.contract.test.ts
 ```
 
-Result: **18 files, 404/404 GREEN** (vitest 4, Node v24.16.0). Composition:
+Result: **18 files, 404/404 GREEN** (Vitest 2.1.9, Node v24.16.0,
+darwin-arm64). Composition:
 the contract's original 13 named suites; plus the two remaining direct
 `./installer.ts` importers `shadow-recipe-v2-data-authority.contract.test.ts`
 and `internal/shadow/installer.contract.test.ts` (importer sweep: `rg` for
@@ -67,16 +69,38 @@ namespace import line itself is FROZEN by Acceptance 5 — the retarget-to-
 donor-module self-certification the attempt-1 tail flagged is closed by
 declaration, checkable in the final diff.
 
-## Parity 3 — ADR-0335 boundary coverage, BOTH inventories (RED)
+## Parity 3 — ADR-0335 boundary coverage (RED)
 
-Discriminating pairs via `evaluateRuntimeAdapterBoundary(tempRoot)` from
-`tools/checks/runtime-adapter-boundary.mjs`: a temp root stubs every listed
-generic + Sass-surface path with `export const ok = 1;`, then plants the
-mutant at an UNLISTED extracted-module path vs a LISTED path.
+Runnable harness (Node v24.16.0, typescript 5.9.3 — the parser the gate
+itself uses; run from the repo root): build a temp root stubbing every listed
+generic + Sass-surface path with `export const ok = 1;`, plant the mutant,
+call `evaluateRuntimeAdapterBoundary(tempRoot)`:
 
-Generic inventory — probe source (verbatim, also the attempt-1 live-gate
-probe, then at `installer-red-probe.ts`, gate exit 0 with 17 modules
-"consumer-branch-free"):
+```sh
+node -e "
+const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+const { join, dirname } = await import('node:path');
+const os = await import('node:os');
+const { evaluateRuntimeAdapterBoundary, GENERIC_RUNTIME_ADAPTER_MODULES, SASS_FORBIDDEN_SURFACE } = await import('./tools/checks/runtime-adapter-boundary.mjs');
+const root = mkdtempSync(join(os.tmpdir(), 'boundary-red-'));
+const stub = 'export const ok = 1;\n';
+for (const f of GENERIC_RUNTIME_ADAPTER_MODULES) { mkdirSync(join(root, dirname(f)), {recursive:true}); writeFileSync(join(root, f), stub); }
+for (const [cat, paths] of Object.entries(SASS_FORBIDDEN_SURFACE)) {
+  if (cat === 'catalogConsumers') continue;
+  for (const p of paths) {
+    if (/\\.[cm]?[jt]sx?\$/.test(p)) { mkdirSync(join(root, dirname(p)), {recursive:true}); writeFileSync(join(root, p), stub); }
+    else mkdirSync(join(root, p), {recursive:true});
+  }
+}
+const mutant = process.argv[1];
+writeFileSync(join(root, process.argv[2]), mutant);
+console.log(JSON.stringify(evaluateRuntimeAdapterBoundary(root)));
+" "<mutant source>" "<repo-relative plant path>"
+```
+
+Generic-scan mutant — probe source (verbatim; also the attempt-1 live-gate
+probe, then at `installer-red-probe.ts`: `pnpm check:runtime-adapter-boundary`
+exited 0, "17 generic modules … consumer-branch-free"):
 
 ```ts
 export function redProbeConsumerBranch(name: string): boolean {
@@ -86,15 +110,15 @@ export function redProbeConsumerBranch(name: string): boolean {
 ```
 
 ```
-A) probe at UNLISTED packages/npm-client/src/eddy-fast-path.ts → []
-B) same probe at LISTED packages/npm-client/src/installer.ts →
+A) probe at packages/npm-client/src/eddy-fast-path.ts (in NO inventory) → []
+B) same probe at packages/npm-client/src/installer.ts (GENERIC-listed) →
    ["packages/npm-client/src/installer.ts:2: consumer-specific runtime literal \"esbuild\""]
 ```
 
-Provenance inventory — the generic scan flags identifiers only inside
+Sass-scan mutant — the generic scan flags identifiers only inside
 control-flow conditions, so a runtime `sass*` identifier in plain expression
-position is invisible to it and caught ONLY by the `registrySourceProvenance`
-(genericChecks=false) scan. Mutant source (verbatim):
+position is invisible to it and caught only by the Sass scan
+(genericChecks=false). Mutant source (verbatim):
 
 ```ts
 declare function resolveLauncher(name: string): string;
@@ -103,24 +127,48 @@ export const sassLauncherPath = launcher;
 ```
 
 ```
-A) mutant at UNLISTED packages/npm-client/src/installer-sources.ts → []
-B) same content at LISTED packages/npm-client/src/registry.ts →
+A) mutant at packages/npm-client/src/installer-sources.ts (in NO inventory) → []
+B) same content at packages/npm-client/src/registry.ts (registrySourceProvenance-listed,
+   NOT GENERIC-listed) →
    ["packages/npm-client/src/registry.ts:3: consumer-specific runtime identifier \"sassLauncherPath\""]
 ```
 
-Both silent passes ARE the defect row 3 rejects: an extracted module omitted
-from the applicable list is never inspected. The row closes when
-`GENERIC_RUNTIME_ADAPTER_MODULES` names every extracted module,
-`registrySourceProvenance` additionally names the provenance carriers
-(sources, walk, eddy fast path, shadow substitution), the frozen test mirrors
-carry the same append-only entries, and the gate flags both planted mutants in
-a listed module.
+Both A-silences ARE the defect row 3 rejects: a module in NO inventory is
+never inspected. Scan-reach fact (frozen-assumption killed at attempt-2
+verify): `SASS_FORBIDDEN_SURFACE.catalogConsumers` aliases the whole
+`GENERIC_RUNTIME_ADAPTER_MODULES` array, so every GENERIC-listed module
+already receives the Sass scan — a mutant CANNOT distinguish
+"GENERIC-listed + provenance-omitted" from "GENERIC-listed +
+provenance-listed" (both flag pair-B-style). Provenance-list membership for
+the extracted carriers (sources, walk, eddy fast path, shadow substitution)
+is therefore the Acceptance-4 declaration obligation with a structural
+oracle: list content in the check + mirror equality asserted by
+`tools/checks/runtime-adapter-boundary.test.ts:69,74`. The row closes when
+every extracted module is GENERIC-listed, provenance carriers are declared in
+`registrySourceProvenance`, both frozen mirrors carry the same append-only
+entries, and the gate flags both planted mutants in a listed module.
 
 ## Parity 4 — ratchet identity (full partition transcript)
 
-Command: `node` against `evaluate()`/`BASELINE` from
-`tools/checks/file-size.mjs` (THRESHOLD 800, RECORD_DELTA 150), measuring
-`packages/npm-client/src/installer.ts` at each partition:
+Runnable command (Node v24.16.0, from the repo root; THRESHOLD 800,
+RECORD_DELTA 150 in `tools/checks/file-size.mjs` at `686b650a4`):
+
+```sh
+node -e "
+const { evaluate, BASELINE } = await import('./tools/checks/file-size.mjs');
+const f = 'packages/npm-client/src/installer.ts';
+for (const lines of [3067, 3066, 3000, 2917, 2916, 801, 800, 691]) {
+  const v = evaluate([{file:f, lines}], BASELINE).filter(x=>x.includes('installer.ts'));
+  console.log(String(lines).padStart(5), '→', v.length ? v[0] : '(silent — pin holds)');
+}
+const del = BASELINE.filter(e=>e.file!==f);
+console.log('entry deleted, 691 →', JSON.stringify(evaluate([{file:f, lines:691}], del).filter(x=>x.includes('installer.ts'))));
+console.log('entry deleted, 3000 →', JSON.stringify(evaluate([{file:f, lines:3000}], del).filter(x=>x.includes('installer.ts'))));
+console.log('file absent, entry retained →', JSON.stringify(evaluate([], BASELINE).filter(x=>x.includes('installer.ts'))));
+"
+```
+
+Output transcript:
 
 ```
  3067 → grew 3066 → 3067 lines — grandfathered files may only shrink; …
