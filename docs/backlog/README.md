@@ -105,8 +105,9 @@ fixed form:
    experience and project direction (mission/milestone). Never mechanics.
 2. What changes — experience-level: what starts working, what will loudly
    degrade (warn) or throw. Never file lists.
-3. Steps — ordered slices, ONE line each ending with the observable result
-   once that slice lands ("after this: X works / X visible").
+3. Steps — name the epic once (`epics/<slug>`), then ordered slices, ONE line
+   each: the item id (`area/slug`) + what it is in plain words, ending with
+   the observable result once that slice lands ("after this: X works").
 4. Risks — ONLY challenge problems that could change the user's decision to
    proceed, translated into plain risk statements ("if this is acceptable,
    nothing to do"); problems already fixed in the docs are omitted, verbatim
