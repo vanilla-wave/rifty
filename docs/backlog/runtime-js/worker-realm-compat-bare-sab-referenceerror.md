@@ -27,9 +27,10 @@ Node v24.16.0 oracle:
    `installWorkerRealmCompat`, so today's SDK no-COI path never installs the
    shim organically. Whether the tier's composition CAN install the Node
    runtime in its realm — making this I2-load-bearing organically — is
-   UNSETTLED: map Open question "installNodeRuntime seam" (checkpoint-3),
-   settled at the future build-loop slice's Contract+RED; a NO re-fits the I2
-   mapping. The defect itself is helper-level and
+   UNSETTLED: map Open question "installNodeRuntime seam" (checkpoint-3;
+   settlement re-assigned checkpoint-4 B6 — a deliverable of the first slice
+   composing the no-COI runtime, certified at ITS Contract+RED, never a slicing
+   gate); a NO re-fits the I2 mapping. The defect itself is helper-level and
    certain: no-COI Chromium has no `SharedArrayBuffer` binding (probe row 1) →
    wherever the shim installs in such a realm EVERY `decode()` throws
    `ReferenceError: SharedArrayBuffer is not defined` — bytes, no-arg, shared
@@ -84,11 +85,12 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   this Contract+RED (checkpoint-2 C1): `playwright.no-coi.config.ts` +
   `tests/no-coi/` (server without COOP/COEP, esbuild of the prod sources,
   probe body shared with the replayable evidence driver); run
-  `pnpm test:no-coi` — today 7 RED (parity 1–7, every failure
-  `ReferenceError: SharedArrayBuffer is not defined`) + 2 green pins
-  (preconditions, parity 10), inside the declared 5–8 band. Substrate = the
-  goal's first no-COI test lane, reusable by later slices; flips GREEN in the
-  fix PR, never edited to pass.
+  `pnpm test:no-coi` — today 8 RED (parity 1–7, every failure
+  `ReferenceError: SharedArrayBuffer is not defined`; parity 12, every poisoned
+  decode trips the counting accessor) + 2 green pins (preconditions,
+  parity 10), inside the declared 5–8 band. Substrate = the goal's first no-COI
+  test lane (ADR-0369), reusable by later slices; flips GREEN in the fix PR,
+  never edited to pass.
 - After install (direct or via `installWorkerRealmCompat()`) in that realm,
   decode NEVER evaluates the absent binding — every input class:
   `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm
@@ -98,7 +100,14 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   text (projections — char counts, slices — collide on corrupted/repositioned
   sentinels and are out); `é` split across two shared-backed views with
   `{stream:true}` on ONE decoder → `'é'`. Today ALL throw
-  `ReferenceError` (probe row 8).
+  `ReferenceError` (probe row 8). "NEVER evaluates" is itself pinned by an
+  observable, not inferred from outputs (checkpoint-4 B3 — output rows alone
+  admit a try/catch over the bare identifier): with `SharedArrayBuffer`
+  defined as a counting, throwing accessor AFTER install, the full decode
+  sweep (bytes / no-arg / shared view / DataView / raw buffer / streaming,
+  direct AND aggregate installs) returns the same outputs with access count
+  EXACTLY 0 (parity 12; today count 6 — every class trips the poison,
+  probe row 13).
 - `installSharedMemoryTolerantTextDecoder` returns `true` and marks the patched
   fn there too (unconditional patch retained — ADR-0162); repeat install
   (direct AND via aggregate) → `false` AND `proto.decode` strictly `===` the
@@ -121,11 +130,15 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   input/opts identity (view/DataView/ArrayBuffer/no-arg), sentinel-error
   identity (non-shared AND shared post-copy), repeat-install identity for
   direct AND aggregate sequences — all green pins guarding the fix.
-  Checkpoint-3 additions (same file, still green): aggregate CALL-ONE sibling
-  snapshot (global/self before any repeat) and installWritableSelf
-  ownership/descriptor/pre-write-value pins.
-- COI behavior unchanged: existing `worker-realm-compat.test.ts` stays green
-  unmodified; strengthened pins are ADDED, never edited-to-pass.
+  Checkpoint-3/4 additions (same file, still green): aggregate CALL-ONE
+  sibling snapshot (global/self before any repeat) and a SEPARATE
+  installWritableSelf strengthened-pin test (ownership/descriptor/pre-write
+  value) — checkpoint 4 (B4) restored the pre-existing installWritableSelf
+  test byte-identical to main; it is the unmodified-baseline carrier.
+- COI behavior unchanged: every pre-existing test in
+  `worker-realm-compat.test.ts` stays green and byte-identical to main (the
+  branch diff of that file is additions only); strengthened pins are ADDED,
+  never edited-to-pass.
 
 ## Parity cases
 
@@ -133,10 +146,10 @@ Oracles per Reference contract; every row's artifact is REPLAYABLE
 (checkpoint-2 C4): `node tools/probes/no-coi-realm-probe.mjs` regenerates the
 whole probe table (Chromium 148.0.7778.96 page+Worker × direct/aggregate,
 node v24.16.0 oracle + absent-binding sim + real `node:util/types`
-differential); raw output committed at
+differential, kernel PUBLIC-entry bundle); raw output committed at
 `reference/no-coi-realm-probe-transcript-2026-08-29.json`. Committed test
-carriers: parity 1–7, 10 → `tests/no-coi/worker-realm-compat.no-coi.spec.ts`
-(7 RED / 2 green today); parity 6 call-one sibling snapshot + parity 7
+carriers: parity 1–7, 10, 12 → `tests/no-coi/worker-realm-compat.no-coi.spec.ts`
+(8 RED / 2 green today); parity 6 call-one sibling snapshot + parity 7
 (direct+aggregate), 8, 9 → `worker-realm-compat.test.ts` added pins (green);
 parity 11 → existing suite unmodified. RED target unless marked pin/green.
 
@@ -181,6 +194,13 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
     not an oracle.
 11. COI/SAB realm: existing shared-copy / pass-through / idempotence tests
     stay green unmodified.
+12. no-COI page+worker, direct AND aggregate: `SharedArrayBuffer` defined as a
+    counting+throwing accessor AFTER install → full patched-decode sweep
+    (bytes/no-arg/shared view/DataView/raw buffer/streaming) returns the
+    parity-1–5 outputs with binding-access count EXACTLY 0; prior binding
+    state restored. Today count 6, every decode
+    `POISON: bare SharedArrayBuffer binding evaluated` (probe row 13) — a
+    try/catch-over-bare-reference implementation passes 1–5 but fails here.
 
 ## Fault matrix
 
@@ -196,16 +216,20 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
 ## Out of scope
 
 - No warn and no capability-report row for this shim — decode is fully
-  Node-faithful post-fix, nothing degraded; the report surface is the
-  build-loop slice (unseeded — goal map).
+  Node-faithful post-fix, nothing degraded; the report surface is
+  composition-fog scope (goal map §Fog; ADR-0367 §1).
 - Kernel direct SAB constructors ARE reachable no-COI via public exports:
-  `createSabRing` (kernel `index.ts:32` → `sab-ring.ts:136`) throws raw
-  `ReferenceError: SharedArrayBuffer is not defined` in the real no-COI page
-  (probe row 12); same class `spawnKernelWorker` (`spawn-worker.ts:395`) +
-  `createWorkerOutputState` (`worker-stdio-drain.ts:119`). Loud crash, wrong
-  name: the NAMED loud capability gate/report is the build-loop slice's
-  deliverable (goal I1) — scope held on the goal map (Unseeded line + probe
-  row 12). Prior sweep claim "unreachable behind the typeof gate" corrected
+  `createSabRing` (kernel `index.ts:32` → `sab-ring.ts:136`),
+  `spawnKernelWorker` (dies at its FIRST constructor, `spawn-worker.ts:395`,
+  before any Worker exists) and the retained second constructor
+  `createWorkerOutputState` (`worker-stdio-drain.ts:119`) ALL throw raw
+  `ReferenceError: SharedArrayBuffer is not defined` in the real no-COI page —
+  probe row 12 sweeps them through a bundle of the PUBLIC
+  `kernel/src/index.ts` entry (checkpoint-4 B5: a removed public export or
+  broken `spawnKernelWorker` fails the probe, never passes silently). Loud
+  crash, wrong name: the NAMED loud capability gate/report is composition-fog
+  scope (goal I1; ADR-0367 §1) — held on the goal map (§Fog + probe row 12).
+  Prior sweep claim "unreachable behind the typeof gate" corrected
   (`provenance-lie` killed).
 - child_process sync family no-COI: ONLY `execSync` carries the named loud
   `NotImplementedError` (`child_process-sync.ts:65`; its
@@ -251,8 +275,8 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
 - Prod-source sweep corrected (2026-08-29): runtime-evaluated bare
   `SharedArrayBuffer` reachable from a no-COI realm = worker-realm-compat.ts
   75,80 (this unit) AND kernel constructor sites via PUBLIC
-  `createSabRing`/`spawnKernelWorker` (probe row 12 — routed to build-loop,
-  see Out of scope). Prior "kernel sites worker-spawn-only behind the typeof
+  `createSabRing`/`spawnKernelWorker` (probe row 12 — routed to the map's
+  composition fog, see Out of scope). Prior "kernel sites worker-spawn-only behind the typeof
   capability gate" held only for the runtime-js spawn path, not direct public
   entries.
 - RED substrate carrier (which lane / how the headerless page is served) was
@@ -299,6 +323,36 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
   decode outcome, identity pin, and error identity kept verbatim — pins only
   STRENGTHENED under the same oracles; no user-observable fork, no demotion of
   this contract. Still 7 RED + 2 green, inside the declared 5–8 band.
+
+- Re-cut 2026-08-29 (4th) in place after Contract+RED checkpoint 4 (batch;
+  same branch, attempt 5, lineage carries; no split — one behavior, blockers
+  were one weak observable, two provenance/process gaps, and goal/map-side
+  authority gaps, not a scope fork). Pre-re-cut clauses quoted for the
+  checkpoint diff: "decode NEVER evaluates the absent binding" was pinned by
+  output rows alone — a try/catch over the bare identifier passes them →
+  poisoned counting+throwing accessor after install, count EXACTLY 0, direct
+  AND aggregate, prior binding state restored (parity 12, probe row 13; B3
+  `frozen-assumption`); "existing `worker-realm-compat.test.ts` stays green
+  unmodified" while checkpoint 3 had RENAMED+EDITED the pre-existing
+  installWritableSelf test → restored byte-identical to main (branch diff of
+  that file additions-only), strengthened pin ADDED as a SEPARATE test (B4);
+  probe row 12 bundled PRIVATE `ipc/sab-ring.ts`, so a removed public export
+  or broken `spawnKernelWorker` passed silently → PUBLIC `kernel/src/index.ts`
+  bundle sweeping `createSabRing` + `spawnKernelWorker` + retained
+  `createWorkerOutputState` (B5 `provenance-lie`; reference doc rows 12–13 +
+  transcript regenerated). Goal-side same checkpoint: the goal's IRREVERSIBLE
+  choices got ADR carriers — ADR-0367 (semantic capability report ADDITIVE to
+  the untouched public `checkCapabilities` probe; restart/died-event beside
+  the dispose()-only lifecycle; cpus→1 divergence), ADR-0368 (OPFS selection
+  drops the ADR-0072 `crossOriginIsolated &&` clause — dated correction note +
+  README row, not a postponed draft), ADR-0369 (headerless no-COI Playwright
+  lane); map: leftover build-loop/dev-hmr pseudo-items dissolved into UNSLICED
+  fog (FIT §5), installNodeRuntime-seam settlement re-assigned from the
+  owning slice's own later Contract+RED (illegal fog→pickup transition, B6)
+  to a DELIVERABLE of the first slice composing the no-COI runtime. Every
+  previously declared decode outcome, identity pin, and error identity kept
+  verbatim; no user-observable fork, no demotion. Now 8 RED + 2 green, inside
+  the declared 5–8 band.
 
 ## Reversibility
 

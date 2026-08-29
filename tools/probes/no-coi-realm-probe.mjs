@@ -2,9 +2,12 @@
 /**
  * Replayable no-COI realm probe: `node tools/probes/no-coi-realm-probe.mjs`
  * regenerates the whole evidence table as raw JSON on stdout — real built shim
- * in no-COI Chromium (page + Worker × direct/aggregate), kernel PUBLIC
- * `createSabRing()`, and the Node oracle (binding intact + deleted, plus the
- * REAL `node:util/types` differential). Durable record:
+ * in no-COI Chromium (page + Worker × direct/aggregate), the kernel PUBLIC
+ * entry (`createSabRing()` + `spawnKernelWorker()` via a bundle of
+ * `kernel/src/index.ts` — a removed public export fails HERE, never silently)
+ * plus the retained private constructor `createWorkerOutputState()`, and the
+ * Node oracle (binding intact + deleted, plus the REAL `node:util/types`
+ * differential). Durable record:
  * `docs/backlog/runtime-js/reference/no-coi-degradation-probes.md` §2026-08-29.
  */
 import { execFileSync } from 'node:child_process';
@@ -25,9 +28,16 @@ const { startNoCoiServer } = await import(
 );
 
 await buildNoCoiFixtures();
-// Kernel public createSabRing (row 12) — probe-only bundle, not a lane fixture.
+// Row 12 probe-only bundles (not lane fixtures): the kernel PUBLIC entry — so
+// the row's provenance holds against the real export surface — and the private
+// `worker-stdio-drain.ts` whose `createWorkerOutputState()` (:119) is the
+// SECOND constructor `spawnKernelWorker` retains (spawn-worker.ts:425): fixing
+// sab-ring alone would still leave the public spawn path throwing.
 await build({
-  entryPoints: [{ in: join(repoRoot, 'packages/kernel/src/ipc/sab-ring.ts'), out: 'sab-ring' }],
+  entryPoints: [
+    { in: join(repoRoot, 'packages/kernel/src/index.ts'), out: 'kernel-public' },
+    { in: join(repoRoot, 'packages/kernel/src/worker-stdio-drain.ts'), out: 'kernel-stdio-drain' },
+  ],
   bundle: true,
   format: 'esm',
   outdir: join(fixturesDir, 'dist'),
@@ -94,19 +104,44 @@ try {
     }
   }
 
-  // Row 12: kernel PUBLIC createSabRing() in the no-COI page realm.
+  // Row 12: kernel constructor sites in the no-COI page realm, swept via the
+  // PUBLIC entry (`createSabRing`, `spawnKernelWorker` — dies at its first
+  // constructor, spawn-worker.ts:395, before any Worker exists) plus the
+  // retained private `createWorkerOutputState` (worker-stdio-drain.ts:119).
   {
     const page = await browser.newPage();
     try {
       await page.goto(`http://localhost:${port}/index.html`);
-      transcript.chromiumNoCoi.createSabRing = await page.evaluate(async () => {
-        const ring = await import('/dist/sab-ring.mjs');
-        try {
-          ring.createSabRing();
-          return { ok: true };
-        } catch (err) {
-          return { ok: false, errName: err.name, errMsg: err.message };
-        }
+      transcript.chromiumNoCoi.kernelPublicEntry = await page.evaluate(async () => {
+        const attempt = (fn) => {
+          try {
+            fn();
+            return { ok: true };
+          } catch (err) {
+            return { ok: false, errName: err.name, errMsg: err.message };
+          }
+        };
+        const kernel = await import('/dist/kernel-public.mjs');
+        const drain = await import('/dist/kernel-stdio-drain.mjs');
+        const createSabRing = attempt(() => kernel.createSabRing());
+        // Never fetched: the throw fires before the Worker is constructed.
+        kernel.setKernelWorkerUrl('/probe-worker.mjs');
+        const spawnKernelWorker = attempt(() =>
+          kernel.spawnKernelWorker(
+            {
+              entry: { kind: 'source', code: '', sourceUrl: 'rifty-probe://empty' },
+              argv: [],
+              env: {},
+              cwd: '/',
+            },
+            { pid: 9001, ppid: 1 },
+          ),
+        );
+        return {
+          createSabRing,
+          spawnKernelWorker,
+          retainedCreateWorkerOutputState: attempt(() => drain.createWorkerOutputState()),
+        };
       });
     } finally {
       await page.close();

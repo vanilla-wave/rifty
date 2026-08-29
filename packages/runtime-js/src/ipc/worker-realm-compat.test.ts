@@ -223,7 +223,18 @@ describe('installWritableSelf', () => {
     }
   });
 
-  it('installs an OWN writable data self === globalThis (assignment is a harmless no-op)', () => {
+  it('installs a writable self === globalThis (assignment is a harmless no-op)', () => {
+    installWritableSelf();
+    expect((globalThis as { self?: unknown }).self).toBe(globalThis);
+    // emnapi's `globalThis.self = globalThis` must not throw after this.
+    expect(() => {
+      (globalThis as { self?: unknown }).self = globalThis;
+    }).not.toThrow();
+  });
+
+  // ADDED strengthened pin (checkpoint-4 B4) — the pre-existing test above is
+  // the unmodified baseline carrier and stays byte-identical to main.
+  it('strengthened pin: self is an OWN writable DATA property, pre-write value globalThis', () => {
     installWritableSelf();
     // Pre-write value + ownership + descriptor BEFORE any assignment: a null
     // value or an inherited setter must fail here, not be masked by the write.
@@ -231,10 +242,7 @@ describe('installWritableSelf', () => {
     expect(Object.hasOwn(globalThis, 'self')).toBe(true);
     const desc = Object.getOwnPropertyDescriptor(globalThis, 'self');
     expect(desc !== undefined && 'value' in desc && desc.writable).toBe(true);
-    // emnapi's `globalThis.self = globalThis` must not throw after this.
-    expect(() => {
-      (globalThis as { self?: unknown }).self = globalThis;
-    }).not.toThrow();
+    (globalThis as { self?: unknown }).self = globalThis;
     expect((globalThis as { self?: unknown }).self).toBe(globalThis);
   });
 });

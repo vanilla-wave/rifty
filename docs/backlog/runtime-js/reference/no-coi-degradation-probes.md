@@ -34,8 +34,9 @@ REPLAYABLE — one command regenerates every row from the real built shim:
 `node tools/probes/no-coi-realm-probe.mjs`. Raw output committed:
 `no-coi-realm-probe-transcript-2026-08-29.json` (this dir). Mechanism (the
 committed driver, formerly a disposable spike): esbuild of the REAL prod
-sources (`ipc/worker-realm-compat.ts`, `builtins/util-types.ts`,
-`kernel/src/ipc/sab-ring.ts` bundled); page + dedicated MODULE Worker served
+sources (`ipc/worker-realm-compat.ts`, `builtins/util-types.ts`, the kernel
+PUBLIC entry `kernel/src/index.ts` + `kernel/src/worker-stdio-drain.ts`
+bundled); page + dedicated MODULE Worker served
 by `tests/no-coi/server.mjs` (plain `node:http`, NO COOP/COEP); probe body
 `tests/no-coi/fixtures/probe-lib.mjs` (same body the no-COI substrate lane
 runs); Playwright `chromium.launch()` — **Chromium 148.0.7778.96**. Results
@@ -57,7 +58,8 @@ body, transcript `nodeOracle.binding-intact-direct`; absent-binding sim =
 | 9 | `installWorkerRealmCompat()` → `global === globalThis`; `self = globalThis` assignment | `true`; assign ok, `self === globalThis` | — |
 | 10 | built util-types: `isSharedArrayBuffer(new ArrayBuffer(1))` / `isAnyArrayBuffer(…)` | `false` / `true`, no throw | same — REAL `node:util/types`, same inputs (transcript `utilTypesNative`; binding intact AND deleted) |
 | 11 | built util-types on shared wasm buffer: `isSharedArrayBuffer` / `isAnyArrayBuffer` | `true` / `true`, no throw | same — REAL `node:util/types` (transcript `utilTypesNative`) |
-| 12 | kernel PUBLIC `createSabRing()` (bundled `sab-ring.ts`) | `ReferenceError: SharedArrayBuffer is not defined` | — |
+| 12 | kernel PUBLIC entry (bundled `kernel/src/index.ts` — a removed export fails here): `createSabRing()`, `spawnKernelWorker()` (dies at its FIRST constructor, `spawn-worker.ts:395`, before any Worker exists), plus retained private `createWorkerOutputState()` (`worker-stdio-drain.ts:119`, bundled `worker-stdio-drain.ts`) | ALL `ReferenceError: SharedArrayBuffer is not defined` (transcript `kernelPublicEntry`) | — |
+| 13 | poisoned binding: `SharedArrayBuffer` redefined as a counting+throwing accessor AFTER install, then the full patched-decode sweep of row 8 (transcript `poisonedBinding`, all four realm×install combos) | count **6** — EVERY class trips `POISON: bare SharedArrayBuffer binding evaluated`; contract target after fix: count 0, outputs of rows 5–8 intact | count 6 (binding intact AND deleted sims — same patched body) |
 
 Kills the 2026-08-26 frozen assumption "nothing can be shared in a SAB-less
 realm": Chromium does NOT gate shared `WebAssembly.Memory` on COI — shared

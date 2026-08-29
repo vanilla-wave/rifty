@@ -18,6 +18,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
 | 0276 | Semantic VFS replacements use applied owner evidence |
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
+| 0368 | OPFS backend selection drops the crossOriginIsolated condition |
 
 ### kernel
 
@@ -223,6 +224,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0312 | Keep synchronous SHA-256 implementations layer-local |
 | 0323 | Gate heavy PR tests on code-affecting changes |
 | 0338 | TTY parity composes exact one-axis native resize traces |
+| 0367 | No-COI sandbox tier degradation surface and recovery primitives |
+| 0369 | Dedicated headerless no-COI browser test lane |
 
 ### protocol
 
@@ -344,6 +347,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0072 `crossOriginIsolated &&` OPFS backend-selection conjunct | 0368 / note 2026-08-29 | selection is `OpfsVfs.isSupported()` alone; COI condition was policy, not platform — no-COI OPFS durability spike-proven |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
 | 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
 | 0009 unconditional async-wrapper assumption | 0348 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |

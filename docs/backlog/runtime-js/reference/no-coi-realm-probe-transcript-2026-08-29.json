@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-29T14:10:49.146Z",
+  "generated": "2026-08-29T21:49:14.074Z",
   "command": "node tools/probes/no-coi-realm-probe.mjs",
   "chromium": "148.0.7778.96",
   "node": "v24.16.0",
@@ -76,6 +76,41 @@
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "poisonedBinding": {
+        "count": 6,
+        "sweep": {
+          "bytes": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "noArg": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedDataView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "rawShared": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "streaming": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          }
         }
       },
       "utilTypes": {
@@ -204,6 +239,41 @@
           "errMsg": "SharedArrayBuffer is not defined"
         }
       },
+      "poisonedBinding": {
+        "count": 6,
+        "sweep": {
+          "bytes": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "noArg": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedDataView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "rawShared": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "streaming": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          }
+        }
+      },
       "utilTypes": {
         "ok": true,
         "value": {
@@ -310,6 +380,41 @@
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "poisonedBinding": {
+        "count": 6,
+        "sweep": {
+          "bytes": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "noArg": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedDataView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "rawShared": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "streaming": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          }
         }
       },
       "utilTypes": {
@@ -438,6 +543,41 @@
           "errMsg": "SharedArrayBuffer is not defined"
         }
       },
+      "poisonedBinding": {
+        "count": 6,
+        "sweep": {
+          "bytes": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "noArg": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedDataView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "rawShared": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "streaming": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          }
+        }
+      },
       "utilTypes": {
         "ok": true,
         "value": {
@@ -474,10 +614,22 @@
         }
       }
     },
-    "createSabRing": {
-      "ok": false,
-      "errName": "ReferenceError",
-      "errMsg": "SharedArrayBuffer is not defined"
+    "kernelPublicEntry": {
+      "createSabRing": {
+        "ok": false,
+        "errName": "ReferenceError",
+        "errMsg": "SharedArrayBuffer is not defined"
+      },
+      "spawnKernelWorker": {
+        "ok": false,
+        "errName": "ReferenceError",
+        "errMsg": "SharedArrayBuffer is not defined"
+      },
+      "retainedCreateWorkerOutputState": {
+        "ok": false,
+        "errName": "ReferenceError",
+        "errMsg": "SharedArrayBuffer is not defined"
+      }
     }
   },
   "nodeOracle": {
@@ -512,7 +664,10 @@
         },
         "streaming": {
           "ok": true,
-          "value": ["", "é"]
+          "value": [
+            "",
+            "é"
+          ]
         }
       },
       "firstInstall": true,
@@ -545,7 +700,45 @@
         },
         "streaming": {
           "ok": true,
-          "value": ["", "é"]
+          "value": [
+            "",
+            "é"
+          ]
+        }
+      },
+      "poisonedBinding": {
+        "count": 6,
+        "sweep": {
+          "bytes": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "noArg": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedDataView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "rawShared": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "streaming": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          }
         }
       },
       "utilTypes": {
@@ -620,7 +813,10 @@
         },
         "streaming": {
           "ok": true,
-          "value": ["", "é"]
+          "value": [
+            "",
+            "é"
+          ]
         }
       },
       "firstInstall": true,
@@ -657,6 +853,41 @@
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "poisonedBinding": {
+        "count": 6,
+        "sweep": {
+          "bytes": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "noArg": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "sharedDataView": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "rawShared": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          },
+          "streaming": {
+            "ok": false,
+            "errName": "Error",
+            "errMsg": "POISON: bare SharedArrayBuffer binding evaluated"
+          }
         }
       },
       "utilTypes": {

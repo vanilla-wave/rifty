@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * no-COI substrate lane: fixtures served WITHOUT COOP/COEP — the load-bearing
- * property (every other browser lane is cross-origin isolated). Reused by
- * later `no-coi-sandbox-tier` slices. Run: `pnpm test:no-coi`.
+ * no-COI substrate lane (ADR-0369): fixtures served WITHOUT COOP/COEP — the
+ * load-bearing property (every other browser lane is cross-origin isolated).
+ * Reused by later `no-coi-sandbox-tier` slices. Run: `pnpm test:no-coi`.
  */
 const port = Number(process.env.RIFTY_NO_COI_PORT ?? 5307);
 

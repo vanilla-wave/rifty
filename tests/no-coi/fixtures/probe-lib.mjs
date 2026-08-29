@@ -76,6 +76,44 @@ function streamingParts(Dec) {
   return [first, final];
 }
 
+/**
+ * Parity 12 — binding-access poison (frozen-assumption killer): output
+ * assertions alone cannot reject a try/catch implementation that still
+ * EVALUATES the bare `SharedArrayBuffer` identifier. Define the global as a
+ * counting, throwing accessor for the duration of a full patched-decode sweep;
+ * the contract's "decode NEVER evaluates the absent binding" means count === 0
+ * with every output intact. Prior binding state restored exactly.
+ */
+async function poisonedBindingSweep(mem) {
+  const prior = Object.getOwnPropertyDescriptor(globalThis, 'SharedArrayBuffer');
+  let count = 0;
+  Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+    configurable: true,
+    get() {
+      count += 1;
+      throw new Error('POISON: bare SharedArrayBuffer binding evaluated');
+    },
+  });
+  try {
+    const enc = new TextEncoder();
+    const sweep = {
+      bytes: await attempt(() => new TextDecoder().decode(enc.encode('hello'))),
+      noArg: await attempt(() => new TextDecoder().decode()),
+      sharedView: await attempt(() => new TextDecoder().decode(new Uint8Array(mem.buffer, 3, 5))),
+      sharedDataView: await attempt(() => new TextDecoder().decode(new DataView(mem.buffer, 3, 5))),
+      rawShared: await attempt(() => exactTextRecord(new TextDecoder().decode(mem.buffer))),
+      streaming: await attempt(() => streamingParts(TextDecoder)),
+    };
+    return { count, sweep };
+  } finally {
+    if (prior === undefined) {
+      Reflect.deleteProperty(globalThis, 'SharedArrayBuffer');
+    } else {
+      Object.defineProperty(globalThis, 'SharedArrayBuffer', prior);
+    }
+  }
+}
+
 /** Parity 9 identity pins via an injected spy decoder (exact-object capture). */
 async function identityChecks(installShim) {
   const seen = [];
@@ -214,6 +252,10 @@ export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = 
     rawShared: await attempt(() => exactTextRecord(new TextDecoder().decode(mem.buffer))),
     streaming: await attempt(() => streamingParts(TextDecoder)),
   };
+
+  // Parity 12: poisoned-binding sweep on the patched realm decoder — decode
+  // must never evaluate the bare binding (count 0) while outputs stay intact.
+  r.poisonedBinding = await poisonedBindingSweep(mem);
 
   // Built util-types (parity 10) — brand-based, must match Node with no throw.
   const utilTypesChecks = (m) => ({

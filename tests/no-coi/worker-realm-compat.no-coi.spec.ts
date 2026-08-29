@@ -1,8 +1,9 @@
 /**
  * RED-first no-COI substrate — contract
  * `docs/backlog/runtime-js/worker-realm-compat-bare-sab-referenceerror.md`.
- * Expected RED today: parity 1–7, every failure `ReferenceError:
- * SharedArrayBuffer is not defined`. Green pins: preconditions + parity 10.
+ * Expected RED today: parity 1–7 (every failure `ReferenceError:
+ * SharedArrayBuffer is not defined`) + parity 12 (every poisoned decode trips
+ * the counting accessor). Green pins: preconditions + parity 10.
  * Parity 8–9 exactness/identity pins are COI vitest
  * (`packages/runtime-js/src/ipc/worker-realm-compat.test.ts`).
  */
@@ -45,6 +46,13 @@ interface ProbeResult {
   >;
   utilTypes: Attempt;
   identity: Record<'view' | 'dataView' | 'arrayBuffer' | 'noArg' | 'errorIdentity', Attempt>;
+  poisonedBinding: {
+    count: number;
+    sweep: Record<
+      'bytes' | 'noArg' | 'sharedView' | 'sharedDataView' | 'rawShared' | 'streaming',
+      Attempt
+    >;
+  };
 }
 
 // EXACT whole-buffer oracle text (Node-verified via the committed transcript):
@@ -175,6 +183,21 @@ test('parity 7: repeat install → false AND strict-identity patched fn AND shar
     expect(r.repeatIdentity, combo).toBe(true);
     // Booleans alone don't close this: decode must still work after repeats.
     expect(r.patched.sharedView, combo).toEqual({ ok: true, value: 'hello' });
+  });
+});
+
+test('parity 12: poisoned binding — patched decode sweep NEVER evaluates bare SharedArrayBuffer (count 0), outputs intact', () => {
+  // Kills the frozen assumption that output rows alone pin the fix carrier: a
+  // try/catch over the bare identifier passes parity 1–5 yet counts here.
+  each((combo, r) => {
+    expect(r.poisonedBinding.count, combo).toBe(0);
+    const s = r.poisonedBinding.sweep;
+    expect(s.bytes, combo).toEqual({ ok: true, value: 'hello' });
+    expect(s.noArg, combo).toEqual({ ok: true, value: '' });
+    expect(s.sharedView, combo).toEqual({ ok: true, value: 'hello' });
+    expect(s.sharedDataView, combo).toEqual({ ok: true, value: 'hello' });
+    expect(s.rawShared, combo).toEqual({ ok: true, value: RAW_EXACT });
+    expect(s.streaming, combo).toEqual({ ok: true, value: ['', 'é'] });
   });
 });
 
