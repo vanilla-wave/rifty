@@ -1,11 +1,6 @@
 /**
- * Build the REAL shim artifacts the no-COI substrate exercises — esbuild of the
- * actual prod sources (never a source copy):
- *   - `packages/runtime-js/src/ipc/worker-realm-compat.ts` → fixtures/dist/worker-realm-compat.mjs
- *   - `packages/runtime-js/src/builtins/util-types.ts`     → fixtures/dist/util-types.mjs
- *
- * Called by the lane's globalSetup and by `tools/probes/no-coi-realm-probe.mjs`.
- * Output dir is gitignored (`dist/`).
+ * esbuild the REAL prod shim sources into `fixtures/dist/` (gitignored) — the
+ * substrate never exercises a source copy.
  */
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';

@@ -1,22 +1,21 @@
 /**
  * RED-first no-COI substrate — contract
  * `docs/backlog/runtime-js/worker-realm-compat-bare-sab-referenceerror.md`.
- *
- * Real Chromium, headerless page (no COOP/COEP) + dedicated module Worker,
- * REAL BUILT shim (esbuild of `packages/runtime-js/src/ipc/worker-realm-compat.ts`),
- * page/Worker × direct/aggregate install, every declared input class.
- *
- * Expected RED today (declared band, 7 tests): parity 1–7 — after install every
- * `decode()` throws `ReferenceError: SharedArrayBuffer is not defined`
- * (worker-realm-compat.ts:75,80 bare references). GREEN pins: preconditions +
- * parity 10 (built util-types). Parity 8–9 exactness/identity pins are
- * COI-unit vitest (`packages/runtime-js/src/ipc/worker-realm-compat.test.ts`);
- * the probe records their evidence rows for the replayable driver
- * (`tools/probes/no-coi-realm-probe.mjs`).
+ * Expected RED today: parity 1–7, every failure `ReferenceError:
+ * SharedArrayBuffer is not defined`. Green pins: preconditions + parity 10.
+ * Parity 8–9 exactness/identity pins are COI vitest
+ * (`packages/runtime-js/src/ipc/worker-realm-compat.test.ts`).
  */
+import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 
 type Attempt = { ok: true; value: unknown } | { ok: false; errName: string; errMsg: string };
+
+interface SelfSnapshot {
+  isGlobalThis: boolean;
+  hasOwn: boolean;
+  ownWritableData: boolean;
+}
 
 interface ProbeResult {
   mode: 'direct' | 'aggregate';
@@ -24,8 +23,19 @@ interface ProbeResult {
   sabBindingTypeof: string;
   wasmSharedBrand: string;
   wasmSharedInstanceofArrayBuffer: boolean;
-  native: Record<'bytes' | 'noArg' | 'sharedView' | 'rawShared' | 'streaming', Attempt>;
+  native: Record<
+    'bytes' | 'noArg' | 'sharedView' | 'sharedDataView' | 'rawShared' | 'streaming',
+    Attempt
+  >;
   firstInstall: boolean;
+  // Aggregate only: sibling effects snapshot IMMEDIATELY after call ONE.
+  afterFirstInstall?: {
+    marker: boolean;
+    globalAlias: boolean;
+    self: SelfSnapshot;
+    selfAssign: Attempt;
+    decodeBytes: Attempt;
+  };
   marker: boolean;
   repeatDirectReturned: boolean;
   repeatIdentity: boolean;
@@ -33,11 +43,18 @@ interface ProbeResult {
     'bytes' | 'noArg' | 'sharedView' | 'sharedDataView' | 'rawShared' | 'streaming',
     Attempt
   >;
-  globalAlias: boolean;
-  selfWritable: Attempt;
   utilTypes: Attempt;
   identity: Record<'view' | 'dataView' | 'arrayBuffer' | 'noArg' | 'errorIdentity', Attempt>;
 }
+
+// EXACT whole-buffer oracle text (Node-verified via the committed transcript):
+// 0x00 → U+0000, invalid 0xFF → U+FFFD each, 'hello' at [3,8). Pinned as
+// length + SHA-256 — a digest is exact where projections collide.
+const RAW_TEXT = `\u0000\ufffd\ufffdhello\ufffd\ufffd${'\u0000'.repeat(65526)}`;
+const RAW_EXACT = {
+  length: 65536,
+  sha256: createHash('sha256').update(RAW_TEXT, 'utf8').digest('hex'),
+};
 
 const COMBOS = [
   ['page', 'direct'],
@@ -110,20 +127,17 @@ test('parity 2: patched decode() → "" (no-arg)', () => {
   });
 });
 
-test('parity 3: shared-wasm view, "hello" bytes at offset 3 len 5 → "hello" (Node oracle)', () => {
+test('parity 3: shared-wasm Uint8Array view AND DataView, "hello" bytes at offset 3 len 5 → "hello" (Node oracle)', () => {
   each((combo, r) => {
     expect(r.patched.sharedView, combo).toEqual({ ok: true, value: 'hello' });
+    // Sibling view class — a Uint8Array-only branch must not pass.
+    expect(r.patched.sharedDataView, combo).toEqual({ ok: true, value: 'hello' });
   });
 });
 
-test('parity 4: raw shared-wasm buffer → whole-buffer text, Node-identical (65536 chars, sentinels exact)', () => {
+test('parity 4: raw shared-wasm buffer → whole-buffer text EXACT (length + SHA-256, Node-identical)', () => {
   each((combo, r) => {
-    // 4 non-NUL chars outside the view = the 0xFF sentinels (U+FFFD each);
-    // 'hello' sits exactly at [3,8). Anything else = wrong bytes decoded.
-    expect(r.patched.rawShared, combo).toEqual({
-      ok: true,
-      value: { length: 65536, atOffset: 'hello', nonNul: 4 },
-    });
+    expect(r.patched.rawShared, combo).toEqual({ ok: true, value: RAW_EXACT });
   });
 });
 
@@ -133,15 +147,23 @@ test('parity 5: "é" split across two shared-backed views, {stream:true}, ONE de
   });
 });
 
-test('parity 6: aggregate installWorkerRealmCompat — global alias + writable self + marker + decode green together', () => {
+test('parity 6: aggregate call ONE — global alias + own writable self (pre-write value, hasOwn, descriptor, assignment) + marker + decode green together', () => {
   each((combo, r) => {
     if (r.mode !== 'aggregate') return;
     expect(r.firstInstall, combo).toBe(true);
-    expect(r.globalAlias, combo).toBe(true);
-    expect(r.selfWritable, combo).toEqual({ ok: true, value: true });
-    expect(r.marker, combo).toBe(true);
-    // No guard may skip a sibling installer: decode must be green here too.
-    expect(r.patched.bytes, combo).toEqual({ ok: true, value: 'hello' });
+    const a = r.afterFirstInstall;
+    expect(a, combo).toBeDefined();
+    if (a === undefined) return;
+    // Snapshot taken IMMEDIATELY after the first installWorkerRealmCompat() —
+    // a sibling effect only observable after a second call fails here.
+    expect(a.marker, combo).toBe(true);
+    expect(a.globalAlias, combo).toBe(true);
+    // self BEFORE any probe write: own writable DATA property valued
+    // globalThis — self=null or an inherited setter fails here.
+    expect(a.self, combo).toEqual({ isGlobalThis: true, hasOwn: true, ownWritableData: true });
+    expect(a.selfAssign, combo).toEqual({ ok: true, value: true });
+    // No guard may skip a sibling installer: decode green at call one too.
+    expect(a.decodeBytes, combo).toEqual({ ok: true, value: 'hello' });
   });
 });
 
@@ -157,6 +179,8 @@ test('parity 7: repeat install → false AND strict-identity patched fn AND shar
 });
 
 test('parity 10: built util-types Node-identical incl. shared-wasm buffer, no throw (GREEN pin)', () => {
+  // Node column provenance: the transcript's `utilTypesNative` rows run the
+  // REAL node:util/types on the same inputs (differential, not a rifty re-run).
   each((combo, r) => {
     expect(r.utilTypes, combo).toEqual({
       ok: true,

@@ -179,8 +179,15 @@ describe('repeat-install identity pins — parity 7 (booleans alone do not close
     const savedSelf = (globalThis as { self?: unknown }).self;
     try {
       installWorkerRealmCompat();
+      // Call-ONE sibling snapshot (observable-order): every sibling effect is
+      // present after the FIRST aggregate call, before any repeat.
       const first = TextDecoder.prototype.decode;
       expect((first as { __riftyShared?: boolean }).__riftyShared).toBe(true);
+      expect((globalThis as { global?: unknown }).global).toBe(globalThis);
+      expect((globalThis as { self?: unknown }).self).toBe(globalThis); // pre-write value
+      expect(Object.hasOwn(globalThis, 'self')).toBe(true);
+      const selfDesc = Object.getOwnPropertyDescriptor(globalThis, 'self');
+      expect(selfDesc !== undefined && 'value' in selfDesc && selfDesc.writable).toBe(true);
       installWorkerRealmCompat();
       expect(TextDecoder.prototype.decode).toBe(first);
       expect(installSharedMemoryTolerantTextDecoder()).toBe(false);
@@ -216,12 +223,18 @@ describe('installWritableSelf', () => {
     }
   });
 
-  it('installs a writable self === globalThis (assignment is a harmless no-op)', () => {
+  it('installs an OWN writable data self === globalThis (assignment is a harmless no-op)', () => {
     installWritableSelf();
+    // Pre-write value + ownership + descriptor BEFORE any assignment: a null
+    // value or an inherited setter must fail here, not be masked by the write.
     expect((globalThis as { self?: unknown }).self).toBe(globalThis);
+    expect(Object.hasOwn(globalThis, 'self')).toBe(true);
+    const desc = Object.getOwnPropertyDescriptor(globalThis, 'self');
+    expect(desc !== undefined && 'value' in desc && desc.writable).toBe(true);
     // emnapi's `globalThis.self = globalThis` must not throw after this.
     expect(() => {
       (globalThis as { self?: unknown }).self = globalThis;
     }).not.toThrow();
+    expect((globalThis as { self?: unknown }).self).toBe(globalThis);
   });
 });

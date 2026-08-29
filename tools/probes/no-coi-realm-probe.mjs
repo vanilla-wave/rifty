@@ -1,23 +1,11 @@
 #!/usr/bin/env node
 /**
- * Replayable no-COI realm probe — the executable artifact behind
- * `docs/backlog/runtime-js/reference/no-coi-degradation-probes.md` §2026-08-29
- * (contract: `docs/backlog/runtime-js/worker-realm-compat-bare-sab-referenceerror.md`).
- *
- * One command regenerates the whole evidence table from the REAL BUILT shim:
- *
- *   node tools/probes/no-coi-realm-probe.mjs            # raw JSON transcript to stdout
- *
- * What runs (same probe body as the substrate lane — `tests/no-coi/fixtures/probe-lib.mjs`):
- *   - real Chromium (Playwright) on a headerless page (tests/no-coi/server.mjs,
- *     NO COOP/COEP) — page realm + dedicated module Worker realm, direct +
- *     aggregate install modes; plus kernel PUBLIC `createSabRing()` (row 12);
- *   - Node oracle: same probe body in this Node, binding intact (reference
- *     values) AND with `delete globalThis.SharedArrayBuffer` (absent-binding sim).
- *
- * Every run re-verifies: native rows (1–6, 10–12), built-shim rows (7–8),
- * aggregate/global/self (9), and the parity 7–9 evidence rows (repeat-install
- * identity, sentinel/offset exactness, exact input/opts/error identity).
+ * Replayable no-COI realm probe: `node tools/probes/no-coi-realm-probe.mjs`
+ * regenerates the whole evidence table as raw JSON on stdout — real built shim
+ * in no-COI Chromium (page + Worker × direct/aggregate), kernel PUBLIC
+ * `createSabRing()`, and the Node oracle (binding intact + deleted, plus the
+ * REAL `node:util/types` differential). Durable record:
+ * `docs/backlog/runtime-js/reference/no-coi-degradation-probes.md` §2026-08-29.
  */
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -47,13 +35,16 @@ await build({
   logLevel: 'silent',
 });
 
-/** Run probe-lib in a fresh Node child; `dropSab` deletes the global binding first. */
+/** Run probe-lib in a fresh Node child; `dropSab` deletes the global binding
+ * first. Passes the REAL `node:util/types` (imported BEFORE install — the
+ * patched decode poisons the ESM loader in the binding-less sim). */
 function nodeProbe(mode, dropSab) {
   const libUrl = pathToFileURL(join(fixturesDir, 'probe-lib.mjs')).href;
   const script = `
     ${dropSab ? 'delete globalThis.SharedArrayBuffer;' : ''}
+    const nativeUtilTypes = await import('node:util/types');
     const { runProbe } = await import(${JSON.stringify(libUrl)});
-    const result = await runProbe(${JSON.stringify(mode)}, { requireNoCoi: false });
+    const result = await runProbe(${JSON.stringify(mode)}, { requireNoCoi: false, nativeUtilTypes });
     console.log(JSON.stringify(result));
   `;
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-29T12:44:41.871Z",
+  "generated": "2026-08-29T14:10:49.146Z",
   "command": "node tools/probes/no-coi-realm-probe.mjs",
   "chromium": "148.0.7778.96",
   "node": "v24.16.0",
@@ -22,6 +22,11 @@
           "value": ""
         },
         "sharedView": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        },
+        "sharedDataView": {
           "ok": false,
           "errName": "TypeError",
           "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
@@ -72,11 +77,6 @@
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
         }
-      },
-      "globalAlias": false,
-      "selfWritable": {
-        "ok": true,
-        "value": true
       },
       "utilTypes": {
         "ok": true,
@@ -134,6 +134,11 @@
           "errName": "TypeError",
           "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
         },
+        "sharedDataView": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        },
         "rawShared": {
           "ok": false,
           "errName": "TypeError",
@@ -146,6 +151,24 @@
         }
       },
       "firstInstall": true,
+      "afterFirstInstall": {
+        "marker": true,
+        "globalAlias": true,
+        "self": {
+          "isGlobalThis": true,
+          "hasOwn": true,
+          "ownWritableData": true
+        },
+        "selfAssign": {
+          "ok": true,
+          "value": true
+        },
+        "decodeBytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
       "marker": true,
       "repeatDirectReturned": false,
       "repeatIdentity": true,
@@ -180,11 +203,6 @@
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
         }
-      },
-      "globalAlias": true,
-      "selfWritable": {
-        "ok": true,
-        "value": true
       },
       "utilTypes": {
         "ok": true,
@@ -242,6 +260,11 @@
           "errName": "TypeError",
           "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
         },
+        "sharedDataView": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        },
         "rawShared": {
           "ok": false,
           "errName": "TypeError",
@@ -288,12 +311,6 @@
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
         }
-      },
-      "globalAlias": false,
-      "selfWritable": {
-        "ok": false,
-        "errName": "TypeError",
-        "errMsg": "Cannot set property self of #<WorkerGlobalScope> which has only a getter"
       },
       "utilTypes": {
         "ok": true,
@@ -351,6 +368,11 @@
           "errName": "TypeError",
           "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
         },
+        "sharedDataView": {
+          "ok": false,
+          "errName": "TypeError",
+          "errMsg": "Failed to execute 'decode' on 'TextDecoder': The provided ArrayBufferView value must not be shared."
+        },
         "rawShared": {
           "ok": false,
           "errName": "TypeError",
@@ -363,6 +385,24 @@
         }
       },
       "firstInstall": true,
+      "afterFirstInstall": {
+        "marker": true,
+        "globalAlias": true,
+        "self": {
+          "isGlobalThis": true,
+          "hasOwn": true,
+          "ownWritableData": true
+        },
+        "selfAssign": {
+          "ok": true,
+          "value": true
+        },
+        "decodeBytes": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
       "marker": true,
       "repeatDirectReturned": false,
       "repeatIdentity": true,
@@ -397,11 +437,6 @@
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
         }
-      },
-      "globalAlias": true,
-      "selfWritable": {
-        "ok": true,
-        "value": true
       },
       "utilTypes": {
         "ok": true,
@@ -464,20 +499,20 @@
           "ok": true,
           "value": "hello"
         },
+        "sharedDataView": {
+          "ok": true,
+          "value": "hello"
+        },
         "rawShared": {
           "ok": true,
           "value": {
             "length": 65536,
-            "atOffset": "hello",
-            "nonNul": 4
+            "sha256": "c0a9261ddb870cc7bec7a6a90e0f766b574bea8f741797e448ab112e73e0af4f"
           }
         },
         "streaming": {
           "ok": true,
-          "value": [
-            "",
-            "é"
-          ]
+          "value": ["", "é"]
         }
       },
       "firstInstall": true,
@@ -505,24 +540,24 @@
           "ok": true,
           "value": {
             "length": 65536,
-            "atOffset": "hello",
-            "nonNul": 4
+            "sha256": "c0a9261ddb870cc7bec7a6a90e0f766b574bea8f741797e448ab112e73e0af4f"
           }
         },
         "streaming": {
           "ok": true,
-          "value": [
-            "",
-            "é"
-          ]
+          "value": ["", "é"]
         }
       },
-      "globalAlias": true,
-      "selfWritable": {
-        "ok": true,
-        "value": true
-      },
       "utilTypes": {
+        "ok": true,
+        "value": {
+          "privateIsShared": false,
+          "privateIsAny": true,
+          "sharedWasmIsShared": true,
+          "sharedWasmIsAny": true
+        }
+      },
+      "utilTypesNative": {
         "ok": true,
         "value": {
           "privateIsShared": false,
@@ -572,20 +607,20 @@
           "ok": true,
           "value": "hello"
         },
+        "sharedDataView": {
+          "ok": true,
+          "value": "hello"
+        },
         "rawShared": {
           "ok": true,
           "value": {
             "length": 65536,
-            "atOffset": "hello",
-            "nonNul": 4
+            "sha256": "c0a9261ddb870cc7bec7a6a90e0f766b574bea8f741797e448ab112e73e0af4f"
           }
         },
         "streaming": {
           "ok": true,
-          "value": [
-            "",
-            "é"
-          ]
+          "value": ["", "é"]
         }
       },
       "firstInstall": true,
@@ -624,12 +659,16 @@
           "errMsg": "SharedArrayBuffer is not defined"
         }
       },
-      "globalAlias": true,
-      "selfWritable": {
-        "ok": true,
-        "value": true
-      },
       "utilTypes": {
+        "ok": true,
+        "value": {
+          "privateIsShared": false,
+          "privateIsAny": true,
+          "sharedWasmIsShared": true,
+          "sharedWasmIsAny": true
+        }
+      },
+      "utilTypesNative": {
         "ok": true,
         "value": {
           "privateIsShared": false,

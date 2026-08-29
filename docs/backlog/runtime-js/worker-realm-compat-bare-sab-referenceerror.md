@@ -25,9 +25,11 @@ Node v24.16.0 oracle:
    `@riftydev/runtime-js/worker` entry (worker-entry.ts — what
    `createSandbox`→`spawnRuntime` boots) installs NEITHER it NOR
    `installWorkerRealmCompat`, so today's SDK no-COI path never installs the
-   shim organically. It becomes I2-load-bearing when build-loop's composition
-   installs the Node runtime in the tier's realm (organic-reachability
-   certification recorded on that item). The defect itself is helper-level and
+   shim organically. Whether the tier's composition CAN install the Node
+   runtime in its realm — making this I2-load-bearing organically — is
+   UNSETTLED: map Open question "installNodeRuntime seam" (checkpoint-3),
+   settled at the future build-loop slice's Contract+RED; a NO re-fits the I2
+   mapping. The defect itself is helper-level and
    certain: no-COI Chromium has no `SharedArrayBuffer` binding (probe row 1) →
    wherever the shim installs in such a realm EVERY `decode()` throws
    `ReferenceError: SharedArrayBuffer is not defined` — bytes, no-arg, shared
@@ -89,20 +91,27 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   fix PR, never edited to pass.
 - After install (direct or via `installWorkerRealmCompat()`) in that realm,
   decode NEVER evaluates the absent binding — every input class:
-  `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm view
-  ('hello' bytes at offset 3) → `'hello'`; raw shared-wasm buffer →
-  Node-identical whole-buffer text; `é` split across two shared-backed views
-  with `{stream:true}` on ONE decoder → `'é'`. Today ALL throw
+  `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm
+  Uint8Array view AND DataView ('hello' bytes at offset 3, len 5) → `'hello'`
+  (a Uint8Array-only branch must not pass); raw shared-wasm buffer →
+  Node-identical whole-buffer text pinned EXACTLY as length + SHA-256 of the
+  text (projections — char counts, slices — collide on corrupted/repositioned
+  sentinels and are out); `é` split across two shared-backed views with
+  `{stream:true}` on ONE decoder → `'é'`. Today ALL throw
   `ReferenceError` (probe row 8).
 - `installSharedMemoryTolerantTextDecoder` returns `true` and marks the patched
   fn there too (unconditional patch retained — ADR-0162); repeat install
   (direct AND via aggregate) → `false` AND `proto.decode` strictly `===` the
   captured first patched function AND shared decode still green — booleans
   alone don't close this.
-- Aggregate in the no-COI WORKER realm pins ALL sibling effects together:
-  `global === globalThis`, own writable `self` (assignment doesn't throw,
-  `self === globalThis`), decode green, marker present — no guard at helper or
-  aggregate level may skip a sibling installer.
+- Aggregate pins ALL sibling effects together, snapshot IMMEDIATELY after the
+  FIRST `installWorkerRealmCompat()` call (an effect observable only after a
+  second call fails): `global === globalThis`; `self` an OWN (`Object.hasOwn`)
+  writable DATA property whose PRE-WRITE value is `globalThis` — only then the
+  assignment (doesn't throw, value kept); decode green at call one; marker
+  present — no guard at helper or aggregate level may skip a sibling
+  installer, and a post-write compare alone (passes on `self=null` or an
+  inherited setter) closes nothing.
 - COI-realm exactness pins (unit, injected decoders): copy path respects
   byteOffset/byteLength against sentinel bytes; non-shared path passes the
   EXACT input and opts objects and propagates the exact thrown error object
@@ -112,6 +121,9 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   input/opts identity (view/DataView/ArrayBuffer/no-arg), sentinel-error
   identity (non-shared AND shared post-copy), repeat-install identity for
   direct AND aggregate sequences — all green pins guarding the fix.
+  Checkpoint-3 additions (same file, still green): aggregate CALL-ONE sibling
+  snapshot (global/self before any repeat) and installWritableSelf
+  ownership/descriptor/pre-write-value pins.
 - COI behavior unchanged: existing `worker-realm-compat.test.ts` stays green
   unmodified; strengthened pins are ADDED, never edited-to-pass.
 
@@ -120,27 +132,34 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
 Oracles per Reference contract; every row's artifact is REPLAYABLE
 (checkpoint-2 C4): `node tools/probes/no-coi-realm-probe.mjs` regenerates the
 whole probe table (Chromium 148.0.7778.96 page+Worker × direct/aggregate,
-node v24.16.0 oracle + absent-binding sim); raw output committed at
+node v24.16.0 oracle + absent-binding sim + real `node:util/types`
+differential); raw output committed at
 `reference/no-coi-realm-probe-transcript-2026-08-29.json`. Committed test
 carriers: parity 1–7, 10 → `tests/no-coi/worker-realm-compat.no-coi.spec.ts`
-(7 RED / 2 green today); parity 7 (direct+aggregate), 8, 9 →
-`worker-realm-compat.test.ts` added pins (green); parity 11 → existing suite
-unmodified. RED target unless marked pin/green.
+(7 RED / 2 green today); parity 6 call-one sibling snapshot + parity 7
+(direct+aggregate), 8, 9 → `worker-realm-compat.test.ts` added pins (green);
+parity 11 → existing suite unmodified. RED target unless marked pin/green.
 
 1. no-COI page+worker: `decode(bytes('hello'))` → `'hello'`; today
    `ReferenceError: SharedArrayBuffer is not defined` — probe row 8.
 2. same: `decode()` → `''`; today same ReferenceError — probe row 8.
-3. same: shared-wasm view, 'hello' bytes at offset 3, len 5 → `'hello'` (Node
-   probe row 3); today ReferenceError patched / `TypeError: … must not be
-   shared` native — probe rows 3, 8.
-4. same: raw shared-wasm buffer → whole-buffer text, Node-identical (65536
-   chars, probe row 4); today ReferenceError patched / `TypeError: … parameter
-   1 is not of type 'ArrayBuffer'` native.
+3. same: shared-wasm Uint8Array view AND DataView, 'hello' bytes at offset 3,
+   len 5 → `'hello'` each (Node probe row 3 — native differential recorded for
+   BOTH view classes: Chromium native rejects both, Node native decodes both,
+   transcript `native.sharedView`/`native.sharedDataView`); today
+   ReferenceError patched / `TypeError: … must not be shared` native.
+4. same: raw shared-wasm buffer → whole-buffer text pinned EXACTLY as
+   `{length: 65536, sha256}` of the decoded text, Node-identical (probe row 4,
+   digest `c0a9261d…` in the transcript); today ReferenceError patched /
+   `TypeError: … parameter 1 is not of type 'ArrayBuffer'` native.
 5. same: `é` split across two shared-backed views, `{stream:true}` then final,
    ONE decoder → `'é'` (Node probe row 6); today ReferenceError — probe row 8.
-6. no-COI worker: `installWorkerRealmCompat()` → `global === globalThis`, own
-   writable `self`, decode green, `decode.__riftyShared === true` —
-   global/self green today (probe row 9), decode RED (row 8).
+6. no-COI page+worker aggregate: sibling effects snapshot IMMEDIATELY after
+   the FIRST `installWorkerRealmCompat()` call — `global === globalThis`;
+   `self` own writable data prop, pre-write value `globalThis`
+   (`Object.hasOwn` + descriptor), then assignment kept; decode at call one;
+   `decode.__riftyShared === true` — global/self green today (probe row 9),
+   call-one decode RED (row 8).
 7. install idempotence: first direct install `true` (green today, probe row 7);
    second call (direct and aggregate repeat) → `false` AND strict-identity
    patched fn AND shared decode still green — identity pin (today only
@@ -156,7 +175,10 @@ unmodified. RED target unless marked pin/green.
 10. no-COI page+worker, built util-types:
     `isSharedArrayBuffer(new ArrayBuffer(1))` → `false`,
     `isAnyArrayBuffer(…)` → `true`, shared-wasm buffer → `true`/`true`, no
-    throw — GREEN (probe rows 10–11, matches Node); pin in the substrate.
+    throw — GREEN (probe rows 10–11); pin in the substrate. Node column =
+    REAL `node:util/types` on the same inputs (transcript `utilTypesNative`
+    rows, both predicates × private/shared-wasm) — a rifty-rerun-in-Node is
+    not an oracle.
 11. COI/SAB realm: existing shared-copy / pass-through / idempotence tests
     stay green unmodified.
 
@@ -164,8 +186,8 @@ unmodified. RED target unless marked pin/green.
 
 | axis × operation | honest outcome | fault target |
 |---|---|---|
-| no-SAB-binding realm × install (direct/aggregate) | patch installs (`true`), marker set; aggregate also global alias + writable self; nothing gates on the absent binding (`frozen-assumption` killed by probe row 2) | parity 1–2, 6–7 substrate REDs |
-| no-SAB-binding realm × decode(shared-wasm view/buffer, nonzero offset, streaming) | copy-into-private, Node-identical text incl. offset/length + streaming state | parity 3–5 REDs |
+| no-SAB-binding realm × install (direct/aggregate) | patch installs (`true`), marker set; aggregate siblings — global alias + OWN writable data `self` — observable at call ONE, pre-write (`observable-order` + self `lossy-aggregate` killed); nothing gates on the absent binding (`frozen-assumption` killed by probe row 2) | parity 1–2, 6–7 substrate REDs |
+| no-SAB-binding realm × decode(shared-wasm Uint8Array/DataView/raw buffer, nonzero offset, streaming) | copy-into-private, Node-identical: 'hello' per view class (`sibling-drift` killed on DataView), raw buffer exact length+SHA-256 (`lossy-aggregate` killed), streaming state kept | parity 3–5 REDs |
 | no-SAB-binding realm × decode(non-shared / no-arg) | pass-through, Node-identical | parity 1–2 REDs |
 | SAB realm, native rejects shared × decode(shared view/DataView/raw SAB) | copy path, EXACT view bytes — sentinel + nonzero offset (`lossy-aggregate` killed) | parity 8 pin |
 | SAB realm × decode(non-shared) | exact input/opts object identity through; thrown error object identity through (`lossy-aggregate` killed) | parity 9 pins |
@@ -174,15 +196,17 @@ unmodified. RED target unless marked pin/green.
 ## Out of scope
 
 - No warn and no capability-report row for this shim — decode is fully
-  Node-faithful post-fix, nothing degraded; the report surface is `build-loop`.
+  Node-faithful post-fix, nothing degraded; the report surface is the
+  build-loop slice (unseeded — goal map).
 - Kernel direct SAB constructors ARE reachable no-COI via public exports:
   `createSabRing` (kernel `index.ts:32` → `sab-ring.ts:136`) throws raw
   `ReferenceError: SharedArrayBuffer is not defined` in the real no-COI page
   (probe row 12); same class `spawnKernelWorker` (`spawn-worker.ts:395`) +
   `createWorkerOutputState` (`worker-stdio-drain.ts:119`). Loud crash, wrong
-  name: the NAMED loud capability gate/report is `build-loop`'s deliverable
-  (map item 4, goal I1) — recorded on that item this commit. Prior sweep claim
-  "unreachable behind the typeof gate" corrected (`provenance-lie` killed).
+  name: the NAMED loud capability gate/report is the build-loop slice's
+  deliverable (goal I1) — scope held on the goal map (Unseeded line + probe
+  row 12). Prior sweep claim "unreachable behind the typeof gate" corrected
+  (`provenance-lie` killed).
 - child_process sync family no-COI: ONLY `execSync` carries the named loud
   `NotImplementedError` (`child_process-sync.ts:65`; its
   `isSabIpcSupported()` gate is absent-binding-safe — `capabilities.ts:25`
@@ -217,7 +241,8 @@ unmodified. RED target unless marked pin/green.
   rejected) unchanged and re-affirmed — the prior re-cut's conditional no-op
   would have contradicted it without a successor; this contract doesn't. No
   ADR needed: internal patched-body fix.
-- Map open question 3 settled (map edited same commit): util-types is
+- Map util-types open question settled 2026-08-29 (fog line since removed from
+  the map — evidence lives here + ledger): util-types is
   brand-based (`Object.prototype.toString`), zero runtime SAB references
   (`npx esbuild packages/runtime-js/src/builtins/util-types.ts --format=esm |
   grep SharedArrayBuffer` → type positions/string literals only); real no-COI
@@ -249,6 +274,31 @@ unmodified. RED target unless marked pin/green.
   this checkpoint (C1–C3). No observable promise weakened — every previously
   declared decode outcome, identity pin, and error identity kept verbatim; no
   demotion (no user-observable fork).
+
+- Re-cut 2026-08-29 (3rd) in place after Contract+RED checkpoint 3 (12
+  blockers; same branch, attempt 4, lineage carries; batch, no split — one
+  behavior, blockers were exactness/order/provenance gaps in the pins plus
+  goal-drift in the map, not a scope fork). Pre-re-cut clauses quoted for the
+  checkpoint diff: parity 4 asserted a `{length, atOffset, nonNul}` PROJECTION
+  → exact length+SHA-256 (`lossy-aggregate`); probe recorded aggregate
+  `globalAlias`/`selfWritable` only after the repeat install and compared
+  `self` post-write → call-one snapshot + pre-write value + `Object.hasOwn` +
+  writable-data descriptor (`observable-order`, `lossy-aggregate`);
+  `patched.sharedDataView` was recorded but never asserted and native rows
+  omitted DataView → asserted in all four combos + native differential row
+  (`sibling-drift`, `frozen-assumption`); parity 10 "Node oracle" re-ran rifty
+  util-types in Node → REAL `node:util/types` differential rows
+  (`provenance-lie`); unused `startNoCoiServer` root knob cut (§Simplicity);
+  harness headers trimmed to load-bearing rationale. Goal-side same
+  checkpoint: I2 organic-reachability claim demoted from "certification
+  recorded on build-loop" to map Open question "installNodeRuntime seam";
+  build-loop + dev-hmr UNSEEDED (FIT §5 — contracts depended on open
+  questions; drafts deleted, scope back to map fog, durable evidence stays in
+  `reference/` + hmr spike record); map item-1 narrative and settled
+  util-types paragraph cut (map = index, not store). Every previously declared
+  decode outcome, identity pin, and error identity kept verbatim — pins only
+  STRENGTHENED under the same oracles; no user-observable fork, no demotion of
+  this contract. Still 7 RED + 2 green, inside the declared 5–8 band.
 
 ## Reversibility
 

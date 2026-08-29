@@ -1,29 +1,21 @@
 /**
- * Two-realm TextDecoder/realm-compat probe — the ONE probe body run by:
- *   - the no-COI substrate spec (page realm via import, Worker realm via
- *     `probe-worker.mjs`) — RED targets for
- *     `docs/backlog/runtime-js/worker-realm-compat-bare-sab-referenceerror.md`;
- *   - `tools/probes/no-coi-realm-probe.mjs` — replayable evidence driver for
- *     `docs/backlog/runtime-js/reference/no-coi-degradation-probes.md`
- *     (same body re-run in Node v24 as the oracle, with and without the
- *     `SharedArrayBuffer` binding).
+ * Two-realm TextDecoder/realm-compat probe — ONE body run by the no-COI
+ * substrate spec (page + `probe-worker.mjs`) and the replayable driver
+ * `tools/probes/no-coi-realm-probe.mjs` (which re-runs it in Node as the
+ * oracle). Exercises the REAL BUILT shims from `./dist/` — never a source
+ * copy. Returns plain data (structured-clone and JSON safe).
  *
- * Exercises the REAL BUILT shim (`./dist/worker-realm-compat.mjs`, esbuild of
- * `packages/runtime-js/src/ipc/worker-realm-compat.ts` — never a source copy)
- * plus built `util-types`. Returns plain-data results only (structured-clone
- * and JSON safe).
- *
- * `mode`: 'direct' installs `installSharedMemoryTolerantTextDecoder()` alone;
- * 'aggregate' installs via `installWorkerRealmCompat()` (global alias +
- * writable self + decoder patch — sibling effects pinned together).
+ * `mode`: 'direct' = installSharedMemoryTolerantTextDecoder() alone;
+ * 'aggregate' = installWorkerRealmCompat() — sibling effects snapshot at
+ * call ONE (a later call must not be what makes them observable).
  */
 
 const HELLO = [104, 101, 108, 108, 111]; // 'hello'
 
-/** Run `fn`, record outcome as plain data (never throw out of a check). */
-function attempt(fn) {
+/** Run `fn` (sync or async), record outcome as plain data (never throw out of a check). */
+async function attempt(fn) {
   try {
-    return { ok: true, value: fn() };
+    return { ok: true, value: await fn() };
   } catch (err) {
     return {
       ok: false,
@@ -48,13 +40,27 @@ function writeHelloWithSentinels(buffer) {
   all[9] = 0xff;
 }
 
-/** Derived record of a whole-shared-buffer decode (65536 chars is not portable output). */
-function describeWholeBufferText(text, offset, expected) {
-  let nonNul = 0;
-  for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) !== 0 && (i < offset || i >= offset + expected.length)) nonNul++;
-  }
-  return { length: text.length, atOffset: text.slice(offset, offset + expected.length), nonNul };
+/** EXACT whole-buffer record: length + SHA-256 hex of the UTF-8 text.
+ * 65536 chars is not portable output; a digest is exact where projections
+ * (char counts, slices) collide on corrupted/repositioned sentinels. */
+async function exactTextRecord(text) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return {
+    length: text.length,
+    sha256: Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join(''),
+  };
+}
+
+/** `self` observed WITHOUT writing it: pre-write value + ownership + descriptor.
+ * Kills the lossy check where an assignment-then-compare passes on `self=null`
+ * or an inherited setter. */
+function selfSnapshot() {
+  const desc = Object.getOwnPropertyDescriptor(globalThis, 'self');
+  return {
+    isGlobalThis: globalThis.self === globalThis,
+    hasOwn: Object.hasOwn(globalThis, 'self'),
+    ownWritableData: desc !== undefined && 'value' in desc && desc.writable === true,
+  };
 }
 
 /** Streaming: 'é' (0xC3,0xA9) split across two shared-backed views, ONE decoder.
@@ -71,7 +77,7 @@ function streamingParts(Dec) {
 }
 
 /** Parity 9 identity pins via an injected spy decoder (exact-object capture). */
-function identityChecks(installShim) {
+async function identityChecks(installShim) {
   const seen = [];
   class SpyDecoder {
     decode(...args) {
@@ -86,22 +92,22 @@ function identityChecks(installShim) {
   const ab = new ArrayBuffer(2);
   const opts = { stream: true };
   const out = {};
-  out.view = attempt(() => {
+  out.view = await attempt(() => {
     d.decode(view, opts);
     const s = seen.pop();
     return s.input === view && s.opts === opts;
   });
-  out.dataView = attempt(() => {
+  out.dataView = await attempt(() => {
     d.decode(dv, opts);
     const s = seen.pop();
     return s.input === dv && s.opts === opts;
   });
-  out.arrayBuffer = attempt(() => {
+  out.arrayBuffer = await attempt(() => {
     d.decode(ab, opts);
     const s = seen.pop();
     return s.input === ab && s.opts === opts;
   });
-  out.noArg = attempt(() => {
+  out.noArg = await attempt(() => {
     d.decode();
     const s = seen.pop();
     return s.input === undefined && s.opts === undefined;
@@ -114,7 +120,7 @@ function identityChecks(installShim) {
     }
   }
   installShim(ThrowingDecoder);
-  out.errorIdentity = attempt(() => {
+  out.errorIdentity = await attempt(() => {
     try {
       new ThrowingDecoder().decode(new Uint8Array(1));
       return 'no-throw';
@@ -127,9 +133,12 @@ function identityChecks(installShim) {
 
 /**
  * @param {'direct'|'aggregate'} mode
- * @param {{requireNoCoi?: boolean}} [opts] Node oracle runs pass `false`.
+ * @param {{requireNoCoi?: boolean, nativeUtilTypes?: object}} [opts]
+ *   Node oracle runs pass `requireNoCoi: false` and the REAL `node:util/types`
+ *   namespace as `nativeUtilTypes` (differential for the built util-types —
+ *   without it the "Node oracle" would just re-run rifty code in Node).
  */
-export async function runProbe(mode, { requireNoCoi = true } = {}) {
+export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = {}) {
   const r = { mode };
 
   // Reference-contract preconditions — asserted BEFORE acting so a future
@@ -159,20 +168,33 @@ export async function runProbe(mode, { requireNoCoi = true } = {}) {
   // NATIVE rows (pre-install): the realm's own TextDecoder against shared input.
   const enc = new TextEncoder();
   r.native = {
-    bytes: attempt(() => new TextDecoder().decode(enc.encode('hello'))),
-    noArg: attempt(() => new TextDecoder().decode()),
-    sharedView: attempt(() => new TextDecoder().decode(new Uint8Array(mem.buffer, 3, 5))),
-    rawShared: attempt(() =>
-      describeWholeBufferText(new TextDecoder().decode(mem.buffer), 3, 'hello'),
-    ),
-    streaming: attempt(() => streamingParts(TextDecoder)),
+    bytes: await attempt(() => new TextDecoder().decode(enc.encode('hello'))),
+    noArg: await attempt(() => new TextDecoder().decode()),
+    sharedView: await attempt(() => new TextDecoder().decode(new Uint8Array(mem.buffer, 3, 5))),
+    sharedDataView: await attempt(() => new TextDecoder().decode(new DataView(mem.buffer, 3, 5))),
+    rawShared: await attempt(() => exactTextRecord(new TextDecoder().decode(mem.buffer))),
+    streaming: await attempt(() => streamingParts(TextDecoder)),
   };
 
-  // INSTALL (real built shim), then the patched sweep.
+  // INSTALL (real built shim).
   const markerOf = () => TextDecoder.prototype.decode.__riftyShared === true;
   if (mode === 'aggregate') {
     shim.installWorkerRealmCompat();
     r.firstInstall = markerOf();
+    // Sibling effects snapshot IMMEDIATELY after call ONE — before any repeat
+    // call or decode sweep, so a call-one decoder-only guard cannot pass.
+    // Order per contract: pre-write self value + ownership + descriptor, THEN
+    // the assignment, then a decode.
+    r.afterFirstInstall = {
+      marker: markerOf(),
+      globalAlias: globalThis.global === globalThis,
+      self: selfSnapshot(),
+      selfAssign: await attempt(() => {
+        globalThis.self = globalThis;
+        return globalThis.self === globalThis;
+      }),
+      decodeBytes: await attempt(() => new TextDecoder().decode(enc.encode('hello'))),
+    };
   } else {
     r.firstInstall = shim.installSharedMemoryTolerantTextDecoder();
   }
@@ -185,36 +207,31 @@ export async function runProbe(mode, { requireNoCoi = true } = {}) {
   r.repeatIdentity = TextDecoder.prototype.decode === captured;
 
   r.patched = {
-    bytes: attempt(() => new TextDecoder().decode(enc.encode('hello'))),
-    noArg: attempt(() => new TextDecoder().decode()),
-    sharedView: attempt(() => new TextDecoder().decode(new Uint8Array(mem.buffer, 3, 5))),
-    sharedDataView: attempt(() => new TextDecoder().decode(new DataView(mem.buffer, 3, 5))),
-    rawShared: attempt(() =>
-      describeWholeBufferText(new TextDecoder().decode(mem.buffer), 3, 'hello'),
-    ),
-    streaming: attempt(() => streamingParts(TextDecoder)),
+    bytes: await attempt(() => new TextDecoder().decode(enc.encode('hello'))),
+    noArg: await attempt(() => new TextDecoder().decode()),
+    sharedView: await attempt(() => new TextDecoder().decode(new Uint8Array(mem.buffer, 3, 5))),
+    sharedDataView: await attempt(() => new TextDecoder().decode(new DataView(mem.buffer, 3, 5))),
+    rawShared: await attempt(() => exactTextRecord(new TextDecoder().decode(mem.buffer))),
+    streaming: await attempt(() => streamingParts(TextDecoder)),
   };
 
-  // Aggregate sibling effects (parity 6) — recorded in every mode; asserted
-  // for aggregate runs (no guard may skip a sibling installer).
-  r.globalAlias = globalThis.global === globalThis;
-  r.selfWritable = attempt(() => {
-    globalThis.self = globalThis;
-    return globalThis.self === globalThis;
-  });
-
   // Built util-types (parity 10) — brand-based, must match Node with no throw.
-  r.utilTypes = attempt(() => ({
-    privateIsShared: utilTypes.isSharedArrayBuffer(new ArrayBuffer(1)),
-    privateIsAny: utilTypes.isAnyArrayBuffer(new ArrayBuffer(1)),
-    sharedWasmIsShared: utilTypes.isSharedArrayBuffer(mem.buffer),
-    sharedWasmIsAny: utilTypes.isAnyArrayBuffer(mem.buffer),
-  }));
+  const utilTypesChecks = (m) => ({
+    privateIsShared: m.isSharedArrayBuffer(new ArrayBuffer(1)),
+    privateIsAny: m.isAnyArrayBuffer(new ArrayBuffer(1)),
+    sharedWasmIsShared: m.isSharedArrayBuffer(mem.buffer),
+    sharedWasmIsAny: m.isAnyArrayBuffer(mem.buffer),
+  });
+  r.utilTypes = await attempt(() => utilTypesChecks(utilTypes));
+  if (nativeUtilTypes !== undefined) {
+    // Same predicates, same inputs, REAL node:util/types — the differential row.
+    r.utilTypesNative = await attempt(() => utilTypesChecks(nativeUtilTypes));
+  }
 
   // Parity 8–9 evidence (injected decoders; COI-unit pins live in vitest —
   // recorded here so the Node oracle rows are replayable and the realm rows
   // flip green with the fix).
-  r.identity = identityChecks(shim.installSharedMemoryTolerantTextDecoder);
+  r.identity = await identityChecks(shim.installSharedMemoryTolerantTextDecoder);
 
   return r;
 }

@@ -1,16 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * no-COI substrate lane — the goal `no-coi-sandbox-tier`'s first browser lane
- * served WITHOUT COOP/COEP (every other lane is cross-origin isolated).
- *
- * Contract (docs/backlog/runtime-js/worker-realm-compat-bare-sab-referenceerror.md):
- * real Chromium on a headerless page + dedicated module Worker, exercising the
- * REAL BUILT shim; every spec asserts `crossOriginIsolated === false` AND
- * `typeof SharedArrayBuffer === 'undefined'` before acting. Reused by later
- * no-COI slices; becomes the tier's CI lane at `distribution/no-coi-sandbox-build-loop`.
- *
- * Run: npx playwright test --config playwright.no-coi.config.ts
+ * no-COI substrate lane: fixtures served WITHOUT COOP/COEP — the load-bearing
+ * property (every other browser lane is cross-origin isolated). Reused by
+ * later `no-coi-sandbox-tier` slices. Run: `pnpm test:no-coi`.
  */
 const port = Number(process.env.RIFTY_NO_COI_PORT ?? 5307);
 

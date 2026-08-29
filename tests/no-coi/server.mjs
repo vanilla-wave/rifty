@@ -26,12 +26,12 @@ const CONTENT_TYPES = {
 };
 
 /** Start the headerless fixture server; resolves with the http.Server. */
-export function startNoCoiServer(port, root = FIXTURES_DIR) {
+export function startNoCoiServer(port) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
     const rel = url.pathname === '/' ? '/index.html' : url.pathname;
-    const path = normalize(join(root, rel));
-    if (!path.startsWith(root)) {
+    const path = normalize(join(FIXTURES_DIR, rel));
+    if (!path.startsWith(FIXTURES_DIR)) {
       res.writeHead(403).end('forbidden');
       return;
     }
