@@ -348,6 +348,7 @@ superseded.
 | ADR | corrected by | note |
 |---|---|---|
 | 0011 same-realm fallback "test environments only" clause | 0367 / note 2026-08-30 | no-COI tier ships the fallback as a warned + capability-reported product mode; COI retirement stays kernel/process-equals-web-worker scope |
+| 0369 red-until-fix "wired at bare-sab-guard Contract+RED" consequence | note 2026-08-30 | lane split to its own item, landing green as first consumer; a demoted draft's RED batch leaves the branch; red-until-fix binds a READY RED-first substrate from its Contract+RED commit — the checkpoint-8 declared-RED (`test.fail`) greening device is withdrawn |
 | 0072 `crossOriginIsolated &&` OPFS backend-selection conjunct | 0368 / note 2026-08-29 | selection is `OpfsVfs.isSupported()` alone; COI condition was policy, not platform — no-COI OPFS durability spike-proven |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
 | 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |

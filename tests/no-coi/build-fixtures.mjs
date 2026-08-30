@@ -16,6 +16,11 @@ export async function buildNoCoiFixtures() {
         out: 'worker-realm-compat',
       },
       { in: `${repoRoot}packages/runtime-js/src/builtins/util-types.ts`, out: 'util-types' },
+      // Kernel PUBLIC entry + the retained private constructor module: consumed
+      // by the evidence driver's row-12 sweep AND the lane's kernelDriver
+      // provenance controls (`header-provenance.no-coi.spec.ts`).
+      { in: `${repoRoot}packages/kernel/src/index.ts`, out: 'kernel-public' },
+      { in: `${repoRoot}packages/kernel/src/worker-stdio-drain.ts`, out: 'kernel-stdio-drain' },
     ],
     bundle: true,
     format: 'esm',

@@ -25,6 +25,7 @@
       ".arch-fixtures/**",
       ".claude/**",
       "docs/backlog/npm-client/reference/npm-11-peer-placement-probe-output.json",
+      "docs/backlog/runtime-js/reference/no-coi-realm-probe-transcript-2026-08-29.json",
       "tools/shadow-registry/src/fixtures/sass-1.100.0-contract.json",
       "tools/shadow-registry/src/fixtures/sass-embedded-1.100.0-contract.json",
       "tests/browser-unit/fixtures/real-tree-manifest.json",

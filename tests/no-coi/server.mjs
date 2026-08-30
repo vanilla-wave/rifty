@@ -38,8 +38,11 @@ const INJECT_HEADERS = {
  *   ONLY on actually-consumed destinations (`Sec-Fetch-Dest` present and not
  *   'empty') — the adversarial server an ordinary re-fetch sweep cannot see;
  *   the consumed-response provenance pins must still catch it.
- * - `{status, path}` — serve that non-200 status on ONE path (body replaced) so
- *   the harness's consumed-non-200 arm is exercised against a REAL class path.
+ * - `{status, path, dest?}` — serve that non-200 status on ONE path (body
+ *   replaced); with `dest`, ONLY when the request's `Sec-Fetch-Dest` equals it
+ *   (destination-only failure: the REAL consumer — navigation / Worker /
+ *   module — fails while an ordinary `fetch(path)` of the SAME path stays 200,
+ *   the adversarial server a pathname-only consumption match cannot see).
  */
 export function startNoCoiServer(port, { inject } = {}) {
   const server = createServer(async (req, res) => {
@@ -50,8 +53,14 @@ export function startNoCoiServer(port, { inject } = {}) {
       res.writeHead(403).end('forbidden');
       return;
     }
-    if (inject !== undefined && inject.status !== undefined && url.pathname === inject.path) {
-      res.writeHead(inject.status).end('injected non-200');
+    if (
+      inject !== undefined &&
+      inject.status !== undefined &&
+      url.pathname === inject.path &&
+      (inject.dest === undefined || req.headers['sec-fetch-dest'] === inject.dest)
+    ) {
+      res.writeHead(inject.status, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('injected non-200');
       return;
     }
     try {

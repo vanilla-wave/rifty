@@ -5,19 +5,21 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 ## Items
 
 1. `toolchain-build/no-coi-substrate-lane` — **no-coi-lane** — headerless
-   Playwright lane (ADR-0369) + consumed-response header provenance (injection
-   AND absent/non-200 pinned) + required `no-coi-chromium` CI job + replayable
-   evidence driver; green and serially landable FIRST (checkpoint 8: successor
-   expected-REDs are runner-declared `test.fail` rows — executed, loud on
-   unexpected pass — so this item's job is green with no dependency on the
-   fix); split from bare-sab-guard at checkpoint 7; reusable by every later
-   slice; depends on nothing.
+   Playwright lane (ADR-0369 + correction) + destination-aware
+   consumed-response header provenance (identity/injection/absent/
+   dest-only-non-200 pinned with exact messages) + required `no-coi-chromium`
+   CI job (parsed-exact mapping sweep) + replayable evidence driver; green
+   and serially landable FIRST — it carries only its own pins (checkpoint 9:
+   the draft predecessor's batch left the branch; the checkpoint-8 declared-
+   RED device is withdrawn); split from bare-sab-guard at checkpoint 7;
+   reusable by every later slice; depends on nothing.
 2. `runtime-js/worker-realm-compat-bare-sab-referenceerror` — **bare-sab-guard**
    — realm-safe unconditional TextDecoder patch, RED-first on item 1's lane
-   (12 declared-RED blocks committed). DRAFT since checkpoint-8 demotion —
-   band fork recorded in the item, awaiting manual `rifty-refine`; never
-   implement while draft. I2 reachability = Open question "installNodeRuntime
-   seam" below.
+   at its ready re-compile (12-block batch verbatim in the pre-demotion
+   reference + git history; no tests on the branch while draft). DRAFT since
+   checkpoint-8 demotion — band fork recorded in the item, awaiting manual
+   `rifty-refine`; never implement while draft. I2 reachability = Open
+   question "installNodeRuntime seam" below.
 3. `runtime-js/same-realm-spawn-stdio-pipe-drop` — **console-swap** — per-child
    console over childProcess.stdout/stderr (I7 pipe half); declared microtask
    residual stays.

@@ -36,6 +36,64 @@ function nodeVersions(job: string): string[] {
   );
 }
 
+/** Every step `run:` value in a job block, parsed to the exact executable
+ * string: plain scalars get their trailing YAML comment stripped; `run: |`
+ * block scalars are joined verbatim. */
+function stepRuns(job: string): string[] {
+  const runs: string[] = [];
+  const lines = job.split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const match = lines[i]?.match(/^(\s*)(?:- )?run:\s*(.*)$/u);
+    if (match === null || match === undefined) continue;
+    const value = match[2] ?? '';
+    if (value === '|' || value === '>') {
+      const bodyIndent = (match[1] ?? '').length + 2;
+      const body: string[] = [];
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const bodyLine = lines[j] ?? '';
+        if (bodyLine.trim() === '') {
+          body.push('');
+          continue;
+        }
+        if ((bodyLine.match(/^\s*/u)?.[0].length ?? 0) < bodyIndent) break;
+        body.push(bodyLine.slice(bodyIndent));
+      }
+      while (body.at(-1) === '') body.pop();
+      runs.push(body.join('\n'));
+    } else {
+      runs.push(value.replace(/\s+#\s.*$/u, '').trim());
+    }
+  }
+  return runs;
+}
+
+/** Every mapping key in the YAML text — block entries and inline maps —
+ * ignoring comment lines. */
+function yamlKeys(text: string): Set<string> {
+  const keys = new Set<string>();
+  for (const line of text.split('\n')) {
+    if (line.trimStart().startsWith('#')) continue;
+    for (const m of line.matchAll(/^\s*(?:- )?([A-Za-z][\w-]*):/gu)) keys.add(m[1] ?? '');
+    for (const m of line.matchAll(/[{,]\s*([A-Za-z][\w-]*):/gu)) keys.add(m[1] ?? '');
+  }
+  return keys;
+}
+
+/** The first step `env:` map in a job block, parsed to exact key→value. */
+function stepEnv(job: string): Record<string, string> {
+  const lines = job.split('\n');
+  const start = lines.findIndex((l) => /^\s+env:\s*$/u.test(l));
+  const out: Record<string, string> = {};
+  if (start === -1) return out;
+  const entryIndent = (lines[start]?.match(/^\s*/u)?.[0].length ?? 0) + 2;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const m = lines[i]?.match(/^(\s*)([A-Z][A-Z0-9_]*):\s*(.*)$/u);
+    if (m === null || m === undefined || (m[1] ?? '').length < entryIndent) break;
+    out[m[2] ?? ''] = (m[3] ?? '').trim();
+  }
+  return out;
+}
+
 describe('CI change scope', () => {
   it('allows only explicit documentation paths to skip heavy tests', () => {
     for (const path of [
@@ -170,65 +228,92 @@ describe('CI change scope', () => {
     }
   });
 
-  it('pins the exact job→script→config→gate mapping for every gated suite (sibling sweep)', () => {
+  it('pins the exact job→script→config→gate mapping for every gated suite (sibling sweep)', async () => {
     // A `needs`/`if` presence check alone lets a job run `true` or a SIBLING
     // suite, soften its verdict with continue-on-error, or feed the gate
-    // another job's result — every hop of the chain is pinned instead.
+    // another job's result. Every hop is PARSED and compared as an exact
+    // executable value — never a substring pin: `pnpm test:no-coi || true`
+    // still CONTAINS the suite command; only exact equality rejects it.
     const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
     const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
       scripts: Record<string, string>;
     };
 
     // No job may soften its verdict: a continue-on-error'd failure reports
-    // success to the gate (provenance-lie).
-    expect(workflow).not.toContain('continue-on-error');
+    // success to the gate (provenance-lie). Parsed as YAML KEYS (block and
+    // inline-map), never a text grep.
+    expect(yamlKeys(workflow).has('continue-on-error')).toBe(false);
 
-    // job → exact suite script (a `run: true` or a sibling script fails here).
-    for (const [job, runLine] of [
-      ['no-coi-chromium', '- run: pnpm test:no-coi'],
-      ['browser-unit-chromium', '- run: pnpm test:browser-unit'],
-      ['e2e-chromium', 'pnpm test:e2e:${{ matrix.lane }}'],
-      ['unit-and-conformance', '- run: pnpm test:${{ matrix.suite }}'],
+    // job → exact suite run value: array membership is whole-value equality,
+    // so `run: true`, a sibling script, or an appended `|| true` fails here.
+    for (const [job, run] of [
+      ['no-coi-chromium', 'pnpm test:no-coi'],
+      ['browser-unit-chromium', 'pnpm test:browser-unit'],
+      [
+        'e2e-chromium',
+        "pnpm test:e2e:${{ matrix.lane }} ${{ matrix.lane == 'light' && '--workers=1' || '' }} ${{ matrix.shardTotal && format('--shard={0}/{1}', matrix.shard, matrix.shardTotal) || '' }}",
+      ],
+      ['unit-and-conformance', 'pnpm test:${{ matrix.suite }}'],
     ] as const) {
-      expect(jobBlock(workflow, job), job).toContain(runLine);
+      expect(stepRuns(jobBlock(workflow, job)), job).toContain(run);
     }
-    expect(jobBlock(workflow, 'unit-and-conformance')).toContain('suite: [run, parity]');
-    for (const lane of ['heavy', 'light', 'prod']) {
-      expect(jobBlock(workflow, 'e2e-chromium'), lane).toContain(`lane: ${lane}`);
+    // Matrix axes parsed exact: the templated run values above resolve only
+    // through these.
+    const suiteAxis = jobBlock(workflow, 'unit-and-conformance').match(
+      /^\s+suite:\s*\[([^\]]*)\]\s*$/mu,
+    );
+    expect(suiteAxis?.[1]?.split(',').map((s) => s.trim())).toEqual(['run', 'parity']);
+    const lanes = Array.from(
+      jobBlock(workflow, 'e2e-chromium').matchAll(/\{ lane: ([a-z]+)/gu),
+      (m) => m[1],
+    );
+    expect([...new Set(lanes)].sort()).toEqual(['heavy', 'light', 'prod']);
+
+    // script → whole executable value (exact — a sibling config, a dropped
+    // flag, or a `|| true` all fail equality).
+    for (const [script, value] of [
+      ['test:no-coi', 'playwright test --config playwright.no-coi.config.ts'],
+      ['test:browser-unit', 'playwright test --config playwright.browser-unit.config.ts'],
+      ['test:e2e:prod', 'playwright test --config playwright.prod.config.ts --project=chromium'],
+      ['test:e2e:heavy', 'playwright test --project=chromium-heavy --workers=1'],
+      ['test:e2e:light', 'playwright test --project=chromium-light'],
+      ['test:run', 'vitest run'],
+      ['test:parity', 'tsx tools/node-parity-runner/src/cli.ts'],
+    ] as const) {
+      expect(packageJson.scripts[script], script).toBe(value);
     }
 
-    // script → config → suite dir (a script pointed at a sibling config runs
-    // the wrong specs under the right job name).
-    const configOf: [script: string, config: string, testDir: string][] = [
-      ['test:no-coi', 'playwright.no-coi.config.ts', './tests/no-coi'],
-      ['test:browser-unit', 'playwright.browser-unit.config.ts', './tests/browser-unit'],
-      ['test:e2e:prod', 'playwright.prod.config.ts', './tests/e2e-prod'],
-    ];
-    for (const [script, config, testDir] of configOf) {
-      expect(packageJson.scripts[script], script).toContain(`--config ${config}`);
-      expect(readFileSync(config, 'utf8'), config).toContain(`testDir: '${testDir}'`);
-    }
+    // config → suite dir, read from the IMPORTED config objects (the exact
+    // values Playwright executes), not a source grep of the config text.
+    const [noCoi, browserUnit, prod, dflt] = (await Promise.all([
+      import('../../playwright.no-coi.config.ts'),
+      import('../../playwright.browser-unit.config.ts'),
+      import('../../playwright.prod.config.ts'),
+      import('../../playwright.config.ts'),
+    ])) as { default: { testDir?: string; projects?: { name?: string }[] } }[];
+    expect(noCoi?.default.testDir).toBe('./tests/no-coi');
+    expect(browserUnit?.default.testDir).toBe('./tests/browser-unit');
+    expect(prod?.default.testDir).toBe('./tests/e2e-prod');
     // heavy/light ride the default config (no --config flag → playwright.config.ts).
-    for (const script of ['test:e2e:heavy', 'test:e2e:light']) {
-      expect(packageJson.scripts[script], script).toMatch(/^playwright test --project=chromium-/);
-      expect(packageJson.scripts[script], script).not.toContain('--config');
-    }
-    expect(readFileSync('playwright.config.ts', 'utf8')).toContain("testDir: './tests/e2e'");
+    expect(dflt?.default.testDir).toBe('./tests/e2e');
+    const projectNames = (dflt?.default.projects ?? []).map((p) => p.name);
+    expect(projectNames).toContain('chromium-heavy');
+    expect(projectNames).toContain('chromium-light');
 
-    // gate ← each job's OWN result (feeding a sibling's result — while the
-    // needs list stays complete — must fail here, not pass by presence).
+    // gate ← each job's OWN result: the step's WHOLE env map compared exact
+    // (feeding a sibling's result, dropping or adding a key all fail), and the
+    // gate's only run step is the gate script itself.
     const gate = jobBlock(workflow, 'ci-gate');
-    for (const [env, expr] of [
-      ['CODE', '${{ needs.change-scope.outputs.code }}'],
-      ['CHANGE_SCOPE_RESULT', '${{ needs.change-scope.result }}'],
-      ['LINT_RESULT', '${{ needs.lint-and-typecheck.result }}'],
-      ['UNIT_RESULT', '${{ needs.unit-and-conformance.result }}'],
-      ['E2E_RESULT', '${{ needs.e2e-chromium.result }}'],
-      ['BROWSER_UNIT_RESULT', '${{ needs.browser-unit-chromium.result }}'],
-      ['NO_COI_RESULT', '${{ needs.no-coi-chromium.result }}'],
-    ] as const) {
-      expect(gate, env).toContain(`${env}: ${expr}`);
-    }
+    expect(stepRuns(gate)).toEqual(['node tools/checks/ci-gate.mjs']);
+    expect(stepEnv(gate)).toEqual({
+      CODE: '${{ needs.change-scope.outputs.code }}',
+      CHANGE_SCOPE_RESULT: '${{ needs.change-scope.result }}',
+      LINT_RESULT: '${{ needs.lint-and-typecheck.result }}',
+      UNIT_RESULT: '${{ needs.unit-and-conformance.result }}',
+      E2E_RESULT: '${{ needs.e2e-chromium.result }}',
+      BROWSER_UNIT_RESULT: '${{ needs.browser-unit-chromium.result }}',
+      NO_COI_RESULT: '${{ needs.no-coi-chromium.result }}',
+    });
   });
 });
 

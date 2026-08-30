@@ -49,4 +49,13 @@ Chromium realm — kept only as a transcript differential).
   `pr:check` stays browser-lane-free like every Playwright lane
   (`tools/checks/pr-check.mjs` boundary). Goal I8 extends the lane's coverage
   to I1–I7; it does not first wire it.
+
+> Correction 2026-08-30 (no-coi-substrate-lane checkpoint 9): the lane's
+> mechanics/CI wiring split to `toolchain-build/no-coi-substrate-lane`, which
+> is the job's first consumer and lands GREEN (own pins only);
+> bare-sab-guard demoted to draft and its expected-RED batch left the branch
+> with it — a draft is never implemented. Red-until-fix binds a READY
+> RED-first substrate: from its Contract+RED commit the required job stays
+> red until its fix lands. No declared-RED (`test.fail`) encoding may green a
+> ready unit's REDs between slices — that checkpoint-8 device is withdrawn.
 - Later slices inherit server/fixture plumbing instead of re-deciding it.

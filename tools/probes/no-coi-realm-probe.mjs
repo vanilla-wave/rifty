@@ -18,7 +18,6 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from '@playwright/test';
-import { build } from 'esbuild';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const fixturesDir = join(repoRoot, 'tests', 'no-coi', 'fixtures');
@@ -37,23 +36,12 @@ const {
   summarizeConsumedResponses,
 } = await import(pathToFileURL(join(repoRoot, 'tests', 'no-coi', 'header-provenance.mjs')).href);
 
+// Builds ALL lane fixtures incl. the row-12 kernel bundles: the kernel PUBLIC
+// entry — so the row's provenance holds against the real export surface — and
+// the private `worker-stdio-drain.ts` whose `createWorkerOutputState()` (:119)
+// is the SECOND constructor `spawnKernelWorker` retains (spawn-worker.ts:425):
+// fixing sab-ring alone would still leave the public spawn path throwing.
 await buildNoCoiFixtures();
-// Row 12 probe-only bundles (not lane fixtures): the kernel PUBLIC entry — so
-// the row's provenance holds against the real export surface — and the private
-// `worker-stdio-drain.ts` whose `createWorkerOutputState()` (:119) is the
-// SECOND constructor `spawnKernelWorker` retains (spawn-worker.ts:425): fixing
-// sab-ring alone would still leave the public spawn path throwing.
-await build({
-  entryPoints: [
-    { in: join(repoRoot, 'packages/kernel/src/index.ts'), out: 'kernel-public' },
-    { in: join(repoRoot, 'packages/kernel/src/worker-stdio-drain.ts'), out: 'kernel-stdio-drain' },
-  ],
-  bundle: true,
-  format: 'esm',
-  outdir: join(fixturesDir, 'dist'),
-  outExtension: { '.js': '.mjs' },
-  logLevel: 'silent',
-});
 
 /** Run probe-lib in a fresh Node child; `dropSab` deletes the global binding
  * first. Passes the REAL `node:util/types` (imported BEFORE install — the
@@ -91,9 +79,11 @@ try {
     for (const mode of ['direct', 'aggregate']) {
       const page = await browser.newPage();
       try {
-        // Row 16: header provenance on the ACTUALLY consumed responses (an
-        // in-page re-fetch sweep passes a Sec-Fetch-Dest-keyed server).
-        const responses = captureConsumedResponses(page);
+        // Row 16: header provenance on the ACTUALLY consumed responses, keyed
+        // path + destination (an in-page re-fetch sweep passes a
+        // Sec-Fetch-Dest-keyed server; a pathname-only match passes a
+        // destination-only-404 one).
+        const capture = captureConsumedResponses(page);
         await page.goto(`http://localhost:${port}/index.html`);
         const result =
           realm === 'page'
@@ -111,6 +101,7 @@ try {
                 if (!msg.ok) throw new Error(`worker probe failed: ${msg.error}`);
                 return msg.result;
               }, mode);
+        const responses = await capture.settle();
         assertHeaderlessConsumption(responses, CONSUMED_CLASSES[realm]);
         result.consumedResponseHeaders = summarizeConsumedResponses(
           responses,
@@ -133,7 +124,7 @@ try {
   {
     const page = await browser.newPage();
     try {
-      const responses = captureConsumedResponses(page);
+      const capture = captureConsumedResponses(page);
       await page.goto(`http://localhost:${port}/index.html`);
       transcript.chromiumNoCoi.kernelPublicEntry = await page.evaluate(async () => {
         const RealWorker = globalThis.Worker;
@@ -241,7 +232,7 @@ try {
           `kernel sweep: expected 0 TOTAL Worker constructions across import+setup+calls, got ${sweep.totalWorkerConstructions}`,
         );
       }
-      assertHeaderlessConsumption(responses, CONSUMED_CLASSES.kernelDriver);
+      assertHeaderlessConsumption(await capture.settle(), CONSUMED_CLASSES.kernelDriver);
     } finally {
       await page.close();
     }

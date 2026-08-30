@@ -122,18 +122,19 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   asserting the Reference-contract preconditions before acting. Lane, header
   provenance, required `no-coi-chromium` CI job + gate mapping, and the replay
   driver are the split sibling's contract
-  (`toolchain-build/no-coi-substrate-lane` — checkpoint 7). THIS unit's
-  committed carrier: `tests/no-coi/worker-realm-compat.no-coi.spec.ts` — today
-  12 declared-RED blocks (parity 1–7, 9, 13, 14, 15 — every decode failure
+  (`toolchain-build/no-coi-substrate-lane` — checkpoint 7). THIS unit's RED
+  batch: 12 substrate blocks in `tests/no-coi/worker-realm-compat.no-coi.spec.ts`
+  (parity 1–7, 9, 13, 14, 15 — every decode failure
   `ReferenceError: SharedArrayBuffer is not defined`; parity 12, every
-  poisoned decode trips the counting accessor) + green pins (preconditions
-  incl. consumed-response header provenance, parity 10, precondition-rejection
-  detection ×2). The RED batch is runner-DECLARED (`test.fail(true,
-  EXPECTED_RED)`, checkpoint 8 — kills the checkpoint-7 map cycle): every RED
-  still EXECUTES on the required `no-coi-chromium` job and must fail; an
-  unexpected pass fails the job LOUD, so the fix PR must strip exactly the 12
-  annotations to go green — assertions are NEVER edited; the RED→GREEN flip is
-  machine-detected, not narrated.
+  poisoned decode trips the counting accessor) + parity-10 green pin. While
+  DRAFT the batch carries NO tests on the branch (checkpoint 9 — a draft is
+  never implemented; the checkpoint-8 `test.fail` declared-RED encoding is
+  withdrawn, ADR-0369 dated correction; the lane spec keeps only lane-owned
+  pins). Verbatim batch: pre-demotion reference + git history. At the ready
+  re-compile, Contract+RED re-commits the blocks as plain REDs on the
+  required `no-coi-chromium` job — the goal PR stays red until the fix flips
+  them green; assertions are NEVER edited; the flip is machine-detected, not
+  narrated.
 - After install (direct or via `installWorkerRealmCompat()`) in that realm,
   decode NEVER evaluates the absent binding — every input class:
   `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm
@@ -168,17 +169,17 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   byteOffset/byteLength against sentinel bytes; non-shared path passes the
   EXACT input and opts objects, RETURNS the decoder's unique per-call sentinel
   unchanged, and propagates the exact thrown error object (Parity 8–9).
-  COMMITTED (checkpoint-2 C2/C3): added describes in
-  `worker-realm-compat.test.ts` — sentinel/nonzero-offset Uint8Array, DataView
-  over shared buffer, raw-SharedArrayBuffer whole-buffer exactness, exact
-  input/opts identity (view/DataView/ArrayBuffer/no-arg), sentinel-error
-  identity (non-shared AND shared post-copy), repeat-install identity for
-  direct AND aggregate sequences — all green pins guarding the fix.
-  Checkpoint-3/4 additions (same file, still green): aggregate CALL-ONE
-  sibling snapshot (global/self before any repeat) and a SEPARATE
-  installWritableSelf strengthened-pin test (ownership/descriptor/pre-write
-  value) — checkpoint 4 (B4) restored the pre-existing installWritableSelf
-  test byte-identical to main; it is the unmodified-baseline carrier.
+  Carrier: added describes in `worker-realm-compat.test.ts` —
+  sentinel/nonzero-offset Uint8Array, DataView over shared buffer,
+  raw-SharedArrayBuffer whole-buffer exactness, exact input/opts identity
+  (view/DataView/ArrayBuffer/no-arg), sentinel-error identity (non-shared AND
+  shared post-copy), repeat-install identity for direct AND aggregate
+  sequences, aggregate CALL-ONE sibling snapshot, SEPARATE
+  installWritableSelf strengthened-pin test (the pre-existing
+  installWritableSelf test stays byte-identical to main — the
+  unmodified-baseline carrier). While DRAFT these ride with the batch OFF the
+  branch (checkpoint 9; verbatim in pre-demotion reference + git history) and
+  return green at the ready re-compile.
 - Ordered exact-call log (parity 13 — output and error-identity rows alone
   admit a try-native/catch/copy-retry wrapper that invokes the ORIGINAL
   decoder on the shared input first): with a logging decoder as the original,
@@ -224,9 +225,10 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   passes every clean-aggregate combo but fails here. Today the decode is the
   ReferenceError RED; siblings green (probe row 14).
 - COI behavior unchanged: every pre-existing test in
-  `worker-realm-compat.test.ts` stays green and byte-identical to main (the
-  branch diff of that file is additions only); strengthened pins are ADDED,
-  never edited-to-pass.
+  `worker-realm-compat.test.ts` stays green and byte-identical to main (while
+  this unit is draft the WHOLE file is byte-identical to main — checkpoint 9;
+  at re-compile the branch diff is additions only); strengthened pins are
+  ADDED, never edited-to-pass.
 
 ## Parity cases
 
@@ -234,11 +236,13 @@ Oracles per Reference contract; every row's artifact is REPLAYABLE via the
 lane item's evidence driver (`node tools/probes/no-coi-realm-probe.mjs` —
 mechanics + kernel goldens: `toolchain-build/no-coi-substrate-lane`); raw
 output committed at
-`reference/no-coi-realm-probe-transcript-2026-08-29.json`. Committed test
-carriers: parity 1–7, 9, 10, 12, 13, 14, 15 →
-`tests/no-coi/worker-realm-compat.no-coi.spec.ts` (12 declared-RED /
-4 green today — preconditions incl. row-16 consumed-response provenance,
-parity 10, precondition-rejection detection page+worker);
+`reference/no-coi-realm-probe-transcript-2026-08-29.json`. Test carriers AT
+THE READY RE-COMPILE (while draft, none carries tests on the branch —
+checkpoint 9; verbatim batch: pre-demotion reference + git history):
+parity 1–7, 9, 10, 12, 13, 14, 15 →
+`tests/no-coi/worker-realm-compat.no-coi.spec.ts` (12 plain RED + parity-10
+green; lane-owned preconditions/provenance/rejection-detection pins live
+there already);
 parity 6 call-one sibling snapshot + parity 7 (direct+aggregate), 8, 9, 13
 (full class set + fresh-TypeError first-error sweeps — shared, private/no-arg,
 AND explicit stream:false incl. the streaming final) →
@@ -497,6 +501,16 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
   (§Demotion above) — manual `rifty-refine` requested. Transcript regenerated
   same command (Chromium 148.0.7778.96 / node v24.16.0); lane 32 green
   (12 declared-RED + 20 pins); vitest 22 green, still additions-only vs main.
+- Checkpoint 9, 2026-08-30 (lane-unit batch, this draft touched as Budget
+  scope): the demoted unit's carriers left the branch — the 12-block
+  substrate batch, its `test.fail` declared-RED encoding (withdrawn;
+  ADR-0369 dated correction), the parity-10 substrate pin, and the 663 added
+  COI vitest lines (`worker-realm-compat.test.ts` restored byte-identical to
+  main). A draft is never implemented; nothing weakened — the contract text
+  above is unchanged in what it REQUIRES, carriers return at the ready
+  re-compile as plain REDs/greens. Verbatim batch:
+  `reference/bare-sab-guard-pre-demotion-2026-08-30.md` + git history
+  (`67cc346`).
 
 ## Reversibility
 
