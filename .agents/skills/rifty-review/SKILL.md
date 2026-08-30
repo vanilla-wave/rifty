@@ -33,10 +33,15 @@ Cite `file:line`.
 
 One fresh isolated reviewer per named checkpoint — raw evidence only, never the
 implementer's diagnosis. Setup: with a PR — resolve branch + raw body (`gh pr
-view <arg> --json body,headRefName,baseRefName`), `BASE=origin/<baseRefName>`;
-without one — Contract+RED runs locally: `BASE=origin/main` (or the declared
-base), the goal named by its directory. A PR is never a prerequisite
-for Contract+RED; attempts count per unit either way — keep every verdict.
+view <arg> --json body,headRefName,baseRefName`). `BASE` is the UNIT-of-work
+boundary, never the delivery form (`fault-classes.md` §Review convergence, Scope
+row): inside a goal run it is the prior landed slice's reviewed tree — its
+`final-green:` verdict line in that slice's doc — otherwise
+`origin/<baseRefName>`, or `origin/main` when Contract+RED runs locally. Earlier
+landed slices are certified: re-reviewing them is scope error and their files
+raise no `coverage` row. The goal is named by its directory. A PR is never a
+prerequisite for Contract+RED; attempts count per unit either way — every
+verdict is kept AND appended to the unit doc's `## Decisions` (Lineage row).
 Refuse a dirty tree; name `CHECKPOINT` (ambiguity stops). Open the run's single
 draft PR at the first Contract+RED pass — goal runs default to one PR per goal
 carrying all slices, splitting allowed, never required (`AGENTS.md` §PR);
@@ -69,6 +74,19 @@ authority makes. A blocker cites its violated authority (`authority` field —
 (stricter assertion, deeper mutant, extra hardening) is a concern — batched,
 never spending an attempt — or a backlog candidate, never a checkpoint block.
 
+Evidence bar differs by checkpoint, because the subject differs:
+
+- **Final+GREEN** — code exists and settles a mutant in one read. Judge `pass`
+  adversarially: a plausible wrong implementation must fail the cited carrier.
+- **Contract+RED** — no implementation exists, so "a plausible wrong
+  implementation" has no finite answer and is NOT the question. The subject is
+  the promise and its RED. Four admissible blocker classes, each carrying an
+  EXECUTED artifact (`fault-classes.md` Contract+RED evidence row): false fact
+  about the oracle (probe output) · User-scenario behavior no clause covers
+  (cited line) · RED not failing now or failing for another reason (run output)
+  · RED passing with the scenario unimplemented (run output). Reasoning without
+  an artifact is a concern — the same bar the contract itself carries.
+
 One checkpoint = two find passes, one adjudication, then one batch fix, then
 ONE verify pass — never one-blocker-per-round iteration:
 
@@ -76,15 +94,19 @@ ONE verify pass — never one-blocker-per-round iteration:
    defect visible in this tree that surfaces at a later attempt = review
    failure. The reviewer partitions the diff itself and spawns parallel
    read-only subagents (rubric axes / seams it identifies), merges + dedupes.
-   It fills `coverage`: one row per contract `## Fault matrix` line,
-   Acceptance/Parity clause, public API entry the diff touches, frozen
-   oracle/golden. `pass` judged adversarially — a plausible wrong
-   implementation must fail the cited RED. `weak` is bounded: it names the
+   It fills `coverage` WITHIN the Scope-row boundary: one row per contract
+   `## Fault matrix` line, Acceptance/Parity clause, public API entry the
+   in-boundary diff touches, frozen oracle/golden — a certified earlier slice
+   and out-of-scope carriers (docs/CI/tooling/harness) raise no row. At
+   Final+GREEN `pass` is judged adversarially — a plausible wrong
+   implementation must fail the cited carrier; `weak` is bounded: it names the
    concrete wrong implementation AND the declared clause/failure-model row it
    violates; a mutant beyond the obligation as declared (deeper hardening) is
-   a concern — the row stays `pass`. Every weak/missing row carries a finding.
-   Any weak/missing row blocks (`blockers.mjs` enforces); a later gap in a
-   `pass` cell is reviewer error.
+   a concern — the row stays `pass`. At Contract+RED the mutant question does
+   not apply: `weak` needs an executed artifact from the four admissible
+   classes, else the row stays `pass` and the doubt lands as a concern. Every
+   weak/missing row carries a finding. Any weak/missing row blocks
+   (`blockers.mjs` enforces); a later gap in a `pass` cell is reviewer error.
 2. **Tail pass** — fresh reviewer, prior findings attached as settled (do not
    re-raise; a rephrase = failure), hunts only what is NOT on the list; own
    subagents + a dedupe adjudicator. Empty tail = found set converged.
@@ -106,16 +128,31 @@ ONE verify pass — never one-blocker-per-round iteration:
    (lineage); the adjudication rides beside it.
 
 Fix surviving blockers in one batch re-cut, then one verify pass on the new
-tree (same command, prior verdicts as settled). An obligation neither pass can
-pin because the contract never declared it (missing exactness, count, identity)
-is a contract hole → §Contract escalation re-refine, not another review round.
+tree (same command, prior verdicts as settled). Append the blocker verdict line
+(`contract-red:` / `final-green:`) to the unit doc's `## Decisions` — the count
+is only real if it is written down. An obligation neither pass can pin because
+the contract never declared
+it (missing exactness, count, identity) is a contract hole → §Contract
+escalation re-refine, not another review round.
+
+Two valves close the round loop — check them BEFORE ordering another fix batch,
+and report the trigger to the user rather than continuing (`fault-classes.md`
+§Review convergence):
+
+- **Contract escalation** — 2nd consecutive Contract+RED blocker on one unit:
+  the contract is wrong. Split/re-refine in place; the recorded verdict lines
+  carry into the successor. A 2nd escalation in one lineage stops to the user.
+- **Convergence** — blocker count not strictly falling across two consecutive
+  rounds while findings land on the same unit: the fixes are growing the review
+  surface faster than they close it, and round N+1 will not converge. Stop and
+  report. New findings each round are not progress.
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
 codex exec -C "$(git rev-parse --show-toplevel)" --approve-for-me \
   -c model_reasoning_effort="ultra" \
   --skip-git-repo-check --output-schema tools/review/review-schema.json -o "$RUN/verdict.json" \
-  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, the named goal directory (docs/backlog/epics/<slug>/) when declared, current-unit contract, and every changed file. Do not modify tracked files. ROLE: certify this tree against its DECLARED authorities — the unit contract (Acceptance/Parity/Fault matrix), repo rules (AGENTS.md, docs/process, active ADRs), and existing baseline behavior. Two failure modes, equally serious: missing a declared-authority violation, and blocking on a demand no declared authority makes. A finding is a blocker ONLY with its violated authority cited in the \`authority\` field (exact clause/rule/ADR/baseline behavior); strengthening beyond declaration is a concern — batched, never blocking — and issuing it as a blocker is your error, symmetric to a miss. EXHAUSTIVENESS: single-pass — enumerate EVERY blocker in this one verdict; a defect visible in this tree that would only surface in a later attempt counts as a failure of this review. Partition the review yourself and spawn parallel read-only subagents (rubric axes and the seams/boundaries you identify in the diff), then merge and dedupe their findings. COVERAGE: fill the \`coverage\` section — one row per contract \`## Fault matrix\` line, Acceptance/Parity clause, public API entry point the diff adds or changes, and frozen oracle/golden artifact; judge \`pass\` adversarially (a plausible wrong implementation must fail the cited carrier — lossy/inexact assertions, non-discriminating fixtures, absent count/order/identity checks are \`weak\`); \`weak\` must name the concrete wrong implementation AND the declared clause/failure-model row it violates — a mutant beyond the obligation as declared is a concern and leaves the row \`pass\`; every weak/missing row carries a finding; do not skip rows. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
+  "Invoke the \`rifty-review\` skill for the $CHECKPOINT checkpoint. Review raw current branch vs \`$BASE\`, the PR body, the named goal directory (docs/backlog/epics/<slug>/) when declared, current-unit contract, and every changed file. SCOPE: \`$BASE\` is the unit-of-work boundary, not a delivery form — everything before it is already certified, and re-reviewing it is an error. Files in this diff that fall outside review-convergence scope (docs, CI, process, tooling, test harness) get ordinary review: report them as concerns, never blockers, and raise no coverage row for them. Do not modify tracked files. ROLE: certify this tree against its DECLARED authorities — the unit contract (Acceptance/Parity/Fault matrix), repo rules (AGENTS.md, docs/process, active ADRs), and existing baseline behavior. Two failure modes, equally serious: missing a declared-authority violation, and blocking on a demand no declared authority makes. A finding is a blocker ONLY with its violated authority cited in the \`authority\` field (exact clause/rule/ADR/baseline behavior); strengthening beyond declaration is a concern — batched, never blocking — and issuing it as a blocker is your error, symmetric to a miss. EXHAUSTIVENESS: single-pass — enumerate EVERY blocker in this one verdict; a defect visible in this tree that would only surface in a later attempt counts as a failure of this review. Partition the review yourself and spawn parallel read-only subagents (rubric axes and the seams/boundaries you identify in the diff), then merge and dedupe their findings. EVIDENCE BAR — it differs by checkpoint because the subject differs. At Final+GREEN the implementation exists and settles a mutant in one read: judge \`pass\` adversarially (a plausible wrong implementation must fail the cited carrier — lossy/inexact assertions, non-discriminating fixtures, absent count/order/identity checks are \`weak\`); \`weak\` must name the concrete wrong implementation AND the declared clause/failure-model row it violates — a mutant beyond the obligation as declared is a concern and leaves the row \`pass\`. At Contract+RED NO implementation exists, so 'a plausible wrong implementation' has no finite answer and is NOT your question — the subject is the promise and its RED. Exactly four blocker classes are admissible there, each REQUIRING an executed artifact quoted in the finding: (1) the contract asserts a false fact about the oracle — probe command + output + version; (2) behavior in the \`## User scenario\` that no clause covers — quote the scenario line; (3) a RED test that does not fail on this tree, or fails for another reason such as an import or typecheck error — run output; (4) a RED test that would pass with the scenario left unimplemented — run output. A doubt with no executed artifact is a concern, never a blocker: this is the same bar the contract itself must carry (decision-workflow.md §Backlog readiness 4 — model memory is not evidence). COVERAGE: fill the \`coverage\` section — one row per contract \`## Fault matrix\` line, Acceptance/Parity clause, public API entry point the in-boundary diff adds or changes, and frozen oracle/golden artifact; every weak/missing row carries a finding; do not skip rows. Fill checkpoint, unit_goal_source, every required axis, unit_residuals, goal_residuals, goal_complete. Behavioral correctness blockers name fault class, missing RED, sibling sweep; goal/process blockers cite the violated contract/rule. Return only schema JSON with file:line citations." \
   </dev/null >"$RUN/log" 2>&1
 node tools/review/blockers.mjs "$RUN/verdict.json"  # missing verdict → tail -n 40 "$RUN/log"
 ```

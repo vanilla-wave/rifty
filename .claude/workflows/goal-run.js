@@ -11,12 +11,13 @@ export const meta = {
   ],
 }
 
-// args: { goal: '<epics dir slug>', date: 'YYYY-MM-DD', maxSlices?, maxAttempts? }
-// Stop contract: every non-{closed} return names the user-owned decision or cap that blocked.
+// args: { goal: '<epics dir slug>', date: 'YYYY-MM-DD', maxSlices? }
+// Stop contract: every non-{closed} return names the user-owned decision or valve that blocked.
+// Checkpoint rounds have no cap arg on purpose: the valves below are canon
+// (fault-classes.md §Review convergence), not a budget an agent may raise.
 if (!args?.goal || !args?.date) return { stop: 'args', need: "{ goal: '<slug>', date: 'YYYY-MM-DD' }" }
 const { goal, date } = args
 const MAX_SLICES = args.maxSlices ?? 8
-const MAX_ATTEMPTS = args.maxAttempts ?? 3
 const DIR = `docs/backlog/epics/${goal}`
 const GOAL_SKILL = '.agents/skills/rifty-goal'
 
@@ -55,20 +56,48 @@ const state = (label) =>
   )
 
 // One checkpoint = codex run per rifty-review §Checkpoint run; blockers → one batch fix → verify.
+// Two valves end the loop instead of grinding (fault-classes.md §Review convergence):
+// Contract escalation (2nd consecutive Contract+RED blocker = the contract is wrong) and
+// Convergence (count not strictly falling across two rounds = fixes grow the surface).
 async function checkpoint(name, child) {
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  const counts = []
+  let escalated = false
+  for (let attempt = 1; ; attempt++) {
     const v = await agent(
-      `Run the ${name} checkpoint for goal ${goal} per .agents/skills/rifty-review/SKILL.md §Checkpoint run — you are the runner, codex is the reviewer; follow the skill verbatim (find pass, tail pass, adjudication, blockers.mjs). Return pass=true only on exit 0; otherwise list surviving HOLDS blockers verbatim.`,
+      `Run the ${name} checkpoint for goal ${goal} per .agents/skills/rifty-review/SKILL.md §Checkpoint run — you are the runner, codex is the reviewer; follow the skill verbatim (find pass, tail pass, adjudication, blockers.mjs). Append the verdict line to the unit doc's ## Decisions. Return pass=true only on exit 0; otherwise list surviving HOLDS blockers verbatim.`,
       { schema: VERDICT, label: `${child}:${name}#${attempt}`, phase: 'Slices' },
     )
-    if (v?.pass) return true
-    if (!v?.blockers?.length) return false
+    if (v?.pass) return { pass: true }
+    const blockers = v?.blockers ?? []
+    if (!blockers.length) return { pass: false, stop: `${name} returned no pass and no blockers` }
+    counts.push(blockers.length)
+    if (counts.length >= 3 && counts.at(-1) >= counts.at(-2) && counts.at(-2) >= counts.at(-3)) {
+      return {
+        pass: false,
+        blockers,
+        stop: `${name} not converging (blockers ${counts.join('→')}) — the fixes grow the review surface faster than they close it; round ${attempt + 1} will not converge`,
+      }
+    }
+    if (name === 'Contract+RED' && attempt >= 2) {
+      if (escalated) {
+        return {
+          pass: false,
+          blockers,
+          stop: '2nd Contract+RED escalation in one lineage — the contract is not reviewable; only the user re-scopes it (rifty-refine)',
+        }
+      }
+      escalated = true
+      await agent(
+        `Goal ${goal}, unit ${child}: 2nd consecutive Contract+RED blocker → §Contract escalation. The contract is wrong, not the tests. Split or re-refine it IN PLACE per docs/process/fault-classes.md and decision-workflow.md §Backlog readiness 5: record the fork plus the pre-demotion Acceptance/Parity verbatim, carry the recorded verdict lines into the successor, name the predecessor. Do NOT answer the blockers with more test surface:\n${blockers.map((b) => `- ${b}`).join('\n')}`,
+        { label: `${child}:escalate#${attempt}`, phase: 'Slices' },
+      )
+      continue
+    }
     await agent(
-      `Goal ${goal}, unit ${child}: batch re-cut IN PLACE (same branch, lineage carries — never a fresh start) fixing ALL surviving ${name} blockers in one batch, then commit:\n${v.blockers.map((b) => `- ${b}`).join('\n')}\nNever weaken a ready contract silently (demotion records the fork), never edit a test to pass.`,
+      `Goal ${goal}, unit ${child}: batch re-cut IN PLACE (same branch, lineage carries — never a fresh start) fixing ALL surviving ${name} blockers in one batch, then commit:\n${blockers.map((b) => `- ${b}`).join('\n')}\nNever weaken a ready contract silently (demotion records the fork), never edit a test to pass.`,
       { label: `${child}:fix#${attempt}`, phase: 'Slices' },
     )
   }
-  return false
 }
 
 const rechart = (after) =>
@@ -102,14 +131,16 @@ while (!st.mapEmpty) {
       { schema: PICKUP, label: `pickup:${child}`, phase: 'Slices' },
     )
     if (!p?.done) return { stop: p?.fork ? 'user fork — manual rifty-refine' : 'pickup failed', child, fork: p?.fork ?? null }
-    if (!(await checkpoint('Contract+RED', child))) return { stop: 'attempt cap at Contract+RED', child }
+    const cr = await checkpoint('Contract+RED', child)
+    if (!cr.pass) return { stop: cr.stop, child, blockers: cr.blockers }
   }
 
   await agent(
     `Implement the ready unit ${child} of goal ${goal} on this branch, within its declared ledger band: expected RED first, then GREEN; classify every discovery per ${GOAL_SKILL}/SKILL.md run rules (required → reverse-linked draft child, outside → rifty-to-backlog; new drafts carry '## Challenge' per docs/backlog/README.md §Challenge); append ledger lines for decisions/observations. Commit; leave the tree clean; pnpm pr:check must pass.`,
     { label: `implement:${child}`, phase: 'Slices' },
   )
-  if (!(await checkpoint('Final+GREEN', child))) return { stop: 'attempt cap at Final+GREEN', child }
+  const fg = await checkpoint('Final+GREEN', child)
+  if (!fg.pass) return { stop: fg.stop, child, blockers: fg.blockers }
   await rechart(child)
   landed++
   log(`slice ${child} landed (${landed})`)

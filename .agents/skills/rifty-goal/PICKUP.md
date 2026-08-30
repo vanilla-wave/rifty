@@ -14,7 +14,9 @@
    sized from the compiled contract's expected-RED batch. Far above any prior
    estimate → the unit is too big: split it now, not after review.
 4. **Contract+RED** via `rifty-review` §Checkpoint run (fresh isolated
-   reviewer). Record `ready-verdict:` in the item and one ledger line.
+   reviewer). Record `ready-verdict:` in the item and one ledger line; a blocker
+   verdict is recorded too (`contract-red: <date> — blocker @ <sha>`) — the
+   valves in `fault-classes.md` §Review convergence read that count.
 5. **Hand off.** Implementation is outside this skill; this mode is done.
 
 Done when the verdict and band are recorded and no implementation has started.

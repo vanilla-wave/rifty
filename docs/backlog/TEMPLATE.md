@@ -54,6 +54,9 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 ## Decisions
 
 <!-- At pickup the first line is the Contract+RED verdict, copied verbatim:
-     ready-verdict: <date> — Contract+RED @ <sha>   (decision-workflow §Backlog readiness) -->
+     ready-verdict: <date> — Contract+RED @ <sha>   (decision-workflow §Backlog readiness)
+     Each blocker verdict before it is recorded too — the attempt count is only
+     real if written down (fault-classes.md §Review convergence, Lineage):
+     contract-red: <date> — blocker @ <sha> -->
 
 <Every fork resolved, or linked to its ADR. No open "Decide X".>
