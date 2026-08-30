@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-29T23:40:04.789Z",
+  "generated": "2026-08-30T00:50:29.016Z",
   "command": "node tools/probes/no-coi-realm-probe.mjs",
   "chromium": "148.0.7778.96",
   "node": "v24.16.0",
@@ -10,6 +10,33 @@
       "mode": "direct",
       "crossOriginIsolated": false,
       "sabBindingTypeof": "undefined",
+      "responseHeaders": {
+        "document": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "workerScript": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "probeModule": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtShim": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtUtilTypes": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        }
+      },
       "wasmSharedBrand": "[object SharedArrayBuffer]",
       "wasmSharedInstanceofArrayBuffer": false,
       "native": {
@@ -178,6 +205,48 @@
             "first": false,
             "throwCount": 0
           }
+        },
+        "errorFirstShared": {
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "exactCallLog": {
+        "direct": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "aggregate": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
         }
       }
     },
@@ -185,6 +254,33 @@
       "mode": "aggregate",
       "crossOriginIsolated": false,
       "sabBindingTypeof": "undefined",
+      "responseHeaders": {
+        "document": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "workerScript": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "probeModule": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtShim": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtUtilTypes": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        }
+      },
       "wasmSharedBrand": "[object SharedArrayBuffer]",
       "wasmSharedInstanceofArrayBuffer": false,
       "native": {
@@ -356,6 +452,48 @@
             "first": false,
             "throwCount": 0
           }
+        },
+        "errorFirstShared": {
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "exactCallLog": {
+        "direct": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "aggregate": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
         }
       }
     },
@@ -363,6 +501,33 @@
       "mode": "direct",
       "crossOriginIsolated": false,
       "sabBindingTypeof": "undefined",
+      "responseHeaders": {
+        "document": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "workerScript": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "probeModule": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtShim": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtUtilTypes": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        }
+      },
       "wasmSharedBrand": "[object SharedArrayBuffer]",
       "wasmSharedInstanceofArrayBuffer": false,
       "native": {
@@ -531,6 +696,48 @@
             "first": false,
             "throwCount": 0
           }
+        },
+        "errorFirstShared": {
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "exactCallLog": {
+        "direct": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "aggregate": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
         }
       }
     },
@@ -538,6 +745,33 @@
       "mode": "aggregate",
       "crossOriginIsolated": false,
       "sabBindingTypeof": "undefined",
+      "responseHeaders": {
+        "document": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "workerScript": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "probeModule": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtShim": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtUtilTypes": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        }
+      },
       "wasmSharedBrand": "[object SharedArrayBuffer]",
       "wasmSharedInstanceofArrayBuffer": false,
       "native": {
@@ -709,6 +943,48 @@
             "first": false,
             "throwCount": 0
           }
+        },
+        "errorFirstShared": {
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "exactCallLog": {
+        "direct": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "aggregate": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
         }
       }
     },
@@ -903,6 +1179,204 @@
             "first": true,
             "throwCount": 1
           }
+        },
+        "errorFirstShared": {
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          }
+        }
+      },
+      "exactCallLog": {
+        "direct": {
+          "ok": true,
+          "value": {
+            "callCount": 9,
+            "rows": {
+              "priv": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": true,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "privDataView": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": true,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "privArrayBuffer": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": true,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "noArg": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": true,
+                "backingBrand": "[object Undefined]",
+                "bytes": null,
+                "optsExact": true
+              },
+              "sharedView": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "sharedDataView": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "rawShared": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": {
+                  "length": 65536,
+                  "sha256": "167c274db8179fae2352d02dfcad9beec4be8f9d1e102f98880fd230f0b05379"
+                },
+                "optsExact": true
+              },
+              "stream1": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [195],
+                "optsExact": true
+              },
+              "stream2": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [169],
+                "optsExact": true
+              }
+            }
+          }
+        },
+        "aggregate": {
+          "ok": true,
+          "value": {
+            "callCount": 9,
+            "rows": {
+              "priv": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": true,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "privDataView": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": true,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "privArrayBuffer": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": true,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "noArg": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": true,
+                "backingBrand": "[object Undefined]",
+                "bytes": null,
+                "optsExact": true
+              },
+              "sharedView": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "sharedDataView": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [104, 101, 108, 108, 111],
+                "optsExact": true
+              },
+              "rawShared": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": {
+                  "length": 65536,
+                  "sha256": "167c274db8179fae2352d02dfcad9beec4be8f9d1e102f98880fd230f0b05379"
+                },
+                "optsExact": true
+              },
+              "stream1": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [195],
+                "optsExact": true
+              },
+              "stream2": {
+                "newCalls": 1,
+                "retSentinel": true,
+                "isSource": false,
+                "backingBrand": "[object ArrayBuffer]",
+                "bytes": [169],
+                "optsExact": true
+              }
+            }
+          }
         }
       }
     },
@@ -1085,6 +1559,48 @@
             "first": false,
             "throwCount": 0
           }
+        },
+        "errorFirstShared": {
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "exactCallLog": {
+        "direct": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
+        },
+        "aggregate": {
+          "ok": false,
+          "errName": "ReferenceError",
+          "errMsg": "SharedArrayBuffer is not defined"
         }
       }
     }

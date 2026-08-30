@@ -1,10 +1,11 @@
 /**
  * RED-first no-COI substrate — contract
  * `docs/backlog/runtime-js/worker-realm-compat-bare-sab-referenceerror.md`.
- * Expected RED today: parity 1–7, 9, 14, 15 (every decode failure
+ * Expected RED today: parity 1–7, 9, 13, 14, 15 (every decode failure
  * `ReferenceError: SharedArrayBuffer is not defined`) + parity 12 (every
- * poisoned decode trips the counting accessor). Green pins: preconditions +
- * parity 10. Parity 8/13 exactness/call-log pins are COI vitest
+ * poisoned decode trips the counting accessor). Green pins: preconditions
+ * (incl. response-header provenance) + parity 10. Parity 8 exactness pins and
+ * the COI twin of the parity 13 call log are vitest
  * (`packages/runtime-js/src/ipc/worker-realm-compat.test.ts`).
  */
 import { createHash } from 'node:crypto';
@@ -18,10 +19,36 @@ interface SelfSnapshot {
   ownWritableData: boolean;
 }
 
+/** Per-decode record of what reached the ORIGINAL decoder (probe-lib
+ * `orderedExactCallSweep`) — bytes as plain array, or length+SHA-256 past 16. */
+interface ExactCallRow {
+  newCalls: number;
+  retSentinel: boolean;
+  isSource: boolean;
+  backingBrand: string;
+  bytes: number[] | { length: number; sha256: string } | null;
+  optsExact: boolean;
+}
+
+type ExactCallRowName =
+  | 'priv'
+  | 'privDataView'
+  | 'privArrayBuffer'
+  | 'noArg'
+  | 'sharedView'
+  | 'sharedDataView'
+  | 'rawShared'
+  | 'stream1'
+  | 'stream2';
+
 interface ProbeResult {
   mode: 'direct' | 'aggregate';
   crossOriginIsolated: unknown;
   sabBindingTypeof: string;
+  responseHeaders: Record<
+    'document' | 'workerScript' | 'probeModule' | 'builtShim' | 'builtUtilTypes',
+    { status: number; coop: string | null; coep: string | null }
+  >;
   wasmSharedBrand: string;
   wasmSharedInstanceofArrayBuffer: boolean;
   native: Record<
@@ -63,7 +90,10 @@ interface ProbeResult {
   identity: Record<
     'view' | 'dataView' | 'arrayBuffer' | 'noArg' | 'errorIdentity' | 'errorIdentitySharedFirst',
     Attempt
-  >;
+  > & {
+    errorFirstShared: Record<'sharedView' | 'sharedDataView' | 'rawShared' | 'streaming', Attempt>;
+  };
+  exactCallLog: Record<'direct' | 'aggregate', Attempt>;
   poisonedBinding: {
     count: number;
     sweep: Record<
@@ -80,6 +110,68 @@ const RAW_TEXT = `\u0000\ufffd\ufffdhello\ufffd\ufffd${'\u0000'.repeat(65526)}`;
 const RAW_EXACT = {
   length: 65536,
   sha256: createHash('sha256').update(RAW_TEXT, 'utf8').digest('hex'),
+};
+
+const HELLO = [104, 101, 108, 108, 111];
+
+// The BYTES the original decoder must receive for the raw-shared row of the
+// exact-call sweep: the whole sentinel-laid 64KiB buffer, privately copied.
+const RAW_BYTES = Buffer.alloc(65536);
+RAW_BYTES[1] = 0xff;
+RAW_BYTES[2] = 0xff;
+RAW_BYTES.set(HELLO, 3);
+RAW_BYTES[8] = 0xff;
+RAW_BYTES[9] = 0xff;
+const RAW_BYTES_EXACT = {
+  length: 65536,
+  sha256: createHash('sha256').update(RAW_BYTES).digest('hex'),
+};
+
+function pass(bytes: number[]): ExactCallRow {
+  return {
+    newCalls: 1,
+    retSentinel: true,
+    isSource: true,
+    backingBrand: '[object ArrayBuffer]',
+    bytes,
+    optsExact: true,
+  };
+}
+function copy(bytes: ExactCallRow['bytes']): ExactCallRow {
+  return {
+    newCalls: 1,
+    retSentinel: true,
+    isSource: false,
+    backingBrand: '[object ArrayBuffer]',
+    bytes,
+    optsExact: true,
+  };
+}
+
+/** Green shape of one exact-call sweep: EXACTLY one original call per decode,
+ * priv classes + no-arg pass the source object through, shared classes carry a
+ * private ([object ArrayBuffer]) copy — never the source — bytes/opts exact,
+ * unique sentinel returns unchanged. */
+const EXACT_SWEEP_GREEN: { callCount: number; rows: Record<ExactCallRowName, ExactCallRow> } = {
+  callCount: 9,
+  rows: {
+    priv: pass(HELLO),
+    privDataView: pass(HELLO),
+    privArrayBuffer: pass(HELLO),
+    noArg: {
+      newCalls: 1,
+      retSentinel: true,
+      isSource: true,
+      backingBrand: '[object Undefined]',
+      bytes: null,
+      optsExact: true,
+    },
+    sharedView: copy(HELLO),
+    sharedDataView: copy(HELLO),
+    rawShared: copy(RAW_BYTES_EXACT),
+    stream1: copy([0xc3]),
+    stream2: copy([0xa9]),
+  },
 };
 
 const COMBOS = [
@@ -130,7 +222,7 @@ function each(fn: (combo: ComboKey, r: ProbeResult) => void): void {
   for (const [combo, r] of results) fn(combo, r);
 }
 
-test('preconditions: crossOriginIsolated===false, no SAB binding, shared wasm memory EXISTS (probe rows 1–2)', () => {
+test('preconditions: crossOriginIsolated===false, no SAB binding, shared wasm memory EXISTS (probe rows 1–2), NO COOP/COEP on any response class (row 16)', () => {
   expect(results.size).toBe(4);
   each((combo, r) => {
     expect(r.crossOriginIsolated, combo).toBe(false);
@@ -138,6 +230,22 @@ test('preconditions: crossOriginIsolated===false, no SAB binding, shared wasm me
     // The killed frozen assumption: shared BufferSource exists without COI.
     expect(r.wasmSharedBrand, combo).toBe('[object SharedArrayBuffer]');
     expect(r.wasmSharedInstanceofArrayBuffer, combo).toBe(false);
+    // Header provenance: derived state alone lies — a server adding ONLY COOP
+    // or ONLY COEP still reports crossOriginIsolated === false. BOTH headers
+    // must be absent on EVERY response class the substrate consumes.
+    for (const cls of [
+      'document',
+      'workerScript',
+      'probeModule',
+      'builtShim',
+      'builtUtilTypes',
+    ] as const) {
+      expect(r.responseHeaders[cls], `${combo} ${cls}`).toEqual({
+        status: 200,
+        coop: null,
+        coep: null,
+      });
+    }
   });
 });
 
@@ -219,6 +327,30 @@ test('parity 9: spy identity + unique sentinel returns per non-shared class; thr
     expect(r.identity.errorIdentitySharedFirst, combo).toEqual({
       ok: true,
       value: { first: true, throwCount: 1 },
+    });
+    // Sibling sweep — fresh TypeError per call, EVERY shared class: a
+    // native-first wrapper retrying only on TypeError passes the generic-Error
+    // row, and a Uint8Array-only row misses a DataView/raw/streaming branch.
+    for (const cls of ['sharedView', 'sharedDataView', 'rawShared', 'streaming'] as const) {
+      expect(r.identity.errorFirstShared[cls], `${combo} ${cls}`).toEqual({
+        ok: true,
+        value: { first: true, throwCount: 1 },
+      });
+    }
+  });
+});
+
+test('parity 13: ordered exact-call log — original invoked EXACTLY once per decode; only shared-source calls get a private copy (direct+aggregate)', () => {
+  // Output and error-identity rows alone admit a native-first retry wrapper
+  // that hands the ORIGINAL decoder the shared source before copying.
+  each((combo, r) => {
+    expect(r.exactCallLog.direct, `${combo} direct`).toEqual({
+      ok: true,
+      value: EXACT_SWEEP_GREEN,
+    });
+    expect(r.exactCallLog.aggregate, `${combo} aggregate`).toEqual({
+      ok: true,
+      value: EXACT_SWEEP_GREEN,
     });
   });
 });

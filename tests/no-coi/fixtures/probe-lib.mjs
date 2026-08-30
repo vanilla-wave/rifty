@@ -53,6 +53,43 @@ async function exactTextRecord(text) {
   };
 }
 
+/** EXACT byte record for big buffers (transcript-safe twin of exactTextRecord). */
+async function exactBytesRecord(bytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return {
+    length: bytes.length,
+    sha256: Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join(''),
+  };
+}
+
+/**
+ * Header provenance (provenance-lie killer): derived state alone lies — a
+ * server adding ONLY COOP or ONLY COEP still yields
+ * `crossOriginIsolated === false`, silently violating the lane's load-bearing
+ * property (tests/no-coi/server.mjs: NO isolation headers at all). Sweep every
+ * response class the substrate consumes — document, Worker script, probe
+ * module, built bundles — and record BOTH headers per response.
+ */
+async function responseHeaderSweep() {
+  const paths = {
+    document: '/index.html',
+    workerScript: '/probe-worker.mjs',
+    probeModule: '/probe-lib.mjs',
+    builtShim: '/dist/worker-realm-compat.mjs',
+    builtUtilTypes: '/dist/util-types.mjs',
+  };
+  const out = {};
+  for (const [name, path] of Object.entries(paths)) {
+    const resp = await fetch(path, { cache: 'no-store' });
+    out[name] = {
+      status: resp.status,
+      coop: resp.headers.get('cross-origin-opener-policy'),
+      coep: resp.headers.get('cross-origin-embedder-policy'),
+    };
+  }
+  return out;
+}
+
 /** `self` observed WITHOUT writing it: pre-write value + ownership + descriptor.
  * Kills the lossy check where an assignment-then-compare passes on `self=null`
  * or an inherited setter. */
@@ -181,7 +218,153 @@ async function identityChecks(installShim) {
       return { first: thrown.length > 0 && err === thrown[0], throwCount: thrown.length };
     }
   });
+  // Sibling sweep, fresh TypeError per call, EVERY shared class: a native-first
+  // wrapper that retries only on TypeError passes the generic-Error row above,
+  // and a Uint8Array-only row misses a DataView/raw retry branch. With fresh
+  // TypeErrors any retry propagates the SECOND object with count 2.
+  const errorFirstRow = (makeInput, streamOpts) =>
+    attempt(() => {
+      const typeErrors = [];
+      class FreshTypeErrorDecoder {
+        decode() {
+          const err = new TypeError(`fresh-typeerror-${typeErrors.length}`);
+          typeErrors.push(err);
+          throw err;
+        }
+      }
+      installShim(FreshTypeErrorDecoder);
+      try {
+        if (streamOpts === undefined) new FreshTypeErrorDecoder().decode(makeInput());
+        else new FreshTypeErrorDecoder().decode(makeInput(), streamOpts);
+        return 'no-throw';
+      } catch (err) {
+        return {
+          first: typeErrors.length > 0 && err === typeErrors[0],
+          throwCount: typeErrors.length,
+        };
+      }
+    });
+  out.errorFirstShared = {
+    sharedView: await errorFirstRow(() => new Uint8Array(makeSharedWasmMemory().buffer, 0, 4)),
+    sharedDataView: await errorFirstRow(() => new DataView(makeSharedWasmMemory().buffer, 0, 4)),
+    rawShared: await errorFirstRow(() => makeSharedWasmMemory().buffer),
+    streaming: await errorFirstRow(() => new Uint8Array(makeSharedWasmMemory().buffer, 0, 1), {
+      stream: true,
+    }),
+  };
   return out;
+}
+
+/** Bytes + brand + identity of whatever object reached the original decoder —
+ * realm-safe (brand check, never a bare `SharedArrayBuffer` reference). */
+async function receivedInputRecord(entry, source, expectOpts) {
+  const input = entry.input;
+  const backing = ArrayBuffer.isView(input) ? input.buffer : input;
+  const bytes =
+    input === undefined
+      ? null
+      : ArrayBuffer.isView(input)
+        ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+        : new Uint8Array(input);
+  return {
+    isSource: input === source,
+    backingBrand: Object.prototype.toString.call(backing),
+    bytes:
+      bytes === null ? null : bytes.length > 16 ? await exactBytesRecord(bytes) : Array.from(bytes),
+    optsExact: entry.opts === expectOpts,
+  };
+}
+
+/**
+ * Parity 13 substrate — ordered exact-call log over the full declared class
+ * set (priv view/DataView/ArrayBuffer, no-arg, shared view/DataView/raw,
+ * streaming): the original decoder is invoked EXACTLY once per decode, in
+ * order; only shared-source calls carry a private copy (never the source,
+ * exact bytes, exact opts object); unique sentinel returns come back
+ * unchanged. Output/error rows alone admit a native-first retry wrapper.
+ */
+async function orderedExactCallSweep(d, log) {
+  const enc = new TextEncoder();
+  const mem = makeSharedWasmMemory();
+  writeHelloWithSentinels(mem.buffer);
+  const streamMem = makeSharedWasmMemory();
+  const streamBytes = new Uint8Array(streamMem.buffer);
+  streamBytes[0] = 0xc3;
+  streamBytes[1] = 0xa9;
+  const sources = {
+    priv: enc.encode('hello'),
+    privDataView: new DataView(enc.encode('hello').buffer),
+    privArrayBuffer: enc.encode('hello').buffer,
+    sharedView: new Uint8Array(mem.buffer, 3, 5),
+    sharedDataView: new DataView(mem.buffer, 3, 5),
+    rawShared: mem.buffer,
+    stream1: new Uint8Array(streamMem.buffer, 0, 1),
+    stream2: new Uint8Array(streamMem.buffer, 1, 1),
+  };
+  const opts = { stream: false };
+  const streamOpts = { stream: true };
+  const finalOpts = { stream: false };
+  const calls = [
+    ['priv', sources.priv, opts, () => d.decode(sources.priv, opts)],
+    ['privDataView', sources.privDataView, opts, () => d.decode(sources.privDataView, opts)],
+    [
+      'privArrayBuffer',
+      sources.privArrayBuffer,
+      opts,
+      () => d.decode(sources.privArrayBuffer, opts),
+    ],
+    ['noArg', undefined, undefined, () => d.decode()],
+    ['sharedView', sources.sharedView, opts, () => d.decode(sources.sharedView, opts)],
+    ['sharedDataView', sources.sharedDataView, opts, () => d.decode(sources.sharedDataView, opts)],
+    ['rawShared', sources.rawShared, opts, () => d.decode(sources.rawShared, opts)],
+    ['stream1', sources.stream1, streamOpts, () => d.decode(sources.stream1, streamOpts)],
+    ['stream2', sources.stream2, finalOpts, () => d.decode(sources.stream2, finalOpts)],
+  ];
+  const rows = {};
+  for (const [name, source, expectOpts, call] of calls) {
+    const before = log.length;
+    const ret = call();
+    rows[name] = {
+      newCalls: log.length - before,
+      retSentinel: ret === `log-${log.length}`,
+      ...(await receivedInputRecord(log[log.length - 1], source, expectOpts)),
+    };
+  }
+  return { callCount: log.length, rows };
+}
+
+/** Both REAL install carriers: direct = injected logging class through
+ * `installSharedMemoryTolerantTextDecoder`; aggregate = the realm decoder
+ * swapped to an unmarked logging original, then `installWorkerRealmCompat()`
+ * re-patches over it (restored after). */
+async function exactCallSweeps(shim) {
+  const makeLog = () => {
+    const log = [];
+    const decode = (...args) => {
+      log.push({ input: args[0], opts: args[1] });
+      return `log-${log.length}`;
+    };
+    return { log, decode };
+  };
+  const direct = await attempt(async () => {
+    const { log, decode } = makeLog();
+    class LoggingDecoder {}
+    LoggingDecoder.prototype.decode = decode;
+    shim.installSharedMemoryTolerantTextDecoder(LoggingDecoder);
+    return await orderedExactCallSweep(new LoggingDecoder(), log);
+  });
+  const aggregate = await attempt(async () => {
+    const saved = TextDecoder.prototype.decode;
+    const { log, decode } = makeLog();
+    TextDecoder.prototype.decode = decode;
+    try {
+      shim.installWorkerRealmCompat();
+      return await orderedExactCallSweep(new TextDecoder(), log);
+    } finally {
+      TextDecoder.prototype.decode = saved;
+    }
+  });
+  return { direct, aggregate };
 }
 
 /**
@@ -204,6 +387,19 @@ export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = 
         r.crossOriginIsolated,
       )}, typeof SharedArrayBuffer=${r.sabBindingTypeof}`,
     );
+  }
+  if (requireNoCoi) {
+    // Response-header provenance: BOTH isolation headers absent on EVERY
+    // response class — derived state above passes a COOP-only/COEP-only server.
+    r.responseHeaders = await responseHeaderSweep();
+    for (const [name, h] of Object.entries(r.responseHeaders)) {
+      if (h.status !== 200 || h.coop !== null || h.coep !== null) {
+        throw new Error(
+          `no-COI substrate served isolation headers on ${name}: ` +
+            `status=${h.status} coop=${String(h.coop)} coep=${String(h.coep)}`,
+        );
+      }
+    }
   }
 
   const mem = makeSharedWasmMemory();
@@ -310,6 +506,9 @@ export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = 
   // recorded here so the Node oracle rows are replayable and the realm rows
   // flip green with the fix).
   r.identity = await identityChecks(shim.installSharedMemoryTolerantTextDecoder);
+
+  // Parity 13 substrate: ordered exact-call log, BOTH real install carriers.
+  r.exactCallLog = await exactCallSweeps(shim);
 
   return r;
 }

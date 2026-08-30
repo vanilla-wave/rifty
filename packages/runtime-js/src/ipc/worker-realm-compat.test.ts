@@ -181,43 +181,106 @@ function receivedShape(input: unknown): { shared: boolean; bytes: number[] } {
   throw new Error('unexpected original-decoder input');
 }
 
-describe('ordered exact-call log — parity 13 (original decoder invoked EXACTLY once; only the shared-path call gets a private copy)', () => {
+describe('ordered exact-call log — parity 13 (original decoder invoked EXACTLY once per decode; only shared-source calls get a private copy)', () => {
   // Output and error-identity rows alone admit a try-native/catch/copy-retry
   // wrapper that invokes the ORIGINAL decoder on the shared input first. The
-  // ordered log kills it: one original call per decode, and the one call on a
-  // shared source carries a private (non-shared) copy with the exact bytes.
+  // ordered log kills it — over the FULL declared class set (a SAB-present-only
+  // shared-streaming or DataView/raw native-first branch must not slip past a
+  // Uint8Array-only, stream:false sweep): one original call per decode, and
+  // every call on a shared source carries a private copy with the exact bytes.
   const HELLO = [104, 101, 108, 108, 111];
   const SENTINEL_SAB_BYTES = [0xff, 0xff, 0xff, ...HELLO, 0xff, 0xff];
+
+  interface SweepSources {
+    priv: Uint8Array;
+    privDataView: DataView;
+    privArrayBuffer: ArrayBuffer;
+    view: Uint8Array;
+    dataView: DataView;
+    sab: SharedArrayBuffer;
+    stream1: Uint8Array;
+    stream2: Uint8Array;
+  }
+
+  function makeSweepSources(): SweepSources {
+    const { sab, view, dataView } = makeSentinelSab();
+    const streamSab = new SharedArrayBuffer(2);
+    new Uint8Array(streamSab).set([0xc3, 0xa9]); // 'é' split across two views
+    return {
+      priv: new TextEncoder().encode('plain'),
+      privDataView: new DataView(new TextEncoder().encode('plain').buffer),
+      privArrayBuffer: new TextEncoder().encode('plain').buffer,
+      view,
+      dataView,
+      sab,
+      stream1: new Uint8Array(streamSab, 0, 1),
+      stream2: new Uint8Array(streamSab, 1, 1),
+    };
+  }
+
+  function runSweep(
+    d: TextDecoder,
+    s: SweepSources,
+    opts: object,
+    streamOpts: object,
+    finalOpts: object,
+  ): string[] {
+    return [
+      d.decode(s.priv, opts),
+      d.decode(s.privDataView, opts),
+      d.decode(s.privArrayBuffer, opts),
+      d.decode(),
+      d.decode(s.view, opts),
+      d.decode(s.dataView, opts),
+      d.decode(s.sab as unknown as ArrayBuffer, opts),
+      d.decode(s.stream1, streamOpts),
+      d.decode(s.stream2, finalOpts),
+    ];
+  }
 
   function assertOrderedLog(
     log: { input: unknown; opts: unknown }[],
     returns: string[],
-    sources: { priv: Uint8Array; view: Uint8Array; dataView: DataView; sab: SharedArrayBuffer },
+    s: SweepSources,
     opts: object,
+    streamOpts: object,
+    finalOpts: object,
   ): void {
     // EXACTLY one original call per decode, in order — no retry, no extra call.
-    expect(log).toHaveLength(4);
-    expect(returns).toEqual(['ret-1', 'ret-2', 'ret-3', 'ret-4']);
-    // Non-shared: the EXACT source object straight through.
-    expect(log[0]?.input).toBe(sources.priv);
-    expect(log[0]?.opts).toBe(opts);
-    // Shared classes: never the source object, never shared-backed, bytes exact.
-    const sharedRows: [number, unknown, number[]][] = [
-      [1, sources.view, HELLO],
-      [2, sources.dataView, HELLO],
-      [3, sources.sab, SENTINEL_SAB_BYTES],
+    expect(log).toHaveLength(9);
+    expect(returns).toEqual(Array.from({ length: 9 }, (_, i) => `ret-${i + 1}`));
+    // Non-shared classes + no-arg: the EXACT source object straight through.
+    const passRows: [number, unknown][] = [
+      [0, s.priv],
+      [1, s.privDataView],
+      [2, s.privArrayBuffer],
     ];
-    for (const [i, source, bytes] of sharedRows) {
+    for (const [i, source] of passRows) {
+      expect(log[i]?.input).toBe(source);
+      expect(log[i]?.opts).toBe(opts);
+    }
+    expect(log[3]?.input).toBeUndefined();
+    expect(log[3]?.opts).toBeUndefined();
+    // Shared classes incl. STREAMING: never the source object, never
+    // shared-backed, bytes exact, EXACT opts object per call.
+    const sharedRows: [number, unknown, number[], object][] = [
+      [4, s.view, HELLO, opts],
+      [5, s.dataView, HELLO, opts],
+      [6, s.sab, SENTINEL_SAB_BYTES, opts],
+      [7, s.stream1, [0xc3], streamOpts],
+      [8, s.stream2, [0xa9], finalOpts],
+    ];
+    for (const [i, source, bytes, rowOpts] of sharedRows) {
       const entry = log[i];
       expect(entry?.input).not.toBe(source);
       const shape = receivedShape(entry?.input);
       expect(shape.shared).toBe(false);
       expect(shape.bytes).toEqual(bytes);
-      expect(entry?.opts).toBe(opts);
+      expect(entry?.opts).toBe(rowOpts);
     }
   }
 
-  it('direct install: ordered log across priv view / shared view / shared DataView / raw SAB', () => {
+  it('direct install: ordered log across priv view/DataView/ArrayBuffer, no-arg, shared view/DataView/raw SAB, streaming', () => {
     const log: { input: unknown; opts: unknown }[] = [];
     class LoggingDecoder {
       decode(...args: unknown[]): string {
@@ -227,17 +290,12 @@ describe('ordered exact-call log — parity 13 (original decoder invoked EXACTLY
     }
     const Dec = LoggingDecoder as unknown as typeof TextDecoder;
     installSharedMemoryTolerantTextDecoder(Dec);
-    const d = new Dec();
-    const { sab, view, dataView } = makeSentinelSab();
-    const priv = new TextEncoder().encode('plain');
+    const s = makeSweepSources();
     const opts = { stream: false };
-    const returns = [
-      d.decode(priv, opts),
-      d.decode(view, opts),
-      d.decode(dataView, opts),
-      d.decode(sab as unknown as ArrayBuffer, opts),
-    ];
-    assertOrderedLog(log, returns, { priv, view, dataView, sab }, opts);
+    const streamOpts = { stream: true };
+    const finalOpts = { stream: false };
+    const returns = runSweep(new Dec(), s, opts, streamOpts, finalOpts);
+    assertOrderedLog(log, returns, s, opts, streamOpts, finalOpts);
   });
 
   it('aggregate install (installWorkerRealmCompat): same log through the realm TextDecoder', () => {
@@ -253,17 +311,93 @@ describe('ordered exact-call log — parity 13 (original decoder invoked EXACTLY
     }) as typeof TextDecoder.prototype.decode;
     try {
       installWorkerRealmCompat();
-      const d = new TextDecoder();
-      const { sab, view, dataView } = makeSentinelSab();
-      const priv = new TextEncoder().encode('plain');
+      const s = makeSweepSources();
       const opts = { stream: false };
-      const returns = [
-        d.decode(priv, opts),
-        d.decode(view, opts),
-        d.decode(dataView, opts),
-        d.decode(sab as unknown as ArrayBuffer, opts),
-      ];
-      assertOrderedLog(log, returns, { priv, view, dataView, sab }, opts);
+      const streamOpts = { stream: true };
+      const finalOpts = { stream: false };
+      const returns = runSweep(new TextDecoder(), s, opts, streamOpts, finalOpts);
+      assertOrderedLog(log, returns, s, opts, streamOpts, finalOpts);
+    } finally {
+      TextDecoder.prototype.decode = realDecode;
+      if (hadSelf) {
+        Object.defineProperty(globalThis, 'self', {
+          value: savedSelf,
+          writable: true,
+          configurable: true,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'self');
+      }
+    }
+  });
+});
+
+describe('shared-input FIRST-error identity + throw count 1 — fresh TypeError per call, EVERY shared class (parity 9 sibling)', () => {
+  // A native-first wrapper that retries only on TypeError passes a
+  // generic-Error row; one that retries only for DataView/raw/streaming inputs
+  // passes a Uint8Array-only row. Fresh TypeErrors across the whole shared
+  // class set: any retry propagates the SECOND object with count 2.
+  function makeFreshTypeErrorDecoder(): { Dec: typeof TextDecoder; thrown: TypeError[] } {
+    const thrown: TypeError[] = [];
+    class FreshTypeErrorDecoder {
+      decode(): string {
+        const err = new TypeError(`fresh-typeerror-${thrown.length}`);
+        thrown.push(err);
+        throw err;
+      }
+    }
+    return { Dec: FreshTypeErrorDecoder as unknown as typeof TextDecoder, thrown };
+  }
+
+  function sharedClassInputs(): [string, unknown, object | undefined][] {
+    const { sab, view, dataView } = makeSentinelSab();
+    const streamSab = new SharedArrayBuffer(1);
+    new Uint8Array(streamSab)[0] = 0xc3;
+    return [
+      ['shared Uint8Array', view, undefined],
+      ['shared DataView', dataView, undefined],
+      ['raw SharedArrayBuffer', sab, undefined],
+      ['streaming shared view', new Uint8Array(streamSab, 0, 1), { stream: true }],
+    ];
+  }
+
+  it('direct install: each shared class propagates the FIRST TypeError with throw count EXACTLY 1', () => {
+    for (const [label, input, opts] of sharedClassInputs()) {
+      const { Dec, thrown } = makeFreshTypeErrorDecoder();
+      installSharedMemoryTolerantTextDecoder(Dec);
+      let caught: unknown;
+      try {
+        new Dec().decode(input as Uint8Array, opts as TextDecodeOptions | undefined);
+      } catch (err) {
+        caught = err;
+      }
+      expect(thrown, label).toHaveLength(1);
+      expect(caught, label).toBe(thrown[0]);
+    }
+  });
+
+  it('aggregate install (installWorkerRealmCompat): same pins through the realm TextDecoder', () => {
+    const realDecode = TextDecoder.prototype.decode;
+    const hadSelf = 'self' in globalThis;
+    const savedSelf = (globalThis as { self?: unknown }).self;
+    try {
+      for (const [label, input, opts] of sharedClassInputs()) {
+        const thrown: TypeError[] = [];
+        TextDecoder.prototype.decode = ((): string => {
+          const err = new TypeError(`fresh-typeerror-${thrown.length}`);
+          thrown.push(err);
+          throw err;
+        }) as typeof TextDecoder.prototype.decode;
+        installWorkerRealmCompat();
+        let caught: unknown;
+        try {
+          new TextDecoder().decode(input as Uint8Array, opts as TextDecodeOptions | undefined);
+        } catch (err) {
+          caught = err;
+        }
+        expect(thrown, label).toHaveLength(1);
+        expect(caught, label).toBe(thrown[0]);
+      }
     } finally {
       TextDecoder.prototype.decode = realDecode;
       if (hadSelf) {
