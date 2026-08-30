@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: ready
+status: draft
 title: worker-realm-compat TextDecoder shim throws ReferenceError in realms without SharedArrayBuffer
 created: 2026-08-26
 why: without COI Chromium defines NO `SharedArrayBuffer` global binding; the shim's bare references make EVERY decode() in that realm throw ReferenceError — yet shared `WebAssembly.Memory` views EXIST there and Node decodes them, so the patch is needed, realm-safe
@@ -9,6 +9,33 @@ epic: no-coi-sandbox-tier
 sources: [docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, docs/backlog/runtime-js/reference/no-coi-realm-probe-transcript-2026-08-29.json, tools/probes/no-coi-realm-probe.mjs]
 code: [packages/runtime-js/src/ipc/worker-realm-compat.ts, packages/runtime-js/src/ipc/install-process.ts]
 ---
+
+## Demotion — checkpoint 8, 2026-08-30 (ready → draft, fork recorded)
+
+Per decision-workflow §Backlog readiness 5 + fault-classes §Contract
+escalation (re-refine arm; attempt 9). Pre-demotion Acceptance/Parity
+verbatim: `reference/bare-sab-guard-pre-demotion-2026-08-30.md` — this re-cut
+only ADDED observables; nothing below is weakened.
+
+THE FORK (user-owned, manual `rifty-refine` requested): the unit's
+Contract+RED batch is 12 declared-RED substrate blocks against a 3–5 pickup
+band; the Budget rule ("expected-RED batch far above the declared band → the
+unit is too big: re-cut/split before implementation", backlog README §Goal
+run; PICKUP step 3 "far above any prior estimate → split it now") was ruled
+uncured by the checkpoint-7 split (it moved only green tooling). No honest
+in-place cure remains: (a) every candidate split of the RED batch yields a
+unit with no independent deliverable — the fix is ONE atomic patched body
+(worker-realm-compat.ts:75,80), so a second unit's REDs would flip green with
+zero code of its own, violating §Simplicity and "one PR = one reviewable
+delivered behavior"; (b) band re-declaration alone was rejected at review
+checkpoints 7–8; (c) shrinking the batch means dropping substrate carriers of
+review-added wrapper-killer pins (parity 6/7/9/12/13/14 in-realm rows) — an
+observable weakening of what the fix's acceptance PROVES in the real no-COI
+realm, never the agent's call. Refine question: **stand the 12-block batch as
+this unit's declared band (accept an over-band atomic-fix unit), or name
+which substrate pin carriers demote to COI-vitest-twin-only guards (batch
+shrinks into band; in-realm proof narrows accordingly), or split by a
+boundary the user names.** Until answered: draft — never implement.
 
 ## Context
 
@@ -68,13 +95,20 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   `{stream:true}` on one decoder → exact char; non-shared and no-arg unchanged.
 - Realm reference: **real no-COI Chromium 148.0.7778.96** (Playwright-pinned
   build); mechanism: page served over plain HTTP with NO COOP/COEP + a
-  dedicated module Worker on it (probe §2026-08-29). Every substrate test
-  asserts `crossOriginIsolated === false` AND
-  `typeof SharedArrayBuffer === 'undefined'` before acting — a future Chromium
-  change fails loud, never silently re-scopes the test. Realm provenance
+  dedicated module Worker on it (probe §2026-08-29). The probe body GATES all
+  realm preconditions — `crossOriginIsolated === false`,
+  `typeof SharedArrayBuffer === 'undefined'`, shared `WebAssembly.Memory`
+  buffer brand `[object SharedArrayBuffer]` with `instanceof ArrayBuffer`
+  false — BEFORE any built-module import, install, or decode: a future
+  Chromium change REJECTS loud, never acts first and fails a later assertion
+  (recording-while-acting was the checkpoint-8 frozen-assumption blocker).
+  Rejection-precedes-action is itself detection-pinned (green, page AND worker
+  siblings): a wrong-brand realm sim makes `runProbe` throw the named
+  precondition error with side-effect sentinels — no `/dist/` built module
+  ever requested, realm decode left unmarked (probe row 19). Realm provenance
   beyond derived state (BOTH isolation headers absent on every ACTUALLY
-  CONSUMED response class, injection-control-pinned — probe row 16) is the
-  substrate-lane item's contract:
+  CONSUMED response class with status 200, injection- AND absent/non-200-
+  control-pinned — probe row 16) is the substrate-lane item's contract:
   `toolchain-build/no-coi-substrate-lane` (split checkpoint 7).
 - Approximation rejected: stubbing `SharedArrayBuffer = undefined` in a
   COI/Node realm is NOT this realm (`instanceof undefined` TypeError, not the
@@ -88,14 +122,18 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   asserting the Reference-contract preconditions before acting. Lane, header
   provenance, required `no-coi-chromium` CI job + gate mapping, and the replay
   driver are the split sibling's contract
-  (`toolchain-build/no-coi-substrate-lane` — checkpoint 7; the required job
-  keeps this unit's draft red until the fix, green to merge). THIS unit's
+  (`toolchain-build/no-coi-substrate-lane` — checkpoint 7). THIS unit's
   committed carrier: `tests/no-coi/worker-realm-compat.no-coi.spec.ts` — today
-  12 RED (parity 1–7, 9, 13, 14, 15 — every decode failure
+  12 declared-RED blocks (parity 1–7, 9, 13, 14, 15 — every decode failure
   `ReferenceError: SharedArrayBuffer is not defined`; parity 12, every
-  poisoned decode trips the counting accessor) + 2 green pins (preconditions
-  incl. consumed-response header provenance, parity 10); flips GREEN in the
-  fix PR, never edited to pass.
+  poisoned decode trips the counting accessor) + green pins (preconditions
+  incl. consumed-response header provenance, parity 10, precondition-rejection
+  detection ×2). The RED batch is runner-DECLARED (`test.fail(true,
+  EXPECTED_RED)`, checkpoint 8 — kills the checkpoint-7 map cycle): every RED
+  still EXECUTES on the required `no-coi-chromium` job and must fail; an
+  unexpected pass fails the job LOUD, so the fix PR must strip exactly the 12
+  annotations to go green — assertions are NEVER edited; the RED→GREEN flip is
+  machine-detected, not narrated.
 - After install (direct or via `installWorkerRealmCompat()`) in that realm,
   decode NEVER evaluates the absent binding — every input class:
   `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm
@@ -161,15 +199,24 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   twice and propagates the second) — swept with fresh TypeErrors across EVERY
   shared class (view/DataView/raw/streaming, probe row 18) AND every private
   sibling + no-arg (priv view/DataView/ArrayBuffer/no-arg — a reused sentinel
-  lets a private-only retry rethrow the same object unnoticed), AND through
-  the REALM's global TextDecoder via BOTH real carriers (per class: realm
-  decode swapped to an unmarked fresh-TypeError original, re-install
-  direct/aggregate, one decode — transcript `errorFirstRealm`; the injected
-  rows alone admit a fix retrying fresh errors only for the absent-binding
-  realm's global decoder). COI vitest twins direct+aggregate for shared AND
-  private sets: a wrapper retrying only on TypeError, only for
-  non-Uint8Array classes, only failing private inputs, or only on the realm
-  global, fails the sweep.
+  lets a private-only retry rethrow the same object unnoticed), AND every
+  declared `{stream:false}` sibling under an EXPLICIT `{stream:false}` opts
+  object (priv/privDataView/privArrayBuffer/sharedView/sharedDataView/raw —
+  every base row omits opts or passes `{stream:true}` and the exact-call
+  log's stream:false rows use a NONTHROWING logger, so a wrapper retrying
+  only a THROWN `opts.stream===false` call would pass both; transcript
+  `identity.errorFirstOptsFalse`) INCLUDING the streaming pair's FINAL call
+  (original RETURNS on `{stream:true}`, fresh-throws on the final: first
+  error, count 1, original invoked EXACTLY twice — `originalCalls`, killing a
+  pair-replaying wrapper), AND through the REALM's global TextDecoder via
+  BOTH real carriers, full 15-class set (per class: realm decode swapped to
+  an unmarked fresh-TypeError original, re-install direct/aggregate, one
+  decode — transcript `errorFirstRealm`; the injected rows alone admit a fix
+  retrying fresh errors only for the absent-binding realm's global decoder).
+  COI vitest twins direct+aggregate for shared, private, AND stream:false
+  sets incl. the streaming final: a wrapper retrying only on TypeError, only
+  for non-Uint8Array classes, only failing private inputs, only thrown
+  stream:false calls, or only on the realm global, fails the sweep.
 - Mixed install order (parity 14): a direct helper install FIRST, then the
   realm's FIRST `installWorkerRealmCompat()` — decoder identity stays the
   captured patched fn AND global/self siblings still install AND decode green
@@ -189,11 +236,13 @@ mechanics + kernel goldens: `toolchain-build/no-coi-substrate-lane`); raw
 output committed at
 `reference/no-coi-realm-probe-transcript-2026-08-29.json`. Committed test
 carriers: parity 1–7, 9, 10, 12, 13, 14, 15 →
-`tests/no-coi/worker-realm-compat.no-coi.spec.ts` (12 RED / 2 green today;
-the preconditions pin carries the row-16 consumed-response provenance);
+`tests/no-coi/worker-realm-compat.no-coi.spec.ts` (12 declared-RED /
+4 green today — preconditions incl. row-16 consumed-response provenance,
+parity 10, precondition-rejection detection page+worker);
 parity 6 call-one sibling snapshot + parity 7 (direct+aggregate), 8, 9, 13
-(full class set + fresh-TypeError first-error sweeps, shared AND
-private/no-arg) → `worker-realm-compat.test.ts` added pins (green);
+(full class set + fresh-TypeError first-error sweeps — shared, private/no-arg,
+AND explicit stream:false incl. the streaming final) →
+`worker-realm-compat.test.ts` added pins (22 green);
 parity 11 → existing suite unmodified. RED target unless marked pin/green.
 
 1. no-COI page+worker: `decode(bytes('hello'))` → `'hello'`; today
@@ -239,16 +288,23 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
    DataView / raw buffer / streaming `{stream:true}`
    (`identity.errorFirstShared`) — AND every private sibling + no-arg — priv
    view / DataView / ArrayBuffer / no-arg (`identity.errorFirstPrivate`) —
-   AND the REALM's global TextDecoder through BOTH real carriers, full
-   8-class set (per class: realm decode swapped to an unmarked
-   fresh-TypeError original, re-install direct/aggregate, one decode —
-   `errorFirstRealm.direct`/`.aggregate`): `{first:true, throwCount:1}`
-   each — a native-first wrapper retrying only on TypeError passes the
-   generic-Error row; a Uint8Array-only row misses a DataView/raw/streaming
-   retry branch; a private-only retry rethrows a REUSED sentinel unnoticed
-   (fresh error + count 1 kills it); an injected-classes-only sweep misses a
-   fix retrying fresh errors only for the absent-binding realm's global
-   decoder.
+   AND every declared `{stream:false}` sibling under an EXPLICIT
+   `{stream:false}` (priv/privDataView/privArrayBuffer/sharedView/
+   sharedDataView/raw, `identity.errorFirstOptsFalse` — base rows omit opts
+   and the exact-call logger never throws, so a wrapper retrying only a
+   THROWN `opts.stream===false` call passes both) incl. the streaming pair's
+   FINAL call (original returns on `{stream:true}`, fresh-throws on the
+   final: `{first:true, throwCount:1, originalCalls:2}` — a pair-replaying
+   wrapper calls 3+, a retry throws twice) — AND the REALM's global
+   TextDecoder through BOTH real carriers, full 15-class set (per class:
+   realm decode swapped to an unmarked fresh-TypeError original, re-install
+   direct/aggregate, one decode — `errorFirstRealm.direct`/`.aggregate`):
+   `{first:true, throwCount:1}` each — a native-first wrapper retrying only
+   on TypeError passes the generic-Error row; a Uint8Array-only row misses a
+   DataView/raw/streaming retry branch; a private-only retry rethrows a
+   REUSED sentinel unnoticed (fresh error + count 1 kills it); an
+   injected-classes-only sweep misses a fix retrying fresh errors only for
+   the absent-binding realm's global decoder.
 10. no-COI page+worker, built util-types:
     `isSharedArrayBuffer(new ArrayBuffer(1))` → `false`,
     `isAnyArrayBuffer(…)` → `true`, shared-wasm buffer → `true`/`true`, no
@@ -300,8 +356,9 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
 | no-SAB-binding realm × decode(non-shared / no-arg) | pass-through, Node-identical | parity 1–2 REDs |
 | SAB realm, native rejects shared × decode(shared view/DataView/raw SAB) | copy path, EXACT view bytes — sentinel + nonzero offset (`lossy-aggregate` killed) | parity 8 pin |
 | SAB realm × decode(non-shared) | exact input/opts object identity through; unique sentinel RETURN through unchanged; thrown error object identity through (`lossy-aggregate` killed twice — objects AND returns) | parity 9 pins |
-| any realm × decode(any class) through the patched fn | original decoder invoked EXACTLY once, ordered log over the FULL class set — priv view/DataView/ArrayBuffer, no-arg, shared view/DataView/raw, streaming; every shared-source call = private copy, never the original on shared input; first-error identity with throw count 1, fresh-TypeError swept per shared class AND per private class + no-arg AND through the realm decoder direct+aggregate (`observable-order` try-native-retry killed; `sibling-drift` catch-TypeError / class-scoped / private-only / realm-global-only retry killed) | parity 13 COI pins + substrate REDs (probe row 17); parity 9 first-error + row-18 sweeps |
-| substrate lane × served response headers | consumed-response provenance + injection controls — `toolchain-build/no-coi-substrate-lane` (split checkpoint 7) | lane item fault matrix (probe row 16) |
+| any realm × decode(any class) through the patched fn | original decoder invoked EXACTLY once, ordered log over the FULL class set — priv view/DataView/ArrayBuffer, no-arg, shared view/DataView/raw, streaming; every shared-source call = private copy, never the original on shared input; first-error identity with throw count 1, fresh-TypeError swept per shared class AND per private class + no-arg AND per explicit `{stream:false}` sibling incl. the streaming FINAL call (originalCalls EXACTLY 2) AND through the realm decoder direct+aggregate, 15 classes (`observable-order` try-native-retry killed; `sibling-drift` catch-TypeError / class-scoped / private-only / thrown-stream:false-only / realm-global-only retry killed) | parity 13 COI pins + substrate REDs (probe row 17); parity 9 first-error + row-18 sweeps incl. `errorFirstOptsFalse` |
+| wrong-brand realm × runProbe | loud NAMED precondition rejection BEFORE any built-module import/install/decode; side-effect sentinels prove order — no `/dist/` request, decode unmarked (`frozen-assumption` record-then-act killed, `observable-order` preserved) | precondition-detection green pins, page+worker (probe row 19) |
+| substrate lane × served response headers | consumed-response provenance + injection + absent/non-200 controls — `toolchain-build/no-coi-substrate-lane` (split checkpoint 7) | lane item fault matrix (probe row 16) |
 | no-SAB realm × direct install then FIRST aggregate call | sibling installers still run (global alias, own writable `self`), decoder identity kept, decode green (`observable-order` marker-early-return killed) | parity 14 RED |
 | any realm × repeat install | `false`, strict-identity patched fn, shared decode intact (`lossy-aggregate` killed) | parity 7 pin |
 
@@ -420,6 +477,26 @@ parity 11 → existing suite unmodified. RED target unless marked pin/green.
   compacted to lineage one-liners (approach-cost blocker). Transcript
   regenerated same command (Chromium 148.0.7778.96 / node v24.16.0). Still
   12 RED + 2 green.
+- Re-cut 2026-08-30 (8th) in place after Contract+RED checkpoint 8 (9-blocker
+  batch; same branch, attempt 9, lineage carries). Additions only (details in
+  the sections above): parity 9 fresh-error sweeps extended to explicit
+  `{stream:false}` siblings + the streaming FINAL call (`originalCalls`
+  EXACTLY 2), all carriers; runProbe preconditions GATED (incl. shared-memory
+  brand + instanceof) before any built-module import/install/decode, with
+  wrong-brand detection pins + side-effect sentinels page+worker; kernel
+  driver goldens hardened to actual-ReferenceError identity
+  (instanceof/prototype/constructor) + total-zero Worker counter, and
+  consumed-class absent/non-200 detection controls — both lane-item scope,
+  carried in the same batch. RED batch runner-DECLARED via
+  `test.fail(true, …)` — executed, loud on unexpected pass, fix PR strips
+  exactly the annotations — making the split SERIAL (lane = map item 1, lands
+  first; the checkpoint-7 cycle killed). Ledger rows 7–11 restored verbatim
+  (the checkpoint-7 ledger compaction violated append-only; THIS doc's
+  Decisions compaction stands — a contract re-cuts in place, the ledger only
+  grows). Budget: unit DEMOTED to draft with the band fork recorded
+  (§Demotion above) — manual `rifty-refine` requested. Transcript regenerated
+  same command (Chromium 148.0.7778.96 / node v24.16.0); lane 32 green
+  (12 declared-RED + 20 pins); vitest 22 green, still additions-only vs main.
 
 ## Reversibility
 

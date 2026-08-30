@@ -17,6 +17,7 @@ export declare const CONSUMED_CLASSES: {
     'document' | 'workerScript' | 'probeModule' | 'builtShim' | 'builtUtilTypes',
     string
   >;
+  kernelDriver: Record<'document' | 'kernelPublic' | 'kernelStdioDrain', string>;
 };
 export declare function captureConsumedResponses(page: Page): ConsumedResponse[];
 export declare function summarizeConsumedResponses(

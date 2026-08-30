@@ -11,7 +11,9 @@
  * destination-conditional injection.
  */
 
-/** Response classes the substrate consumes, by pathname. */
+/** Response classes the substrate consumes, by pathname. `kernelDriver` is the
+ * evidence driver's kernel-sweep page (probe row 12) — ONE authority for every
+ * sibling caller of {@link assertHeaderlessConsumption}. */
 export const CONSUMED_CLASSES = {
   page: {
     document: '/index.html',
@@ -25,6 +27,11 @@ export const CONSUMED_CLASSES = {
     probeModule: '/probe-lib.mjs',
     builtShim: '/dist/worker-realm-compat.mjs',
     builtUtilTypes: '/dist/util-types.mjs',
+  },
+  kernelDriver: {
+    document: '/index.html',
+    kernelPublic: '/dist/kernel-public.mjs',
+    kernelStdioDrain: '/dist/kernel-stdio-drain.mjs',
   },
 };
 
@@ -55,7 +62,10 @@ export function summarizeConsumedResponses(responses, classes) {
 }
 
 /** Throws unless BOTH isolation headers are absent on EVERY consumed response
- * AND every expected class was actually consumed (status 200). */
+ * AND every expected class was actually consumed with status 200. The absent
+ * and non-200 arms throw DISTINCT messages — each arm carries its own
+ * detection pin (`header-provenance.no-coi.spec.ts`); a headerless sweep alone
+ * proves nothing about classes the realm never (successfully) loaded. */
 export function assertHeaderlessConsumption(responses, classes) {
   for (const r of responses) {
     if (r.coop !== null || r.coep !== null) {
@@ -66,9 +76,16 @@ export function assertHeaderlessConsumption(responses, classes) {
     }
   }
   for (const [name, pathname] of Object.entries(classes)) {
-    if (!responses.some((r) => r.pathname === pathname && r.status === 200)) {
+    const hits = responses.filter((r) => r.pathname === pathname);
+    if (hits.length === 0) {
       throw new Error(
         `no-COI substrate never consumed ${name} (${pathname}) — header provenance unproven`,
+      );
+    }
+    if (!hits.some((r) => r.status === 200)) {
+      throw new Error(
+        `no-COI substrate consumed ${name} (${pathname}) only non-200 ` +
+          `(status ${hits.map((r) => r.status).join(',')}) — header provenance unproven`,
       );
     }
   }

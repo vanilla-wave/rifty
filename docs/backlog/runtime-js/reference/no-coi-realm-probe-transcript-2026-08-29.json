@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-30T02:27:09.858Z",
+  "generated": "2026-08-30T04:26:05.357Z",
   "command": "node tools/probes/no-coi-realm-probe.mjs",
   "chromium": "148.0.7778.96",
   "node": "v24.16.0",
@@ -238,6 +238,58 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstOptsFalse": {
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -309,6 +361,56 @@
               "first": false,
               "throwCount": 0
             }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
           }
         },
         "aggregate": {
@@ -366,6 +468,56 @@
             "value": {
               "first": false,
               "throwCount": 0
+            }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
             }
           }
         }
@@ -628,6 +780,58 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstOptsFalse": {
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -699,6 +903,56 @@
               "first": false,
               "throwCount": 0
             }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
           }
         },
         "aggregate": {
@@ -756,6 +1010,56 @@
             "value": {
               "first": false,
               "throwCount": 0
+            }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
             }
           }
         }
@@ -1015,6 +1319,58 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstOptsFalse": {
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -1086,6 +1442,56 @@
               "first": false,
               "throwCount": 0
             }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
           }
         },
         "aggregate": {
@@ -1143,6 +1549,56 @@
             "value": {
               "first": false,
               "throwCount": 0
+            }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
             }
           }
         }
@@ -1410,6 +1866,58 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstOptsFalse": {
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -1481,6 +1989,56 @@
               "first": false,
               "throwCount": 0
             }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
           }
         },
         "aggregate": {
@@ -1539,6 +2097,56 @@
               "first": false,
               "throwCount": 0
             }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
           }
         }
       },
@@ -1580,20 +2188,30 @@
         "ok": false,
         "errName": "ReferenceError",
         "errMsg": "SharedArrayBuffer is not defined",
+        "errIsReferenceError": true,
+        "errProtoIsReferenceError": true,
+        "errCtorIsReferenceError": true,
         "workerConstructions": 0
       },
       "spawnKernelWorker": {
         "ok": false,
         "errName": "ReferenceError",
         "errMsg": "SharedArrayBuffer is not defined",
+        "errIsReferenceError": true,
+        "errProtoIsReferenceError": true,
+        "errCtorIsReferenceError": true,
         "workerConstructions": 0
       },
       "retainedCreateWorkerOutputState": {
         "ok": false,
         "errName": "ReferenceError",
         "errMsg": "SharedArrayBuffer is not defined",
+        "errIsReferenceError": true,
+        "errProtoIsReferenceError": true,
+        "errCtorIsReferenceError": true,
         "workerConstructions": 0
-      }
+      },
+      "totalWorkerConstructions": 0
     }
   },
   "nodeOracle": {
@@ -1628,7 +2246,10 @@
         },
         "streaming": {
           "ok": true,
-          "value": ["", "é"]
+          "value": [
+            "",
+            "é"
+          ]
         }
       },
       "firstInstall": true,
@@ -1675,7 +2296,10 @@
         },
         "streaming": {
           "ok": true,
-          "value": ["", "é"]
+          "value": [
+            "",
+            "é"
+          ]
         },
         "privDataView": {
           "ok": true,
@@ -1826,6 +2450,58 @@
               "throwCount": 1
             }
           }
+        },
+        "errorFirstOptsFalse": {
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1,
+              "originalCalls": 2
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -1839,7 +2515,13 @@
                 "retSentinel": true,
                 "isSource": true,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "privDataView": {
@@ -1847,7 +2529,13 @@
                 "retSentinel": true,
                 "isSource": true,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "privArrayBuffer": {
@@ -1855,7 +2543,13 @@
                 "retSentinel": true,
                 "isSource": true,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "noArg": {
@@ -1871,7 +2565,13 @@
                 "retSentinel": true,
                 "isSource": false,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "sharedDataView": {
@@ -1879,7 +2579,13 @@
                 "retSentinel": true,
                 "isSource": false,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "rawShared": {
@@ -1898,7 +2604,9 @@
                 "retSentinel": true,
                 "isSource": false,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [195],
+                "bytes": [
+                  195
+                ],
                 "optsExact": true
               },
               "stream2": {
@@ -1906,7 +2614,9 @@
                 "retSentinel": true,
                 "isSource": false,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [169],
+                "bytes": [
+                  169
+                ],
                 "optsExact": true
               }
             }
@@ -1922,7 +2632,13 @@
                 "retSentinel": true,
                 "isSource": true,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "privDataView": {
@@ -1930,7 +2646,13 @@
                 "retSentinel": true,
                 "isSource": true,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "privArrayBuffer": {
@@ -1938,7 +2660,13 @@
                 "retSentinel": true,
                 "isSource": true,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "noArg": {
@@ -1954,7 +2682,13 @@
                 "retSentinel": true,
                 "isSource": false,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "sharedDataView": {
@@ -1962,7 +2696,13 @@
                 "retSentinel": true,
                 "isSource": false,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [104, 101, 108, 108, 111],
+                "bytes": [
+                  104,
+                  101,
+                  108,
+                  108,
+                  111
+                ],
                 "optsExact": true
               },
               "rawShared": {
@@ -1981,7 +2721,9 @@
                 "retSentinel": true,
                 "isSource": false,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [195],
+                "bytes": [
+                  195
+                ],
                 "optsExact": true
               },
               "stream2": {
@@ -1989,7 +2731,9 @@
                 "retSentinel": true,
                 "isSource": false,
                 "backingBrand": "[object ArrayBuffer]",
-                "bytes": [169],
+                "bytes": [
+                  169
+                ],
                 "optsExact": true
               }
             }
@@ -2053,6 +2797,56 @@
               "first": true,
               "throwCount": 1
             }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1,
+              "originalCalls": 2
+            }
           }
         },
         "aggregate": {
@@ -2111,6 +2905,56 @@
               "first": true,
               "throwCount": 1
             }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1,
+              "originalCalls": 2
+            }
           }
         }
       }
@@ -2146,7 +2990,10 @@
         },
         "streaming": {
           "ok": true,
-          "value": ["", "é"]
+          "value": [
+            "",
+            "é"
+          ]
         }
       },
       "firstInstall": true,
@@ -2354,6 +3201,58 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstOptsFalse": {
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -2425,6 +3324,56 @@
               "first": false,
               "throwCount": 0
             }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
+            }
           }
         },
         "aggregate": {
@@ -2482,6 +3431,56 @@
             "value": {
               "first": false,
               "throwCount": 0
+            }
+          },
+          "privOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBufferOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataViewOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawSharedOptsFalse": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streamingFinal": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0,
+              "originalCalls": 0
             }
           }
         }

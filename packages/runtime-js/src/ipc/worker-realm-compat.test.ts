@@ -566,3 +566,183 @@ describe('installWritableSelf', () => {
     expect((globalThis as { self?: unknown }).self).toBe(globalThis);
   });
 });
+
+describe('explicit {stream:false} FIRST-error pins — every declared stream:false sibling incl. the streaming FINAL call (parity 9 sibling)', () => {
+  // Every fresh-error row above omits opts (or passes stream:true), and the
+  // exact-call log's stream:false rows use a NONTHROWING logger — a wrapper
+  // retrying only a THROWN opts.stream===false call passes both. These rows
+  // kill it: fresh TypeError per call under an explicit {stream:false}, the
+  // propagated error is the FIRST thrown with count EXACTLY 1. Substrate
+  // twins: probe `identity.errorFirstOptsFalse` + `errorFirstRealm` rows.
+  function makeFreshOptsFalseDecoder(): { Dec: typeof TextDecoder; thrown: TypeError[] } {
+    const thrown: TypeError[] = [];
+    class FreshTypeErrorDecoder {
+      decode(): string {
+        const err = new TypeError(`fresh-typeerror-${thrown.length}`);
+        thrown.push(err);
+        throw err;
+      }
+    }
+    return { Dec: FreshTypeErrorDecoder as unknown as typeof TextDecoder, thrown };
+  }
+
+  function optsFalseCalls(): [string, (d: TextDecoder, opts: TextDecodeOptions) => void][] {
+    const { sab, view, dataView } = makeSentinelSab();
+    return [
+      ['private Uint8Array', (d, o) => void d.decode(new TextEncoder().encode('hello'), o)],
+      [
+        'private DataView',
+        (d, o) => void d.decode(new DataView(new TextEncoder().encode('hello').buffer), o),
+      ],
+      ['private ArrayBuffer', (d, o) => void d.decode(new TextEncoder().encode('hello').buffer, o)],
+      ['shared Uint8Array', (d, o) => void d.decode(view, o)],
+      ['shared DataView', (d, o) => void d.decode(dataView, o)],
+      ['raw SharedArrayBuffer', (d, o) => void d.decode(sab as unknown as ArrayBuffer, o)],
+    ];
+  }
+
+  it('direct install: each class under explicit {stream:false} propagates the FIRST fresh TypeError with count EXACTLY 1', () => {
+    for (const [label, call] of optsFalseCalls()) {
+      const { Dec, thrown } = makeFreshOptsFalseDecoder();
+      installSharedMemoryTolerantTextDecoder(Dec);
+      let caught: unknown;
+      try {
+        call(new Dec(), { stream: false });
+      } catch (err) {
+        caught = err;
+      }
+      expect(thrown, label).toHaveLength(1);
+      expect(caught, label).toBe(thrown[0]);
+    }
+  });
+
+  it('aggregate install (installWorkerRealmCompat): same explicit {stream:false} pins through the realm TextDecoder', () => {
+    const realDecode = TextDecoder.prototype.decode;
+    const hadSelf = 'self' in globalThis;
+    const savedSelf = (globalThis as { self?: unknown }).self;
+    try {
+      for (const [label, call] of optsFalseCalls()) {
+        const thrown: TypeError[] = [];
+        TextDecoder.prototype.decode = ((): string => {
+          const err = new TypeError(`fresh-typeerror-${thrown.length}`);
+          thrown.push(err);
+          throw err;
+        }) as typeof TextDecoder.prototype.decode;
+        installWorkerRealmCompat();
+        let caught: unknown;
+        try {
+          call(new TextDecoder(), { stream: false });
+        } catch (err) {
+          caught = err;
+        }
+        expect(thrown, label).toHaveLength(1);
+        expect(caught, label).toBe(thrown[0]);
+      }
+    } finally {
+      TextDecoder.prototype.decode = realDecode;
+      if (hadSelf) {
+        Object.defineProperty(globalThis, 'self', {
+          value: savedSelf,
+          writable: true,
+          configurable: true,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'self');
+      }
+    }
+  });
+
+  // Streaming FINAL {stream:false} call: the original RETURNS on {stream:true}
+  // and fresh-throws only on the final — the propagated error is the FIRST
+  // thrown, throw count EXACTLY 1, and the original was invoked EXACTLY twice
+  // (a wrapper replaying the pair calls it 3+ times; a retry throws twice).
+  function makeStreamFinalThrower(): {
+    Dec: typeof TextDecoder;
+    thrown: TypeError[];
+    calls: () => number;
+  } {
+    const thrown: TypeError[] = [];
+    let calls = 0;
+    class StreamFinalThrower {
+      decode(_input?: unknown, opts?: unknown): string {
+        calls += 1;
+        if (opts !== undefined && (opts as { stream?: boolean }).stream === true) return '';
+        const err = new TypeError(`fresh-typeerror-${thrown.length}`);
+        thrown.push(err);
+        throw err;
+      }
+    }
+    return {
+      Dec: StreamFinalThrower as unknown as typeof TextDecoder,
+      thrown,
+      calls: () => calls,
+    };
+  }
+
+  function streamingPairSources(): { first: Uint8Array; final: Uint8Array } {
+    const streamSab = new SharedArrayBuffer(2);
+    new Uint8Array(streamSab).set([0xc3, 0xa9]); // 'é' split across two views
+    return {
+      first: new Uint8Array(streamSab, 0, 1),
+      final: new Uint8Array(streamSab, 1, 1),
+    };
+  }
+
+  it('direct install: streaming FINAL {stream:false} — FIRST error, throw count 1, original invoked EXACTLY twice', () => {
+    const { Dec, thrown, calls } = makeStreamFinalThrower();
+    installSharedMemoryTolerantTextDecoder(Dec);
+    const d = new Dec();
+    const { first, final } = streamingPairSources();
+    expect(d.decode(first, { stream: true })).toBe('');
+    let caught: unknown;
+    try {
+      d.decode(final, { stream: false });
+    } catch (err) {
+      caught = err;
+    }
+    expect(calls()).toBe(2);
+    expect(thrown).toHaveLength(1);
+    expect(caught).toBe(thrown[0]);
+  });
+
+  it('aggregate install (installWorkerRealmCompat): same streaming FINAL pins through the realm TextDecoder', () => {
+    const realDecode = TextDecoder.prototype.decode;
+    const hadSelf = 'self' in globalThis;
+    const savedSelf = (globalThis as { self?: unknown }).self;
+    try {
+      const thrown: TypeError[] = [];
+      let calls = 0;
+      TextDecoder.prototype.decode = ((_input?: unknown, opts?: unknown): string => {
+        calls += 1;
+        if (opts !== undefined && (opts as { stream?: boolean }).stream === true) return '';
+        const err = new TypeError(`fresh-typeerror-${thrown.length}`);
+        thrown.push(err);
+        throw err;
+      }) as typeof TextDecoder.prototype.decode;
+      installWorkerRealmCompat();
+      const d = new TextDecoder();
+      const { first, final } = streamingPairSources();
+      expect(d.decode(first, { stream: true })).toBe('');
+      let caught: unknown;
+      try {
+        d.decode(final, { stream: false });
+      } catch (err) {
+        caught = err;
+      }
+      expect(calls).toBe(2);
+      expect(thrown).toHaveLength(1);
+      expect(caught).toBe(thrown[0]);
+    } finally {
+      TextDecoder.prototype.decode = realDecode;
+      if (hadSelf) {
+        Object.defineProperty(globalThis, 'self', {
+          value: savedSelf,
+          writable: true,
+          configurable: true,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'self');
+      }
+    }
+  });
+});

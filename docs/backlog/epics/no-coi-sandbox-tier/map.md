@@ -4,15 +4,20 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `runtime-js/worker-realm-compat-bare-sab-referenceerror` — **bare-sab-guard** —
-   realm-safe unconditional TextDecoder patch, RED-first on the no-COI
-   substrate (item 2's lane). I2 reachability = Open question
-   "installNodeRuntime seam" below.
-2. `toolchain-build/no-coi-substrate-lane` — **no-coi-lane** — headerless
-   Playwright lane (ADR-0369) + consumed-response header provenance
-   (injection-pinned) + required `no-coi-chromium` CI job + replayable
-   evidence driver; split from bare-sab-guard at Contract+RED checkpoint 7
-   (green, tooling-class); reusable by every later slice.
+1. `toolchain-build/no-coi-substrate-lane` — **no-coi-lane** — headerless
+   Playwright lane (ADR-0369) + consumed-response header provenance (injection
+   AND absent/non-200 pinned) + required `no-coi-chromium` CI job + replayable
+   evidence driver; green and serially landable FIRST (checkpoint 8: successor
+   expected-REDs are runner-declared `test.fail` rows — executed, loud on
+   unexpected pass — so this item's job is green with no dependency on the
+   fix); split from bare-sab-guard at checkpoint 7; reusable by every later
+   slice; depends on nothing.
+2. `runtime-js/worker-realm-compat-bare-sab-referenceerror` — **bare-sab-guard**
+   — realm-safe unconditional TextDecoder patch, RED-first on item 1's lane
+   (12 declared-RED blocks committed). DRAFT since checkpoint-8 demotion —
+   band fork recorded in the item, awaiting manual `rifty-refine`; never
+   implement while draft. I2 reachability = Open question "installNodeRuntime
+   seam" below.
 3. `runtime-js/same-realm-spawn-stdio-pipe-drop` — **console-swap** — per-child
    console over childProcess.stdout/stderr (I7 pipe half); declared microtask
    residual stays.

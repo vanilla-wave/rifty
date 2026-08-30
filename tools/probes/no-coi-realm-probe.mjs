@@ -4,9 +4,11 @@
  * regenerates the whole evidence table as raw JSON on stdout — real built shim
  * in no-COI Chromium (page + Worker × direct/aggregate), the kernel PUBLIC
  * entry (`createSabRing()` + `spawnKernelWorker()` via a bundle of
- * `kernel/src/index.ts` — GOLDEN per entry: function export + raw
- * `ReferenceError: SharedArrayBuffer is not defined` + EXACTLY zero counted
- * `Worker` constructions, replay fails loud on anything else)
+ * `kernel/src/index.ts` — GOLDEN per entry: function export + ACTUAL realm
+ * `ReferenceError: SharedArrayBuffer is not defined` (instanceof + prototype +
+ * constructor, never name/message projections) + EXACTLY zero counted `Worker`
+ * constructions per entry AND in total across import/setup/calls, replay fails
+ * loud on anything else)
  * plus the retained private constructor `createWorkerOutputState()`, and the
  * Node oracle (binding intact + deleted, plus the REAL `node:util/types`
  * differential). Durable record:
@@ -152,6 +154,12 @@ try {
               ok: false,
               errName: err.name,
               errMsg: err.message,
+              // Realm-truth error identity (lossy-aggregate killer): name and
+              // message alone pass a fabricated
+              // Object.assign(new Error(msg), {name:'ReferenceError'}).
+              errIsReferenceError: err instanceof ReferenceError,
+              errProtoIsReferenceError: Object.getPrototypeOf(err) === ReferenceError.prototype,
+              errCtorIsReferenceError: err.constructor === ReferenceError,
               workerConstructions: constructions - before,
             };
           }
@@ -185,15 +193,23 @@ try {
             createSabRing,
             spawnKernelWorker,
             retainedCreateWorkerOutputState: attempt(() => drain.createWorkerOutputState()),
+            // ONE exact counter over the WHOLE sweep — module imports,
+            // setKernelWorkerUrl setup, and all three calls. Per-entry deltas
+            // alone are blind to a Worker constructed BETWEEN entries (during
+            // import or setup).
+            totalWorkerConstructions: constructions,
           };
         } finally {
           globalThis.Worker = RealWorker;
         }
       });
       // GOLDEN assertions — replay fails LOUD unless each entry is a real
-      // function export AND throws EXACTLY the raw absent-binding
-      // ReferenceError with ZERO Worker constructions. `attempt` alone records
-      // removed exports (TypeError), success, or wrong errors as data.
+      // function export AND throws an ACTUAL realm ReferenceError (instanceof
+      // + prototype + constructor — name/message alone pass a fabricated
+      // Object.assign(new Error(msg), {name})) with the exact raw
+      // absent-binding message and ZERO Worker constructions, per entry AND in
+      // total across import/setup/calls. `attempt` alone records removed
+      // exports (TypeError), success, or wrong errors as data.
       const sweep = transcript.chromiumNoCoi.kernelPublicEntry;
       for (const name of [
         'createSabRing',
@@ -210,19 +226,22 @@ try {
           row.ok !== false ||
           row.errName !== 'ReferenceError' ||
           row.errMsg !== 'SharedArrayBuffer is not defined' ||
+          row.errIsReferenceError !== true ||
+          row.errProtoIsReferenceError !== true ||
+          row.errCtorIsReferenceError !== true ||
           row.workerConstructions !== 0
         ) {
           throw new Error(
-            `kernel sweep ${name}: expected raw ReferenceError('SharedArrayBuffer is not defined') ` +
-              `with 0 Worker constructions, got ${JSON.stringify(row)}`,
+            `kernel sweep ${name}: expected an ACTUAL raw ReferenceError('SharedArrayBuffer is not defined') (instanceof/prototype/constructor) with 0 Worker constructions, got ${JSON.stringify(row)}`,
           );
         }
       }
-      assertHeaderlessConsumption(responses, {
-        document: '/index.html',
-        kernelPublic: '/dist/kernel-public.mjs',
-        kernelStdioDrain: '/dist/kernel-stdio-drain.mjs',
-      });
+      if (sweep.totalWorkerConstructions !== 0) {
+        throw new Error(
+          `kernel sweep: expected 0 TOTAL Worker constructions across import+setup+calls, got ${sweep.totalWorkerConstructions}`,
+        );
+      }
+      assertHeaderlessConsumption(responses, CONSUMED_CLASSES.kernelDriver);
     } finally {
       await page.close();
     }

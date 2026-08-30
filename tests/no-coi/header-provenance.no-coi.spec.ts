@@ -18,6 +18,106 @@ import { startNoCoiServer } from './server.mjs';
 
 const port = Number(process.env.RIFTY_NO_COI_PORT ?? 5307) + 4;
 
+/**
+ * Absent / non-200 detection pins (provenance-lie killer #2): the harness's
+ * never-consumed and consumed-non-200 arms must each throw LOUD — deleting
+ * either loop leaves every positive and header-injection pin below green while
+ * a class the realm never (successfully) loaded silently passes. Swept through
+ * every sibling caller class set (page spec / worker spec / evidence driver
+ * kernel page — one authority: CONSUMED_CLASSES).
+ */
+const ABSENT_CONTROLS = [
+  // Navigation alone consumes ONLY the document — the named class stays absent.
+  { caller: 'page', classes: CONSUMED_CLASSES.page, missing: 'probeModule' },
+  { caller: 'worker', classes: CONSUMED_CLASSES.worker, missing: 'workerScript' },
+  { caller: 'kernelDriver', classes: CONSUMED_CLASSES.kernelDriver, missing: 'kernelPublic' },
+] as const;
+
+for (const { caller, classes, missing } of ABSENT_CONTROLS) {
+  test(`absent class (${caller} caller set): a never-consumed expected class throws loud`, async ({
+    browser,
+  }) => {
+    const server = await startNoCoiServer(port);
+    const page = await browser.newPage();
+    try {
+      const responses = captureConsumedResponses(page);
+      await page.goto(`http://localhost:${port}/index.html`);
+      expect(() => assertHeaderlessConsumption(responses, classes)).toThrow(
+        new RegExp(`never consumed ${missing} `),
+      );
+    } finally {
+      await page.close();
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+}
+
+const NON_200_CONTROLS = [
+  {
+    caller: 'page',
+    classes: CONSUMED_CLASSES.page,
+    cls: 'probeModule',
+    path: '/probe-lib.mjs',
+    consume: async (page: import('@playwright/test').Page, path: string) => {
+      await page.evaluate(
+        (p) => import(/* @vite-ignore */ p).catch((err: unknown) => String(err)),
+        path,
+      );
+    },
+  },
+  {
+    caller: 'worker',
+    classes: CONSUMED_CLASSES.worker,
+    cls: 'workerScript',
+    path: '/probe-worker.mjs',
+    consume: async (page: import('@playwright/test').Page, path: string) => {
+      const settled = page.waitForResponse((r) => new URL(r.url()).pathname === path);
+      await page.evaluate((p) => {
+        new Worker(p, { type: 'module' });
+      }, path);
+      await settled;
+    },
+  },
+  {
+    caller: 'kernelDriver',
+    classes: CONSUMED_CLASSES.kernelDriver,
+    cls: 'kernelPublic',
+    path: '/dist/kernel-public.mjs',
+    consume: async (page: import('@playwright/test').Page, path: string) => {
+      await page.evaluate(
+        (p) => import(/* @vite-ignore */ p).catch((err: unknown) => String(err)),
+        path,
+      );
+    },
+  },
+] as const;
+
+for (const { caller, classes, cls, path, consume } of NON_200_CONTROLS) {
+  test(`non-200 class (${caller} caller set): a consumed non-200 expected class throws loud`, async ({
+    browser,
+  }) => {
+    // The server serves the REAL class path with 404 — the response IS consumed
+    // (recorded with its status), so only the non-200 arm can catch it.
+    const server = await startNoCoiServer(port, { inject: { status: 404, path } });
+    const page = await browser.newPage();
+    try {
+      const responses = captureConsumedResponses(page);
+      await page.goto(`http://localhost:${port}/index.html`);
+      await consume(page, path);
+      expect(() => assertHeaderlessConsumption(responses, classes)).toThrow(
+        new RegExp(`consumed ${cls} .* only non-200 \\(status 404\\)`),
+      );
+    } finally {
+      await page.close();
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+}
+
 for (const header of ['coop', 'coep'] as const) {
   for (const [cls, path] of Object.entries(CONSUMED_CLASSES.worker)) {
     test(`injected ${header} on ${cls} is CAUGHT on the consumed response, invisible to ordinary fetch`, async ({

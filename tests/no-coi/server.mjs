@@ -34,10 +34,12 @@ const INJECT_HEADERS = {
  * Start the headerless fixture server; resolves with the http.Server.
  *
  * `inject` (negative-control harness ONLY — `header-provenance.no-coi.spec.ts`):
- * serve ONE isolation header (`{header: 'coop'|'coep', path}`) on ONE path,
- * ONLY on actually-consumed destinations (`Sec-Fetch-Dest` present and not
- * 'empty') — the adversarial server an ordinary re-fetch sweep cannot see;
- * the consumed-response provenance pins must still catch it.
+ * - `{header: 'coop'|'coep', path}` — serve ONE isolation header on ONE path,
+ *   ONLY on actually-consumed destinations (`Sec-Fetch-Dest` present and not
+ *   'empty') — the adversarial server an ordinary re-fetch sweep cannot see;
+ *   the consumed-response provenance pins must still catch it.
+ * - `{status, path}` — serve that non-200 status on ONE path (body replaced) so
+ *   the harness's consumed-non-200 arm is exercised against a REAL class path.
  */
 export function startNoCoiServer(port, { inject } = {}) {
   const server = createServer(async (req, res) => {
@@ -46,6 +48,10 @@ export function startNoCoiServer(port, { inject } = {}) {
     const path = normalize(join(FIXTURES_DIR, rel));
     if (!path.startsWith(FIXTURES_DIR)) {
       res.writeHead(403).end('forbidden');
+      return;
+    }
+    if (inject !== undefined && inject.status !== undefined && url.pathname === inject.path) {
+      res.writeHead(inject.status).end('injected non-200');
       return;
     }
     try {
@@ -58,6 +64,7 @@ export function startNoCoiServer(port, { inject } = {}) {
       const dest = req.headers['sec-fetch-dest'];
       if (
         inject !== undefined &&
+        inject.header !== undefined &&
         url.pathname === inject.path &&
         dest !== undefined &&
         dest !== 'empty'

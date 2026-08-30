@@ -194,11 +194,14 @@ async function identityChecks(installShim) {
   // wrapper that retries only on TypeError passes the generic-Error row above,
   // and a Uint8Array-only row misses a DataView/raw retry branch. With fresh
   // TypeErrors any retry propagates the SECOND object with count 2.
-  const errorFirstRow = (call) =>
+  const errorFirstRow = ({ call, okOnStreamTrue }) =>
     attempt(() => {
       const typeErrors = [];
+      let originalCalls = 0;
       class FreshTypeErrorDecoder {
-        decode() {
+        decode(_input, opts) {
+          originalCalls += 1;
+          if (okOnStreamTrue === true && opts !== undefined && opts.stream === true) return '';
           const err = new TypeError(`fresh-typeerror-${typeErrors.length}`);
           typeErrors.push(err);
           throw err;
@@ -212,6 +215,7 @@ async function identityChecks(installShim) {
         return {
           first: typeErrors.length > 0 && err === typeErrors[0],
           throwCount: typeErrors.length,
+          ...(okOnStreamTrue === true ? { originalCalls } : {}),
         };
       }
     });
@@ -232,15 +236,34 @@ async function identityChecks(installShim) {
     privArrayBuffer: await errorFirstRow(errorFirstCalls.privArrayBuffer),
     noArg: await errorFirstRow(errorFirstCalls.noArg),
   };
+  // Explicit {stream:false} siblings + the streaming FINAL call: every base
+  // row above omits opts (or passes stream:true) and the exact-call log's
+  // stream:false rows use a NONTHROWING logger — a wrapper retrying only a
+  // THROWN opts.stream===false call passes both. These rows kill it.
+  out.errorFirstOptsFalse = {
+    privOptsFalse: await errorFirstRow(errorFirstCalls.privOptsFalse),
+    privDataViewOptsFalse: await errorFirstRow(errorFirstCalls.privDataViewOptsFalse),
+    privArrayBufferOptsFalse: await errorFirstRow(errorFirstCalls.privArrayBufferOptsFalse),
+    sharedViewOptsFalse: await errorFirstRow(errorFirstCalls.sharedViewOptsFalse),
+    sharedDataViewOptsFalse: await errorFirstRow(errorFirstCalls.sharedDataViewOptsFalse),
+    rawSharedOptsFalse: await errorFirstRow(errorFirstCalls.rawSharedOptsFalse),
+    streamingFinal: await errorFirstRow(errorFirstCalls.streamingFinal),
+  };
   return out;
 }
 
-/** One decode thunk per declared input class (fresh inputs per thunk call). */
+/** One decode entry `{call, okOnStreamTrue?}` per declared input class (fresh
+ * inputs per thunk call). `*OptsFalse` rows pass an EXPLICIT `{stream:false}`.
+ * `streamingFinal` is the declared streaming pair's FINAL `{stream:false}`
+ * call: the original RETURNS on `{stream:true}` (okOnStreamTrue) and
+ * fresh-throws on the final — first error, throw count 1, and the original
+ * invoked EXACTLY twice (`originalCalls` kills a wrapper replaying the pair). */
 function errorFirstClassCalls() {
-  return {
-    priv: (d) => d.decode(new TextEncoder().encode('hello')),
-    privDataView: (d) => d.decode(new DataView(new TextEncoder().encode('hello').buffer)),
-    privArrayBuffer: (d) => d.decode(new TextEncoder().encode('hello').buffer),
+  const enc = () => new TextEncoder().encode('hello');
+  const thunks = {
+    priv: (d) => d.decode(enc()),
+    privDataView: (d) => d.decode(new DataView(enc().buffer)),
+    privArrayBuffer: (d) => d.decode(enc().buffer),
     noArg: (d) => d.decode(),
     sharedView: (d) => d.decode(new Uint8Array(makeSharedWasmMemory().buffer, 0, 4)),
     sharedDataView: (d) => d.decode(new DataView(makeSharedWasmMemory().buffer, 0, 4)),
@@ -249,7 +272,26 @@ function errorFirstClassCalls() {
       d.decode(new Uint8Array(makeSharedWasmMemory().buffer, 0, 1), {
         stream: true,
       }),
+    privOptsFalse: (d) => d.decode(enc(), { stream: false }),
+    privDataViewOptsFalse: (d) => d.decode(new DataView(enc().buffer), { stream: false }),
+    privArrayBufferOptsFalse: (d) => d.decode(enc().buffer, { stream: false }),
+    sharedViewOptsFalse: (d) =>
+      d.decode(new Uint8Array(makeSharedWasmMemory().buffer, 0, 4), { stream: false }),
+    sharedDataViewOptsFalse: (d) =>
+      d.decode(new DataView(makeSharedWasmMemory().buffer, 0, 4), { stream: false }),
+    rawSharedOptsFalse: (d) => d.decode(makeSharedWasmMemory().buffer, { stream: false }),
   };
+  const entries = {};
+  for (const [name, call] of Object.entries(thunks)) entries[name] = { call };
+  entries.streamingFinal = {
+    okOnStreamTrue: true,
+    call: (d) => {
+      const buffer = makeSharedWasmMemory().buffer;
+      d.decode(new Uint8Array(buffer, 0, 1), { stream: true });
+      return d.decode(new Uint8Array(buffer, 1, 1), { stream: false });
+    },
+  };
+  return entries;
 }
 
 /**
@@ -263,10 +305,13 @@ function errorFirstClassCalls() {
 async function realmErrorFirstSweeps(shim) {
   const carrier = async (install) => {
     const out = {};
-    for (const [name, call] of Object.entries(errorFirstClassCalls())) {
+    for (const [name, { call, okOnStreamTrue }] of Object.entries(errorFirstClassCalls())) {
       const saved = TextDecoder.prototype.decode;
       const thrown = [];
-      TextDecoder.prototype.decode = function decode() {
+      let originalCalls = 0;
+      TextDecoder.prototype.decode = function decode(_input, opts) {
+        originalCalls += 1;
+        if (okOnStreamTrue === true && opts !== undefined && opts.stream === true) return '';
         const err = new TypeError(`fresh-typeerror-${thrown.length}`);
         thrown.push(err);
         throw err;
@@ -278,7 +323,11 @@ async function realmErrorFirstSweeps(shim) {
             call(new TextDecoder());
             return 'no-throw';
           } catch (err) {
-            return { first: thrown.length > 0 && err === thrown[0], throwCount: thrown.length };
+            return {
+              first: thrown.length > 0 && err === thrown[0],
+              throwCount: thrown.length,
+              ...(okOnStreamTrue === true ? { originalCalls } : {}),
+            };
           }
         });
       } finally {
@@ -415,15 +464,31 @@ async function exactCallSweeps(shim) {
 export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = {}) {
   const r = { mode };
 
-  // Reference-contract preconditions — asserted BEFORE acting so a future
-  // Chromium change fails loud instead of silently re-scoping the lane.
+  // Reference-contract preconditions — computed AND GATED before ANY action
+  // (built-module import, install, decode). A wrong realm — future Chromium
+  // change, wrong shared-memory brand — REJECTS here; rejection-precedes-action
+  // is proven by side-effect sentinels in the spec (no /dist/ request ever
+  // issued, realm decode left unmarked), never inferred from a later
+  // assertion on a result the probe produced by acting anyway.
   r.crossOriginIsolated = globalThis.crossOriginIsolated;
   r.sabBindingTypeof = typeof SharedArrayBuffer;
-  if (requireNoCoi && (r.crossOriginIsolated !== false || r.sabBindingTypeof !== 'undefined')) {
+  const mem = makeSharedWasmMemory();
+  r.wasmSharedBrand = Object.prototype.toString.call(mem.buffer);
+  r.wasmSharedInstanceofArrayBuffer = mem.buffer instanceof ArrayBuffer;
+  if (
+    requireNoCoi &&
+    (r.crossOriginIsolated !== false ||
+      r.sabBindingTypeof !== 'undefined' ||
+      r.wasmSharedBrand !== '[object SharedArrayBuffer]' ||
+      r.wasmSharedInstanceofArrayBuffer !== false)
+  ) {
     throw new Error(
       `no-COI substrate precondition violated: crossOriginIsolated=${String(
         r.crossOriginIsolated,
-      )}, typeof SharedArrayBuffer=${r.sabBindingTypeof}`,
+      )}, typeof SharedArrayBuffer=${r.sabBindingTypeof}, shared WebAssembly.Memory buffer ` +
+        `brand=${r.wasmSharedBrand} (instanceof ArrayBuffer: ${String(
+          r.wasmSharedInstanceofArrayBuffer,
+        )})`,
     );
   }
   // Response-header provenance is HARNESS-observed (tests/no-coi/
@@ -432,9 +497,6 @@ export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = 
   // destination serves them on the ACTUAL navigation/Worker/module responses
   // while every ordinary fetch stays clean.
 
-  const mem = makeSharedWasmMemory();
-  r.wasmSharedBrand = Object.prototype.toString.call(mem.buffer);
-  r.wasmSharedInstanceofArrayBuffer = mem.buffer instanceof ArrayBuffer;
   writeHelloWithSentinels(mem.buffer);
 
   // Import BOTH built modules BEFORE installing: in a binding-less realm the
