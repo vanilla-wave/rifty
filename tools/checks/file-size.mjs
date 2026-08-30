@@ -49,7 +49,6 @@ const NON_PROD_RE = /\.(?:test|spec|fault|contract)\.[cm]?[jt]sx?$|\.d\.ts$/;
  *  {@link THRESHOLD} is deleted. Burn-down plan:
  *  `docs/backlog/toolchain-build/oversized-source-burndown.md`. */
 export const BASELINE = [
-  { file: 'packages/npm-client/src/installer.ts', max: 3066 },
   { file: 'packages/shell/src/commands/git.ts', max: 3064 },
   { file: 'packages/runtime-js/src/module-loader/function-import-routing.ts', max: 2806 },
   { file: 'packages/workbench/src/workers/playground-project-authority.ts', max: 2697 },

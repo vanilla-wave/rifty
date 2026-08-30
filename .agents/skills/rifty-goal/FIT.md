@@ -12,12 +12,13 @@ recorded decisions.
    Outcome`, `## User scenario` (real package/program, exact calls). Legacy
    epic: carry its ratified content verbatim; the old file is deleted in the
    same commit.
-3. **Probe-or-fog.** Enumerate every external-semantics assumption the plan
-   encodes (npm tree/bins/peers, Node behavior, browser APIs). Each gets either
-   a discriminating probe — command + output + version, disposable spike
-   subagents run in parallel, artifact kept — or a `## Open questions` line in
-   `map.md`. Done when no assumption is left implicit: each has a probe
-   artifact or a fog line.
+3. **Probe-or-fog.** Enumerate every assumption the plan encodes: external
+   semantics (npm tree/bins/peers, Node behavior, browser APIs) AND internal
+   scope-carrying mappings ("path X is the issue scenario", "Y runs while the
+   transport is live"). Each gets either a discriminating probe — command +
+   output + version, disposable spike subagents run in parallel, artifact
+   kept — or a `## Open questions` line in `map.md`. Done when no assumption
+   is left implicit: each has a probe artifact or a fog line.
 4. **Invariants + tier.** Draft numbered `## Invariants` from
    Outcome/scenario/decisions only — an invariant needing unsettled scope is an
    observable fork → request manual `rifty-refine` for that statement. Check

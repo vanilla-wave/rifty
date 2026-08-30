@@ -4,6 +4,14 @@
 
 ### Changed
 
+- Move-only decomposition: `installer.ts` (3064 lines) split along its
+  existing seams into `installer-walk.ts`, `installer-sources.ts`,
+  `eddy-fast-path.ts`, `installer-request.ts`, `installer-bin-claims.ts`,
+  `installer-peers.ts`, `internal/shadow/substitution.ts`, and
+  `utils/abort-signal.ts`; `installer.ts` keeps only the `install` overloads,
+  orchestration, and public types (530 lines). Public API unchanged; the
+  file-size ratchet pin is deleted.
+
 - Lockfile root entries preserve the project's declared dependency maps and
   requested ranges; hoisted transitive packages no longer acquire false root
   authority.
