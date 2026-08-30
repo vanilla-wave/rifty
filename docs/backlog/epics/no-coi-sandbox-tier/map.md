@@ -5,14 +5,18 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 ## Items
 
 1. `runtime-js/worker-realm-compat-bare-sab-referenceerror` — **bare-sab-guard** —
-   realm-safe unconditional TextDecoder patch, RED-first on the first no-COI
-   substrate (`playwright.no-coi.config.ts` + `tests/no-coi/` — ADR-0369);
-   unblocks the sibling slices' no-COI lane. I2 reachability = Open question
+   realm-safe unconditional TextDecoder patch, RED-first on the no-COI
+   substrate (item 2's lane). I2 reachability = Open question
    "installNodeRuntime seam" below.
-2. `runtime-js/same-realm-spawn-stdio-pipe-drop` — **console-swap** — per-child
+2. `toolchain-build/no-coi-substrate-lane` — **no-coi-lane** — headerless
+   Playwright lane (ADR-0369) + consumed-response header provenance
+   (injection-pinned) + required `no-coi-chromium` CI job + replayable
+   evidence driver; split from bare-sab-guard at Contract+RED checkpoint 7
+   (green, tooling-class); reusable by every later slice.
+3. `runtime-js/same-realm-spawn-stdio-pipe-drop` — **console-swap** — per-child
    console over childProcess.stdout/stderr (I7 pipe half); declared microtask
    residual stays.
-3. `vfs/no-coi-opfs-policy-flip` — **opfs-no-coi** — drop the COI condition in
+4. `vfs/no-coi-opfs-policy-flip` — **opfs-no-coi** — drop the COI condition in
    detectVfsBackend (ADR-0368) + no-COI reload-durability proof (I5).
 
 ## Fog

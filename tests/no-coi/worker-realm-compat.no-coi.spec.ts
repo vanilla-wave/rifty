@@ -4,12 +4,20 @@
  * Expected RED today: parity 1–7, 9, 13, 14, 15 (every decode failure
  * `ReferenceError: SharedArrayBuffer is not defined`) + parity 12 (every
  * poisoned decode trips the counting accessor). Green pins: preconditions
- * (incl. response-header provenance) + parity 10. Parity 8 exactness pins and
- * the COI twin of the parity 13 call log are vitest
- * (`packages/runtime-js/src/ipc/worker-realm-compat.test.ts`).
+ * (incl. consumed-response header provenance — lane contract
+ * `docs/backlog/toolchain-build/no-coi-substrate-lane.md`) + parity 10.
+ * Parity 8 exactness pins and the COI twins of the parity 9/13 sweeps are
+ * vitest (`packages/runtime-js/src/ipc/worker-realm-compat.test.ts`).
  */
 import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
+import {
+  CONSUMED_CLASSES,
+  type ConsumedClassSummary,
+  assertHeaderlessConsumption,
+  captureConsumedResponses,
+  summarizeConsumedResponses,
+} from './header-provenance.mjs';
 
 type Attempt = { ok: true; value: unknown } | { ok: false; errName: string; errMsg: string };
 
@@ -41,14 +49,21 @@ type ExactCallRowName =
   | 'stream1'
   | 'stream2';
 
+type ErrorFirstRow = Attempt; // green value: { first: true, throwCount: 1 }
+type ErrorFirstClassName =
+  | 'priv'
+  | 'privDataView'
+  | 'privArrayBuffer'
+  | 'noArg'
+  | 'sharedView'
+  | 'sharedDataView'
+  | 'rawShared'
+  | 'streaming';
+
 interface ProbeResult {
   mode: 'direct' | 'aggregate';
   crossOriginIsolated: unknown;
   sabBindingTypeof: string;
-  responseHeaders: Record<
-    'document' | 'workerScript' | 'probeModule' | 'builtShim' | 'builtUtilTypes',
-    { status: number; coop: string | null; coep: string | null }
-  >;
   wasmSharedBrand: string;
   wasmSharedInstanceofArrayBuffer: boolean;
   native: Record<
@@ -91,9 +106,14 @@ interface ProbeResult {
     'view' | 'dataView' | 'arrayBuffer' | 'noArg' | 'errorIdentity' | 'errorIdentitySharedFirst',
     Attempt
   > & {
-    errorFirstShared: Record<'sharedView' | 'sharedDataView' | 'rawShared' | 'streaming', Attempt>;
+    errorFirstShared: Record<
+      'sharedView' | 'sharedDataView' | 'rawShared' | 'streaming',
+      ErrorFirstRow
+    >;
+    errorFirstPrivate: Record<'priv' | 'privDataView' | 'privArrayBuffer' | 'noArg', ErrorFirstRow>;
   };
   exactCallLog: Record<'direct' | 'aggregate', Attempt>;
+  errorFirstRealm: Record<'direct' | 'aggregate', Record<ErrorFirstClassName, ErrorFirstRow>>;
   poisonedBinding: {
     count: number;
     sweep: Record<
@@ -183,12 +203,16 @@ const COMBOS = [
 type ComboKey = `${(typeof COMBOS)[number][0]}-${(typeof COMBOS)[number][1]}`;
 
 const results = new Map<ComboKey, ProbeResult>();
+const consumedHeaders = new Map<ComboKey, ConsumedClassSummary>();
 
 test.beforeAll(async ({ browser }) => {
   for (const [realm, mode] of COMBOS) {
     // Fresh page per combo: TextDecoder.prototype patching is realm-global.
     const page = await browser.newPage();
     try {
+      // Header provenance on the ACTUALLY consumed responses (attach before
+      // navigation) — an in-page re-fetch sweep cannot observe these.
+      const responses = captureConsumedResponses(page);
       await page.goto('/index.html');
       const result =
         realm === 'page'
@@ -211,6 +235,11 @@ test.beforeAll(async ({ browser }) => {
               }
               return msg.result;
             }, mode);
+      assertHeaderlessConsumption(responses, CONSUMED_CLASSES[realm]);
+      consumedHeaders.set(
+        `${realm}-${mode}`,
+        summarizeConsumedResponses(responses, CONSUMED_CLASSES[realm]),
+      );
       results.set(`${realm}-${mode}`, result);
     } finally {
       await page.close();
@@ -222,7 +251,7 @@ function each(fn: (combo: ComboKey, r: ProbeResult) => void): void {
   for (const [combo, r] of results) fn(combo, r);
 }
 
-test('preconditions: crossOriginIsolated===false, no SAB binding, shared wasm memory EXISTS (probe rows 1–2), NO COOP/COEP on any response class (row 16)', () => {
+test('preconditions: crossOriginIsolated===false, no SAB binding, shared wasm memory EXISTS (probe rows 1–2), NO COOP/COEP on any CONSUMED response class (row 16)', () => {
   expect(results.size).toBe(4);
   each((combo, r) => {
     expect(r.crossOriginIsolated, combo).toBe(false);
@@ -230,21 +259,15 @@ test('preconditions: crossOriginIsolated===false, no SAB binding, shared wasm me
     // The killed frozen assumption: shared BufferSource exists without COI.
     expect(r.wasmSharedBrand, combo).toBe('[object SharedArrayBuffer]');
     expect(r.wasmSharedInstanceofArrayBuffer, combo).toBe(false);
-    // Header provenance: derived state alone lies — a server adding ONLY COOP
-    // or ONLY COEP still reports crossOriginIsolated === false. BOTH headers
-    // must be absent on EVERY response class the substrate consumes.
-    for (const cls of [
-      'document',
-      'workerScript',
-      'probeModule',
-      'builtShim',
-      'builtUtilTypes',
-    ] as const) {
-      expect(r.responseHeaders[cls], `${combo} ${cls}`).toEqual({
-        status: 200,
-        coop: null,
-        coep: null,
-      });
+    // Header provenance on the responses the realm ACTUALLY consumed (derived
+    // state passes a one-header server; an in-page re-fetch sweep passes a
+    // destination-keyed one — injection controls:
+    // header-provenance.no-coi.spec.ts). BOTH headers absent on every class.
+    const [realm] = combo.split('-') as ['page' | 'worker'];
+    const consumed = consumedHeaders.get(combo);
+    expect(consumed, combo).toBeDefined();
+    for (const cls of Object.keys(CONSUMED_CLASSES[realm])) {
+      expect(consumed?.[cls], `${combo} ${cls}`).toEqual({ status: 200, coop: null, coep: null });
     }
   });
 });
@@ -312,7 +335,7 @@ test('parity 7: repeat install → false AND strict-identity patched fn AND shar
   });
 });
 
-test('parity 9: spy identity + unique sentinel returns per non-shared class; thrown error = the FIRST error object, throw count 1, shared-wasm input included', () => {
+test('parity 9: spy identity + unique sentinel returns; FIRST-error identity with throw count 1 — shared AND private classes, injected AND realm-decoder direct+aggregate carriers', () => {
   each((combo, r) => {
     // Exact input/opts objects AND the spy's unique sentinel returned unchanged
     // — a wrapper passing exact objects but fabricating output fails here.
@@ -336,6 +359,35 @@ test('parity 9: spy identity + unique sentinel returns per non-shared class; thr
         ok: true,
         value: { first: true, throwCount: 1 },
       });
+    }
+    // Private siblings + no-arg, same fresh-error discipline: a wrapper
+    // retrying only FAILING PRIVATE inputs invokes the original twice — with a
+    // reused sentinel it rethrows the same object and passes; count 1 kills it.
+    for (const cls of ['priv', 'privDataView', 'privArrayBuffer', 'noArg'] as const) {
+      expect(r.identity.errorFirstPrivate[cls], `${combo} ${cls}`).toEqual({
+        ok: true,
+        value: { first: true, throwCount: 1 },
+      });
+    }
+    // REALM-decoder carriers (direct AND aggregate), full class set: the
+    // injected rows alone admit a fix retrying fresh errors only for the
+    // absent-binding realm's global TextDecoder.
+    for (const carrier of ['direct', 'aggregate'] as const) {
+      for (const cls of [
+        'priv',
+        'privDataView',
+        'privArrayBuffer',
+        'noArg',
+        'sharedView',
+        'sharedDataView',
+        'rawShared',
+        'streaming',
+      ] as const) {
+        expect(r.errorFirstRealm[carrier][cls], `${combo} realm-${carrier} ${cls}`).toEqual({
+          ok: true,
+          value: { first: true, throwCount: 1 },
+        });
+      }
     }
   });
 });

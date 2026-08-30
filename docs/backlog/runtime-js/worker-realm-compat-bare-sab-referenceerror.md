@@ -71,13 +71,11 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   dedicated module Worker on it (probe §2026-08-29). Every substrate test
   asserts `crossOriginIsolated === false` AND
   `typeof SharedArrayBuffer === 'undefined'` before acting — a future Chromium
-  change fails loud, never silently re-scopes the test. Derived state alone is
-  a provenance lie (a server adding ONLY COOP or ONLY COEP still reports
-  `false`): the probe body additionally sweeps BOTH isolation headers
-  (`cross-origin-opener-policy`, `cross-origin-embedder-policy`) ABSENT on
-  every response class it consumes — document, Worker script, probe module,
-  built bundles — throwing loud on any present header (probe row 16; asserted
-  in the preconditions pin).
+  change fails loud, never silently re-scopes the test. Realm provenance
+  beyond derived state (BOTH isolation headers absent on every ACTUALLY
+  CONSUMED response class, injection-control-pinned — probe row 16) is the
+  substrate-lane item's contract:
+  `toolchain-build/no-coi-substrate-lane` (split checkpoint 7).
 - Approximation rejected: stubbing `SharedArrayBuffer = undefined` in a
   COI/Node realm is NOT this realm (`instanceof undefined` TypeError, not the
   absent-binding ReferenceError); the RED must run in the real no-COI browser
@@ -87,20 +85,17 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
 
 - RED-first on a real no-COI Chromium substrate — headerless page AND dedicated
   module Worker, exercising the real built shim (not a source copy), both
-  asserting the Reference-contract preconditions before acting. COMMITTED at
-  this Contract+RED (checkpoint-2 C1): `playwright.no-coi.config.ts` +
-  `tests/no-coi/` (server without COOP/COEP, esbuild of the prod sources,
-  probe body shared with the replayable evidence driver); run
-  `pnpm test:no-coi` — today 12 RED (parity 1–7, 9, 13, 14, 15 — every decode
-  failure `ReferenceError: SharedArrayBuffer is not defined`; parity 12, every
+  asserting the Reference-contract preconditions before acting. Lane, header
+  provenance, required `no-coi-chromium` CI job + gate mapping, and the replay
+  driver are the split sibling's contract
+  (`toolchain-build/no-coi-substrate-lane` — checkpoint 7; the required job
+  keeps this unit's draft red until the fix, green to merge). THIS unit's
+  committed carrier: `tests/no-coi/worker-realm-compat.no-coi.spec.ts` — today
+  12 RED (parity 1–7, 9, 13, 14, 15 — every decode failure
+  `ReferenceError: SharedArrayBuffer is not defined`; parity 12, every
   poisoned decode trips the counting accessor) + 2 green pins (preconditions
-  incl. response-header provenance, parity 10), top of the re-declared 8–12
-  band (checkpoint 6). Substrate = the
-  goal's first no-COI test lane (ADR-0369), reusable by later slices; flips
-  GREEN in the fix PR, never edited to pass. The lane is a REQUIRED CI job
-  from THIS PR (`no-coi-chromium` + `CI gate`, wired checkpoint 5 — an opt-in
-  lane never closes acceptance per DoD): red on the draft until the fix, green
-  to merge; goal I8 extends its coverage, it does not first wire it.
+  incl. consumed-response header provenance, parity 10); flips GREEN in the
+  fix PR, never edited to pass.
 - After install (direct or via `installWorkerRealmCompat()`) in that realm,
   decode NEVER evaluates the absent binding — every input class:
   `decode(encode('hello'))` → `'hello'`; `decode()` → `''`; shared-wasm
@@ -161,12 +156,20 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
   RED today, ReferenceError before the original is ever invoked (probe
   row 17) — a SAB-present-only shared-streaming or DataView/raw native-first
   branch passes a Uint8Array-only `stream:false` log. Sibling first-error
-  pins (parity 9): on shared-wasm input a fresh-error-per-call decoder
-  propagates the FIRST thrown object with throw count EXACTLY 1, browser AND
-  Node (a retry wrapper throws twice and propagates the second) — swept with
-  fresh TypeErrors across EVERY shared class (view/DataView/raw/streaming,
-  probe row 18, COI vitest twins direct+aggregate): a wrapper retrying only
-  on TypeError, or only for non-Uint8Array classes, fails the sweep.
+  pins (parity 9): a fresh-error-per-call decoder propagates the FIRST thrown
+  object with throw count EXACTLY 1, browser AND Node (a retry wrapper throws
+  twice and propagates the second) — swept with fresh TypeErrors across EVERY
+  shared class (view/DataView/raw/streaming, probe row 18) AND every private
+  sibling + no-arg (priv view/DataView/ArrayBuffer/no-arg — a reused sentinel
+  lets a private-only retry rethrow the same object unnoticed), AND through
+  the REALM's global TextDecoder via BOTH real carriers (per class: realm
+  decode swapped to an unmarked fresh-TypeError original, re-install
+  direct/aggregate, one decode — transcript `errorFirstRealm`; the injected
+  rows alone admit a fix retrying fresh errors only for the absent-binding
+  realm's global decoder). COI vitest twins direct+aggregate for shared AND
+  private sets: a wrapper retrying only on TypeError, only for
+  non-Uint8Array classes, only failing private inputs, or only on the realm
+  global, fails the sweep.
 - Mixed install order (parity 14): a direct helper install FIRST, then the
   realm's FIRST `installWorkerRealmCompat()` — decoder identity stays the
   captured patched fn AND global/self siblings still install AND decode green
@@ -180,20 +183,18 @@ node --input-type=module -e 'delete globalThis.SharedArrayBuffer;
 
 ## Parity cases
 
-Oracles per Reference contract; every row's artifact is REPLAYABLE
-(checkpoint-2 C4): `node tools/probes/no-coi-realm-probe.mjs` regenerates the
-whole probe table (Chromium 148.0.7778.96 page+Worker × direct/aggregate,
-node v24.16.0 oracle + absent-binding sim + real `node:util/types`
-differential, kernel PUBLIC-entry bundle under a counting Worker
-constructor); raw output committed at
+Oracles per Reference contract; every row's artifact is REPLAYABLE via the
+lane item's evidence driver (`node tools/probes/no-coi-realm-probe.mjs` —
+mechanics + kernel goldens: `toolchain-build/no-coi-substrate-lane`); raw
+output committed at
 `reference/no-coi-realm-probe-transcript-2026-08-29.json`. Committed test
 carriers: parity 1–7, 9, 10, 12, 13, 14, 15 →
 `tests/no-coi/worker-realm-compat.no-coi.spec.ts` (12 RED / 2 green today;
-the preconditions pin carries the row-16 header-provenance sweep);
+the preconditions pin carries the row-16 consumed-response provenance);
 parity 6 call-one sibling snapshot + parity 7 (direct+aggregate), 8, 9, 13
-(full class set + fresh-TypeError first-error sweep) →
-`worker-realm-compat.test.ts` added pins (green); parity 11 → existing suite
-unmodified. RED target unless marked pin/green.
+(full class set + fresh-TypeError first-error sweeps, shared AND
+private/no-arg) → `worker-realm-compat.test.ts` added pins (green);
+parity 11 → existing suite unmodified. RED target unless marked pin/green.
 
 1. no-COI page+worker: `decode(bytes('hello'))` → `'hello'`; today
    `ReferenceError: SharedArrayBuffer is not defined` — probe row 8.
@@ -233,12 +234,21 @@ unmodified. RED target unless marked pin/green.
    with throw count EXACTLY 1 (browser + Node — probe
    `identity.errorIdentitySharedFirst`; today no-COI every row
    ReferenceError / `{first:false, throwCount:0}` — RED in the substrate,
-   green COI pins). Sibling sweep with fresh TypeErrors across EVERY shared
-   class — shared view / DataView / raw buffer / streaming `{stream:true}`
-   (probe row 18, `identity.errorFirstShared`; COI vitest twins direct AND
-   aggregate): `{first:true, throwCount:1}` each — a native-first wrapper
-   retrying only on TypeError passes the generic-Error row, and a
-   Uint8Array-only row misses a DataView/raw/streaming retry branch.
+   green COI pins). Sibling sweeps with fresh TypeErrors (probe row 18; COI
+   vitest twins direct AND aggregate): EVERY shared class — shared view /
+   DataView / raw buffer / streaming `{stream:true}`
+   (`identity.errorFirstShared`) — AND every private sibling + no-arg — priv
+   view / DataView / ArrayBuffer / no-arg (`identity.errorFirstPrivate`) —
+   AND the REALM's global TextDecoder through BOTH real carriers, full
+   8-class set (per class: realm decode swapped to an unmarked
+   fresh-TypeError original, re-install direct/aggregate, one decode —
+   `errorFirstRealm.direct`/`.aggregate`): `{first:true, throwCount:1}`
+   each — a native-first wrapper retrying only on TypeError passes the
+   generic-Error row; a Uint8Array-only row misses a DataView/raw/streaming
+   retry branch; a private-only retry rethrows a REUSED sentinel unnoticed
+   (fresh error + count 1 kills it); an injected-classes-only sweep misses a
+   fix retrying fresh errors only for the absent-binding realm's global
+   decoder.
 10. no-COI page+worker, built util-types:
     `isSharedArrayBuffer(new ArrayBuffer(1))` → `false`,
     `isAnyArrayBuffer(…)` → `true`, shared-wasm buffer → `true`/`true`, no
@@ -290,8 +300,8 @@ unmodified. RED target unless marked pin/green.
 | no-SAB-binding realm × decode(non-shared / no-arg) | pass-through, Node-identical | parity 1–2 REDs |
 | SAB realm, native rejects shared × decode(shared view/DataView/raw SAB) | copy path, EXACT view bytes — sentinel + nonzero offset (`lossy-aggregate` killed) | parity 8 pin |
 | SAB realm × decode(non-shared) | exact input/opts object identity through; unique sentinel RETURN through unchanged; thrown error object identity through (`lossy-aggregate` killed twice — objects AND returns) | parity 9 pins |
-| any realm × decode(any class) through the patched fn | original decoder invoked EXACTLY once, ordered log over the FULL class set — priv view/DataView/ArrayBuffer, no-arg, shared view/DataView/raw, streaming; every shared-source call = private copy, never the original on shared input; shared-input first-error identity with throw count 1, fresh-TypeError swept per shared class (`observable-order` try-native-retry killed; `sibling-drift` catch-TypeError / class-scoped retry killed) | parity 13 COI pins + substrate REDs (probe row 17); parity 9 shared-first-error + row-18 sweep |
-| substrate lane × served response headers | BOTH COOP and COEP absent on document / Worker-script / probe-module / built-bundle responses; probe throws loud on any present header (`provenance-lie` killed — derived `crossOriginIsolated===false` passes a one-header server) | preconditions pin (probe row 16) |
+| any realm × decode(any class) through the patched fn | original decoder invoked EXACTLY once, ordered log over the FULL class set — priv view/DataView/ArrayBuffer, no-arg, shared view/DataView/raw, streaming; every shared-source call = private copy, never the original on shared input; first-error identity with throw count 1, fresh-TypeError swept per shared class AND per private class + no-arg AND through the realm decoder direct+aggregate (`observable-order` try-native-retry killed; `sibling-drift` catch-TypeError / class-scoped / private-only / realm-global-only retry killed) | parity 13 COI pins + substrate REDs (probe row 17); parity 9 first-error + row-18 sweeps |
+| substrate lane × served response headers | consumed-response provenance + injection controls — `toolchain-build/no-coi-substrate-lane` (split checkpoint 7) | lane item fault matrix (probe row 16) |
 | no-SAB realm × direct install then FIRST aggregate call | sibling installers still run (global alias, own writable `self`), decoder identity kept, decode green (`observable-order` marker-early-return killed) | parity 14 RED |
 | any realm × repeat install | `false`, strict-identity patched fn, shared decode intact (`lossy-aggregate` killed) | parity 7 pin |
 
@@ -331,18 +341,6 @@ unmodified. RED target unless marked pin/green.
 
 ## Decisions
 
-- Re-cut 2026-08-29 in place after Contract+RED checkpoint 1 (14-blocker
-  batch; same branch, lineage carries). Pre-re-cut clauses quoted for the
-  checkpoint diff: Decisions `Guard = feature-detect at install: typeof
-  SharedArrayBuffer !== 'function' → return false, never patch`; Acceptance
-  `installSharedMemoryTolerantTextDecoder there returns false and leaves
-  TextDecoder.prototype.decode untouched (no __riftyShared marker)`; Fault row
-  `no shared input physically possible: Chromium gates SAB and wasm shared
-  memory on COI`. All rested on one frozen assumption the real probe killed:
-  Chromium 148 does NOT gate shared `WebAssembly.Memory` on COI (probe rows
-  2–4). The correction STRENGTHENS the contract under the Node oracle (patch
-  installs everywhere; more input classes decode; every previously promised
-  observable — 'hello', '' — kept) — no user-observable fork, no demotion.
 - Fix carrier = realm-safe shared-input detection inside the patched body (no
   bare `SharedArrayBuffer` evaluation on any path); exact mechanism (brand
   check / `!(buf instanceof ArrayBuffer)` complement / captured constructor)
@@ -369,151 +367,59 @@ unmodified. RED target unless marked pin/green.
   implementation-owned; settled by the checkpoint-2 re-cut: dedicated
   Playwright lane `playwright.no-coi.config.ts` + `tests/no-coi/` (plain
   `node:http` headerless server). Observables unchanged: real Chromium, both
-  realm preconditions, real built shim, page + dedicated Worker.
-- Re-cut 2026-08-29 (2nd) in place after Contract+RED checkpoint 2 (5
-  blockers: C1–C4 + G1; same branch, attempt 3, lineage carries).
-  fault-classes §Contract escalation applied — 2nd consecutive Contract+RED
-  blocker → re-refine in place; NO split: one behavior, one fix carrier, the
-  blockers were missing committed carriers/artifacts + one provenance claim,
-  not a scope fork. Pre-re-cut clauses quoted for the checkpoint diff:
-  Context `installNodeRuntime (install-process.ts:117) runs it in every Node
-  realm` → corrected to kernel-pre-entry-only + public-worker-entry-never
-  (G1); Parity intro `every row's artifact = probe §2026-08-29 row (command +
-  output …)` → replayable driver + committed transcript (C4); Acceptance
-  `committed in the same PR as the fix` → substrate + COI pins committed at
-  this checkpoint (C1–C3). No observable promise weakened — every previously
-  declared decode outcome, identity pin, and error identity kept verbatim; no
-  demotion (no user-observable fork).
+  realm preconditions, real built shim, page + dedicated Worker. Lane
+  mechanics/provenance/CI/driver contract since split out:
+  `toolchain-build/no-coi-substrate-lane` (checkpoint 7).
 
-- Re-cut 2026-08-29 (3rd) in place after Contract+RED checkpoint 3 (12
-  blockers; same branch, attempt 4, lineage carries; batch, no split — one
-  behavior, blockers were exactness/order/provenance gaps in the pins plus
-  goal-drift in the map, not a scope fork). Pre-re-cut clauses quoted for the
-  checkpoint diff: parity 4 asserted a `{length, atOffset, nonNul}` PROJECTION
-  → exact length+SHA-256 (`lossy-aggregate`); probe recorded aggregate
-  `globalAlias`/`selfWritable` only after the repeat install and compared
-  `self` post-write → call-one snapshot + pre-write value + `Object.hasOwn` +
-  writable-data descriptor (`observable-order`, `lossy-aggregate`);
-  `patched.sharedDataView` was recorded but never asserted and native rows
-  omitted DataView → asserted in all four combos + native differential row
-  (`sibling-drift`, `frozen-assumption`); parity 10 "Node oracle" re-ran rifty
-  util-types in Node → REAL `node:util/types` differential rows
-  (`provenance-lie`); unused `startNoCoiServer` root knob cut (§Simplicity);
-  harness headers trimmed to load-bearing rationale. Goal-side same
-  checkpoint: I2 organic-reachability claim demoted from "certification
-  recorded on build-loop" to map Open question "installNodeRuntime seam";
-  build-loop + dev-hmr UNSEEDED (FIT §5 — contracts depended on open
-  questions; drafts deleted, scope back to map fog, durable evidence stays in
-  `reference/` + hmr spike record); map item-1 narrative and settled
-  util-types paragraph cut (map = index, not store). Every previously declared
-  decode outcome, identity pin, and error identity kept verbatim — pins only
-  STRENGTHENED under the same oracles; no user-observable fork, no demotion of
-  this contract. Still 7 RED + 2 green, inside the declared 5–8 band.
-
-- Re-cut 2026-08-29 (4th) in place after Contract+RED checkpoint 4 (batch;
-  same branch, attempt 5, lineage carries; no split — one behavior, blockers
-  were one weak observable, two provenance/process gaps, and goal/map-side
-  authority gaps, not a scope fork). Pre-re-cut clauses quoted for the
-  checkpoint diff: "decode NEVER evaluates the absent binding" was pinned by
-  output rows alone — a try/catch over the bare identifier passes them →
-  poisoned counting+throwing accessor after install, count EXACTLY 0, direct
-  AND aggregate, prior binding state restored (parity 12, probe row 13; B3
-  `frozen-assumption`); "existing `worker-realm-compat.test.ts` stays green
-  unmodified" while checkpoint 3 had RENAMED+EDITED the pre-existing
-  installWritableSelf test → restored byte-identical to main (branch diff of
-  that file additions-only), strengthened pin ADDED as a SEPARATE test (B4);
-  probe row 12 bundled PRIVATE `ipc/sab-ring.ts`, so a removed public export
-  or broken `spawnKernelWorker` passed silently → PUBLIC `kernel/src/index.ts`
-  bundle sweeping `createSabRing` + `spawnKernelWorker` + retained
-  `createWorkerOutputState` (B5 `provenance-lie`; reference doc rows 12–13 +
-  transcript regenerated). Goal-side same checkpoint: the goal's IRREVERSIBLE
-  choices got ADR carriers — ADR-0367 (semantic capability report ADDITIVE to
-  the untouched public `checkCapabilities` probe; restart/died-event beside
-  the dispose()-only lifecycle; cpus→1 divergence), ADR-0368 (OPFS selection
-  drops the ADR-0072 `crossOriginIsolated &&` clause — dated correction note +
-  README row, not a postponed draft), ADR-0369 (headerless no-COI Playwright
-  lane); map: leftover build-loop/dev-hmr pseudo-items dissolved into UNSLICED
-  fog (FIT §5), installNodeRuntime-seam settlement re-assigned from the
-  owning slice's own later Contract+RED (illegal fog→pickup transition, B6)
-  to a DELIVERABLE of the first slice composing the no-COI runtime. Every
-  previously declared decode outcome, identity pin, and error identity kept
-  verbatim; no user-observable fork, no demotion. Now 8 RED + 2 green, inside
-  the declared 5–8 band.
-
-- Re-cut 2026-08-30 (5th) in place after Contract+RED checkpoint 5 (9-blocker
-  batch; same branch, attempt 6, lineage carries; no split — one behavior,
-  blockers were wrapper-shaped holes in the pins, provenance gaps, and
-  authority/process corrections). Pre-re-cut clauses quoted for the checkpoint
-  diff: parity 8–9 pinned outputs and object/error identity only — a
-  try-native/catch/copy-retry wrapper (original invoked on the SHARED input
-  first) and an exact-objects-in/fabricated-output wrapper both passed → parity
-  13 ordered exact-call log (exactly one original call per decode; only the
-  shared-source call gets a private copy; Uint8Array/DataView/raw SAB ×
-  direct/aggregate) + unique-sentinel returns in parity 9 COI and no-COI +
-  realm-decoder privDataView/privArrayBuffer rows (parity 15)
-  (`observable-order`, `lossy-aggregate`); the probe's ONLY errorIdentity row
-  used non-shared input, leaving a shared-path error wrapper invisible →
-  shared-wasm FIRST-error identity + throw-count-1 row, browser AND Node
-  (`provenance-lie`); every aggregate carrier started unpatched, so a
-  marker-keyed aggregate early return passed → parity 14 mixed
-  direct-then-first-aggregate sequence, page+worker, clean aggregate combos
-  retained (`observable-order`); probe row 12 recorded only the eventual
-  ReferenceError, letting Worker construction move before the SAB throw
-  unobserved → counting Worker constructor, `workerConstructions: 0` per
-  public-entry call, replay fails loud on nonzero
-  (`provenance-lie`/`observable-order`); ADR-0369 consequence "`pnpm
-  test:no-coi` is not part of `pr:check` until the goal's I8 slice wires it
-  green" left the unit's only Final+GREEN carrier opt-in → lane wired as
-  REQUIRED CI job `no-coi-chromium` + CI gate this checkpoint (DoD: opt-in
-  lanes never close acceptance); `workers: 1` + `fullyParallel: false` had no
-  no-COI forcing constraint → cut (§Simplicity); ADR-0367 §4 promoted
-  ADR-0011's deprecated "non-isolated test environments only" same-realm
-  fallback into a warned product tier without recording the supersession →
-  §4 names the superseded clause + dated correction note on ADR-0011 + README
-  Corrections row; goal.md had been edited after ledger pickup (ADR citations,
-  disposition-comment rewrite) — the goal is user-owned
-  (decision-workflow §Goal runs: "re-cut them, never the goal") → restored
-  byte-identical to main; ADR/citation carriers live on the map, the ADRs and
-  this ledger. Every previously declared decode outcome, identity pin, and
-  error identity kept verbatim — pins only STRENGTHENED under the same
-  oracles; no user-observable fork, no demotion. Now 11 RED + 2 green; band
-  re-declared 8–12 (was 5–8; three added RED carriers: parity 9 substrate,
-  14, 15).
-
-- Re-cut 2026-08-30 (6th) in place after Contract+RED checkpoint 6 (4-blocker
-  batch; same branch, attempt 7, lineage carries; no split — one behavior,
-  blockers were two class-coverage holes, one substrate-provenance gap, and
-  one goal-drift reconciliation). Pre-re-cut clauses quoted for the checkpoint
-  diff: the substrate asserted only DERIVED no-COI state
-  (`crossOriginIsolated===false` + `typeof SharedArrayBuffer==='undefined'`)
-  — a server adding ONLY COOP or ONLY COEP passed while violating the lane's
-  load-bearing "NO COOP/COEP" property → response-header sweep over every
-  consumed response class (document / Worker script / probe module / built
-  bundles), loud throw in the probe body + preconditions pin, probe row 16
-  (`provenance-lie`); the shared first-error coverage was ONE generic-Error
-  shared-Uint8Array row — a native-first wrapper retrying only on TypeError,
-  or only for DataView/raw/streaming inputs, passed → fresh-TypeError sweep
-  across EVERY shared class, page+worker × direct/aggregate probe + COI
-  vitest twins, probe row 18 (`observable-order`, `sibling-drift`); parity 13
-  covered priv Uint8Array + shared view/DataView/raw with `stream:false`,
-  COI vitest only — a SAB-present-only shared-streaming (or no-arg/priv
-  DataView/ArrayBuffer-blind) native-first branch passed every carrier →
-  FULL-class-set ordered log (no-arg, priv DataView/ArrayBuffer, streaming
-  pair with exact per-call opts) in vitest direct+aggregate AND a substrate
-  `exactCallLog` carrier through both REAL install paths — RED today, probe
-  row 17. Goal drift same checkpoint: unpicked draft
-  `vfs/no-coi-opfs-policy-flip` required `OpfsFsSync.isSupported()` as the
-  selection predicate, explicitly rejected `OpfsVfs.isSupported()`, and
-  scoped a pickup ADR that ADR-0368 (checkpoint 4) had since recorded →
-  draft re-cut to the recorded choice (unpicked items contradicted by new
-  facts re-cut freely; active ADRs immutable): selection =
-  `OpfsVfs.isSupported()` platform probe, sync capability keeps its loud
-  `OpfsFsSync.init` NotImplementedError guard, pickup-ADR scope dropped.
-  Every previously declared decode outcome, identity pin, and error identity
-  kept verbatim — pins only STRENGTHENED under the same oracles; no
-  user-observable fork, no demotion. Transcript regenerated same command
-  (Chromium 148.0.7778.96 / node v24.16.0). Now 12 RED + 2 green — top of
-  the declared 8–12 band.
+- Re-cut lineage, checkpoints 1–6 (compacted checkpoint 7 — approach-cost
+  blocker: quoted-clause narratives duplicated the contract; ONE authority =
+  this file's current sections + the committed transcript; full per-checkpoint
+  text in this file's git history). Every checkpoint: same branch, batch
+  re-cut in place, observables only STRENGTHENED under the same oracles — no
+  user-observable fork, no demotion.
+  - ckpt 1, 2026-08-29 (14 blockers, attempt 2): direction flip — spike-era
+    no-op guard killed by the real probe (shared wasm memory exists no-COI);
+    fix = unconditional realm-safe patch.
+  - ckpt 2, 2026-08-29 (5, attempt 3; §Contract escalation, re-refine no
+    split): substrate + COI pins committed; probe made replayable; I2 install
+    mapping corrected.
+  - ckpt 3, 2026-08-29 (12, attempt 4): exactness/order pins — raw-buffer
+    digest, call-one sibling snapshot, DataView + real `node:util/types`
+    differentials; build-loop/dev-hmr unseeded, map narrative cut.
+  - ckpt 4, 2026-08-29 (10+2, attempt 5): poisoned-binding accessor
+    (parity 12); baseline installWritableSelf test restored byte-identical;
+    kernel PUBLIC-entry sweep; ADR-0367/0368/0369 carriers; fog dissolution +
+    installNodeRuntime-seam re-assignment.
+  - ckpt 5, 2026-08-30 (9, attempt 6): ordered exact-call log (parity 13),
+    sentinel returns, shared first-error row, mixed sequence (parity 14),
+    realm priv rows (parity 15), counting Worker constructor; lane wired
+    REQUIRED in CI; ADR-0011 supersession recorded; goal.md restored to main.
+    Band re-declared 8–12 (was 5–8).
+  - ckpt 6, 2026-08-30 (4, attempt 7): response-header provenance sweep,
+    fresh-TypeError shared sweep, full-class exact-call log + substrate
+    carrier; opfs-policy-flip draft reconciled to ADR-0368. 12 RED + 2 green.
+- Re-cut 2026-08-30 (7th) in place after Contract+RED checkpoint 7 (7-blocker
+  batch; same branch, attempt 8, lineage carries). Completeness closed
+  (details now IN the sections above — no duplicate narrative): parity 9
+  fresh-error sweeps extended to private classes + no-arg AND to the realm's
+  global TextDecoder through both real carriers, substrate + COI vitest
+  twins; header provenance re-based from the in-page fetch sweep (blind to a
+  `Sec-Fetch-Dest`-keyed server) to ACTUAL consumed-response observation with
+  per-class × per-header injection controls; CI job→script→config→gate
+  mapping pinned with a sibling sweep; kernel public-entry sweep given GOLDEN
+  export+ReferenceError assertions. SPLIT per backlog README §Goal run ("an
+  expected-RED batch far above [the declared band] → the unit is too big:
+  re-cut/split before implementation"; Budget blocker — pickup band 3–5 grew
+  to 12 across checkpoints without a split): lane mechanics, provenance
+  harness, required CI job, and evidence driver moved verbatim-or-stronger to
+  `toolchain-build/no-coi-substrate-lane` (ready, green, tooling-class; split
+  re-cut names its predecessor — nothing weakened, no demotion). THIS unit's
+  band re-declared as EXACTLY its 12 committed substrate REDs: the growth was
+  review-added wrapper-killer pins on the ONE fix carrier, not scope — the
+  separable scope is what split out. Ledger rows 7–11 and these Decisions
+  compacted to lineage one-liners (approach-cost blocker). Transcript
+  regenerated same command (Chromium 148.0.7778.96 / node v24.16.0). Still
+  12 RED + 2 green.
 
 ## Reversibility
 

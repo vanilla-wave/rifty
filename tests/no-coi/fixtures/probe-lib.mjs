@@ -62,34 +62,6 @@ async function exactBytesRecord(bytes) {
   };
 }
 
-/**
- * Header provenance (provenance-lie killer): derived state alone lies — a
- * server adding ONLY COOP or ONLY COEP still yields
- * `crossOriginIsolated === false`, silently violating the lane's load-bearing
- * property (tests/no-coi/server.mjs: NO isolation headers at all). Sweep every
- * response class the substrate consumes — document, Worker script, probe
- * module, built bundles — and record BOTH headers per response.
- */
-async function responseHeaderSweep() {
-  const paths = {
-    document: '/index.html',
-    workerScript: '/probe-worker.mjs',
-    probeModule: '/probe-lib.mjs',
-    builtShim: '/dist/worker-realm-compat.mjs',
-    builtUtilTypes: '/dist/util-types.mjs',
-  };
-  const out = {};
-  for (const [name, path] of Object.entries(paths)) {
-    const resp = await fetch(path, { cache: 'no-store' });
-    out[name] = {
-      status: resp.status,
-      coop: resp.headers.get('cross-origin-opener-policy'),
-      coep: resp.headers.get('cross-origin-embedder-policy'),
-    };
-  }
-  return out;
-}
-
 /** `self` observed WITHOUT writing it: pre-write value + ownership + descriptor.
  * Kills the lossy check where an assignment-then-compare passes on `self=null`
  * or an inherited setter. */
@@ -222,7 +194,7 @@ async function identityChecks(installShim) {
   // wrapper that retries only on TypeError passes the generic-Error row above,
   // and a Uint8Array-only row misses a DataView/raw retry branch. With fresh
   // TypeErrors any retry propagates the SECOND object with count 2.
-  const errorFirstRow = (makeInput, streamOpts) =>
+  const errorFirstRow = (call) =>
     attempt(() => {
       const typeErrors = [];
       class FreshTypeErrorDecoder {
@@ -234,8 +206,7 @@ async function identityChecks(installShim) {
       }
       installShim(FreshTypeErrorDecoder);
       try {
-        if (streamOpts === undefined) new FreshTypeErrorDecoder().decode(makeInput());
-        else new FreshTypeErrorDecoder().decode(makeInput(), streamOpts);
+        call(new FreshTypeErrorDecoder());
         return 'no-throw';
       } catch (err) {
         return {
@@ -244,15 +215,82 @@ async function identityChecks(installShim) {
         };
       }
     });
+  const errorFirstCalls = errorFirstClassCalls();
   out.errorFirstShared = {
-    sharedView: await errorFirstRow(() => new Uint8Array(makeSharedWasmMemory().buffer, 0, 4)),
-    sharedDataView: await errorFirstRow(() => new DataView(makeSharedWasmMemory().buffer, 0, 4)),
-    rawShared: await errorFirstRow(() => makeSharedWasmMemory().buffer),
-    streaming: await errorFirstRow(() => new Uint8Array(makeSharedWasmMemory().buffer, 0, 1), {
-      stream: true,
-    }),
+    sharedView: await errorFirstRow(errorFirstCalls.sharedView),
+    sharedDataView: await errorFirstRow(errorFirstCalls.sharedDataView),
+    rawShared: await errorFirstRow(errorFirstCalls.rawShared),
+    streaming: await errorFirstRow(errorFirstCalls.streaming),
+  };
+  // Private siblings + no-arg, SAME fresh-error discipline: a wrapper that
+  // retries only FAILING PRIVATE inputs invokes the original twice yet — with
+  // one reused sentinel — throws the same object and passes; fresh errors +
+  // count EXACTLY 1 kill it.
+  out.errorFirstPrivate = {
+    priv: await errorFirstRow(errorFirstCalls.priv),
+    privDataView: await errorFirstRow(errorFirstCalls.privDataView),
+    privArrayBuffer: await errorFirstRow(errorFirstCalls.privArrayBuffer),
+    noArg: await errorFirstRow(errorFirstCalls.noArg),
   };
   return out;
+}
+
+/** One decode thunk per declared input class (fresh inputs per thunk call). */
+function errorFirstClassCalls() {
+  return {
+    priv: (d) => d.decode(new TextEncoder().encode('hello')),
+    privDataView: (d) => d.decode(new DataView(new TextEncoder().encode('hello').buffer)),
+    privArrayBuffer: (d) => d.decode(new TextEncoder().encode('hello').buffer),
+    noArg: (d) => d.decode(),
+    sharedView: (d) => d.decode(new Uint8Array(makeSharedWasmMemory().buffer, 0, 4)),
+    sharedDataView: (d) => d.decode(new DataView(makeSharedWasmMemory().buffer, 0, 4)),
+    rawShared: (d) => d.decode(makeSharedWasmMemory().buffer),
+    streaming: (d) =>
+      d.decode(new Uint8Array(makeSharedWasmMemory().buffer, 0, 1), {
+        stream: true,
+      }),
+  };
+}
+
+/**
+ * Fresh-TypeError first-error sweep through the REALM's global TextDecoder,
+ * BOTH real install carriers (sibling-drift killer): the injected-class rows
+ * above admit a fix that retries fresh errors only for the absent-binding
+ * realm's global decoder. Per class: swap the realm decode to an UNMARKED
+ * fresh-TypeError original, re-install (direct no-arg / aggregate), one
+ * decode — propagated error must be the FIRST thrown with count EXACTLY 1.
+ */
+async function realmErrorFirstSweeps(shim) {
+  const carrier = async (install) => {
+    const out = {};
+    for (const [name, call] of Object.entries(errorFirstClassCalls())) {
+      const saved = TextDecoder.prototype.decode;
+      const thrown = [];
+      TextDecoder.prototype.decode = function decode() {
+        const err = new TypeError(`fresh-typeerror-${thrown.length}`);
+        thrown.push(err);
+        throw err;
+      };
+      try {
+        install();
+        out[name] = await attempt(() => {
+          try {
+            call(new TextDecoder());
+            return 'no-throw';
+          } catch (err) {
+            return { first: thrown.length > 0 && err === thrown[0], throwCount: thrown.length };
+          }
+        });
+      } finally {
+        TextDecoder.prototype.decode = saved;
+      }
+    }
+    return out;
+  };
+  return {
+    direct: await carrier(() => shim.installSharedMemoryTolerantTextDecoder()),
+    aggregate: await carrier(() => shim.installWorkerRealmCompat()),
+  };
 }
 
 /** Bytes + brand + identity of whatever object reached the original decoder —
@@ -388,19 +426,11 @@ export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = 
       )}, typeof SharedArrayBuffer=${r.sabBindingTypeof}`,
     );
   }
-  if (requireNoCoi) {
-    // Response-header provenance: BOTH isolation headers absent on EVERY
-    // response class — derived state above passes a COOP-only/COEP-only server.
-    r.responseHeaders = await responseHeaderSweep();
-    for (const [name, h] of Object.entries(r.responseHeaders)) {
-      if (h.status !== 200 || h.coop !== null || h.coep !== null) {
-        throw new Error(
-          `no-COI substrate served isolation headers on ${name}: ` +
-            `status=${h.status} coop=${String(h.coop)} coep=${String(h.coep)}`,
-        );
-      }
-    }
-  }
+  // Response-header provenance is HARNESS-observed (tests/no-coi/
+  // header-provenance.mjs, spec + replay driver): an in-page re-fetch sweep is
+  // a provenance lie — a server keying isolation headers on request
+  // destination serves them on the ACTUAL navigation/Worker/module responses
+  // while every ordinary fetch stays clean.
 
   const mem = makeSharedWasmMemory();
   r.wasmSharedBrand = Object.prototype.toString.call(mem.buffer);
@@ -509,6 +539,10 @@ export async function runProbe(mode, { requireNoCoi = true, nativeUtilTypes } = 
 
   // Parity 13 substrate: ordered exact-call log, BOTH real install carriers.
   r.exactCallLog = await exactCallSweeps(shim);
+
+  // Parity 9 realm carriers: fresh-TypeError first-error sweep on the REALM
+  // decoder, direct AND aggregate, full class set.
+  r.errorFirstRealm = await realmErrorFirstSweeps(shim);
 
   return r;
 }

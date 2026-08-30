@@ -169,6 +169,67 @@ describe('CI change scope', () => {
       expect(gate, dependency).toContain(`- ${dependency}`);
     }
   });
+
+  it('pins the exact job→script→config→gate mapping for every gated suite (sibling sweep)', () => {
+    // A `needs`/`if` presence check alone lets a job run `true` or a SIBLING
+    // suite, soften its verdict with continue-on-error, or feed the gate
+    // another job's result — every hop of the chain is pinned instead.
+    const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+
+    // No job may soften its verdict: a continue-on-error'd failure reports
+    // success to the gate (provenance-lie).
+    expect(workflow).not.toContain('continue-on-error');
+
+    // job → exact suite script (a `run: true` or a sibling script fails here).
+    for (const [job, runLine] of [
+      ['no-coi-chromium', '- run: pnpm test:no-coi'],
+      ['browser-unit-chromium', '- run: pnpm test:browser-unit'],
+      ['e2e-chromium', 'pnpm test:e2e:${{ matrix.lane }}'],
+      ['unit-and-conformance', '- run: pnpm test:${{ matrix.suite }}'],
+    ] as const) {
+      expect(jobBlock(workflow, job), job).toContain(runLine);
+    }
+    expect(jobBlock(workflow, 'unit-and-conformance')).toContain('suite: [run, parity]');
+    for (const lane of ['heavy', 'light', 'prod']) {
+      expect(jobBlock(workflow, 'e2e-chromium'), lane).toContain(`lane: ${lane}`);
+    }
+
+    // script → config → suite dir (a script pointed at a sibling config runs
+    // the wrong specs under the right job name).
+    const configOf: [script: string, config: string, testDir: string][] = [
+      ['test:no-coi', 'playwright.no-coi.config.ts', './tests/no-coi'],
+      ['test:browser-unit', 'playwright.browser-unit.config.ts', './tests/browser-unit'],
+      ['test:e2e:prod', 'playwright.prod.config.ts', './tests/e2e-prod'],
+    ];
+    for (const [script, config, testDir] of configOf) {
+      expect(packageJson.scripts[script], script).toContain(`--config ${config}`);
+      expect(readFileSync(config, 'utf8'), config).toContain(`testDir: '${testDir}'`);
+    }
+    // heavy/light ride the default config (no --config flag → playwright.config.ts).
+    for (const script of ['test:e2e:heavy', 'test:e2e:light']) {
+      expect(packageJson.scripts[script], script).toMatch(/^playwright test --project=chromium-/);
+      expect(packageJson.scripts[script], script).not.toContain('--config');
+    }
+    expect(readFileSync('playwright.config.ts', 'utf8')).toContain("testDir: './tests/e2e'");
+
+    // gate ← each job's OWN result (feeding a sibling's result — while the
+    // needs list stays complete — must fail here, not pass by presence).
+    const gate = jobBlock(workflow, 'ci-gate');
+    for (const [env, expr] of [
+      ['CODE', '${{ needs.change-scope.outputs.code }}'],
+      ['CHANGE_SCOPE_RESULT', '${{ needs.change-scope.result }}'],
+      ['LINT_RESULT', '${{ needs.lint-and-typecheck.result }}'],
+      ['UNIT_RESULT', '${{ needs.unit-and-conformance.result }}'],
+      ['E2E_RESULT', '${{ needs.e2e-chromium.result }}'],
+      ['BROWSER_UNIT_RESULT', '${{ needs.browser-unit-chromium.result }}'],
+      ['NO_COI_RESULT', '${{ needs.no-coi-chromium.result }}'],
+    ] as const) {
+      expect(gate, env).toContain(`${env}: ${expr}`);
+    }
+  });
 });
 
 describe('CI Node CLI eval oracle', () => {

@@ -411,6 +411,74 @@ describe('shared-input FIRST-error identity + throw count 1 — fresh TypeError 
       }
     }
   });
+
+  // PRIVATE siblings + no-arg, same fresh-error discipline: a reused sentinel
+  // lets a wrapper that retries only FAILING PRIVATE inputs invoke the
+  // original twice yet rethrow the same object; fresh errors + count EXACTLY 1
+  // kill it. Substrate twins: probe `identity.errorFirstPrivate` +
+  // `errorFirstRealm` (page+worker, realm decoder, direct+aggregate).
+  function privateClassCalls(): [string, (d: TextDecoder) => void][] {
+    return [
+      ['private Uint8Array', (d) => void d.decode(new TextEncoder().encode('hello'))],
+      [
+        'private DataView',
+        (d) => void d.decode(new DataView(new TextEncoder().encode('hello').buffer)),
+      ],
+      ['private ArrayBuffer', (d) => void d.decode(new TextEncoder().encode('hello').buffer)],
+      ['no-arg', (d) => void d.decode()],
+    ];
+  }
+
+  it('direct install: each PRIVATE class + no-arg propagates the FIRST fresh error with throw count EXACTLY 1', () => {
+    for (const [label, call] of privateClassCalls()) {
+      const { Dec, thrown } = makeFreshTypeErrorDecoder();
+      installSharedMemoryTolerantTextDecoder(Dec);
+      let caught: unknown;
+      try {
+        call(new Dec());
+      } catch (err) {
+        caught = err;
+      }
+      expect(thrown, label).toHaveLength(1);
+      expect(caught, label).toBe(thrown[0]);
+    }
+  });
+
+  it('aggregate install (installWorkerRealmCompat): same PRIVATE-class + no-arg pins through the realm TextDecoder', () => {
+    const realDecode = TextDecoder.prototype.decode;
+    const hadSelf = 'self' in globalThis;
+    const savedSelf = (globalThis as { self?: unknown }).self;
+    try {
+      for (const [label, call] of privateClassCalls()) {
+        const thrown: TypeError[] = [];
+        TextDecoder.prototype.decode = ((): string => {
+          const err = new TypeError(`fresh-typeerror-${thrown.length}`);
+          thrown.push(err);
+          throw err;
+        }) as typeof TextDecoder.prototype.decode;
+        installWorkerRealmCompat();
+        let caught: unknown;
+        try {
+          call(new TextDecoder());
+        } catch (err) {
+          caught = err;
+        }
+        expect(thrown, label).toHaveLength(1);
+        expect(caught, label).toBe(thrown[0]);
+      }
+    } finally {
+      TextDecoder.prototype.decode = realDecode;
+      if (hadSelf) {
+        Object.defineProperty(globalThis, 'self', {
+          value: savedSelf,
+          writable: true,
+          configurable: true,
+        });
+      } else {
+        Reflect.deleteProperty(globalThis, 'self');
+      }
+    }
+  });
 });
 
 describe('repeat-install identity pins — parity 7 (booleans alone do not close this)', () => {

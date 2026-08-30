@@ -25,8 +25,21 @@ const CONTENT_TYPES = {
   '.wasm': 'application/wasm',
 };
 
-/** Start the headerless fixture server; resolves with the http.Server. */
-export function startNoCoiServer(port) {
+const INJECT_HEADERS = {
+  coop: ['cross-origin-opener-policy', 'same-origin'],
+  coep: ['cross-origin-embedder-policy', 'require-corp'],
+};
+
+/**
+ * Start the headerless fixture server; resolves with the http.Server.
+ *
+ * `inject` (negative-control harness ONLY — `header-provenance.no-coi.spec.ts`):
+ * serve ONE isolation header (`{header: 'coop'|'coep', path}`) on ONE path,
+ * ONLY on actually-consumed destinations (`Sec-Fetch-Dest` present and not
+ * 'empty') — the adversarial server an ordinary re-fetch sweep cannot see;
+ * the consumed-response provenance pins must still catch it.
+ */
+export function startNoCoiServer(port, { inject } = {}) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
     const rel = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -38,10 +51,21 @@ export function startNoCoiServer(port) {
     try {
       const body = await readFile(path);
       // Deliberately NO Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy.
-      res.writeHead(200, {
+      const headers = {
         'content-type': CONTENT_TYPES[extname(path)] ?? 'application/octet-stream',
         'cache-control': 'no-store',
-      });
+      };
+      const dest = req.headers['sec-fetch-dest'];
+      if (
+        inject !== undefined &&
+        url.pathname === inject.path &&
+        dest !== undefined &&
+        dest !== 'empty'
+      ) {
+        const [name, value] = INJECT_HEADERS[inject.header];
+        headers[name] = value;
+      }
+      res.writeHead(200, headers);
       res.end(body);
     } catch {
       res.writeHead(404).end('not found');

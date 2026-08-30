@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-30T00:50:29.016Z",
+  "generated": "2026-08-30T02:27:09.858Z",
   "command": "node tools/probes/no-coi-realm-probe.mjs",
   "chromium": "148.0.7778.96",
   "node": "v24.16.0",
@@ -10,33 +10,6 @@
       "mode": "direct",
       "crossOriginIsolated": false,
       "sabBindingTypeof": "undefined",
-      "responseHeaders": {
-        "document": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        },
-        "workerScript": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        },
-        "probeModule": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        },
-        "builtShim": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        },
-        "builtUtilTypes": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        }
-      },
       "wasmSharedBrand": "[object SharedArrayBuffer]",
       "wasmSharedInstanceofArrayBuffer": false,
       "native": {
@@ -235,6 +208,36 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstPrivate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -247,6 +250,146 @@
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "errorFirstRealm": {
+        "direct": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        },
+        "aggregate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "consumedResponseHeaders": {
+        "document": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "probeModule": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtShim": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtUtilTypes": {
+          "status": 200,
+          "coop": null,
+          "coep": null
         }
       }
     },
@@ -254,33 +397,6 @@
       "mode": "aggregate",
       "crossOriginIsolated": false,
       "sabBindingTypeof": "undefined",
-      "responseHeaders": {
-        "document": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        },
-        "workerScript": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        },
-        "probeModule": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        },
-        "builtShim": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        },
-        "builtUtilTypes": {
-          "status": 200,
-          "coop": null,
-          "coep": null
-        }
-      },
       "wasmSharedBrand": "[object SharedArrayBuffer]",
       "wasmSharedInstanceofArrayBuffer": false,
       "native": {
@@ -482,6 +598,36 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstPrivate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -495,19 +641,127 @@
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
         }
-      }
-    },
-    "worker-direct": {
-      "mode": "direct",
-      "crossOriginIsolated": false,
-      "sabBindingTypeof": "undefined",
-      "responseHeaders": {
-        "document": {
-          "status": 200,
-          "coop": null,
-          "coep": null
+      },
+      "errorFirstRealm": {
+        "direct": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
         },
-        "workerScript": {
+        "aggregate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "consumedResponseHeaders": {
+        "document": {
           "status": 200,
           "coop": null,
           "coep": null
@@ -527,7 +781,12 @@
           "coop": null,
           "coep": null
         }
-      },
+      }
+    },
+    "worker-direct": {
+      "mode": "direct",
+      "crossOriginIsolated": false,
+      "sabBindingTypeof": "undefined",
       "wasmSharedBrand": "[object SharedArrayBuffer]",
       "wasmSharedInstanceofArrayBuffer": false,
       "native": {
@@ -726,6 +985,36 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstPrivate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -739,13 +1028,126 @@
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
         }
-      }
-    },
-    "worker-aggregate": {
-      "mode": "aggregate",
-      "crossOriginIsolated": false,
-      "sabBindingTypeof": "undefined",
-      "responseHeaders": {
+      },
+      "errorFirstRealm": {
+        "direct": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        },
+        "aggregate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "consumedResponseHeaders": {
         "document": {
           "status": 200,
           "coop": null,
@@ -771,7 +1173,12 @@
           "coop": null,
           "coep": null
         }
-      },
+      }
+    },
+    "worker-aggregate": {
+      "mode": "aggregate",
+      "crossOriginIsolated": false,
+      "sabBindingTypeof": "undefined",
       "wasmSharedBrand": "[object SharedArrayBuffer]",
       "wasmSharedInstanceofArrayBuffer": false,
       "native": {
@@ -973,6 +1380,36 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstPrivate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -986,9 +1423,159 @@
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
         }
+      },
+      "errorFirstRealm": {
+        "direct": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        },
+        "aggregate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        }
+      },
+      "consumedResponseHeaders": {
+        "document": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "workerScript": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "probeModule": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtShim": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        },
+        "builtUtilTypes": {
+          "status": 200,
+          "coop": null,
+          "coep": null
+        }
       }
     },
     "kernelPublicEntry": {
+      "exportTypes": {
+        "createSabRing": "function",
+        "spawnKernelWorker": "function",
+        "retainedCreateWorkerOutputState": "function"
+      },
       "createSabRing": {
         "ok": false,
         "errName": "ReferenceError",
@@ -1209,6 +1796,36 @@
               "throwCount": 1
             }
           }
+        },
+        "errorFirstPrivate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -1375,6 +1992,124 @@
                 "bytes": [169],
                 "optsExact": true
               }
+            }
+          }
+        }
+      },
+      "errorFirstRealm": {
+        "direct": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          }
+        },
+        "aggregate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": true,
+              "throwCount": 1
             }
           }
         }
@@ -1589,6 +2324,36 @@
               "throwCount": 0
             }
           }
+        },
+        "errorFirstPrivate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
         }
       },
       "exactCallLog": {
@@ -1601,6 +2366,124 @@
           "ok": false,
           "errName": "ReferenceError",
           "errMsg": "SharedArrayBuffer is not defined"
+        }
+      },
+      "errorFirstRealm": {
+        "direct": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
+        },
+        "aggregate": {
+          "priv": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "privArrayBuffer": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "noArg": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "sharedDataView": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "rawShared": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          },
+          "streaming": {
+            "ok": true,
+            "value": {
+              "first": false,
+              "throwCount": 0
+            }
+          }
         }
       }
     }

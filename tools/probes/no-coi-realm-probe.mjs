@@ -4,8 +4,9 @@
  * regenerates the whole evidence table as raw JSON on stdout — real built shim
  * in no-COI Chromium (page + Worker × direct/aggregate), the kernel PUBLIC
  * entry (`createSabRing()` + `spawnKernelWorker()` via a bundle of
- * `kernel/src/index.ts` — a removed public export fails HERE, never silently;
- * a counting `Worker` constructor pins EXACTLY zero constructions per call)
+ * `kernel/src/index.ts` — GOLDEN per entry: function export + raw
+ * `ReferenceError: SharedArrayBuffer is not defined` + EXACTLY zero counted
+ * `Worker` constructions, replay fails loud on anything else)
  * plus the retained private constructor `createWorkerOutputState()`, and the
  * Node oracle (binding intact + deleted, plus the REAL `node:util/types`
  * differential). Durable record:
@@ -27,6 +28,12 @@ const { buildNoCoiFixtures } = await import(
 const { startNoCoiServer } = await import(
   pathToFileURL(join(repoRoot, 'tests', 'no-coi', 'server.mjs')).href
 );
+const {
+  assertHeaderlessConsumption,
+  captureConsumedResponses,
+  CONSUMED_CLASSES,
+  summarizeConsumedResponses,
+} = await import(pathToFileURL(join(repoRoot, 'tests', 'no-coi', 'header-provenance.mjs')).href);
 
 await buildNoCoiFixtures();
 // Row 12 probe-only bundles (not lane fixtures): the kernel PUBLIC entry — so
@@ -82,8 +89,11 @@ try {
     for (const mode of ['direct', 'aggregate']) {
       const page = await browser.newPage();
       try {
+        // Row 16: header provenance on the ACTUALLY consumed responses (an
+        // in-page re-fetch sweep passes a Sec-Fetch-Dest-keyed server).
+        const responses = captureConsumedResponses(page);
         await page.goto(`http://localhost:${port}/index.html`);
-        transcript.chromiumNoCoi[`${realm}-${mode}`] =
+        const result =
           realm === 'page'
             ? await page.evaluate(async (m) => {
                 const lib = await import('/probe-lib.mjs');
@@ -99,6 +109,12 @@ try {
                 if (!msg.ok) throw new Error(`worker probe failed: ${msg.error}`);
                 return msg.result;
               }, mode);
+        assertHeaderlessConsumption(responses, CONSUMED_CLASSES[realm]);
+        result.consumedResponseHeaders = summarizeConsumedResponses(
+          responses,
+          CONSUMED_CLASSES[realm],
+        );
+        transcript.chromiumNoCoi[`${realm}-${mode}`] = result;
       } finally {
         await page.close();
       }
@@ -115,6 +131,7 @@ try {
   {
     const page = await browser.newPage();
     try {
+      const responses = captureConsumedResponses(page);
       await page.goto(`http://localhost:${port}/index.html`);
       transcript.chromiumNoCoi.kernelPublicEntry = await page.evaluate(async () => {
         const RealWorker = globalThis.Worker;
@@ -158,6 +175,13 @@ try {
             ),
           );
           return {
+            // A removed/renamed export must fail the goldens below as a
+            // non-'function' typeof, never as an incidental TypeError row.
+            exportTypes: {
+              createSabRing: typeof kernel.createSabRing,
+              spawnKernelWorker: typeof kernel.spawnKernelWorker,
+              retainedCreateWorkerOutputState: typeof drain.createWorkerOutputState,
+            },
             createSabRing,
             spawnKernelWorker,
             retainedCreateWorkerOutputState: attempt(() => drain.createWorkerOutputState()),
@@ -166,15 +190,39 @@ try {
           globalThis.Worker = RealWorker;
         }
       });
-      // Zero-construction pin — replay fails LOUD if any public entry
-      // constructs a Worker around its SAB throw.
-      for (const [name, row] of Object.entries(transcript.chromiumNoCoi.kernelPublicEntry)) {
-        if (row.workerConstructions !== 0) {
+      // GOLDEN assertions — replay fails LOUD unless each entry is a real
+      // function export AND throws EXACTLY the raw absent-binding
+      // ReferenceError with ZERO Worker constructions. `attempt` alone records
+      // removed exports (TypeError), success, or wrong errors as data.
+      const sweep = transcript.chromiumNoCoi.kernelPublicEntry;
+      for (const name of [
+        'createSabRing',
+        'spawnKernelWorker',
+        'retainedCreateWorkerOutputState',
+      ]) {
+        const row = sweep[name];
+        if (sweep.exportTypes[name] !== 'function') {
           throw new Error(
-            `kernel sweep ${name}: expected 0 Worker constructions, got ${row.workerConstructions}`,
+            `kernel sweep ${name}: export is ${sweep.exportTypes[name]}, not a function`,
+          );
+        }
+        if (
+          row.ok !== false ||
+          row.errName !== 'ReferenceError' ||
+          row.errMsg !== 'SharedArrayBuffer is not defined' ||
+          row.workerConstructions !== 0
+        ) {
+          throw new Error(
+            `kernel sweep ${name}: expected raw ReferenceError('SharedArrayBuffer is not defined') ` +
+              `with 0 Worker constructions, got ${JSON.stringify(row)}`,
           );
         }
       }
+      assertHeaderlessConsumption(responses, {
+        document: '/index.html',
+        kernelPublic: '/dist/kernel-public.mjs',
+        kernelStdioDrain: '/dist/kernel-stdio-drain.mjs',
+      });
     } finally {
       await page.close();
     }
