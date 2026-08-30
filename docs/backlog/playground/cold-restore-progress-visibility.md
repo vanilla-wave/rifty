@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Cold snapshot restore visibility — silent openActive reopen, pinned indicator, dead #167 wiring removed
 created: 2026-08-29
 why: PR #167 (merge 7828b058, claimed mechanical) dropped the grey «restoring project dependencies…» wiring + flipped its e2e assert; measured 2026-08-30 — deep-link/transition paths stay visible via projectBusy carriers (unpinned), but the no-query persisted reopen (openActive) restores in FULL silence; beforeRun is dead machinery.
@@ -152,6 +152,14 @@ Network); operations are the two dependency-arrival entries this item pins.
 - Eviction-divergence frequency instrumentation.
 
 ## Decisions
+
+ready-verdict: 2026-08-30 — Contract+RED @ b953b3011
+
+- Contract+RED attempt 5 (verify) @ b953b3011: PASS — 0 blockers, coverage
+  15/15. Batched concerns for the implementing unit: (1) dev fault-cookie
+  seam accepts unvalidated values / loose URL match (hardening beyond
+  contract — apply only if free); (2) after the allowlist entry is deleted,
+  pin the tests/e2e ratchet scope with a direct regression assertion.
 
 - refine 2026-08-29 (user-owned, active-baseline fork): contract =
   **visibility, not a pinned line** — every path where a snapshot restore
