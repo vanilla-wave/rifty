@@ -241,9 +241,14 @@ test.describe('cold snapshot restore visibility', () => {
       source('packages/workbench/src/workers/pty-server.ts'),
       'pty-server must not carry the prod-unconsumed beforeRun dep/gate',
     ).not.toContain('beforeRun');
+    const slowProgress = source('apps/playground/src/glue/slow-progress.ts');
     expect(
-      source('apps/playground/src/glue/slow-progress.ts'),
+      slowProgress,
       'slow-progress must keep only prod-consumed options (delayMs, onSlow)',
     ).not.toContain('onSettledAfterSlow');
+    expect(
+      slowProgress,
+      'the tests-only `now` clock seam must go with its only consumer',
+    ).not.toMatch(/\bnow\??:/);
   });
 });

@@ -112,10 +112,15 @@ an immediate response fails even when local restore work is slow.
    (refine decision); the committed test pins only the observable.
 3. **Dead machinery gone** (RED today): `beforeRun` deleted from pty-server
    deps + gate (line 148/412) with its tests-only harness; `slow-progress.ts`
-   keeps only prod-consumed options (`delayMs`, `onSlow`). Committed carrier:
-   the source-shape test in the same spec («dead #167 machinery is removed»)
-   — the obligation IS source removal, so source shape is its honest
-   observable; `pnpm pr:check` stays green.
+   keeps EXACTLY the prod-consumed options `delayMs` + `onSlow` (the
+   `onSettledAfterSlow` and `now` seams go with their only consumers).
+   Committed carrier: the source-shape test in the same spec («dead #167
+   machinery is removed») — allowlisted in `check:source-grep` with the
+   recorded why (behavioral proof impossible: erased type property has no
+   runtime surface in real-owner lanes; a harness would stub sibling
+   workbench modules — forbidden mock; expected-RED cannot live in pr:check
+   lanes). The implementing PR deletes the allowlist entry with the
+   machinery; `pnpm pr:check` stays green.
 
 ## Parity cases
 
@@ -206,6 +211,15 @@ Network); operations are the two dependency-arrival entries this item pins.
   >
   > None — own-product UI visibility, no Node oracle; parity-runner n/a.
 
+- Contract+RED attempt 4 (verify) @ d25a5b634: blocker — 2 findings on the
+  Acceptance-3 carrier, both accepted without a separate adjudication
+  (testing.md:19 quoted verbatim; option-set exactness is the clause as
+  written): carrier admissibility resolved via the rule's own exception
+  mechanism — `check:source-grep` scope extended to `tests/e2e` (the same
+  bypass argument that added `tests/browser-unit`) and the spec allowlisted
+  with the recorded why; carrier extended to reject the `now` seam
+  (exact option set). `source-grep-ratchet.mjs` is not a contract-drift
+  referee (REFEREE_RE), so the gate edit rides this unit.
 - Contract+RED attempt 3 (verify) @ 673b81915: blocker — 2 substantive
   findings, both accepted WITHOUT a separate adjudication pass (recorded
   rationale: an Acceptance-3 `missing` coverage row forces a carrier under any
