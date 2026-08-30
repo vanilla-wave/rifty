@@ -58,4 +58,10 @@ Chromium realm — kept only as a transcript differential).
 > RED-first substrate: from its Contract+RED commit the required job stays
 > red until its fix lands. No declared-RED (`test.fail`) encoding may green a
 > ready unit's REDs between slices — that checkpoint-8 device is withdrawn.
+
+> Correction 2026-08-30 (no-coi-substrate-lane checkpoint 10): the required
+> job is UNCONDITIONAL — never in ADR-0323 §3's docs-only classified set, and
+> `CI gate` requires its success on every path (code, docs-only, classifier
+> failure). A docs-only classification skipping it would green a READY
+> RED-first substrate's PR between Contract+RED and its fix (false-fallback).
 - Later slices inherit server/fixture plumbing instead of re-deciding it.

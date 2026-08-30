@@ -271,17 +271,15 @@ jobs:
           path: playwright-report
 
   no-coi-chromium:
-    needs: change-scope
-    # bare needs.* implies success() and would skip the heavy suite when
-    # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
-    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     # Headerless no-COI lane (ADR-0369 + correction): fixtures served with NO
     # COOP/COEP — the only realm class where `crossOriginIsolated === false` +
     # absent `SharedArrayBuffer` binding is real. Own job, own config
     # (playwright.no-coi.config.ts) — never bolted onto the COI e2e config.
     # Required from its first consumer (toolchain-build/no-coi-substrate-lane)
-    # onward: an opt-in lane never closes acceptance; a READY RED-first
-    # substrate keeps its PR red until the fix.
+    # onward and UNCONDITIONAL like lint (never in ADR-0323's classified set):
+    # a docs-only classification skipping this job would green a READY
+    # RED-first substrate's PR between Contract+RED and its fix — the gate
+    # requires this job's success on EVERY path (false-fallback kill).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

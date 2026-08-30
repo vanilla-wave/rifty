@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- no-COI substrate lane (ADR-0369, epic `no-coi-sandbox-tier`): dedicated headerless Playwright lane `playwright.no-coi.config.ts` + `tests/no-coi/` (plain `node:http` server, NO COOP/COEP; fixtures = esbuild of real prod sources with metafile-pinned provenance), consumed-response header provenance keyed (path, `Sec-Fetch-Dest`) with injection/absent/non-200/every-class-position detection pins, precondition-rejection detection per predicate sibling with an actual decode counter, replayable evidence driver `tools/probes/no-coi-realm-probe.mjs` (kernel goldens + real `node:util/types` oracle provenance), and an UNCONDITIONAL required `no-coi-chromium` CI job (never in the docs-only classified set) wired into `CI gate` with a parsed-exact step/env mapping sweep.
+
 - `docs/process/traps.md` — hard-won gotcha cache (worktrees/git, CI/PR verification, e2e, browser runtime/bundling, testing discipline, tooling wiring) + `AGENTS.md` pointer; landed from the stranded `docs/agent-traps` branch (b83415482).
 
 ### Changed

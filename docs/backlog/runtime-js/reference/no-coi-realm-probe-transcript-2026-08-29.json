@@ -1,5 +1,5 @@
 {
-  "generated": "2026-08-30T04:26:05.357Z",
+  "generated": "2026-08-30T07:19:53.320Z",
   "command": "node tools/probes/no-coi-realm-probe.mjs",
   "chromium": "148.0.7778.96",
   "node": "v24.16.0",
@@ -2957,7 +2957,8 @@
             }
           }
         }
-      }
+      },
+      "nativeUtilTypesProvenance": true
     },
     "binding-deleted-direct": {
       "mode": "direct",
@@ -3484,7 +3485,8 @@
             }
           }
         }
-      }
+      },
+      "nativeUtilTypesProvenance": true
     }
   }
 }

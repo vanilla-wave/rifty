@@ -21,16 +21,35 @@ describe('CI gate reducer', () => {
     expect(gate({})).toEqual([]);
   });
 
-  it('passes a docs-only PR with heavy jobs skipped', () => {
+  it('passes a docs-only PR with classified heavy jobs skipped and no-coi-chromium green', () => {
     expect(
       gate({
         code: 'false',
         unit: 'skipped',
         e2e: 'skipped',
         browserUnit: 'skipped',
-        noCoi: 'skipped',
       }),
     ).toEqual([]);
+  });
+
+  // false-fallback fault row: no-coi-chromium is unconditional like lint —
+  // a docs-only classification must never let the gate accept its skip (a
+  // READY RED-first substrate would go green between Contract+RED and fix).
+  it('requires no-coi-chromium success on EVERY outcome path (code / docs-only / classifier failure)', () => {
+    const outcomes: Record<string, Record<string, string>> = {
+      code: { code: 'true' },
+      docsOnly: { code: 'false', unit: 'skipped', e2e: 'skipped', browserUnit: 'skipped' },
+      classifierFailure: { code: '', changeScope: 'failure' },
+    };
+    for (const [name, base] of Object.entries(outcomes)) {
+      for (const noCoi of ['skipped', 'failure', 'cancelled']) {
+        const errors = gate({ ...base, noCoi });
+        expect(
+          errors.some((e: string) => e.includes('no-coi-chromium') && e.includes("'success'")),
+          `${name} noCoi=${noCoi}`,
+        ).toBe(true);
+      }
+    }
   });
 
   it('fails a docs-only PR whose heavy jobs unexpectedly ran', () => {

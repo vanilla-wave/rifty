@@ -16,6 +16,8 @@
 import { expect, test } from '@playwright/test';
 import {
   CONSUMED_CLASSES,
+  type ConsumedClass,
+  type ConsumedResponse,
   assertHeaderlessConsumption,
   captureConsumedResponses,
 } from './header-provenance.mjs';
@@ -60,6 +62,61 @@ test('CONSUMED_CLASSES: exact class→(path,dest) identity per caller set — an
     expect(new Set(keys).size, `${caller} unique (path, dest)`).toBe(keys.length);
   }
 });
+
+/**
+ * EVERY-class-position sweep (pure records): the browser controls below each
+ * fail their caller's FIRST unsatisfied class, so an implementation validating
+ * only the document plus the first non-document class passes them all while a
+ * TAIL class (builtUtilTypes, kernelStdioDrain, …) goes absent or 404
+ * unnoticed. Per caller set × per class position × {absent, non-200}, with the
+ * shadowing ordinary-fetch row present, the exact per-class message must name
+ * exactly that class — and the full-success record set must pass whole.
+ */
+const CLASS_POSITION_COUNTS = { page: 4, worker: 5, kernelDriver: 3 } as const;
+
+for (const [caller, classes] of Object.entries(CONSUMED_CLASSES) as [
+  keyof typeof CONSUMED_CLASSES,
+  Record<string, ConsumedClass>,
+][]) {
+  test(`every class position (${caller} caller set): absent and non-200 arms throw the exact per-class message at EVERY position, full set passes`, () => {
+    const names = Object.keys(classes);
+    expect(names.length, `${caller} declared positions`).toBe(CLASS_POSITION_COUNTS[caller]);
+    const record = (
+      cls: ConsumedClass,
+      over: Partial<ConsumedResponse> = {},
+    ): ConsumedResponse => ({
+      pathname: cls.path,
+      status: 200,
+      dest: cls.dest,
+      coop: null,
+      coep: null,
+      ...over,
+    });
+    const clsOf = (n: string): ConsumedClass => classes[n] as ConsumedClass;
+    const fullSet = names.map((n) => record(clsOf(n)));
+    expect(() => assertHeaderlessConsumption(fullSet, classes)).not.toThrow();
+    for (const target of names) {
+      const cls = clsOf(target);
+      const others = names.filter((n) => n !== target).map((n) => record(clsOf(n)));
+      // Shadow row: ordinary fetch of the same path — 200, destination `empty`.
+      const shadow = record(cls, { dest: 'empty' });
+      expect(
+        thrownMessage(() => assertHeaderlessConsumption([...others, shadow], classes)),
+        `${caller} ${target} absent`,
+      ).toBe(
+        `no-COI substrate never consumed ${target} (${cls.path} as ${cls.dest}) — header provenance unproven`,
+      );
+      expect(
+        thrownMessage(() =>
+          assertHeaderlessConsumption([...others, record(cls, { status: 404 }), shadow], classes),
+        ),
+        `${caller} ${target} non-200`,
+      ).toBe(
+        `no-COI substrate consumed ${target} (${cls.path} as ${cls.dest}) only non-200 (status 404) — header provenance unproven`,
+      );
+    }
+  });
+}
 
 /**
  * Absent-class detection (per caller class set): the realm consumes ONLY the
@@ -110,13 +167,18 @@ for (const { caller, classes, fetchPaths, message } of ABSENT_CONTROLS) {
       const capture = captureConsumedResponses(page);
       await page.goto(`http://localhost:${port}/index.html`);
       // Clean 200 fetch of EVERY non-document class path — satisfies a
-      // pathname-only matcher, never a (path, dest) class.
-      await page.evaluate(
+      // pathname-only matcher, never a (path, dest) class. Each status is
+      // asserted 200 PER PATH: without it a tail 404 (missing fixture) makes
+      // the control's "clean same-path fetch" premise a silent lie.
+      const fetchStatuses = await page.evaluate(
         async (paths) => {
-          for (const p of paths) await fetch(p, { cache: 'no-store' });
+          const out: Record<string, number> = {};
+          for (const p of paths) out[p] = (await fetch(p, { cache: 'no-store' })).status;
+          return out;
         },
         fetchPaths as unknown as string[],
       );
+      for (const p of fetchPaths) expect(fetchStatuses[p], `${caller} clean fetch ${p}`).toBe(200);
       const responses = await capture.settle();
       const thrown = thrownMessage(() => assertHeaderlessConsumption(responses, classes));
       expect(thrown).toBe(message);

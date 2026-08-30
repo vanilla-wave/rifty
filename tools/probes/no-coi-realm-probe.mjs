@@ -45,20 +45,36 @@ await buildNoCoiFixtures();
 
 /** Run probe-lib in a fresh Node child; `dropSab` deletes the global binding
  * first. Passes the REAL `node:util/types` (imported BEFORE install — the
- * patched decode poisons the ESM loader in the binding-less sim). */
+ * patched decode poisons the ESM loader in the binding-less sim). Oracle
+ * provenance is STRUCTURED per sibling (binding intact AND deleted): the
+ * namespace handed to runProbe must be identical (per predicate, `===`) to
+ * the realm's `node:util` `.types` — a rifty util-types build substituted as
+ * "the Node oracle" fails the child loud and the golden below. */
 function nodeProbe(mode, dropSab) {
   const libUrl = pathToFileURL(join(fixturesDir, 'probe-lib.mjs')).href;
   const script = `
     ${dropSab ? 'delete globalThis.SharedArrayBuffer;' : ''}
     const nativeUtilTypes = await import('node:util/types');
+    const { types } = await import('node:util');
+    const nativeUtilTypesProvenance = ['isSharedArrayBuffer', 'isAnyArrayBuffer'].every(
+      (k) => nativeUtilTypes[k] === types[k],
+    );
+    if (!nativeUtilTypesProvenance) {
+      throw new Error('node oracle provenance: nativeUtilTypes is not the realm node:util types');
+    }
     const { runProbe } = await import(${JSON.stringify(libUrl)});
     const result = await runProbe(${JSON.stringify(mode)}, { requireNoCoi: false, nativeUtilTypes });
+    result.nativeUtilTypesProvenance = nativeUtilTypesProvenance;
     console.log(JSON.stringify(result));
   `;
   const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     encoding: 'utf8',
   });
-  return JSON.parse(out);
+  const row = JSON.parse(out);
+  if (row.nativeUtilTypesProvenance !== true) {
+    throw new Error(`node oracle provenance missing for ${mode} dropSab=${String(dropSab)}`);
+  }
+  return row;
 }
 
 const server = await startNoCoiServer(port);

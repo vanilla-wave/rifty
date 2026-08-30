@@ -4,8 +4,9 @@
  * pins only: realm reality (crossOriginIsolated===false, absent
  * `SharedArrayBuffer` binding, shared `WebAssembly.Memory` EXISTS — probe rows
  * 1–2) + consumed-response header provenance (row 16) across all four
- * realm×install combos, and precondition-REJECTION detection (wrong-brand
- * realm rejects before any import/install/decode).
+ * realm×install combos, and precondition-REJECTION detection (every violated
+ * predicate sibling rejects before any import/install/decode — actual decode
+ * counter, not just marker/request sentinels).
  *
  * The TextDecoder shim behavior contract and its expected-RED batch belong to
  * `runtime-js/worker-realm-compat-bare-sab-referenceerror` — DRAFT since its
@@ -113,40 +114,80 @@ test('preconditions: crossOriginIsolated===false, no SAB binding, shared wasm me
 });
 
 /**
- * Precondition-rejection detection (GREEN pins): recording the shared-memory
- * brand while acting anyway is a frozen assumption — a wrong-brand realm must
- * REJECT before ANY action, proven by side-effect sentinels (no built /dist/
- * module ever requested, realm decode left unmarked), swept through the page
- * AND Worker probe siblings.
+ * Precondition-rejection detection (GREEN pins): recording a violated
+ * precondition while acting anyway is a frozen assumption — a wrong realm must
+ * REJECT before ANY action. Swept across EVERY predicate sibling of the gate
+ * (`crossOriginIsolated` / SAB binding present / wrong shared-memory brand /
+ * `instanceof ArrayBuffer` true) × page AND Worker realms. Order is proven by
+ * side-effect sentinels PLUS an ACTUAL decode counter: a spy over the real
+ * `TextDecoder.prototype.decode` installed before the probe — an unpatched
+ * NATIVE decode before the gate leaves no `__riftyShared` marker and no
+ * /dist/ request, only the counter (EXACTLY 0 at rejection) sees it.
  */
+const PRECONDITION_POISONS = [
+  { kind: 'coi', names: /crossOriginIsolated=true/ },
+  { kind: 'sab', names: /typeof SharedArrayBuffer=function/ },
+  { kind: 'brand', names: /brand=\[object ArrayBuffer\]/ },
+  { kind: 'instanceof', names: /instanceof ArrayBuffer: true/ },
+] as const;
+
 for (const realm of ['page', 'worker'] as const) {
-  test(`precondition detection (${realm}): wrong shared-memory brand rejects BEFORE any import/install/decode`, async ({
-    browser,
-  }) => {
-    // Fresh page: its module map has never loaded the built /dist/ fixtures.
-    const page = await browser.newPage();
-    try {
-      const distRequests: string[] = [];
-      page.on('request', (req) => {
-        const p = new URL(req.url()).pathname;
-        if (p.startsWith('/dist/')) distRequests.push(p);
-      });
-      await page.goto('/index.html');
-      const out =
-        realm === 'page'
-          ? await page.evaluate(async () => {
-              const wasm = WebAssembly as unknown as { Memory: unknown };
-              const RealMemory = wasm.Memory;
-              // Wrong-brand realm sim: shared memory whose .buffer is PRIVATE.
-              wasm.Memory = class {
-                buffer = new ArrayBuffer(65536);
-              };
-              try {
+  for (const { kind, names } of PRECONDITION_POISONS) {
+    test(`precondition detection (${realm}, ${kind}): violated predicate rejects BEFORE any import/install/decode — decode count 0`, async ({
+      browser,
+    }) => {
+      // Fresh page: its module map has never loaded the built /dist/ fixtures.
+      const page = await browser.newPage();
+      try {
+        const distRequests: string[] = [];
+        page.on('request', (req) => {
+          const p = new URL(req.url()).pathname;
+          if (p.startsWith('/dist/')) distRequests.push(p);
+        });
+        await page.goto('/index.html');
+        const out =
+          realm === 'page'
+            ? await page.evaluate(async (poison) => {
+                if (poison === 'coi') {
+                  Object.defineProperty(globalThis, 'crossOriginIsolated', {
+                    configurable: true,
+                    value: true,
+                  });
+                } else if (poison === 'sab') {
+                  (globalThis as { SharedArrayBuffer?: unknown }).SharedArrayBuffer =
+                    function SharedArrayBuffer() {};
+                } else if (poison === 'brand') {
+                  // Wrong-brand realm sim: shared memory whose .buffer is PRIVATE.
+                  (WebAssembly as unknown as { Memory: unknown }).Memory = class {
+                    buffer = new ArrayBuffer(65536);
+                  };
+                } else {
+                  // Right brand, wrong prototype chain: instanceof stays true.
+                  class FakeSharedArrayBuffer extends ArrayBuffer {}
+                  Object.defineProperty(FakeSharedArrayBuffer.prototype, Symbol.toStringTag, {
+                    configurable: true,
+                    get: () => 'SharedArrayBuffer',
+                  });
+                  (WebAssembly as unknown as { Memory: unknown }).Memory = class {
+                    buffer = new FakeSharedArrayBuffer(65536);
+                  };
+                }
+                // ACTUAL decode counter — installed BEFORE the probe module
+                // ever loads; counts native decodes the marker sentinel misses.
+                const realDecode = TextDecoder.prototype.decode;
+                let decodeCalls = 0;
+                TextDecoder.prototype.decode = function decode(
+                  this: TextDecoder,
+                  ...args: Parameters<TextDecoder['decode']>
+                ) {
+                  decodeCalls += 1;
+                  return realDecode.apply(this, args);
+                };
                 const libPath = '/probe-lib.mjs';
                 const lib = await import(/* @vite-ignore */ libPath);
                 try {
                   await lib.runProbe('direct');
-                  return { rejected: false, error: '', decodeMarked: true };
+                  return { rejected: false, error: '', decodeMarked: true, decodeCalls };
                 } catch (err) {
                   return {
                     rejected: true,
@@ -157,41 +198,44 @@ for (const realm of ['page', 'worker'] as const) {
                           __riftyShared?: boolean;
                         }
                       ).__riftyShared === true,
+                    decodeCalls,
                   };
                 }
-              } finally {
-                wasm.Memory = RealMemory;
-              }
-            })
-          : await page.evaluate(async () => {
-              const worker = new Worker('/probe-worker.mjs?mode=direct&poisonWasmBrand=1', {
-                type: 'module',
-              });
-              const msg = await new Promise<{
-                ok: boolean;
-                error?: string;
-                decodeMarked?: boolean;
-              }>((resolve, reject) => {
-                worker.onmessage = (e) => resolve(e.data);
-                worker.onerror = (e) => reject(new Error(`worker error: ${e.message}`));
-              });
-              worker.terminate();
-              return {
-                rejected: !msg.ok,
-                error: msg.error ?? '',
-                decodeMarked: msg.decodeMarked === true,
-              };
-            });
-      // Rejection happened and NAMED the wrong brand.
-      expect(out.rejected, realm).toBe(true);
-      expect(out.error, realm).toMatch(/precondition violated/);
-      expect(out.error, realm).toMatch(/brand=\[object ArrayBuffer\]/);
-      // Side-effect sentinels: rejection PRECEDED every action — the realm
-      // decode was never patched and no built module was ever requested.
-      expect(out.decodeMarked, realm).toBe(false);
-      expect(distRequests, realm).toEqual([]);
-    } finally {
-      await page.close();
-    }
-  });
+              }, kind)
+            : await page.evaluate(async (poison) => {
+                const worker = new Worker(`/probe-worker.mjs?mode=direct&poison=${poison}`, {
+                  type: 'module',
+                });
+                const msg = await new Promise<{
+                  ok: boolean;
+                  error?: string;
+                  decodeMarked?: boolean;
+                  decodeCalls?: number;
+                }>((resolve, reject) => {
+                  worker.onmessage = (e) => resolve(e.data);
+                  worker.onerror = (e) => reject(new Error(`worker error: ${e.message}`));
+                });
+                worker.terminate();
+                return {
+                  rejected: !msg.ok,
+                  error: msg.error ?? '',
+                  decodeMarked: msg.decodeMarked === true,
+                  decodeCalls: msg.decodeCalls ?? -1,
+                };
+              }, kind);
+        // Rejection happened and NAMED the violated predicate.
+        expect(out.rejected, `${realm} ${kind}`).toBe(true);
+        expect(out.error, `${realm} ${kind}`).toMatch(/precondition violated/);
+        expect(out.error, `${realm} ${kind}`).toMatch(names);
+        // Side-effect sentinels: rejection PRECEDED every action — the realm
+        // decode was never patched, no built module was ever requested, and
+        // NOT ONE decode (patched OR native) ran before the gate.
+        expect(out.decodeMarked, `${realm} ${kind}`).toBe(false);
+        expect(out.decodeCalls, `${realm} ${kind}`).toBe(0);
+        expect(distRequests, `${realm} ${kind}`).toEqual([]);
+      } finally {
+        await page.close();
+      }
+    });
+  }
 }

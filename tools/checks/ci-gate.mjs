@@ -12,6 +12,10 @@ export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit, 
     if (actual !== expected) errors.push(`${name} concluded '${actual}'; expected '${expected}'`);
   };
   require('lint-and-typecheck', lint, 'success');
+  // Unconditional like lint (never classification-gated): a docs-only skip
+  // would green a READY RED-first no-COI substrate between its Contract+RED
+  // and its fix (ADR-0369 correction; fault class false-fallback).
+  require('no-coi-chromium', noCoi, 'success');
 
   let heavyExpected = 'success';
   if (code === 'true') {
@@ -30,7 +34,6 @@ export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit, 
   require('unit-and-conformance', unit, heavyExpected);
   require('e2e-chromium', e2e, heavyExpected);
   require('browser-unit-chromium', browserUnit, heavyExpected);
-  require('no-coi-chromium', noCoi, heavyExpected);
   return errors;
 }
 

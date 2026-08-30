@@ -7,8 +7,10 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 1. `toolchain-build/no-coi-substrate-lane` — **no-coi-lane** — headerless
    Playwright lane (ADR-0369 + correction) + destination-aware
    consumed-response header provenance (identity/injection/absent/
-   dest-only-non-200 pinned with exact messages) + required `no-coi-chromium`
-   CI job (parsed-exact mapping sweep) + replayable evidence driver; green
+   dest-only-non-200/every-class-position pinned with exact messages) +
+   structural fixture/oracle provenance + UNCONDITIONAL required
+   `no-coi-chromium` CI job (step-scoped mapping + mutant sweep, gate
+   requires success on docs-only too) + replayable evidence driver; green
    and serially landable FIRST — it carries only its own pins (checkpoint 9:
    the draft predecessor's batch left the branch; the checkpoint-8 declared-
    RED device is withdrawn); split from bare-sab-guard at checkpoint 7;
