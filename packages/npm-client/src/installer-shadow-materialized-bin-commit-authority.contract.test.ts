@@ -308,10 +308,12 @@ describe('shadow materialized-bin commit authority', () => {
     ].sort();
     const binPaths = ['/project/node_modules/.bin/esbuild'];
     const shimPaths = ['/project/node_modules/rollup/dist/native.js'];
+    const [lightningRedirectReport, lightningMaterializedReport] = expectedLightningReports('root');
     const expectedReports = [
       ESBUILD_REDIRECT_REPORT,
-      ...expectedLightningReports('root'),
+      lightningRedirectReport,
       ESBUILD_REPORT,
+      lightningMaterializedReport,
       ROLLUP_REPORT,
     ];
     const phases: string[] = [];
@@ -368,11 +370,8 @@ describe('shadow materialized-bin commit authority', () => {
     expect
       .soft(phases)
       .toEqual([
-        ...Array<string>(packagePaths.length - esbuildRecipe.materialization.files.length).fill(
-          'files',
-        ),
+        ...Array<string>(packagePaths.length).fill('files'),
         ...Array<string>(aliasPaths.length).fill('aliases'),
-        ...Array<string>(esbuildRecipe.materialization.files.length).fill('files'),
         ...Array<string>(binPaths.length).fill('bins'),
         ...Array<string>(shimPaths.length).fill('shims'),
         'lock',
