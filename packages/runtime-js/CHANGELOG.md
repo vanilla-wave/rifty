@@ -61,6 +61,9 @@
 
 ### Fixed
 
+- Same-realm spawned children now bind one private Node-compatible console to
+  their stdout/stderr pipes; global console and both module aliases share it.
+
 - Worker-realm TextDecoder compatibility now keeps its unconditional patch in
   non-isolated browser realms while safely passing private inputs when the
   `SharedArrayBuffer` global is absent.
