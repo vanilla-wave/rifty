@@ -145,6 +145,8 @@ pnpm test:parity console
 
 review: checkpoints — Node parity plus overlapping same-realm child routing.
 
+contract-red: 2026-08-31 — blocker @ 5ee6f7c9fba30b3305953d9e4707b4ac48c297f5
+
 - Node v24.16.0 settles the observable fork: child global console and both
   console-module aliases are one child-bound object; owner-console leakage is
   never an accepted degradation.
