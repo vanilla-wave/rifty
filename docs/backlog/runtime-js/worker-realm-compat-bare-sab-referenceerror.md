@@ -103,6 +103,7 @@ node --input-type=module -e 'console.log(process.version); delete globalThis.Sha
 
 ## Decisions
 
+ready-verdict: 2026-08-31 — Contract+RED @ 02f20db5f1b8d69d2c67cd5c1184cce1f32faa91
 review: checkpoints — parity behavior at a browser realm boundary.
 contract-red: 2026-08-31 — blocker @ e7b45a865173cf811c06d06f6a69953181848411
 
