@@ -61,6 +61,10 @@
 
 ### Fixed
 
+- Worker-realm TextDecoder compatibility now keeps its unconditional patch in
+  non-isolated browser realms while safely passing private inputs when the
+  `SharedArrayBuffer` global is absent.
+
 - Owner-backed `fs.*` calls now rehydrate the `VfsError` prototype erased by
   SyncRpc's JSON error frame before reaching `node:fs`, preserving exact Node
   `code`/`errno`/`syscall`/`path` shaping for missing, directory, and
