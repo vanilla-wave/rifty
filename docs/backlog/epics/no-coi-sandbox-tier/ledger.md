@@ -11,3 +11,4 @@
 - 2026-08-31 — runtime-js/worker-realm-compat-bare-sab-referenceerror checkpoint lineage: Contract+RED blocker @ e7b45a865, PASS @ 02f20db5f; Final+GREEN blocker @ 6ef9b4a1d, PASS @ 4c63e23e2; unit residuals empty.
 - 2026-08-31 — SAB-less realm decode now delegates private input exactly once while direct/aggregate installs preserve patch identity, idempotence, `global` and writable `self`; carriers `packages/runtime-js/src/ipc/worker-realm-compat.ts`, `packages/runtime-js/src/ipc/worker-realm-compat.test.ts`, `tests/browser-unit/worker-realm-compat-no-coi.spec.ts`.
 - 2026-08-31 — re-chart after runtime-js/worker-realm-compat-bare-sab-referenceerror: 0 graduated / 1 invalidated (completed item deleted); remaining child order, empty fog and out-of-scope unchanged.
+- 2026-08-31 — runtime-js/same-realm-spawn-stdio-pipe-drop band 2–3 expected REDs (Node-v24 pipe/alias/output-order differential; overlapping same-realm child routing/isolation).
