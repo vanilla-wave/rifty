@@ -45,26 +45,3 @@ export function observeOwnerChildExit(handle: object): Promise<void> {
     observeProcessTerminalOutcome(handle as ProcessTerminalEventSource, () => resolve());
   });
 }
-
-export function commitOwnerChildAdmission(
-  reservation: OwnerChildAdmissionReservation,
-  _exited: Promise<unknown>,
-): void {
-  reservation.commit();
-}
-
-export function abortOwnerChildAdmissionBeforeSpawn(
-  reservation: OwnerChildAdmissionReservation,
-  error: unknown,
-): void {
-  reservation.abortBeforeSpawn(error);
-}
-
-/** Keep the overlapping package slot until the spawned worker is confirmed dead. */
-export async function abortOwnerChildAdmissionAfterSpawn(
-  reservation: OwnerChildAdmissionReservation,
-  error: unknown,
-  exited: Promise<unknown>,
-): Promise<void> {
-  await reservation.abortAfterChildSettlement(error, exited);
-}

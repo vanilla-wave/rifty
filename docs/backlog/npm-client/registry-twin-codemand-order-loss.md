@@ -4,9 +4,9 @@ status: draft
 title: Ordinary registry-twin co-demand can erase a substitution by dependency order
 created: 2026-08-31
 why: the install walk deduplicates an ordinary twin and its recipe-backed public package by acquisition identity before it records the substitution fact, so package.json key order can remove the public facade from an otherwise successful install
-user_story: As a browser-IDE user whose dependency graph directly or transitively contains both esbuild and esbuild-wasm, I want npm install to preserve both requested package surfaces, but today one dependency order silently omits esbuild and makes require('esbuild') fail.
+user_story: As a browser-IDE user whose dependency graph directly or transitively contains a substituted package and its upstream twin (esbuild + esbuild-wasm, sass-embedded + sass, lightningcss + lightningcss-wasm), I want npm install to preserve both requested package surfaces, but today one dependency order silently omits the substituted one and makes its require() fail.
 sources: [PR-289, docs/process/fault-classes.md]
-code: [packages/npm-client/src/installer-walk.ts]
+code: [packages/npm-client/src/installer-walk.ts, tools/shadow-registry/src/internal/catalog-source.ts]
 ---
 
 ## Context
@@ -35,6 +35,26 @@ acquisition may deduplicate bytes, but it cannot collapse distinct requested
 package surfaces. Dedup found no matching backlog title, `code:` owner, goal
 map child, or declined-concepts row. No new coordination mechanism is implied;
 the carrier choice remains for pickup.
+
+**Sibling sweep** (2026-08-31, inline review of PR #289 — answers challenge
+problem 2's "confined to esbuild?"; verbatim challenge stands per §Challenge).
+The collapse is a property of the walk dedup, not of esbuild: every
+registry-twin recipe pairs a public name with a different upstream acquisition
+name, and each pair is co-demandable by an ordinary dependency
+(`catalog-source.ts`):
+
+| recipe | public name | acquisition | introduced |
+|---|---|---|---|
+| `rifty.shadow-substitution.esbuild.v2` | `esbuild` | `esbuild-wasm@0.28.0` | PR #289 (regression) |
+| `rifty.shadow-substitution.lightningcss.v2` | `lightningcss` | `lightningcss-wasm@1.32.0` | pre-existing |
+| `rifty.shadow-substitution.sass-embedded.v2` | `sass-embedded` | `sass@1.100.0` | pre-existing |
+
+Only the esbuild row is new: before PR #289 that recipe acquired
+synthetically, so no identity collision existed. The other two have shipped
+this shape since recipe-v2 and were never probed. `sass` in particular is an
+ordinary direct dependency for anyone who also wants `sass-embedded`, so the
+likeliest real-world instance is not the one the probe found. A pickup covers
+the class at the walk, not the esbuild pair.
 
 ## Observable gap
 

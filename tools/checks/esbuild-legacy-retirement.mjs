@@ -84,7 +84,6 @@ const PUBLISHED_PACKAGE_ROOTS = Object.freeze([
 ]);
 const EXPECTED_PACKAGE_FILES = Object.freeze(['dist', 'CHANGELOG.md']);
 const GENERATED_CLIENT_SHA256 = '7acc5cd6f0e111810d3505c0959ec2fb5767f25af8dd2c5919a5b36d4f4da553';
-const ESBUILD_WASM_BYTES = 13_918_738;
 const MAX_PUBLISHED_OUTPUT_BYTES = 2_000_000;
 const LARGE_BASE64_RUN = /[A-Za-z0-9+/]{1000000,}={0,2}/u;
 const COORDINATION_SOURCE =
@@ -212,9 +211,8 @@ export function evaluateEsbuildBundleInventory(
   for (const path of files) {
     const bytes = readOutput(path);
     if (path.endsWith('.wasm')) violations.push(`${path}: runtime wasm shipped in package output`);
-    if (bytes.byteLength >= ESBUILD_WASM_BYTES) {
-      violations.push(`${path}: output is large enough to inline the esbuild wasm member`);
-    }
+    // The 2 MB ceiling already subsumes the 13.9 MB member: no output can
+    // inline the wasm without first breaking this bound.
     if (bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES) {
       violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling`);
     }

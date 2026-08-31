@@ -29,9 +29,6 @@ import {
 import type { NodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import {
   type ReserveOwnerChildAdmission,
-  abortOwnerChildAdmissionAfterSpawn,
-  abortOwnerChildAdmissionBeforeSpawn,
-  commitOwnerChildAdmission,
   observeOwnerChildExit,
   projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
@@ -172,7 +169,7 @@ export function createOwnerChildDevServer(
           ),
         );
       } catch (error) {
-        abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+        reservation.abortBeforeSpawn(error);
         throw error;
       }
       const admissionExit = observeOwnerChildExit(handle);
@@ -467,10 +464,10 @@ export function createOwnerChildDevServer(
             'dev-server child setup and termination failed',
           );
         }
-        await abortOwnerChildAdmissionAfterSpawn(reservation, setupError, admissionExit);
+        await reservation.abortAfterChildSettlement(setupError, admissionExit);
         throw setupError;
       }
-      commitOwnerChildAdmission(reservation, admissionExit);
+      reservation.commit();
       return boot;
     },
   };

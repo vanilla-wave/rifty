@@ -22,9 +22,6 @@ import { runForegroundChild } from '../glue/run-foreground-child.ts';
 import { isBinShimPath } from './bin-entry-path.ts';
 import {
   type ReserveOwnerChildAdmission,
-  abortOwnerChildAdmissionAfterSpawn,
-  abortOwnerChildAdmissionBeforeSpawn,
-  commitOwnerChildAdmission,
   observeOwnerChildExit,
   projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
@@ -108,7 +105,7 @@ export function createOwnerChildBinExecutor(
       }
       handle = spawned;
     } catch (error) {
-      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      reservation.abortBeforeSpawn(error);
       throw error;
     }
     const physicalExit = observeOwnerChildExit(handle);
@@ -122,14 +119,14 @@ export function createOwnerChildBinExecutor(
           : undefined,
         onExit: hooks.onExit ? () => hooks.onExit?.(req, ctx) : undefined,
       });
-      commitOwnerChildAdmission(reservation, physicalExit);
+      reservation.commit();
     } catch (error) {
       try {
         handle.kill('SIGTERM');
       } catch {
         // Exact physical exit observation below remains authoritative.
       }
-      await abortOwnerChildAdmissionAfterSpawn(reservation, error, physicalExit);
+      await reservation.abortAfterChildSettlement(error, physicalExit);
       throw error;
     }
     return running;
