@@ -143,6 +143,8 @@ pnpm test:parity console
 
 ## Decisions
 
+ready-verdict: 2026-09-01 — Contract+RED @ 55317d7ee7ebc6891d6a0ba3d509db4348ef99f6
+
 review: checkpoints — Node parity plus overlapping same-realm child routing.
 
 contract-red: 2026-08-31 — blocker @ 5ee6f7c9fba30b3305953d9e4707b4ac48c297f5
