@@ -28,7 +28,6 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0019 | `cwd` lives in `kernel.ProcessRecord` |
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
 | 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
-| 0313 | One-shot opaque Worker entry capability ports |
 | 0326 | Federated Worker child tree with separate public IPC and private control |
 | 0331 | SyncRpc v3 owns one live exchange through reply consumption |
 | 0333 | Descendant settlement barrier preserves recursive teardown ordering |
@@ -149,13 +148,12 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0303 | Direct roots reserve flat slots before transitive placement |
 | 0309 | One package-tree authority for install-tree lifecycle |
 | 0314 | Cancellable package acquisition |
-| 0318 | Retain verified shadow assets for manager lifetime |
-| 0321 | Keep shadow asset port correlation package local |
 | 0343 | Auto-injected companions do not claim package bins without ordinary demand |
 | 0344 | Exact Sass twin exposes named positive surfaces; gaps require observed unsupported behavior |
 | 0361 | Lock replay admits the attested recipe pin; request admission unchanged |
 | 0363 | Eddy memory envelope and fail-fast admission |
 | 0364 | One npm package-bin normalization authority follows active npm package-json semantics |
+| 0371 | Registry twins carry substituted runtime bytes in the installed tree |
 
 ### playground
 
@@ -195,7 +193,6 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0293 | Tab-independent workspace admission UX |
 | 0307 | Install trust is an install-protocol commit, not tree surveillance |
 | 0317 | Vite 8 build and preview through installed CLI |
-| 0320 | Define instant restore runtime asset availability |
 | 0327 | Installed nodemon owns the Workbench Node-server dev loop |
 | 0329 | Authority-owned project Save rebinds exact installed-tree trust |
 | 0336 | Exact Vite 8 projects pin the proven Rolldown WASI runtime |
@@ -336,6 +333,10 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0337 | 0338 | raw trace retained; permissive comparator replaced by exact one-axis native resize steps |
 | 0310 | 0344 | Pattern-1 carrier retained; impossible generic unproven-surface gap replaced by finite positive claims and RED-first specific gaps |
 | 0187 | 0358 | FIFO-order write-through contract falls to per-path lanes + ancestor fencing + explicit stamp fence; pending boot stamps, checked drains, persist-failure ledger, background command site (per 0216/0261) grafted |
+| 0313 | 0371 | opaque entry metadata retained in bootstrap; the N=1 transferable capability-port surface is deleted |
+| 0318 | 0371 | verified exact bytes retained; separate manager-lifetime CAS falls to the installed registry twin |
+| 0320 | 0371 | instant offline availability retained; the restored installed tree replaces the separate runtime CAS |
+| 0321 | 0371 | strict lifecycle motive retained; the ninth correlation engine is deleted with its only consumer |
 
 ## Corrections (active)
 
@@ -393,7 +394,7 @@ superseded.
 | 0053 vendored-WASI transform provider premise | 0316 / note 2026-07-24 | resolver behavior stands; no provider is prescribed |
 | 0070 shadow-registry esbuild-binding / published esbuild-transform exports | 0316 / note 2026-07-24 | both carrier subpaths removed; pure internal catalog replaces the transform surface |
 | 0135 baked snapshot contains preview1 carrier | 0316 / note 2026-07-24 | snapshots use registry-owned substitutions; setup semantics stand |
-| 0135 instant zero-network clause | 0320 | instant skips npm install; an empty verified Vite 7 runtime CAS performs the exact esbuild-wasm acquisition or fails loudly offline |
+| 0135 instant zero-network clause | 0371 | instant skips npm install; the exact esbuild-wasm twin rides the restored tree and needs no separate runtime acquisition |
 | 0172 Playground vendored-WASI consumer consequence | 0316 / note 2026-07-24 | public side-effect-free runner remains; product esbuild no longer consumes it |
 | 0173 vendored-WASI build preparation clauses | 0316 / note 2026-07-24 | registry esbuild-wasm owns product builds; installed Vite ownership stands |
 | 0173 D5 Vite 8 build/preview loud-reject clause | 0317 / note 2026-07-25 | exact Vite 8.0.16 builds and previews through the installed CLI; Vite 7 remains default and Vite 8 HMR stays off |

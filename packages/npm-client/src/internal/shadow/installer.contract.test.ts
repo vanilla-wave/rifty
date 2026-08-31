@@ -21,6 +21,10 @@ type LightningManifest = VersionManifest & {
   readonly bundleDependencies: readonly string[];
 };
 
+type EsbuildManifest = VersionManifest & {
+  readonly bundleDependencies: readonly string[];
+};
+
 class MemoryTarballCache implements TarballCache {
   readonly #entries = new Map<string, Uint8Array>();
 
@@ -99,6 +103,43 @@ class LightningRegistry extends RegistryClient {
   }
 }
 
+class EsbuildRegistry extends RegistryClient {
+  readonly reads: string[] = [];
+  readonly #tarball: Uint8Array;
+
+  constructor(tarball: Uint8Array) {
+    super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
+    this.#tarball = tarball;
+  }
+
+  override async getPackument(name: string): Promise<Packument> {
+    this.reads.push(`packument:${name}`);
+    if (name !== 'esbuild-wasm') throw new Error(`unexpected registry package ${name}`);
+    const manifest: EsbuildManifest = {
+      name,
+      version: '0.28.0',
+      dependencies: {},
+      optionalDependencies: {},
+      peerDependencies: {},
+      bundleDependencies: [],
+      dist: { tarball: 'https://registry.test/esbuild-wasm-0.28.0.tgz' },
+    };
+    return {
+      name,
+      'dist-tags': { latest: manifest.version },
+      versions: { [manifest.version]: manifest },
+    };
+  }
+
+  override async getTarball(url: string): Promise<Uint8Array> {
+    this.reads.push(`tarball:${url}`);
+    if (url !== 'https://registry.test/esbuild-wasm-0.28.0.tgz') {
+      throw new Error(`unexpected registry tarball ${url}`);
+    }
+    return this.#tarball.slice();
+  }
+}
+
 async function fixtureTarball(files: Readonly<Record<string, string>>): Promise<Uint8Array> {
   const chunks: Uint8Array[] = [];
   for (const [path, text] of Object.entries(files)) {
@@ -106,6 +147,22 @@ async function fixtureTarball(files: Readonly<Record<string, string>>): Promise<
     chunks.push(buildHeader(`package/${path}`, bytes.length), padToBlock(bytes));
   }
   return gzip(concat(...chunks, TAR_TRAILER));
+}
+
+async function esbuildRegistry(): Promise<EsbuildRegistry> {
+  return new EsbuildRegistry(
+    await fixtureTarball({
+      'package.json': JSON.stringify({
+        name: 'esbuild-wasm',
+        version: '0.28.0',
+        dependencies: {},
+        optionalDependencies: {},
+        peerDependencies: {},
+        bundleDependencies: [],
+      }),
+      'esbuild.wasm': '\0asm-registry-twin-fixture',
+    }),
+  );
 }
 
 async function lightningRegistry(): Promise<LightningRegistry> {
@@ -190,6 +247,91 @@ afterEach(() => {
 });
 
 describe('shadow substitution installer boundary', () => {
+  it('acquires and lockfile-replays the esbuild-wasm twin through the ordinary registry path', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const cache = new MemoryTarballCache();
+    const firstRegistry = await esbuildRegistry();
+
+    const first = await install(
+      'fixture',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/project',
+        registry: firstRegistry,
+        tarballCache: cache,
+        onSubstitution: () => {},
+      },
+    );
+
+    expect(firstRegistry.reads).toEqual([
+      'packument:esbuild-wasm',
+      'tarball:https://registry.test/esbuild-wasm-0.28.0.tgz',
+    ]);
+    expect(
+      new TextDecoder().decode(
+        await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm'),
+      ),
+    ).toBe('\0asm-registry-twin-fixture');
+    expect(first.lockfile.packages['node_modules/esbuild-wasm']).toMatchObject({
+      version: '0.28.0',
+      resolved: 'https://registry.test/esbuild-wasm-0.28.0.tgz',
+    });
+    expect(first.lockfile.packages['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+    });
+
+    const replayRegistry = new RejectingRegistry();
+    const replay = await install(
+      'fixture',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      {
+        vfs,
+        cwd: '/project',
+        registry: replayRegistry,
+        tarballCache: cache,
+        onSubstitution: () => {},
+      },
+    );
+    expect(replayRegistry.reads).toBe(0);
+    expect(replay.lockfile).toEqual(first.lockfile);
+    expect(
+      new TextDecoder().decode(
+        await vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm'),
+      ),
+    ).toBe('\0asm-registry-twin-fixture');
+  });
+
+  it('projects the attested acquisition path as the only esbuild runtime binding', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/project', { recursive: true });
+    const result = await install(
+      'fixture',
+      '1.0.0',
+      { esbuild: '^0.28.0' },
+      { vfs, cwd: '/project', registry: await esbuildRegistry(), onSubstitution: () => {} },
+    );
+    const internal = await import('./index.ts');
+    const planFor = Reflect.get(internal, 'shadowSubstitutionPlanForInstallResult');
+    expect(typeof planFor).toBe('function');
+    if (typeof planFor !== 'function') return;
+    const plan = Reflect.apply(planFor, undefined, [result]) as unknown;
+
+    expect(plan).toMatchObject({
+      bindings: [
+        {
+          adapterId: 'rifty.runtime-adapter.esbuild.v1',
+          packagePath: 'node_modules/esbuild-wasm',
+        },
+      ],
+    });
+    expect(Object.isFrozen(plan)).toBe(true);
+  });
+
   it('materializes and lockfile-replays esbuild without registry acquisition', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/project', { recursive: true });

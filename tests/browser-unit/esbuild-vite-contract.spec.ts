@@ -1018,11 +1018,14 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       .toBe('rifty.shadow-substitution.esbuild.v2');
     expect.soft(esbuildRecipe?.catalog, 'real Chromium esbuild catalog identity').toEqual({
       id: 'rifty.shadow-substitutions.builtin.v2',
-      digest: '16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6',
+      digest: 'c9f38a0ea9218c64fdc68bca65eb34817cb51f1c1132c89048ffcb86b510d4b0',
     });
     expect
       .soft(esbuildRecipe?.recipeDigest, 'real Chromium esbuild recipe digest')
-      .toBe('b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28');
+      .toBe('7cd677fe08657829bf151d3d97520984d81f70323cdc948f8fd0a7116e4a4afd');
+    expect
+      .soft(esbuildRecipe?.acquisition, 'real Chromium esbuild registry twin')
+      .toMatchObject({ kind: 'registry', name: 'esbuild-wasm', version: '0.28.0' });
     expect
       .soft(esbuildRecipe?.materialization, 'real Chromium esbuild materialization identity')
       .toMatchObject({
@@ -1040,6 +1043,12 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
         bin: { esbuild: 'bin/esbuild' },
         riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
       });
+    expect
+      .soft(
+        projectLock.packages?.['node_modules/esbuild-wasm'],
+        'real Chromium esbuild-wasm lock entry',
+      )
+      .toMatchObject({ version: '0.28.0' });
 
     const contract = await runContractHarness(page);
     expect(
@@ -1176,13 +1185,36 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
     expect(hostEsbuildWasmRequests(requests), 'retired host esbuild.wasm asset request').toEqual(
       [],
     );
-    expect(
-      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
-      'Vite 7 must acquire the registry recipe asset, not host bytes',
-    ).toBe(true);
+    expect
+      .soft(
+        registryPackageRequests(requests, 'esbuild-wasm'),
+        'instant Vite 7 must use the restored exact registry twin',
+      )
+      .toEqual([]);
+    const twinManifest = await readOwnerFile(
+      page,
+      '/scratch/node_modules/esbuild-wasm/package.json',
+    );
+    expect.soft(twinManifest.ok, twinManifest.error).toBe(true);
+    if (twinManifest.ok) {
+      expect.soft(JSON.parse(twinManifest.text)).toMatchObject({
+        name: 'esbuild-wasm',
+        version: '0.28.0',
+      });
+    }
 
     await closeOwner(page);
     ownerOpen = false;
+    requests.length = 0;
+    await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory();
+      try {
+        const rifty = await root.getDirectoryHandle('.rifty');
+        await rifty.removeEntry('shadow-assets', { recursive: true });
+      } catch (error) {
+        if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
+      }
+    });
     const blockedRegistryRequests: string[] = [];
     await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
       blockedRegistryRequests.push(route.request().url());
@@ -1192,12 +1224,17 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
     ownerOpen = true;
     const offlineBuild = await execLine(page, 'vite build');
     expect(offlineBuild.exit, offlineBuild.out).toBe(0);
+    expect(offlineBuild.out).not.toContain('npm: installing');
     const offlineDev = await execLineUntil(page, 'vite --host 127.0.0.1 --port 5174', 'Local');
     expect(offlineDev.out).toContain('Local');
+    expect(offlineDev.out).not.toContain('npm: installing');
     expect(
       blockedRegistryRequests,
-      'cold-filled Vite tree and registry asset must reopen without acquisition',
+      'restored registry twin must reopen after the retired CAS is absent',
     ).toEqual([]);
+    expect(registryPackageRequests(requests, 'esbuild-wasm')).toEqual([]);
+    expect(hostEsbuildWasmRequests(requests)).toEqual([]);
+    expect(aliasRequests(requests)).toEqual([]);
   } finally {
     if (ownerOpen) await closeOwner(page);
   }

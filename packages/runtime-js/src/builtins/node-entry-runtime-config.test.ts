@@ -136,6 +136,70 @@ describe('node-entry host bootstrap config', () => {
     });
   });
 
+  it('snapshots exact package-path runtime bindings into existing launch metadata', () => {
+    const runtimeBindings = [
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: '/node_modules/esbuild-wasm',
+      },
+    ];
+    const entry = buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+      kind: 'program',
+      bin: false,
+      remoteFs: true,
+      nodeServe: false,
+      runtimeBindings,
+    } as unknown as NodeEntryLaunch);
+    runtimeBindings[0]!.packagePath = '/mutated';
+
+    expect(entry.bootstrap?.payload).toMatchObject({
+      launch: {
+        runtimeBindings: [
+          {
+            adapterId: 'rifty.runtime-adapter.esbuild.v1',
+            packagePath: '/node_modules/esbuild-wasm',
+          },
+        ],
+      },
+    });
+    const launch = (entry.bootstrap?.payload as { launch?: { runtimeBindings?: unknown } })?.launch;
+    expect(Object.isFrozen(launch?.runtimeBindings)).toBe(true);
+    const binding = (launch?.runtimeBindings as readonly unknown[] | undefined)?.[0];
+    expect(Object.isFrozen(binding)).toBe(true);
+  });
+
+  it.each([
+    ['non-array', {}, /runtimeBindings.*array/i],
+    ['sparse', new Array(1), /runtimeBindings.*dense|element/i],
+    ['unknown field', [{ adapterId: 'a', packagePath: '/pkg', extra: true }], /unexpected field/i],
+    ['empty adapter', [{ adapterId: '', packagePath: '/pkg' }], /adapterId/i],
+    ['relative path', [{ adapterId: 'a', packagePath: 'node_modules/pkg' }], /packagePath/i],
+    ['root path', [{ adapterId: 'a', packagePath: '/' }], /packagePath/i],
+    [
+      'non-normal absolute path',
+      [{ adapterId: 'a', packagePath: '/workspace/../forged' }],
+      /packagePath/i,
+    ],
+    [
+      'duplicate adapter',
+      [
+        { adapterId: 'a', packagePath: '/first' },
+        { adapterId: 'a', packagePath: '/second' },
+      ],
+      /duplicate.*adapter/i,
+    ],
+  ] as const)('rejects corrupt runtime bindings: %s', (_label, runtimeBindings, error) => {
+    expect(() =>
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+        kind: 'program',
+        bin: false,
+        remoteFs: true,
+        nodeServe: false,
+        runtimeBindings,
+      } as unknown as NodeEntryLaunch),
+    ).toThrow(error);
+  });
+
   it.each([
     {
       kind: 'program',

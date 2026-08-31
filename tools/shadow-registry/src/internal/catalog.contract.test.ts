@@ -75,7 +75,7 @@ describe('builtin shadow substitution catalog contract', () => {
     });
   });
 
-  it('models runtime-bound esbuild and install-only lightningcss with one clone-safe recipe', () => {
+  it('models esbuild and lightningcss as exact registry twins with data-only bindings', () => {
     const esbuild = builtinShadowSubstitutionCatalog.recipes.find(
       (recipe) => recipe.trigger.name === 'esbuild',
     );
@@ -88,17 +88,28 @@ describe('builtin shadow substitution catalog contract', () => {
       id: 'rifty.shadow-substitution.esbuild.v2',
       trigger: { name: 'esbuild', version: '0.28.0' },
       admission: { kind: 'semver-admits', unsupportedFeature: 'esbuild.version' },
-      acquisition: { kind: 'synthetic' },
+      acquisition: {
+        kind: 'registry',
+        name: 'esbuild-wasm',
+        version: '0.28.0',
+        dependencyProjection: {
+          dependencies: {},
+          optionalDependencies: {},
+          omittedOptionalDependencies: {},
+          peerDependencies: {},
+          bundledDependencies: [],
+          unsupportedFeature: 'esbuild.acquisition',
+        },
+      },
       materialization: {
         name: 'esbuild',
         version: '0.28.0',
         bin: { esbuild: 'bin/esbuild' },
       },
-      binding: {
-        adapterId: 'rifty.runtime-adapter.esbuild.v1',
-        assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
-      },
+      binding: { adapterId: 'rifty.runtime-adapter.esbuild.v1' },
     });
+    expect(esbuild?.binding).toEqual({ adapterId: 'rifty.runtime-adapter.esbuild.v1' });
+    expect(Object.hasOwn(builtinShadowSubstitutionCatalog, 'assets')).toBe(false);
     expect(esbuild?.materialization.files.map((file) => file.path)).toEqual([
       'bin/esbuild',
       'lib/main.cjs',

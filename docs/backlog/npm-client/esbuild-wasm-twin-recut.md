@@ -1,11 +1,12 @@
 ---
 area: npm-client
-status: draft
+status: ready
+review: checkpoints
 title: Recut esbuild delivery to the exact esbuild-wasm twin — or re-state the asset chain's forcing constraint
 created: 2026-08-29
 why: the runtime-asset seam is N=1 since ADR-0308; the rollback hook is recorded (ADR-0361) but carries no work item — an asset-only CAS/port/kernel-capability chain (~1.2k LOC + kernel API) stands for one 13.9 MB wasm with its forcing constraint stated nowhere
 user_story: As a rifty maintainer touching install/admission code, I want esbuild's wasm delivered by the smallest honest mechanism, but today a full Pattern-2 chain (CAS store, bespoke MessagePort protocol, kernel capability ports, owner/child wiring) exists for exactly one asset and no record says why it must.
-sources: [docs/adr/npm-client/0361-lock-replay-admits-the-attested-recipe-pin-request-admission-unchanged.md, docs/adr/npm-client/0344-exact-sass-twin-exposes-named-positive-surfaces-gaps-require-observed-unsupported-behavior.md, docs/adr/npm-client/0321-keep-shadow-asset-port-correlation-package-local.md, docs/adr/kernel/0313-one-shot-opaque-worker-entry-capability-ports.md, docs/adr/playground/0320-define-instant-restore-runtime-asset-availability.md, docs/adr/distribution/0311-registry-owned-esbuild-runtime-removes-the-host-asset-url.md, docs/process/fault-classes.md]
+sources: [docs/adr/npm-client/0371-registry-twins-carry-substituted-runtime-bytes-in-the-installed-tree.md, docs/adr/npm-client/0361-lock-replay-admits-the-attested-recipe-pin-request-admission-unchanged.md, docs/adr/npm-client/0344-exact-sass-twin-exposes-named-positive-surfaces-gaps-require-observed-unsupported-behavior.md, docs/adr/distribution/0311-registry-owned-esbuild-runtime-removes-the-host-asset-url.md, docs/process/fault-classes.md]
 code: [packages/npm-client/src/internal/shadow/manager.ts, packages/npm-client/src/internal/shadow/port.ts, packages/npm-client/src/internal/shadow/planner.ts, packages/npm-client/src/internal/shadow/source.ts, packages/kernel/src/worker-entry.ts, packages/workbench/src/workers/owner-shadow-assets.ts, packages/workbench/src/workers/workbench-runtime-adapters.ts, tools/shadow-registry/src/internal/catalog-source.ts]
 ---
 
@@ -87,6 +88,123 @@ item is the successor carrier. §Class-kill inventory (capture gate 4): no new
 mechanism proposed — a removal; the port engine is already inventoried in
 ADR-0321 + the consolidation item.
 
+## Reference contract
+
+- Node v24.16.0 / pnpm 11.5.2 / `esbuild-wasm@0.28.0`. The installed upstream
+  package member is exactly 13,918,738 bytes with SHA-256
+  `9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b`;
+  `pnpm vitest run tools/shadow-registry/src/esbuild-contract-source-pin.test.ts`
+  is the executable pin. The package has no dependency, optional, peer, or
+  bundled dependency maps.
+- The pre-recut preservation and RED transcripts live in
+  `docs/backlog/npm-client/reference/esbuild-wasm-twin-recut-contract-red.md`.
+  Browser acceptance uses the real registry proxy, tarball, Memory/OPFS VFS,
+  Workers, direct CJS/ESM, Vite 7 dev/HMR/build/reopen, and Vite 8's no-esbuild
+  path.
+- ADR-0371 selects and constrains the carrier. ADR-0226 remains the exact
+  generated-client oracle; its browser CJS source SHA-256 is
+  `b882a5ffb3bf170c0d8f40c0832cc5dca00830400314bb9455dea5d6f58c2a10`.
+
+## User scenario
+
+A browser-IDE user opens the baked Vite 7 project while offline, then runs the
+dev server and `vite build`. Today the installed tree is present but a fresh
+profile lacks the separate shadow CAS, so admission fails before guest entry.
+After the recut the exact esbuild-wasm bytes already ride that tree: both
+commands start offline, and direct `require('esbuild')` / `import 'esbuild'`
+still expose the same exact 0.28.0 outer.
+
+## Acceptance
+
+1. Exact `esbuild-wasm@0.28.0` is a normal registry acquisition of the builtin
+   esbuild recipe. The acquired tree contains
+   `node_modules/esbuild-wasm/esbuild.wasm` with the pinned size/hash and the
+   sibling synthetic `node_modules/esbuild` facade/bin. Fresh install records
+   both package facts; exact replay restores the same bytes and lock facts with
+   zero registry reads.
+2. Runtime activation is authorized only by the attested recipe binding. The
+   owner derives one frozen `{adapterId, packagePath}` from its effective
+   acquisition path, freezes it with package admission, and carries it through
+   existing entry-bootstrap metadata. A bare user-installed `esbuild-wasm`, a
+   forged/duplicate adapter id, missing member, wrong size, or wrong digest
+   never publishes an esbuild outer.
+3. Before guest import, the child reads and verifies the in-tree member through
+   its existing `FsSync`, then runs the one ADR-0226 generated client. Direct
+   CJS/ESM and Vite 7 dev/HMR/optimize/build keep one runtime/object identity;
+   Vite 8 carries no binding and performs no esbuild acquisition or activation.
+4. The runtime-asset catalog fields/projection, CAS storage, registry-member
+   source, MessagePort read/cancel protocol, owner ensure/serve/consume path,
+   and kernel `WorkerEntryDescriptor.capabilityPorts` /
+   `consumeKernelEntryCapabilityPorts()` API are deleted. No replacement
+   channel, cache, protocol, correlation engine, epoch, lock, or lifecycle
+   owner ships.
+5. An instant Vite 7 snapshot contains the registry twin. Closing the physical
+   owner, blocking every `/npm-registry` request, reopening, then running dev
+   and build succeeds with zero blocked requests; no `npm install` or hidden
+   fallback runs. From-scratch cold install still makes exactly the packument
+   and tgz requests.
+6. Catalog and published package cost stay data-only: recipe data carries
+   coordinates, exact dependency projection, facade files, and adapter id;
+   runtime bytes never enter generated JS. The existing 135 KB derived client
+   remains the sole recorded Workbench-bundle exception.
+7. Existing exact admission/replay, LightningCSS/Sass twins, bin collision,
+   install fault, Vite 7/8, direct esbuild, and package-tree mutation suites
+   remain green. `pnpm pr:check` passes and affected package changelogs record
+   the behavior/API removal.
+
+## Parity cases
+
+1. **Exact upstream twin:** installed member byte length and SHA-256 equal the
+   pinned `esbuild-wasm@0.28.0` package; empty dependency projection equals its
+   exact manifest. RED: the current synthetic recipe installs no twin.
+2. **Fresh/replay:** direct and transitive `esbuild@^0.28.0` acquire the twin
+   through the registry-recipe path; replay reproduces tree, facade, lock
+   trace, resolved/integrity and bytes with zero reads. RED: current fresh
+   install performs zero esbuild registry reads and emits an asset binding.
+3. **Activation authority/order:** admitted `{adapterId, packagePath}` reaches
+   Node-entry and dev-server metadata, the exact member is verified before
+   compile, and the outer publishes before guest import. Forged, duplicate,
+   path, size, and hash mutations loud-fail first. RED: current activation
+   requires the ready/read/dispose MessagePort client.
+4. **Direct + Vite 7:** the existing real-browser direct CJS/ESM transform and
+   Vite 7 optimize/dev/HMR/build rows remain exact with no host wasm URL or
+   legacy alias. The two fresh registry requests are unchanged.
+5. **Offline instant reopen:** restored tree plus a new physical owner runs
+   Vite 7 dev/build while all registry requests are aborted; request ledger is
+   empty. RED: today only a previously filled separate CAS makes this pass.
+6. **Vite 8/no demand:** Vite 8 and a project without an admitted esbuild
+   substitution carry zero runtime bindings, request no esbuild-wasm, and do
+   not compile the adapter. Recipe catalog entries for other packages trigger
+   no bytes.
+7. **Deletion/API:** TypeScript and architecture gates reject every surviving
+   runtime-asset/`capabilityPorts` import or public export; emitted bundles
+   contain no asset protocol/CAS owner while retaining one generated client.
+
+## Fault matrix
+
+| Fault class | Required outcome | Proof |
+|---|---|---|
+| corrupt-input / provenance-lie | drifted packument projection, tarball integrity, installed member size/hash, recipe trace, adapter id, or package path never publishes runtime readiness | catalog/acquisition mutations + binding/adapter member mutations + real-browser exact twin |
+| unbounded-read / observable-order | ordinary bounded registry/tarball readers settle before tree/lock publication; member verification settles before compile and guest import | existing registry stall/abort battery + adapter-before-import ledger |
+| torn-state / quota-perm-fail | failed twin/facade/bin write publishes no lock, install result, binding, or guest entry; retry reaches exact tree | shared registry-twin VFS fault suite through esbuild acquisition |
+| poisoned-cache / provenance-lie | integrity-keyed tarball replay is zero-read only for exact bytes/trace; drift is loud, never a cached success | fresh→offline replay and cache/trace mutation suite |
+| sibling-drift | esbuild, LightningCSS, and Sass use the same registry projection/acquisition/materialization/replay owner; no esbuild-only fetch/store path remains | shared registry-recipe contract plus deleted-chain inventory |
+| frozen-assumption / lossy-aggregate | full member bytes/digest, lock facts, request ledger, runtime outputs, and emitted-bundle inventory are compared; presence booleans/source greps cannot close acceptance | upstream pins + browser direct/Vite differential + bundle golden |
+
+## Out of scope
+
+- Cross-project OPFS dedup and a pnpm-style package store. Per-project 13.9 MB
+  copies are accepted; no hidden CAS survives this unit.
+- Moving the ADR-0226 generated client in-tree, publishing another derived
+  package, or install-time patching upstream JS. A second bundled derived
+  client is refused by ADR-0371.
+- Other esbuild versions, the real CLI, host native packages, and
+  `@esbuild/wasi-preview1`. They remain compat ❌ and loud-throw the existing
+  `esbuild.version` / `esbuild.cli` / native-policy gaps.
+- General native-module support or third-party adapter/plugin registration.
+  Unknown adapter ids remain loud; there is no public executable-policy SPI.
+- Vite 8 HMR and non-Chromium support, per the existing compat matrix/roadmap.
+
 ## Challenge
 
 challenge: 2026-08-29 — 2 problems
@@ -97,6 +215,9 @@ challenge: 2026-08-29 — 2 problems
 
 ## Decisions
 
+- contract-compile 2026-08-31 — ADR-0371 selects the exact registry twin,
+  `{adapterId, packagePath}` bootstrap descriptor, local size/hash verification,
+  and the single bundled generated-client exception; no observable fork remains.
 - refine 2026-08-29, fork "exit": user picked exit 1 (recut to registry twin) —
   the in-tree cost (13.9 MB per esbuild project, snapshot +≤3.8 MB, lost
   per-profile dedup) is accepted. Challenge problem 2 (unweighed trade) was

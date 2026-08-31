@@ -3,13 +3,18 @@
  * esbuild/Vite cutover deletion ratchet.
  *
  * Browser parity proves the registry adapter. This finite inventory proves the
- * retired ADR-0047 vendored-WASI carrier cannot remain beside it or return.
+ * retired ADR-0047 vendored-WASI and Pattern-2 asset carriers cannot remain
+ * beside it or return.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export const RETIRED_ESBUILD_PATHS = Object.freeze([
+  'packages/npm-client/src/internal/shadow/manager.ts',
+  'packages/npm-client/src/internal/shadow/port.ts',
+  'packages/npm-client/src/internal/shadow/source.ts',
+  'packages/workbench/src/workers/owner-shadow-assets.ts',
   'tests/integration/esbuild-wasi-transform.test.ts',
   'tools/shadow-registry/scripts/fetch-esbuild-wasi.mjs',
   'tools/shadow-registry/src/esbuild-binding.ts',
@@ -19,10 +24,30 @@ export const RETIRED_ESBUILD_PATHS = Object.freeze([
 ]);
 
 export const RETIRED_ESBUILD_REFERENCES = Object.freeze([
+  'KernelEntryCapabilityPorts',
+  'OriginExclusiveShadowAssetManager',
+  'PackageTreeShadowAssetBoundary',
+  'SHADOW_ASSET_PORT_CAPABILITY',
+  'ShadowAssetPlan',
+  'ShadowAssetPortServer',
+  'ShadowAssetReadySet',
+  'ShadowAssetStorageClass',
+  'ShadowAssetVfsDurability',
+  'ShadowRuntimeAsset',
   '@riftydev/shadow-registry/esbuild-binding',
   '@riftydev/shadow-registry/esbuild-transform',
+  'capabilityPorts',
+  'consumeKernelEntryCapabilityPorts',
+  'createMemoryShadowAssetStorage',
+  'createOriginExclusiveShadowAssetManager',
+  'createRegistryShadowAssetSource',
+  'createShadowAssetPortClient',
+  'createVfsShadowAssetStorage',
   'ESBUILD_WASM_VENDOR_PATH',
   'loadVendoredEsbuildWasm',
+  'probeBrowserShadowAssetStorageClass',
+  'shadowAssetPlanForInstallResult',
+  'shadowAssets',
   'fetch-esbuild-wasi.mjs',
 ]);
 
