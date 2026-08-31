@@ -35,6 +35,14 @@ the old→new pointer to `docs/adr/README.md`.
 
 Shape and validation: `docs/backlog/README.md`. Never implement a draft.
 
+WHEN it fires — the hand-off boundary is the ready `goal.md`, NOT a ready item:
+a goal is handed off with its children still `draft`, and each child compiles
+here at its own PICKUP, JIT, one at a time (`rifty-goal` PICKUP 2). FIT never
+compiles a child. Outside a goal run a settled draft may compile at intake.
+Either way the verdict is the unit's Contract+RED at pickup (step 4) — item
+`ready` is a per-slice event inside the run, never a precondition for starting
+one.
+
 1. Exhaust code, ADR, real-Node, and disposable-spike evidence.
 2. Resolve internal forks yourself. A missing section is not a reason to invoke a skill.
 3. Remaining user-observable fork → leave draft, surface the exact branch, and

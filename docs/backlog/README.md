@@ -89,7 +89,19 @@ recorded), and `tier`. No approval gate: FIT flips `status: ready` itself and
 ends with the completion report (§Report) — a ready goal is immediately
 runnable.
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
-`ledger.md` opens empty. Seed order proves the minimal pattern first (the
+`ledger.md` opens empty. Seeded children stay `draft` — a ready goal hands off
+with draft children; each compiles to `ready` at its own PICKUP, never at FIT
+(`decision-workflow.md` §Backlog readiness, WHEN).
+
+Fog is owner-typed. A user-owned observable-scope question (what the value
+requires, what must NOT change, whose scenario counts) is asked at FIT while
+the user is there — a probe existing for its technical half is not a reason to
+park it (`rifty-goal` FIT 3). It reaches fog only when it is not answerable
+yet, tagged `owner: user` + why; PICKUP routes such a line to `rifty-refine`,
+never to a probe. Every fog line: `<question> — owner: user|agent — <what
+settles it>`. A rejected rival route is recorded checkable in goal `##
+Decisions`: `rejected route: <route> — violates <I#|Outcome clause>` — the
+clause a later agent cites instead of re-deriving the comparison. Seed order proves the minimal pattern first (the
 null/install-only case of a shared mechanism lands before machinery for the
 maximal case); a child whose contract depends on an open question is not
 seeded. A mechanism shared by two children needs an existing owner, a first

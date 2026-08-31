@@ -9,7 +9,9 @@
    §Backlog readiness: exhaust code/ADR/real-Node/spike evidence; every
    Parity/Fault row carries a reproducible artifact (command + output +
    version); a remaining user-observable fork → stop and request manual
-   `rifty-refine` — never self-run the interview.
+   `rifty-refine` — never self-run the interview. A fog line this slice depends
+   on that is tagged `owner: user` IS such a fork: route it to refine, never
+   settle it with a probe — a probe answers facts, not what the value requires.
 3. **Declare the band.** Append a ledger row `<date> — <slice> band <lo>–<hi>`
    sized from the compiled contract's expected-RED batch. Far above any prior
    estimate → the unit is too big: split it now, not after review.
