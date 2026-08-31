@@ -205,7 +205,7 @@ const exactEsbuildWasm = new Uint8Array(
 );
 const exactEsbuildWasmSha256 = createHash('sha256').update(exactEsbuildWasm).digest('hex');
 const fixtureEsbuildTarballIntegrity =
-  'sha512-55tsopeJgNV0B+Pha3VS0T7X4oGZhbaMVDCiv/VPCsyy3OQGXhGLeRwfzOP+AHr02GHuh7FLnYlMCoz+MDzC6g==';
+  'sha512-Soab/tJSCCC8R8Piugb516EQpNacyJcTHjbhWsBxXnKArLJ+h5Nf9y54l7h/UMqBdB74mXyhZOYlJGdUJ1UPGw==';
 
 let esbuildTarballPromise: Promise<Readonly<{ bytes: Uint8Array; integrity: string }>> | undefined;
 

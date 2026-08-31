@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Test registry tarballs normalize the RFC 1952 OS byte, so fixture integrity
+  and shadow replay traces are identical on macOS and Linux CI.
+
 - Move-only decomposition: `installer.ts` (3064 lines) split along its
   existing seams into `installer-walk.ts`, `installer-sources.ts`,
   `eddy-fast-path.ts`, `installer-request.ts`, `installer-bin-claims.ts`,
