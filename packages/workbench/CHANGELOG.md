@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Owner child launchers call `reservation.commit` /
+  `abortBeforeSpawn` / `abortAfterChildSettlement` directly. The three
+  `owner-child-admission` wrappers degenerated into pass-throughs once ADR-0371
+  removed the capability-port lifecycle they owned; behavior is unchanged.
+
 - **Activate esbuild from the admitted installed tree (ADR-0371).** Package
   admission projects the exact registry-twin path into existing Node/dev-server
   bootstrap metadata; each child verifies the 13,918,738-byte SHA-pinned member

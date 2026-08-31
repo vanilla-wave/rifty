@@ -26,9 +26,6 @@ import {
 import { toOwnerProjectPath } from '../workbench/project-file-boundary.ts';
 import {
   type ReserveOwnerChildAdmission,
-  abortOwnerChildAdmissionAfterSpawn,
-  abortOwnerChildAdmissionBeforeSpawn,
-  commitOwnerChildAdmission,
   observeOwnerChildExit,
   projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
@@ -114,7 +111,7 @@ export function createOwnerExecSyncRunner(
         context?.parentPid ?? 1,
       );
     } catch (error) {
-      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      reservation.abortBeforeSpawn(error);
       throw error;
     }
     let resolvePhysicalExit = (): void => {};
@@ -160,7 +157,7 @@ export function createOwnerExecSyncRunner(
       child.stderr.on('data', (chunk) => {
         if (chunk instanceof Uint8Array) stderr.push(chunk);
       });
-      commitOwnerChildAdmission(reservation, physicalExit);
+      reservation.commit();
     } catch (error) {
       let failure = error;
       // SIGTERM starts the kernel's ordered teardown; the worker is gone only
@@ -175,7 +172,7 @@ export function createOwnerExecSyncRunner(
           'execSync child setup and termination failed',
         );
       }
-      await abortOwnerChildAdmissionAfterSpawn(reservation, failure, termination);
+      await reservation.abortAfterChildSettlement(failure, termination);
       throw failure;
     }
     return result;
@@ -313,7 +310,7 @@ export function createOwnerChildNodeExecutor(
         ),
       );
     } catch (error) {
-      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      reservation.abortBeforeSpawn(error);
       throw error;
     }
     const physicalExit = observeOwnerChildExit(handle);
@@ -326,14 +323,14 @@ export function createOwnerChildNodeExecutor(
           hooks.onListening(hooks.sid, control.pid, control.ports, control.previewScope),
         onExit: () => hooks.onExit(hooks.sid),
       });
-      commitOwnerChildAdmission(reservation, physicalExit);
+      reservation.commit();
     } catch (error) {
       try {
         handle.kill('SIGTERM');
       } catch {
         // Exact physical exit observation below remains authoritative.
       }
-      await abortOwnerChildAdmissionAfterSpawn(reservation, error, physicalExit);
+      await reservation.abortAfterChildSettlement(error, physicalExit);
       throw error;
     }
     return running;
