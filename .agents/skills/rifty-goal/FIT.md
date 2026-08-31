@@ -27,7 +27,9 @@ recorded decisions.
 5. **Map.** Seed ONLY specifiable children — the minimal pattern first (the
    null/install-only case of a shared mechanism before machinery for the
    maximal case). A child whose contract depends on an open question stays
-   unseeded; don't pre-slice the fog. Add `## Out of scope`.
+   unseeded; don't pre-slice the fog. Children stay `draft`: compiling one to
+   `ready` here is scope error — PICKUP owns draft→ready, JIT per slice
+   (`decision-workflow.md` §Backlog readiness, WHEN). Add `## Out of scope`.
 6. **Ledger.** Create `ledger.md` with one header line.
 7. **Challenge.** One fresh independent critic on the raw `goal.md` + `map.md`
    (`docs/backlog/README.md` §Challenge — no author framing): attack the
