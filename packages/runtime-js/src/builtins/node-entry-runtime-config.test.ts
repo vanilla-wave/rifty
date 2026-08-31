@@ -136,6 +136,7 @@ describe('node-entry host bootstrap config', () => {
     });
   });
 
+  // TODO(backlog: runtime-js/node-entry-runtime-binding-variant-coverage)
   it('snapshots exact package-path runtime bindings into existing launch metadata', () => {
     const runtimeBindings = [
       {

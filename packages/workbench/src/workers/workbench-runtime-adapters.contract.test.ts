@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { readRuntimeEsbuild } from '@riftydev/runtime-js';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import { activateWorkbenchRuntimeAdapters } from './workbench-runtime-adapters.ts';
@@ -20,11 +21,13 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     const fs = new MemoryFsSync();
     const read = vi.spyOn(fs, 'readFileBytesSync');
     const compile = vi.spyOn(WebAssembly, 'compile');
+    const before = readRuntimeEsbuild();
 
     await activateWorkbenchRuntimeAdapters({ bindings: [], fs, cwd: '/workspace' });
 
     expect(read).not.toHaveBeenCalled();
     expect(compile).not.toHaveBeenCalled();
+    expect(readRuntimeEsbuild()).toBe(before);
   });
 
   it('rejects unknown and duplicate adapter ids before reading the tree', async () => {
@@ -35,16 +38,19 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     for (const bindings of cases) {
       const fs = new MemoryFsSync();
       const read = vi.spyOn(fs, 'readFileBytesSync');
+      const before = readRuntimeEsbuild();
       await expect(
         activateWorkbenchRuntimeAdapters({ bindings, fs, cwd: '/workspace' }),
       ).rejects.toThrow(/runtime-adapter|duplicate/u);
       expect(read).not.toHaveBeenCalled();
+      expect(readRuntimeEsbuild()).toBe(before);
     }
   });
 
   it('loud-fails a missing admitted package member before compile', async () => {
     const fs = new MemoryFsSync();
     const compile = vi.spyOn(WebAssembly, 'compile');
+    const before = readRuntimeEsbuild();
 
     await expect(
       activateWorkbenchRuntimeAdapters({
@@ -55,6 +61,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     ).rejects.toThrow(/esbuild\.wasm|runtime-adapter/u);
 
     expect(compile).not.toHaveBeenCalled();
+    expect(readRuntimeEsbuild()).toBe(before);
   });
 
   it('rejects a wrong-size member before digest or compile', async () => {
@@ -65,11 +72,13 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
       new Uint8Array([0, 97, 115, 109]),
     );
     const compile = vi.spyOn(WebAssembly, 'compile');
+    const before = readRuntimeEsbuild();
 
     await expect(
       activateWorkbenchRuntimeAdapters({ bindings: [ESBUILD_BINDING], fs, cwd: '/workspace' }),
     ).rejects.toThrow(/size|13.?918.?738/u);
     expect(compile).not.toHaveBeenCalled();
+    expect(readRuntimeEsbuild()).toBe(before);
   });
 
   it('rejects a valid member at a non-ancestor forged absolute package path', async () => {
@@ -81,11 +90,13 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     fs.mkdirSync(forged.packagePath, { recursive: true });
     fs.writeFileSync(`${forged.packagePath}/esbuild.wasm`, exactEsbuildWasm);
     const compile = vi.spyOn(WebAssembly, 'compile');
+    const before = readRuntimeEsbuild();
 
     await expect(
       activateWorkbenchRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
     ).rejects.toThrow(/packagePath|ancestor|runtime-adapter/u);
     expect(compile).not.toHaveBeenCalled();
+    expect(readRuntimeEsbuild()).toBe(before);
   });
 
   it('rejects an exact member at a normalized in-root sibling path before reading it', async () => {
@@ -98,12 +109,14 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     fs.writeFileSync(`${forged.packagePath}/esbuild.wasm`, exactEsbuildWasm);
     const read = vi.spyOn(fs, 'readFileBytesSync');
     const compile = vi.spyOn(WebAssembly, 'compile');
+    const before = readRuntimeEsbuild();
 
     await expect(
       activateWorkbenchRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
     ).rejects.toThrow(/packagePath|esbuild-wasm|runtime-adapter/u);
     expect(read).not.toHaveBeenCalled();
     expect(compile).not.toHaveBeenCalled();
+    expect(readRuntimeEsbuild()).toBe(before);
   });
 
   it('rejects an exact member at a descendant exact-leaf path before reading it', async () => {
@@ -116,12 +129,14 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     fs.writeFileSync(`${forged.packagePath}/esbuild.wasm`, exactEsbuildWasm);
     const read = vi.spyOn(fs, 'readFileBytesSync');
     const compile = vi.spyOn(WebAssembly, 'compile');
+    const before = readRuntimeEsbuild();
 
     await expect(
       activateWorkbenchRuntimeAdapters({ bindings: [forged], fs, cwd: '/workspace' }),
     ).rejects.toThrow(/packagePath|ancestor|runtime-adapter/u);
     expect(read).not.toHaveBeenCalled();
     expect(compile).not.toHaveBeenCalled();
+    expect(readRuntimeEsbuild()).toBe(before);
   });
 
   it.each([
@@ -135,6 +150,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
       const nested = { adapterId: ESBUILD_BINDING.adapterId, packagePath } as const;
       const read = vi.spyOn(fs, 'readFileBytesSync');
       const compile = vi.spyOn(WebAssembly, 'compile');
+      const before = readRuntimeEsbuild();
 
       await expect(
         activateWorkbenchRuntimeAdapters({ bindings: [nested], fs, cwd }),
@@ -142,6 +158,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
 
       expect(read).toHaveBeenCalledWith(`${nested.packagePath}/esbuild.wasm`);
       expect(compile).not.toHaveBeenCalled();
+      expect(readRuntimeEsbuild()).toBe(before);
     },
   );
 
@@ -150,6 +167,7 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     fs.mkdirSync(ESBUILD_BINDING.packagePath, { recursive: true });
     fs.writeFileSync(`${ESBUILD_BINDING.packagePath}/esbuild.wasm`, new Uint8Array(13_918_738));
     const compile = vi.spyOn(WebAssembly, 'compile');
+    const before = readRuntimeEsbuild();
 
     await expect(
       activateWorkbenchRuntimeAdapters({
@@ -160,5 +178,6 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     ).rejects.toThrow(/digest|sha|runtime-adapter/u);
 
     expect(compile).not.toHaveBeenCalled();
+    expect(readRuntimeEsbuild()).toBe(before);
   });
 });

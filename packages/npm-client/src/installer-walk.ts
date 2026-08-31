@@ -414,6 +414,7 @@ export async function walkAndPin(
           );
         }
         if (ordinaryBinDemand) scheduledPackage.ordinaryBinDemand = true;
+        // TODO(backlog: npm-client/registry-twin-codemand-order-loss)
         return;
       }
       scheduled.set(installPath, { identity: key, ordinaryBinDemand });
