@@ -31,6 +31,23 @@ interface GeneratedRuntimeModule {
 
 const generated = generatedRuntime as unknown as GeneratedRuntimeModule;
 
+function isNestedPackageRoot(packageRoot: string, cwd: string): boolean {
+  if (!packageRoot.startsWith(`${cwd}/node_modules/`)) return false;
+  const parts = packageRoot.slice(cwd.length + 1).split('/');
+  let index = 0;
+  while (index < parts.length) {
+    if (parts[index] !== 'node_modules') return false;
+    const scopeOrName = parts[index + 1];
+    if (!scopeOrName || scopeOrName === 'node_modules') return false;
+    index += scopeOrName.startsWith('@') ? 3 : 2;
+    if (scopeOrName.startsWith('@')) {
+      const name = parts[index - 1];
+      if (!name || name === 'node_modules') return false;
+    }
+  }
+  return index === parts.length;
+}
+
 async function startGeneratedEsbuildRuntime(
   options: EsbuildRuntimeOptions,
 ): Promise<RuntimeEsbuildCjsOuter> {
@@ -54,10 +71,11 @@ async function activateEsbuild(
     packageRoot === '/' ||
     packageRoot === normalizedCwd ||
     normalizedCwd.startsWith(`${packageRoot}/`);
+  const inCwdPackageTree = isNestedPackageRoot(packageRoot, normalizedCwd);
   if (
     !isAbsolute(packagePath) ||
     normalizePath(packagePath) !== packagePath ||
-    !onCwdAncestry ||
+    (!onCwdAncestry && !inCwdPackageTree) ||
     !packagePath.endsWith(ESBUILD_RUNTIME_PACKAGE_SUFFIX)
   ) {
     throw new TypeError(`runtime-adapter.esbuild packagePath is not admitted: ${packagePath}`);

@@ -124,6 +124,23 @@ describe('Workbench in-tree runtime adapter dispatch', () => {
     expect(compile).not.toHaveBeenCalled();
   });
 
+  it('admits an attested nested dependency package path through member validation', async () => {
+    const fs = new MemoryFsSync();
+    const nested = {
+      adapterId: ESBUILD_BINDING.adapterId,
+      packagePath: '/workspace/node_modules/host/node_modules/esbuild-wasm',
+    } as const;
+    const read = vi.spyOn(fs, 'readFileBytesSync');
+    const compile = vi.spyOn(WebAssembly, 'compile');
+
+    await expect(
+      activateWorkbenchRuntimeAdapters({ bindings: [nested], fs, cwd: '/workspace' }),
+    ).rejects.toThrow(/esbuild\.wasm|runtime-adapter/u);
+
+    expect(read).toHaveBeenCalledWith(`${nested.packagePath}/esbuild.wasm`);
+    expect(compile).not.toHaveBeenCalled();
+  });
+
   it('rejects exact-size but wrong-digest bytes before compile', async () => {
     const fs = new MemoryFsSync();
     fs.mkdirSync(ESBUILD_BINDING.packagePath, { recursive: true });
