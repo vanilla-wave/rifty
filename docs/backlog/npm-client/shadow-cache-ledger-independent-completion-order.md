@@ -1,13 +1,14 @@
 ---
 area: npm-client
 status: draft
-title: Shadow cache ledger freezes independent completion order
+title: Shadow contract ledgers freeze independent completion order
 created: 2026-07-28
-why: the recipe-v2 contract intermittently requires two distinct-key cache puts to finish in request order even though bounded acquisition runs them concurrently
-user_story: As a contributor running pnpm pr:check, I want the shadow acquisition contract to assert only required event order, but today aggregate load can fail a green change when independent cache puts swap
-sources: [PR-213, docs/process/fault-classes.md]
+why: recipe-v2 tests intermittently require independent package completions to finish in request order even though bounded acquisition runs them concurrently
+user_story: As a contributor running pnpm pr:check, I want shadow contracts to assert only required phase order, but today aggregate load can fail a green change when independent package completions swap
+sources: [PR-213, PR-289, docs/process/fault-classes.md]
 code:
   - packages/npm-client/src/shadow-recipe-v2-data-authority.contract.test.ts
+  - packages/npm-client/src/installer-shadow-materialized-bin-commit-authority.contract.test.ts
 ---
 
 ## Context
@@ -27,8 +28,19 @@ the test ledger, not an `observable-order` runtime defect. The sibling sweep
 found the same exact cache-put ordering only in `supportedFreshEvents()` and
 `supportedEddyEvents()` in this file.
 
+PR #289 exposed the same class in
+`installer-shadow-materialized-bin-commit-authority.contract.test.ts`: one
+full `pr:check` observed the esbuild facade files complete before the
+LightningCSS aliases and the two post-lock materialization reports swap, while
+the isolated suite and preceding/following full gates used the opposite order.
+All required phase edges still held: acquisition before materialization,
+facade/bin/shim before lock, and every report after lock. The exact
+cross-package ordering is another `frozen-assumption`, not a product-order
+defect.
+
 Dedup searched backlog titles, `code:`, epic Items/children, ADRs, and cache
 ledger/order terms. The existing bounded-concurrency perf draft owns acquisition
 throughput, not this test defect. No serializer or product-order change is
-justified merely to satisfy the ledger; a future ready contract must preserve
-required phase edges while accepting physically independent completions.
+justified merely to satisfy either ledger; a future ready contract must
+preserve required phase edges while accepting physically independent
+completions across the full sibling set.
