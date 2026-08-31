@@ -81,7 +81,7 @@ node --input-type=module -e 'console.log(process.version); delete globalThis.Sha
 3. SAB-present realm + shared-backed view → private-copy decode with identical
    bytes; second install → `false`. Artifact: `pnpm vitest run
    packages/runtime-js/src/ipc/worker-realm-compat.test.ts` on the current tree,
-   Node v24.16.0 / Vitest 2.1.0, passes the existing shared-copy and idempotence
+   Node v24.16.0 / Vitest 2.1.9, passes the existing shared-copy and idempotence
    cases; these are green preservation pins, not new REDs.
 
 ## Fault matrix
@@ -104,6 +104,7 @@ node --input-type=module -e 'console.log(process.version); delete globalThis.Sha
 ## Decisions
 
 review: checkpoints — parity behavior at a browser realm boundary.
+contract-red: 2026-08-31 — blocker @ e7b45a865173cf811c06d06f6a69953181848411
 
 - ADR-0162's unconditional patch remains binding. Fix the patched decode's
   shared-input discrimination so it never evaluates an absent bare binding;
