@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **One registry-twin byte carrier (ADR-0371).** The esbuild recipe now
+  acquires exact `esbuild-wasm@0.28.0` with an empty dependency projection and
+  a data-only adapter id. The catalog's runtime-asset schema and bytes/source
+  metadata are removed; exact member size/hash remain executable source pins.
+
 - The synthetic esbuild CommonJS shim declares upstream's static named-export
   surface, preserving native CJS/ESM namespace identities after installation.
 - Snapshot drift validation now requires canonical v3 cache archives; the
@@ -34,14 +39,12 @@
   (`schema`/`api`/`version`/`consumer`/`source`/`wasm`/`patches`); compat prose
   edits no longer invalidate deployed stamps or force snapshot rebakes. One-time
   identity flip; the accompanying rebake changed no package bytes or versions.
-- Cold offline promise reworded to the page-observable failure
-  (`ShadowAssetError: failed to acquire …`); `ESHADOWASSET`/`acquire` fields
-  stay unit-pinned below the owner boundary.
+- Cold offline Vite 7 now restores the exact in-tree twin with zero registry
+  requests; from-scratch acquisition retains the ordinary exact two requests.
 
-- Builtin substitutions now come from one generated, strict-decoded catalog
-  with canonical catalog/recipe/file identities. Esbuild is an exact synthetic
-  recipe with a runtime-asset binding; the retained lightningcss public tables
-  derive byte-for-byte from its install-only recipe.
+- Builtin substitutions come from one generated, strict-decoded catalog with
+  canonical catalog/recipe/file identities. Esbuild and LightningCSS use exact
+  registry twins; binding data contains no runtime bytes.
 - The retired esbuild baked redirect and `@esbuild/wasi-preview1` alias shim are
   removed from the public root tables. Shared catalog primitives live only at
   the declared `./internal` subpath.

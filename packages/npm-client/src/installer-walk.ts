@@ -29,7 +29,7 @@ import {
 } from './internal/shadow/admission.ts';
 import type { RegistryShadowEmbeddedDependency } from './internal/shadow/planner.ts';
 import { attestBuiltinShadowSubstitution } from './internal/shadow/planner.ts';
-import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
+import type { ShadowSubstitutionPlan } from './internal/shadow/planner.ts';
 import {
   assertRegistryShadowEmbeddedManifests,
   pinnedShadowSubstitutions,
@@ -156,7 +156,7 @@ export type LockfileReuseDecision =
 /** Per-edge ADR-0023 coverage. Strict lockfile decoding errors stay fatal. */
 export function lockfileReuseDecision(
   lockfile: Lockfile,
-  shadowPlan: ShadowAssetPlan,
+  shadowPlan: ShadowSubstitutionPlan,
   name: string,
   range: string | null,
   ctx: ResolveContext,
@@ -414,6 +414,7 @@ export async function walkAndPin(
           );
         }
         if (ordinaryBinDemand) scheduledPackage.ordinaryBinDemand = true;
+        // TODO(backlog: npm-client/registry-twin-codemand-order-loss)
         return;
       }
       scheduled.set(installPath, { identity: key, ordinaryBinDemand });

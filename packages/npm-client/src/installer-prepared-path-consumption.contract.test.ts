@@ -4,7 +4,7 @@ import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
 import * as npmClientRoot from './index.ts';
 import { install } from './installer.ts';
 import * as installer from './installer.ts';
-import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
+import type { ShadowSubstitutionPlan } from './internal/shadow/planner.ts';
 import {
   type Lockfile,
   type PreparedInstallPackage,
@@ -25,11 +25,9 @@ interface InstallerIngressContractApi {
 
 const contractApi = installer as unknown as Partial<InstallerIngressContractApi>;
 const emptyShadowPlan = Object.freeze({
-  requiredSetDigest: '0'.repeat(64),
   substitutions: Object.freeze([]),
-  assets: Object.freeze([]),
   bindings: Object.freeze([]),
-}) satisfies ShadowAssetPlan;
+}) satisfies ShadowSubstitutionPlan;
 
 function requirePackageLinkTargets(): InstallerIngressContractApi['packageLinkTargets'] {
   const candidate = contractApi.packageLinkTargets;

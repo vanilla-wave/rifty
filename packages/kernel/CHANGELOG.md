@@ -18,11 +18,12 @@
   fork JSON IPC, worker-thread messages, and private lifecycle control stay
   separate while subtree and peer-death teardown settle once.
 
-- **One-shot opaque URL-entry capabilities (ADR-0313).** A spawned URL entry
-  can carry a validated frozen map of named `MessagePort`s in its existing init
-  transaction. The worker publishes them before pre-entry, privileged
-  bootstrap consumes them once before guest import, and every init/exit failure
-  closes adopted endpoints. Source entries and process identity stay unchanged.
+### Removed
+
+- **Retire URL-entry capability ports (ADR-0371).** Remove the public
+  `WorkerEntryDescriptor.capabilityPorts`, `KernelEntryCapabilityPorts`, and
+  `consumeKernelEntryCapabilityPorts()` surface with its N=1 esbuild consumer;
+  clone-safe bootstrap metadata remains the sole higher-runtime entry carrier.
 
 ### Fixed
 
@@ -80,12 +81,10 @@
   `console.error` naming the method instead of a silent `catch {}`. No wire or
   behavior change — messages and one log line only.
 
-- **Failed Worker init no longer leaks its half-built process.** If an entry
-  descriptor getter, SAB/Worker setup, bootstrap `postMessage`, or listener
-  install throws after capability adoption, spawn now closes every adopted
-  endpoint and rolls back all resources acquired so far before rethrowing the
-  same error. Worker-side SAB attach and shared-global publication now share
-  entry finalization, so setup failure closes the transferred ports and realm.
+- **Failed Worker init no longer leaks its half-built process.** If SAB/Worker
+  setup, bootstrap `postMessage`, or listener install throws, spawn closes all
+  fixed process ports and rolls back the Worker/ring before rethrowing. Worker-
+  side SAB attach and shared-global publication share entry finalization.
 - **Dispatcher backstop is uncounted infra (ADR-0158, keepalive gap-e).** `SyncRpcDispatcher` now captures the HOST `setInterval`/`clearInterval` at module load and arms its backstop timer on them, instead of the realm's global `setInterval` (which a worker realm replaces with runtime-js's keepalive-counted wrapper). The infra timer therefore never enters the event-loop keepalive count, by construction (ADR-0152 §5 precedent) — removing the prior depth-1 count-then-`.unref()` coupling and any risk of pinning a nested child's (depth-2) drain. Guard: `sync-dispatch.test.ts` asserts the backstop arms the host timer, not the wrapped global.
 
 - **A kernel worker crash is no longer swallowed.** `spawnKernelWorker`'s

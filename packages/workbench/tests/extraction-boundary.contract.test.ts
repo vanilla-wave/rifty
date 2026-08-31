@@ -331,7 +331,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 140 → 141 (2026-08-19, #247 item 5): emnapi install policy.
     // 141 → 143 (2026-08-24, ADR-0362): PTY pending-authority file-size split
     // and the owner-only `.bin` path classifier.
-    expect(packageProductionFiles).toHaveLength(143);
+    // 143 → 142 (2026-08-31, ADR-0371): delete the N=1 owner asset authority.
+    expect(packageProductionFiles).toHaveLength(142);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

@@ -1,13 +1,8 @@
 import { NotImplementedError } from '@riftydev/io';
-import type { KernelEntryCapabilityPorts } from '@riftydev/kernel';
 import type { RegistryClient } from '@riftydev/npm-client';
 import {
-  type PackageTreeShadowAssetBoundary,
-  SHADOW_ASSET_PORT_CAPABILITY,
-  type ShadowAssetPortServer,
-  type ShadowAssetReadySet,
   planShadowSubstitutionsFromLockfile,
-  shadowAssetPlanForInstallResult,
+  shadowSubstitutionPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
 import {
   type CommandContext,
@@ -101,8 +96,6 @@ export interface OwnerPackageStateOptions {
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   readonly log: (line: string) => void;
   readonly registry: RegistryClient;
-  /** Origin-exclusive ready-asset manager, constructed under the Workbench Web Lock. */
-  readonly shadowAssets?: PackageTreeShadowAssetBoundary;
   /** Test seam at the external registry/install boundary. */
   readonly install?: InstallFn;
   /** Fold one exact first-install lock into the fresh Starter Git baseline. */
@@ -142,10 +135,7 @@ export interface OwnerPackageState {
 
 export interface OwnerChildPackageAdmission {
   readonly root: string;
-  readonly ready: ShadowAssetReadySet | null;
-  readonly capabilityPorts: KernelEntryCapabilityPorts;
-  /** Release the ready-port server after confirmed physical child settlement. */
-  dispose(): void;
+  readonly runtimeBindings: readonly Readonly<{ adapterId: string; packagePath: string }>[];
 }
 
 export type OwnerChildPackageReservation = PackageFifoReservation<OwnerChildPackageAdmission>;
@@ -324,7 +314,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
 
   const packages = createPackageAcquisitionAuthority({
     stamps,
-    ...(options.shadowAssets === undefined ? {} : { shadowAssets: options.shadowAssets }),
     stampTransition: { flush: options.flush },
     resolveTreeGuards: (root, knownProjects) =>
       discoverPackageAcquisitionGuardTransitions(options.fsSync, knownProjects, root),
@@ -516,7 +505,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           if ('status' in installed) return installed;
           return {
             ...installed,
-            shadowPlan: shadowAssetPlanForInstallResult(installed.result),
+            shadowPlan: shadowSubstitutionPlanForInstallResult(installed.result),
           };
         } catch (error) {
           if (consumesFirstMaterialization) {
@@ -546,44 +535,9 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   const reserveChildAdmission = async (root: string): Promise<OwnerChildPackageReservation> => {
     const canonicalRoot = normalizePath(root);
     const reservation = await packages.reserveChildAdmission(canonicalRoot);
-    const admitted = reservation.snapshot;
-    if (admitted.ready === null) {
-      const snapshot: OwnerChildPackageAdmission = Object.freeze({
-        root: admitted.root,
-        ready: null,
-        capabilityPorts: Object.freeze({}),
-        dispose: () => {},
-      });
-      return Object.freeze({ ...reservation, snapshot });
-    }
-    const boundary = options.shadowAssets;
-    if (boundary === undefined) {
-      reservation.abortBeforeSpawn(new NotImplementedError('npm-client.packageTree.shadowAssets'));
-      throw new NotImplementedError('npm-client.packageTree.shadowAssets');
-    }
-    const channel = new MessageChannel();
-    let server: ShadowAssetPortServer;
-    try {
-      server = boundary.serve(admitted.ready, channel.port1);
-    } catch (error) {
-      channel.port1.close();
-      channel.port2.close();
-      reservation.abortBeforeSpawn(error);
-      throw error;
-    }
-    let disposed = false;
     const snapshot: OwnerChildPackageAdmission = Object.freeze({
-      root: admitted.root,
-      ready: admitted.ready,
-      capabilityPorts: Object.freeze({
-        [SHADOW_ASSET_PORT_CAPABILITY]: channel.port2,
-      }),
-      dispose() {
-        if (disposed) return;
-        disposed = true;
-        server.dispose();
-        channel.port2.close();
-      },
+      root: reservation.snapshot.root,
+      runtimeBindings: reservation.snapshot.runtimeBindings,
     });
     return Object.freeze({ ...reservation, snapshot });
   };

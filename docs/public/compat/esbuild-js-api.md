@@ -11,8 +11,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Exact source and WASM provenance | ✅ | Pinned and test-verified `package/lib/browser.js` SHA-256 `b882a5ffb3bf170c0d8f40c0832cc5dca00830400314bb9455dea5d6f58c2a10` and `package/esbuild.wasm` SHA-256 `9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b`; generated output and manifest are drift-gated. |
 | Ordered generated patch plan | ✅ | 1. `inline-worker-startup` — private worker:false Go/WASM startup in the admitted Node-entry Worker<br>2. `node-callback-fs` — Node-callback filesystem over guest FsSync; protocol fds preserved<br>3. `channel-has-fs` — upstream channel runs with hasFS:true<br>4. `runtime-default-wd` — defaultWD is the guest cwd<br>5. `transform-temp-fs` — large-transform temporary files use guest VFS<br>6. `native-validation-provenance` — exact origin tags recover Node validator diagnostic locations<br>7. `native-target-errno` — service-owned target errno spelling matches the native oracle<br>8. `gate-direct-lifecycle` — direct initialize and stop capability gates<br>9. `gate-sync-family` — four synchronous API capability gates<br>10. `gate-analyze-metafile` — async analyzeMetafile capability gate<br>11. `gate-context-watch-serve` — context watch and serve capability gates<br>12. `gate-one-shot-build-write` — post-plugin one-shot build write gate |
 | Generated upstream-derived runtime | ✅ | Exact esbuild-wasm 0.28.0 client runs over guest VFS in each admitted Node-entry Worker and publishes one exact CJS outer before the first import; direct Node and Vite consume the same adapter. |
-| Install request for esbuild@0.28.0 | ✅ | Exact 0.28.0 admission is enforced across fresh/replay and direct/transitive requests; the builtin recipe materializes the exact synthetic delegate and plans the attested esbuild-wasm asset without a package alias. |
-| Cold runtime-asset availability | ⚠️ | An instant Vite 7 restore performs no npm install, but an empty verified shadow CAS requests the exact `/npm-registry/esbuild-wasm` packument and `/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz` bytes before admission; cold offline fails loudly with `ShadowAssetError: failed to acquire esbuild-wasm@0.28.0/package/esbuild.wasm` (only the error name and message cross the owner boundary), while a verified warm CAS and Vite 8's empty plan make zero esbuild registry requests. |
+| Install request for esbuild@0.28.0 | ✅ | Exact 0.28.0 admission is enforced across fresh/replay and direct/transitive requests; the builtin recipe acquires exact esbuild-wasm@0.28.0 into the installed tree and materializes the synthetic esbuild facade beside it. |
+| Cold runtime-asset availability | ✅ | The exact esbuild-wasm twin rides the installed tree and baked snapshot. Instant Vite 7 restore and physical-owner reopen run offline with zero registry requests; a from-scratch install uses the ordinary exact packument and tarball path. |
 | Direct CommonJS and ESM loading | ✅ | A normal project with only esbuild@0.28.0 installed can require('esbuild') or import('esbuild') without Vite; both orders expose the same CJS outer and browser-differential transform output. |
 | transform | ✅ | Exact upstream transform matches native validation, diagnostics, result shape, and the large-input temporary-file path over guest VFS. |
 | build with write:false | ✅ | Exact upstream build handles config imports, dependency scan/prebundle, plugin validation, and bundled output over guest VFS. |
@@ -36,8 +36,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tools/shadow-registry/src/esbuild-contract.test.ts`
 - `tools/shadow-registry/src/esbuild-generated-provenance.test.ts`
 - `packages/npm-client/src/installer-shadow-shims.test.ts`
-- `packages/npm-client/src/internal/shadow/manager.contract.test.ts`
-- `packages/npm-client/src/internal/shadow/source.fault.test.ts`
+- `packages/npm-client/src/internal/shadow/installer.contract.test.ts`
+- `packages/npm-client/src/internal/shadow/planner.contract.test.ts`
 - `packages/workbench/src/workers/vite-cli-prep.test.ts`
 - `packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts`
 - `packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts`

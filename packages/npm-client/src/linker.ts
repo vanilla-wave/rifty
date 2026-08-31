@@ -13,8 +13,8 @@ import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/inte
 import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 import {
   type RegistryShadowEmbeddedSource,
-  type ShadowAssetPlan,
   type ShadowSubstitutionLockfileTrace,
+  type ShadowSubstitutionPlan,
   createShadowSubstitutionLockfileTrace,
   registryAcquisitionInstallPath,
 } from './internal/shadow/planner.ts';
@@ -445,7 +445,7 @@ export function buildInstallLockfile(
   rootName: string,
   rootVersion: string,
   packages: Parameters<typeof buildLockfile>[2],
-  planValue: ShadowAssetPlan,
+  planValue: ShadowSubstitutionPlan,
   embeddedSources: readonly RegistryShadowEmbeddedSource[] = [],
   rootDependencyMaps?: RootLockfileDependencyMaps,
 ): Lockfile {
@@ -464,7 +464,7 @@ export function buildPreparedInstallLockfile(
   rootName: string,
   rootVersion: string,
   packages: readonly PreparedInstallPackage<LockfilePackage>[],
-  planValue: ShadowAssetPlan,
+  planValue: ShadowSubstitutionPlan,
   embeddedSources: readonly RegistryShadowEmbeddedSource[] = [],
   rootDependencyMaps?: RootLockfileDependencyMaps,
 ): Lockfile {
@@ -505,7 +505,7 @@ export function buildPreparedInstallLockfile(
 
 function appendRegistryShadowEmbeddedSources(
   lockfile: Lockfile,
-  plan: ShadowAssetPlan,
+  plan: ShadowSubstitutionPlan,
   embeddedSources: readonly RegistryShadowEmbeddedSource[],
 ): void {
   const remainingSources = [...embeddedSources];

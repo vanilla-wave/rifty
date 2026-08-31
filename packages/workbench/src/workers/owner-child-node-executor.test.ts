@@ -1,6 +1,5 @@
 import { EventEmitter } from 'node:events';
 import type { SpawnWorkerSpec } from '@riftydev/kernel';
-import { SHADOW_ASSET_PORT_CAPABILITY } from '@riftydev/npm-client/internal';
 import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { CommandContext } from '@riftydev/shell';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -21,12 +20,23 @@ const NODE_WORKER_RUNTIME_ENV = {
   RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
 };
 const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const RUNTIME_BINDINGS = [
+  {
+    adapterId: 'rifty.runtime-adapter.esbuild.v1',
+    packagePath: `${REMOTE_FS_ROOT}/node_modules/esbuild-wasm`,
+  },
+] as const;
+const PUBLIC_RUNTIME_BINDINGS = [
+  {
+    adapterId: 'rifty.runtime-adapter.esbuild.v1',
+    packagePath: '/node_modules/esbuild-wasm',
+  },
+] as const;
 
 function emptyAdmission(): OwnerChildAdmissionReservation {
   return Object.freeze({
     snapshot: Object.freeze({
-      capabilityPorts: Object.freeze({}),
-      dispose() {},
+      runtimeBindings: Object.freeze([]),
     }),
     commit() {},
     abortBeforeSpawn() {},
@@ -213,15 +223,11 @@ describe('owner-child-node-executor', () => {
 
   it('roots an owner execSync child out of band and captures stdout/stderr byte-exact', async () => {
     const fake = fakeRecursiveChild();
-    const capability = new MessageChannel();
     const spawn = vi.fn((_spec: SpawnWorkerSpec) => fake.child);
     const reserve = vi.fn<ReserveOwnerChildAdmission>(async () => ({
       ...emptyAdmission(),
       snapshot: {
-        capabilityPorts: {
-          [SHADOW_ASSET_PORT_CAPABILITY]: capability.port2,
-        },
-        dispose() {},
+        runtimeBindings: RUNTIME_BINDINGS,
       },
     }));
     const run = createOwnerExecSyncRunner(
@@ -265,6 +271,7 @@ describe('owner-child-node-executor', () => {
                 remoteFs: true,
                 remoteFsRoot: REMOTE_FS_ROOT,
                 nodeServe: false,
+                runtimeBindings: PUBLIC_RUNTIME_BINDINGS,
               },
             }),
           }),
@@ -276,13 +283,10 @@ describe('owner-child-node-executor', () => {
       42,
     );
     expect(reserve).toHaveBeenCalledWith(`${REMOTE_FS_ROOT}/packages/nested/child.mjs`);
-    expect(JSON.stringify(spawn.mock.calls[0]?.[0].env)).not.toContain(REMOTE_FS_ROOT);
-    const spawnedEntry = spawn.mock.calls[0]?.[0].entry;
-    if (spawnedEntry?.kind !== 'url') throw new Error('expected URL entry');
-    expect(spawnedEntry.capabilityPorts).toBeDefined();
-    expect(spawnedEntry.capabilityPorts?.[SHADOW_ASSET_PORT_CAPABILITY]).toBe(capability.port2);
-    capability.port1.close();
-    capability.port2.close();
+    const spawned = spawn.mock.calls[0]?.[0];
+    expect(
+      JSON.stringify({ argv: spawned?.argv, env: spawned?.env, cwd: spawned?.cwd }),
+    ).not.toContain(REMOTE_FS_ROOT);
   });
 
   it('rejects when the owner execSync worker peer dies instead of leaving its caller pending', async () => {
@@ -326,6 +330,45 @@ describe('owner-child-node-executor', () => {
     await vi.waitFor(() => expect(observed).toEqual({ status: 'rejected', reason: peerFailure }), {
       timeout: 100,
     });
+  });
+
+  it('aborts execSync admission before spawn when the reserved spawn throws', async () => {
+    const spawnFailure = new Error('execSync spawn failed after package reservation');
+    const commit = vi.fn();
+    const abortBeforeSpawn = vi.fn();
+    const abortAfterChildSettlement = vi.fn();
+    const reserve = vi.fn<ReserveOwnerChildAdmission>(async () => ({
+      snapshot: { runtimeBindings: RUNTIME_BINDINGS },
+      commit,
+      abortBeforeSpawn,
+      abortAfterChildSettlement,
+    }));
+    const run = createOwnerExecSyncRunner(
+      'URL',
+      NODE_WORKER_RUNTIME_ENV,
+      () => REMOTE_FS_ROOT,
+      reserve,
+      () => {
+        throw spawnFailure;
+      },
+    );
+
+    await expect(
+      run(
+        {
+          entryPath: '/packages/nested/child.mjs',
+          argv: ['rifty', '/packages/nested/child.mjs'],
+          env: {},
+          cwd: '/',
+        },
+        { parentPid: 42 },
+      ),
+    ).rejects.toBe(spawnFailure);
+
+    expect(reserve).toHaveBeenCalledWith(`${REMOTE_FS_ROOT}/packages/nested/child.mjs`);
+    expect(abortBeforeSpawn).toHaveBeenCalledWith(spawnFailure);
+    expect(commit).not.toHaveBeenCalled();
+    expect(abortAfterChildSettlement).not.toHaveBeenCalled();
   });
 
   it('fails before owner execSync spawn when the active project is gone', async () => {
@@ -387,15 +430,13 @@ describe('owner-child-node-executor', () => {
     );
   });
 
-  it('keeps an empty admitted plan off the spawned entry and releases it on physical exit', async () => {
+  it('carries an empty admitted binding set and commits the reservation after spawn', async () => {
     const fake = fakeHandle();
-    const dispose = vi.fn();
     const commit = vi.fn();
     const reserve = vi.fn<ReserveOwnerChildAdmission>(async () =>
       Object.freeze({
         snapshot: Object.freeze({
-          capabilityPorts: Object.freeze({}),
-          dispose,
+          runtimeBindings: Object.freeze([]),
         }),
         commit,
         abortBeforeSpawn: vi.fn(),
@@ -416,24 +457,20 @@ describe('owner-child-node-executor', () => {
     await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
     expect(reserve).toHaveBeenCalledWith('/w/server.js');
     const entry = spawn.mock.calls[0]![0].entry;
-    expect(Object.hasOwn(entry, 'capabilityPorts')).toBe(false);
+    expect(entry).toMatchObject({
+      bootstrap: { payload: { launch: { runtimeBindings: [] } } },
+    });
     expect(commit).toHaveBeenCalledOnce();
-    expect(dispose).not.toHaveBeenCalled();
 
     fake.emit('exit', 0, null);
     await expect(running).resolves.toEqual({ code: 0, signal: null });
-    await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce());
   });
 
-  it('attaches an admitted capability to the URL entry before spawn', async () => {
+  it('carries admitted runtime bindings in the URL entry before spawn', async () => {
     const fake = fakeHandle();
-    const capability = new MessageChannel();
     const reserve: ReserveOwnerChildAdmission = async () => ({
       snapshot: {
-        capabilityPorts: {
-          [SHADOW_ASSET_PORT_CAPABILITY]: capability.port2,
-        },
-        dispose() {},
+        runtimeBindings: RUNTIME_BINDINGS,
       },
       commit() {},
       abortBeforeSpawn() {},
@@ -445,6 +482,7 @@ describe('owner-child-node-executor', () => {
     const exec = createOwnerChildNodeExecutor('URL', NODE_WORKER_RUNTIME_ENV, reserve, spawn);
     const running = exec('/w/server.js', [], makeCtx(), {
       sid: 'capability',
+      remoteFsRoot: REMOTE_FS_ROOT,
       onListening: () => {},
       onExit: () => {},
     });
@@ -453,18 +491,13 @@ describe('owner-child-node-executor', () => {
     const entry = spawn.mock.calls[0]![0].entry;
     fake.emit('exit', 0, null);
     await expect(running).resolves.toEqual({ code: 0, signal: null });
-    capability.port1.close();
-    expect(entry.kind).toBe('url');
-    if (entry.kind !== 'url') throw new Error('expected URL worker entry');
-    expect(entry.capabilityPorts).toBeDefined();
-    expect(entry.capabilityPorts?.[SHADOW_ASSET_PORT_CAPABILITY]).toBe(capability.port2);
-    capability.port2.close();
+    expect(entry).toMatchObject({
+      bootstrap: { payload: { launch: { runtimeBindings: PUBLIC_RUNTIME_BINDINGS } } },
+    });
   });
 
-  it('aborts admission before spawn when a capability-bearing spawn throws', async () => {
-    const capability = new MessageChannel();
-    const spawnFailure = new Error('spawn rejected the capability entry');
-    const dispose = vi.fn();
+  it('aborts admission before spawn when a binding-bearing spawn throws', async () => {
+    const spawnFailure = new Error('spawn rejected the binding entry');
     const commit = vi.fn();
     const abortBeforeSpawn = vi.fn();
     const abortAfterChildSettlement = vi.fn(async (_error: unknown, exited: Promise<unknown>) => {
@@ -472,10 +505,7 @@ describe('owner-child-node-executor', () => {
     });
     const reserve: ReserveOwnerChildAdmission = async () => ({
       snapshot: {
-        capabilityPorts: {
-          [SHADOW_ASSET_PORT_CAPABILITY]: capability.port2,
-        },
-        dispose,
+        runtimeBindings: RUNTIME_BINDINGS,
       },
       commit,
       abortBeforeSpawn,
@@ -493,13 +523,9 @@ describe('owner-child-node-executor', () => {
       }),
     ).rejects.toBe(spawnFailure);
 
-    expect(dispose).toHaveBeenCalledOnce();
     expect(abortBeforeSpawn).toHaveBeenCalledWith(spawnFailure);
     expect(abortAfterChildSettlement).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
-
-    capability.port1.close();
-    capability.port2.close();
   });
 
   it('streams stdout, reports listening, resolves on exit + removes', async () => {

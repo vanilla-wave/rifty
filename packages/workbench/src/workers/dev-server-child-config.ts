@@ -1,5 +1,9 @@
 import { type WorkerEntryDescriptor, readKernelEntryBootstrap } from '@riftydev/kernel';
-import type { NodeEntryTerminalBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
+import {
+  type NodeEntryRuntimeBinding,
+  type NodeEntryTerminalBootstrap,
+  snapshotNodeEntryRuntimeBindings,
+} from '@riftydev/runtime-js/builtins/node-entry-url';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
 import {
@@ -15,6 +19,7 @@ export interface DevServerChildConfig {
   readonly terminal: NodeEntryTerminalBootstrap;
   readonly remoteFsRoot?: string;
   readonly previewScope?: string;
+  readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
 }
 
 function record(value: unknown, owner: string): Record<string, unknown> {
@@ -230,7 +235,7 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
   exact(
     payload,
     ['nodeWorkerRuntime', 'cfg', 'terminal'],
-    ['previewScope', 'remoteFsRoot'],
+    ['previewScope', 'remoteFsRoot', 'runtimeBindings'],
     'dev-server bootstrap payload',
   );
   const cfg = snapshotPackageConfig(payload.cfg);
@@ -241,6 +246,14 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
   );
   const remoteFsRootValue = optionalOwnField(payload, 'remoteFsRoot');
   const remoteFsRoot = remoteFsRootValue === undefined ? undefined : projectRoot(remoteFsRootValue);
+  const runtimeBindingsValue = optionalOwnField(payload, 'runtimeBindings');
+  const runtimeBindings =
+    runtimeBindingsValue === undefined
+      ? undefined
+      : snapshotNodeEntryRuntimeBindings(
+          runtimeBindingsValue,
+          'dev-server bootstrap runtimeBindings',
+        );
   return Object.freeze({
     nodeWorkerRuntime: snapshotNodeWorkerRuntimeConfig(
       payload.nodeWorkerRuntime,
@@ -250,6 +263,7 @@ function inspectBootstrap(value: unknown): DevServerChildConfig {
     terminal,
     ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
     ...(previewScope === undefined ? {} : { previewScope }),
+    ...(runtimeBindings === undefined ? {} : { runtimeBindings }),
   });
 }
 
@@ -262,6 +276,7 @@ export function buildDevServerChildEntry(
     readonly terminal: NodeEntryTerminalBootstrap;
     readonly remoteFsRoot?: string;
     readonly previewScope?: string;
+    readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
   },
 ): Extract<WorkerEntryDescriptor, { readonly kind: 'url' }> {
   if (typeof url !== 'string' || url.length === 0) {
@@ -282,6 +297,9 @@ export function buildDevServerChildEntry(
         terminal: inspected.terminal,
         ...(inspected.remoteFsRoot === undefined ? {} : { remoteFsRoot: inspected.remoteFsRoot }),
         ...(inspected.previewScope === undefined ? {} : { previewScope: inspected.previewScope }),
+        ...(inspected.runtimeBindings === undefined
+          ? {}
+          : { runtimeBindings: inspected.runtimeBindings }),
       }),
     }),
   });

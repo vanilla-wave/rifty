@@ -24,8 +24,7 @@ const FORGED_PTY_SESSION_ENV = 'RIFTY_INTERNAL_PTY_SID';
 const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () =>
   Object.freeze({
     snapshot: Object.freeze({
-      capabilityPorts: Object.freeze({}),
-      dispose() {},
+      runtimeBindings: Object.freeze([]),
     }),
     commit() {},
     abortBeforeSpawn() {},

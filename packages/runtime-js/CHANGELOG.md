@@ -40,6 +40,15 @@
   pending eval drain when a listened-server branch wins; later exit, error, or
   rejection still prints and terminates exactly once.
 
+### Changed
+
+- **Entry-scoped runtime bindings (ADR-0371).** Node-entry v3 validates and
+  freezes exact `{adapterId, packagePath}` rows in its existing clone metadata;
+  recursive launches inherit them without a new channel or process-visible
+  environment field.
+
+### Added
+
 - **Worker-backed `child_process` plan and Node IPC (ADR-0326).** Recursive
   `spawn`/`fork` runs a fresh owner-FS Worker with validated stdio/default-JSON
   IPC and nodemon's finite `ps`/`SIGUSR2` forms; other forms stay loud gaps.

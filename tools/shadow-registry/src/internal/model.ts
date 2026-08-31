@@ -28,16 +28,6 @@ export type ShadowRecipeAcquisition =
       dependencyProjection: ShadowRegistryDependencyProjection;
     }>;
 
-export interface ShadowRuntimeAsset {
-  readonly id: string;
-  readonly source: Readonly<{ name: string; version: string; integrity: string }>;
-  readonly member: string;
-  readonly memberSha256: string;
-  readonly memberSize: number;
-  readonly maxTarballBytes: number;
-  readonly maxUnpackedBytes: number;
-}
-
 export interface BuiltinShadowSubstitutionRecipe {
   readonly schema: 2;
   readonly id: string;
@@ -51,7 +41,7 @@ export interface BuiltinShadowSubstitutionRecipe {
     bin: Readonly<Record<string, string>>;
     files: readonly Readonly<ShadowMaterializationFile>[];
   }>;
-  readonly binding?: Readonly<{ adapterId: string; assets: readonly string[] }>;
+  readonly binding?: Readonly<{ adapterId: string }>;
 }
 
 export interface BuiltinShadowSubstitutionCatalog {
@@ -59,7 +49,6 @@ export interface BuiltinShadowSubstitutionCatalog {
   readonly id: string;
   readonly digest: string;
   readonly recipes: readonly Readonly<BuiltinShadowSubstitutionRecipe>[];
-  readonly assets: readonly Readonly<ShadowRuntimeAsset>[];
 }
 
 export type ShadowCatalogRecipeDefinition = Omit<BuiltinShadowSubstitutionRecipe, 'digest'>;
@@ -67,5 +56,4 @@ export interface ShadowCatalogDefinition {
   readonly schema: 2;
   readonly id: string;
   readonly recipes: readonly Readonly<ShadowCatalogRecipeDefinition>[];
-  readonly assets: readonly Readonly<ShadowRuntimeAsset>[];
 }

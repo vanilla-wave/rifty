@@ -80,6 +80,11 @@
 
 ### Changed (Workbench extraction)
 
+- Re-bake Vite 7, Vite 8, and TypeScript instant snapshots against ADR-0371.
+  Vite 7/TypeScript now carry exact `esbuild-wasm@0.28.0` in-tree; live ranges
+  also advance Rollup/`@rollup/wasm-node` 4.62.4→4.63.1 and picomatch
+  4.0.5→4.0.7 (Vite 8: picomatch only). Gzip sizes are 12.2/18.1/19.3 MB.
+
 - Dependency snapshots are re-baked against the catalog identity containing
   the exact Sass substitution; preset dependency sets remain unchanged.
 - TypeScript, Vite 7, and Vite 8 instant snapshots now carry protocol-v2
@@ -93,10 +98,9 @@
 - TypeScript, Vite 7, and Vite 8 dependency snapshots are re-baked against the
   schema-2 shadow catalog/install identity; stale schema-1 snapshots cannot be
   restored (ADR-0328).
-- Instant Vite 7 restores still skip `npm install`, but an empty verified
-  runtime CAS now has an explicit two-request esbuild-wasm acquisition contract
-  and loud `ESHADOWASSET/acquire` offline failure; warm CAS and Vite 8 are
-  registry-free (ADR-0320).
+- Instant Vite 7 restores skip `npm install` and carry the exact esbuild-wasm
+  twin in the tree, so physical-owner reopen stays registry-free offline;
+  from-scratch installs retain the ordinary two registry requests (ADR-0371).
 - Baked dependency snapshots re-baked against the live registry absorbed
   `postcss` 8.5.22 → 8.5.23 (vite's floating `^8.5.6` range) in all three
   presets; pinning bake inputs is
