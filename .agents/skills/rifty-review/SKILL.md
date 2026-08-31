@@ -9,7 +9,12 @@ Review raw contract, baseline, PR body, diff, and tests. Apply
 Report these axes once, in order:
 
 1. **Completeness** — every unit clause covered; no required deferral.
-2. **Mission and architecture** — fits rifty's mission and boundaries.
+2. **Mission and architecture** — the DELIVERY fits rifty's mission and
+   boundaries. The goal's premise is not the subject: it was adjudicated at FIT
+   with the user. A premise objection (value does not follow / cheaper rival
+   route) is a concern that stops the run to the user — never a blocker, never
+   a round, never an attempt; a goal `rejected route:` line answers it by
+   citation.
 3. **Goal drift** — delivery matches the named goal (`docs/backlog/epics/<slug>/goal.md`), else ready contract; a ready `goal.md` never changes and `ledger.md` only grows; a `draft→ready` flip in the diff carries its `ready-verdict:` line; every previously landed slice carries its `re-chart after <slice>` ledger line.
 4. **Approach cost** — identify removable machinery: contract deliverable without it → blocker, first instance and ported/carried machinery included (a port re-states its forcing constraint — §Class-kill); pure code shrinkage → goal residual (in a run) or capture, never a checkpoint condition. Apply §Class-kill.
 5. **Budget** — every carried slice declared with its band in the goal's `ledger.md`; inspect modified files against them.

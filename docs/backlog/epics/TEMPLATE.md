@@ -43,6 +43,7 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 ## Decisions
 
 - <fit-time decisions; one line each>
+- rejected route: <cheaper/rival route considered> — violates <I#|Outcome clause>
 ```
 
 ## `map.md` — live plan (freely edited at every re-chart)
@@ -57,9 +58,14 @@ Index, not store: one line + link per entry; content lives on items/ledger.
 ## Open questions
 
 <!-- Fog: in-scope questions not yet phrasable as a contract. A child whose
-     contract depends on an open question is not seeded. Don't pre-slice fog. -->
+     contract depends on an open question is not seeded. Don't pre-slice fog.
+     Owner-typed: a user-owned observable-scope question answerable now is
+     ASKED at FIT, never parked here (rifty-goal FIT 3); owner: user lines
+     carry why they are not answerable yet and route to rifty-refine at
+     PICKUP, never to a probe. Split a mixed question by owner. -->
 
-- <question> — <what would settle it: probe/spike/decision>
+- <question> — owner: <user|agent> — <what settles it: probe/spike/decision;
+  for owner: user — why not answerable now>
 
 ## Out of scope
 

@@ -12,18 +12,33 @@ recorded decisions.
    Outcome`, `## User scenario` (real package/program, exact calls). Legacy
    epic: carry its ratified content verbatim; the old file is deleted in the
    same commit.
-3. **Probe-or-fog.** Enumerate every assumption the plan encodes: external
-   semantics (npm tree/bins/peers, Node behavior, browser APIs) AND internal
-   scope-carrying mappings ("path X is the issue scenario", "Y runs while the
-   transport is live"). Each gets either a discriminating probe — command +
-   output + version, disposable spike subagents run in parallel, artifact
-   kept — or a `## Open questions` line in `map.md`. Done when no assumption
-   is left implicit: each has a probe artifact or a fog line.
+3. **Owner first, then probe-or-fog.** Enumerate every assumption the plan
+   encodes: external semantics (npm tree/bins/peers, Node behavior, browser
+   APIs) AND internal scope-carrying mappings ("path X is the issue scenario",
+   "Y runs while the transport is live"). Type each by OWNER before picking an
+   exit — a probe settles facts, never value:
+   - **user-owned** (observable scope: what the value requires, what must NOT
+     change, whose scenario counts) and answerable now → **ask now**. FIT is
+     interactive and the user is present; existence of a probe is not a reason
+     to skip the ask.
+   - **agent-owned fact** → discriminating probe (command + output + version,
+     disposable spike subagents in parallel, artifact kept), or a fog line when
+     it only shapes the route.
+   A mixed question is SPLIT — the technical half may be probed, the value half
+   stays the user's (the 2026-08-28 `no-coi-sandbox-tier` fog line asked both in
+   one sentence, exited on the technical one, and stopped the run three days
+   later). An answer that could invalidate the destination is never fog: settle
+   it here or don't flip `ready` — a frozen goal has no cheap repair, its only
+   in-run exit is close + re-fit. Done when no assumption is left implicit: each
+   has an answer, a probe artifact, or an owner-tagged fog line.
 4. **Invariants + tier.** Draft numbered `## Invariants` from
    Outcome/scenario/decisions only — an invariant needing unsettled scope is an
    observable fork → request manual `rifty-refine` for that statement. Check
    each false on current main; record the evidence in a comment above the list.
-   Pick `tier` (§Tier) and justify it in one `## Decisions` line.
+   Pick `tier` (§Tier) and justify it in one `## Decisions` line. A rival route
+   considered and rejected lands checkable, never as prose: `rejected route:
+   <route> — violates <I#|Outcome clause>`; if no invariant excludes it, the
+   discriminator IS a missing invariant — add it (step 3 asked the user).
 5. **Map.** Seed ONLY specifiable children — the minimal pattern first (the
    null/install-only case of a shared mechanism before machinery for the
    maximal case). A child whose contract depends on an open question stays
