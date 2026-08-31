@@ -650,7 +650,7 @@ async function harness(
   reservationEvidence?: {
     readonly events: string[];
     readonly paths?: string[];
-    ready?: unknown;
+    runtimeBindings?: unknown;
   },
   packageAcquisition?: {
     readonly registry?: RegistryClient;
@@ -709,17 +709,9 @@ async function harness(
           reserveChildAdmission: async (root) => {
             reservationEvidence.paths?.push(root);
             const reservation = await packageState.reserveChildAdmission(root);
-            reservationEvidence.ready = reservation.snapshot.ready;
-            const snapshot = reservation.snapshot;
+            reservationEvidence.runtimeBindings = reservation.snapshot.runtimeBindings;
             return Object.freeze({
               ...reservation,
-              snapshot: Object.freeze({
-                ...snapshot,
-                dispose() {
-                  reservationEvidence.events.push('dispose');
-                  snapshot.dispose();
-                },
-              }),
               commit() {
                 reservationEvidence.events.push('commit');
                 reservation.commit();
@@ -1292,7 +1284,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     const reservationEvidence: {
       events: string[];
       paths: string[];
-      ready?: unknown;
+      runtimeBindings?: unknown;
     } = { events: [], paths: [] };
     const h = await harness(
       undefined,
@@ -1378,6 +1370,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         'print',
         'remoteFs',
         'remoteFsRoot',
+        'runtimeBindings',
         'source',
         'terminal',
       ].sort(),
@@ -1388,7 +1381,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
 
     worker.finish(0);
     await running;
-    await vi.waitFor(() => expect(reservationEvidence.events).toEqual(['commit', 'dispose']));
+    expect(reservationEvidence.events).toEqual(['commit']);
     expect(globalProcessManager.get(spec.pid)).toBeNull();
     expect(writeHistory).not.toHaveBeenCalled();
     expect(unlinkHistory).not.toHaveBeenCalled();
@@ -1855,7 +1848,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     const reservationEvidence: {
       events: string[];
       paths: string[];
-      ready?: unknown;
+      runtimeBindings?: unknown;
     } = { events: [], paths: [] };
     const h = await harness(
       undefined,
@@ -1964,9 +1957,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
     secondWorker.finish(7);
     firstWorker.finish(0);
     await Promise.all([runningA, runningB]);
-    await vi.waitFor(() =>
-      expect(reservationEvidence.events.filter((event) => event === 'dispose')).toHaveLength(2),
-    );
+    expect(reservationEvidence.events).toEqual(['commit', 'commit']);
     expect(globalProcessManager.get(firstSpec.pid)).toBeNull();
     expect(globalProcessManager.get(secondSpec.pid)).toBeNull();
     expect(
@@ -2285,7 +2276,7 @@ describe('Workbench project runtime', () => {
     const reservationEvidence: {
       events: string[];
       paths: string[];
-      ready?: unknown;
+      runtimeBindings?: unknown;
     } = { events: [], paths: [] };
     const h = await harness(
       undefined,
@@ -2359,12 +2350,12 @@ describe('Workbench project runtime', () => {
     if (entry?.kind !== 'url' || entry.bootstrap === undefined) {
       throw new Error('expected node-entry URL bootstrap');
     }
-    expect(reservationEvidence.ready).toBeNull();
+    expect(reservationEvidence.runtimeBindings).toEqual([]);
     expect(reservationEvidence.paths).toEqual([`${ROOT}/node_modules/.bin/vite`]);
-    expect(Object.hasOwn(entry, 'capabilityPorts')).toBe(false);
     expect(reservationEvidence.events).toEqual(['commit']);
     const payload = entry.bootstrap.payload as NodeEntryBootstrapPayload;
     if (payload.launch.kind !== 'program') throw new Error('expected program launch');
+    expect(payload.launch.runtimeBindings ?? []).toEqual([]);
     expect(payload.launch.previewScope).not.toBe('scope-forged');
 
     worker.emitListening({
@@ -2413,7 +2404,7 @@ describe('Workbench project runtime', () => {
     worker.emitExit(null, 'SIGTERM');
     await expect(closing).resolves.toBeUndefined();
     await running;
-    expect(reservationEvidence.events).toEqual(['commit', 'dispose']);
+    expect(reservationEvidence.events).toEqual(['commit']);
   });
 
   it('exposes one project-rooted terminal namespace without leaking the owner root', async () => {

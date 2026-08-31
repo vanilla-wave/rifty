@@ -15,6 +15,11 @@ export interface NodeEntryTerminalBootstrap {
   readonly rows: number;
 }
 
+export interface NodeEntryRuntimeBinding {
+  readonly adapterId: string;
+  readonly packagePath: string;
+}
+
 export interface NodeEntryProgramLaunch {
   readonly kind: 'program';
   readonly bin: boolean;
@@ -26,6 +31,7 @@ export interface NodeEntryProgramLaunch {
   readonly nodeServe: boolean;
   readonly previewScope?: string;
   readonly terminal?: NodeEntryTerminalBootstrap;
+  readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
 }
 
 export interface NodeEntryEvalLaunch {
@@ -38,6 +44,7 @@ export interface NodeEntryEvalLaunch {
   readonly remoteFsRoot?: string;
   readonly previewScope?: string;
   readonly terminal?: NodeEntryTerminalBootstrap;
+  readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
 }
 
 export interface NodeEntryWorkerThreadLaunch {
@@ -47,6 +54,7 @@ export interface NodeEntryWorkerThreadLaunch {
   readonly remoteFsRoot?: string;
   readonly threadId: number;
   readonly workerDataJson?: string;
+  readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
 }
 
 export type NodeEntryLaunch =
@@ -158,6 +166,50 @@ function stringArrayOwnField(
   return Object.freeze([...value]);
 }
 
+export function snapshotNodeEntryRuntimeBindings(
+  value: unknown,
+  owner = 'node-entry bootstrap runtimeBindings',
+): readonly NodeEntryRuntimeBinding[] {
+  if (!Array.isArray(value)) throw new TypeError(`${owner} must be an array`);
+  const bindings: NodeEntryRuntimeBinding[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (descriptor === undefined || !('value' in descriptor)) {
+      throw new TypeError(`${owner} must contain dense data elements`);
+    }
+    const record = objectRecord(descriptor.value, `${owner}[${index}]`);
+    assertAllowedOwnFields(record, ['adapterId', 'packagePath'], `${owner}[${index}]`);
+    const adapterDescriptor = Object.getOwnPropertyDescriptor(record, 'adapterId');
+    const pathDescriptor = Object.getOwnPropertyDescriptor(record, 'packagePath');
+    if (
+      adapterDescriptor === undefined ||
+      !('value' in adapterDescriptor) ||
+      pathDescriptor === undefined ||
+      !('value' in pathDescriptor)
+    ) {
+      throw new TypeError(`${owner}[${index}] fields must be data properties`);
+    }
+    const adapterId = adapterDescriptor.value;
+    const packagePath = pathDescriptor.value;
+    if (typeof adapterId !== 'string' || adapterId.length === 0) {
+      throw new TypeError(`${owner}[${index}].adapterId must be a non-empty string`);
+    }
+    if (
+      typeof packagePath !== 'string' ||
+      packagePath === '/' ||
+      !isAbsolute(packagePath) ||
+      normalizePath(packagePath) !== packagePath
+    ) {
+      throw new TypeError(`${owner}[${index}].packagePath must be normalized and absolute`);
+    }
+    if (seen.has(adapterId)) throw new TypeError(`${owner} has duplicate adapter ${adapterId}`);
+    seen.add(adapterId);
+    bindings.push(Object.freeze({ adapterId, packagePath }));
+  }
+  return Object.freeze(bindings);
+}
+
 function positiveInteger(value: unknown, owner: string): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0) {
     throw new RangeError(`${owner} must be a positive safe integer`);
@@ -223,7 +275,17 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
   if (kind === 'program') {
     assertAllowedOwnFields(
       record,
-      ['kind', 'bin', 'remoteFs', 'remoteFsRoot', 'ipc', 'nodeServe', 'previewScope', 'terminal'],
+      [
+        'kind',
+        'bin',
+        'remoteFs',
+        'remoteFsRoot',
+        'ipc',
+        'nodeServe',
+        'previewScope',
+        'terminal',
+        'runtimeBindings',
+      ],
       'node-entry bootstrap program launch',
     );
     const bin = booleanOwnField(record, 'bin', 'node-entry bootstrap launch');
@@ -236,6 +298,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
     const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));
     const terminal = optionalOwnField(record, 'terminal');
+    const runtimeBindings = optionalOwnField(record, 'runtimeBindings');
     return Object.freeze({
       kind: 'program',
       bin,
@@ -245,6 +308,9 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       nodeServe,
       ...(previewScope === undefined ? {} : { previewScope }),
       ...(terminal === undefined ? {} : { terminal: snapshotNodeEntryTerminalBootstrap(terminal) }),
+      ...(runtimeBindings === undefined
+        ? {}
+        : { runtimeBindings: snapshotNodeEntryRuntimeBindings(runtimeBindings) }),
     });
   }
   if (kind === 'eval') {
@@ -259,6 +325,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
         'remoteFsRoot',
         'previewScope',
         'terminal',
+        'runtimeBindings',
       ],
       'node-entry bootstrap eval launch',
     );
@@ -269,6 +336,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
     const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));
     const terminal = optionalOwnField(record, 'terminal');
+    const runtimeBindings = optionalOwnField(record, 'runtimeBindings');
     return Object.freeze({
       kind: 'eval',
       source,
@@ -278,12 +346,15 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
       ...(previewScope === undefined ? {} : { previewScope }),
       ...(terminal === undefined ? {} : { terminal: snapshotNodeEntryTerminalBootstrap(terminal) }),
+      ...(runtimeBindings === undefined
+        ? {}
+        : { runtimeBindings: snapshotNodeEntryRuntimeBindings(runtimeBindings) }),
     });
   }
   if (kind === 'worker-thread') {
     assertAllowedOwnFields(
       record,
-      ['kind', 'remoteFs', 'remoteFsRoot', 'threadId', 'workerDataJson'],
+      ['kind', 'remoteFs', 'remoteFsRoot', 'threadId', 'workerDataJson', 'runtimeBindings'],
       'node-entry bootstrap worker-thread launch',
     );
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
@@ -293,6 +364,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       'node-entry bootstrap launch.threadId',
     );
     const workerDataJson = optionalOwnField(record, 'workerDataJson');
+    const runtimeBindings = optionalOwnField(record, 'runtimeBindings');
     if (workerDataJson !== undefined) {
       if (typeof workerDataJson !== 'string') {
         throw new TypeError('node-entry bootstrap launch.workerDataJson must be a string');
@@ -309,6 +381,9 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
       threadId,
       ...(workerDataJson === undefined ? {} : { workerDataJson }),
+      ...(runtimeBindings === undefined
+        ? {}
+        : { runtimeBindings: snapshotNodeEntryRuntimeBindings(runtimeBindings) }),
     });
   }
   throw new TypeError('node-entry bootstrap launch.kind must be program, eval, or worker-thread');
@@ -350,6 +425,7 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
   }
   const current = readNodeEntryBootstrapIfPresent();
   const inheritedRoot = current?.launch.remoteFsRoot;
+  const inheritedRuntimeBindings = current?.launch.runtimeBindings;
   const inheritedPreviewScope =
     current !== null && current.launch.kind !== 'worker-thread'
       ? current.launch.previewScope
@@ -379,6 +455,9 @@ export function buildConfiguredNodeEntryWorkerEntry(launch: NodeEntryLaunch): No
     launch.kind !== 'worker-thread' &&
     launch.previewScope === undefined
       ? { previewScope: inheritedPreviewScope }
+      : {}),
+    ...(inheritedRuntimeBindings !== undefined && launch.runtimeBindings === undefined
+      ? { runtimeBindings: inheritedRuntimeBindings }
       : {}),
   };
   return buildNodeEntryWorkerEntry(config.url, config.hostRuntime, nestedLaunch);

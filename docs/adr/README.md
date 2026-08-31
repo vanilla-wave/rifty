@@ -427,6 +427,9 @@ superseded.
 | 0261 "0187 persist-ledger/checked-drain/FIFO/pending-boot rules stand" scope note | 0358 / note 2026-08-15 | ADR-0187 fully superseded; the FIFO clause falls to per-path lanes + explicit stamp fence; ledger, checked-drain, and pending-boot rules continue in 0358 |
 | 0261 whole-tree-rename "removal-before-rename via write-through FIFO" proof | 0358 / note 2026-08-16 | the ordering proof now rides ADR-0358's structural subtree fences (rm/rename fence pins); the removal-before-rename conclusion stands, only its mechanism changed |
 | 0359 plumbing "existing owner→page durability channel" clause | 0359 note 2026-08-16 (#256 first-open unit) | that channel is per-project token-gated — mute for the first-open materialization drain; progress rides an owner-level `workbench:durability-progress` control message on the same ipc; per-project vfs frame hop removed; shape/surface/reach/honesty stand |
+| 0311 manager/capability/CAS runtime-source clauses | 0371 / note 2026-08-31 | exact installed esbuild-wasm twin + local size/hash verification; no-host and single-authority clauses stand |
+| 0346 separate runtime-asset CAS clause | 0371 / note 2026-08-31 | exact member rides ordinary snapshot node_modules; replay tarball cache stands |
+| 0361 concrete esbuild/runtime-binding and unchanged-kernel-port clauses | 0371 / note 2026-08-31 | registry twin + package-path binding; runtime asset and capability-port surfaces removed |
 | 0194 §8 learned-pin 30-min hard-TTL clause | 0261 | freshness is SWR: fresh <1800s, stale from 1800s to <24h, dropped at 24h |
 | 0261 every copied project reinstalls consequence | 0329 | ordinary copies stay untrusted; authority-mediated destructive Save rebinds exact trust after destination proof |
 | 0194 deferred upstream-registry lever | 0194 note 2026-07-07 | on-VM A/B resolved the fork: eddy now uses direct `https://registry.npmjs.org`; the browser standard install path still uses the CORS registry proxy |

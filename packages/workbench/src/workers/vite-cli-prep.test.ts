@@ -615,10 +615,10 @@ describe('prepareViteCli — mode-independent esbuild admission fault (ADR-0308)
 
     try {
       await prepareViteCliAcquisitionFiles('/app');
-      await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.shadowAssets');
+      await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.runtime');
       expect(fetchCalls).toBe(0);
       expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
-      await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.shadowAssets');
+      await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.runtime');
       expect(fetchCalls).toBe(0);
     } finally {
       globalThis.fetch = savedFetch;

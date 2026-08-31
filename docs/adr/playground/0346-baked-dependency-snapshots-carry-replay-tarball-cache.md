@@ -54,3 +54,9 @@ bytes that the installer does not require for correctness.
 - Only templates with registry shadow acquisitions grow, by those compressed
   source tarballs; ordinary cache misses retain their existing network path.
 - The v3 format and cache-key export are public compatibility commitments.
+
+## Correction 2026-08-31 (ADR-0371)
+
+Decision 4's separate runtime-asset CAS clause is withdrawn. Snapshot v3 now
+carries the exact esbuild-wasm member in ordinary `node_modules`; its existing
+verified replay tarball cache remains the network-byte authority.

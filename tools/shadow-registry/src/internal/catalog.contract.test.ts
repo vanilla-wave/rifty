@@ -10,6 +10,11 @@ import {
 import type { BuiltinShadowSubstitutionCatalog } from './model.ts';
 import sha256FixedVectors from './sha256-fixed-vectors.json';
 
+const catalogHasNoAssetField: 'assets' extends keyof BuiltinShadowSubstitutionCatalog
+  ? false
+  : true = true;
+void catalogHasNoAssetField;
+
 function recordAt(value: unknown, path: readonly PropertyKey[]): Record<PropertyKey, unknown> {
   let current = value;
   for (const key of path) {
@@ -75,7 +80,7 @@ describe('builtin shadow substitution catalog contract', () => {
     });
   });
 
-  it('models esbuild and lightningcss as exact registry twins with data-only bindings', () => {
+  it('models esbuild and lightningcss as registry twins with clone-safe bindings', () => {
     const esbuild = builtinShadowSubstitutionCatalog.recipes.find(
       (recipe) => recipe.trigger.name === 'esbuild',
     );
@@ -108,8 +113,6 @@ describe('builtin shadow substitution catalog contract', () => {
       },
       binding: { adapterId: 'rifty.runtime-adapter.esbuild.v1' },
     });
-    expect(esbuild?.binding).toEqual({ adapterId: 'rifty.runtime-adapter.esbuild.v1' });
-    expect(Object.hasOwn(builtinShadowSubstitutionCatalog, 'assets')).toBe(false);
     expect(esbuild?.materialization.files.map((file) => file.path)).toEqual([
       'bin/esbuild',
       'lib/main.cjs',
@@ -143,6 +146,7 @@ describe('builtin shadow substitution catalog contract', () => {
       materialization: { name: 'lightningcss', version: '1.32.0', bin: {} },
     });
     expect(lightningcss?.binding).toBeUndefined();
+    expect(Object.hasOwn(builtinShadowSubstitutionCatalog, 'assets')).toBe(false);
     expect(structuredClone(builtinShadowSubstitutionCatalog)).toEqual(
       builtinShadowSubstitutionCatalog,
     );
@@ -356,7 +360,6 @@ describe('builtin shadow substitution catalog contract', () => {
         mutate(catalog, recipeIndex) {
           Reflect.set(recordAt(catalog, ['recipes', recipeIndex]), 'binding', {
             adapterId: 'rifty.runtime-adapter.esbuild.v1',
-            assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
           });
         },
       },
@@ -370,14 +373,14 @@ describe('builtin shadow substitution catalog contract', () => {
     }
   });
 
-  it('rejects getters, non-normal paths, invalid SRI, and recomputed foreign builtin ids', () => {
+  it('rejects getters, non-normal paths, and recomputed foreign builtin ids', () => {
     let getterRan = false;
     const getter = structuredClone(builtinShadowSubstitutionCatalog);
     Object.defineProperty(getter.recipes[0]!, 'acquisition', {
       enumerable: true,
       get() {
         getterRan = true;
-        return { kind: 'synthetic' };
+        return { kind: 'registry' };
       },
     });
     expect(() => decodeBuiltinShadowSubstitutionCatalog(getter)).toThrow(/accessor/i);
@@ -400,10 +403,6 @@ describe('builtin shadow substitution catalog contract', () => {
       Reflect.set(invalid.recipes[0]!.materialization.files[0]!, 'path', path);
       expect(() => decodeBuiltinShadowSubstitutionCatalog(invalid)).toThrow(/path|normalized/i);
     }
-
-    const sri = structuredClone(builtinShadowSubstitutionCatalog);
-    Reflect.set(sri.assets[0]!.source, 'integrity', 'sha256-YQ==');
-    expect(() => decodeBuiltinShadowSubstitutionCatalog(sri)).toThrow(/wrong-length/i);
 
     const foreign = structuredClone(builtinShadowSubstitutionCatalog);
     Reflect.set(foreign, 'id', 'foreign.builtin');

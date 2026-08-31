@@ -119,6 +119,7 @@ if (launch.kind === 'eval') {
   await prepareNodeEntryRuntime({
     kind: 'eval',
     root: proc.cwd(),
+    runtimeBindings: launch.runtimeBindings ?? [],
     fs: syncMirror(),
   });
 } else {
@@ -127,6 +128,7 @@ if (launch.kind === 'eval') {
     root: proc.cwd(),
     args: proc.argv.slice(2),
     entryPath: requiredEntryPath(entryPath),
+    runtimeBindings: launch.runtimeBindings ?? [],
     fs: syncMirror(),
   });
 }

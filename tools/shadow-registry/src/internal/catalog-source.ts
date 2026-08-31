@@ -461,7 +461,19 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
         kind: 'semver-admits',
         unsupportedFeature: 'esbuild.version',
       },
-      acquisition: { kind: 'synthetic' },
+      acquisition: {
+        kind: 'registry',
+        name: 'esbuild-wasm',
+        version: '0.28.0',
+        dependencyProjection: {
+          dependencies: {},
+          optionalDependencies: {},
+          omittedOptionalDependencies: {},
+          peerDependencies: {},
+          bundledDependencies: [],
+          unsupportedFeature: 'esbuild.acquisition',
+        },
+      },
       materialization: {
         name: 'esbuild',
         version: '0.28.0',
@@ -472,10 +484,7 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
           file('package.json', ESBUILD_ALIAS_PACKAGE),
         ],
       },
-      binding: {
-        adapterId: 'rifty.runtime-adapter.esbuild.v1',
-        assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
-      },
+      binding: { adapterId: 'rifty.runtime-adapter.esbuild.v1' },
     },
     {
       schema: 2,
@@ -545,22 +554,6 @@ export const builtinShadowCatalogSource: ShadowCatalogDefinition = {
           file('package.json', SASS_EMBEDDED_FACADE_PACKAGE),
         ],
       },
-    },
-  ],
-  assets: [
-    {
-      id: 'esbuild-wasm@0.28.0/package/esbuild.wasm',
-      source: {
-        name: 'esbuild-wasm',
-        version: '0.28.0',
-        integrity:
-          'sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg==',
-      },
-      member: 'package/esbuild.wasm',
-      memberSha256: '9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b',
-      memberSize: 13_918_738,
-      maxTarballBytes: 3_845_798,
-      maxUnpackedBytes: 14_483_968,
     },
   ],
 };

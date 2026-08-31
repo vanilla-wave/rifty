@@ -23,7 +23,7 @@ import type {
   AppliedShadowSubstitution,
   RegistryShadowEmbeddedDependency,
   RegistryShadowEmbeddedSource,
-  ShadowAssetPlan,
+  ShadowSubstitutionPlan,
 } from './planner.ts';
 
 export interface PinnedShadowState {
@@ -187,7 +187,7 @@ export function syntheticManifest(recipe: BuiltinShadowSubstitutionRecipe): Read
 }
 
 export function replayedShadowFact(
-  plan: ShadowAssetPlan,
+  plan: ShadowSubstitutionPlan,
   recipe: BuiltinShadowSubstitutionRecipe,
   entry: Lockfile['packages'][string],
   materializationInstallPath: string,

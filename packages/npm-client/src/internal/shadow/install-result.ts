@@ -1,11 +1,11 @@
 import type { InstallResult } from '../../installer.ts';
-import type { ShadowAssetPlan } from './planner.ts';
+import type { ShadowSubstitutionPlan } from './planner.ts';
 
-const plans = new WeakMap<InstallResult, ShadowAssetPlan>();
+const plans = new WeakMap<InstallResult, ShadowSubstitutionPlan>();
 
-export function recordShadowAssetPlanForInstallResult(
+export function recordShadowSubstitutionPlanForInstallResult(
   result: InstallResult,
-  plan: ShadowAssetPlan,
+  plan: ShadowSubstitutionPlan,
 ): void {
   if (!Object.isFrozen(plan) || !Object.isFrozen(plan.substitutions)) {
     throw new TypeError('trusted InstallResult shadow plan invariant failed');
@@ -13,7 +13,9 @@ export function recordShadowAssetPlanForInstallResult(
   plans.set(result, plan);
 }
 
-export function shadowAssetPlanForInstallResult(result: InstallResult): ShadowAssetPlan {
+export function shadowSubstitutionPlanForInstallResult(
+  result: InstallResult,
+): ShadowSubstitutionPlan {
   const plan = plans.get(result);
   if (!plan) {
     throw new TypeError('InstallResult was not produced by the shadow-aware installer boundary');

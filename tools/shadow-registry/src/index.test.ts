@@ -7,8 +7,8 @@ describe('shadow-registry', () => {
     expect(bakedOverrides.bcrypt).toBe('bcryptjs');
   });
 
-  it('has no legacy esbuild redirect or alias overlay', () => {
-    expect(bakedOverrides.esbuild).toBeUndefined();
+  it('derives the exact esbuild registry twin without the legacy internal shim', () => {
+    expect(bakedOverrides.esbuild).toBe('esbuild-wasm@0.28.0');
     expect(internalsShims['@esbuild/wasi-preview1']).toBeUndefined();
   });
 

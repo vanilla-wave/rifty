@@ -27,7 +27,7 @@ import {
   builtinRecipeForRequest,
   registryRecipeForResolution,
 } from './internal/shadow/admission.ts';
-import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
+import type { ShadowSubstitutionPlan } from './internal/shadow/planner.ts';
 import { registryShadowEmbeddedSourcesFromLockfile } from './internal/shadow/planner.ts';
 import {
   type SubstitutionReporter,
@@ -53,7 +53,7 @@ export interface SourcePlan {
 /** Pick per-edge lockfile replay or fresh metadata resolution. */
 export function chooseSource(
   existingLockfile: Lockfile | null,
-  existingShadowPlan: ShadowAssetPlan | null,
+  existingShadowPlan: ShadowSubstitutionPlan | null,
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   opts: InstallOptions,
@@ -85,7 +85,7 @@ export function chooseSource(
 /** Covered edges replay; only uncovered or policy-drifted frontiers use metadata. */
 function createIncrementalSource(
   lockfile: Lockfile,
-  shadowPlan: ShadowAssetPlan,
+  shadowPlan: ShadowSubstitutionPlan,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
 ): Readonly<{ source: ResolutionSource; resolution: () => InstallResolution }> {
@@ -137,7 +137,7 @@ function createIncrementalSource(
  */
 function createLockfileSource(
   lockfile: Lockfile,
-  shadowPlan: ShadowAssetPlan,
+  shadowPlan: ShadowSubstitutionPlan,
   opts: InstallOptions,
   substitutions: SubstitutionReporter,
 ): ResolutionSource {

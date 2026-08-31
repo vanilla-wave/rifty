@@ -25,7 +25,7 @@ import {
 import { closureHashOf } from './closure-hash.ts';
 import { EDDY_BUNDLE_FORMAT, packEddyBundle } from './eddy-bundle.ts';
 import { type InstallOptions, type InstallResult, install } from './installer.ts';
-import { shadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
+import { shadowSubstitutionPlanForInstallResult } from './internal/shadow/install-result.ts';
 import type { Lockfile } from './linker.ts';
 import { computeIntegrity } from './tarball-cache.ts';
 
@@ -649,8 +649,7 @@ async function expectExactMaterialization(
     .soft(await vfs.readFileText(`${ROOT}/${fixture.binPath}`), 'user-visible Sass launcher')
     .toBe(`#!/usr/bin/env node\nimport('../${SASS_TRIGGER}/${SASS_BIN}');\n`);
 
-  const plan = shadowAssetPlanForInstallResult(result);
-  expect.soft(plan.assets).toEqual([]);
+  const plan = shadowSubstitutionPlanForInstallResult(result);
   expect.soft(plan.bindings).toEqual([]);
   const fileFacts = recipe.materialization.files.map(({ path, bytes, sha256: digest }) => ({
     path,

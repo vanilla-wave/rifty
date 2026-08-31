@@ -1,9 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { InstallResult } from '@riftydev/npm-client';
 import {
-  type PackageTreeShadowAssetBoundary,
-  type ShadowAssetPlan,
-  type ShadowAssetReadySet,
+  type ShadowSubstitutionPlan,
   planAppliedShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
 } from '@riftydev/npm-client/internal';
@@ -181,13 +179,13 @@ export type PackageInstallAdapterResult =
       /** Exact manifest bytes whose empty dependency graph was inspected. */
       readonly packageJsonText: string | null;
       /** Canonical empty plan produced by the package adapter. */
-      readonly shadowPlan: ShadowAssetPlan;
+      readonly shadowPlan: ShadowSubstitutionPlan;
     }
   | {
       readonly status?: 'installed';
       readonly result: InstallResult;
       /** Installer-owned, frozen decode of this exact result. Never reparse its lockfile. */
-      readonly shadowPlan: ShadowAssetPlan;
+      readonly shadowPlan: ShadowSubstitutionPlan;
       /** Exact manifest bytes after the installer has finished mutating the tree.
        * `null` keeps a successful install successful but makes it unstampable. */
       readonly packageJsonText: string | null;
@@ -210,7 +208,7 @@ export type SnapshotRestorePlan =
       readonly status: 'ready';
       readonly packages: number;
       /** Strictly decoded before any claim/tree mutation; reused without re-decoding. */
-      readonly shadowPlan: ShadowAssetPlan;
+      readonly shadowPlan: ShadowSubstitutionPlan;
       /** Applies only the already-validated immutable restore plan. */
       readonly apply: () => Promise<void>;
     }
@@ -268,8 +266,6 @@ export interface PackageAcquisitionAuthorityOptions {
   /** The owner durability barrier forwarded to every stamp state transition. */
   readonly stampTransition?: InstallStampTransitionOptions;
   readonly adapter: PackageAcquisitionAdapter;
-  /** Real ready-asset boundary; runtime-bearing trees fail loudly when absent. */
-  readonly shadowAssets?: PackageTreeShadowAssetBoundary;
   /** FIFO-head ancestor/descendant claims affected by replacing `<root>/node_modules`. */
   readonly resolveTreeGuards?: (
     root: string,
@@ -345,9 +341,8 @@ export interface PackageFifoReservation<T> {
 export interface PackageTreeAdmission {
   readonly root: string;
   readonly project: PackageAcquisitionProject;
-  readonly plan: ShadowAssetPlan;
-  /** Null means the attested substitutions require zero runtime assets. */
-  readonly ready: ShadowAssetReadySet | null;
+  readonly plan: ShadowSubstitutionPlan;
+  readonly runtimeBindings: readonly Readonly<{ adapterId: string; packagePath: string }>[];
 }
 
 type PackageAcquisitionResult = AcquisitionProvenance | ProjectAcquisitionPlan | undefined;
@@ -387,8 +382,7 @@ type PublishedPackageTree =
       kind: 'installed';
       project: PackageAcquisitionProject;
       packageJsonText: string;
-      plan: ShadowAssetPlan;
-      ready: ShadowAssetReadySet | null;
+      plan: ShadowSubstitutionPlan;
       /** A manifest-only edit preserves the live tree, not its durable install claim. */
       proof: 'claim' | 'owner-runtime';
     }>
@@ -396,8 +390,7 @@ type PublishedPackageTree =
       kind: 'empty';
       project: PackageAcquisitionProject;
       packageJsonText: string;
-      plan: ShadowAssetPlan;
-      ready: null;
+      plan: ShadowSubstitutionPlan;
     }>;
 
 type PublishedPackageTreeEntry = readonly [root: string, tree: PublishedPackageTree];
@@ -454,7 +447,6 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   readonly #stamps: InstallStampAuthority;
   readonly #stampTransition: InstallStampTransitionOptions | undefined;
   readonly #adapter: PackageAcquisitionAdapter;
-  readonly #shadowAssets?: PackageTreeShadowAssetBoundary;
   readonly #resolveTreeGuards?: PackageAcquisitionAuthorityOptions['resolveTreeGuards'];
   readonly #observe?: (event: AcquisitionObservation) => void;
   readonly #queue: QueueEntry[] = [];
@@ -470,7 +462,6 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     this.#stamps = options.stamps;
     this.#stampTransition = options.stampTransition;
     this.#adapter = options.adapter;
-    this.#shadowAssets = options.shadowAssets;
     this.#resolveTreeGuards = options.resolveTreeGuards;
     this.#observe = options.observe;
   }
@@ -505,7 +496,6 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         project: canonicalProject,
         packageJsonText,
         plan: EMPTY_SHADOW_PLAN,
-        ready: null,
       }),
     );
   }
@@ -528,18 +518,9 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   async #publishPackageTree(
     project: PackageAcquisitionProject,
     packageJsonText: string,
-    plan: ShadowAssetPlan,
+    plan: ShadowSubstitutionPlan,
   ): Promise<void> {
     const root = normalizeSchedulingRoot(project.root);
-    const runtimeAssetsRequired = plan.assets.length > 0 || plan.bindings.length > 0;
-    let ready: ShadowAssetReadySet | null = null;
-    if (runtimeAssetsRequired) {
-      const boundary = this.#shadowAssets;
-      if (boundary === undefined) {
-        throw new NotImplementedError('npm-client.packageTree.shadowAssets');
-      }
-      ready = await this.#publishShadowAssets(boundary, plan);
-    }
     this.#packageTrees.set(
       root,
       Object.freeze({
@@ -547,17 +528,9 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         project: Object.freeze({ ...project, root }),
         packageJsonText,
         plan,
-        ready,
         proof: 'claim',
       }),
     );
-  }
-
-  async #publishShadowAssets(
-    boundary: PackageTreeShadowAssetBoundary,
-    plan: ShadowAssetPlan,
-  ): Promise<ShadowAssetReadySet> {
-    return boundary.ensure(plan);
   }
 
   async #publishPackageLockfile(
@@ -605,12 +578,27 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     throw new Error(`package tree readiness is not trusted for ${canonicalRoot}`);
   }
 
-  async #composePackageTreeAncestry(
-    ancestry: readonly PublishedPackageTreeEntry[],
-  ): Promise<Readonly<{ plan: ShadowAssetPlan; ready: ShadowAssetReadySet | null }>> {
-    const substitutions: ShadowAssetPlan['substitutions'][number][] = [];
+  async #composePackageTreeAncestry(ancestry: readonly PublishedPackageTreeEntry[]): Promise<
+    Readonly<{
+      plan: ShadowSubstitutionPlan;
+      runtimeBindings: readonly Readonly<{ adapterId: string; packagePath: string }>[];
+    }>
+  > {
+    const substitutions: ShadowSubstitutionPlan['substitutions'][number][] = [];
     const claimedInstallPaths = new Set<string>();
-    for (const [, published] of ancestry) {
+    const claimedAdapters = new Set<string>();
+    const runtimeBindings: Array<Readonly<{ adapterId: string; packagePath: string }>> = [];
+    for (const [root, published] of ancestry) {
+      for (const binding of published.plan.bindings) {
+        if (claimedAdapters.has(binding.adapterId)) continue;
+        claimedAdapters.add(binding.adapterId);
+        runtimeBindings.push(
+          Object.freeze({
+            adapterId: binding.adapterId,
+            packagePath: normalizePath(`${root}/${binding.packagePath}`),
+          }),
+        );
+      }
       for (const substitution of published.plan.substitutions) {
         const installPath = substitution.materialization.installPath;
         if (claimedInstallPaths.has(installPath)) continue;
@@ -621,30 +609,19 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
 
     const nearest = ancestry[0];
     if (nearest === undefined) throw new Error('package tree ancestry is empty');
-    const composed =
-      substitutions.length === 0 ? nearest[1].plan : planAppliedShadowSubstitutions(substitutions);
     const exactPublished = ancestry.find(
-      ([, published]) => published.plan.requiredSetDigest === composed.requiredSetDigest,
+      ([, published]) =>
+        published.plan.substitutions.length === substitutions.length &&
+        published.plan.substitutions.every(
+          (substitution, index) => substitution === substitutions[index],
+        ),
     )?.[1];
-    const plan = exactPublished?.plan ?? composed;
-    const runtimeAssetsRequired = plan.assets.length > 0 || plan.bindings.length > 0;
-    if (!runtimeAssetsRequired) return Object.freeze({ plan, ready: null });
-
-    const reusable = ancestry
-      .map(([, published]) => published.ready)
-      .find(
-        (ready) =>
-          ready !== null &&
-          ready.plan.requiredSetDigest === plan.requiredSetDigest &&
-          ready.receipt.requiredSetDigest === plan.requiredSetDigest,
-      );
-    if (reusable) return Object.freeze({ plan, ready: reusable });
-
-    const boundary = this.#shadowAssets;
-    if (boundary === undefined) {
-      throw new NotImplementedError('npm-client.packageTree.shadowAssets');
-    }
-    return Object.freeze({ plan, ready: await this.#publishShadowAssets(boundary, plan) });
+    const plan =
+      exactPublished?.plan ??
+      (substitutions.length === 0
+        ? nearest[1].plan
+        : planAppliedShadowSubstitutions(substitutions));
+    return Object.freeze({ plan, runtimeBindings: Object.freeze(runtimeBindings) });
   }
 
   async quiesce(): Promise<void> {
@@ -926,7 +903,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       root: canonicalRoot,
       project: published.project,
       plan: composed.plan,
-      ready: composed.ready,
+      runtimeBindings: composed.runtimeBindings,
     });
   }
 
@@ -1510,7 +1487,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     packageJsonText: string | null,
     packages: number,
     claim: InstallStampClaim,
-    shadowPlan: ShadowAssetPlan,
+    shadowPlan: ShadowSubstitutionPlan,
     onPromotion?: (result: InstallStampPromotionResult) => void,
   ): Promise<void> {
     const settle = async (): Promise<void> => {

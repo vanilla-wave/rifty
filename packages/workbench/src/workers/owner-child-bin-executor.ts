@@ -10,12 +10,11 @@
  * invariant). Stream/kill/exit use the shared foreground-child driver directly.
  */
 
+import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import {
-  type KernelEntryCapabilityPorts,
-  type SpawnWorkerSpec,
-  globalProcessManager,
-} from '@riftydev/kernel';
-import { buildNodeEntryWorkerEntry } from '@riftydev/runtime-js/builtins/node-entry-url';
+  type NodeEntryRuntimeBinding,
+  buildNodeEntryWorkerEntry,
+} from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { BinExecutor } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest, BinWorkerHandle } from '../glue/bin-executor.ts';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
@@ -25,9 +24,9 @@ import {
   type ReserveOwnerChildAdmission,
   abortOwnerChildAdmissionAfterSpawn,
   abortOwnerChildAdmissionBeforeSpawn,
-  attachOwnerChildCapabilities,
   commitOwnerChildAdmission,
   observeOwnerChildExit,
+  projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
 import { prepareViteBinSpawnRequest } from './vite-cli-prep.ts';
 
@@ -36,8 +35,9 @@ export function buildChildSpawnSpec(
   req: BinSpawnRequest,
   nodeEntryUrl: string,
   nodeWorkerRuntimeEnv: Readonly<Record<string, string>>,
-  capabilityPorts?: KernelEntryCapabilityPorts,
+  runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
 ): SpawnWorkerSpec {
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, req.remoteFsRoot);
   const entry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
     kind: 'program',
     bin: isBinShimPath(req.shimPath),
@@ -46,10 +46,10 @@ export function buildChildSpawnSpec(
     nodeServe: true,
     ...(req.previewScope === undefined ? {} : { previewScope: req.previewScope }),
     terminal: childTerminalBootstrap(req),
+    ...(projectedBindings.length === 0 ? {} : { runtimeBindings: projectedBindings }),
   });
   return {
-    entry:
-      capabilityPorts === undefined ? entry : attachOwnerChildCapabilities(entry, capabilityPorts),
+    entry,
     argv: ['rifty', req.shimPath, ...req.args],
     env: { ...req.env },
     cwd: req.cwd,
@@ -99,7 +99,7 @@ export function createOwnerChildBinExecutor(
           req,
           nodeEntryUrl,
           nodeWorkerRuntimeEnv,
-          reservation.snapshot.capabilityPorts,
+          reservation.snapshot.runtimeBindings,
         ),
         1,
       );

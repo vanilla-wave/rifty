@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **Activate esbuild from the admitted installed tree (ADR-0371).** Package
+  admission projects the exact registry-twin path into existing Node/dev-server
+  bootstrap metadata; each child verifies the 13,918,738-byte SHA-pinned member
+  through its `FsSync` before compile. The owner CAS, asset server/client, and
+  kernel capability-port wiring are deleted.
+
 - **Supervised FS relays consume SyncRpc v5 binary requests (ADR-0366).** Node
   entries, dev-server children, and recursive relay peers receive the complete
   JSON + binary kernel sync API with no legacy fallback.
@@ -125,12 +131,10 @@
   deployment entries (ADR-0263, ADR-0282).
 
 - Dispatch admitted runtime bindings by recipe `adapterId` before guest entry.
-  Direct CJS/ESM esbuild and Vite 7 consume the same registry-attested bytes;
+  Direct CJS/ESM esbuild and Vite 7 consume the same installed registry twin;
   Vite 8 keeps an empty plan, and the `esbuild` bin fails loudly as
-  `NotImplementedError('esbuild.cli')` (ADR-0308/0311). Capability endpoints
-  ride the kernel's one-shot URL-entry descriptor and are consumed before guest
-  import; generic runtime-js entries and process-visible IPC stay unchanged
-  (ADR-0313).
+  `NotImplementedError('esbuild.cli')` (ADR-0308/0311/0371). Runtime binding
+  rows ride existing entry bootstrap metadata; process-visible IPC is unchanged.
 
 ### Changed
 

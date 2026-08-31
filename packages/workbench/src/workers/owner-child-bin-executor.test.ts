@@ -1,4 +1,3 @@
-import { SHADOW_ASSET_PORT_CAPABILITY } from '@riftydev/npm-client/internal';
 import { NODE_ENTRY_BOOTSTRAP_PROTOCOL } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { type BinExecutor, Shell } from '@riftydev/shell';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
@@ -15,6 +14,18 @@ const NODE_WORKER_RUNTIME_ENV = {
   RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
 };
 const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const RUNTIME_BINDINGS = [
+  {
+    adapterId: 'rifty.runtime-adapter.esbuild.v1',
+    packagePath: `${REMOTE_FS_ROOT}/node_modules/esbuild-wasm`,
+  },
+] as const;
+const PUBLIC_RUNTIME_BINDINGS = [
+  {
+    adapterId: 'rifty.runtime-adapter.esbuild.v1',
+    packagePath: '/node_modules/esbuild-wasm',
+  },
+] as const;
 
 describe('buildChildSpawnSpec', () => {
   it('keeps guest env exact and carries server-capable bin metadata beside the entry', () => {
@@ -151,25 +162,32 @@ describe('buildChildSpawnSpec', () => {
     ]);
   });
 
-  it('attaches admitted capabilities to the URL entry before spawn', () => {
-    const capability = new MessageChannel();
+  it('carries admitted runtime bindings in existing URL-entry metadata', () => {
     const req: BinSpawnRequest = {
       shimPath: '/node_modules/.bin/vite',
       args: ['build'],
       env: {},
       cwd: '/',
       isTTY: false,
+      remoteFsRoot: REMOTE_FS_ROOT,
     };
 
-    const spec = buildChildSpawnSpec(req, 'blob:node-entry-url', NODE_WORKER_RUNTIME_ENV, {
-      [SHADOW_ASSET_PORT_CAPABILITY]: capability.port2,
-    });
+    const spec = buildChildSpawnSpec(
+      req,
+      'blob:node-entry-url',
+      NODE_WORKER_RUNTIME_ENV,
+      RUNTIME_BINDINGS,
+    );
 
-    expect(spec.entry.kind).toBe('url');
-    if (spec.entry.kind !== 'url') throw new Error('expected URL worker entry');
-    expect(spec.entry.capabilityPorts?.[SHADOW_ASSET_PORT_CAPABILITY]).toBe(capability.port2);
-    capability.port1.close();
-    capability.port2.close();
+    expect(spec.entry).toMatchObject({
+      bootstrap: { payload: { launch: { runtimeBindings: PUBLIC_RUNTIME_BINDINGS } } },
+    });
+    expect(spec.argv).toEqual(['rifty', '/node_modules/.bin/vite', 'build']);
+    expect(spec.env).toEqual({});
+    expect(spec.cwd).toBe('/');
+    expect(JSON.stringify({ argv: spec.argv, env: spec.env, cwd: spec.cwd })).not.toContain(
+      REMOTE_FS_ROOT,
+    );
   });
 });
 

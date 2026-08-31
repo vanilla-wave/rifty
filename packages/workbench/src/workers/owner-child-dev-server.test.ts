@@ -1,8 +1,10 @@
 import { EventEmitter } from 'node:events';
 import type { TerminalResizeSource, TerminalSize } from '@riftydev/shell';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import type { NodeServerPackageConfig } from '../workbench/internal/project-package-config.ts';
+import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import type { ReserveOwnerChildAdmission } from './owner-child-admission.ts';
 import {
@@ -12,6 +14,7 @@ import {
   createOwnerChildDevServer as createOwnerChildDevServerWithAdmission,
 } from './owner-child-dev-server.ts';
 import { HOST_PREVIEW_ORIGIN, createPreviewRegistry } from './preview-registry.ts';
+import { ProjectTerminalFsSync } from './project-terminal-namespace.ts';
 
 const nodeServerConfig: NodeServerPackageConfig = {
   runtime: 'node-server',
@@ -44,8 +47,7 @@ const NODE_WORKER_RUNTIME_ENV = {
 const reserveEmptyAdmission: ReserveOwnerChildAdmission = async () =>
   Object.freeze({
     snapshot: Object.freeze({
-      capabilityPorts: Object.freeze({}),
-      dispose() {},
+      runtimeBindings: Object.freeze([]),
     }),
     commit() {},
     abortBeforeSpawn() {},
@@ -179,7 +181,6 @@ describe('buildDevServerChildSpawnSpec', () => {
         },
       },
     });
-    expect(Object.hasOwn(spec.entry, 'capabilityPorts')).toBe(false);
   });
 
   it('forces the WASI path for napi-rs bindings — never native', () => {
@@ -192,20 +193,23 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.env.NAPI_RS_FORCE_WASI).toBe('1');
   });
 
-  it('attaches admitted capabilities to the URL entry before spawn', () => {
-    const capability = new MessageChannel();
+  it('carries admitted runtime bindings in existing dev-server metadata', () => {
+    const runtimeBindings = [
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: '/workspace/node_modules/esbuild-wasm',
+      },
+    ] as const;
     const spec = buildDevServerChildSpawnSpec(
       params,
       'blob:dev-server-url',
       NODE_WORKER_RUNTIME_ENV,
-      { 'test.shadow-assets/v1': capability.port2 },
+      runtimeBindings,
     );
 
-    expect(spec.entry.kind).toBe('url');
-    if (spec.entry.kind !== 'url') throw new Error('expected URL worker entry');
-    expect(spec.entry.capabilityPorts?.['test.shadow-assets/v1']).toBe(capability.port2);
-    capability.port1.close();
-    capability.port2.close();
+    expect(spec.entry).toMatchObject({
+      bootstrap: { payload: { runtimeBindings } },
+    });
   });
 });
 
@@ -311,6 +315,92 @@ describe('createOwnerChildDevServer', () => {
     await waitForChildAdmission();
 
     expect(reserve).toHaveBeenCalledWith('/packages/nested/server.mjs');
+    fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
+    const handle = await boot;
+    await handle.stop();
+  });
+
+  it('projects an admitted ancestor binding through dev-server metadata into guest FsSync', async () => {
+    const fake = new FakeHandle();
+    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const physicalPackagePath = `${remoteFsRoot}/node_modules/esbuild-wasm`;
+    const reserve: ReserveOwnerChildAdmission = async () => ({
+      snapshot: Object.freeze({
+        runtimeBindings: Object.freeze([
+          Object.freeze({
+            adapterId: 'rifty.runtime-adapter.esbuild.v1',
+            packagePath: physicalPackagePath,
+          }),
+        ]),
+      }),
+      commit() {},
+      abortBeforeSpawn() {},
+      async abortAfterChildSettlement(_error: unknown, exited: Promise<unknown>) {
+        await exited;
+      },
+    });
+    type SpawnedSpec = Parameters<
+      NonNullable<Parameters<typeof createOwnerChildDevServerWithAdmission>[3]>
+    >[0];
+    let spawnedSpec: SpawnedSpec | null = null;
+    const driver = createOwnerChildDevServerWithAdmission(
+      'blob:dev-url',
+      NODE_WORKER_RUNTIME_ENV,
+      reserve,
+      (spec) => {
+        spawnedSpec = spec;
+        return fake;
+      },
+    );
+    const nestedParams: DevServerChildSpawnParams = {
+      ...params,
+      cfg: {
+        ...nodeServerConfig,
+        root: '/packages/nested',
+        entryPath: '/packages/nested/server.mjs',
+        seedFiles: { '/packages/nested/server.mjs': 'export {}' },
+      },
+      remoteFsRoot,
+    };
+    const boot = driver.boot({
+      signal: new AbortController().signal,
+      log: () => {},
+      params: nestedParams,
+      onSnapshotDirty: () => {},
+    });
+    await waitForChildAdmission();
+
+    const observedSpec = spawnedSpec as SpawnedSpec | null;
+    if (observedSpec === null) throw new Error('dev-server binding spawn was not observed');
+    const entry = observedSpec.entry as { readonly bootstrap?: unknown };
+    const child = resolveDevServerChildConfig(entry.bootstrap);
+    const runtimeBindings = child.runtimeBindings ?? [];
+    expect(runtimeBindings).toEqual([
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: '/node_modules/esbuild-wasm',
+      },
+    ]);
+    const ownerFs = new MemoryFsSync();
+    const marker = new Uint8Array([0, 97, 115, 109]);
+    ownerFs.mkdirSync(physicalPackagePath, { recursive: true });
+    ownerFs.writeFileSync(`${physicalPackagePath}/esbuild.wasm`, marker);
+    const guestFs = new ProjectTerminalFsSync(ownerFs, remoteFsRoot);
+    expect(guestFs.readFileBytesSync(`${runtimeBindings[0]!.packagePath}/esbuild.wasm`)).toEqual(
+      marker,
+    );
+    expect(observedSpec.argv).toEqual(['rifty', '/packages/nested/server.mjs']);
+    expect(observedSpec.cwd).toBe('/packages/nested');
+    expect(observedSpec.env).toEqual({
+      USER_VALUE: 'kept',
+      RIFTY_PREVIEW_SCOPE: 'guest-preview',
+      NAPI_RS_FORCE_WASI: '1',
+      PORT: '5174',
+    });
+    expect(
+      JSON.stringify({ argv: observedSpec.argv, env: observedSpec.env, cwd: observedSpec.cwd }),
+    ).not.toContain(remoteFsRoot);
+
     fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
     const handle = await boot;
     await handle.stop();

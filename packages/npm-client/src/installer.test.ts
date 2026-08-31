@@ -272,6 +272,8 @@ describe('install — lifecycle cancellation (ADR-0314)', () => {
   });
 
   it('[fault: torn-state] observes an abort parked in lock commit before reports or result', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('esbuild-wasm', new Map([['0.28.0', await makeEntry('esbuild-wasm', '0.28.0')]]));
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const writeStarted = deferred<void>();
@@ -296,7 +298,7 @@ describe('install — lifecycle cancellation (ADR-0314)', () => {
       {
         vfs,
         cwd: '/proj',
-        registry: new FakeRegistry(new Map()),
+        registry: new FakeRegistry(db),
         signal: controller.signal,
         onSubstitution: (line) => reports.push(line),
       },
@@ -317,7 +319,7 @@ describe('install — lifecycle cancellation (ADR-0314)', () => {
       {
         vfs,
         cwd: '/proj',
-        registry: new FakeRegistry(new Map()),
+        registry: new FakeRegistry(db),
         onSubstitution: (line) => reports.push(line),
       },
     );
@@ -325,6 +327,7 @@ describe('install — lifecycle cancellation (ADR-0314)', () => {
       esbuild: 'bin/esbuild',
     });
     expect(reports).toEqual([
+      'npm: esbuild@^0.28.0 → esbuild-wasm@0.28.0 (substituted from shadow registry, ADR-0051)',
       'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)',
     ]);
   });
@@ -886,7 +889,9 @@ describe('install — package.json defaults', () => {
     expect(await vfs.exists('/proj/node_modules/with-prepare/package.json')).toBe(true);
   });
 
-  it('materializes synthetic esbuild before registry lifecycle handling', async () => {
+  it('materializes the esbuild alias beside its exact registry twin', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('esbuild-wasm', new Map([['0.28.0', await makeEntry('esbuild-wasm', '0.28.0')]]));
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     await vfs.writeFile(
@@ -898,9 +903,9 @@ describe('install — package.json defaults', () => {
       }),
     );
 
-    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
 
-    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual(['esbuild@0.28.0']);
+    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual(['esbuild-wasm@0.28.0']);
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
     expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.cjs')).toContain(
       '__rifty?.esbuild',
@@ -912,9 +917,10 @@ describe('install — package.json defaults', () => {
     expect(result.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
   });
 
-  it('replays a transitive synthetic esbuild recipe on the lockfile fast path', async () => {
+  it('replays a transitive esbuild registry twin on the lockfile fast path', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('host', new Map([['1.0.0', await makeEntry('host', '1.0.0', { esbuild: '^0.28.0' })]]));
+    db.set('esbuild-wasm', new Map([['0.28.0', await makeEntry('esbuild-wasm', '0.28.0')]]));
 
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -931,7 +937,7 @@ describe('install — package.json defaults', () => {
 
     const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
     expect(second.packages.map((p) => `${p.name}@${p.version}`).sort()).toEqual([
-      'esbuild@0.28.0',
+      'esbuild-wasm@0.28.0',
       'host@1.0.0',
     ]);
     expect(second.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);

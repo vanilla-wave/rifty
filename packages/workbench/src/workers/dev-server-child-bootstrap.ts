@@ -77,6 +77,7 @@ async function bootstrapDevServerChild(): Promise<void> {
     root: c.cfg.root,
     args: [],
     entryPath: c.cfg.entryPath,
+    runtimeBindings: c.runtimeBindings ?? [],
     fs: remoteFs,
   });
   // A node-server child may spawn nested workers whose `fs.*` sync-RPC calls
