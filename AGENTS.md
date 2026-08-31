@@ -41,7 +41,7 @@ Full checklist + subagent budget: `docs/process/decision-workflow.md`. Core:
 - REVERSIBLE + judgment call → `docs/backlog/<area>/<slug>.md` + `// TODO(backlog: <area>/<slug>)`.
 - IRREVERSIBLE (public API / new dep / contradicts ADR / genuine design choice) → `pnpm adr:new <area> "Title"`.
 - Overturn recorded decision → decision subagent → superseding ADR. Active ADRs immutable; superseded = removed + pointer in `docs/adr/README.md`.
-- Confirm-first only: outward/destructive beyond repo (publish, spend, shared-remote push, delete user data).
+- Confirm-first only: publish, spend, delete user data. Commit, push, draft PR pre-authorized; merge permission persists once given.
 
 ## Goal runs
 
