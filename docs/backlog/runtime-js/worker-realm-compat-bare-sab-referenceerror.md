@@ -107,6 +107,7 @@ ready-verdict: 2026-08-31 — Contract+RED @ 02f20db5f1b8d69d2c67cd5c1184cce1f32
 review: checkpoints — parity behavior at a browser realm boundary.
 contract-red: 2026-08-31 — blocker @ e7b45a865173cf811c06d06f6a69953181848411
 final-green: 2026-08-31 — blocker @ 6ef9b4a1dfc30a2ac1b38a1f28506b3bb6f8b01f
+final-green: 2026-08-31 — pass @ 4c63e23e206057df5cb685524964b0d0848a1e6c
 
 - ADR-0162's unconditional patch remains binding. Fix the patched decode's
   shared-input discrimination so it never evaluates an absent bare binding;
