@@ -33,6 +33,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - `docs/process/traps.md` — hard-won gotchas (worktrees/git, CI, e2e, browser runtime, tooling); check before debugging a weird fail or re-proposing a rejected speedup
 - `docs/process/fault-classes.md` — fault taxonomy + review convergence
 - `docs/process/testing.md` — test pyramid + why parity
+- `docs/process/shakedown.md` — banked rehearsal suite: where this process hurts, per archetype; re-run before changing a process rule
 - `docs/public/` — compat matrix, publishing, hosting
 
 ## Decisions — decide, record, continue; never stop to ask
