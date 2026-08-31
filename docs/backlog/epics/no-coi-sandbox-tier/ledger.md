@@ -1,3 +1,9 @@
 # Ledger — no-coi-sandbox-tier (append-only)
 
 - 2026-08-28 — fitted from refine-closed draft `distribution/no-coi-sandbox-tier` (interview 2026-08-25..28, decisions carried to goal.md; draft deleted this commit — evidence lives in goal + `runtime-js/reference/no-coi-degradation-probes.md` + spike branches).
+- 2026-08-31 — SW-COI shim probe executed (Chrome 151.0.7922.174): headerless first load not isolated; after SW install + reload `crossOriginIsolated=true`, SAB constructible. Durable record `distribution/reference/sw-coi-shim-probe.md`; /tmp run discarded.
+- 2026-08-31 — re-fit in place, pre-run (no pickup recorded): user answered the scope half the 2026-08-28 fog line never asked — the host document must stay non-COI, that is why the epic exists. Landed as I9 + `rejected route:` line; SW-COI moved to map `## Out of scope`.
+- 2026-08-31 — user decision: boot marker for unflushed writes joins the tier as I10 (marker only, journal still declined); tier stays `works`.
+- 2026-08-31 — fog closed to empty: util-types.ts:27,31 are type positions only (runtime compares brand strings) — nothing for the bare-sab-guard sweep there.
+- 2026-08-31 — re-fit critic: 6 problems. Agent-owned three closed in place (restrict-properties variant named + per-flavor rejection table; speed claim re-attributed to composition, not to dropping COI; build-spike numbers inlined into `distribution/reference/no-coi-build-spike-record.md` off the rot-prone branch).
+- 2026-08-31 — user answers: destination is the shared-memory-free CLASS of work, Vite 7.3.6 is only its representative instance (closes C3); docs-site audience removed, a from-scratch site should take real isolation (closes C1). C4 (no recorded adopter demand, M11 opportunity cost) stays the user's accepted premise risk from 2026-08-28.
