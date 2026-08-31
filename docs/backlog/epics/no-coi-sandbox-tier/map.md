@@ -4,20 +4,17 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `runtime-js/worker-realm-compat-bare-sab-referenceerror` — **bare-sab-guard** —
-   RED-first in a real no-COI browser context (first no-COI test substrate);
-   unblocks every other slice (I2 prerequisite).
-2. `runtime-js/same-realm-spawn-stdio-pipe-drop` — **console-swap** — per-child
+1. `runtime-js/same-realm-spawn-stdio-pipe-drop` — **console-swap** — per-child
    console over childProcess.stdout/stderr (I7 pipe half); declared microtask
    residual stays.
-3. `vfs/no-coi-opfs-policy-flip` — **opfs-no-coi** — drop the COI condition in
+2. `vfs/no-coi-opfs-policy-flip` — **opfs-no-coi** — drop the COI condition in
    detectVfsBackend + no-COI reload-durability proof (I5).
-4. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
+3. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
    composition for real Vite 7 build outside workbench gates + loud capability
    gate/report + spawn warn-once + cpus→1 + Vite-8 loud named error + the
    no-COI CI lane, which also pins the host document non-COI across the loop
    (I1, I2, I3, I7 rest, I8, I9).
-5. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
+4. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
    HMR through SW preview + worker-died event + restore primitive + boot marker
    for unflushed writes (I4, I6, I10). Blocked by build-loop.
 
