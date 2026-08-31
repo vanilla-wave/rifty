@@ -64,7 +64,13 @@ describe('installSharedMemoryTolerantTextDecoder (unconditional shared-buffer co
   it('is idempotent — a second install on the same decoder is a no-op', () => {
     const Dec = makeRejectingDecoder();
     expect(installSharedMemoryTolerantTextDecoder(Dec)).toBe(true);
+    const patched = Dec.prototype.decode;
     expect(installSharedMemoryTolerantTextDecoder(Dec)).toBe(false);
+    expect(Dec.prototype.decode).toBe(patched);
+
+    const sharedBytes = new Uint8Array(new SharedArrayBuffer(2));
+    sharedBytes.set([111, 107]);
+    expect(new Dec().decode(sharedBytes)).toBe('ok');
   });
 });
 

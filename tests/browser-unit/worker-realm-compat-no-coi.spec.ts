@@ -38,6 +38,16 @@ test('direct TextDecoder install preserves private decode without SharedArrayBuf
 
   const result = await page.evaluate(async (moduleUrl) => {
     const compat = await import(/* @vite-ignore */ moduleUrl);
+    const nativeDecode = TextDecoder.prototype.decode;
+    let delegateCalls = 0;
+    TextDecoder.prototype.decode = function (
+      this: TextDecoder,
+      input?: AllowSharedBufferSource,
+      options?: TextDecodeOptions,
+    ): string {
+      delegateCalls += 1;
+      return nativeDecode.call(this, input, options);
+    };
     const before = TextDecoder.prototype.decode;
     const installed = compat.installSharedMemoryTolerantTextDecoder(TextDecoder);
     const afterInstall = TextDecoder.prototype.decode;
@@ -50,6 +60,7 @@ test('direct TextDecoder install preserves private decode without SharedArrayBuf
       repeated,
       repeatKeptIdentity: afterRepeat === afterInstall,
       decoded,
+      delegateCalls,
     };
   }, compatModuleUrl);
 
@@ -59,6 +70,7 @@ test('direct TextDecoder install preserves private decode without SharedArrayBuf
     repeated: false,
     repeatKeptIdentity: true,
     decoded: 'ok',
+    delegateCalls: 1,
   });
 });
 
@@ -69,6 +81,16 @@ test('aggregate realm install keeps sibling shims and private decode without Sha
 
   const result = await page.evaluate(async (moduleUrl) => {
     const compat = await import(/* @vite-ignore */ moduleUrl);
+    const nativeDecode = TextDecoder.prototype.decode;
+    let delegateCalls = 0;
+    TextDecoder.prototype.decode = function (
+      this: TextDecoder,
+      input?: AllowSharedBufferSource,
+      options?: TextDecodeOptions,
+    ): string {
+      delegateCalls += 1;
+      return nativeDecode.call(this, input, options);
+    };
     const before = TextDecoder.prototype.decode;
     compat.installWorkerRealmCompat();
     const afterInstall = TextDecoder.prototype.decode;
@@ -84,6 +106,7 @@ test('aggregate realm install keeps sibling shims and private decode without Sha
       selfIsGlobalThis: globalThis.self === globalThis,
       selfWritable: selfDescriptor?.writable === true,
       decoded,
+      delegateCalls,
     };
   }, compatModuleUrl);
 
@@ -94,5 +117,6 @@ test('aggregate realm install keeps sibling shims and private decode without Sha
     selfIsGlobalThis: true,
     selfWritable: true,
     decoded: 'ok',
+    delegateCalls: 1,
   });
 });
