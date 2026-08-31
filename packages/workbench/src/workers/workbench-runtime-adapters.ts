@@ -31,9 +31,17 @@ interface GeneratedRuntimeModule {
 
 const generated = generatedRuntime as unknown as GeneratedRuntimeModule;
 
-function isNestedPackageRoot(packageRoot: string, cwd: string): boolean {
-  if (!packageRoot.startsWith(`${cwd}/node_modules/`)) return false;
-  const parts = packageRoot.slice(cwd.length + 1).split('/');
+function isOnCwdAncestry(root: string, cwd: string): boolean {
+  return root === '/' || root === cwd || cwd.startsWith(`${root}/`);
+}
+
+function isNestedPackageRootOnCwdAncestry(packageRoot: string, cwd: string): boolean {
+  const marker = '/node_modules/';
+  const markerIndex = packageRoot.indexOf(marker);
+  if (markerIndex < 0) return false;
+  const treeRoot = markerIndex === 0 ? '/' : packageRoot.slice(0, markerIndex);
+  if (!isOnCwdAncestry(treeRoot, cwd)) return false;
+  const parts = packageRoot.slice(markerIndex + 1).split('/');
   let index = 0;
   while (index < parts.length) {
     if (parts[index] !== 'node_modules') return false;
@@ -67,11 +75,8 @@ async function activateEsbuild(
   const packageRoot = packagePath.endsWith(ESBUILD_RUNTIME_PACKAGE_SUFFIX)
     ? packagePath.slice(0, -ESBUILD_RUNTIME_PACKAGE_SUFFIX.length) || '/'
     : '';
-  const onCwdAncestry =
-    packageRoot === '/' ||
-    packageRoot === normalizedCwd ||
-    normalizedCwd.startsWith(`${packageRoot}/`);
-  const inCwdPackageTree = isNestedPackageRoot(packageRoot, normalizedCwd);
+  const onCwdAncestry = isOnCwdAncestry(packageRoot, normalizedCwd);
+  const inCwdPackageTree = isNestedPackageRootOnCwdAncestry(packageRoot, normalizedCwd);
   if (
     !isAbsolute(packagePath) ||
     normalizePath(packagePath) !== packagePath ||

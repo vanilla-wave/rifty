@@ -216,6 +216,7 @@ challenge: 2026-08-29 — 2 problems
 ## Decisions
 
 ready-verdict: 2026-08-31 — Contract+RED @ 1d5694b65
+final-green: 2026-08-31 — blocker @ 15f5326ed
 - contract-compile 2026-08-31 — ADR-0371 selects the exact registry twin,
   `{adapterId, packagePath}` bootstrap descriptor, local size/hash verification,
   and the single bundled generated-client exception; no observable fork remains.
