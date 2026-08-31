@@ -6,15 +6,22 @@ export default {
   setup: {
     files: {
       'project/a.js': `
+        const plain = require('console');
+        const node = require('node:console');
         setTimeout(() => {
-          console.log('A', { child: 1 });
-          console.error('AE');
+          console.log('A-global', { child: 1 });
+          plain.log('A-plain', console === plain, plain === node);
+          node.error('A-node');
         }, 10);
       `,
       'project/b.js': `
+        const plain = require('console');
+        const node = require('node:console');
+        globalThis[Symbol.unscopables] = { console: true };
         setTimeout(() => {
-          console.log('B', { child: 2 });
-          console.error('BE');
+          console.log('B-global', { child: 2 });
+          plain.log('B-plain', console === plain, plain === node);
+          node.error('B-node');
         }, 0);
       `,
     },
@@ -45,7 +52,7 @@ export default {
     });
   `,
   expected:
-    '{"a":{"code":0,"signal":null,"stdout":"A { child: 1 }\\n","stderr":"AE\\n"},' +
-    '"b":{"code":0,"signal":null,"stdout":"B { child: 2 }\\n","stderr":"BE\\n"},' +
+    '{"a":{"code":0,"signal":null,"stdout":"A-global { child: 1 }\\nA-plain true true\\n","stderr":"A-node\\n"},' +
+    '"b":{"code":0,"signal":null,"stdout":"B-global { child: 2 }\\nB-plain true true\\n","stderr":"B-node\\n"},' +
     '"ownerFrames":[]}',
 } satisfies ParityCase;

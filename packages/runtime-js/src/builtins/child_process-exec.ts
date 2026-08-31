@@ -439,31 +439,28 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       setImmediate: { value: localSetImmediate, configurable: true },
       clearImmediate: { value: localClearImmediate, configurable: true },
     });
+    const validatedFunction = new Function(
+      '__stdout_write',
+      '__stderr_write',
+      '__process',
+      'process',
+      'setTimeout',
+      'clearTimeout',
+      'setInterval',
+      'clearInterval',
+      'setImmediate',
+      'clearImmediate',
+      'globalThis',
+      'global',
+      'self',
+      'require',
+      `${code}\n//# sourceURL=${scriptPath}`,
+    ) as (...args: unknown[]) => unknown;
     const createChildFunction = new Function(
-      '__childGlobal',
-      `with (__childGlobal) {
-        return function(
-          __stdout_write,
-          __stderr_write,
-          __process,
-          process,
-          setTimeout,
-          clearTimeout,
-          setInterval,
-          clearInterval,
-          setImmediate,
-          clearImmediate,
-          globalThis,
-          global,
-          self,
-          require
-        ) {
-${code}
-        };
-      }
-//# sourceURL=${scriptPath}`,
-    ) as (scope: Record<PropertyKey, unknown>) => (...args: unknown[]) => unknown;
-    const fn = createChildFunction(childGlobal);
+      'console',
+      `return (${Function.prototype.toString.call(validatedFunction)});`,
+    ) as (console: Console) => (...args: unknown[]) => unknown;
+    const fn = createChildFunction(childConsole);
     const result = withChildProcess(() =>
       fn(
         writeStdout,
