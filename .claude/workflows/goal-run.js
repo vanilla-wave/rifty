@@ -31,6 +31,7 @@ const STATE = {
     mapEmpty: { type: 'boolean' }, // map.md ## Items empty
     frontierChild: { type: ['string', 'null'] }, // first open unblocked child in seed order
     pickedChildReady: { type: 'boolean' }, // frontier child already carries ready-verdict:
+    childOrdinaryReview: { type: 'boolean' }, // child's `review: ordinary` line — no checkpoints
     notes: { type: 'string' },
   },
 }
@@ -41,6 +42,7 @@ const PICKUP = {
     done: { type: 'boolean' },
     fork: { type: ['string', 'null'] }, // user-observable fork → manual rifty-refine
     band: { type: 'string' },
+    ordinaryReview: { type: 'boolean' }, // unit outside §Review convergence scope → no checkpoints
   },
 }
 const VERDICT = {
@@ -51,7 +53,7 @@ const VERDICT = {
 
 const state = (label) =>
   agent(
-    `Read-only. Inspect goal ${DIR} and git in this repo. Report facts per the schema: goal.md is status:ready (goalReady); working tree clean (treeClean); ledger tail shows a landed slice without its 're-chart after <slice>' line (rechartDebt); map.md '## Items' is empty (mapEmpty); first frontier child — open, unblocked by blocked_by, in seed order (frontierChild, null if none); that child already carries a 'ready-verdict:' line (pickedChildReady).`,
+    `Read-only. Inspect goal ${DIR} and git in this repo. Report facts per the schema: goal.md is status:ready (goalReady); working tree clean (treeClean); ledger tail shows a landed slice without its 're-chart after <slice>' line (rechartDebt); map.md '## Items' is empty (mapEmpty); first frontier child — open, unblocked by blocked_by, in seed order (frontierChild, null if none); that child already carries a 'ready-verdict:' line (pickedChildReady); that child's doc says 'review: ordinary' (childOrdinaryReview — false when absent or 'checkpoints').`,
     { schema: STATE, label, phase: 'Preflight' },
   )
 
@@ -125,22 +127,36 @@ while (!st.mapEmpty) {
   const child = st.frontierChild
   if (!child) return { stop: 'map non-empty but no frontier child — everything blocked; re-cut needed', notes: st.notes }
 
+  // Checkpoint membership is per unit, decided at pickup — a CI/harness/docs unit
+  // gets one ordinary review, never the checkpoint loop (fault-classes.md §Review convergence).
+  let ordinary = st.childOrdinaryReview === true
   if (!st.pickedChildReady) {
     const p = await agent(
-      `Run PICKUP per ${GOAL_SKILL}/PICKUP.md for goal ${goal}, child ${child}, date ${date}: compile draft→ready per decision-workflow §Backlog readiness, declare the band ledger row, commit. A remaining user-observable fork: return it in 'fork' and change nothing further — never interview. Do NOT run the checkpoint, do NOT implement.`,
+      `Run PICKUP per ${GOAL_SKILL}/PICKUP.md for goal ${goal}, child ${child}, date ${date}: compile draft→ready per decision-workflow §Backlog readiness, declare the band ledger row, decide review membership (\`review: checkpoints|ordinary\`) from the unit's OWN subject per fault-classes.md §Review convergence, commit. Return ordinaryReview=true when the unit is docs/CI/process/tooling/harness. A remaining user-observable fork: return it in 'fork' and change nothing further — never interview. Do NOT run the checkpoint, do NOT implement.`,
       { schema: PICKUP, label: `pickup:${child}`, phase: 'Slices' },
     )
     if (!p?.done) return { stop: p?.fork ? 'user fork — manual rifty-refine' : 'pickup failed', child, fork: p?.fork ?? null }
-    const cr = await checkpoint('Contract+RED', child)
-    if (!cr.pass) return { stop: cr.stop, child, blockers: cr.blockers }
+    ordinary = p.ordinaryReview === true
+    if (!ordinary) {
+      const cr = await checkpoint('Contract+RED', child)
+      if (!cr.pass) return { stop: cr.stop, child, blockers: cr.blockers }
+    }
   }
 
   await agent(
     `Implement the ready unit ${child} of goal ${goal} on this branch, within its declared ledger band: expected RED first, then GREEN; classify every discovery per ${GOAL_SKILL}/SKILL.md run rules (required → reverse-linked draft child, outside → rifty-to-backlog; new drafts carry '## Challenge' per docs/backlog/README.md §Challenge); append ledger lines for decisions/observations. Commit; leave the tree clean; pnpm pr:check must pass.`,
     { label: `implement:${child}`, phase: 'Slices' },
   )
-  const fg = await checkpoint('Final+GREEN', child)
-  if (!fg.pass) return { stop: fg.stop, child, blockers: fg.blockers }
+  if (ordinary) {
+    const r = await agent(
+      `Goal ${goal}, unit ${child} is \`review: ordinary\` (outside §Review convergence scope): run ONE rifty-review pass on this tree, fix every blocker in place, then re-run \`pnpm pr:check\`. No checkpoint, no attempt accounting. Return pass=true when the gate is green and no blocker is left.`,
+      { schema: VERDICT, label: `${child}:ordinary-review`, phase: 'Slices' },
+    )
+    if (!r?.pass) return { stop: `ordinary review left blockers on ${child}`, child, blockers: r?.blockers }
+  } else {
+    const fg = await checkpoint('Final+GREEN', child)
+    if (!fg.pass) return { stop: fg.stop, child, blockers: fg.blockers }
+  }
   await rechart(child)
   landed++
   log(`slice ${child} landed (${landed})`)
