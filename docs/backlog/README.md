@@ -70,11 +70,16 @@ doc); is there a cheaper route to the same value. It names problems explicitly,
 especially **user experience** (which real user scenario benefits, and does it
 materially) and **project direction** (mission/ROADMAP fit, opportunity cost).
 Verdict verbatim: `challenge: <date> — clear` or `challenge: <date> — N
-problems` + one grounded line each. **Advisory** — never blocks capture,
-draft→ready, or a run start; but problems surface verbatim in the completion
-report (§Report), in refine, and in the capturing PR body. Fabricated
-speculative doubt = failure symmetric to missing a rotten premise.
-`backlog:check` enforces presence + verdict line only.
+problems` + one grounded line each. Advisory at capture — never blocks a draft
+landing or a run start. Two premise classes BLOCK `draft→ready`: the claimed
+value does not follow from the proposed work, and a materially cheaper direct
+authority reaches the same value. Each closes by answering it in the doc or by
+a recorded user override (`## Decisions` line naming the override) — never by
+compiling past it; these are the findings a review cannot raise later, because
+by then the work is the premise. Every other problem stays advisory and
+surfaces verbatim in the completion report (§Report), in refine, and in the
+capturing PR body. Fabricated speculative doubt = failure symmetric to missing
+a rotten premise. `backlog:check` enforces presence + verdict line only.
 
 ## Epic fit
 

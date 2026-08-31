@@ -41,7 +41,10 @@ Shape and validation: `docs/backlog/README.md`. Never implement a draft.
    request manual `rifty-refine`; don't interview mid-task.
 4. Otherwise compile the contract: every Parity/Fault row carries a reproducible
    artifact — command + output + version; model memory is not evidence; a
-   prescribed carrier with no spike/ADR fact = frozen assumption. All forks
+   prescribed carrier with no spike/ADR fact = frozen assumption. An open
+   blocking `## Challenge` premise problem (value does not follow / cheaper
+   direct authority — `docs/backlog/README.md` §Challenge) is answered in the
+   doc or overridden by the user on the record; never flip past it. All forks
    resolved + rows evidenced → set `ready`, run `pnpm backlog:check`, continue;
    open fork → step 3; missing/unverifiable evidence → step 1. No «settled with
    caveats». Verification is the unit's Contract+RED checkpoint at pickup (fresh
@@ -95,7 +98,10 @@ ordinary items, single fixes, or process/docs/skill work:
    residual (reverse-linked draft child); outside → `rifty-to-backlog`.
 4. Band trip or Final+GREEN unit residual → re-cut the unit IN PLACE — same
    branch, attempt + checkpoint count carries. Never a fresh start, never
-   narrow the goal or detach required work.
+   narrow the goal or detach required work. Either review-convergence valve
+   (Contract escalation, Convergence — `fault-classes.md`) ends the round loop
+   with a stop to the user, never round N+1; raising a round budget to get past
+   one is not an agent decision.
 5. Unit clean → merge, then RE-CHART: graduate touched fog into draft children;
    re-cut or delete unpicked items the new facts invalidated; append learned
    one-liners to the ledger.
@@ -107,9 +113,10 @@ Show any conflict with the destination against its exact clause.
 
 Claude sessions may execute steps 2–6 deterministically via the `goal-run`
 workflow (`.claude/workflows/goal-run.js`): slice loop until the map is empty,
-then CLOSE; any user-owned decision (fork → `rifty-refine`,
-attempt/slice cap) returns a structured stop — resolve it and re-invoke, done
-stages skip off disk state. The skills stay canon — the script owns only
+then CLOSE; any user-owned decision (fork → `rifty-refine`, a fired
+review-convergence valve, slice cap) returns a structured stop — resolve it and
+re-invoke, done stages skip off disk state. The valves take no budget argument
+by design. The skills stay canon — the script owns only
 order, gates, and bookkeeping checks, its prompts point at the skill files.
 FIT stays an inline skill (interactive: forks).
 
