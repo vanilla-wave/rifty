@@ -22,3 +22,4 @@
 - 2026-09-01 — re-chart after vfs/no-coi-opfs-policy-flip: 0 graduated / 2 invalidated (completed item + covered COI residual deleted); frontier build-loop then dev-hmr, empty fog and out-of-scope unchanged.
 - 2026-09-01 — distribution/no-coi-sandbox-build-loop band 5–6 expected REDs (capability/degradation; live COI↔no-COI build bytes; Vite-8/threaded-WASM boundary; overlapping operation; disposal settlement; host/default-admission preservation green).
 - 2026-09-01 — distribution/no-coi-sandbox-build-loop checkpoint lineage: Contract+RED blocker @ 326f5b70e (2 HOLDS after find 2 / tail 0 / independent adjudication; generic-report scope + false marker oracle re-cut in place).
+- 2026-09-01 — distribution/no-coi-sandbox-build-loop checkpoint lineage: Contract+RED blocker @ 326f5b70e, PASS @ f0066d4d2 (find 2 / tail 0 / adjudication 2 HOLDS / verify 0; 43/43 coverage; unit residuals empty; implementation not started).

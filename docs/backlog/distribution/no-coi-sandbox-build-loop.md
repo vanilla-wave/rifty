@@ -204,6 +204,8 @@ pnpm exec vitest run --project unit \
 
 ## Decisions
 
+ready-verdict: 2026-09-01 — Contract+RED @ f0066d4d2
+
 review: checkpoints — runtime/network/parity public SDK slice.
 
 - No user-owned fork/fog remains: frozen I1/I2/I3/I7/I8/I9 and the recorded

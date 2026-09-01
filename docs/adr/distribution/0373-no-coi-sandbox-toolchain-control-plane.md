@@ -93,3 +93,13 @@ extended RuntimeController correlation owner in the host; no second queue/map.
 - The worker export and public SDK types are additive host wiring.
 - Dev/HMR, restart, preview lifecycle and pending-write marker remain the next
   goal child; `sandbox.exec()` remains its independent broader API decision.
+
+## Correction (2026-09-01 — Contract+RED)
+
+The first accepted pickup draft put the toolchain entry in SDK, kept the
+legacy top-level Worker URL mandatory, promised the report on generic
+sandboxes, and named only Vite/Rolldown's threaded boundary. Contract+RED
+corrected those clauses before implementation: Workbench owns the legal worker
+composition; the toolchain overload needs only its nested URL; generic
+sandboxes retain `capabilities`; direct shared WebAssembly memory reaches the
+same named boundary. The narrow install/run-bin surface is unchanged.

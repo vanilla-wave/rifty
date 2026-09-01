@@ -346,6 +346,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0373 original SDK-owned/dual-URL/every-sandbox/Vite-only clauses | 0373 / note 2026-09-01 | Workbench owns the toolchain entry; nested URL only; report belongs to toolchain sandbox; direct shared WASM uses the named boundary |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
