@@ -39,6 +39,9 @@ export default {
     const ownerFrames = [];
     const ownerMethods = ['log', 'info', 'debug', 'warn', 'error'];
     const ownerConsole = console;
+    const savedDefineProperty = Object.defineProperty;
+    const savedDefineProperties = Object.defineProperties;
+    const savedReflectDefineProperty = Reflect.defineProperty;
     const savedOwnerConsole = Object.fromEntries(
       ownerMethods.map((method) => [method, ownerConsole[method]]),
     );
@@ -53,6 +56,27 @@ export default {
       get: () => ownerConsole,
       set: () => { consoleWrites += 1; },
     });
+    const consoleDescriptorWrites = {
+      defineProperty: 0,
+      defineProperties: 0,
+      reflectDefineProperty: 0,
+    };
+    Object.defineProperty = (target, key, descriptor) => {
+      if (target === globalThis && key === 'console') consoleDescriptorWrites.defineProperty += 1;
+      return savedDefineProperty(target, key, descriptor);
+    };
+    Object.defineProperties = (target, descriptors) => {
+      if (target === globalThis && Object.hasOwn(descriptors, 'console')) {
+        consoleDescriptorWrites.defineProperties += 1;
+      }
+      return savedDefineProperties(target, descriptors);
+    };
+    Reflect.defineProperty = (target, key, descriptor) => {
+      if (target === globalThis && key === 'console') {
+        consoleDescriptorWrites.reflectDefineProperty += 1;
+      }
+      return savedReflectDefineProperty(target, key, descriptor);
+    };
     const child = spawn('node', ['child.js'], { stdio: 'pipe' });
     let stdout = '';
     let stderr = '';
@@ -64,8 +88,11 @@ export default {
     });
     child.on('close', (code, signal) => {
       lifecycle.push('close:' + code + '/' + signal);
+      Object.defineProperty = savedDefineProperty;
+      Object.defineProperties = savedDefineProperties;
+      Reflect.defineProperty = savedReflectDefineProperty;
       if (savedConsoleDescriptor) {
-        Object.defineProperty(globalThis, 'console', savedConsoleDescriptor);
+        savedDefineProperty(globalThis, 'console', savedConsoleDescriptor);
       } else {
         delete globalThis.console;
       }
@@ -85,6 +112,7 @@ export default {
         lifecycle,
         ownerFrames,
         consoleWrites,
+        consoleDescriptorWrites,
         descriptorRestored,
       }));
     });
@@ -93,5 +121,7 @@ export default {
     '{"stdout":"base-crypto Crypto\\nL { a: 1 }\\nI\\nD\\nO1|O2\\nO3\\nidentity true true true function true true\\n",' +
     '"stderr":"R1|W\\nE\\nR2\\n",' +
     '"lifecycle":["exit:0/null","close:0/null"],"ownerFrames":[],' +
-    '"consoleWrites":0,"descriptorRestored":true}',
+    '"consoleWrites":0,"consoleDescriptorWrites":{' +
+    '"defineProperty":0,"defineProperties":0,"reflectDefineProperty":0},' +
+    '"descriptorRestored":true}',
 } satisfies ParityCase;
