@@ -1,27 +1,43 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
 why: the real-Vite composition (esbuild-wasm adapter, bin execution, npm/shell wiring) exists only behind workbench COI gates; the sandbox tier needs the same loop composed in the single worker, a capability report making every gap loud, and a CI lane that serves NO COOP/COEP — today zero browser lanes do
 user_story: As an agent platform, I want createSandbox → install → vite build → dist on a headerless page with a report naming what throws/degrades, but today the composition throws at the workbench gate and no lane proves any of it
-sources: [ADR-0316, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
-code: [packages/rifty/src/sandbox.ts, packages/workbench/src/workers/vite-esbuild-runtime.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/os.ts]
+sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0373, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
+code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/workbench/src/workers/vite-esbuild-runtime.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/os.ts]
 ---
 
 ## Context
 
-Build spike proved the loop end-to-end in real no-COI Chromium (78-pkg install, vite build,
-byte-identical artifacts) but via throwaway harness hacks (deep workbench-internal imports,
-manual global install). This item is the honest composition: sandbox-surface wiring of the
-esbuild adapter + `.bin/vite` execution via runNodeEntry, the loud capability gate/report
-(enumerates working / degraded-warn / throwing: execSync throw, spawn same-realm warn-once,
-worker_threads polyfill warn, cpus→1, Vite-8/Rolldown loud named error — never a wasm crash),
-and the no-COI Playwright lane (page served without COOP/COEP) that becomes the acceptance
-vehicle for the whole epic. Degradation shape is user-decided (epic goal.md Decisions);
-fidelity rule: no silent lie — the report is the single place an embedder/agent reads the
-tier contract from.
+The durable spike proved the loop, but its worker deep-imported Workbench
+internals and installed globals by hand. Current source still has only the
+generic `createSandbox` eval/fs protocol; the real install + adapter + bin
+composition lives in Worker-only Workbench code. ADR-0373 selects the narrow
+product seam: explicit `toolchain:true`, one SDK-owned Worker, manifest install
+and run-to-completion `.bin` execution. It deliberately does not absorb the
+broader `sandbox.exec()` or the next child's dev/preview lifecycle.
+
+Current-source evidence C148-BUILD, source/tree
+`1519229f3a837abf0d285be40222aa6774149983` /
+`3ef946662dddac42d24060d46c28c8f252412f81`:
+
+```sh
+node tools/perf/child-fs.mjs --runs 1 --port 5397 \
+  --out /private/tmp/no-coi-build-loop-current-tree.json
+# Chrome 148.0.7778.96, Playwright 1.60.0, Node 24.16.0, pnpm 11.5.2
+# scenario 559e5e226348c484d542f197b442d3826e11d9e19c206d028c978d96a4595d4c
+# deps de9e65b1ca98200f8be9b40080b3d5ac871c962786b33665d564b3da68d4b0bc
+# product-coi: real npm install + .bin/vite, exit 0, 2180 modules
+# in-realm: real npm install + .bin/vite, exit 0, 2180 modules
+```
+
+This re-verifies the real current carriers and spike premise. The lines use
+different edit markers, so their hashed JS names differ; they are not claimed
+as byte parity. The RED carrier uses one frozen project/marker in both live
+products and compares the complete `dist/` path set, bytes and SHA-256.
 
 ## Challenge
 
@@ -30,3 +46,169 @@ challenge: 2026-08-28 — 1 problem
 
 <!-- Post-challenge edit: the shim probe is now a hard PICKUP prerequisite of this slice
      (map item 4); a value-collapsing probe result is a re-fit trigger. -->
+
+Disposition: closed before this PICKUP. The 2026-08-31 probe says the shim
+works, but the user-owned discriminator is now frozen goal I9: it changes the
+whole host document's policy and requires reload. `map.md` has empty fog and
+records the route out of scope; no premise problem remains open here.
+
+## User scenario
+
+An existing app opens its ordinary same-origin SDK page from an opener. The
+page response has no COOP/COEP. It explicitly calls
+`createSandbox({requireCrossOriginIsolation:false, toolchain:true, workerUrl})`,
+writes the canonical react-class project, installs from the configured registry,
+and runs `/project/node_modules/.bin/vite build`. It reads the complete `dist/`
+tree through the same sandbox and gets the exact bytes the current COI product
+emits for the identical project. The app document, opener and a cross-origin
+image that needs no CORS/CORP keep their original behavior throughout.
+
+## Reference contract
+
+- Browser/product oracle: C148-BUILD above plus the frozen live scenario from
+  `tools/perf/child-fs/scenario.mjs`: exact Vite `7.3.6`, React `19.2.8`,
+  React DOM `19.2.8`, Gravity UI `7.48.1`, Gravity icons `2.22.0`, date-fns
+  `4.4.0` (Express remains the existing scenario's non-build preservation
+  dependency). The Contract+RED carrier runs both products with one marker.
+- Vite/bin authority: ADR-0137/0174 — installed `node_modules/.bin/vite` and
+  `runNodeEntry(..., bin:true)`, never a curated Vite callback.
+- Esbuild authority: ADR-0316 — registry-attested `esbuild-wasm@0.28.0`; no
+  preview1/vendored second provider.
+- Public composition: ADR-0071/0131/0373 — explicit host Worker URL, one Worker
+  VFS authority, narrow install/run-bin control plane.
+- Platform boundary: headerless Chrome exposes no SharedArrayBuffer. Vite 8's
+  installed Rolldown WASI binding needs pthread shared memory; the no-COI
+  outcome is the named `toolchain.threaded-wasm` error, not a wasm crash.
+
+## Acceptance
+
+1. A navigation response served by the dedicated no-COI Vite config has no
+   COOP/COEP. Before sandbox boot, during install, during build and after build,
+   the same document/time-origin reports `crossOriginIsolated===false` and
+   `typeof SharedArrayBuffer==='undefined'`; no bootstrap reload occurs.
+2. The host is opened from an existing same-origin app. Its live
+   `window.opener` message round-trip and a no-CORS/no-CORP image from the same
+   server's alternate host name work before/during/after exactly as at entry.
+3. `createSandbox` admits no-COI only through the explicit existing
+   `requireCrossOriginIsolation:false`; default admission still throws
+   `COI_REQUIRED_MESSAGE`. `toolchain:true` handshakes the SDK toolchain Worker
+   before returning and exposes the ADR-0373 install/run-bin methods over the
+   same `runtime`/`fs` Worker.
+4. The immutable report contains exactly these no-COI feature outcomes:
+   `fs`, `npm.install`, `node_modules.bin`, `child_process.spawn.stdio` working;
+   `child_process.spawn`, `worker_threads.Worker`, `os.parallelism`
+   degraded with explicit warnings (`os.parallelism.value=1`); and
+   `child_process.execSync`, `toolchain.threaded-wasm`, `toolchain.dev-hmr`
+   throwing with named `NotImplementedError` features.
+5. Two same-realm spawns warn exactly once, both children retain landed
+   console→stdout/stderr pipe behavior, and both settle in order.
+   `worker_threads.Worker` retains its own once-only same-realm warning.
+   `os.cpus().length===availableParallelism()===1`. `execSync` throws
+   `NotImplementedError` with `feature==='child_process.execSync'`.
+6. From the frozen project manifest, the real npm-client installs every exact
+   dependency version and the admitted `esbuild-wasm@0.28.0` runtime. The
+   executed entry is exactly `/project/node_modules/.bin/vite`, args exactly
+   `['build']`, exit exactly 0, with exactly one `2180 modules transformed`
+   line and no curated/deep-import execution path.
+7. The live no-COI and live COI products receive byte-identical project files
+   and marker. Their complete normalized `dist/` relative-path sets are equal;
+   every paired file has equal length, equal bytes and equal SHA-256. The JS
+   contains the marker exactly once; equality is not count-only or filename-only.
+8. A real `vite@8.0.16` install followed by its installed `.bin/vite build` in
+   the no-COI sandbox rejects before Rolldown pthread startup with
+   `NotImplementedError`, `feature==='toolchain.threaded-wasm'`, and a message
+   naming Vite 8, Rolldown/WASI pthreads and COI/SharedArrayBuffer. It writes no
+   successful `dist/` claim.
+9. Toolchain input is validated once before mutation. A malformed cwd/bin/args
+   rejects loudly; a second install/run overlapping one admitted operation
+   rejects immediately as `SandboxToolchainBusyError` rather than racing or
+   queuing. Dispose/Worker death rejects the admitted promise; none hangs.
+10. `pnpm test:no-coi` is a committed Playwright Chromium lane with its own
+    headerless server config/port and CI job. It runs the public SDK path and
+    live COI oracle; it is never a route-intercept header simulation and never
+    boots the Playground app no-COI.
+
+## Parity cases
+
+1. Current COI product vs no-COI toolchain Worker: one project/dependency
+   digest, exact installed versions, real `.bin/vite`, exit/module count, full
+   `dist` paths+bytes+SHA. Artifact: C148-BUILD establishes both current
+   compositions; `pnpm test:no-coi -g "build parity.*designed RED"` is the
+   committed differential and current-tree RED.
+2. Host document lifecycle: raw response headers + continuous page-realm
+   sampling + stable time origin/opener/subresource. Artifact:
+   `pnpm test:no-coi -g preservation` is green before implementation; the full
+   build carrier repeats the controls around each phase.
+3. No-COI Node surfaces: spawn stdio/warn cardinality, worker_threads warning,
+   CPU count and execSync feature. Artifact: Node v24.16.0 behavior is the
+   external semantic baseline where applicable; the same real sandbox Worker
+   carrier `pnpm test:no-coi -g "capability.*designed RED"` is the RED target.
+4. Vite 8/Rolldown: exact installed `vite@8.0.16`, real `.bin` request, named
+   pre-pthread rejection. Artifact: current COI product proof is
+   `tests/browser-unit/esbuild-vite-contract.spec.ts`; no-COI RED target is
+   `pnpm test:no-coi -g "threaded-WASM.*designed RED"`.
+5. Default COI admission remains loud; generic createSandbox no-COI eval/fs
+   keeps working when explicitly allowed. Artifact:
+   `pnpm exec vitest run --project unit packages/rifty/src/sandbox.test.ts
+   --reporter=dot` and the no-COI preservation carrier.
+6. Network/admission inheritance: bounded registry reads, required fetch
+   failures, corrupt shadow bytes and concurrent same-key acquisition stay
+   loud/deduplicated. Artifact: focused npm-client fault command recorded in
+   Evidence C148-NPM below; the SDK layer adds no cache/retry authority.
+
+## Fault matrix
+
+| axis × operation | honest outcome | reproducible artifact / fault target |
+|---|---|---|
+| `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; handshake mismatch named | Acceptance 3-4; no-COI preservation + capability RED |
+| `corrupt-input` + `observable-order` × install/run-bin request | exact fields validated before VFS/process mutation; ordered output precedes one terminal result | Acceptance 5-6, 9; capability/build RED |
+| `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry/shadow acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
+| `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0373; `toolchain overlap` designed RED |
+| Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
+| `false-fallback` × Vite 8/threaded WASM | named pre-pthread throw, no generic wasm crash or successful dist | Acceptance/Parity 8/4; threaded-WASM RED |
+| `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
+| `observable-order` × host lifecycle | entry behavior sampled before/during/after; stable time origin proves no reload | Acceptance/Parity 1-2/2; preservation control |
+
+Evidence C148-NPM (Node 24.16.0, Vitest 2.1.9; command output recorded at
+pickup after the RED carrier lands):
+
+```sh
+pnpm exec vitest run --project unit \
+  packages/npm-client/src/eddy-bundle-stream.test.ts \
+  packages/npm-client/src/internal/shadow/source.fault.test.ts \
+  packages/npm-client/src/installer-concurrency.test.ts --reporter=dot
+```
+
+## Out of scope
+
+- Vite dev/HMR, SW preview binding, restart/death event and pending-write boot
+  marker remain `distribution/no-coi-dev-hmr-restore`, blocked by this unit.
+  The report says `toolchain.dev-hmr` throwing until that child lands.
+- `sandbox.exec()` streaming, shell grammar, stdin, cancellation and normalized
+  preview URL remain `distribution/public-api-ai-agent-exec-preview`.
+- `spawnSync`/execSync implementation, kernel ring-less spawn, real parallel
+  worker_threads and arbitrary threaded-WASM emulation remain out. Gaps stay
+  report-visible or named throws.
+- No Playground app no-COI mode, no SW-delivered COI, no page reload, no header
+  mutation, no third-party iframe tier.
+- No dev/HMR acceptance, restart, forced-kill durability or workspace journal
+  is smuggled into this build-only unit.
+
+## Decisions
+
+review: checkpoints — runtime/network/parity public SDK slice.
+
+- No user-owned fork/fog remains: frozen I1/I2/I3/I7/I8/I9 and the recorded
+  user decisions fix the tier, warning shape, CPU value, host posture and loud
+  boundaries. API/protocol placement was agent-owned and is settled by
+  ADR-0373.
+- Challenge blocker closed: the SW-COI probe ran and the frozen user decision
+  rejects it by I9; the stale draft comment is superseded by the disposition
+  above.
+- Expected RED batch: capability/degradation; real build differential;
+  threaded-WASM boundary; overlap; disposal settlement. Host/default-admission
+  and live COI oracle are green preservation controls.
+- No production implementation has started. Committed RED imports public SDK
+  code and drives real Chromium, Workers, npm tarballs, installed bins and the
+  current COI product; only network stall/image endpoints are external-boundary
+  fixtures.

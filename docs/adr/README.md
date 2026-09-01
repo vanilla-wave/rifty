@@ -301,6 +301,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0311 | Registry-owned esbuild runtime removes the host asset URL |
 | 0319 | Preserve admitted mutations across project close |
 | 0341 | Project terminal runs expose authoritative shell status |
+| 0373 | No-COI sandbox toolchain control plane |
 
 ## Superseded (removed)
 
