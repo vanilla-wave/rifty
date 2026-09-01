@@ -898,6 +898,12 @@ async function assertTarballInstall(consumerRoot, tarballs) {
     if (workspaceSpecs.length > 0) {
       throw new Error(`Packed ${name} retained workspace dependencies`);
     }
+    if (
+      name.startsWith('@riftydev/') &&
+      (await stat(resolve(installedRoot, 'src')).catch(() => null)) !== null
+    ) {
+      throw new Error(`Packed ${name} unexpectedly shipped workspace sources`);
+    }
   }
 
   const installedWorkbenchRoot = resolve(nodeModulesRoot, '@riftydev/workbench');
@@ -908,9 +914,6 @@ async function assertTarballInstall(consumerRoot, tarballs) {
       throw new Error(`Packed Workbench export ${specifier} does not target dist`);
     }
     await stat(resolve(installedWorkbenchRoot, target));
-  }
-  if ((await stat(resolve(installedWorkbenchRoot, 'src')).catch(() => null)) !== null) {
-    throw new Error('Packed Workbench unexpectedly shipped workspace sources');
   }
   await assertFirstPartyImportsStayExternal(installedWorkbenchRoot, installedWorkbench);
 
@@ -1230,15 +1233,29 @@ async function main() {
       env: { npm_config_cache: npmCacheRoot, npm_config_offline: 'true' },
     });
     await assertTarballInstall(consumerRoot, tarballs);
-    await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
-    await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
     if (surfaceOnly) {
+      const failures = [];
+      for (const [script, timeoutMs] of [
+        ['typecheck', 180_000],
+        ['build', 300_000],
+      ]) {
+        try {
+          await run('npm', ['run', script], { cwd: consumerRoot, timeoutMs });
+        } catch (error) {
+          failures.push(error instanceof Error ? error.stack : String(error));
+        }
+      }
+      if (failures.length > 0) {
+        throw new Error(`Packed toolchain surface failures:\n\n${failures.join('\n\n')}`);
+      }
       await stat(resolve(consumerRoot, 'dist/main.js'));
       await stat(resolve(consumerRoot, 'dist/worker.js'));
       console.log(
         `Packed toolchain surface passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, strict TypeScript + generic SDK/Worker graphs`,
       );
     } else {
+      await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
+      await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
       await stat(resolve(consumerRoot, 'dist/index.html'));
       const registryPackages = await browserRegistryPackages({
         packageRoot: browserPackageRoot,

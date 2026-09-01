@@ -18,11 +18,11 @@ void toolchain.install({ cwd: 1, registryUrl: 'https://registry.invalid' });
 
 // @ts-expect-error binPath is required
 void toolchain.runBin({ cwd: '/project', args: [] });
-// @ts-expect-error runBin rejects extra fields
 void toolchain.runBin({
   cwd: '/project',
   binPath: '/project/node_modules/.bin/arbitrary-tool',
   args: [],
+  // @ts-expect-error runBin rejects the exact extra queue field
   queue: true,
 });
 // @ts-expect-error args is a readonly string array
@@ -41,10 +41,10 @@ void missingRunBin;
 // @ts-expect-error install is required
 const missingInstall: SandboxToolchain = { runBin: async () => ({ exitCode: 0 }) };
 void missingInstall;
-// @ts-expect-error public toolchain rejects extra methods
 const extraMethod: SandboxToolchain = {
   install: async () => {},
   runBin: async () => ({ exitCode: 0 }),
+  // @ts-expect-error SandboxToolchain rejects the exact extra reconnect method
   reconnect: async () => {},
 };
 void extraMethod;

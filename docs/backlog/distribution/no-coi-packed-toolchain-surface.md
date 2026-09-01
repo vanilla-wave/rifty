@@ -107,8 +107,8 @@ installed-bin run control surface; invalid public shapes fail compilation.
    generic Worker entry imports
    `@riftydev/workbench/no-coi-toolchain-worker`. Both JavaScript graphs bundle
    from installed tarballs only. Every first-party import resolves through a
-   declared packed export; the SDK public root remains closed and no consumer
-   reaches package source.
+   declared packed export; the runtime public root remains closed and no
+   consumer reaches package source.
 3. The same packed consumer passes TypeScript 5.9.3 with `strict:true` and
    `skipLibCheck:false`. The complete first-party declaration graph resolves;
    no missing package subpath or declaration error is skipped.
@@ -128,12 +128,14 @@ installed-bin run control surface; invalid public shapes fail compilation.
 
 ## Parity cases
 
-1. Workspace source graph vs packed graph: the same generic SDK and Workbench
-   Worker entrypoints build from workspace packages, then from offline-installed
-   tarballs. Artifact: `pnpm test:packed-toolchain-surface` is current-tree RED
-   at the packed Worker import because runtime `./internal` is not published.
-2. Workspace public types vs packed declarations: the same strict positive and
-   exact-negative TypeScript fixture checks both graphs with
+1. Packed JavaScript graph: real workspace publish entries build, become
+   tarballs, install offline, then the generic SDK root and Workbench Worker
+   entries bundle from that installed graph. Artifact:
+   `pnpm test:packed-toolchain-surface` aggregates the strict type and JavaScript
+   branches; both are current-tree RED because runtime `./internal` is not
+   published.
+2. Packed public declarations: one strict positive and exact-negative
+   TypeScript fixture checks the offline-installed declaration graph with
    `skipLibCheck:false`. Artifact: the packed command above is the RED target;
    `pnpm --filter @riftydev/sdk typecheck` and
    `pnpm --filter @riftydev/workbench typecheck` are preservation controls.
@@ -156,12 +158,14 @@ esbuild 0.28.0):
 pnpm test:packed-toolchain-surface
 # real workspace closure built; 15 first-party packages packed; external
 # dependency closure packed; offline npm install completed with no links.
-# RED at strict tsc:
+# RED aggregates strict tsc and generic JS bundle:
 # @riftydev/io dist/index.d.ts TS2417 Duplex static toWeb conflict
 # @riftydev/kernel worker-entry declaration TS2304 DedicatedWorkerGlobalScope
 # @riftydev/sdk dist/index.d.ts TS2307 @riftydev/runtime-js/internal missing
 # ten exact-negative @ts-expect-error assertions unused because the unresolved
 # SandboxToolchain declaration lost its discriminating shape
+# esbuild rejects @riftydev/runtime-js/internal from both packed SDK root and
+# packed Workbench no-COI Worker graphs
 ```
 
 ## Out of scope
@@ -196,3 +200,8 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
 - Expected RED batch: packed SDK root JS graph; packed Workbench Worker JS
   graph; strict declaration graph; exact negative public shapes. Existing
   packed evidence already proves the missing runtime internal subpath.
+- `contract-red: 2026-09-01 — blocker @ 65f581bc0`
+- Contract+RED find 3 blockers + fresh tail 1 new blocker; independent
+  adjudication 4 HOLDS. One re-cut batch fixes command reachability and exact
+  negative directives, and removes self-imposed workspace-consumer parity;
+  packed Acceptance 1-6 is unchanged.
