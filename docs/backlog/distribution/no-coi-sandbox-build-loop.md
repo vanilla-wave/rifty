@@ -6,7 +6,7 @@ created: 2026-08-28
 epic: no-coi-sandbox-tier
 why: the real-Vite composition (esbuild-wasm adapter, bin execution, npm/shell wiring) exists only behind workbench COI gates; the sandbox tier needs the same loop composed in the single worker, a capability report making every gap loud, and a CI lane that serves NO COOP/COEP — today zero browser lanes do
 user_story: As an agent platform, I want createSandbox → install → vite build → dist on a headerless page with a report naming what throws/degrades, but today the composition throws at the workbench gate and no lane proves any of it
-sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0374, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
+sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
 code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/workbench/src/workers/vite-esbuild-runtime.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/os.ts]
 ---
 
@@ -15,7 +15,7 @@ code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/
 The durable spike proved the loop, but its worker deep-imported Workbench
 internals and installed globals by hand. Current source still has only the
 generic `createSandbox` eval/fs protocol; the real install + adapter + bin
-composition lives in Worker-only Workbench code. ADR-0374 selects the narrow
+composition lives in Worker-only Workbench code. ADR-0375 selects the narrow
 product seam: explicit `toolchain:{workerUrl}`, one Workbench-owned Worker, manifest install
 and run-to-completion `.bin` execution. It deliberately does not absorb the
 broader `sandbox.exec()` or the next child's dev/preview lifecycle.
@@ -50,7 +50,7 @@ bytes, bounded reads, loud required-fetch/corruption failures and deduplicated
 same-key acquisition. The carrier/authority fork must be recompiled and
 re-reviewed; it cannot ride the old verdict.
 
-Recompiled resolution: ADR-0374 grafts ADR-0371's installed registry-twin
+Recompiled resolution: ADR-0375 grafts ADR-0371's installed registry-twin
 authority; Evidence C148-NPM uses the 51-test registry-twin carrier. Acceptance
 and user-observable parity remain unchanged and are strengthened below by the
 three Final+GREEN blocker carriers.
@@ -86,7 +86,7 @@ lifecycle.
 3. `createSandbox` admits no-COI only through the explicit existing
    `requireCrossOriginIsolation:false`; default admission still throws
    `COI_REQUIRED_MESSAGE`. `toolchain:{workerUrl}` handshakes the SDK toolchain Worker
-   before returning and exposes the ADR-0374 install/run-bin methods over the
+   before returning and exposes the ADR-0375 install/run-bin methods over the
    same `runtime`/`fs` Worker. A valid backend paired with any mismatched
    protocol rejects `NotImplementedError('sandbox.toolchain.worker')` and
    terminates that Worker; it is never ignored or later admitted. Real packed
@@ -310,7 +310,7 @@ behavior throughout.
 3. `createSandbox` admits no-COI only through the explicit existing
    `requireCrossOriginIsolation:false`; default admission still throws
    `COI_REQUIRED_MESSAGE`. `toolchain:{workerUrl}` handshakes the SDK toolchain Worker
-   before returning and exposes the ADR-0374 install/run-bin methods over the
+   before returning and exposes the ADR-0375 install/run-bin methods over the
    same `runtime`/`fs` Worker. A valid backend paired with any mismatched
    protocol rejects `NotImplementedError('sandbox.toolchain.worker')` and
    terminates that Worker; it is never ignored or later admitted. The authority
@@ -406,7 +406,7 @@ behavior throughout.
 | `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; valid-backend protocol mismatch named + Worker terminated | Acceptance 3-4; Evidence R5-HANDSHAKE; no-COI preservation + capability RED |
 | `corrupt-input` + `observable-order` × install/run-bin request | exact fields validated before VFS/process mutation; arbitrary admitted bin identity does not change policy; ordered output precedes one terminal result | Acceptance 3, 5-6, 9; capability/build/generic-bin carriers |
 | `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry-twin acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
-| `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0374; `toolchain overlap` designed RED |
+| `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0375; `toolchain overlap` designed RED |
 | Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
 | `false-fallback` × threaded WASM | real Vite 8 and literal/WebIDL-truthy shared-memory construction reach the same generic named boundary; an identity-equivalent bin without a shared-memory request runs; no generic wasm crash or successful dist | Acceptance/Parity 8/4; Evidence R5-REALM/R6-IDENTITY; threaded-WASM RED |
 | `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
@@ -496,7 +496,7 @@ review: checkpoints — runtime/network/parity public SDK slice.
 - No user-owned fork/fog remains: frozen I1/I2/I3/I7/I8/I9 and the recorded
   user decisions fix the tier, warning shape, CPU value, host posture and loud
   boundaries. API/protocol placement was agent-owned and is settled by
-  ADR-0374.
+  ADR-0375.
 - Challenge blocker closed: the SW-COI probe ran and the frozen user decision
   rejects it by I9; the stale draft comment is superseded by the disposition
   above.

@@ -4,6 +4,10 @@
 
 ### Changed
 
+- The no-COI Worker installs exact manifests and runs admitted installed bins
+  without Vite identity/version/path/lifecycle policy. Generic installed-tree
+  finalization is isolated from the existing Vite project finalizer.
+
 - Owner child launchers call `reservation.commit` /
   `abortBeforeSpawn` / `abortAfterChildSettlement` directly. The three
   `owner-child-admission` wrappers degenerated into pass-throughs once ADR-0371
@@ -39,10 +43,10 @@
 
 ### Added
 
-- **No-COI SDK toolchain Worker (ADR-0374).** One Worker owns runtime/VFS, real
-  npm-client + installed registry-twin esbuild admission, build-only installed
-  `.bin` execution, loud overlap/death/clean-close settlement, and named
-  shared-WASM/Vite-8 boundaries. Dev/serve/preview and build-watch stay loud.
+- **No-COI SDK toolchain Worker (ADR-0375).** One Worker owns runtime/VFS, real
+  npm-client + installed registry-twin esbuild admission, installed `.bin`
+  execution, loud overlap/death/clean-close settlement, and the generic
+  shared-WASM boundary.
 
 - **Owner-authoritative command completion and direct VFS entries (ADR-0362).**
   `ProjectTerminal.complete()` uses a bounded, correlated PTY request against

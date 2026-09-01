@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
 
-import { NotImplementedError } from '@riftydev/io';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
@@ -19,12 +18,8 @@ import {
 } from '@riftydev/runtime-js/internal';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import { finalizeBuildPackageInstallFiles } from './package-install-finalizer.ts';
-import {
-  prepareViteBuildCli,
-  viteCliPreparationFromArgs,
-  viteCliRequiresResidentLifecycle,
-} from './vite-cli-prep.ts';
+import { declaredGapCause } from './declared-gap-cause.ts';
+import { finalizeGenericPackageInstallFiles } from './package-install-generic-finalizer.ts';
 import {
   type WorkbenchRuntimeBinding,
   activateWorkbenchRuntimeAdapters,
@@ -74,7 +69,7 @@ async function installManifest(input: Extract<ToolchainRequest, { op: 'install' 
     cwd: input.cwd,
     registry,
   });
-  await finalizeBuildPackageInstallFiles({ root: input.cwd });
+  finalizeGenericPackageInstallFiles({ root: input.cwd });
   await activateInstallRuntime(input.cwd, result);
   await flushMirror();
 }
@@ -91,44 +86,9 @@ function processExitCode(error: unknown): number | null {
     : null;
 }
 
-function viteVersion(cwd: string): string | null {
-  const path = `${cwd}/node_modules/vite/package.json`;
-  const fs = syncMirror();
-  if (!fs.existsSync(path)) return null;
-  const manifest = JSON.parse(new TextDecoder().decode(fs.readFileBytesSync(path))) as {
-    readonly name?: unknown;
-    readonly version?: unknown;
-  };
-  return manifest.name === 'vite' && typeof manifest.version === 'string' ? manifest.version : null;
-}
-
-function rejectThreadedVite(cwd: string, binPath: string): void {
-  if (!binPath.endsWith('/node_modules/.bin/vite')) return;
-  const version = viteVersion(cwd);
-  if (version === null || !/^8\./u.test(version) || globalThis.crossOriginIsolated === true) return;
-  throw new NotImplementedError(
-    'toolchain.threaded-wasm',
-    `Vite ${version} uses Rolldown's WASI pthread runtime, which requires cross-origin isolation and SharedArrayBuffer.`,
-  );
-}
-
 async function runInstalledBin(
   input: Extract<ToolchainRequest, { op: 'run-bin' }>['input'],
 ): Promise<{ readonly exitCode: number }> {
-  const preparation = viteCliPreparationFromArgs({
-    root: input.cwd,
-    args: input.args,
-    executedBinPath: input.binPath,
-  });
-  if (preparation !== null && viteCliRequiresResidentLifecycle(input.args)) {
-    throw new NotImplementedError(
-      'toolchain.dev-hmr',
-      'resident Vite dev/serve/preview/build-watch lifecycle is unavailable in build-only toolchain mode',
-    );
-  }
-  rejectThreadedVite(input.cwd, input.binPath);
-  if (preparation !== null) await prepareViteBuildCli(preparation);
-
   const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
   process.argv = ['node', input.binPath, ...input.args];
   process.exitCode = undefined;
@@ -145,8 +105,8 @@ async function runInstalledBin(
     if (typeof process.exitCode === 'number') exitCode = process.exitCode;
   } catch (error) {
     const signalled = processExitCode(error);
-    if (signalled === null) throw error;
-    exitCode = signalled;
+    if (signalled !== null) exitCode = signalled;
+    else throw declaredGapCause(error) ?? error;
   }
   await flushMirror();
   return { exitCode };

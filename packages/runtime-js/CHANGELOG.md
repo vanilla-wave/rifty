@@ -4,7 +4,7 @@
 
 ### Added
 
-- Runtime Worker protocol carries the ADR-0374 toolchain handshake and
+- Runtime Worker protocol carries the ADR-0375 toolchain handshake and
   install/run-bin results through its existing correlation owner, including
   exact protocol/backend decoding and Worker crash/disposal/clean-close
   settlement.
@@ -79,6 +79,10 @@
   environment field.
 
 ### Fixed
+
+- The toolchain realm applies WebIDL ToBoolean to `WebAssembly.Memory`'s
+  `shared` descriptor through its lexical guard, so truthy numbers/strings join
+  literal true without replacing the Worker-global constructor.
 
 - Toolchain peer clean-close, dispose and crash settle pending eval, fs and
   toolchain calls through one owner. CJS, ESM, REPL and installed bins reject

@@ -90,10 +90,10 @@ const SPEC = {
       // the genuine execSync client without re-implementing the SAB gate.
       './builtins/child_process': './src/builtins/child_process.ts',
       './builtins/process-identity': './src/builtins/process-identity.ts',
-      // node:os / node:path faithful shims (ADR-0026) exposed so a Vite bundle
+      // node:os / node:path faithful shims (ADR-0026) exposed so a browser bundle
       // containing a heavy node-targeting dep (the `typescript` engine in the
       // ts-language-service worker, ADR-0166) can ALIAS the bare `os`/`path`
-      // specifiers to the REAL rifty shims instead of Vite's empty browser stub
+      // specifiers to the REAL rifty shims instead of an empty browser stub
       // (`os.platform is not a function` at the dep's module-eval). Not a new
       // mechanism — the same modules already back the `require('os')` registry.
       './builtins/os': './src/builtins/os.ts',

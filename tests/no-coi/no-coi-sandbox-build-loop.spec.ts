@@ -941,11 +941,15 @@ test('installed-bin admission ignores Vite identity without a shared-memory requ
       const root = '/identity-decoy';
       await sandbox.fs.writeFile(
         `${root}/node_modules/vite/package.json`,
-        JSON.stringify({ name: 'vite', version: '8.0.16' }),
+        JSON.stringify({ name: 'vite', version: '8.0.16', type: 'module' }),
+      );
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/vite/bin/vite.js`,
+        "console.log('__RIFTY_GENERIC_BIN__identity-only')\n",
       );
       await sandbox.fs.writeFile(
         `${root}/node_modules/.bin/vite`,
-        "#!/usr/bin/env node\nconsole.log('__RIFTY_GENERIC_BIN__identity-only')\n",
+        "#!/usr/bin/env node\nimport('../vite/bin/vite.js');\n",
       );
       const output: string[] = [];
       const off = sandbox.runtime.on((event) => {
@@ -1139,48 +1143,6 @@ test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descripto
   }
 });
 
-test('build-only toolchain rejects every resident Vite mode by name', async ({ page }) => {
-  const { host } = await openHeaderlessHost(page);
-  try {
-    await createToolchainSandbox(host);
-    const outcomes = await host.evaluate(async () => {
-      const sandbox = (
-        globalThis as typeof globalThis & {
-          __riftyNoCoiSandbox: {
-            toolchain: { runBin(input: Record<string, unknown>): Promise<unknown> };
-          };
-        }
-      ).__riftyNoCoiSandbox;
-      const forms = [[], ['dev'], ['serve'], ['preview'], ['build', '--watch'], ['build', '-w']];
-      const failures: Array<{ args: string[]; name: string; feature?: string }> = [];
-      for (const args of forms) {
-        try {
-          await sandbox.toolchain.runBin({
-            cwd: '/resident',
-            binPath: '/resident/node_modules/.bin/vite',
-            args,
-          });
-          failures.push({ args, name: 'resolved' });
-        } catch (error) {
-          const inspected = error as Error & { feature?: string };
-          failures.push({ args, name: inspected.name, feature: inspected.feature });
-        }
-      }
-      return failures;
-    });
-    expect(outcomes).toEqual(
-      [[], ['dev'], ['serve'], ['preview'], ['build', '--watch'], ['build', '-w']].map((args) => ({
-        args,
-        name: 'NotImplementedError',
-        feature: 'toolchain.dev-hmr',
-      })),
-    );
-  } finally {
-    await disposeSandbox(host);
-    await host.close();
-  }
-});
-
 test('runBin uses the requested installed-bin path as its only authority', async ({ page }) => {
   const { host } = await openHeaderlessHost(page);
   try {
@@ -1352,6 +1314,10 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
               writeFile(path: string, value: string): Promise<void>;
               readFile(path: string, encoding: 'utf8'): Promise<string>;
             };
+            runtime: {
+              eval(source: string): Promise<{ ok: boolean }>;
+              on(fn: (event: { type: string; chunk?: string }) => void): () => void;
+            };
             toolchain: {
               install(input: Record<string, unknown>): Promise<void>;
               runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
@@ -1360,13 +1326,18 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
         }
       ).__riftyNoCoiSandbox;
       const root = '/vite8';
+      const selectedWasi = await sandbox.runtime.eval("process.env.NAPI_RS_FORCE_WASI = 'error'");
+      if (!selectedWasi.ok) throw new Error('Vite 8 boundary fixture could not select WASI');
       await sandbox.fs.writeFile(
         `${root}/package.json`,
         JSON.stringify({
           name: 'vite8-boundary',
           private: true,
           type: 'module',
-          dependencies: { vite: '8.0.16' },
+          dependencies: {
+            vite: '8.0.16',
+            '@rolldown/binding-wasm32-wasi': '1.0.3',
+          },
         }),
       );
       await sandbox.fs.writeFile(
@@ -1375,15 +1346,48 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
       );
       await sandbox.fs.writeFile(`${root}/src.js`, "document.body.textContent='vite8';\n");
       await sandbox.toolchain.install({ cwd: root, registryUrl: '/npm-registry' });
+      const replaceOnce = (source: string, needle: string, replacement: string): string => {
+        if (source.split(needle).length !== 2) {
+          throw new Error(`Vite 8 boundary fixture anchor drifted: ${needle}`);
+        }
+        return source.replace(needle, replacement);
+      };
+      const cliPath = `${root}/node_modules/vite/dist/node/cli.js`;
+      let cliSource = await sandbox.fs.readFile(cliPath, 'utf8');
+      cliSource = replaceOnce(
+        cliSource,
+        'if (run) this.runMatchedCommand();',
+        'if (run) globalThis.__riftyVite8FixtureAction = this.runMatchedCommand();',
+      );
+      cliSource = replaceOnce(
+        cliSource,
+        'cli.parse();',
+        'cli.parse();\nexport const __promise = globalThis.__riftyVite8FixtureAction;',
+      );
+      await sandbox.fs.writeFile(cliPath, cliSource);
+      const entryPath = `${root}/node_modules/vite/bin/vite.js`;
+      let entrySource = await sandbox.fs.readFile(entryPath, 'utf8');
+      entrySource = replaceOnce(
+        entrySource,
+        '} else {\n  start()\n}',
+        '} else {\n  globalThis.__riftyVite8FixtureImport = start()\n}\nexport const __promise = globalThis.__riftyVite8FixtureImport.then((namespace) => namespace.__promise)',
+      );
+      await sandbox.fs.writeFile(entryPath, entrySource);
+      const output: string[] = [];
+      const off = sandbox.runtime.on((event) => {
+        if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+          output.push(event.chunk);
+        }
+      });
       try {
-        await sandbox.toolchain.runBin({
+        const result = await sandbox.toolchain.runBin({
           cwd: root,
           binPath: `${root}/node_modules/.bin/vite`,
           args: ['build'],
         });
-        return { threw: false };
+        return { threw: false, result, output: output.join('') };
       } catch (error) {
-        const inspected = error as Error & { feature?: string };
+        const inspected = error as Error & { cause?: unknown; feature?: string };
         let dist: string;
         try {
           await sandbox.fs.readFile(`${root}/dist/index.html`, 'utf8');
@@ -1396,20 +1400,33 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
           name: inspected.name,
           feature: inspected.feature,
           message: inspected.message,
+          cause:
+            inspected.cause instanceof Error
+              ? {
+                  name: inspected.cause.name,
+                  message: inspected.cause.message,
+                  feature: (inspected.cause as Error & { feature?: string }).feature,
+                }
+              : inspected.cause,
           dist,
+          output: output.join(''),
         };
+      } finally {
+        off();
       }
     });
+    if (!failure.threw)
+      throw new Error(`Vite 8 boundary did not throw: ${JSON.stringify(failure)}`);
+    if (failure.name !== 'NotImplementedError') {
+      throw new Error(`Vite 8 boundary threw the wrong error: ${JSON.stringify(failure)}`);
+    }
     expect(failure).toMatchObject({
       threw: true,
       name: 'NotImplementedError',
       feature: 'toolchain.threaded-wasm',
       dist: 'absent',
     });
-    expect(failure.message).toMatch(/Vite 8\.0\.16/i);
-    expect(failure.message).toMatch(/Rolldown/i);
-    expect(failure.message).toMatch(/WASI/i);
-    expect(failure.message).toMatch(/pthread/i);
+    expect(failure.message).toMatch(/shared WebAssembly\.Memory/i);
     expect(failure.message).toMatch(/SharedArrayBuffer/i);
     expect(failure.message).toMatch(/cross-origin isolation/i);
   } finally {

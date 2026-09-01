@@ -333,8 +333,9 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 141 → 143 (2026-08-24, ADR-0362): PTY pending-authority file-size split
     // and the owner-only `.bin` path classifier.
     // 143 → 142 (2026-08-31, ADR-0371): delete the N=1 owner asset authority.
-    // 142 → 143 (2026-09-01, ADR-0374): public no-COI toolchain Worker.
-    expect(packageProductionFiles).toHaveLength(143);
+    // 142 → 143 (2026-09-01, ADR-0375): public no-COI toolchain Worker.
+    // 143 → 145 (2026-09-01, ADR-0375): generic finalizer + bounded gap provenance.
+    expect(packageProductionFiles).toHaveLength(145);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

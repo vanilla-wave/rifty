@@ -12,8 +12,8 @@ terminal, and preview operations.
   tools.
 - `owner-worker`, `kernel-worker`, `node-worker`, `dev-server-worker`, and
   `typescript-worker` — host-resolved deployment entries.
-- `no-coi-toolchain-worker` — one-Worker SDK build-loop entry for explicit
-  shared-memory-free mode.
+- `no-coi-toolchain-worker` — one-Worker SDK exact-manifest/install-bin entry
+  for explicit shared-memory-free mode; package identity is not policy.
 
 Controllers, owner transports, worker protocols, and `src/internal/*` are not
 public. Browser hosts supply Worker, Service Worker, and WASM URLs; package code
