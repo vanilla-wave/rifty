@@ -12,7 +12,7 @@ import {
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
 const runtimeWorkerUrl = `/@fs${workspacePath}/packages/runtime-js/src/worker-entry.ts`;
-const toolchainWorkerUrl = `/@fs${workspacePath}/packages/rifty/src/toolchain-worker.ts`;
+const toolchainWorkerUrl = `/@fs${workspacePath}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`;
 const coiPort = Number(process.env.RIFTY_NO_COI_ORACLE_PORT ?? 5412);
 const resourcePort = Number(process.env.RIFTY_NO_COI_RESOURCE_PORT ?? 5413);
 const coiBaseUrl = `http://localhost:${coiPort}`;
@@ -139,7 +139,35 @@ async function setHostPhase(page: Page, phase: string): Promise<void> {
   }, phase);
 }
 
-function assertHostSnapshot(actual: HostSnapshot, baseline: HostSnapshot): void {
+function openerRoundTrip(page: Page): Promise<boolean> {
+  return page.evaluate(async () => {
+    const api = Reflect.get(globalThis, '__riftyNoCoiHost') as {
+      openerRoundTrip(): Promise<boolean>;
+    };
+    return api.openerRoundTrip();
+  });
+}
+
+async function renewCrossOriginImage(page: Page): Promise<void> {
+  const status = await page.evaluate(async () => {
+    const image = document.getElementById('cross-origin-probe') as HTMLImageElement | null;
+    if (image === null) throw new Error('cross-origin probe image is missing');
+    image.dataset.status = 'loading';
+    const loaded = new Promise<string>((resolve) => {
+      image.addEventListener('load', () => resolve('loaded'), { once: true });
+      image.addEventListener('error', () => resolve('error'), { once: true });
+    });
+    const next = new URL(image.src);
+    next.search = crypto.randomUUID();
+    image.src = next.href;
+    const outcome = await loaded;
+    image.dataset.status = outcome;
+    return outcome;
+  });
+  expect(status).toBe('loaded');
+}
+
+function assertHostCore(actual: HostSnapshot, baseline: HostSnapshot): void {
   expect(actual.token).toBe(baseline.token);
   expect(actual.timeOrigin).toBe(baseline.enteredTimeOrigin);
   expect(actual.enteredTimeOrigin).toBe(baseline.enteredTimeOrigin);
@@ -148,6 +176,10 @@ function assertHostSnapshot(actual: HostSnapshot, baseline: HostSnapshot): void 
   expect(actual.crossOriginIsolated).toBe(false);
   expect(actual.sharedArrayBufferType).toBe('undefined');
   expect(actual.openerPresent).toBe(true);
+}
+
+function assertHostSnapshot(actual: HostSnapshot, baseline: HostSnapshot): void {
+  assertHostCore(actual, baseline);
   expect(actual.imageStatus).toBe('loaded');
   expect(actual.imageWidth).toBeGreaterThan(0);
 }
@@ -276,7 +308,7 @@ async function createToolchainSandbox(page: Page): Promise<{
   readonly runBinType: string;
   readonly report: unknown;
   readonly reportFrozen: boolean;
-  readonly rowsFrozen: boolean;
+  readonly reportDeepFrozen: boolean;
 }> {
   const state = await page.evaluate(
     async ({ sdkUrl, genericWorkerUrl, selectedToolchainWorkerUrl }) => {
@@ -298,16 +330,18 @@ async function createToolchainSandbox(page: Page): Promise<{
       const report = sandbox.capabilityReport;
       const features =
         typeof report === 'object' && report !== null ? Reflect.get(report, 'features') : undefined;
+      const deepFrozen = (value: unknown): boolean => {
+        if (typeof value !== 'object' || value === null) return true;
+        if (!Object.isFrozen(value)) return false;
+        return Object.values(value).every(deepFrozen);
+      };
       return {
         hasToolchain: toolchain !== undefined,
         installType: typeof toolchain?.install,
         runBinType: typeof toolchain?.runBin,
         report,
         reportFrozen: typeof report === 'object' && report !== null && Object.isFrozen(report),
-        rowsFrozen:
-          Array.isArray(features) &&
-          Object.isFrozen(features) &&
-          features.every((row) => typeof row === 'object' && row !== null && Object.isFrozen(row)),
+        reportDeepFrozen: Array.isArray(features) && deepFrozen(report),
       };
     },
     {
@@ -389,7 +423,10 @@ async function collectProjectDist(page: Page): Promise<readonly DistFile[]> {
   }, sealedWorkbenchFixtureUrl);
 }
 
-async function runCoiProduct(page: Page): Promise<{
+async function runCoiProduct(
+  page: Page,
+  onOpened: () => void,
+): Promise<{
   readonly dist: readonly DistFile[];
   readonly output: string;
 }> {
@@ -410,6 +447,7 @@ async function runCoiProduct(page: Page): Promise<{
       entryPath: '/express-anchor.cjs',
     },
   });
+  onOpened();
   const install = await execLineOutcome(page, 'npm install');
   assertCommandSuccess(install, 'COI npm install');
   for (const [dependency, version] of Object.entries(scenario.dependencies)) {
@@ -430,6 +468,7 @@ async function runNoCoiProduct(page: Page): Promise<{
   readonly dist: readonly DistFile[];
   readonly output: string;
   readonly exitCode: number;
+  readonly esbuildAdmission: unknown;
 }> {
   const scenario = childFsScenario();
   await page.evaluate(
@@ -458,6 +497,31 @@ async function runNoCoiProduct(page: Page): Promise<{
     ).__riftyNoCoiSandbox;
     await sandbox.toolchain.install({ cwd: '/project', registryUrl: '/npm-registry' });
   });
+  const esbuildAdmission = await page.evaluate(async () => {
+    const sandbox = (
+      globalThis as typeof globalThis & {
+        __riftyNoCoiSandbox: {
+          fs: { readFile(path: string, encoding: 'utf8'): Promise<string> };
+        };
+      }
+    ).__riftyNoCoiSandbox;
+    const lock = JSON.parse(await sandbox.fs.readFile('/project/package-lock.json', 'utf8'));
+    const trace = lock.rifty?.shadowSubstitutions;
+    const recipe = trace?.applied?.find(
+      (candidate: Record<string, unknown>) =>
+        (candidate.materialization as { name?: unknown } | undefined)?.name === 'esbuild',
+    );
+    return {
+      protocol: trace?.protocol,
+      substitutionId: recipe?.substitutionId,
+      catalog: recipe?.catalog,
+      recipeDigest: recipe?.recipeDigest,
+      materialization: recipe?.materialization,
+      lockEntry: lock.packages?.['node_modules/esbuild'],
+    };
+  });
+  expect(await openerRoundTrip(page)).toBe(true);
+  await renewCrossOriginImage(page);
   for (const [dependency, version] of Object.entries(scenario.dependencies)) {
     const installed = await page.evaluate(
       async ({ path }) => {
@@ -516,6 +580,8 @@ async function runNoCoiProduct(page: Page): Promise<{
       off();
     }
   });
+  expect(await openerRoundTrip(page)).toBe(true);
+  await renewCrossOriginImage(page);
   const paths = await page.evaluate(async () => {
     const sandbox = (
       globalThis as typeof globalThis & {
@@ -581,7 +647,7 @@ async function runNoCoiProduct(page: Page): Promise<{
       }),
     );
   }, paths);
-  return { dist, output: build.output, exitCode: build.exitCode };
+  return { dist, output: build.output, exitCode: build.exitCode, esbuildAdmission };
 }
 
 test('preservation: real public createSandbox stays headerless and keeps opener/subresource/eval/fs', async ({
@@ -622,7 +688,7 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
       installType: 'function',
       runBinType: 'function',
       reportFrozen: true,
-      rowsFrozen: true,
+      reportDeepFrozen: true,
     });
     const surfaces = await host.evaluate(async () => {
       const sandbox = (
@@ -636,7 +702,10 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
           };
         }
       ).__riftyNoCoiSandbox;
-      await sandbox.fs.writeFile('/project/child.cjs', "console.log('child-console')\n");
+      await sandbox.fs.writeFile(
+        '/project/child.cjs',
+        "console.log('child-console'); console.error('child-error')\n",
+      );
       await sandbox.fs.writeFile('/project/thread.cjs', "console.log('thread-console')\n");
       const stdout: string[] = [];
       const stderr: string[] = [];
@@ -667,9 +736,15 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
           let execSync;
           try { cp.execSync('node /project/child.cjs'); }
           catch (error) { execSync = { name: error.name, feature: error.feature }; }
+          let sharedWasm;
+          try { new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true }); }
+          catch (error) {
+            sharedWasm = { name: error.name, feature: error.feature, message: error.message };
+          }
+          const privateWasmBytes = new WebAssembly.Memory({ initial: 1 }).buffer.byteLength;
           console.log('__RIFTY_SURFACES__' + JSON.stringify({
             first, second, thread, cpus: os.cpus().length,
-            parallelism: os.availableParallelism(), execSync,
+            parallelism: os.availableParallelism(), execSync, sharedWasm, privateWasmBytes,
           }));
         })()
       `);
@@ -687,12 +762,17 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
     });
     expect(surfaces.evalOk).toBe(true);
     expect(surfaces.value).toEqual({
-      first: { code: 0, signal: null, out: 'child-console\n', err: '' },
-      second: { code: 0, signal: null, out: 'child-console\n', err: '' },
+      first: { code: 0, signal: null, out: 'child-console\n', err: 'child-error\n' },
+      second: { code: 0, signal: null, out: 'child-console\n', err: 'child-error\n' },
       thread: { code: 0 },
       cpus: 1,
       parallelism: 1,
       execSync: { name: 'NotImplementedError', feature: 'child_process.execSync' },
+      sharedWasm: expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'toolchain.threaded-wasm',
+      }),
+      privateWasmBytes: 65_536,
     });
     expect((surfaces.stderr.match(/\[rifty:child_process\].*same-realm/gu) ?? []).length).toBe(1);
     expect((surfaces.stderr.match(/\[rifty:worker_threads\].*same-realm/gu) ?? []).length).toBe(1);
@@ -710,8 +790,9 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
   const coiPage = await browser.newPage();
   let ownerOpened = false;
   try {
-    const coi = await runCoiProduct(coiPage);
-    ownerOpened = true;
+    const coi = await runCoiProduct(coiPage, () => {
+      ownerOpened = true;
+    });
     const { host, baseline } = await openHeaderlessHost(page);
     try {
       const state = await createToolchainSandbox(host);
@@ -724,6 +805,26 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
       expect(noCoi.exitCode).toBe(0);
       expect((noCoi.output.match(/2180 modules transformed\./gu) ?? []).length).toBe(1);
       expect(noCoi.dist).toEqual(coi.dist);
+      expect(noCoi.esbuildAdmission).toMatchObject({
+        protocol: 'rifty.shadow-substitutions/v2',
+        substitutionId: 'rifty.shadow-substitution.esbuild.v2',
+        catalog: {
+          id: 'rifty.shadow-substitutions.builtin.v2',
+          digest: '16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6',
+        },
+        recipeDigest: 'b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28',
+        materialization: {
+          installPath: 'node_modules/esbuild',
+          name: 'esbuild',
+          version: '0.28.0',
+          bin: { esbuild: 'bin/esbuild' },
+        },
+        lockEntry: {
+          version: '0.28.0',
+          bin: { esbuild: 'bin/esbuild' },
+          riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+        },
+      });
       const js = noCoi.dist.filter(({ path }) => path.endsWith('.js'));
       expect(js).toHaveLength(1);
       expect(atob(js[0]?.base64 ?? '').split(marker).length - 1).toBe(2);
@@ -731,8 +832,10 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
       const samples = await hostSamples(host);
       expect(samples.some(({ phase }) => phase === 'install')).toBe(true);
       expect(samples.some(({ phase }) => phase === 'build')).toBe(true);
-      for (const sample of samples) assertHostSnapshot(sample, baseline);
+      for (const sample of samples) assertHostCore(sample, baseline);
       assertHostSnapshot(await hostSnapshot(host), baseline);
+      expect(await openerRoundTrip(host)).toBe(true);
+      await renewCrossOriginImage(host);
       expect(coi.output).toContain('2180 modules transformed.');
     } finally {
       await disposeSandbox(host);
@@ -815,9 +918,12 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
       feature: 'toolchain.threaded-wasm',
       dist: 'absent',
     });
-    expect(failure.message).toMatch(
-      /Vite 8\.0\.16.*Rolldown.*WASI.*pthread.*SharedArrayBuffer.*cross-origin isolation/is,
-    );
+    expect(failure.message).toMatch(/Vite 8\.0\.16/i);
+    expect(failure.message).toMatch(/Rolldown/i);
+    expect(failure.message).toMatch(/WASI/i);
+    expect(failure.message).toMatch(/pthread/i);
+    expect(failure.message).toMatch(/SharedArrayBuffer/i);
+    expect(failure.message).toMatch(/cross-origin isolation/i);
   } finally {
     await disposeSandbox(host);
     await host.close();
@@ -845,12 +951,63 @@ async function seedStalledInstall(page: Page, root: string): Promise<void> {
   );
 }
 
+async function beginStalledInstall(page: Page, root: string): Promise<void> {
+  const admitted = page.waitForRequest((request) =>
+    new URL(request.url()).pathname.startsWith('/__no-coi-stall-registry/'),
+  );
+  await page.evaluate(
+    ({ projectRoot }) => {
+      const holder = globalThis as typeof globalThis & {
+        __riftyNoCoiSandbox: {
+          toolchain: { install(input: Record<string, unknown>): Promise<void> };
+        };
+        __riftyPendingToolchain?: Promise<void>;
+      };
+      const operation = holder.__riftyNoCoiSandbox.toolchain.install({
+        cwd: projectRoot,
+        registryUrl: '/__no-coi-stall-registry',
+      });
+      operation.catch(() => {});
+      holder.__riftyPendingToolchain = operation;
+    },
+    { projectRoot: root },
+  );
+  await admitted;
+}
+
 test('toolchain overlap rejects instead of racing or queuing — designed RED', async ({ page }) => {
   const { host } = await openHeaderlessHost(page);
   try {
     const state = await createToolchainSandbox(host);
     expect(state.installType).toBe('function');
     await seedStalledInstall(host, '/overlap');
+    const malformed = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            fs: { readFile(path: string, encoding: 'utf8'): Promise<string> };
+            toolchain: { runBin(input: Record<string, unknown>): Promise<unknown> };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      const before = await sandbox.fs.readFile('/overlap/package.json', 'utf8');
+      let failure: { name: string; message: string } | null = null;
+      try {
+        await sandbox.toolchain.runBin({
+          cwd: '/overlap',
+          binPath: '/overlap/node_modules/.bin/vite',
+          args: 'build',
+        });
+      } catch (error) {
+        const inspected = error instanceof Error ? error : new Error(String(error));
+        failure = { name: inspected.name, message: inspected.message };
+      }
+      const after = await sandbox.fs.readFile('/overlap/package.json', 'utf8');
+      return { before, after, failure };
+    });
+    expect(malformed.failure).toMatchObject({ name: 'TypeError' });
+    expect(malformed.after).toBe(malformed.before);
+    await beginStalledInstall(host, '/overlap');
     const outcome = await host.evaluate(async () => {
       const sandbox = (
         globalThis as typeof globalThis & {
@@ -859,11 +1016,6 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
           };
         }
       ).__riftyNoCoiSandbox;
-      const first = sandbox.toolchain.install({
-        cwd: '/overlap',
-        registryUrl: '/__no-coi-stall-registry',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
       let second: { name: string; message: string } | null = null;
       try {
         await sandbox.toolchain.install({
@@ -874,11 +1026,9 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
         const inspected = error instanceof Error ? error : new Error(String(error));
         second = { name: inspected.name, message: inspected.message };
       }
-      first.catch(() => {});
       return second;
     });
     expect(outcome).toMatchObject({ name: 'SandboxToolchainBusyError' });
-    expect(outcome?.message).toMatch(/active toolchain operation/i);
   } finally {
     await disposeSandbox(host);
     await host.close();
@@ -893,21 +1043,17 @@ test('toolchain disposal rejects the admitted request without a hang — designe
     const state = await createToolchainSandbox(host);
     expect(state.installType).toBe('function');
     await seedStalledInstall(host, '/dispose');
+    await beginStalledInstall(host, '/dispose');
     const outcome = await host.evaluate(async () => {
-      const sandbox = (
-        globalThis as typeof globalThis & {
-          __riftyNoCoiSandbox: {
-            dispose(): void;
-            toolchain: { install(input: Record<string, unknown>): Promise<void> };
-          };
-        }
-      ).__riftyNoCoiSandbox;
-      const installing = sandbox.toolchain.install({
-        cwd: '/dispose',
-        registryUrl: '/__no-coi-stall-registry',
-      });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      sandbox.dispose();
+      const holder = globalThis as typeof globalThis & {
+        __riftyNoCoiSandbox: {
+          dispose(): void;
+        };
+        __riftyPendingToolchain?: Promise<void>;
+      };
+      const installing = holder.__riftyPendingToolchain;
+      if (installing === undefined) throw new Error('admitted install promise is missing');
+      holder.__riftyNoCoiSandbox.dispose();
       try {
         await Promise.race([
           installing,

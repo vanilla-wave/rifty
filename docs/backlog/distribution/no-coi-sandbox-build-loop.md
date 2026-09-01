@@ -7,7 +7,7 @@ epic: no-coi-sandbox-tier
 why: the real-Vite composition (esbuild-wasm adapter, bin execution, npm/shell wiring) exists only behind workbench COI gates; the sandbox tier needs the same loop composed in the single worker, a capability report making every gap loud, and a CI lane that serves NO COOP/COEP — today zero browser lanes do
 user_story: As an agent platform, I want createSandbox → install → vite build → dist on a headerless page with a report naming what throws/degrades, but today the composition throws at the workbench gate and no lane proves any of it
 sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0373, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
-code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/workbench/src/workers/vite-esbuild-runtime.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/os.ts]
+code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/workbench/src/workers/vite-esbuild-runtime.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/os.ts]
 ---
 
 ## Context
@@ -56,7 +56,7 @@ records the route out of scope; no premise problem remains open here.
 
 An existing app opens its ordinary same-origin SDK page from an opener. The
 page response has no COOP/COEP. It explicitly calls
-`createSandbox({requireCrossOriginIsolation:false, workerUrl,
+`createSandbox({requireCrossOriginIsolation:false,
 toolchain:{workerUrl:toolchainWorkerUrl}})`,
 writes the canonical react-class project, installs from the configured registry,
 and runs `/project/node_modules/.bin/vite build`. It reads the complete `dist/`
@@ -101,7 +101,9 @@ behavior throughout.
    `child_process.spawn`, `worker_threads.Worker`, `os.parallelism`
    degraded with explicit warnings (`os.parallelism.value=1`); and
    `child_process.execSync`, `toolchain.threaded-wasm`, `toolchain.dev-hmr`
-   throwing with named `NotImplementedError` features.
+   throwing with named `NotImplementedError` features. It is recursively
+   frozen with `schemaVersion:1`, tier `shared-memory-free` and the listed row
+   order; warning strings are the exact strings pinned by the RED carrier.
 5. Two same-realm spawns warn exactly once, both children retain landed
    console→stdout/stderr pipe behavior, and both settle in order.
    `worker_threads.Worker` retains its own once-only same-realm warning.
@@ -115,12 +117,15 @@ behavior throughout.
 7. The live no-COI and live COI products receive byte-identical project files
    and marker. Their complete normalized `dist/` relative-path sets are equal;
    every paired file has equal length, equal bytes and equal SHA-256. The JS
-   contains the marker exactly once; equality is not count-only or filename-only.
+   contains the marker exactly twice, matching the frozen source's two sites;
+   equality is not count-only or filename-only.
 8. A real `vite@8.0.16` install followed by its installed `.bin/vite build` in
    the no-COI sandbox rejects before Rolldown pthread startup with
    `NotImplementedError`, `feature==='toolchain.threaded-wasm'`, and a message
    naming Vite 8, Rolldown/WASI pthreads and COI/SharedArrayBuffer. It writes no
-   successful `dist/` claim.
+   successful `dist/` claim. Direct guest construction of shared
+   `WebAssembly.Memory` rejects with the same feature, while non-shared memory
+   still constructs.
 9. Toolchain input is validated once before mutation. A malformed cwd/bin/args
    rejects loudly; a second install/run overlapping one admitted operation
    rejects immediately as `SandboxToolchainBusyError` rather than racing or
@@ -146,7 +151,8 @@ behavior throughout.
    external semantic baseline where applicable; the same real sandbox Worker
    carrier `pnpm test:no-coi -g "capability.*designed RED"` is the RED target.
 4. Vite 8/Rolldown: exact installed `vite@8.0.16`, real `.bin` request, named
-   pre-pthread rejection. Artifact: current COI product proof is
+   pre-pthread rejection plus direct shared/non-shared `WebAssembly.Memory`
+   boundary. Artifact: current COI product proof is
    `tests/browser-unit/esbuild-vite-contract.spec.ts`; no-COI RED target is
    `pnpm test:no-coi -g "threaded-WASM.*designed RED"`.
 5. Default COI admission remains loud; generic createSandbox no-COI eval/fs
@@ -167,7 +173,7 @@ behavior throughout.
 | `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry/shadow acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
 | `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0373; `toolchain overlap` designed RED |
 | Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
-| `false-fallback` × Vite 8/threaded WASM | named pre-pthread throw, no generic wasm crash or successful dist | Acceptance/Parity 8/4; threaded-WASM RED |
+| `false-fallback` × Vite 8/threaded WASM | Vite 8 and direct shared-memory construction reach the same named boundary; no generic wasm crash or successful dist | Acceptance/Parity 8/4; threaded-WASM RED |
 | `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
 | `observable-order` × host lifecycle | entry behavior sampled before/during/after; stable time origin proves no reload | Acceptance/Parity 1-2/2; preservation control |
 
@@ -214,3 +220,4 @@ review: checkpoints — runtime/network/parity public SDK slice.
   code and drives real Chromium, Workers, npm tarballs, installed bins and the
   current COI product; only network stall/image endpoints are external-boundary
   fixtures.
+- `contract-red: 2026-09-01 — blocker @ 326f5b70e`

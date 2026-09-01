@@ -3,9 +3,9 @@
 Status: Accepted
 Date: 2026-09-01
 
-> TL;DR: explicit `toolchain:{workerUrl}` boots one SDK-owned Worker and exposes only
-> manifest install + run-to-completion `.bin` execution beside the existing
-> runtime/fs handles.
+> TL;DR: explicit `toolchain:{workerUrl}` boots one Workbench-owned toolchain
+> Worker through the SDK and exposes only manifest install + run-to-completion
+> `.bin` execution beside the existing runtime/fs handles.
 
 ## Context
 
@@ -22,17 +22,19 @@ make the installed `.bin` launcher, not a curated Vite callback, the execution
 authority; ADR-0316 keeps registry-attested `esbuild-wasm@0.28.0` the sole
 product adapter.
 
-Mechanism sweep (`rg "BusyError|busy =|inFlight|command overlap" packages apps`)
-found Workbench/PTY active-run rejection and npm fetch dedupe. The SDK Worker
-is a separate realm authority, so it reuses the active-run shape but imports no
-Workbench owner or queue.
+Mechanism sweep (`rg "BusyError|busy =|inFlight|pendingFs|command overlap"
+packages apps`) found Workbench/PTY active-run rejection, npm fetch dedupe and
+runtime-js host request correlation/Worker-terminal settlement. The toolchain
+path reuses those two shapes: one active-run rejection in its Worker and one
+extended RuntimeController correlation owner in the host; no second queue/map.
 
 ## Decision
 
 1. `CreateSandboxOptions.toolchain?: {workerUrl:string|URL}` defaults absent.
-   Presence selects the new `@riftydev/sdk/toolchain-worker` entry while the
-   legacy top-level `workerUrl` remains the generic-runtime input. Only the
-   selected toolchain Worker is spawned in this mode. Boot handshakes before returning;
+   Presence selects the new
+   `@riftydev/workbench/no-coi-toolchain-worker` entry. The toolchain overload
+   does not require the legacy top-level `workerUrl`; only the selected
+   toolchain Worker is spawned. Boot handshakes before returning;
    mismatch rejects `NotImplementedError('sandbox.toolchain.worker')`, never a
    controller whose methods hang.
 2. A toolchain sandbox exposes `Sandbox.toolchain`:
@@ -44,16 +46,19 @@ Workbench owner or queue.
      bin:true)`, and resolves after drain. Stdout/stderr remain the existing
      ordered `Sandbox.runtime` events. No shell parsing, stdin, streaming
      handle, cancellation, dev lifecycle or preview URL is added.
-3. The SDK-owned Worker composes VFS, npm-client, runtime-js and the existing
-   Workbench runtime-adapter/Vite-preparation authorities in one realm. The
+3. Workbench owns and publishes the toolchain Worker entry so it can legally
+   compose its private runtime-adapter/Vite-preparation authorities with VFS,
+   npm-client and runtime-js in one realm. SDK owns admission/control. The
    existing `Sandbox.runtime` and `Sandbox.fs` speak to that same Worker; no
-   sibling mirror, deep consumer import or second runtime authority exists.
+   sibling mirror, deep consumer import, second request-correlation map or
+   second runtime authority exists.
 4. One install/run may mutate realm-global process/adapter state at a time.
    Overlap rejects immediately with `name: 'SandboxToolchainBusyError'`; no
    FIFO, lock, retry or hidden queue. Worker death/dispose rejects every
    admitted call with the existing Worker-termination signal.
-5. Every sandbox returns an immutable capability report with exact feature
-   rows. In no-COI toolchain mode it distinguishes `working`,
+5. Every toolchain sandbox returns an immutable capability report with exact
+   feature rows; generic sandboxes retain the existing hardware
+   `Sandbox.capabilities`. In no-COI toolchain mode the report distinguishes `working`,
    `degraded`+warning, and `throwing`+named error. Same-realm
    `child_process.spawn` and `worker_threads.Worker` additionally warn once on
    first use; `os.cpus()`/`availableParallelism()` expose one; execSync remains
@@ -61,7 +66,9 @@ Workbench owner or queue.
 6. Vite 7.3.6 consumes the admitted esbuild runtime and real installed bin.
    On no-COI, Vite 8/Rolldown is rejected before pthread startup as
    `NotImplementedError('toolchain.threaded-wasm')`, naming the executed Vite
-   version and Rolldown WASI pthread requirement. The report declares the same
+   version and Rolldown WASI pthread requirement. The toolchain Worker also
+   maps direct shared `WebAssembly.Memory` construction to that same named
+   error; non-shared memories are unchanged. The report declares the same
    general threaded-WASM boundary.
 
 ## Alternatives

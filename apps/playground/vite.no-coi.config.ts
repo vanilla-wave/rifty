@@ -18,6 +18,7 @@ function stalledRegistryPlugin(): Plugin {
 
 /** Dedicated headerless host. Never import the Playground COI config. */
 export default defineConfig({
+  cacheDir: `node_modules/.vite-no-coi-${port}`,
   plugins: [rifySwPlugin(), stalledRegistryPlugin()],
   server: {
     host: '127.0.0.1',
