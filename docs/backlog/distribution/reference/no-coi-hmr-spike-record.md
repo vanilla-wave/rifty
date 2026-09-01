@@ -31,9 +31,9 @@ durability boundary.
 
 ## Current-source re-verification (2026-09-01)
 
-Only the facts load-bearing for `vfs/no-coi-opfs-policy-flip` were re-run; the
-100-cycle HMR, wedge and forced-kill rows remain spike history and are not
-reclaimed by this proof. Production source:
+Only the facts load-bearing for the no-COI OPFS selector and goal I5 were
+re-run; the 100-cycle HMR, wedge and forced-kill rows remain spike history and
+are not reclaimed by this proof. Production source:
 `e924531ba2d46116406a68c9d4a86e59106ef24b`; Playwright 1.60.0; Chrome for
 Testing 148.0.7778.96.
 

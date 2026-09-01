@@ -17,3 +17,6 @@
 - 2026-09-01 — re-chart after runtime-js/same-realm-spawn-stdio-pipe-drop: 0 graduated / 1 invalidated (completed item deleted); remaining child order, empty fog and out-of-scope unchanged.
 - 2026-09-01 — vfs/no-coi-opfs-policy-flip band 1–2 expected REDs (headerless dedicated-Worker selection + exact-byte flush/reload; direct/main/COI/permission preservation pins).
 - 2026-09-01 — vfs/no-coi-opfs-policy-flip checkpoint lineage: Contract+RED PASS @ 61cf57f9b (find 0 blockers; fresh tail 0 new blockers; implementation not started).
+- 2026-09-01 — vfs/no-coi-opfs-policy-flip checkpoint lineage: Contract+RED PASS @ 61cf57f9b; Final+GREEN blocker @ 7308d2c9a, PASS @ content 029f9726d; verdict bookkeeping @ 81b9786fb; unit residuals empty.
+- 2026-09-01 — Realm-local sync-handle capability, not COI, now selects OPFS; exact-byte no-COI flush→reload closes I5, and the COI direct-Worker carrier closes `vfs/opfs-persistence-browser-roundtrip`. Carriers `packages/vfs/src/boot.ts`, `tests/browser-unit/opfs-no-coi-policy.spec.ts`, `tests/e2e/m0-boot.spec.ts`, ADR-0372.
+- 2026-09-01 — re-chart after vfs/no-coi-opfs-policy-flip: 0 graduated / 2 invalidated (completed item + covered COI residual deleted); frontier build-loop then dev-hmr, empty fog and out-of-scope unchanged.
