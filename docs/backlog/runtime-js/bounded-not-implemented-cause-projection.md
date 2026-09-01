@@ -220,3 +220,15 @@ Child checkpoint lines prepend copied predecessor lineage (verbatim):
 - User-authorized SPLIT narrows only the next frontier unit. Build-loop and the
   frozen goal behavior stay unchanged; this child owns only ADR-0375 Decision
   5's generic bounded projection.
+- Implementation @ `6795bb7c4`: runtime-js repo-only internal owns one bounded
+  loop. It checks depth 0..8, reads only links 1..8 and returns no projection on
+  non-Error tails or any throwing getter. Workbench's existing Worker seam
+  imports it; no public root/API, dependency, protocol or state added.
+- Focused GREEN: runtime + Workbench unit 6/6; both package typechecks;
+  package-generic Chromium Worker/serialization carrier 1/1; adjacent no-COI
+  generic admission, native-memory, threaded-gap and run-bin controls 6/6.
+- Real revert-check @ `6795bb7c4`: restoring only the prior helper/wiring made
+  the unchanged unit carrier fail 2/4 (`reads:1`; all hostile getter values
+  escaped) and Chromium fail 1/1 (ninth/hostile errors replaced exact outers).
+  Exact committed tree restored clean; unit 6/6, typechecks and Chromium 1/1
+  reran GREEN.
