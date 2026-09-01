@@ -159,6 +159,8 @@ back. No test-only backend force participates in this acceptance path.
 
 ## Decisions
 
+ready-verdict: 2026-09-01 — Contract+RED @ 61cf57f9b0f2283215b93e25d2d3462379b4a6b1
+
 review: checkpoints — persistence/browser policy and reload durability.
 
 - ADR-0372 selects realm-local `OpfsFsSync.isSupported()` and rejects both the
