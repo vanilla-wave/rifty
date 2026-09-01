@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: no-COI packed toolchain surface — generic SDK and Worker JS/declaration graph
 created: 2026-09-01
 epic: no-coi-sandbox-tier
@@ -180,6 +180,8 @@ pnpm test:packed-toolchain-surface
   callback, retry, queue or lifecycle mechanism.
 
 ## Decisions
+
+ready-verdict: 2026-09-01 — Contract+RED @ d1a0dd2ee
 
 review: checkpoints — cross-package JS/declaration distribution boundary; user
 requires fresh Contract+RED and Final+GREEN.

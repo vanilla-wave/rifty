@@ -29,3 +29,4 @@
 - 2026-09-01 — re-chart after Contract stop on distribution/no-coi-sandbox-build-loop: 1 graduated / 1 invalidated (packed-surface minted first; build-loop demoted/re-cut and blocked); empty fog and goal destination unchanged.
 - 2026-09-01 — distribution/no-coi-packed-toolchain-surface band 3–4 expected REDs (packed SDK root JS; packed Workbench no-COI Worker JS; strict declaration graph; exact negative public types).
 - 2026-09-01 — distribution/no-coi-packed-toolchain-surface Contract+RED blocker @ 65f581bc0: find 3 + fresh tail 1 new, independent adjudication 4 HOLDS (oracle stopped before JS; two misplaced exact-negative directives; self-imposed workspace JS/type parity absent). One in-place re-cut; packed Acceptance unchanged.
+- 2026-09-01 — distribution/no-coi-packed-toolchain-surface Contract+RED PASS @ d1a0dd2ee: verify 0 blockers, 13/13 coverage obligations pass; both strict-type and generic SDK/Worker JS RED branches executed; implementation not started.
