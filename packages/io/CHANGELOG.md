@@ -106,6 +106,9 @@
 
 ### Fixed
 
+- Packed strict declarations keep Node's real `Duplex.toWeb` pair without a
+  static-side suppression or widening `Readable.toWeb`.
+
 - **Node stream source protocol converges on one owner (ADR-0237–0239).**
   `Readable` now dispatches late-bound `_read`, keeps demand latched until
   `push`, bounds filtered refill, normalizes covered byte chunks once, and

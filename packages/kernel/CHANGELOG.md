@@ -27,6 +27,9 @@
 
 ### Fixed
 
+- Packed kernel declarations carry their Worker-entry target shape without
+  requiring a host consumer to add the WebWorker ambient library.
+
 - `SIGKILL` now physically terminates a Worker before abandoning stranded
   output, so forced thread teardown cannot wait on a dead peer's stdio seal.
 

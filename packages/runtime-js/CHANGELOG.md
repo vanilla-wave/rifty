@@ -66,6 +66,10 @@
 
 ### Changed
 
+- The repo-only `./internal` composition seam now ships in packed JS and
+  declarations for the SDK + Workbench no-COI Worker; the public root still
+  exposes no toolchain controller or protocol.
+
 - Sandbox toolchain controller/protocol stays on the repo-only internal seam;
   the published runtime root exposes no admission-bypassing control plane.
 
