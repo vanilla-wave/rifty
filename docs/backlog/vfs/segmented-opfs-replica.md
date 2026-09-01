@@ -104,13 +104,19 @@ the fault and migration evidence above before ADR/ready.
 Fit-time (goal `epics/fast-project-open-reopen`, 2026-09-01); the compile at
 PICKUP prepends its `ready-verdict` line.
 
-- OPEN (goal `## Decisions` first line, blocks ready): route R — re-apply a
-  matching baked snapshot on reopen instead of persisting its `node_modules`
-  — decides this item's persona (installed trees only) or existence; answered
-  via `rifty-refine` before PICKUP.
-- Scope after FIT re-cut: projects FIRST persisted under the new format +
-  loud refusal of a legacy per-file layout; legacy re-materialization is an
-  unseeded goal child (playground-loss fog).
+- Route R (snapshot re-apply on reopen) rejected by the user 2026-09-01 —
+  option 3: the replica persists every tree (goal `## Decisions`).
+- Scope = slice A of the staged cut (goal map item 2): write-once base
+  segment at init + validated replay on reopen; mutations after init stay on
+  today's per-file path under an explicit precedence rule (per-file entry
+  wins over the base segment for the same path) and a tombstone for a
+  base-segment path deleted later — both from day one; store namespace bump
+  `/.rifty/workbench/v1` → `v2` so a legacy per-file tree is never read
+  (`v1` bytes untouched; the existing `project-materialization.ts` open path
+  re-materializes from the definition); the format ADR carries the
+  no-migration decision as an IRREVERSIBLE clause. Append into segments +
+  compaction = `vfs/segmented-replica-append-compaction`; one-time legacy
+  notice + playground honesty = `vfs/legacy-per-file-layout-cold-restore`.
 - Format ADR is IRREVERSIBLE (new persistence authority): ≥2 radically
   different candidates kept/killed by named evidence — current per-file
   baseline (B4/C3), B index + lazy hydration (C1/C2: killed, +1.70 s burst,

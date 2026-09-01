@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Project open/reopen at Tracker scale — storage wait in seconds, honesty intact
 created: 2026-09-01
 value: Opening or reloading a Tracker-scale project (216 packages / 15.6k files / 74 MB) waits ≤2 s at the storage boundary instead of a projected 7.7 s drain inside a real 16.3 s cold open and a projected 5 s reopen, every editor read scales with the entry it asks for, and reload honesty is exactly today's.
@@ -80,15 +80,21 @@ a consistent tree or the loud cold-restore path.
      I2 — C3 current fresh-process reopen median 4,603.7 ms on S → 4.95 s
           projected on T; never timed by the embedder.
      I3 — `packages/vfs/src/opfs-sync.ts` `refreshIndex`/`preloadContent` read
-          the per-file layout as project state with no layout-version check;
-          `packages/workbench/src/glue/project-deps.ts` re-materializes
-          (snapshot/install provenance, ADR-0135) only when no stamp is
-          trusted — a legacy layout with a valid stamp is trusted as-is. The
-          gap is the trigger, not the re-materialization path.
+          the per-file layout as project state; the store namespace
+          `/.rifty/workbench/v1` (`workbench-project-store.ts`) is the only
+          layout version marker and is not bumped; `project-materialization.ts`
+          `open()` re-materializes `definition.files` only when the store
+          record is absent, and `project-deps.ts` restores `node_modules`
+          (ADR-0135) only when no stamp is trusted — a legacy tree with a
+          record + valid stamp is trusted as-is. The gap is the trigger.
      I4 — `packages/workbench/src/workers/workbench-project-vfs.ts` read-file /
           read-directory call `authority.snapshot()`; `owner-vfs-authority.ts`
           `#snapshotEntry` slices every file's bytes: 46.5 ms on S (B0) vs
-          4.3 ms on 521 entries (C5) — tree-size bound. -->
+          4.3 ms on 521 entries (C5) — tree-size bound.
+     I5 — today every path is per-file on reopen (≈ 0.3 ms each, C3), so a
+          post-init `npm install` of package scale reopens at the per-file
+          floor (~5 s on T); after slice A alone, 5k mutated paths ≈ 1.6 s on
+          top of the 0.86 s base replay > 2.0 s. -->
 
 1. I1. First open of T (manifest of the real tracker-plugin snapshot): the
    durable-flush tail before `openProject` resolves takes ≤ 2.0 s median
@@ -105,6 +111,10 @@ a consistent tree or the loud cold-restore path.
    521-entry tree (≤ 2× apart) and ≤ 1 ms median for a ≤ 4 KB file or a
    ≤ 64-entry directory; a read never copies bytes of files outside the
    requested path — today 46.5 ms vs 4.3 ms, full-tree byte copy per read.
+5. I5. After a post-init `npm install` that mutates ≥ 5,000 `node_modules`
+   paths of T, the next fresh-process reopen still meets I2 (≤ 2.0 s
+   median) and one persistence substrate holds every path (no per-file
+   mutation layer) — today ~5 s per-file; after slice A alone > 2.0 s.
 
 ## Challenge
 
@@ -120,30 +130,40 @@ challenge: 2026-09-01 — 10 problems
 - The map is effectively "do the whole epic in one child": item 2 `vfs/segmented-opfs-replica` carries "I1, I2, I3; the IRREVERSIBLE format ADR …, write path …, validated replay, legacy-layout cold restore, `## Fault matrix` at production tier" with the cut deferred to "PICKUP may split", while item 1 is explicitly "independent of the format, no new mechanism" and therefore proves none of the shared pattern README §Epic fit demands ("Seed order proves the minimal pattern first"); §Goal run's "the unit is too big: re-cut/split before implementation" applies at FIT, not at PICKUP [advisory].
 - `tier: production` is committed for a persistence format whose central maintenance operation has zero evidence — map.md: "Segment compaction: trigger, crash point, proof — owner: agent … no measurement exists (rounds 1/2 never compacted)" — and the opportunity cost is unaddressed against ROADMAP M11 ("**ACTIVE — the current focus** … The wedge is *usage ergonomics*, not new runtime capability"), since the sole evidenced beneficiary is one embedder whose real trace the goal admits is unreachable ("The real 171-package trace is unreachable (issues #255/#256 hold aggregates only)") [advisory].
 
-Disposition (2026-09-01, same day): problem 1 is a user-owned observable
-fork → goal stays `draft`, fork recorded in `## Decisions` (OPEN) and map
-fog; ready flips only on the user's answer. Problems 2–6 answered in this
+Disposition (2026-09-01): problem 1 closed by recorded user override —
+`## Decisions` "route R" line (option 3 chosen; R violates Outcome (f) and
+would be a second truth regime for one tree). Problems 2–6 answered in this
 doc (I3 evidence corrected, Outcome attributes B0 vs C5, I4 rewritten as a
 tree-size-independence test, I1 evidence states the unmeasured real open).
-Problem 7 → map fog probe, settle before ready. Problem 8 → report question.
-Problem 9 → map re-cut (replica for fresh projects; legacy restore unseeded
-behind the user fog). Problem 10 → tier kept, opportunity cost is the
-user's call (report Risks).
+Problem 7 → map probe, settle before replica PICKUP. Problem 8 → asked and
+answered (playground loud loss, `## Decisions`). Problem 9 → map re-cut into
+slices A/B + legacy restore. Problem 10 → tier kept; opportunity cost was the
+user's call and they proceeded.
 
 ## Decisions
 
-- OPEN (user; blocks ready — challenge problem 1): for a tree whose
-  `node_modules` has a matching baked snapshot (ADR-0135 provenance), should
-  reopen re-apply the snapshot instead of persisting that subtree — no drain,
-  no walk, ~0.24 s re-apply for 47 MB (C4), zero new format — accepting that
-  in-`node_modules` edits do not survive reload (or flip the subtree to
-  persisted once touched)? Route R reaches I1/I2 for snapshot-backed trees
-  only; an `npm install`ed tree (surrogate S: no snapshot) re-derives only via
-  network install, violating Outcome (f). Options: (1) R for untouched
-  snapshot subtrees + replica for installed trees (persona = this
-  `user_story`); (2) R only, replica dropped, goal shrinks to
-  targeted-page-reads + the R item; (3) replica for every persisted tree, R
-  rejected. Fires: before ready → `rifty-refine`.
+- Route R fork (challenge problem 1) — decided **option 3** (user,
+  2026-09-01): the replica persists every tree, `node_modules` included; the
+  OPFS tree is the live source of truth from init on. Options weighed: (1)
+  hybrid R-for-untouched-snapshot-subtree + replica; (2) R only, no format.
+  Rejected because R's machinery (provenance-trusted stamp = supersede of
+  ADR-0261 semantics, subtree persistence exclusion, touched-flip, re-apply on
+  reload) shares nothing with the replica and would survive as a second truth
+  regime for one tree (§Class-kill) or be deleted after; reload would depend
+  on the HTTP-cached 28.5 MB asset and pay the decode tax every time; net gain
+  over the replica on T ≈ 0.4 s per reload.
+- Staged cut of the replica (user, 2026-09-01; README §Epic fit minimal
+  pattern first): slice A = write-once base segment at init + replay on
+  reopen, later mutations stay on today's per-file path with an explicit
+  precedence + tombstone rule from day one; slice B = append of mutations
+  into segments + compaction (re-emission of the base segment from the live
+  front), per-file layer retired. Between A and B Outcome (c) is suspended
+  by this decision — the tree has two persistence layers — and I5 is what
+  closes it.
+- Playground (user, 2026-09-01): breaking change — catalog projects (ADR-0165
+  named / scratch) whose only source is the per-file layout are lost at open,
+  loudly named; no export-before-switch prompt; the pre-existing ADR-0286
+  archive is the user's own route.
 - tier: production (2026-09-01) — a persistence format's product IS reload
   consistency; torn segment, compaction crash, and legacy layout are proven by
   a real-browser kill + reopen, not a unit fault decorator alone.
@@ -158,8 +178,13 @@ user's call (report Risks).
   — accepted limit; a cold-OS number is a probe (map.md), not a re-fit.
 - Migration = cold restore (user, 2026-09-01): the legacy per-file layout is
   not read; re-materialize from the definition; edits without a source are not
-  kept. Playground-catalog projects whose only source is that layout → fog
-  (map.md, owner: user).
+  kept (playground consequence: previous line). Carrier (critic, 2026-09-01):
+  bump the existing store namespace `/.rifty/workbench/v1` → `v2` in slice A;
+  `v1` bytes stay untouched — never read, never deleted by this goal; the
+  existing `project-materialization.ts` open path re-materializes from the
+  definition with no new authority; the format ADR records the no-migration
+  decision as an IRREVERSIBLE clause. A bounded one-time migration through
+  the ADR-0165 §10 journal exists and was not taken (user: breaking change).
 - Second tab on the same origin already fails loud on main
   (`WorkbenchOriginOccupiedError`, Web Lock `rifty:workbench:v1`,
   `ifAvailable`); the format ADR promotes this one-writer fact to a contract
@@ -201,6 +226,9 @@ user's call (report Risks).
 - rejected route: integrity-keyed CAS inside npm-client — violates Outcome (c)
   (writer-specific; dies under honest package managers).
 - rejected route: `ephemeral` as the public default — violates Outcome (e).
+- rejected route: route R (snapshot re-apply on reopen instead of persisting
+  `node_modules`, options 1/2 above) — violates Outcome (f) once the subtree
+  is touched, and Outcome (c) as a second persistence regime.
 - rejected route: network re-derivation of an installed tree on reopen
   (re-install via lockfile/eddy instead of persisting `node_modules`) —
   violates Outcome (f).
