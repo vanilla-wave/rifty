@@ -63,6 +63,10 @@
   needed — the default handles the 42 s first open unconfigured.
 
 ### Fixed
+
+- No-COI installed-bin failures preserve a real bounded `NotImplementedError`
+  cause without reading a ninth or throwing `cause` getter.
+
 - `@emnapi/core@1.10.0` installs receive the exact upstream child-thread
   orphaned-reference cleanup backport before stamp promotion. A Vite 8
   unresolved import now returns Vite's normal non-zero build error instead of

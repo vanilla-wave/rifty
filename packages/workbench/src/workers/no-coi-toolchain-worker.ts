@@ -15,10 +15,10 @@ import {
   SANDBOX_TOOLCHAIN_PROTOCOL,
   type ToolchainRequest,
   type ToolchainResult,
+  declaredGapCause,
 } from '@riftydev/runtime-js/internal';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import { declaredGapCause } from './declared-gap-cause.ts';
 import { finalizeGenericPackageInstallFiles } from './package-install-generic-finalizer.ts';
 import {
   type WorkbenchRuntimeBinding,

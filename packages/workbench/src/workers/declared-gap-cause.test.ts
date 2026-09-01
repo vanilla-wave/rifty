@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
+import { declaredGapCause } from '@riftydev/runtime-js/internal';
 import { describe, expect, it } from 'vitest';
-import { declaredGapCause } from './declared-gap-cause.ts';
 
 function wrapped(error: Error, count: number): Error {
   let current = error;

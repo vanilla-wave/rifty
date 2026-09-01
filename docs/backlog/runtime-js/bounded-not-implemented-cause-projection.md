@@ -7,7 +7,7 @@ epic: no-coi-sandbox-tier
 why: the generic toolchain error path preserves a real named product gap hidden by an ordinary Error wrapper, but its declared eight-link walk reads a ninth cause getter at depth eight; an adversarial getter throws instead of returning the honest outer error
 user_story: As a package author whose installed bin wraps a rifty NotImplementedError in an ordinary loader Error, I want the existing toolchain result to preserve that named gap within a strict finite bound, while arbitrary, cyclic or hostile cause chains remain the original loud outer failure
 sources: [ADR-0375, docs/process/fault-classes.md]
-code: [packages/workbench/src/workers/declared-gap-cause.ts, packages/workbench/src/workers/declared-gap-cause.test.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts]
+code: [packages/runtime-js/src/internal/declared-gap-cause.ts, packages/runtime-js/src/internal/declared-gap-cause.test.ts, packages/workbench/src/workers/declared-gap-cause.test.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts]
 ---
 
 ## Context
