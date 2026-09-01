@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
@@ -486,6 +486,8 @@ pnpm test:packed-consumer
   is smuggled into this build-only unit.
 
 ## Decisions
+
+ready-verdict: 2026-09-01 — Contract+RED @ ead27000f
 
 ready-verdict: 2026-09-01 — Contract+RED @ f0066d4d2
 
