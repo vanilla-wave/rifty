@@ -147,10 +147,9 @@ it('admits a deferred first-materialization child only while its package tree st
   );
 
   const reservation = await state.reserveChildAdmission(`${ROOT}/src/missing.cjs`);
-  expect(reservation.snapshot).toMatchObject({
+  expect(reservation.snapshot).toEqual({
     root: ROOT,
-    ready: null,
-    capabilityPorts: {},
+    runtimeBindings: [],
   });
   reservation.commit();
 
@@ -193,10 +192,9 @@ it('re-publishes an exact empty tree after a coordinated package.json edit', asy
   );
 
   const reservation = await state.reserveChildAdmission(`${ROOT}/server.mjs`);
-  expect(reservation.snapshot).toMatchObject({
+  expect(reservation.snapshot).toEqual({
     root: ROOT,
-    ready: null,
-    capabilityPorts: {},
+    runtimeBindings: [],
   });
   reservation.commit();
 });
@@ -221,10 +219,9 @@ it('retains the installed tree for runtime after a coordinated package.json edit
   );
 
   const reservation = await state.reserveChildAdmission(`${ROOT}/server.mjs`);
-  expect(reservation.snapshot).toMatchObject({
+  expect(reservation.snapshot).toEqual({
     root: ROOT,
-    ready: null,
-    capabilityPorts: {},
+    runtimeBindings: [],
   });
   reservation.commit();
 
@@ -273,7 +270,7 @@ it('does not fall through a known nested root after production empty proof fails
   const unknownSubdirectory = await state.reserveChildAdmission(
     `${ROOT}/packages/unknown/src/main.ts`,
   );
-  expect(unknownSubdirectory.snapshot.root).toBe(ROOT);
+  expect(unknownSubdirectory.snapshot.runtimeBindings).toEqual([]);
   unknownSubdirectory.commit();
   await expect(state.reserveChildAdmission(`${nestedRoot}/src/main.ts`)).rejects.toThrow(
     `package tree readiness is not published for ${nestedRoot}`,

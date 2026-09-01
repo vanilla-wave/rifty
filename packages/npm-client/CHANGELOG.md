@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Test registry tarballs normalize the RFC 1952 OS byte, so fixture integrity
+  and shadow replay traces are identical on macOS and Linux CI.
+
 - Move-only decomposition: `installer.ts` (3064 lines) split along its
   existing seams into `installer-walk.ts`, `installer-sources.ts`,
   `eddy-fast-path.ts`, `installer-request.ts`, `installer-bin-claims.ts`,
@@ -53,23 +56,15 @@
   degrade into fallback or optional-dependency skip. Registry packument and
   tarball methods accept the new optional request-options argument.
 
-- **Builtin shadow-substitution runtime assets (ADR-0308).** Exact applied
-  recipe facts produce a canonical asset plan; a digest-verified manager
-  acquires each npm member once and mints a strict one-shot ready/read port for
-  admitted child entries. The exact `esbuild@0.28.0` recipe now
-  synthetic-materializes its CJS/ESM delegate and loud CLI bin without the
-  retired `@esbuild/wasi-preview1` alias. Its ready/read/cancel correlation
-  engine remains package-local under the recorded layer constraint (ADR-0321).
+- **Exact in-tree esbuild registry twin (ADR-0371).** The builtin
+  `esbuild@0.28.0` recipe acquires exact `esbuild-wasm@0.28.0` through the same
+  registry projection, tarball cache, tree materialization, and lock replay as
+  other twins, then derives one frozen `{adapterId, packagePath}` binding.
+  Runtime-asset catalog fields, CAS manager, member source, and ready/read/
+  cancel MessagePort protocol are removed.
 - Shadow recipe provenance now round-trips through lockfile markers plus a
   canonical applied trace. Synthetic replay performs zero registry reads;
   registry-backed install-only recipes retain exact acquisition provenance.
-- Shadow CAS readiness now distinguishes persisted OPFS, best-effort OPFS, and
-  memory sessions, durability-flushes mirror writes, reads back through the
-  actual persisted VFS, and refuses receipts/pointers after quota, torn-write,
-  lifecycle-abort, or port-death faults. Each CAS object is SHA-verified once
-  when loaded, then port reads copy the retained verified bytes without another
-  storage read or hash; a cold reopen still validates persisted bytes.
-
 - `serializePackageJson()` provides one canonical byte spelling for finite
   plain-data manifests shared by host plans, Workbench definitions, and snapshot
   tooling; lossy object shapes, accessors, cycles, and unsupported JSON leaves

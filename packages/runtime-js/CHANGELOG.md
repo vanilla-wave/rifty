@@ -63,6 +63,13 @@
   runtime owns identity across Vite imports without cloning esbuild's API
   object (ADR-0226).
 
+### Changed
+
+- **Entry-scoped runtime bindings (ADR-0371).** Node-entry v3 validates and
+  freezes exact `{adapterId, packagePath}` rows in its existing clone metadata;
+  recursive launches inherit them without a new channel or process-visible
+  environment field.
+
 ### Fixed
 
 - Headerless same-realm `child_process.spawn` warns once; `os.cpus()` and

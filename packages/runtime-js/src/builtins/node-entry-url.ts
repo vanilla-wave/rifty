@@ -19,10 +19,12 @@ export {
   NODE_ENTRY_BOOTSTRAP_PROTOCOL,
   buildNodeEntryWorkerEntry,
   readNodeEntryBootstrap,
+  snapshotNodeEntryRuntimeBindings,
   type NodeEntryBootstrapPayload,
   type NodeEntryEvalLaunch,
   type NodeEntryLaunch,
   type NodeEntryProgramLaunch,
+  type NodeEntryRuntimeBinding,
   type NodeEntryTerminalBootstrap,
   type NodeEntryWorkerThreadLaunch,
 } from './node-entry-runtime-config.ts';

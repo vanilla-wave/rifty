@@ -38,7 +38,7 @@ import {
 } from './installer-walk.ts';
 import type { InstallOptions } from './installer.ts';
 import { builtinRecipeForRequest } from './internal/shadow/admission.ts';
-import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
+import type { ShadowSubstitutionPlan } from './internal/shadow/planner.ts';
 import {
   planShadowSubstitutionsFromLockfile,
   registryShadowEmbeddedSourcesFromLockfile,
@@ -57,7 +57,7 @@ import { abortReason, awaitWithSignal } from './utils/abort-signal.ts';
 /** Skip Eddy when the existing lock owns replay or a loud structural failure. */
 export function existingLockfilePreemptsEddy(
   existingLockfile: Lockfile | null,
-  shadowPlan: ShadowAssetPlan | null,
+  shadowPlan: ShadowSubstitutionPlan | null,
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   rootName: string,
@@ -115,7 +115,7 @@ export async function tryEddyFastPath(
       resolvedAt?: string;
       resolvedVia: 'get' | 'post';
       lockfile: Lockfile;
-      shadowPlan: ShadowAssetPlan;
+      shadowPlan: ShadowSubstitutionPlan;
     }
   | {
       kind: 'declined';
@@ -298,7 +298,7 @@ async function consumeEddyResponse(
       closureHash?: string;
       resolvedAt?: string;
       lockfile: Lockfile;
-      shadowPlan: ShadowAssetPlan;
+      shadowPlan: ShadowSubstitutionPlan;
     }
   | string
 > {
@@ -356,7 +356,7 @@ async function consumeEddyResponse(
 
   let manifest: EddyBundleManifestV1 | null = null;
   let lockfile: Lockfile | null = null;
-  let shadowPlan: ShadowAssetPlan | null = null;
+  let shadowPlan: ShadowSubstitutionPlan | null = null;
   const byFile = new Map<string, EddyBundleTarballEntry>();
   const seededFiles = new Set<string>();
   const seededTarballs: EddyBundleTarballEntry[] = [];
@@ -514,13 +514,13 @@ function mergeLockfileRequestOwnership(
 interface LockfileRequestAnalysis {
   readonly ownership: LockfileRequestOwnership;
   readonly reachablePaths: ReadonlySet<string>;
-  readonly shadowPlan: ShadowAssetPlan;
+  readonly shadowPlan: ShadowSubstitutionPlan;
 }
 
 /** No-I/O mirror of the mixed resolver, used by the Eddy provenance gates. */
 function analyzeLockfileRequest(
   lockfile: Lockfile,
-  shadowPlan: ShadowAssetPlan,
+  shadowPlan: ShadowSubstitutionPlan,
   dependencies: Record<string, string>,
   optionalDependencies: Record<string, string>,
   rootName: string,

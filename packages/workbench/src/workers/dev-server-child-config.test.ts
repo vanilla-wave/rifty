@@ -45,6 +45,7 @@ function envelope(
     readonly terminal?: unknown;
     readonly previewScope?: unknown;
     readonly remoteFsRoot?: unknown;
+    readonly runtimeBindings?: unknown;
   } = {},
 ): unknown {
   return {
@@ -58,6 +59,9 @@ function envelope(
         : {}),
       ...(Object.prototype.hasOwnProperty.call(input, 'remoteFsRoot')
         ? { remoteFsRoot: input.remoteFsRoot }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(input, 'runtimeBindings')
+        ? { runtimeBindings: input.runtimeBindings }
         : {}),
     },
   };
@@ -90,6 +94,53 @@ describe('dev-server entry bootstrap', () => {
       terminal: TERMINAL,
       previewScope: 'consumer-preview',
     });
+  });
+
+  it('snapshots exact runtime bindings through the existing dev-server payload', () => {
+    const runtimeBindings = [
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: '/node_modules/esbuild-wasm',
+      },
+    ];
+    const resolved = resolveDevServerChildConfig(envelope({ runtimeBindings }));
+    runtimeBindings[0]!.packagePath = '/mutated';
+
+    expect(resolved).toMatchObject({
+      runtimeBindings: [
+        {
+          adapterId: 'rifty.runtime-adapter.esbuild.v1',
+          packagePath: '/node_modules/esbuild-wasm',
+        },
+      ],
+    });
+    expect(Object.isFrozen((resolved as { runtimeBindings?: unknown }).runtimeBindings)).toBe(true);
+    expect(
+      Object.isFrozen((resolved as { runtimeBindings?: readonly unknown[] }).runtimeBindings?.[0]),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['non-array', {}, /runtimeBindings.*array/i],
+    ['sparse', new Array(1), /runtimeBindings.*dense|element/i],
+    ['unknown field', [{ adapterId: 'a', packagePath: '/pkg', extra: true }], /unexpected field/i],
+    ['relative path', [{ adapterId: 'a', packagePath: 'node_modules/pkg' }], /packagePath/i],
+    ['root path', [{ adapterId: 'a', packagePath: '/' }], /packagePath/i],
+    [
+      'non-normal absolute path',
+      [{ adapterId: 'a', packagePath: '/workspace/../forged' }],
+      /packagePath/i,
+    ],
+    [
+      'duplicate adapter id',
+      [
+        { adapterId: 'a', packagePath: '/node_modules/one' },
+        { adapterId: 'a', packagePath: '/node_modules/two' },
+      ],
+      /duplicate.*adapter/i,
+    ],
+  ] as const)('rejects corrupt runtime bindings: %s', (_label, runtimeBindings, error) => {
+    expect(() => resolveDevServerChildConfig(envelope({ runtimeBindings }))).toThrow(error);
   });
 
   it('binds URL and detached config atomically and reads it through the kernel global', () => {

@@ -14,7 +14,17 @@
         "unsupportedFeature": "esbuild.version"
       },
       "acquisition": {
-        "kind": "synthetic"
+        "kind": "registry",
+        "name": "esbuild-wasm",
+        "version": "0.28.0",
+        "dependencyProjection": {
+          "dependencies": {},
+          "optionalDependencies": {},
+          "omittedOptionalDependencies": {},
+          "peerDependencies": {},
+          "bundledDependencies": [],
+          "unsupportedFeature": "esbuild.acquisition"
+        }
       },
       "materialization": {
         "name": "esbuild",
@@ -44,12 +54,9 @@
         ]
       },
       "binding": {
-        "adapterId": "rifty.runtime-adapter.esbuild.v1",
-        "assets": [
-          "esbuild-wasm@0.28.0/package/esbuild.wasm"
-        ]
+        "adapterId": "rifty.runtime-adapter.esbuild.v1"
       },
-      "digest": "b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28"
+      "digest": "7cd677fe08657829bf151d3d97520984d81f70323cdc948f8fd0a7116e4a4afd"
     },
     {
       "schema": 2,
@@ -172,20 +179,5 @@
       "digest": "eb0ca99df87e4df12d1fc3ec5b7fe8eb563cf68fe9527d7997c7e650fca95712"
     }
   ],
-  "assets": [
-    {
-      "id": "esbuild-wasm@0.28.0/package/esbuild.wasm",
-      "source": {
-        "name": "esbuild-wasm",
-        "version": "0.28.0",
-        "integrity": "sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg=="
-      },
-      "member": "package/esbuild.wasm",
-      "memberSha256": "9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b",
-      "memberSize": 13918738,
-      "maxTarballBytes": 3845798,
-      "maxUnpackedBytes": 14483968
-    }
-  ],
-  "digest": "16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6"
+  "digest": "c9f38a0ea9218c64fdc68bca65eb34817cb51f1c1132c89048ffcb86b510d4b0"
 }

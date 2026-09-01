@@ -33,7 +33,6 @@ import { installNodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts'
 import { createOwnerExecSyncRunner } from './owner-child-node-executor.ts';
 import { resolveOwnerGitCommitIdentity } from './owner-git-commit-identity.ts';
 import { createOwnerPackageState } from './owner-package-state.ts';
-import { createOwnerShadowAssetAuthority } from './owner-shadow-assets.ts';
 import {
   type OwnerVfsAuthority,
   type OwnerVfsAuthorityComposition,
@@ -161,7 +160,6 @@ function playgroundTypeScriptWorkerUrl(config: WorkbenchOwnerBootConfig): string
 function withOwnerClose(
   materializer: ProjectMaterializer,
   packageQuiesce: () => Promise<void>,
-  closeShadowAssets: () => Promise<void>,
   authority: OwnerVfsAuthority,
 ): ProjectMaterializer {
   let closePromise: Promise<void> | null = null;
@@ -179,11 +177,6 @@ function withOwnerClose(
         }
         try {
           await packageQuiesce();
-        } catch (error) {
-          failures.push(error);
-        }
-        try {
-          await closeShadowAssets();
         } catch (error) {
           failures.push(error);
         }
@@ -206,7 +199,6 @@ function createCompanionOwnerClose(
   authority: PlaygroundProjectAuthority,
   unsubscribeCatalog: () => void,
   packageQuiesce: () => Promise<void>,
-  closeShadowAssets: () => Promise<void>,
   vfsAuthority: OwnerVfsAuthority,
 ): () => Promise<void> {
   let closePromise: Promise<void> | null = null;
@@ -226,11 +218,6 @@ function createCompanionOwnerClose(
       }
       try {
         await packageQuiesce();
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await closeShadowAssets();
       } catch (error) {
         failures.push(error);
       }
@@ -309,27 +296,6 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   const registry = createProxiedRegistryClient({
     proxyPrefix: config.packageAcquisition.registryUrl,
   });
-  const shadowAssets = (
-    await createOwnerShadowAssetAuthority({
-      ownerStorage: storage,
-      vfs: ownerVfs,
-      registry,
-      ...(storageAuthority.opfs === undefined
-        ? {}
-        : {
-            durability: {
-              persistedVfs: storageAuthority.opfs.persistedVfs,
-              flush: async () => {
-                const report = await authority.flush();
-                if (report === undefined) {
-                  throw new Error('OPFS shadow asset flush returned no durability report');
-                }
-                return report;
-              },
-            },
-          }),
-    })
-  ).manager;
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
@@ -342,7 +308,6 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
     registry,
-    shadowAssets,
     resolverUrl: () => eddy?.resolverUrl,
     resolverBundleBaseUrl: () => eddy?.bundleBaseUrl,
     resolverPin: (templateId) => eddy?.presetPins[templateId],
@@ -364,12 +329,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           ),
       },
     });
-    materializer = withOwnerClose(
-      coreMaterializer,
-      () => packageState.quiesce(),
-      () => shadowAssets.close(),
-      authority,
-    );
+    materializer = withOwnerClose(coreMaterializer, () => packageState.quiesce(), authority);
     closeAuthority = () => (materializer as ProjectMaterializer).close();
   } else {
     playgroundAuthority = await createPlaygroundProjectAuthority({
@@ -416,7 +376,6 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       playgroundAuthority,
       unsubscribeCatalog,
       () => packageState.quiesce(),
-      () => shadowAssets.close(),
       authority,
     );
   }

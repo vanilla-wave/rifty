@@ -4,7 +4,6 @@
  * stdout/stderr bytes. Physical project roots stay in bootstrap config.
  */
 import {
-  type KernelEntryCapabilityPorts,
   type ProcessTerminalEventSource,
   type SpawnWorkerSpec,
   globalProcessManager,
@@ -13,6 +12,7 @@ import {
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
 import {
   type NodeEntryLaunch,
+  type NodeEntryRuntimeBinding,
   buildNodeEntryWorkerEntry,
 } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { InstallRuntimeJsExecSyncOptions } from '@riftydev/runtime-js/ipc/exec-sync-handler';
@@ -26,11 +26,8 @@ import {
 import { toOwnerProjectPath } from '../workbench/project-file-boundary.ts';
 import {
   type ReserveOwnerChildAdmission,
-  abortOwnerChildAdmissionAfterSpawn,
-  abortOwnerChildAdmissionBeforeSpawn,
-  attachOwnerChildCapabilities,
-  commitOwnerChildAdmission,
   observeOwnerChildExit,
+  projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
 
 type OwnerExecSyncRunner = NonNullable<InstallRuntimeJsExecSyncOptions['runWorker']>;
@@ -93,18 +90,20 @@ export function createOwnerExecSyncRunner(
     const reservation = await reserveAdmission(toOwnerProjectPath(remoteFsRoot, spec.entryPath));
     let child: OwnerExecSyncChild;
     try {
+      const projectedBindings = projectOwnerChildRuntimeBindings(
+        reservation.snapshot.runtimeBindings,
+        remoteFsRoot,
+      );
       child = spawn(
         {
-          entry: attachOwnerChildCapabilities(
-            buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
-              kind: 'program',
-              bin: false,
-              remoteFs: true,
-              remoteFsRoot,
-              nodeServe: false,
-            }),
-            reservation.snapshot.capabilityPorts,
-          ),
+          entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
+            kind: 'program',
+            bin: false,
+            remoteFs: true,
+            remoteFsRoot,
+            nodeServe: false,
+            runtimeBindings: projectedBindings,
+          }),
           argv: spec.argv,
           env: { ...spec.env },
           cwd: spec.cwd,
@@ -112,7 +111,7 @@ export function createOwnerExecSyncRunner(
         context?.parentPid ?? 1,
       );
     } catch (error) {
-      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      reservation.abortBeforeSpawn(error);
       throw error;
     }
     let resolvePhysicalExit = (): void => {};
@@ -158,7 +157,7 @@ export function createOwnerExecSyncRunner(
       child.stderr.on('data', (chunk) => {
         if (chunk instanceof Uint8Array) stderr.push(chunk);
       });
-      commitOwnerChildAdmission(reservation, physicalExit);
+      reservation.commit();
     } catch (error) {
       let failure = error;
       // SIGTERM starts the kernel's ordered teardown; the worker is gone only
@@ -173,7 +172,7 @@ export function createOwnerExecSyncRunner(
           'execSync child setup and termination failed',
         );
       }
-      await abortOwnerChildAdmissionAfterSpawn(reservation, failure, termination);
+      await reservation.abortAfterChildSettlement(failure, termination);
       throw failure;
     }
     return result;
@@ -201,13 +200,15 @@ export function buildNodeChildSpawnSpec(
   rows = 24,
   previewScope?: string,
   remoteFsRoot?: string,
-  capabilityPorts?: KernelEntryCapabilityPorts,
+  runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
 ): SpawnWorkerSpec {
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, remoteFsRoot);
   const common = {
     remoteFs: true,
     ...(remoteFsRoot === undefined ? {} : { remoteFsRoot }),
     ...(previewScope === undefined ? {} : { previewScope }),
     terminal: childTerminalBootstrap({ isTTY: tty, cols, rows }),
+    runtimeBindings: projectedBindings,
   } as const;
   const launch: NodeEntryLaunch =
     typeof execution === 'string'
@@ -226,10 +227,7 @@ export function buildNodeChildSpawnSpec(
         };
   const workerEntry = buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, launch);
   return {
-    entry:
-      capabilityPorts === undefined
-        ? workerEntry
-        : attachOwnerChildCapabilities(workerEntry, capabilityPorts),
+    entry: workerEntry,
     argv:
       typeof execution === 'string'
         ? ['rifty', execution, ...args]
@@ -308,11 +306,11 @@ export function createOwnerChildNodeExecutor(
           ctx.rows ?? 24,
           hooks.previewScope,
           hooks.remoteFsRoot,
-          reservation.snapshot.capabilityPorts,
+          reservation.snapshot.runtimeBindings,
         ),
       );
     } catch (error) {
-      abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+      reservation.abortBeforeSpawn(error);
       throw error;
     }
     const physicalExit = observeOwnerChildExit(handle);
@@ -325,14 +323,14 @@ export function createOwnerChildNodeExecutor(
           hooks.onListening(hooks.sid, control.pid, control.ports, control.previewScope),
         onExit: () => hooks.onExit(hooks.sid),
       });
-      commitOwnerChildAdmission(reservation, physicalExit);
+      reservation.commit();
     } catch (error) {
       try {
         handle.kill('SIGTERM');
       } catch {
         // Exact physical exit observation below remains authoritative.
       }
-      await abortOwnerChildAdmissionAfterSpawn(reservation, error, physicalExit);
+      await reservation.abortAfterChildSettlement(error, physicalExit);
       throw error;
     }
     return running;

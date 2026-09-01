@@ -2,13 +2,7 @@
 
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
-import {
-  createMemoryShadowAssetStorage,
-  createOriginExclusiveShadowAssetManager,
-  createRegistryShadowAssetSource,
-  createShadowAssetPortClient,
-  shadowAssetPlanForInstallResult,
-} from '@riftydev/npm-client/internal';
+import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
 import {
   awaitDrain,
   installConsole,
@@ -187,31 +181,16 @@ async function capturedNodeRun(options: {
 }
 
 async function activateViteRuntime(): Promise<void> {
-  if (registry === null || installResult === null) throw new Error('install must complete first');
-  const manager = createOriginExclusiveShadowAssetManager({
-    storage: createMemoryShadowAssetStorage(),
-    source: createRegistryShadowAssetSource(registry),
+  if (installResult === null) throw new Error('install must complete first');
+  const plan = shadowSubstitutionPlanForInstallResult(installResult);
+  await activateWorkbenchRuntimeAdapters({
+    bindings: plan.bindings.map((binding) => ({
+      ...binding,
+      packagePath: `${root}/${binding.packagePath}`,
+    })),
+    fs: syncMirror(),
+    cwd: root,
   });
-  const ready = await manager.ensure(shadowAssetPlanForInstallResult(installResult));
-  const channel = new MessageChannel();
-  const server = manager.serve(ready, channel.port2);
-  const client = createShadowAssetPortClient(channel.port1);
-  let failure: unknown;
-  try {
-    await activateWorkbenchRuntimeAdapters({ assets: client, fs: syncMirror(), cwd: root });
-  } catch (error) {
-    failure = error;
-  }
-  server.dispose();
-  try {
-    await manager.close();
-  } catch (closeError) {
-    if (failure !== undefined) {
-      throw new AggregateError([failure, closeError], 'runtime activation and close failed');
-    }
-    throw closeError;
-  }
-  if (failure !== undefined) throw failure;
 }
 
 async function dispatch(value: unknown): Promise<unknown> {

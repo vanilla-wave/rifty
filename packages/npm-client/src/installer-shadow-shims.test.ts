@@ -17,7 +17,7 @@ import {
 import { closureHashOf } from './closure-hash.ts';
 import { EDDY_BUNDLE_FORMAT, packEddyBundle } from './eddy-bundle.ts';
 import { install } from './installer.ts';
-import { shadowAssetPlanForInstallResult } from './internal/shadow/index.ts';
+import { shadowSubstitutionPlanForInstallResult } from './internal/shadow/install-result.ts';
 import type { Lockfile } from './linker.ts';
 import { resolveOverride } from './overrides.ts';
 import type { Packument, VersionManifest } from './registry.ts';
@@ -73,7 +73,7 @@ async function makeEntry(
   name: string,
   version: string,
   dependencies: Record<string, string> = {},
-  files: Record<string, string> = {},
+  files: Record<string, string | Uint8Array> = {},
   bin?: VersionManifest['bin'],
   optionalDependencies: Record<string, string> = {},
   manifestOptions: EntryManifestOptions = {},
@@ -94,7 +94,7 @@ async function makeEntry(
   };
   const packageJson = JSON.stringify(manifestFields);
   for (const [entry, body] of Object.entries({ 'package.json': packageJson, ...files })) {
-    const bytes = new TextEncoder().encode(body);
+    const bytes = typeof body === 'string' ? new TextEncoder().encode(body) : body;
     chunks.push(buildHeader(`package/${entry}`, bytes.length), padToBlock(bytes));
   }
   return {
@@ -123,6 +123,13 @@ async function readText(vfs: MemoryVfs, path: string): Promise<string> {
 }
 
 const REAL_ROLLUP_NATIVE = 'throw new Error("REAL-NATIVE-SENTINEL");';
+const requireFromRegistry = createRequire(
+  new URL('../../../tools/shadow-registry/package.json', import.meta.url),
+);
+const exactEsbuildWasm = new Uint8Array(
+  await readFile(requireFromRegistry.resolve('esbuild-wasm/esbuild.wasm')),
+);
+const exactEsbuildWasmSha256 = createHash('sha256').update(exactEsbuildWasm).digest('hex');
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -682,9 +689,21 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
   });
 });
 
-describe('shadow substitutions — synthetic recipes + retained legacy redirects', () => {
+describe('shadow substitutions — registry twins + retained legacy redirects', () => {
   async function esbuildDb() {
     return db(
+      [
+        'esbuild-wasm',
+        await makeEntry(
+          'esbuild-wasm',
+          '0.28.0',
+          {},
+          { 'esbuild.wasm': exactEsbuildWasm },
+          undefined,
+          {},
+          { peerDependencies: {}, bundleDependencies: [] },
+        ),
+      ],
       ['user-esbuild-target', await makeEntry('user-esbuild-target', '0.28.0')],
       ['viteish', await makeEntry('viteish', '1.0.0', { esbuild: '^0.28.0' })],
       ['viteish-old', await makeEntry('viteish-old', '1.0.0', { esbuild: '0.21.5' })],
@@ -694,7 +713,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
   const MATERIALIZE_LINE =
     'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)';
 
-  it('materializes synthetic esbuild on fresh + replay, byte-identical', async () => {
+  it('materializes esbuild over its exact registry twin on fresh + offline replay', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -714,6 +733,11 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
     expect(aliasMain).toContain('__rifty?.esbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
+    const wasm = await vfs.readFile('/proj/node_modules/esbuild-wasm/esbuild.wasm');
+    expect(wasm.byteLength).toBe(13_918_738);
+    expect(createHash('sha256').update(wasm).digest('hex')).toBe(exactEsbuildWasmSha256);
+    expect(registry.packumentReads).toBe(1);
+    expect(registry.tarballReads).toBe(1);
     expect(fresh).toContain(MATERIALIZE_LINE);
 
     // Replay (lockfile fast path): same lines, byte-identical shim files.
@@ -731,14 +755,17 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     );
     expect(replay).toContain(MATERIALIZE_LINE);
     expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasMain);
+    expect(await vfs.readFile('/proj/node_modules/esbuild-wasm/esbuild.wasm')).toEqual(wasm);
+    expect(registry.packumentReads).toBe(1);
+    expect(registry.tarballReads).toBe(1);
   });
 
-  it('materializes a transitive synthetic recipe on fresh AND replay', async () => {
+  it('materializes a transitive registry-twin recipe on fresh AND replay', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
     const fresh: string[] = [];
-    await install(
+    const first = await install(
       'root',
       '1.0.0',
       { viteish: '1.0.0' },
@@ -750,10 +777,35 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       },
     );
     expect(fresh).toContain(MATERIALIZE_LINE);
-    expect(await vfs.exists('/proj/node_modules/esbuild/lib/main.cjs')).toBe(true);
+    const firstMain = await vfs.readFile('/proj/node_modules/esbuild/lib/main.cjs');
+    const firstBin = await vfs.readFile('/proj/node_modules/esbuild/bin/esbuild');
+    const firstWasm = await vfs.readFile('/proj/node_modules/esbuild-wasm/esbuild.wasm');
+    expect(firstWasm.byteLength).toBe(13_918_738);
+    expect(createHash('sha256').update(firstWasm).digest('hex')).toBe(exactEsbuildWasmSha256);
+    expect(first.lockfile.packages['node_modules/esbuild']).toMatchObject({
+      version: '0.28.0',
+      bin: { esbuild: 'bin/esbuild' },
+      riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+    });
+    expect(first.lockfile.packages['node_modules/esbuild-wasm']).toMatchObject({
+      version: '0.28.0',
+      resolved: 'fake://esbuild-wasm|0.28.0',
+      integrity: expect.stringMatching(/^sha512-/u),
+    });
+    expect(first.lockfile.rifty?.shadowSubstitutions.applied).toHaveLength(1);
+    expect(shadowSubstitutionPlanForInstallResult(first)).toMatchObject({
+      bindings: [
+        {
+          adapterId: 'rifty.runtime-adapter.esbuild.v1',
+          packagePath: 'node_modules/esbuild-wasm',
+        },
+      ],
+    });
+    expect(registry.packumentReads).toBe(2);
+    expect(registry.tarballReads).toBe(2);
 
     const replay: string[] = [];
-    await install(
+    const second = await install(
       'root',
       '1.0.0',
       { viteish: '1.0.0' },
@@ -765,6 +817,15 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
       },
     );
     expect(replay).toContain(MATERIALIZE_LINE);
+    expect(second.lockfile).toEqual(first.lockfile);
+    expect(shadowSubstitutionPlanForInstallResult(second)).toEqual(
+      shadowSubstitutionPlanForInstallResult(first),
+    );
+    expect(await vfs.readFile('/proj/node_modules/esbuild/lib/main.cjs')).toEqual(firstMain);
+    expect(await vfs.readFile('/proj/node_modules/esbuild/bin/esbuild')).toEqual(firstBin);
+    expect(await vfs.readFile('/proj/node_modules/esbuild-wasm/esbuild.wasm')).toEqual(firstWasm);
+    expect(registry.packumentReads).toBe(2);
+    expect(registry.tarballReads).toBe(2);
   });
 
   it('attests and replays the registry-backed lightningcss recipe', async () => {
@@ -821,11 +882,9 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     expect(await readText(vfs, '/proj/node_modules/lightningcss/index.mjs')).toContain(
       "from 'lightningcss-wasm'",
     );
-    expect(shadowAssetPlanForInstallResult(first)).toMatchObject({
-      assets: [],
-      bindings: [],
-      substitutions: [{ substitutionId: recipeId }],
-    });
+    expect(first.lockfile.rifty?.shadowSubstitutions.applied).toEqual(
+      expect.arrayContaining([expect.objectContaining({ substitutionId: recipeId })]),
+    );
 
     const packument = vi.spyOn(registry, 'getPackument');
     const replayTrace: string[] = [];
@@ -851,7 +910,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     feature: 'esbuild.version',
   };
 
-  it('refuses a direct synthetic substitution when the request excludes exact esbuild 0.28.0', async () => {
+  it('refuses a direct registry-twin substitution when the request excludes exact esbuild 0.28.0', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const lines: string[] = [];
@@ -873,7 +932,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
   });
 
-  it('refuses a direct synthetic substitution on replay when the request excludes exact esbuild 0.28.0', async () => {
+  it('refuses a direct registry-twin substitution on replay when the request excludes exact esbuild 0.28.0', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -895,7 +954,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasBefore);
   });
 
-  it('refuses a transitive synthetic substitution outside its exact recipe', async () => {
+  it('refuses a transitive registry-twin substitution outside its exact recipe', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const lines: string[] = [];
@@ -947,7 +1006,7 @@ describe('shadow substitutions — synthetic recipes + retained legacy redirects
     expect(await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs')).toBe(aliasBefore);
   });
 
-  it('lets an explicit user target bypass built-in synthetic policy without shadow attribution', async () => {
+  it('lets an explicit user target bypass built-in registry-twin policy without shadow attribution', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     const registry = new FakeRegistry(await esbuildDb());
@@ -1071,3 +1130,6 @@ describe('shadow-registry data consistency (npm-client is the semver-aware side)
     }
   });
 });
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';

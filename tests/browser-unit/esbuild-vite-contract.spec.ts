@@ -605,12 +605,29 @@ function registryPackageRequests(urls: readonly string[], packageName: string): 
   });
 }
 
-function hostEsbuildWasmRequests(urls: readonly string[]): readonly string[] {
+function registryRequests(urls: readonly string[]): readonly string[] {
   return urls.filter((url) => {
     try {
-      return new URL(url).pathname.endsWith('/esbuild.wasm');
+      return new URL(url).pathname.includes('/npm-registry');
     } catch {
       return false;
+    }
+  });
+}
+
+const HOST_WASM_BOOT_LEDGER = ['platform:sql.js/dist/sql-wasm.wasm'] as const;
+
+function hostWasmLedger(urls: readonly string[]): readonly string[] {
+  return urls.flatMap((url) => {
+    try {
+      const path = new URL(url).pathname;
+      if (path.includes('/npm-registry') || !path.endsWith('.wasm')) return [];
+      if (path.endsWith('/node_modules/sql.js/dist/sql-wasm.wasm')) {
+        return ['platform:sql.js/dist/sql-wasm.wasm'];
+      }
+      return [path];
+    } catch {
+      return [];
     }
   });
 }
@@ -983,6 +1000,7 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
   await gotoHarness(page);
+  requests.length = 0;
   const bootOptions = {
     workspaceId: 'bu-esbuild-vite-contract',
     template: 'vite' as const,
@@ -1018,11 +1036,11 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       .toBe('rifty.shadow-substitution.esbuild.v2');
     expect.soft(esbuildRecipe?.catalog, 'real Chromium esbuild catalog identity').toEqual({
       id: 'rifty.shadow-substitutions.builtin.v2',
-      digest: '16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6',
+      digest: 'c9f38a0ea9218c64fdc68bca65eb34817cb51f1c1132c89048ffcb86b510d4b0',
     });
     expect
       .soft(esbuildRecipe?.recipeDigest, 'real Chromium esbuild recipe digest')
-      .toBe('b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28');
+      .toBe('7cd677fe08657829bf151d3d97520984d81f70323cdc948f8fd0a7116e4a4afd');
     expect
       .soft(esbuildRecipe?.materialization, 'real Chromium esbuild materialization identity')
       .toMatchObject({
@@ -1173,16 +1191,34 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
       distExecutionError: '',
     });
     expect(aliasRequests(requests), 'retired @esbuild/wasi-preview1 alias request').toEqual([]);
-    expect(hostEsbuildWasmRequests(requests), 'retired host esbuild.wasm asset request').toEqual(
-      [],
-    );
+    expect(hostWasmLedger(requests), 'exact host wasm boot ledger').toEqual(HOST_WASM_BOOT_LEDGER);
     expect(
-      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
-      'Vite 7 must acquire the registry recipe asset, not host bytes',
-    ).toBe(true);
+      registryRequests(requests),
+      'instant Vite 7 must make no registry request for its restored tree',
+    ).toEqual([]);
+    const twinManifest = await readOwnerFile(
+      page,
+      '/scratch/node_modules/esbuild-wasm/package.json',
+    );
+    expect(JSON.parse(twinManifest.text)).toMatchObject({
+      name: 'esbuild-wasm',
+      version: '0.28.0',
+    });
 
     await closeOwner(page);
     ownerOpen = false;
+    requests.length = 0;
+    // Contract RED: remove the retired out-of-tree CAS. The restored project
+    // must remain self-contained; old Pattern-2 fails the offline reopen here.
+    await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory();
+      try {
+        const rifty = await root.getDirectoryHandle('.rifty');
+        await rifty.removeEntry('shadow-assets', { recursive: true });
+      } catch (error) {
+        if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
+      }
+    });
     const blockedRegistryRequests: string[] = [];
     await context.route(/\/npm-registry(?:\/|$)/u, async (route) => {
       blockedRegistryRequests.push(route.request().url());
@@ -1192,12 +1228,17 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
     ownerOpen = true;
     const offlineBuild = await execLine(page, 'vite build');
     expect(offlineBuild.exit, offlineBuild.out).toBe(0);
+    expect(offlineBuild.out).not.toContain('npm: installing');
     const offlineDev = await execLineUntil(page, 'vite --host 127.0.0.1 --port 5174', 'Local');
     expect(offlineDev.out).toContain('Local');
+    expect(offlineDev.out).not.toContain('npm: installing');
     expect(
       blockedRegistryRequests,
-      'cold-filled Vite tree and registry asset must reopen without acquisition',
+      'restored registry twin must reopen after the retired CAS is absent',
     ).toEqual([]);
+    expect(registryRequests(requests)).toEqual([]);
+    expect(hostWasmLedger(requests)).toEqual([]);
+    expect(aliasRequests(requests)).toEqual([]);
   } finally {
     if (ownerOpen) await closeOwner(page);
   }
@@ -1211,6 +1252,7 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
   await gotoHarness(page);
+  requests.length = 0;
   const cjsResultPath = '/direct-cjs-result.json';
   const esmResultPath = '/direct-esm-result.json';
   const bootOptions = {
@@ -1273,13 +1315,14 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     expect(parseResult<DirectEnvelope>(cjsFile, 'direct CJS')).toEqual(expected);
     expect(parseResult<DirectEnvelope>(esmFile, 'direct ESM')).toEqual(expected);
     expect(aliasRequests(requests), 'retired @esbuild/wasi-preview1 alias request').toEqual([]);
-    expect(hostEsbuildWasmRequests(requests), 'retired host esbuild.wasm asset request').toEqual(
-      [],
-    );
+    expect(hostWasmLedger(requests), 'exact host wasm boot ledger').toEqual(HOST_WASM_BOOT_LEDGER);
     expect(
-      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
-      'direct esbuild must acquire the registry recipe asset',
-    ).toBe(true);
+      registryRequests(requests).map((request) => new URL(request).pathname),
+      'direct esbuild cold install must make only the exact ordinary twin requests once',
+    ).toEqual([
+      '/npm-registry/esbuild-wasm',
+      '/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz',
+    ]);
 
     await closeOwner(page);
     ownerOpen = false;
@@ -1310,6 +1353,7 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
   await gotoHarness(page);
+  requests.length = 0;
   const resultPath = '/missing-esbuild-result.json';
   await bootOwner(page, {
     workspaceId: 'bu-esbuild-missing-and-unsupported',
@@ -1359,9 +1403,9 @@ test('missing esbuild keeps Node MODULE_NOT_FOUND and unsupported install leaves
       parseResult<ModuleNotFoundEvidence>(secondEvidence, 'missing after rejected install'),
     ).toEqual(nativeMissingEsbuildEvidence());
     expect(
-      registryPackageRequests(requests, 'esbuild-wasm').length > 0,
-      'unsupported recipe must not acquire runtime assets',
-    ).toBe(false);
+      registryPackageRequests(requests, 'esbuild-wasm'),
+      'unsupported recipe must not acquire a twin',
+    ).toEqual([]);
   } finally {
     await closeOwner(page);
   }
@@ -1470,6 +1514,7 @@ test('Vite 8.0.16 base "./" build/preview stay green with no esbuild fetch or ac
   const requests: string[] = [];
   context.on('request', (request) => requests.push(request.url()));
   await gotoHarness(page);
+  requests.length = 0;
   await bootOwner(page, {
     workspaceId: 'bu-vite8-empty-esbuild-plan',
     persistence: 'ephemeral',
@@ -1571,7 +1616,7 @@ globalThis.process.stdout.write('RIFTY_VITE8_NO_ESBUILD\\n');
       'Vite 8 cold install must not fetch any esbuild package or asset',
     ).toEqual([]);
     expect(aliasRequests(requests)).toEqual([]);
-    expect(hostEsbuildWasmRequests(requests)).toEqual([]);
+    expect(hostWasmLedger(requests)).toEqual(HOST_WASM_BOOT_LEDGER);
   } finally {
     await closeOwner(page);
   }

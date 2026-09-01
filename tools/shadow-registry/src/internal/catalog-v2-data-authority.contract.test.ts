@@ -70,7 +70,6 @@ function withDigest<T extends object>(value: T): T & Readonly<{ digest: string }
 }
 
 function rawSchema2Catalog() {
-  const assetId = 'contract.esbuild-runtime.v1';
   const recipes = [
     withDigest({
       schema: 2 as const,
@@ -80,7 +79,19 @@ function rawSchema2Catalog() {
         kind: 'semver-admits' as const,
         unsupportedFeature: 'esbuild.version',
       },
-      acquisition: { kind: 'synthetic' as const },
+      acquisition: {
+        kind: 'registry' as const,
+        name: 'esbuild-wasm',
+        version: '0.28.0',
+        dependencyProjection: {
+          dependencies: {},
+          optionalDependencies: {},
+          omittedOptionalDependencies: {},
+          peerDependencies: {},
+          bundledDependencies: [],
+          unsupportedFeature: 'esbuild.acquisition',
+        },
+      },
       materialization: {
         name: 'esbuild',
         version: '0.28.0',
@@ -97,7 +108,7 @@ function rawSchema2Catalog() {
           ),
         ],
       },
-      binding: { adapterId: 'contract.esbuild-adapter.v1', assets: [assetId] },
+      binding: { adapterId: 'contract.esbuild-adapter.v1' },
     }),
     withDigest({
       schema: 2 as const,
@@ -134,21 +145,6 @@ function rawSchema2Catalog() {
     schema: 2 as const,
     id: 'contract.shadow-substitutions.v2',
     recipes,
-    assets: [
-      {
-        id: assetId,
-        source: {
-          name: '@contract/esbuild-runtime',
-          version: '0.28.0',
-          integrity: `sha512-${btoa('\0'.repeat(64))}`,
-        },
-        member: 'package/bin/esbuild.wasm',
-        memberSha256: '0'.repeat(64),
-        memberSize: 1,
-        maxTarballBytes: 2,
-        maxUnpackedBytes: 3,
-      },
-    ],
   };
   return { ...payload, digest: shadowDigest(payload) };
 }
@@ -311,7 +307,7 @@ const DATA_MUTATIONS: readonly MutationCase[] = [
     ['recipes', 0, 'admission', 'kind'],
   ),
   deleteMutation(
-    'missing synthetic acquisition kind',
+    'missing registry acquisition kind',
     'catalog.recipes[0].acquisition.kind',
     'unsupported acquisition',
     ['recipes', 0, 'acquisition', 'kind'],
@@ -346,17 +342,6 @@ const DATA_MUTATIONS: readonly MutationCase[] = [
     'extra or missing fields',
     ['recipes', 0, 'binding', 'adapterId'],
   ),
-  deleteMutation('missing asset member', 'catalog.assets[0]', 'extra or missing fields', [
-    'assets',
-    0,
-    'member',
-  ]),
-  deleteMutation(
-    'missing asset source integrity',
-    'catalog.assets[0].source',
-    'extra or missing fields',
-    ['assets', 0, 'source', 'integrity'],
-  ),
   mutation('non-enumerable required field', 'catalog', 'extra or missing fields', (catalog) => {
     Object.defineProperty(catalog, 'id', {
       configurable: true,
@@ -388,7 +373,7 @@ const DATA_MUTATIONS: readonly MutationCase[] = [
     },
   ),
   mutation(
-    'unknown synthetic acquisition field',
+    'unknown registry acquisition field',
     'catalog.recipes[0].acquisition',
     'extra or missing fields',
     (catalog) => {
@@ -437,17 +422,6 @@ const DATA_MUTATIONS: readonly MutationCase[] = [
     'extra or missing fields',
     (catalog) => {
       Reflect.set(recordAt(catalog, ['recipes', 0, 'binding']), 'unexpected', true);
-    },
-  ),
-  mutation('unknown asset field', 'catalog.assets[0]', 'extra or missing fields', (catalog) => {
-    Reflect.set(catalog.assets[0]!, 'unexpected', true);
-  }),
-  mutation(
-    'unknown asset source field',
-    'catalog.assets[0].source',
-    'extra or missing fields',
-    (catalog) => {
-      Reflect.set(catalog.assets[0]!.source, 'unexpected', true);
     },
   ),
   directMutation(
@@ -508,13 +482,6 @@ const DATA_MUTATIONS: readonly MutationCase[] = [
     '-leading',
   ),
   directMutation(
-    'invalid runtime source package name',
-    'catalog.assets[0].source.name',
-    'invalid package name',
-    ['assets', 0, 'source', 'name'],
-    '@scope//pkg',
-  ),
-  directMutation(
     'invalid trigger version',
     'catalog.recipes[0].trigger.version',
     'invalid exact version',
@@ -534,13 +501,6 @@ const DATA_MUTATIONS: readonly MutationCase[] = [
     'invalid exact version',
     ['recipes', 0, 'materialization', 'version'],
     'v0.28.0',
-  ),
-  directMutation(
-    'invalid runtime source version',
-    'catalog.assets[0].source.version',
-    'invalid exact version',
-    ['assets', 0, 'source', 'version'],
-    '0.28',
   ),
   ...(
     [
@@ -647,13 +607,6 @@ const DATA_MUTATIONS: readonly MutationCase[] = [
     'catalog.recipes[0].materialization.files',
     'must be dense and have no extra fields',
     ['recipes', 0, 'materialization', 'files'],
-    new Array<unknown>(1),
-  ),
-  directMutation(
-    'sparse catalog assets',
-    'catalog.assets',
-    'must be dense and have no extra fields',
-    ['assets'],
     new Array<unknown>(1),
   ),
   directMutation(
@@ -767,56 +720,6 @@ const DATA_MUTATIONS: readonly MutationCase[] = [
         version: '0.28.0',
         bin: { esbuild: './bin/other' },
       });
-      resign(catalog);
-    },
-  ),
-  directMutation(
-    'sparse binding assets',
-    'catalog.recipes[0].binding.assets',
-    'must be dense and have no extra fields',
-    ['recipes', 0, 'binding', 'assets'],
-    new Array<unknown>(1),
-  ),
-  mutation(
-    'duplicate binding asset',
-    'catalog.recipes[0].binding.assets',
-    'duplicate member or non-canonical ordering',
-    (catalog) => {
-      const assets = recordAt(catalog, ['recipes', 0, 'binding']).assets;
-      if (!Array.isArray(assets)) throw new Error('fixture binding assets are missing');
-      assets.push(assets[0]);
-      resign(catalog);
-    },
-  ),
-  mutation(
-    'unknown binding asset',
-    'catalog.recipes[0].binding.assets',
-    'unknown asset contract.unknown-runtime.v1',
-    (catalog) => {
-      setAt(catalog, ['recipes', 0, 'binding', 'assets', 0], 'contract.unknown-runtime.v1');
-      resign(catalog);
-    },
-  ),
-  directMutation(
-    'invalid asset integrity',
-    'catalog.assets[0].source.integrity',
-    'non-canonical or wrong-length digest',
-    ['assets', 0, 'source', 'integrity'],
-    'sha512-AA==',
-  ),
-  directMutation(
-    'invalid asset member path',
-    'catalog.assets[0].member',
-    'must be a normalized relative path',
-    ['assets', 0, 'member'],
-    '/absolute',
-  ),
-  mutation(
-    'duplicate catalog asset identity',
-    'catalog.assets',
-    'duplicate identity or non-canonical ordering',
-    (catalog) => {
-      catalog.assets.push(structuredClone(catalog.assets[0]!));
       resign(catalog);
     },
   ),
@@ -1118,8 +1021,6 @@ describe('shadow recipe v2 data authority', () => {
     setAt(catalog, ['recipes', 1, 'acquisition', 'version'], '1.32.0-next.1');
     setAt(catalog, ['recipes', 1, 'materialization', 'name'], '@scope/materialized');
     setAt(catalog, ['recipes', 1, 'materialization', 'version'], '1.32.0-next.1');
-    setAt(catalog, ['assets', 0, 'source', 'name'], '@scope/asset');
-    setAt(catalog, ['assets', 0, 'source', 'version'], '0.28.0-next.1');
     const dependencies = recordAt(catalog, [
       'recipes',
       1,
@@ -1178,7 +1079,7 @@ describe('shadow recipe v2 data authority', () => {
       'kind',
     ],
     [
-      'synthetic acquisition record',
+      'registry acquisition record',
       'catalog.recipes[0].acquisition',
       ['recipes', 0, 'acquisition'] as const,
       'kind',
@@ -1225,13 +1126,6 @@ describe('shadow recipe v2 data authority', () => {
       ['recipes', 0, 'binding'] as const,
       'adapterId',
     ],
-    ['asset record', 'catalog.assets[0]', ['assets', 0] as const, 'member'],
-    [
-      'asset source record',
-      'catalog.assets[0].source',
-      ['assets', 0, 'source'] as const,
-      'integrity',
-    ],
   ])('rejects a $0 accessor without invoking it', (_label, path, targetPath, key) => {
     const catalog = rawSchema2Catalog();
     const target = recordAt(catalog, targetPath);
@@ -1251,7 +1145,6 @@ describe('shadow recipe v2 data authority', () => {
 
   it.each([
     ['recipes', 'catalog.recipes', ['recipes'] as const],
-    ['catalog assets', 'catalog.assets', ['assets'] as const],
     [
       'materialization files',
       'catalog.recipes[0].materialization.files',
@@ -1261,11 +1154,6 @@ describe('shadow recipe v2 data authority', () => {
       'bundled dependencies',
       'catalog.recipes[1].acquisition.dependencyProjection.bundledDependencies',
       ['recipes', 1, 'acquisition', 'dependencyProjection', 'bundledDependencies'] as const,
-    ],
-    [
-      'binding assets',
-      'catalog.recipes[0].binding.assets',
-      ['recipes', 0, 'binding', 'assets'] as const,
     ],
   ])('rejects an accessor element in $0 without invoking it', (_label, path, targetPath) => {
     const catalog = rawSchema2Catalog();

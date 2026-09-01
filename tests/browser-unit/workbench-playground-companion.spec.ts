@@ -1140,6 +1140,25 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
         name: parsedViteManifest.name,
         version: parsedViteManifest.version,
       };
+      const twinManifestRead = await withTimeout(
+        session.files.readFile('/node_modules/esbuild-wasm/package.json'),
+        'snapshot-restored esbuild-wasm manifest read',
+        30_000,
+      );
+      const twinManifest = JSON.parse(new TextDecoder().decode(twinManifestRead.bytes)) as {
+        readonly name: string;
+        readonly version: string;
+      };
+      const twinWasmRead = await withTimeout(
+        session.files.readFile('/node_modules/esbuild-wasm/esbuild.wasm'),
+        'snapshot-restored esbuild-wasm member read',
+        30_000,
+      );
+      const twinWasmDigest = [
+        ...new Uint8Array(await crypto.subtle.digest('SHA-256', twinWasmRead.bytes)),
+      ]
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
       const closeExit = await withTimeout(run.close(), 'Vite run close', 60_000);
       run = null;
       detach();
@@ -1167,6 +1186,8 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
         previewStatus: response.status,
         previewBody,
         viteManifest,
+        twinManifest,
+        twinWasm: { bytes: twinWasmRead.bytes.byteLength, sha256: twinWasmDigest },
         closeExit,
         output: chunks.join(''),
       };
@@ -1192,12 +1213,14 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
   expect(result.previewStatus).toBe(200);
   expect(result.previewBody).toContain('<div id="app"></div>');
   expect(result.viteManifest).toEqual({ name: 'vite', version: expect.stringMatching(/^7\./u) });
+  expect(result.twinManifest).toMatchObject({ name: 'esbuild-wasm', version: '0.28.0' });
+  expect(result.twinWasm).toEqual({
+    bytes: 13_918_738,
+    sha256: '9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b',
+  });
   expect(result.closeExit).toEqual({ code: null, signal: 'SIGTERM' });
   expect(result.output).not.toContain('npm: installing');
-  expect(registryRequests.map((url) => new URL(url).pathname)).toEqual([
-    '/npm-registry/esbuild-wasm',
-    '/npm-registry/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz',
-  ]);
+  expect(registryRequests.map((url) => new URL(url).pathname)).toEqual([]);
   expect(snapshotRequests).toHaveLength(1);
 });
 

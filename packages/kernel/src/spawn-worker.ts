@@ -16,7 +16,6 @@ import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcCallerContext, SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
-import { snapshotKernelEntryCapabilityPorts } from './shared-globals.ts';
 import type {
   WorkerEntryDescriptor,
   WorkerInitMessage,
@@ -133,44 +132,6 @@ export interface SpawnWorkerResult {
 }
 
 /**
- * Validate/snapshot one entry. Capability ownership passes to the spawn only
- * after the whole capability map validates, before later descriptor reads.
- */
-function normalizeWorkerEntryDescriptor(
-  entry: WorkerEntryDescriptor,
-  adoptCapabilityPorts: (ports: readonly MessagePort[]) => void,
-): WorkerEntryDescriptor {
-  const capabilityDescriptor = Object.getOwnPropertyDescriptor(entry, 'capabilityPorts');
-  if (entry.kind === 'source') {
-    if (capabilityDescriptor !== undefined) {
-      throw new TypeError(
-        "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' is valid only on URL entries",
-      );
-    }
-    return entry;
-  }
-  if (capabilityDescriptor !== undefined && !('value' in capabilityDescriptor)) {
-    throw new TypeError(
-      "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' must be a data property; accessors are forbidden",
-    );
-  }
-  if (capabilityDescriptor !== undefined && !capabilityDescriptor.enumerable) {
-    throw new TypeError(
-      "WorkerEntryDescriptor.capabilityPorts 'capabilityPorts' must be enumerable",
-    );
-  }
-  if (capabilityDescriptor === undefined || capabilityDescriptor.value === undefined) return entry;
-  const capabilityPorts = snapshotKernelEntryCapabilityPorts(capabilityDescriptor.value);
-  adoptCapabilityPorts(Object.values(capabilityPorts));
-  return Object.freeze({
-    kind: 'url',
-    url: entry.url,
-    ...(entry.bootstrap === undefined ? {} : { bootstrap: entry.bootstrap }),
-    capabilityPorts,
-  });
-}
-
-/**
  * Performs the `new Worker(...)` + `postMessage(init, transfer)` dance.
  * Throws {@link NotImplementedError} when {@link setKernelWorkerUrl} hasn't
  * been called — makes missing host-wiring loud at the call site rather than
@@ -197,7 +158,6 @@ export function spawnKernelWorker(
   let callerContext: SyncRpcCallerContext | null = null;
   let ports: WorkerStdioPorts | null = null;
   let fullSpec: WorkerSpawnSpec | null = null;
-  let capabilityPorts: readonly MessagePort[] = [];
   const acquiredFixedPorts: MessagePort[] = [];
   const exitListeners: ((code: number) => void)[] = [];
   const messageErrorListeners: ((ev: MessageEvent) => void)[] = [];
@@ -376,7 +336,7 @@ export function spawnKernelWorker(
 
   const rollbackFailedSpawn = (): void => {
     tearDownWorker();
-    for (const port of [...acquiredFixedPorts, ...capabilityPorts]) {
+    for (const port of acquiredFixedPorts) {
       try {
         port.close();
       } catch {
@@ -386,11 +346,7 @@ export function spawnKernelWorker(
   };
 
   try {
-    // Descriptor normalization adopts capability endpoints before reading the
-    // remaining caller-controlled fields, so it starts this rollback transaction.
-    const entry = normalizeWorkerEntryDescriptor(spec.entry, (adoptedPorts) => {
-      capabilityPorts = adoptedPorts;
-    });
+    const entry = spec.entry;
     const payloadCapacity = spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY;
     const createdRing = createSabRing({ payloadCapacity });
     ring = createdRing.ring;
@@ -440,7 +396,6 @@ export function spawnKernelWorker(
       childPorts.stderr,
       childPorts.stdin,
       childPorts.ipc,
-      ...capabilityPorts,
     ]);
 
     for (const [type, listener] of lifecycleListeners) {

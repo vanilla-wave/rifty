@@ -41,7 +41,7 @@ import {
   install as realInstall,
 } from '@riftydev/npm-client';
 import {
-  type ShadowAssetPlan,
+  type ShadowSubstitutionPlan,
   planAppliedShadowSubstitutions,
 } from '@riftydev/npm-client/internal';
 import {
@@ -690,7 +690,7 @@ export async function executeNpmInstallOperation(
   | {
       readonly status: 'noop';
       readonly packageJsonText: string | null;
-      readonly shadowPlan: ShadowAssetPlan;
+      readonly shadowPlan: ShadowSubstitutionPlan;
     }
   | {
       readonly result: InstallResult;

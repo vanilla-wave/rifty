@@ -10,5 +10,4 @@ export type {
   ShadowRecipeAdmission,
   ShadowRecipeAcquisition,
   ShadowRegistryDependencyProjection,
-  ShadowRuntimeAsset,
 } from './model.ts';

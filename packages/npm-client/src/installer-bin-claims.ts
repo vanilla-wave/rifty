@@ -11,7 +11,7 @@ import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/inte
 import { joinPath, normalizePath } from '@riftydev/vfs';
 import { lockfilePathBareName, pinnedEntryForParent } from './installer-lockfile-reader.ts';
 import type { PinnedPackage } from './installer-walk.ts';
-import type { ShadowAssetPlan } from './internal/shadow/planner.ts';
+import type { ShadowSubstitutionPlan } from './internal/shadow/planner.ts';
 import { registryAcquisitionInstallPath } from './internal/shadow/planner.ts';
 import { pinnedShadowSubstitutions } from './internal/shadow/substitution.ts';
 import type {
@@ -51,7 +51,7 @@ export function packageLinkTargets(
 
 export function installPackageBinSources(
   packages: readonly PreparedInstallPackage<PinnedPackage>[],
-  shadowPlan: ShadowAssetPlan,
+  shadowPlan: ShadowSubstitutionPlan,
   companionOnlyInstallPaths: ReadonlySet<string>,
 ): readonly PackageBinSource[] {
   const sources: PackageBinSource[] = packages.map((prepared) => ({
@@ -87,7 +87,7 @@ export function installPackageBinSources(
 
 export function lockfilePackageBinSources(
   lockfile: Lockfile | null,
-  shadowPlan: ShadowAssetPlan | null,
+  shadowPlan: ShadowSubstitutionPlan | null,
   companionOnlyInstallPaths: ReadonlySet<string>,
   currentSources: readonly PackageBinSource[],
   currentPackages: readonly PreparedInstallPackage<PinnedPackage>[],

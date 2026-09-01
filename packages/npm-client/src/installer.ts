@@ -49,7 +49,7 @@ import { normalizeInstallArgs } from './installer-request.ts';
 import { chooseSource } from './installer-sources.ts';
 import { type WalkAndPinResult, walkAndPin } from './installer-walk.ts';
 import { assertDirectShadowRecipeAdmissions } from './internal/shadow/admission.ts';
-import { recordShadowAssetPlanForInstallResult } from './internal/shadow/install-result.ts';
+import { recordShadowSubstitutionPlanForInstallResult } from './internal/shadow/install-result.ts';
 import {
   materializeRegistryShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
@@ -525,6 +525,6 @@ export async function install(
     ...(eddyResolvedAt === undefined ? {} : { resolvedAt: eddyResolvedAt }),
     ...(eddyResolvedVia === undefined ? {} : { resolvedVia: eddyResolvedVia }),
   };
-  recordShadowAssetPlanForInstallResult(result, shadowPlan);
+  recordShadowSubstitutionPlanForInstallResult(result, shadowPlan);
   return result;
 }

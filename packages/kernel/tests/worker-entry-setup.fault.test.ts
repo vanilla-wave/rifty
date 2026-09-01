@@ -18,7 +18,6 @@ import {
   workerOutputAttestation,
 } from '../src/worker-stdio-drain.ts';
 
-const KERNEL_ENTRY_CAPABILITY_PORTS_KEY = '__riftyKernelEntryCapabilityPorts__';
 const KERNEL_SYNC_BINARY_CALL_KEY = '__riftyKernelSyncBinaryCall';
 const ORIGINAL_DEFINE_PROPERTY = Object.defineProperty;
 
@@ -61,16 +60,13 @@ function makeSpec(invalidRing = false): {
   readonly spec: WorkerSpawnSpec;
   readonly ports: readonly ReturnType<typeof fakePort>[];
 } {
-  const capability = fakePort();
-  Object.setPrototypeOf(capability, MessagePort.prototype);
-  const ports = [fakePort(), fakePort(), fakePort(), fakePort(), capability] as const;
+  const ports = [fakePort(), fakePort(), fakePort(), fakePort()] as const;
   const { sab } = createSabRing({ payloadCapacity: 32 });
   return {
     spec: {
       entry: {
         kind: 'url',
         url: 'https://example.invalid/entry.js',
-        capabilityPorts: { test: ports[4] },
       },
       argv: [],
       env: {},
@@ -135,7 +131,6 @@ describe('worker-entry setup transaction', () => {
       KERNEL_SYNC_BINARY_CALL_KEY,
       KERNEL_PROCESS_SPEC_KEY,
       KERNEL_ENTRY_BOOTSTRAP_KEY,
-      KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
     ]) {
       Reflect.deleteProperty(globalThis, key);
     }
@@ -253,7 +248,6 @@ describe('worker-entry setup transaction', () => {
     KERNEL_SYNC_BINARY_CALL_KEY,
     KERNEL_PROCESS_SPEC_KEY,
     KERNEL_ENTRY_BOOTSTRAP_KEY,
-    KERNEL_ENTRY_CAPABILITY_PORTS_KEY,
   ])(
     'finalizes every transferred port and the realm when %s publication fails',
     async (faultKey) => {

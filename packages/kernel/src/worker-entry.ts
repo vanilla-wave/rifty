@@ -40,12 +40,10 @@ import {
   KERNEL_SYNC_BINARY_CALL_KEY,
   KERNEL_SYNC_CALL_KEY,
   type KernelEntryBootstrapEnvelope,
-  type KernelEntryCapabilityPorts,
   type KernelProcessSpec,
   type KernelSyncBinaryCall,
   type KernelSyncCall,
   publishKernelEntryBootstrap,
-  publishKernelEntryCapabilityPorts,
   publishKernelProcessSpec,
   publishKernelSyncApi,
 } from './shared-globals.ts';
@@ -94,8 +92,6 @@ export type WorkerEntryDescriptor =
       readonly url: string;
       /** Entry-scoped higher-runtime metadata; kernel transports it opaquely. */
       readonly bootstrap?: KernelEntryBootstrapEnvelope;
-      /** Entry-scoped protocol-opaque endpoints (ADR-0313); URL entries only. */
-      readonly capabilityPorts?: KernelEntryCapabilityPorts;
     };
 
 /**
@@ -310,17 +306,6 @@ function closeWorkerPorts(ports: WorkerStdioPorts): void {
   }
 }
 
-function closeCapabilityPorts(entry: WorkerEntryDescriptor): void {
-  if (entry.kind !== 'url' || entry.capabilityPorts === undefined) return;
-  for (const port of Object.values(entry.capabilityPorts)) {
-    try {
-      port.close();
-    } catch {
-      /* transferred/already-closed endpoint */
-    }
-  }
-}
-
 /** Outcome of running a worker entry: did it throw, and the resolved exit code. */
 export interface WorkerEntryOutcome {
   readonly threw: boolean;
@@ -370,9 +355,6 @@ async function runEntryLifecycleInternal(
     // their opaque higher-runtime envelope; URL-without-envelope and source
     // entries publish null so stale host/test state cannot cross entries.
     publishKernelEntryBootstrap(spec.entry.kind === 'url' ? (spec.entry.bootstrap ?? null) : null);
-    publishKernelEntryCapabilityPorts(
-      spec.entry.kind === 'url' ? spec.entry.capabilityPorts : undefined,
-    );
     if (deps.preEntryHook !== null) deps.preEntryHook(spec);
     await deps.runEntry(spec.entry);
     if (spec.serve !== true && deps.drainHook !== null) {
@@ -440,7 +422,6 @@ export function finalizeWorkerEntry(
     }
   }
   closeWorkerPorts(spec.stdio);
-  closeCapabilityPorts(spec.entry);
   try {
     target.close();
   } catch (error) {

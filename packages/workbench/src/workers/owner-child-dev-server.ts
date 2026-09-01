@@ -6,11 +6,11 @@
  * but the child is a long-lived SERVER (serve:true), not run-to-completion.
  */
 import {
-  type KernelEntryCapabilityPorts,
   type SpawnWorkerSpec,
   globalProcessManager,
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
+import type { NodeEntryRuntimeBinding } from '@riftydev/runtime-js/builtins/node-entry-url';
 import type { ProcessExit } from '@riftydev/shell';
 import {
   type ChildTerminalContext,
@@ -29,11 +29,8 @@ import {
 import type { NodeWorkerRuntimeConfig } from './node-worker-runtime-config.ts';
 import {
   type ReserveOwnerChildAdmission,
-  abortOwnerChildAdmissionAfterSpawn,
-  abortOwnerChildAdmissionBeforeSpawn,
-  attachOwnerChildCapabilities,
-  commitOwnerChildAdmission,
   observeOwnerChildExit,
+  projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
 
 export interface DevServerChildSpawnParams extends ChildTerminalContext {
@@ -48,18 +45,19 @@ export function buildDevServerChildSpawnSpec(
   params: DevServerChildSpawnParams,
   devServerWorkerUrl: string,
   nodeWorkerRuntime: NodeWorkerRuntimeConfig,
-  capabilityPorts?: KernelEntryCapabilityPorts,
+  runtimeBindings: readonly NodeEntryRuntimeBinding[] = [],
 ): SpawnWorkerSpec {
+  const projectedBindings = projectOwnerChildRuntimeBindings(runtimeBindings, params.remoteFsRoot);
   const entry = buildDevServerChildEntry(devServerWorkerUrl, {
     nodeWorkerRuntime,
     cfg: params.cfg,
     terminal: childTerminalBootstrap(params),
     ...(params.remoteFsRoot === undefined ? {} : { remoteFsRoot: params.remoteFsRoot }),
     ...(params.previewScope === undefined ? {} : { previewScope: params.previewScope }),
+    ...(projectedBindings.length === 0 ? {} : { runtimeBindings: projectedBindings }),
   });
   return {
-    entry:
-      capabilityPorts === undefined ? entry : attachOwnerChildCapabilities(entry, capabilityPorts),
+    entry,
     argv: ['rifty', params.cfg.entryPath],
     env: {
       ...params.env,
@@ -167,11 +165,11 @@ export function createOwnerChildDevServer(
             opts.params,
             devServerWorkerUrl,
             nodeWorkerRuntime,
-            reservation.snapshot.capabilityPorts,
+            reservation.snapshot.runtimeBindings,
           ),
         );
       } catch (error) {
-        abortOwnerChildAdmissionBeforeSpawn(reservation, error);
+        reservation.abortBeforeSpawn(error);
         throw error;
       }
       const admissionExit = observeOwnerChildExit(handle);
@@ -466,10 +464,10 @@ export function createOwnerChildDevServer(
             'dev-server child setup and termination failed',
           );
         }
-        await abortOwnerChildAdmissionAfterSpawn(reservation, setupError, admissionExit);
+        await reservation.abortAfterChildSettlement(setupError, admissionExit);
         throw setupError;
       }
-      commitOwnerChildAdmission(reservation, admissionExit);
+      reservation.commit();
       return boot;
     },
   };

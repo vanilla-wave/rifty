@@ -4,30 +4,73 @@ import schemaOneShadowLockfile from './fixtures/schema-1-shadow-lockfile.json';
 import {
   attestBuiltinShadowSubstitution,
   createShadowSubstitutionLockfileTrace,
-  decodeShadowAssetPlan,
+  decodeShadowSubstitutionPlan,
   materializeRegistryShadowSubstitutions,
   planAppliedShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
 } from './planner.ts';
-import { strictShadowPlanCodecCases } from './strict-codec.contract-fixtures.ts';
+
+const SRI = `sha512-${btoa(String.fromCharCode(...new Uint8Array(64)))}`;
+const RESOLVED = 'https://registry.invalid/esbuild-wasm-0.28.0.tgz';
+type PlannedShadowSubstitutions = ReturnType<typeof planAppliedShadowSubstitutions>;
+const planHasNoAssetField: 'assets' extends keyof PlannedShadowSubstitutions ? false : true = true;
+void planHasNoAssetField;
+
+function esbuildApplied(installPath = 'node_modules/esbuild') {
+  return attestBuiltinShadowSubstitution({
+    trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
+    installPath,
+    acquisition: {
+      kind: 'registry',
+      name: 'esbuild-wasm',
+      version: '0.28.0',
+      resolved: RESOLVED,
+      integrity: SRI,
+    },
+  });
+}
+
+function esbuildLockfile(applied = esbuildApplied()) {
+  const acquisitionPath = applied.materialization.installPath.replace(
+    /node_modules\/esbuild$/u,
+    'node_modules/esbuild-wasm',
+  );
+  const packages = {
+    '': { version: '1.0.0' },
+    [acquisitionPath]: {
+      version: '0.28.0',
+      resolved: RESOLVED,
+      integrity: SRI,
+    },
+    [applied.materialization.installPath]: {
+      version: '0.28.0',
+      riftyShadowRecipe: applied.substitutionId,
+    },
+  };
+  const plan = planAppliedShadowSubstitutions([applied]);
+  return {
+    plan,
+    lockfile: {
+      name: 'fixture',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages,
+      rifty: { shadowSubstitutions: createShadowSubstitutionLockfileTrace(plan, { packages }) },
+    },
+  };
+}
 
 function schemaOneSingleEsbuildLockfile(): unknown {
   const lockfile = structuredClone(schemaOneShadowLockfile) as unknown as {
     packages: Record<string, unknown>;
-    rifty: {
-      shadowSubstitutions: {
-        applied: Array<{ trigger: { name: string } }>;
-      };
-    };
+    rifty: { shadowSubstitutions: { applied: Array<{ trigger: { name: string } }> } };
   };
   const root = lockfile.packages[''];
   const esbuild = lockfile.packages['node_modules/esbuild'];
   if (!root || !esbuild) throw new Error('schema-1 fixture is missing esbuild entries');
   lockfile.packages = {
-    '': {
-      version: '1.0.0',
-      dependencies: { esbuild: '0.28.0' },
-    },
+    '': { version: '1.0.0', dependencies: { esbuild: '0.28.0' } },
     'node_modules/esbuild': esbuild,
   };
   lockfile.rifty.shadowSubstitutions.applied = lockfile.rifty.shadowSubstitutions.applied.filter(
@@ -42,83 +85,51 @@ function captureError(run: () => unknown): unknown {
   } catch (error) {
     return error;
   }
-  return new Error('expected the schema-1 shadow trace to be rejected');
+  return new Error('expected operation to reject');
 }
 
 describe('shadow substitution planner contract', () => {
-  it.each(strictShadowPlanCodecCases)(
-    'strict-decodes $name at planner ingress',
-    ({ value, expected }) => {
-      expect(() => decodeShadowAssetPlan(value())).toThrow(expected);
-    },
-  );
-
-  it('replays exact synthetic esbuild identity and binding', () => {
-    const applied = attestBuiltinShadowSubstitution({
-      trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
-      installPath: 'node_modules/esbuild',
-      acquisition: { kind: 'synthetic' },
+  it('derives one package-path runtime binding from the attested registry acquisition', () => {
+    const { plan, lockfile } = esbuildLockfile();
+    expect(plan).toEqual({
+      substitutions: [
+        expect.objectContaining({ substitutionId: 'rifty.shadow-substitution.esbuild.v2' }),
+      ],
+      bindings: [
+        {
+          adapterId: 'rifty.runtime-adapter.esbuild.v1',
+          packagePath: 'node_modules/esbuild-wasm',
+        },
+      ],
     });
-    const plan = planAppliedShadowSubstitutions([applied]);
-    expect(plan.bindings).toEqual([
-      {
-        adapterId: 'rifty.runtime-adapter.esbuild.v1',
-        assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
-      },
-    ]);
-
-    const packages = {
-      '': { version: '1.0.0' },
-      'node_modules/esbuild': {
-        version: '0.28.0',
-        resolved: `rifty:shadow-substitution/${applied.substitutionId}@${applied.recipeDigest}`,
-        riftyShadowRecipe: applied.substitutionId,
-      },
-    };
-    const lockfile = {
-      name: 'fixture',
-      version: '1.0.0',
-      lockfileVersion: 3,
-      requires: true,
-      packages,
-      rifty: { shadowSubstitutions: createShadowSubstitutionLockfileTrace(plan, { packages }) },
-    };
-    const replay = planShadowSubstitutionsFromLockfile(structuredClone(lockfile));
-    expect(replay).toEqual(plan);
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(decodeShadowSubstitutionPlan(structuredClone(plan))).toEqual(plan);
+    expect(planShadowSubstitutionsFromLockfile(structuredClone(lockfile))).toEqual(plan);
   });
 
   it('detaches ingress values and rejects trace/tree drift', () => {
     const input = {
       trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
       installPath: 'node_modules/esbuild',
-      acquisition: { kind: 'synthetic' as const },
+      acquisition: {
+        kind: 'registry' as const,
+        name: 'esbuild-wasm',
+        version: '0.28.0',
+        resolved: RESOLVED,
+        integrity: SRI,
+      },
     };
     const applied = attestBuiltinShadowSubstitution(input);
     input.trigger.name = 'forged';
     expect(applied.trigger.name).toBe('esbuild');
     expect(Object.isFrozen(applied.materialization.files)).toBe(true);
 
-    const plan = planAppliedShadowSubstitutions([applied]);
-    const packages = {
-      '': { version: '1.0.0' },
-      'node_modules/esbuild': {
-        version: '0.27.0',
-        resolved: `rifty:shadow-substitution/${applied.substitutionId}@${applied.recipeDigest}`,
-        riftyShadowRecipe: applied.substitutionId,
-      },
-    };
-    const lockfile = {
-      name: 'fixture',
-      version: '1.0.0',
-      lockfileVersion: 3,
-      requires: true,
-      packages,
-      rifty: { shadowSubstitutions: createShadowSubstitutionLockfileTrace(plan, { packages }) },
-    };
+    const { lockfile } = esbuildLockfile(applied);
+    lockfile.packages['node_modules/esbuild-wasm']!.version = '0.27.0';
     expect(() => planShadowSubstitutionsFromLockfile(lockfile)).toThrow(/EBROKENLOCK/);
   });
 
-  it('materializes a registry recipe without adding runtime assets', async () => {
+  it('materializes a registry recipe without a runtime binding', async () => {
     const applied = attestBuiltinShadowSubstitution({
       trigger: { name: 'lightningcss', requestedRange: '^1.32.0', version: '1.32.0' },
       installPath: 'node_modules/lightningcss',
@@ -127,14 +138,13 @@ describe('shadow substitution planner contract', () => {
         name: 'lightningcss-wasm',
         version: '1.32.0',
         resolved: 'https://registry.invalid/lightningcss-wasm.tgz',
-        integrity: `sha512-${btoa(String.fromCharCode(...new Uint8Array(64)))}`,
+        integrity: SRI,
       },
     });
     const plan = planAppliedShadowSubstitutions([applied]);
-    expect(plan.assets).toEqual([]);
     expect(plan.bindings).toEqual([]);
 
-    const replay = decodeShadowAssetPlan(structuredClone(plan));
+    const replay = decodeShadowSubstitutionPlan(structuredClone(plan));
     const fresh = new MemoryVfs();
     const restored = new MemoryVfs();
     await materializeRegistryShadowSubstitutions(fresh, '/project', plan, () => {});
@@ -159,11 +169,10 @@ describe('shadow substitution planner contract', () => {
         },
       },
     };
-
     const plan = planShadowSubstitutionsFromLockfile(oldLockfile);
     expect(plan).toEqual(planAppliedShadowSubstitutions([]));
+    expect(plan).toEqual({ substitutions: [], bindings: [] });
     expect(Object.isFrozen(plan)).toBe(true);
-    expect(plan.substitutions).toEqual([]);
   });
 
   it.each([
@@ -184,38 +193,34 @@ describe('shadow substitution planner contract', () => {
     },
   );
 
-  it('rejects nested accessors without invoking them', () => {
+  it('rejects nested accessors, sparse substitutions, and hidden extra fields', () => {
     let getterRan = false;
-    const acquisition = {};
+    const acquisition: Record<string, unknown> = {
+      name: 'esbuild-wasm',
+      version: '0.28.0',
+      resolved: RESOLVED,
+      integrity: SRI,
+    };
     Object.defineProperty(acquisition, 'kind', {
       enumerable: true,
       get() {
         getterRan = true;
-        return 'synthetic';
+        return 'registry';
       },
     });
     expect(() =>
       attestBuiltinShadowSubstitution({
         trigger: { name: 'esbuild', requestedRange: '0.28.0', version: '0.28.0' },
         installPath: 'node_modules/esbuild',
-        acquisition: acquisition as { kind: 'synthetic' },
+        acquisition: acquisition as {
+          kind: 'registry';
+          name: string;
+          version: string;
+          resolved: string;
+          integrity: string;
+        },
       }),
     ).toThrow(/accessors/);
-
-    const applied = attestBuiltinShadowSubstitution({
-      trigger: { name: 'esbuild', requestedRange: '0.28.0', version: '0.28.0' },
-      installPath: 'node_modules/esbuild',
-      acquisition: { kind: 'synthetic' },
-    });
-    const forged = structuredClone(planAppliedShadowSubstitutions([applied]));
-    Object.defineProperty(forged.substitutions[0]!.materialization.files[0]!, 'path', {
-      enumerable: true,
-      get() {
-        getterRan = true;
-        return 'package.json';
-      },
-    });
-    expect(() => decodeShadowAssetPlan(forged)).toThrow(/accessors/);
     expect(getterRan).toBe(false);
 
     expect(() =>
@@ -223,64 +228,40 @@ describe('shadow substitution planner contract', () => {
         new Array(1) as ReturnType<typeof attestBuiltinShadowSubstitution>[],
       ),
     ).toThrow(/dense/);
+
+    const plan = structuredClone(planAppliedShadowSubstitutions([esbuildApplied()]));
+    Object.defineProperty(plan.substitutions[0]!.trigger, 'forged', { value: true });
+    expect(() => decodeShadowSubstitutionPlan(plan)).toThrow(/extra or missing fields/);
+
+    const compatibilityPlan = structuredClone(
+      planAppliedShadowSubstitutions([esbuildApplied()]),
+    ) as unknown as Record<string, unknown>;
+    compatibilityPlan.assets = [];
+    expect(() => decodeShadowSubstitutionPlan(compatibilityPlan)).toThrow(
+      /extra or missing fields|assets/,
+    );
+
+    let planGetterRan = false;
+    const accessorPlan = structuredClone(planAppliedShadowSubstitutions([esbuildApplied()]));
+    Object.defineProperty(accessorPlan.bindings[0]!, 'packagePath', {
+      enumerable: true,
+      get() {
+        planGetterRan = true;
+        return 'node_modules/esbuild-wasm';
+      },
+    });
+    expect(() => decodeShadowSubstitutionPlan(accessorPlan)).toThrow(/accessors|data property/);
+    expect(planGetterRan).toBe(false);
   });
 
-  it.each(['attestation', 'nested-acquisition', 'hidden-required', 'decoded-plan'] as const)(
-    'rejects non-enumerable extra fields at the %s ingress',
-    (boundary) => {
-      const input = {
-        trigger: { name: 'esbuild', requestedRange: '0.28.0', version: '0.28.0' },
-        installPath: 'node_modules/esbuild',
-        acquisition: { kind: 'synthetic' as const },
-      };
-      if (boundary === 'attestation') {
-        Object.defineProperty(input, 'forged', { value: true });
-        expect(() => attestBuiltinShadowSubstitution(input)).toThrow(/extra or missing fields/);
-        return;
-      }
-      if (boundary === 'nested-acquisition') {
-        Object.defineProperty(input.acquisition, 'forged', { value: true });
-        expect(() => attestBuiltinShadowSubstitution(input)).toThrow(/extra or missing fields/);
-        return;
-      }
-      if (boundary === 'hidden-required') {
-        Object.defineProperty(input, 'installPath', {
-          value: input.installPath,
-          enumerable: false,
-        });
-        expect(() => attestBuiltinShadowSubstitution(input)).toThrow(/non-enumerable fields/);
-        return;
-      }
-
-      const applied = attestBuiltinShadowSubstitution(input);
-      const plan = structuredClone(planAppliedShadowSubstitutions([applied]));
-      Object.defineProperty(plan.substitutions[0]!.trigger, 'forged', { value: true });
-      expect(() => decodeShadowAssetPlan(plan)).toThrow(/extra or missing fields/);
-    },
-  );
-
   it('requires a bijection between every marked root/nested entry and trace fact', () => {
-    const root = attestBuiltinShadowSubstitution({
-      trigger: { name: 'esbuild', requestedRange: '0.28.0', version: '0.28.0' },
-      installPath: 'node_modules/esbuild',
-      acquisition: { kind: 'synthetic' },
-    });
-    const nested = attestBuiltinShadowSubstitution({
-      trigger: { name: 'esbuild', requestedRange: '0.28.0', version: '0.28.0' },
-      installPath: 'node_modules/parent/node_modules/esbuild',
-      acquisition: { kind: 'synthetic' },
-    });
+    const root = esbuildApplied();
+    const nested = esbuildApplied('node_modules/parent/node_modules/esbuild');
+    const rootFixture = esbuildLockfile(root);
+    const nestedFixture = esbuildLockfile(nested);
     const packages = {
-      'node_modules/esbuild': {
-        version: '0.28.0',
-        resolved: `rifty:shadow-substitution/${root.substitutionId}@${root.recipeDigest}`,
-        riftyShadowRecipe: root.substitutionId,
-      },
-      'node_modules/parent/node_modules/esbuild': {
-        version: '0.28.0',
-        resolved: `rifty:shadow-substitution/${nested.substitutionId}@${nested.recipeDigest}`,
-        riftyShadowRecipe: nested.substitutionId,
-      },
+      ...rootFixture.lockfile.packages,
+      ...nestedFixture.lockfile.packages,
     };
     const lockfile = {
       lockfileVersion: 3,

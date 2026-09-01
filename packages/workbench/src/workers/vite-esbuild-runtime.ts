@@ -42,6 +42,6 @@ export function prepareViteEsbuildRuntime(options: {
 }): void {
   if (decideViteEsbuildRuntime(options) === 'skip-rolldown') return;
   if (readRuntimeEsbuild() === null) {
-    throw new NotImplementedError('vite.esbuild.shadowAssets');
+    throw new NotImplementedError('vite.esbuild.runtime');
   }
 }

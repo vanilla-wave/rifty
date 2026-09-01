@@ -1,10 +1,10 @@
-import { type InstallResult, RegistryClient, install } from '@riftydev/npm-client';
+import { EventEmitter } from 'node:events';
+import type { InstallResult } from '@riftydev/npm-client';
 import {
-  type ShadowAssetPlan,
-  type ShadowAssetReadySet,
+  type ShadowSubstitutionPlan,
+  attestBuiltinShadowSubstitution,
   planAppliedShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
-  shadowAssetPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
 import { MemoryVfs } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
@@ -17,6 +17,7 @@ import {
   clearProjectTree,
   ensureProjectDependencies,
 } from '../glue/project-deps.ts';
+import { createOwnerExecSyncRunner } from './owner-child-node-executor.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import {
   type EnsurePackagesCommand,
@@ -42,38 +43,31 @@ const EMPTY_SHADOW_PLAN = planShadowSubstitutionsFromLockfile({
   packages: {},
 });
 const EMPTY_PACKAGE_JSON = '{"name":"app","private":true}\n';
-let esbuildShadowPlanPromise: Promise<ShadowAssetPlan> | undefined;
 
 function packageInstall(result: InstallResult, packageJsonText: string | null) {
   return { result, shadowPlan: EMPTY_SHADOW_PLAN, packageJsonText };
 }
 
-async function esbuildShadowPlan(): Promise<ShadowAssetPlan> {
-  esbuildShadowPlanPromise ??= (async () => {
-    const vfs = new MemoryVfs();
-    await vfs.mkdir('/shadow-plan', { recursive: true });
-    const result = await install(
-      'shadow-plan',
-      '1.0.0',
-      { esbuild: '^0.28.0' },
-      {
-        vfs,
-        cwd: '/shadow-plan',
-        registry: new RegistryClient({
-          baseUrl: '/must-not-read',
-          fetch: async () => {
-            throw new Error('synthetic esbuild plan must not read the registry');
-          },
-        }),
-        onSubstitution: () => {},
+function esbuildShadowPlan(): ShadowSubstitutionPlan {
+  return planAppliedShadowSubstitutions([
+    attestBuiltinShadowSubstitution({
+      trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
+      acquisition: {
+        kind: 'registry',
+        name: 'esbuild-wasm',
+        version: '0.28.0',
+        resolved: 'https://registry.test/esbuild-wasm-0.28.0.tgz',
+        integrity: `sha512-${btoa(String.fromCharCode(...new Uint8Array(64)))}`,
       },
-    );
-    return shadowAssetPlanForInstallResult(result);
-  })();
-  return esbuildShadowPlanPromise;
+      installPath: 'node_modules/esbuild',
+    }),
+  ]);
 }
 
-function relocateFirstSubstitution(plan: ShadowAssetPlan, installPath: string): ShadowAssetPlan {
+function relocateFirstSubstitution(
+  plan: ShadowSubstitutionPlan,
+  installPath: string,
+): ShadowSubstitutionPlan {
   return planAppliedShadowSubstitutions(
     plan.substitutions.map((substitution, index) =>
       index === 0
@@ -84,27 +78,6 @@ function relocateFirstSubstitution(plan: ShadowAssetPlan, installPath: string): 
         : substitution,
     ),
   );
-}
-
-function readySet(plan: ShadowAssetPlan): ShadowAssetReadySet {
-  return Object.freeze({
-    plan,
-    receipt: Object.freeze({
-      schema: 1,
-      receiptSha256: '0'.repeat(64),
-      requiredSetDigest: plan.requiredSetDigest,
-      storageClass: 'memory-session',
-      assets: Object.freeze(
-        plan.assets.map((asset) =>
-          Object.freeze({
-            id: asset.id,
-            memberSha256: asset.memberSha256,
-            memberSize: asset.memberSize,
-          }),
-        ),
-      ),
-    }),
-  });
 }
 
 interface Deferred<T> {
@@ -1373,7 +1346,7 @@ describe('package-acquisition authority', () => {
     const reservation = await authority.reserveChildAdmission(ROOT);
     expect(trustedReads).toBe(0);
     expect(reservation.snapshot.plan.substitutions).toEqual([]);
-    expect(reservation.snapshot.ready).toBeNull();
+    expect(reservation.snapshot.runtimeBindings).toEqual([]);
     reservation.commit();
   });
 
@@ -1386,7 +1359,7 @@ describe('package-acquisition authority', () => {
       root: nestedRoot,
       slug: 'nested',
     };
-    const outerPlan = await esbuildShadowPlan();
+    const outerPlan = esbuildShadowPlan();
     const nestedPlan = relocateFirstSubstitution(
       outerPlan,
       'node_modules/nested-tool/node_modules/esbuild',
@@ -1394,13 +1367,8 @@ describe('package-acquisition authority', () => {
     const vfs = await seededVfs();
     await vfs.mkdir(nestedRoot, { recursive: true });
     await vfs.writeFile(`${nestedRoot}/package.json`, nestedPackageJson);
-    const ensure = vi.fn(async (plan: ShadowAssetPlan) => readySet(plan));
     const authority = createPackageAcquisitionAuthority({
       stamps: createInstallStampAuthority({ vfs }),
-      shadowAssets: {
-        ensure,
-        serve: () => ({ dispose: () => {} }),
-      },
       adapter: adapterWith({
         install: async (request) => {
           await vfs.mkdir(`${request.project.root}/node_modules`, { recursive: true });
@@ -1426,7 +1394,14 @@ describe('package-acquisition authority', () => {
     const outer = await authority.reserveChildAdmission(`${ROOT}/src/main.ts`);
     expect(outer.snapshot.root).toBe(ROOT);
     expect(outer.snapshot.plan).toBe(outerPlan);
-    expect(outer.snapshot.ready?.plan).toBe(outerPlan);
+    expect(outer.snapshot.runtimeBindings).toEqual([
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: `${ROOT}/node_modules/esbuild-wasm`,
+      },
+    ]);
+    expect(Object.isFrozen(outer.snapshot.runtimeBindings)).toBe(true);
+    expect(Object.isFrozen(outer.snapshot.runtimeBindings[0])).toBe(true);
     outer.commit();
     const nested = await authority.reserveChildAdmission(`${nestedRoot}/src/main.ts`);
     expect(nested.snapshot.root).toBe(nestedRoot);
@@ -1435,9 +1410,14 @@ describe('package-acquisition authority', () => {
         (substitution) => substitution.materialization.installPath,
       ),
     ).toEqual(['node_modules/esbuild', 'node_modules/nested-tool/node_modules/esbuild']);
-    expect(nested.snapshot.ready?.plan).toBe(nested.snapshot.plan);
-    expect(ensure).toHaveBeenCalledTimes(3);
-    expect(ensure.mock.calls[2]?.[0]).toBe(nested.snapshot.plan);
+    expect(nested.snapshot.runtimeBindings).toEqual([
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: `${nestedRoot}/node_modules/nested-tool/node_modules/esbuild-wasm`,
+      },
+    ]);
+    expect(Object.isFrozen(nested.snapshot.runtimeBindings)).toBe(true);
+    expect(Object.isFrozen(nested.snapshot.runtimeBindings[0])).toBe(true);
     nested.commit();
   });
 
@@ -1449,17 +1429,12 @@ describe('package-acquisition authority', () => {
       root: nestedRoot,
       slug: 'nested',
     };
-    const outerPlan = await esbuildShadowPlan();
+    const outerPlan = esbuildShadowPlan();
     const vfs = await seededVfs();
     await vfs.mkdir(nestedRoot, { recursive: true });
     await vfs.writeFile(`${nestedRoot}/package.json`, EMPTY_PACKAGE_JSON);
-    const ensure = vi.fn(async (plan: ShadowAssetPlan) => readySet(plan));
     const authority = createPackageAcquisitionAuthority({
       stamps: createInstallStampAuthority({ vfs }),
-      shadowAssets: {
-        ensure,
-        serve: () => ({ dispose: () => {} }),
-      },
       adapter: adapterWithEmptyTreeAttestation(
         {
           install: async () => {
@@ -1491,8 +1466,12 @@ describe('package-acquisition authority', () => {
     expect(reservation.snapshot.root).toBe(nestedRoot);
     expect(reservation.snapshot.project).toEqual(nestedProject);
     expect(reservation.snapshot.plan).toBe(outerPlan);
-    expect(reservation.snapshot.ready?.plan).toBe(outerPlan);
-    expect(ensure).toHaveBeenCalledOnce();
+    expect(reservation.snapshot.runtimeBindings).toEqual([
+      {
+        adapterId: 'rifty.runtime-adapter.esbuild.v1',
+        packagePath: `${ROOT}/node_modules/esbuild-wasm`,
+      },
+    ]);
     reservation.commit();
   });
 
@@ -1559,9 +1538,8 @@ describe('package-acquisition authority', () => {
     });
     const reservation = await authority.reserveChildAdmission(ROOT);
     expect(reservation.snapshot.plan).toBe(EMPTY_SHADOW_PLAN);
-    expect(reservation.snapshot.plan.assets).toEqual([]);
     expect(reservation.snapshot.plan.bindings).toEqual([]);
-    expect(reservation.snapshot.ready).toBeNull();
+    expect(reservation.snapshot.runtimeBindings).toEqual([]);
     reservation.commit();
   });
 
@@ -1592,7 +1570,7 @@ describe('package-acquisition authority', () => {
       root: ROOT,
       project: PROJECT,
       plan: EMPTY_SHADOW_PLAN,
-      ready: null,
+      runtimeBindings: [],
     });
     reservation.commit();
   });
@@ -1638,7 +1616,7 @@ describe('package-acquisition authority', () => {
       root: ROOT,
       project: PROJECT,
       plan: EMPTY_SHADOW_PLAN,
-      ready: null,
+      runtimeBindings: [],
     });
     reservation.commit();
   });
@@ -2305,6 +2283,67 @@ describe('package-acquisition authority', () => {
     await aborting;
     await queued;
     expect(installSettled).toBe(true);
+  });
+
+  it('keeps the real owner child failure seam reserved until physical exit', async () => {
+    const vfs = await seededVfs();
+    let installStarts = 0;
+    const authority = createPackageAcquisitionAuthority({
+      stamps: createInstallStampAuthority({ vfs }),
+      adapter: adapterWith({
+        install: async () => {
+          installStarts += 1;
+          await writeInstalledTree(vfs);
+          return packageInstall(installResult('cache'), PACKAGE_JSON);
+        },
+      }),
+    });
+    await authority.dispatch({ type: 'terminal-install', project: PROJECT, argv: [] });
+    installStarts = 0;
+    const setupFailure = new Error('child stdout binding failed after spawn');
+    const child = Object.assign(new EventEmitter(), {
+      stdout: {
+        on() {
+          throw setupFailure;
+        },
+      },
+      stderr: { on: vi.fn() },
+      terminate: vi.fn(),
+    });
+    const spawn = vi.fn(() => child);
+    const run = createOwnerExecSyncRunner(
+      'https://example.invalid/node-entry.js',
+      { RIFTY_KERNEL_WORKER_URL: 'https://example.invalid/kernel.js' },
+      () => ROOT,
+      (root) => authority.reserveChildAdmission(root),
+      spawn,
+    );
+    const running = run(
+      {
+        entryPath: '/src/child.mjs',
+        argv: ['rifty', '/src/child.mjs'],
+        env: {},
+        cwd: '/',
+      },
+      { parentPid: 42 },
+    );
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+    expect(child.terminate).toHaveBeenCalledOnce();
+    let queuedSettled = false;
+    const queued = authority
+      .dispatch({ type: 'terminal-install', project: PROJECT, argv: [] })
+      .then(() => {
+        queuedSettled = true;
+      });
+
+    await Promise.resolve();
+    expect(installStarts).toBe(0);
+    expect(queuedSettled).toBe(false);
+    child.emit('exit', null, 'SIGTERM');
+    await expect(running).rejects.toBe(setupFailure);
+    await queued;
+    expect(installStarts).toBe(1);
+    expect(queuedSettled).toBe(true);
   });
 
   it('keeps a failed post-spawn reservation when exit observation rejects without proving death', async () => {

@@ -169,3 +169,12 @@ Clauses graft ADR-0328/0335 verbatim except the two amended below.
 - Supersedes ADR-0335 (removed; all other clauses grafted verbatim). ADR-0344
   stays active — its version-surface clause reads on requests and is
   unaffected.
+
+## Correction 2026-08-31 (ADR-0371)
+
+The concrete esbuild/runtime-binding and unchanged-kernel-port clauses are
+replaced: esbuild is an exact `esbuild-wasm@0.28.0` registry acquisition with
+the same synthetic facade/bin, and its binding carries only adapter id plus the
+attested acquisition path. Runtime-asset catalog/CAS/port fields and kernel
+entry capability ports are removed. All recipe, admission, projection, trace,
+bin, and replay authorities above stand.

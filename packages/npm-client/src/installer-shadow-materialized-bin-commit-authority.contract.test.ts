@@ -38,7 +38,11 @@ class FixtureRegistry extends RegistryClient {
   }
 
   override async getPackument(name: string): Promise<Packument> {
-    const versions = this.entries.get(name);
+    const versions =
+      this.entries.get(name) ??
+      (name === 'esbuild-wasm'
+        ? new Map([['0.28.0', await exactEsbuildWasmRegistryEntry()]])
+        : undefined);
     if (!versions) throw new Error(`fixture registry has no ${name}`);
     const records = Object.fromEntries(
       [...versions].map(([version, entry]) => [version, entry.manifest]),
@@ -50,9 +54,13 @@ class FixtureRegistry extends RegistryClient {
 
   override async getTarball(url: string): Promise<Uint8Array> {
     const match = /^fixture:\/\/([^|]+)\|(.+)$/.exec(url);
-    const entry = match
-      ? this.entries.get(decodeURIComponent(match[1] ?? ''))?.get(match[2] ?? '')
-      : undefined;
+    const name = match ? decodeURIComponent(match[1] ?? '') : '';
+    const version = match?.[2] ?? '';
+    const entry =
+      this.entries.get(name)?.get(version) ??
+      (name === 'esbuild-wasm' && version === '0.28.0'
+        ? await exactEsbuildWasmRegistryEntry()
+        : undefined);
     if (!entry) throw new Error(`fixture registry has no tarball ${url}`);
     return entry.tarball.slice();
   }
@@ -95,6 +103,13 @@ async function registryEntry(
   };
 }
 
+let esbuildWasmRegistryEntry: Promise<RegistryEntry> | undefined;
+
+function exactEsbuildWasmRegistryEntry(): Promise<RegistryEntry> {
+  esbuildWasmRegistryEntry ??= registryEntry('esbuild-wasm', '0.28.0');
+  return esbuildWasmRegistryEntry;
+}
+
 function registry(...entries: readonly RegistryEntry[]): FixtureRegistry {
   const byName = new Map<string, Map<string, RegistryEntry>>();
   for (const entry of entries) {
@@ -125,8 +140,8 @@ const esbuildRecipe = (() => {
   const recipe = builtinShadowSubstitutionCatalog.recipes.find(
     (candidate) => candidate.id === 'rifty.shadow-substitution.esbuild.v2',
   );
-  if (!recipe || recipe.acquisition.kind !== 'synthetic') {
-    throw new Error('builtin esbuild synthetic recipe is missing');
+  if (!recipe || recipe.acquisition.kind !== 'registry') {
+    throw new Error('builtin esbuild registry-twin recipe is missing');
   }
   return recipe;
 })();
@@ -150,6 +165,8 @@ const rollupNativeShim = (() => {
 const REAL_ROLLUP_NATIVE = 'throw new Error("REAL-NATIVE-SENTINEL");\n';
 const ESBUILD_REPORT =
   'npm: esbuild@^0.28.0 materialized from shadow registry (rifty.shadow-substitution.esbuild.v2)';
+const ESBUILD_REDIRECT_REPORT =
+  'npm: esbuild@^0.28.0 → esbuild-wasm@0.28.0 (substituted from shadow registry, ADR-0051)';
 const ROLLUP_REPORT = 'npm: rollup@4.62.2 internals patched from shadow registry';
 
 type RegistryAliasScope = 'root' | 'nested';
@@ -281,6 +298,7 @@ describe('shadow materialized-bin commit authority', () => {
       ...esbuildRecipe.materialization.files.map(
         ({ path }) => `/project/node_modules/esbuild/${path}`,
       ),
+      '/project/node_modules/esbuild-wasm/package.json',
       '/project/node_modules/lightningcss-wasm/package.json',
       '/project/node_modules/lightningcss-wasm/node_modules/napi-wasm/index.js',
       '/project/node_modules/lightningcss-wasm/node_modules/napi-wasm/package.json',
@@ -290,7 +308,14 @@ describe('shadow materialized-bin commit authority', () => {
     ].sort();
     const binPaths = ['/project/node_modules/.bin/esbuild'];
     const shimPaths = ['/project/node_modules/rollup/dist/native.js'];
-    const expectedReports = [ESBUILD_REPORT, ...expectedLightningReports('root'), ROLLUP_REPORT];
+    const [lightningRedirectReport, lightningMaterializedReport] = expectedLightningReports('root');
+    const expectedReports = [
+      ESBUILD_REDIRECT_REPORT,
+      lightningRedirectReport,
+      ESBUILD_REPORT,
+      lightningMaterializedReport,
+      ROLLUP_REPORT,
+    ];
     const phases: string[] = [];
     const completed = {
       files: [] as string[],
@@ -379,7 +404,9 @@ describe('shadow materialized-bin commit authority', () => {
       },
     );
 
-    expect.soft(freshEvents).toEqual(['lock', `report:${ESBUILD_REPORT}`]);
+    expect
+      .soft(freshEvents)
+      .toEqual(['lock', `report:${ESBUILD_REDIRECT_REPORT}`, `report:${ESBUILD_REPORT}`]);
     await expectExactRecipeFiles(
       vfs,
       '/project/node_modules/esbuild',
@@ -405,7 +432,7 @@ describe('shadow materialized-bin commit authority', () => {
         onSubstitution: (line) => replayReports.push(line),
       },
     );
-    expect.soft(replayReports).toEqual([ESBUILD_REPORT]);
+    expect.soft(replayReports).toEqual([ESBUILD_REDIRECT_REPORT, ESBUILD_REPORT]);
     await expectExactRecipeFiles(
       vfs,
       '/project/node_modules/esbuild',
@@ -706,7 +733,7 @@ describe('shadow materialized-bin commit authority', () => {
     expect
       .soft(await vfs.readFileText('/project/node_modules/.bin/esbuild'))
       .toBe(launcher('esbuild', 'bin/esbuild'));
-    expect(reports).toEqual([ESBUILD_REPORT]);
+    expect(reports).toEqual([ESBUILD_REDIRECT_REPORT, ESBUILD_REPORT]);
   });
 
   it('[fault: torn-state] keeps a parked esbuild bin abort unpublished and exact on retry', async () => {
@@ -761,7 +788,7 @@ describe('shadow materialized-bin commit authority', () => {
     expect
       .soft(await vfs.readFileText('/project/node_modules/.bin/esbuild'))
       .toBe(launcher('esbuild', 'bin/esbuild'));
-    expect(reports).toEqual([ESBUILD_REPORT]);
+    expect(reports).toEqual([ESBUILD_REDIRECT_REPORT, ESBUILD_REPORT]);
   });
 
   it.each(['ENOSPC', 'EACCES'] as const)(
@@ -811,7 +838,7 @@ describe('shadow materialized-bin commit authority', () => {
       );
       expect.soft(await vfs.readFileText(launcherPath)).toBe(launcher('esbuild', 'bin/esbuild'));
       expect.soft(await vfs.exists('/project/package-lock.json')).toBe(true);
-      expect(reports).toEqual([ESBUILD_REPORT]);
+      expect(reports).toEqual([ESBUILD_REDIRECT_REPORT, ESBUILD_REPORT]);
     },
   );
 
@@ -972,7 +999,7 @@ describe('shadow materialized-bin commit authority', () => {
         .soft(await vfs.readFileText('/project/node_modules/.bin/esbuild'))
         .toBe(launcher('esbuild', 'bin/esbuild'));
       expect.soft(await vfs.exists('/project/package-lock.json')).toBe(true);
-      expect(reports).toEqual([ESBUILD_REPORT, ROLLUP_REPORT]);
+      expect(reports).toEqual([ESBUILD_REDIRECT_REPORT, ESBUILD_REPORT, ROLLUP_REPORT]);
     },
   );
 
@@ -1028,7 +1055,7 @@ describe('shadow materialized-bin commit authority', () => {
         .soft(await vfs.readFileText('/project/node_modules/.bin/esbuild'))
         .toBe(launcher('esbuild', 'bin/esbuild'));
       expect.soft(await vfs.exists('/project/package-lock.json')).toBe(true);
-      expect(reports).toEqual([ESBUILD_REPORT]);
+      expect(reports).toEqual([ESBUILD_REDIRECT_REPORT, ESBUILD_REPORT]);
     },
   );
 });

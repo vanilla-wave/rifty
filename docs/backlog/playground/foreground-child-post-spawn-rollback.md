@@ -16,9 +16,9 @@ code: [packages/workbench/src/glue/run-foreground-child.ts, packages/workbench/s
 private-control wiring — is converted into a rejected promise. The launchers
 (`owner-child-node-executor.ts` ~:293, `owner-child-bin-executor.ts` ~:117)
 assign that promise inside their `try`, so their `catch` (kill +
-`abortOwnerChildAdmissionAfterSpawn`) never runs and
-`commitOwnerChildAdmission` proceeds. The spawned worker keeps running,
-undriven, while the caller sees a failure.
+`reservation.abortAfterChildSettlement`) never runs and `reservation.commit`
+proceeds. The spawned worker keeps running, undriven, while the caller sees a
+failure.
 
 Currently unreachable: the only explicit throw in the executor requires a
 handle without `onListeningControl`, and every production spawn returns a

@@ -1,4 +1,10 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import {
+  builtinShadowSubstitutionCatalog,
+  canonicalShadowJson,
+} from '@riftydev/shadow-registry/internal';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -29,15 +35,30 @@ import { RegistryClient } from './registry.ts';
 import { type TarballCache, computeIntegrity } from './tarball-cache.ts';
 
 const encoder = new TextEncoder();
+const requireFromRegistry = createRequire(
+  new URL('../../../tools/shadow-registry/package.json', import.meta.url),
+);
+const exactEsbuildWasm = new Uint8Array(
+  await readFile(requireFromRegistry.resolve('esbuild-wasm/esbuild.wasm')),
+);
 
+const builtinEsbuildRecipe = builtinShadowSubstitutionCatalog.recipes.find(
+  (recipe) => recipe.id === 'rifty.shadow-substitution.esbuild.v2',
+);
+const builtinLightningRecipe = builtinShadowSubstitutionCatalog.recipes.find(
+  (recipe) => recipe.id === 'rifty.shadow-substitution.lightningcss.v2',
+);
+if (!builtinEsbuildRecipe || !builtinLightningRecipe) {
+  throw new Error('builtin replay recipes are missing');
+}
 const CATALOG = {
-  id: 'rifty.shadow-substitutions.builtin.v2',
-  digest: '16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6',
+  id: builtinShadowSubstitutionCatalog.id,
+  digest: builtinShadowSubstitutionCatalog.digest,
 } as const;
 
 const ESBUILD_RECIPE = {
   id: 'rifty.shadow-substitution.esbuild.v2',
-  digest: 'b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28',
+  digest: builtinEsbuildRecipe.digest,
   bin: { esbuild: 'bin/esbuild' },
   files: [
     {
@@ -107,7 +128,7 @@ module.exports = esbuild;
 
 const LIGHTNING_RECIPE = {
   id: 'rifty.shadow-substitution.lightningcss.v2',
-  digest: '1800acdcf6efc1eb97de67a1fa4bb27d7f0c77c583b270644e258543be0dcfc4',
+  digest: builtinLightningRecipe.digest,
   bin: {},
   files: [
     {
@@ -196,10 +217,10 @@ interface ReplayFact {
     installPath: string;
     name: string;
     version: string;
-    bin: Record<string, string>;
     files: Array<{ path: string; sha256: string; bytes: number }>;
+    bin: Record<string, string>;
   };
-  readonly binding?: Readonly<{ adapterId: string; assets: readonly string[] }>;
+  readonly binding?: Readonly<{ adapterId: string }>;
 }
 
 interface ReplayLock {
@@ -290,7 +311,7 @@ async function tarballFixture(
   name: string,
   version: string,
   manifestFields: Readonly<Record<string, unknown>>,
-  extraFiles: Readonly<Record<string, string>> = {},
+  extraFiles: Readonly<Record<string, string | Uint8Array>> = {},
 ): Promise<CachedTarball> {
   const files = {
     'package.json': JSON.stringify({ name, version, ...manifestFields }),
@@ -298,7 +319,7 @@ async function tarballFixture(
   };
   const chunks: Uint8Array[] = [];
   for (const [path, content] of Object.entries(files)) {
-    const bytes = encoder.encode(content);
+    const bytes = typeof content === 'string' ? encoder.encode(content) : content;
     chunks.push(buildHeader(`package/${path}`, bytes.byteLength), padToBlock(bytes));
   }
   const bytes = await gzip(concat(...chunks, TAR_TRAILER));
@@ -330,24 +351,32 @@ function fileFacts(
   return files.map(({ path, sha256, bytes }) => ({ path, sha256, bytes }));
 }
 
-function esbuildFact(): ReplayFact {
+function esbuildFact(source: CachedTarball): ReplayFact {
   return {
     catalog: { ...CATALOG },
     substitutionId: ESBUILD_RECIPE.id,
     recipeDigest: ESBUILD_RECIPE.digest,
     trigger: { name: 'esbuild', requestedRange: '^0.28.0', version: '0.28.0' },
-    acquisition: { kind: 'synthetic' },
+    acquisition: {
+      kind: 'registry',
+      name: 'esbuild-wasm',
+      version: '0.28.0',
+      resolved: source.resolved,
+      integrity: source.integrity,
+      dependencies: {},
+      optionalDependencies: {},
+      peerDependencies: {},
+      bundleDependencies: [],
+      bundled: [],
+    },
     materialization: {
       installPath: 'node_modules/esbuild',
       name: 'esbuild',
       version: '0.28.0',
-      bin: { ...ESBUILD_RECIPE.bin },
       files: fileFacts(ESBUILD_RECIPE.files),
+      bin: { ...ESBUILD_RECIPE.bin },
     },
-    binding: {
-      adapterId: 'rifty.runtime-adapter.esbuild.v1',
-      assets: ['esbuild-wasm@0.28.0/package/esbuild.wasm'],
-    },
+    binding: { adapterId: 'rifty.runtime-adapter.esbuild.v1' },
   };
 }
 
@@ -373,14 +402,34 @@ function lightningFact(source: CachedTarball, installPath: string): ReplayFact {
       installPath,
       name: 'lightningcss',
       version: '1.32.0',
-      bin: { ...LIGHTNING_RECIPE.bin },
       files: fileFacts(LIGHTNING_RECIPE.files),
+      bin: { ...LIGHTNING_RECIPE.bin },
     },
   };
 }
 
 async function replayFixture(scope: Scope): Promise<ReplayFixture> {
   const entries = await scopeEntries(scope);
+  const esbuildAcquisition = await tarballFixture(
+    'esbuild-wasm',
+    '0.28.0',
+    { dependencies: {}, optionalDependencies: {}, peerDependencies: {} },
+    { 'esbuild.wasm': exactEsbuildWasm },
+  );
+  entries.push({
+    manifest: {
+      name: esbuildAcquisition.name,
+      version: esbuildAcquisition.version,
+      dependencies: {},
+      optionalDependencies: {},
+      peerDependencies: {},
+      dist: {
+        tarball: esbuildAcquisition.resolved,
+        integrity: esbuildAcquisition.integrity,
+      },
+    },
+    tarball: esbuildAcquisition.bytes,
+  });
   const sourceEntry = entries.find(
     ({ manifest }) => manifest.name === SOURCE && manifest.version === SOURCE_VERSION,
   );
@@ -415,10 +464,14 @@ async function replayFixture(scope: Scope): Promise<ReplayFixture> {
     },
     'node_modules/esbuild': {
       version: '0.28.0',
-      dependencies: {},
       bin: { ...ESBUILD_RECIPE.bin },
-      resolved: `rifty:shadow-substitution/${ESBUILD_RECIPE.id}@${ESBUILD_RECIPE.digest}`,
       riftyShadowRecipe: ESBUILD_RECIPE.id,
+    },
+    'node_modules/esbuild-wasm': {
+      version: '0.28.0',
+      dependencies: {},
+      resolved: esbuildAcquisition.resolved,
+      integrity: esbuildAcquisition.integrity,
     },
     [aliasPath]: {
       version: '1.32.0',
@@ -433,7 +486,7 @@ async function replayFixture(scope: Scope): Promise<ReplayFixture> {
     },
     [bundledChildPath]: { version: '1.1.3', inBundle: true },
   };
-  const cacheEntries: CachedTarball[] = [acquisition];
+  const cacheEntries: CachedTarball[] = [esbuildAcquisition, acquisition];
   if (host && occupied) {
     packages['node_modules/lightningcss-wasm'] = {
       version: occupied.version,
@@ -450,7 +503,9 @@ async function replayFixture(scope: Scope): Promise<ReplayFixture> {
     cacheEntries.push(occupied, host);
   }
   const expectedReadEntries =
-    nested && occupied && host ? [occupied, host, acquisition] : [acquisition];
+    nested && occupied && host
+      ? [esbuildAcquisition, occupied, host, acquisition]
+      : [esbuildAcquisition, acquisition];
   return {
     scope,
     dependencies,
@@ -470,7 +525,7 @@ async function replayFixture(scope: Scope): Promise<ReplayFixture> {
       rifty: {
         shadowSubstitutions: {
           protocol: 'rifty.shadow-substitutions/v2',
-          applied: [lightningFact(acquisition, aliasPath), esbuildFact()],
+          applied: [esbuildFact(esbuildAcquisition), lightningFact(acquisition, aliasPath)],
         },
       },
     },
@@ -944,6 +999,9 @@ function adoptSubstitutedSource(
   const acquisition = registryTraceAcquisition(lock);
   acquisition.resolved = source.resolved;
   acquisition.integrity = source.integrity;
+  lock.rifty.shadowSubstitutions.applied.sort((left, right) =>
+    appliedCanonicalKey(left).localeCompare(appliedCanonicalKey(right)),
+  );
   const cache = new PreseededCache(fixture.cacheEntries);
   cache.replace(source, source.bytes);
   const originalKey = cacheReadKey(fixture.acquisition);
@@ -954,6 +1012,33 @@ function adoptSubstitutedSource(
       key === originalKey ? cacheReadKey(source) : key,
     ),
   };
+}
+
+function appliedCanonicalKey(fact: ReplayFact): string {
+  const acquisition =
+    fact.acquisition.kind === 'registry'
+      ? {
+          kind: 'registry',
+          name: fact.acquisition.name,
+          version: fact.acquisition.version,
+          resolved: fact.acquisition.resolved,
+          integrity: fact.acquisition.integrity,
+        }
+      : { kind: 'synthetic' };
+  return canonicalShadowJson({
+    catalog: fact.catalog,
+    substitutionId: fact.substitutionId,
+    recipeDigest: fact.recipeDigest,
+    trigger: fact.trigger,
+    acquisition,
+    materialization: {
+      installPath: fact.materialization.installPath,
+      name: fact.materialization.name,
+      version: fact.materialization.version,
+      files: fact.materialization.files,
+    },
+    ...(fact.binding ? { binding: fact.binding } : {}),
+  });
 }
 
 afterEach(() => {
@@ -995,6 +1080,11 @@ describe('shadow recipe v2 replay authority', () => {
           LIGHTNING_RECIPE.files,
         );
         await expectRecipeFiles(replay.vfs, '/project/node_modules/esbuild', ESBUILD_RECIPE.files);
+        const wasm = await replay.vfs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm');
+        expect.soft(wasm.byteLength, `${scope}: esbuild wasm bytes`).toBe(13_918_738);
+        expect
+          .soft(sha256(wasm), `${scope}: esbuild wasm digest`)
+          .toBe('9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b');
         expect
           .soft(await replay.vfs.readFileText('/project/node_modules/.bin/esbuild'))
           .toBe(ESBUILD_LAUNCHER);

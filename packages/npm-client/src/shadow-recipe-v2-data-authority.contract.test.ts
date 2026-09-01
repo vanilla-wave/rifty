@@ -207,6 +207,18 @@ async function registryEntries(
       await registryEntry('napi-wasm', '1.1.3'),
     );
   }
+  if (recipe.name === 'esbuild') {
+    entries.push(
+      await registryEntry(
+        'esbuild-wasm',
+        '0.28.0',
+        {},
+        {
+          files: { 'esbuild.wasm': '\0asm-matrix-fixture' },
+        },
+      ),
+    );
+  }
   return entries;
 }
 
@@ -311,49 +323,30 @@ async function bundleFor(
 
 // TODO(backlog: npm-client/shadow-cache-ledger-independent-completion-order)
 function supportedFreshEvents(recipe: RecipeCase, shape: Shape): string[] {
-  if (recipe.name === 'esbuild') {
-    return shape === 'transitive'
-      ? [
-          `packument:${HOST}`,
-          `cache:get:${HOST}@1.0.0`,
-          `tarball:${HOST}`,
-          `cache:put:${HOST}@1.0.0`,
-        ]
-      : [];
-  }
+  const twin = recipe.name === 'esbuild' ? 'esbuild-wasm@0.28.0' : 'lightningcss-wasm@1.32.0';
+  const twinName = twin.slice(0, twin.lastIndexOf('@'));
   return shape === 'direct'
-    ? [
-        'packument:lightningcss-wasm',
-        'cache:get:lightningcss-wasm@1.32.0',
-        'tarball:lightningcss-wasm',
-        'cache:put:lightningcss-wasm@1.32.0',
-      ]
+    ? [`packument:${twinName}`, `cache:get:${twin}`, `tarball:${twinName}`, `cache:put:${twin}`]
     : [
         `packument:${HOST}`,
         `cache:get:${HOST}@1.0.0`,
-        'packument:lightningcss-wasm',
+        `packument:${twinName}`,
         `tarball:${HOST}`,
-        'cache:get:lightningcss-wasm@1.32.0',
-        'tarball:lightningcss-wasm',
+        `cache:get:${twin}`,
+        `tarball:${twinName}`,
         `cache:put:${HOST}@1.0.0`,
-        'cache:put:lightningcss-wasm@1.32.0',
+        `cache:put:${twin}`,
       ];
 }
 
 function replayCacheEvents(recipe: RecipeCase, shape: Shape): string[] {
-  return [
-    ...(shape === 'transitive' ? [`cache:get:${HOST}@1.0.0`] : []),
-    ...(recipe.name === 'lightningcss' ? ['cache:get:lightningcss-wasm@1.32.0'] : []),
-  ];
+  const twin = recipe.name === 'esbuild' ? 'esbuild-wasm@0.28.0' : 'lightningcss-wasm@1.32.0';
+  return [...(shape === 'transitive' ? [`cache:get:${HOST}@1.0.0`] : []), `cache:get:${twin}`];
 }
 
 function supportedEddyEvents(recipe: RecipeCase, shape: Shape): string[] {
-  if (recipe.name === 'esbuild') {
-    return shape === 'transitive'
-      ? ['eddy:POST', ...supportedFreshEvents(recipe, shape)]
-      : ['eddy:POST'];
-  }
-  const names = [...(shape === 'transitive' ? [`${HOST}@1.0.0`] : []), 'lightningcss-wasm@1.32.0'];
+  const twin = recipe.name === 'esbuild' ? 'esbuild-wasm@0.28.0' : 'lightningcss-wasm@1.32.0';
+  const names = [...(shape === 'transitive' ? [`${HOST}@1.0.0`] : []), twin];
   return [
     'eddy:POST',
     ...names.map((name) => `cache:put:${name}`),
