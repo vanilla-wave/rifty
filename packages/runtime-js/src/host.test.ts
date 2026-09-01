@@ -268,6 +268,24 @@ describe('spawnToolchainRuntime trust boundary', () => {
     expect(worker.terminated).toBe(true);
   });
 
+  it('rejects and tears down a handshake with a valid backend but mismatched protocol', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = fakeWorker(0);
+    worker.emit({ type: 'ready' });
+    worker.emitUnknown({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v0',
+      vfsBackend: 'memory',
+    });
+
+    await expect(runtime.toolchainReady).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'sandbox.toolchain.worker',
+    });
+    expect(worker.terminated).toBe(true);
+  });
+
   it('admits only the exact protocol/backend frame', async () => {
     installFakeWorker();
     const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });

@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
@@ -49,6 +49,11 @@ plus a 51-test carrier. The observable promise stays: exact admitted runtime
 bytes, bounded reads, loud required-fetch/corruption failures and deduplicated
 same-key acquisition. The carrier/authority fork must be recompiled and
 re-reviewed; it cannot ride the old verdict.
+
+Recompiled resolution: ADR-0374 grafts ADR-0371's installed registry-twin
+authority; Evidence C148-NPM uses the 51-test registry-twin carrier. Acceptance
+and user-observable parity remain unchanged and are strengthened below by the
+three Final+GREEN blocker carriers.
 
 ### Pre-demotion Acceptance (verbatim)
 
@@ -184,11 +189,16 @@ behavior throughout.
 2. The host is opened from an existing same-origin app. Its live
    `window.opener` message round-trip and a no-CORS/no-CORP image from a second
    headerless loopback origin work before/during/after exactly as at entry.
+   Both complete while an install and a run-bin operation remain admitted at
+   a held real network boundary; overlap proves admission, releasing the
+   boundary completes the original operation.
 3. `createSandbox` admits no-COI only through the explicit existing
    `requireCrossOriginIsolation:false`; default admission still throws
    `COI_REQUIRED_MESSAGE`. `toolchain:{workerUrl}` handshakes the SDK toolchain Worker
    before returning and exposes the ADR-0374 install/run-bin methods over the
-   same `runtime`/`fs` Worker.
+   same `runtime`/`fs` Worker. A valid backend paired with any mismatched
+   protocol rejects `NotImplementedError('sandbox.toolchain.worker')` and
+   terminates that Worker; it is never ignored or later admitted.
 4. The immutable report contains exactly these no-COI feature outcomes:
    `fs`, `npm.install`, `node_modules.bin`, `child_process.spawn.stdio` working;
    `child_process.spawn`, `worker_threads.Worker`, `os.parallelism`
@@ -218,7 +228,9 @@ behavior throughout.
    naming Vite 8, Rolldown/WASI pthreads and COI/SharedArrayBuffer. It writes no
    successful `dist/` claim. Direct guest construction of shared
    `WebAssembly.Memory` rejects with the same feature, while non-shared memory
-   still constructs.
+   still constructs. WebIDL-truthy `shared:1` and `shared:'yes'` reject beside
+   own/inherited/accessor literal-true descriptors through REPL, CJS, ESM and
+   an installed bin; non-shared native constructor/prototype identity stays.
 9. Toolchain input is validated once before mutation. A malformed cwd/bin/args
    rejects loudly; a second install/run overlapping one admitted operation
    rejects immediately as `SandboxToolchainBusyError` rather than racing or
@@ -236,22 +248,28 @@ behavior throughout.
    compositions; `pnpm test:no-coi -g "build parity.*designed RED"` is the
    committed differential and current-tree RED.
 2. Host document lifecycle: raw response headers + continuous page-realm
-   sampling + stable time origin/opener/subresource. Artifact:
-   `pnpm test:no-coi -g preservation` is green before implementation; the full
-   build carrier repeats the controls around each phase.
+   sampling + stable time origin/opener/subresource, including round-trip and
+   image reload while admitted install/run calls wait at held network
+   boundaries. Artifact: `pnpm test:no-coi -g "host stays interactive while
+   admitted install and run wait"` is a pre-fix green preservation carrier;
+   the full build carrier repeats controls around each phase.
 3. No-COI Node surfaces: spawn stdio/warn cardinality, worker_threads warning,
    CPU count and execSync feature. Artifact: Node v24.16.0 behavior is the
    external semantic baseline where applicable; the same real sandbox Worker
    carrier `pnpm test:no-coi -g "capability.*designed RED"` is the RED target.
 4. Vite 8/Rolldown: exact installed `vite@8.0.16`, real `.bin` request, named
    pre-pthread rejection plus direct shared/non-shared `WebAssembly.Memory`
-   boundary. Artifact: current COI product proof is
+   boundary, including WebIDL-truthy number/string descriptors across all four
+   guest entry forms. Artifact: current COI product proof is
    `tests/browser-unit/esbuild-vite-contract.spec.ts`; no-COI RED target is
-   `pnpm test:no-coi -g "threaded-WASM.*designed RED"`.
+   `pnpm test:no-coi -g "threaded-WASM guard covers real installed bin"`.
 5. Default COI admission remains loud; generic createSandbox no-COI eval/fs
-   keeps working when explicitly allowed. Artifact:
+   keeps working when explicitly allowed; valid-backend protocol mismatch
+   terminates through both public SDK and host-controller carriers. Artifact:
    `pnpm exec vitest run --project unit packages/rifty/src/sandbox.test.ts
-   --reporter=dot` and the no-COI preservation carrier.
+   packages/runtime-js/src/host.test.ts -t "valid backend but mismatched
+   protocol|public admission rejects" --reporter=dot` and the no-COI
+   preservation carrier.
 6. Network/admission inheritance: bounded registry reads, required fetch
    failures, corrupt registry-twin bytes and concurrent same-key acquisition stay
    loud/deduplicated. Artifact: focused npm-client fault command recorded in
@@ -261,14 +279,14 @@ behavior throughout.
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
-| `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; handshake mismatch named | Acceptance 3-4; no-COI preservation + capability RED |
+| `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; valid-backend protocol mismatch named + Worker terminated | Acceptance 3-4; Evidence R5-HANDSHAKE; no-COI preservation + capability RED |
 | `corrupt-input` + `observable-order` × install/run-bin request | exact fields validated before VFS/process mutation; ordered output precedes one terminal result | Acceptance 5-6, 9; capability/build RED |
 | `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry-twin acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
 | `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0374; `toolchain overlap` designed RED |
 | Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
-| `false-fallback` × Vite 8/threaded WASM | Vite 8 and direct shared-memory construction reach the same named boundary; no generic wasm crash or successful dist | Acceptance/Parity 8/4; threaded-WASM RED |
+| `false-fallback` × Vite 8/threaded WASM | Vite 8 and literal/WebIDL-truthy shared-memory construction reach the same named boundary; no generic wasm crash or successful dist | Acceptance/Parity 8/4; Evidence R5-REALM; threaded-WASM RED |
 | `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
-| `observable-order` × host lifecycle | entry behavior sampled before/during/after; stable time origin proves no reload | Acceptance/Parity 1-2/2; preservation control |
+| `observable-order` × host lifecycle | opener round-trip + image reload complete while install/run stay admitted at held network boundaries, then release completes them; stable time origin proves no reload | Acceptance/Parity 1-2/2; Evidence R5-ORDER; preservation control |
 
 Evidence C148-NPM (Node 24.16.0, Vitest 2.1.9):
 
@@ -278,6 +296,33 @@ pnpm exec vitest run --project unit \
   packages/workbench/src/workers/owner-package-runtime-bindings.contract.test.ts \
   packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts --reporter=dot
 # 3 files passed; 51 tests passed
+```
+
+Evidence R5-HANDSHAKE (product `6ba50d605`, Node 24.16.0, Vitest 2.1.9):
+
+```sh
+pnpm exec vitest run --project unit \
+  packages/rifty/src/sandbox.test.ts packages/runtime-js/src/host.test.ts \
+  -t "valid backend but mismatched protocol|public admission rejects" --reporter=dot
+# 2 files passed; 2 tests passed; both reject sandbox.toolchain.worker + terminate
+```
+
+Evidence R5-REALM (product `6ba50d605`, Chrome 148.0.7778.96, Playwright 1.60.0):
+
+```sh
+pnpm test:no-coi -g \
+  "threaded-WASM guard covers real installed bin, CJS, ESM and REPL descriptors"
+# RED: 1 failed; shared:1 and shared:'yes' returned native TypeError, not
+# NotImplementedError(toolchain.threaded-wasm), in REPL/CJS/ESM/installed-bin
+```
+
+Evidence R5-ORDER (product `6ba50d605`, Chrome 148.0.7778.96, Playwright 1.60.0):
+
+```sh
+pnpm test:no-coi -g \
+  "host stays interactive while admitted install and run wait at network boundaries"
+# 1 passed; BusyError proved admission, opener/image completed before release,
+# then both original operations completed
 ```
 
 ## Out of scope
@@ -318,3 +363,10 @@ review: checkpoints — runtime/network/parity public SDK slice.
 - `contract-red: 2026-09-01 — blocker @ 326f5b70e`
 - `final-green: 2026-09-01 — blocker @ 07d370651`
 - `final-green: 2026-09-01 — blocker @ bcff49986`
+- `final-green: 2026-09-01 — blocker @ 541c4cd6c`
+- Re-cut expected batch: WebIDL-truthy shared descriptors are RED across four
+  real guest entries; public/host protocol mismatch and admitted-operation
+  host interactivity are discriminating pre-fix GREEN preservation carriers.
+- No re-cut production edit started. The only observed product failure is the
+  realm-scoped truthy shared-memory guard; protocol admission already rejects
+  and terminates, and host lifecycle already remains interactive.

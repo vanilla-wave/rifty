@@ -1,6 +1,6 @@
 import type { RuntimeController } from '@riftydev/runtime-js';
 import type { FsReadEncoding } from '@riftydev/runtime-js';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CapabilityCheck } from './capabilities.ts';
 import {
   COI_REQUIRED_MESSAGE,
@@ -100,6 +100,10 @@ function deps(over: Partial<SandboxDeps> = {}): SandboxDeps {
   };
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('createSandbox', () => {
   it('wires capabilities, OPFS backend, and the runtime on the happy path', async () => {
     const runtime = fakeRuntime();
@@ -162,6 +166,58 @@ describe('createSandbox', () => {
       });
     },
   );
+
+  it('public admission rejects and terminates a valid-backend mismatched-protocol Worker', async () => {
+    const listeners = new Set<(event: MessageEvent<unknown>) => void>();
+    const terminate = vi.fn();
+    let resolveConstructed: (worker: MismatchedProtocolWorker) => void = () => {};
+    const constructed = new Promise<MismatchedProtocolWorker>((resolve) => {
+      resolveConstructed = resolve;
+    });
+    class MismatchedProtocolWorker {
+      constructor() {
+        resolveConstructed(this);
+      }
+
+      addEventListener(type: string, listener: EventListener): void {
+        if (type === 'message') {
+          listeners.add(listener as (event: MessageEvent<unknown>) => void);
+        }
+      }
+
+      postMessage(): void {}
+
+      terminate(): void {
+        terminate();
+      }
+
+      emit(data: unknown): void {
+        const event = { data } as MessageEvent<unknown>;
+        for (const listener of listeners) listener(event);
+      }
+    }
+    vi.stubGlobal('Worker', MismatchedProtocolWorker);
+    const creating = createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        toolchain: { workerUrl: '/toolchain-worker.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    );
+    const worker = await constructed;
+    worker.emit({ type: 'ready' });
+    worker.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v0',
+      vfsBackend: 'memory',
+    });
+
+    await expect(creating).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'sandbox.toolchain.worker',
+    });
+    expect(terminate).toHaveBeenCalledOnce();
+  });
 
   it('falls back to memory and records the reason when VFS init throws', async () => {
     const warn = vi.fn();

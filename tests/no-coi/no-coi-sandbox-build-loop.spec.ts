@@ -1,4 +1,4 @@
-import { type Page, expect, test } from '@playwright/test';
+import { type Page, type Route, expect, test } from '@playwright/test';
 import { childFsScenario } from '../../tools/perf/child-fs/scenario.mjs';
 import {
   bootOwner,
@@ -27,9 +27,11 @@ const threadedWasmProbeExpression = `(() => {
     shared: { get: () => true, enumerable: true },
   });
   const shared = [
-    ['own', { initial: 1, shared: true }],
-    ['inherited', inherited],
-    ['accessor', accessor],
+    ['own-literal-true', { initial: 1, shared: true }],
+    ['inherited-literal-true', inherited],
+    ['accessor-literal-true', accessor],
+    ['own-truthy-number', { initial: 1, shared: 1 }],
+    ['own-truthy-string', { initial: 1, shared: 'yes' }],
   ].map(([form, descriptor]) => {
     try {
       new WebAssembly.Memory(descriptor);
@@ -1001,7 +1003,13 @@ test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descripto
       { probeExpression: threadedWasmProbeExpression },
     );
     const expected = {
-      shared: ['own', 'inherited', 'accessor'].map((form) => ({
+      shared: [
+        'own-literal-true',
+        'inherited-literal-true',
+        'accessor-literal-true',
+        'own-truthy-number',
+        'own-truthy-string',
+      ].map((form) => ({
         form,
         name: 'NotImplementedError',
         feature: 'toolchain.threaded-wasm',
@@ -1402,6 +1410,162 @@ async function beginStalledRun(page: Page, root: string): Promise<void> {
     await started;
   }, root);
 }
+
+test('host stays interactive while admitted install and run wait at network boundaries', async ({
+  page,
+}) => {
+  const { host, baseline } = await openHeaderlessHost(page);
+  const context = host.context();
+  const installPattern = '**/npm-registry/kleur*';
+  const runPattern = '**/favicon.svg?toolchain-run-boundary=*';
+  let resolveInstallRoute: (route: Route) => void = () => {};
+  let resolveRunRoute: (route: Route) => void = () => {};
+  const installRoute = new Promise<Route>((resolve) => {
+    resolveInstallRoute = resolve;
+  });
+  const runRoute = new Promise<Route>((resolve) => {
+    resolveRunRoute = resolve;
+  });
+  const holdInstall = (route: Route) => resolveInstallRoute(route);
+  const holdRun = (route: Route) => resolveRunRoute(route);
+  try {
+    await createToolchainSandbox(host);
+    await seedStalledInstall(host, '/interactive-install');
+    await context.route(installPattern, holdInstall, { times: 1 });
+    await host.evaluate(() => {
+      const holder = globalThis as typeof globalThis & {
+        __riftyNoCoiSandbox: {
+          toolchain: { install(input: Record<string, unknown>): Promise<void> };
+        };
+        __riftyPendingToolchain?: Promise<unknown>;
+      };
+      holder.__riftyPendingToolchain = holder.__riftyNoCoiSandbox.toolchain.install({
+        cwd: '/interactive-install',
+        registryUrl: '/npm-registry',
+      });
+      holder.__riftyPendingToolchain.catch(() => {});
+    });
+    const heldInstall = await installRoute;
+    const installAdmission = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            toolchain: { install(input: Record<string, unknown>): Promise<void> };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      try {
+        await sandbox.toolchain.install({ cwd: '/other', registryUrl: '/npm-registry' });
+        return { name: 'resolved' };
+      } catch (error) {
+        return { name: error instanceof Error ? error.name : String(error) };
+      }
+    });
+    expect(installAdmission).toEqual({ name: 'SandboxToolchainBusyError' });
+    await setHostPhase(host, 'during-admitted-install');
+    assertHostSnapshot(await hostSnapshot(host), baseline);
+    expect(await openerRoundTrip(host)).toBe(true);
+    await renewCrossOriginImage(host);
+    await heldInstall.continue();
+    await host.evaluate(async () => {
+      const pending = (
+        globalThis as typeof globalThis & { __riftyPendingToolchain?: Promise<unknown> }
+      ).__riftyPendingToolchain;
+      if (pending === undefined) throw new Error('admitted install promise is missing');
+      await pending;
+    });
+    await context.unroute(installPattern, holdInstall);
+
+    await context.route(runPattern, holdRun, { times: 1 });
+    await host.evaluate(async () => {
+      const holder = globalThis as typeof globalThis & {
+        __riftyNoCoiSandbox: {
+          fs: { writeFile(path: string, value: string): Promise<void> };
+          runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
+          toolchain: {
+            runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+          };
+        };
+        __riftyPendingToolchain?: Promise<unknown>;
+      };
+      const root = '/interactive-run';
+      await holder.__riftyNoCoiSandbox.fs.writeFile(
+        `${root}/node_modules/.bin/network-boundary`,
+        "#!/usr/bin/env node\nimport('../network-boundary/cli.js');\n",
+      );
+      await holder.__riftyNoCoiSandbox.fs.writeFile(
+        `${root}/node_modules/network-boundary/package.json`,
+        JSON.stringify({ name: 'network-boundary', type: 'commonjs' }),
+      );
+      await holder.__riftyNoCoiSandbox.fs.writeFile(
+        `${root}/node_modules/network-boundary/cli.js`,
+        "fetch('/favicon.svg?toolchain-run-boundary=admitted').then((response) => response.arrayBuffer()).then(() => console.log('__RIFTY_RUN_RELEASED__')); module.exports = {};\n",
+      );
+      const output: string[] = [];
+      const off = holder.__riftyNoCoiSandbox.runtime.on((event) => {
+        if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+          output.push(event.chunk);
+        }
+      });
+      holder.__riftyPendingToolchain = holder.__riftyNoCoiSandbox.toolchain
+        .runBin({
+          cwd: root,
+          binPath: `${root}/node_modules/.bin/network-boundary`,
+          args: [],
+        })
+        .then((result) => ({ result, output: output.join('') }))
+        .finally(off);
+      holder.__riftyPendingToolchain.catch(() => {});
+    });
+    const heldRun = await runRoute;
+    const runAdmission = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            toolchain: { runBin(input: Record<string, unknown>): Promise<unknown> };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      try {
+        await sandbox.toolchain.runBin({
+          cwd: '/other',
+          binPath: '/other/node_modules/.bin/second',
+          args: [],
+        });
+        return { name: 'resolved' };
+      } catch (error) {
+        return { name: error instanceof Error ? error.name : String(error) };
+      }
+    });
+    expect(runAdmission).toEqual({ name: 'SandboxToolchainBusyError' });
+    await setHostPhase(host, 'during-admitted-build');
+    assertHostSnapshot(await hostSnapshot(host), baseline);
+    expect(await openerRoundTrip(host)).toBe(true);
+    await renewCrossOriginImage(host);
+    await heldRun.continue();
+    const run = await host.evaluate(async () => {
+      const pending = (
+        globalThis as typeof globalThis & { __riftyPendingToolchain?: Promise<unknown> }
+      ).__riftyPendingToolchain;
+      if (pending === undefined) throw new Error('admitted run promise is missing');
+      return pending;
+    });
+    expect(run).toEqual({
+      result: { exitCode: 0 },
+      output: expect.stringContaining('__RIFTY_RUN_RELEASED__'),
+    });
+    await context.unroute(runPattern, holdRun);
+    await setHostPhase(host, 'after-admitted-operations');
+    assertHostSnapshot(await hostSnapshot(host), baseline);
+    expect(await openerRoundTrip(host)).toBe(true);
+    await renewCrossOriginImage(host);
+  } finally {
+    await context.unroute(installPattern, holdInstall);
+    await context.unroute(runPattern, holdRun);
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
 
 test('toolchain overlap rejects instead of racing or queuing — designed RED', async ({ page }) => {
   const { host } = await openHeaderlessHost(page);
