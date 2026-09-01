@@ -1,9 +1,10 @@
 ---
 area: distribution
-status: ready
+status: draft
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
+blocked_by: [runtime-js/sandbox-toolchain-memory-descriptor-evaluation]
 why: the real-Vite composition (esbuild-wasm adapter, bin execution, npm/shell wiring) exists only behind workbench COI gates; the sandbox tier needs the same loop composed in the single worker, a capability report making every gap loud, and a CI lane that serves NO COOP/COEP — today zero browser lanes do
 user_story: As an agent platform, I want createSandbox → install → vite build → dist on a headerless page with a report naming what throws/degrades, but today the composition throws at the workbench gate and no lane proves any of it
 sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
@@ -369,6 +370,126 @@ next PICKUP. Its pre-demotion clauses remain exact; no user behavior weakens.
    loud/deduplicated. Artifact: focused npm-client fault command recorded in
    Evidence C148-NPM below; the SDK layer adds no cache/retry authority.
 
+## Discovered fork — 2026-09-02 descriptor-evaluation split
+
+Final convergence stopped at 1→1: the prior callable-descriptor blocker was
+closed before this continuation, then a fresh `observable-order` /
+`false-fallback` blocker proved the realm guard evaluates caller-owned
+`WebAssembly.Memory` descriptor properties differently from native Node and
+Chrome. User resolved the binding valve by SPLIT, never a same-unit round N+1.
+
+The internal child
+`runtime-js/sandbox-toolchain-memory-descriptor-evaluation` owns only the
+package-generic, Vite-free evaluation defect at the existing runtime-js realm
+seam: native count/order, the stateful false→true outcome, and matching
+REPL/CJS/ESM/installed-bin siblings. This build-loop is demoted and blocked on
+that child. All Contract/Final lineage and the exact 1→1 stop carry; no fix,
+RED or implementation checkpoint has started. The observable goal is unchanged.
+
+### Pre-demotion Acceptance (verbatim, descriptor-evaluation split)
+
+1. A navigation response served by the dedicated no-COI Vite config has no
+   COOP/COEP. Before sandbox boot, during install, during build and after build,
+   the same document/time-origin reports `crossOriginIsolated===false` and
+   `typeof SharedArrayBuffer==='undefined'`; no bootstrap reload occurs.
+2. The host is opened from an existing same-origin app. Its live
+   `window.opener` message round-trip and a no-CORS/no-CORP image from a second
+   headerless loopback origin work before/during/after exactly as at entry.
+   Both complete while an install and a run-bin operation remain admitted at
+   a held real network boundary; overlap proves admission, releasing the
+   boundary completes the original operation.
+3. `createSandbox` admits no-COI only through the explicit existing
+   `requireCrossOriginIsolation:false`; default admission still throws
+   `COI_REQUIRED_MESSAGE`. `toolchain:{workerUrl}` handshakes the SDK toolchain Worker
+   before returning and exposes the ADR-0375 install/run-bin methods over the
+   same `runtime`/`fs` Worker. A valid backend paired with any mismatched
+   protocol rejects `NotImplementedError('sandbox.toolchain.worker')` and
+   terminates that Worker; it is never ignored or later admitted. The authority
+   is generic: install the exact project manifest, then run any admitted
+   installed `node_modules/.bin` path to completion. SDK/runtime/control-plane,
+   package and distribution code never branches on Vite identity, version,
+   callbacks, paths, types or lifecycle.
+4. The immutable report contains exactly these no-COI feature outcomes:
+   `fs`, `npm.install`, `node_modules.bin`, `child_process.spawn.stdio` working;
+   `child_process.spawn`, `worker_threads.Worker`, `os.parallelism`
+   degraded with explicit warnings (`os.parallelism.value=1`); and
+   `child_process.execSync`, `toolchain.threaded-wasm`, `toolchain.dev-hmr`
+   throwing with named `NotImplementedError` features. It is recursively
+   frozen with `schemaVersion:1`, tier `shared-memory-free` and the listed row
+   order; warning strings are the exact strings pinned by the RED carrier.
+5. Two same-realm spawns warn exactly once, both children retain landed
+   console→stdout/stderr pipe behavior, and both settle in order.
+   `worker_threads.Worker` retains its own once-only same-realm warning.
+   `os.cpus().length===availableParallelism()===1`. `execSync` throws
+   `NotImplementedError` with `feature==='child_process.execSync'`.
+6. From the frozen project manifest, the real npm-client installs every exact
+   dependency version and the admitted `esbuild-wasm@0.28.0` runtime. The
+   executed entry is exactly `/project/node_modules/.bin/vite`, args exactly
+   `['build']`, exit exactly 0, with exactly one `2180 modules transformed`
+   line and no curated/deep-import execution path.
+7. The live no-COI and live COI products receive byte-identical project files
+   and marker. Their complete normalized `dist/` relative-path sets are equal;
+   every paired file has equal length, equal bytes and equal SHA-256. The JS
+   contains the marker exactly twice, matching the frozen source's two sites;
+   equality is not count-only or filename-only.
+8. A real `vite@8.0.16` install followed by its installed `.bin/vite build` in
+   the no-COI sandbox reaches the realm-local shared-memory boundary and rejects
+   with `NotImplementedError`, `feature==='toolchain.threaded-wasm'`, and a
+   message naming shared WebAssembly memory, COI and SharedArrayBuffer. It writes
+   no successful `dist/` claim. Vite/Rolldown identity is fixture provenance,
+   never rejection policy: a Vite-8-named installed bin that makes no shared-
+   memory request runs normally. Direct guest construction of shared
+   `WebAssembly.Memory` rejects with the same feature, while non-shared memory
+   still constructs. WebIDL-truthy `shared:1` and `shared:'yes'` reject beside
+   own/inherited/accessor literal-true descriptors through REPL, CJS, ESM and
+   an installed bin; non-shared native constructor/prototype identity stays.
+9. A separate real `nanoid@3.3.18` exact manifest installs and its arbitrary
+   admitted `.bin/nanoid --size 7` exits 0 with one seven-character ID, independent
+   of Vite. Toolchain input is validated once before mutation. A malformed cwd/bin/args
+   rejects loudly; a second install/run overlapping one admitted operation
+   rejects immediately as `SandboxToolchainBusyError` rather than racing or
+   queuing. Dispose/Worker death rejects the admitted promise; none hangs.
+10. `pnpm test:no-coi` is a committed Playwright Chromium lane with its own
+    headerless server config/port and CI job. It runs the public SDK path and
+    live COI oracle; it is never a route-intercept header simulation and never
+    boots the Playground app no-COI.
+
+### Pre-demotion Parity cases (verbatim, descriptor-evaluation split)
+
+1. Current COI product vs no-COI toolchain Worker: one project/dependency
+   digest, exact installed versions, real `.bin/vite`, exit/module count, full
+   `dist` paths+bytes+SHA. Artifact: C148-BUILD establishes both current
+   compositions; `pnpm test:no-coi -g "build parity.*designed RED"` is the
+   committed differential and current-tree RED.
+2. Host document lifecycle: raw response headers + continuous page-realm
+   sampling + stable time origin/opener/subresource, including round-trip and
+   image reload while admitted install/run calls wait at held network
+   boundaries. Artifact: `pnpm test:no-coi -g "host stays interactive while
+   admitted install and run wait"` is a pre-fix green preservation carrier;
+   the full build carrier repeats controls around each phase.
+3. No-COI Node surfaces: spawn stdio/warn cardinality, worker_threads warning,
+   CPU count and execSync feature. Artifact: Node v24.16.0 behavior is the
+   external semantic baseline where applicable; the same real sandbox Worker
+   carrier `pnpm test:no-coi -g "capability.*designed RED"` is the RED target.
+4. Threaded-WASM boundary: exact installed `vite@8.0.16` reaches the generic
+   realm-local shared-memory rejection; an identity-equivalent non-threaded bin
+   and exact real `nanoid@3.3.18` bin run normally. Direct shared/non-shared
+   `WebAssembly.Memory` includes WebIDL-truthy number/string descriptors across
+   all four guest entry forms. Artifact: current COI product proof is
+   `tests/browser-unit/esbuild-vite-contract.spec.ts`; no-COI RED target is
+   `pnpm test:no-coi -g "threaded-WASM guard covers real installed bin"`.
+5. Default COI admission remains loud; generic createSandbox no-COI eval/fs
+   keeps working when explicitly allowed; valid-backend protocol mismatch
+   terminates through both public SDK and host-controller carriers. Artifact:
+   `pnpm exec vitest run --project unit packages/rifty/src/sandbox.test.ts
+   packages/runtime-js/src/host.test.ts -t "valid backend but mismatched
+   protocol|public admission rejects" --reporter=dot` and the no-COI
+   preservation carrier.
+6. Network/admission inheritance: bounded registry reads, required fetch
+   failures, corrupt registry-twin bytes and concurrent same-key acquisition stay
+   loud/deduplicated. Artifact: focused npm-client fault command recorded in
+   Evidence C148-NPM below; the SDK layer adds no cache/retry authority.
+
 ## Challenge
 
 challenge: 2026-08-28 — 1 problem
@@ -466,9 +587,10 @@ behavior throughout.
    never rejection policy: a Vite-8-named installed bin that makes no shared-
    memory request runs normally. Direct guest construction of shared
    `WebAssembly.Memory` rejects with the same feature, while non-shared memory
-   still constructs. WebIDL-truthy `shared:1` and `shared:'yes'` reject beside
-   own/inherited/accessor literal-true descriptors through REPL, CJS, ESM and
-   an installed bin; non-shared native constructor/prototype identity stays.
+   still constructs and retains native constructor/prototype identity. The
+   blocking runtime-js child owns native descriptor count/order, the stateful
+   false→true outcome and package-generic REPL/CJS/ESM/installed-bin siblings;
+   this item consumes that proof for the live public-SDK Vite 8 boundary.
 9. A separate real `nanoid@3.3.18` exact manifest installs and its arbitrary
    admitted `.bin/nanoid --size 7` exits 0 with one seven-character ID, independent
    of Vite. Toolchain input is validated once before mutation. A malformed cwd/bin/args
@@ -499,11 +621,13 @@ behavior throughout.
    carrier `pnpm test:no-coi -g "capability.*designed RED"` is the RED target.
 4. Threaded-WASM boundary: exact installed `vite@8.0.16` reaches the generic
    realm-local shared-memory rejection; an identity-equivalent non-threaded bin
-   and exact real `nanoid@3.3.18` bin run normally. Direct shared/non-shared
-   `WebAssembly.Memory` includes WebIDL-truthy number/string descriptors across
-   all four guest entry forms. Artifact: current COI product proof is
-   `tests/browser-unit/esbuild-vite-contract.spec.ts`; no-COI RED target is
-   `pnpm test:no-coi -g "threaded-WASM guard covers real installed bin"`.
+   and exact real `nanoid@3.3.18` bin run normally. The blocking
+   `runtime-js/sandbox-toolchain-memory-descriptor-evaluation` child owns the
+   native count/order/stateful differential and all four package-generic guest
+   entries. This item retains their live Vite 8 integration. Artifact: current
+   COI product proof is `tests/browser-unit/esbuild-vite-contract.spec.ts`;
+   no-COI integration target is `pnpm test:no-coi -g "threaded-WASM guard
+   covers real installed bin"`.
 5. Default COI admission remains loud; generic createSandbox no-COI eval/fs
    keeps working when explicitly allowed; valid-backend protocol mismatch
    terminates through both public SDK and host-controller carriers. Artifact:
@@ -525,7 +649,7 @@ behavior throughout.
 | `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry-twin acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
 | `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0375; `toolchain overlap` designed RED |
 | Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
-| `false-fallback` × threaded WASM | real Vite 8 and literal/WebIDL-truthy shared-memory construction reach the same generic named boundary; an identity-equivalent bin without a shared-memory request runs; no generic wasm crash or successful dist | Acceptance/Parity 8/4; Evidence R5-REALM/R6-IDENTITY; threaded-WASM RED |
+| `false-fallback` × threaded WASM | real Vite 8 reaches the generic named boundary; an identity-equivalent bin without a shared-memory request runs; the blocking child proves native-order descriptor conversion and no stateful shared-memory success | Acceptance/Parity 8/4; descriptor-evaluation child + R6-IDENTITY; live Vite 8 integration target |
 | `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
 | `observable-order` × host lifecycle | opener round-trip + image reload complete while install/run stay admitted at held network boundaries, then release completes them; stable time origin proves no reload | Acceptance/Parity 1-2/2; Evidence R5-ORDER; preservation control |
 
@@ -586,6 +710,9 @@ pnpm test:packed-consumer
 
 ## Out of scope
 
+- Native-order `WebAssembly.Memory` descriptor evaluation, stateful getter
+  safety and the REPL/CJS/ESM/installed-bin sibling sweep are the blocking
+  `runtime-js/sandbox-toolchain-memory-descriptor-evaluation` child.
 - Vite dev/HMR, SW preview binding, restart/death event and pending-write boot
   marker remain `distribution/no-coi-dev-hmr-restore`, blocked by this unit.
   The report says `toolchain.dev-hmr` throwing until that child lands.
@@ -707,3 +834,17 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
   REPL/CJS/ESM/installed-bin.
 - Convergence valve 1→1; no fix, RED, next review round, dev-HMR or rechart
   started.
+- Split resolution: user-authorized
+  `runtime-js/sandbox-toolchain-memory-descriptor-evaluation` succeeds this
+  unit only for the package-generic native count/order/stateful descriptor
+  defect at the existing runtime-js realm seam. All Contract/Final lineage and
+  the exact 1→1 stop carry to it. This item is demoted, re-cut and blocked;
+  no same-unit round N+1 and no weakened goal behavior.
+- The pre-demotion Acceptance and Parity are copied verbatim above. Active
+  Acceptance 8, Parity 4 and the threaded-WASM fault row delegate only that
+  internal predecessor; live Vite 8 integration remains here.
+- Body proof against stopped HEAD `7a1e95231`: Acceptance
+  `fecc6058ea588189c6363c879408925c5a871d65d5d55e62c5927aff7dec4991`;
+  Parity `c8e93b122e008d05e3db726afcc5847eb9d4a8a7848ad08d0b536164168b2ab5`.
+- No production edit, RED, implementation checkpoint or dev-HMR work started
+  during this RECHART.
