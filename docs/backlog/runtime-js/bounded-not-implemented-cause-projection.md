@@ -182,6 +182,8 @@ instantiates arbitrary package features. It uses no Vite package or identity.
 
 ## Decisions
 
+ready-verdict: 2026-09-01 — Contract+RED @ 7a911fa87
+
 review: checkpoints — runtime error fidelity on an existing Worker/browser
 serialization seam.
 
@@ -195,7 +197,6 @@ Child checkpoint lines prepend copied predecessor lineage (verbatim):
   getter exact-outer carrier; no two-gap first-identity proof; incomplete
   canonical impostor proof; no primitive/real-gap getter-throw cases; no
   object-shaped non-Error tail selector/serialization proof.
-- `ready-verdict: 2026-09-01 — Contract+RED @ 7a911fa87`
 - Contract+RED PASS: 15/15 coverage; prior 7 HOLDS closed; 0 new blockers;
   property-shape table STRETCH concern only; unit residuals empty;
   implementation not started.
