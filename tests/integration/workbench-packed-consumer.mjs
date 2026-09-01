@@ -25,7 +25,13 @@ import { installedPackagePackPlan } from './workbench-packed-consumer-package-ma
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const fixtureRoot = resolve(repoRoot, 'tests/integration/fixtures/workbench-vite-consumer');
+const surfaceOnly = process.argv.includes('--surface-only');
+const fixtureRoot = resolve(
+  repoRoot,
+  surfaceOnly
+    ? 'tests/integration/fixtures/no-coi-packed-toolchain-consumer'
+    : 'tests/integration/fixtures/workbench-vite-consumer',
+);
 const workbenchRoot = resolve(repoRoot, 'packages/workbench');
 const viteSnapshot = resolve(
   repoRoot,
@@ -36,7 +42,9 @@ const esbuildWasmManifest = resolve(
   'tools/shadow-registry/node_modules/esbuild-wasm/package.json',
 );
 const keepTemp = process.argv.includes('--keep');
-const unknownArguments = process.argv.slice(2).filter((argument) => argument !== '--keep');
+const unknownArguments = process.argv
+  .slice(2)
+  .filter((argument) => argument !== '--keep' && argument !== '--surface-only');
 if (unknownArguments.length > 0) {
   throw new Error(`Unknown packed-consumer arguments: ${unknownArguments.join(', ')}`);
 }
@@ -1224,16 +1232,24 @@ async function main() {
     await assertTarballInstall(consumerRoot, tarballs);
     await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
     await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
-    await stat(resolve(consumerRoot, 'dist/index.html'));
-    const registryPackages = await browserRegistryPackages({
-      packageRoot: browserPackageRoot,
-      tarballRoot: browserTarballRoot,
-      npmCacheRoot: browserPackCacheRoot,
-    });
-    await runChromiumJourney(consumerRoot, registryPackages);
-    console.log(
-      `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,
-    );
+    if (surfaceOnly) {
+      await stat(resolve(consumerRoot, 'dist/main.js'));
+      await stat(resolve(consumerRoot, 'dist/worker.js'));
+      console.log(
+        `Packed toolchain surface passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, strict TypeScript + generic SDK/Worker graphs`,
+      );
+    } else {
+      await stat(resolve(consumerRoot, 'dist/index.html'));
+      const registryPackages = await browserRegistryPackages({
+        packageRoot: browserPackageRoot,
+        tarballRoot: browserTarballRoot,
+        npmCacheRoot: browserPackCacheRoot,
+      });
+      await runChromiumJourney(consumerRoot, registryPackages);
+      console.log(
+        `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,
+      );
+    }
   } catch (error) {
     failure = error;
   }

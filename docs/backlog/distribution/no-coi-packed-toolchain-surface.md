@@ -149,6 +149,21 @@ installed-bin run control surface; invalid public shapes fail compilation.
 | `sibling-drift` × dev/publish export graphs | sync authority emits the same declared internal entry into manifest, tsup JS and declarations; package surface checks reject one-sided edits | Acceptance 2, 6; `pnpm sync:publish --check`; package-surface tests |
 | `lossy-aggregate` × public declaration exactness | positive exact results plus per-expression negative fields/types; no count-only or `skipLibCheck` pass | Acceptance 3-5; strict packed type carrier |
 
+Evidence PACKED-RED (Node 24.16.0, pnpm 11.5.2, TypeScript 5.9.3,
+esbuild 0.28.0):
+
+```sh
+pnpm test:packed-toolchain-surface
+# real workspace closure built; 15 first-party packages packed; external
+# dependency closure packed; offline npm install completed with no links.
+# RED at strict tsc:
+# @riftydev/io dist/index.d.ts TS2417 Duplex static toWeb conflict
+# @riftydev/kernel worker-entry declaration TS2304 DedicatedWorkerGlobalScope
+# @riftydev/sdk dist/index.d.ts TS2307 @riftydev/runtime-js/internal missing
+# ten exact-negative @ts-expect-error assertions unused because the unresolved
+# SandboxToolchain declaration lost its discriminating shape
+```
+
 ## Out of scope
 
 - No Vite identity, version, callback, path, type, lifecycle or semantic
