@@ -1,13 +1,13 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: sandbox toolchain WebAssembly.Memory descriptor evaluation parity
 created: 2026-09-02
 epic: no-coi-sandbox-tier
 why: the no-COI realm guard reads descriptor.shared before native construction and the native constructor reads it again; a stateful false-then-true getter therefore creates shared memory where native Node and Chrome read once and create non-shared memory
 user_story: As a package author whose WebAssembly.Memory descriptor uses observable accessors, I want the sandbox toolchain realm to preserve native evaluation count and order while rejecting an actual shared-memory request by name, but today a stateful getter can turn a non-shared request into SharedArrayBuffer
 sources: [ADR-0375, docs/process/fault-classes.md, distribution/no-coi-sandbox-build-loop]
-code: [packages/runtime-js/src/internal/sandbox-toolchain-realm.ts, packages/runtime-js/src/worker-entry.ts, packages/runtime-js/src/module-loader/loader.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts]
+code: [packages/runtime-js/src/internal/sandbox-toolchain-realm.ts, packages/runtime-js/src/internal/sandbox-toolchain-realm.test.ts, packages/runtime-js/src/worker-entry.ts, packages/runtime-js/src/module-loader/loader.ts, tests/no-coi/no-coi-memory-descriptor.spec.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts]
 ---
 
 ## Context
@@ -77,6 +77,60 @@ name, Vite fixture or lifecycle policy participates.
   lexical binding and module-loader lexical binding → CJS/ESM/installed-bin
   execution. No new public or protocol seam is needed.
 
+## Pickup evidence
+
+Evidence N24-ORACLE (Vitest 2.1.9, Node v24.16.0):
+
+```sh
+pnpm exec vitest run --project unit \
+  packages/runtime-js/src/internal/sandbox-toolchain-realm.test.ts \
+  -t "records the native Node v24.16.0" --reporter=dot
+# 1 passed, 4 skipped. Exact result: initial,maximum,shared; one shared read;
+# false→true returns [object ArrayBuffer].
+```
+
+Evidence C148-ORACLE (Playwright 1.60.0, Chrome 148.0.7778.96):
+
+```sh
+pnpm exec playwright test --config playwright.no-coi.config.ts \
+  --project=chromium tests/no-coi/no-coi-memory-descriptor.spec.ts \
+  -g "headerless Chrome 148 native"
+# 1 passed. Response has no COOP/COEP; crossOriginIsolated=false;
+# initial,maximum,shared once; false→true returns [object ArrayBuffer].
+```
+
+Evidence RED-REALM (Vitest 2.1.9, Node v24.16.0, current product
+`53353de49`):
+
+```sh
+pnpm exec vitest run --project unit \
+  packages/runtime-js/src/internal/sandbox-toolchain-realm.test.ts --reporter=dot
+# EXPECTED RED: 3 failed, 2 passed. Guarded false reads
+# shared,initial,maximum,shared twice; false→true returns SharedArrayBuffer;
+# first-read truthy throws the right named gap after reading only shared.
+```
+
+Evidence RED-WORKER (Playwright 1.60.0, Chrome 148.0.7778.96, real headerless
+public SDK Worker, current product `53353de49`):
+
+```sh
+pnpm exec playwright test --config playwright.no-coi.config.ts \
+  --project=chromium tests/no-coi/no-coi-memory-descriptor.spec.ts \
+  -g "public Worker REPL CJS ESM"
+# EXPECTED RED: 1 failed. REPL, CJS, ESM and arbitrary installed bin all
+# report shared,initial,maximum,shared; two reads; SharedArrayBuffer.
+```
+
+Evidence C148-PRESERVE (same browser/toolchain):
+
+```sh
+pnpm exec playwright test --config playwright.no-coi.config.ts \
+  --project=chromium tests/no-coi/no-coi-sandbox-build-loop.spec.ts \
+  -g "threaded-WASM guard covers real installed bin"
+# 1 passed. Literal/inherited/accessor/callable truthy controls keep the exact
+# named gap; non-shared global/constructor/prototype identity stays native.
+```
+
 ## Acceptance
 
 1. A same-realm differential runs fresh accessor-backed descriptors through
@@ -125,10 +179,10 @@ name, Vite fixture or lifecycle policy participates.
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
-| `observable-order` × Memory descriptor evaluation | `initial` → `maximum` → `shared`, one read each; no guard pre-read/native reread | Acceptance/Parity 1/1; same-realm Node/Chrome differential |
-| `false-fallback` × stateful `shared` conversion | false-then-true getter is consumed once as false; result stays `ArrayBuffer`, never shared | Acceptance/Parity 2/2; stateful getter + buffer-brand RED |
-| `provenance-lie` × actual truthy shared request | exact named `toolchain.threaded-wasm` gap after native-order conversion; no shared-memory success | Acceptance/Parity 3/3; truthy + identity controls |
-| `sibling-drift` × guest entry | REPL/CJS/ESM/installed-bin share the runtime-js realm semantics | Acceptance/Parity 4/4; one package-generic four-entry sweep |
+| `observable-order` × Memory descriptor evaluation | `initial` → `maximum` → `shared`, one read each; no guard pre-read/native reread | N24-ORACLE + C148-ORACLE vs RED-REALM + RED-WORKER |
+| `false-fallback` × stateful `shared` conversion | false-then-true getter is consumed once as false; result stays `ArrayBuffer`, never shared | N24-ORACLE + C148-ORACLE vs RED-REALM + RED-WORKER |
+| `provenance-lie` × actual truthy shared request | exact named `toolchain.threaded-wasm` gap after native-order conversion; no shared-memory success | RED-REALM + RED-WORKER; C148-PRESERVE controls |
+| `sibling-drift` × guest entry | REPL/CJS/ESM/installed-bin share the runtime-js realm semantics | RED-WORKER four-entry sweep |
 
 ## Out of scope
 
@@ -148,6 +202,10 @@ name, Vite fixture or lifecycle policy participates.
 
 review: checkpoints — package-generic runtime fidelity at the existing
 toolchain realm seam.
+
+- Pickup band: 4–4 expected RED tests — three same-realm order/stateful/truthy
+  cases plus one real headerless Worker four-sibling sweep; native Node/Chrome
+  oracles and landed truthy/identity controls stay green.
 
 predecessor: `distribution/no-coi-sandbox-build-loop`
 
