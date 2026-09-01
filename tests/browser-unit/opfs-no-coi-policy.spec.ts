@@ -11,6 +11,7 @@ interface WorkerRequest {
   readonly path: string;
   readonly bytes: number[];
   readonly denyStorage?: boolean;
+  readonly disableSyncHandle?: boolean;
 }
 
 async function installNoCoiRoute(page: Page): Promise<void> {
@@ -48,7 +49,10 @@ async function runWorker(page: Page, request: WorkerRequest): Promise<Record<str
     ({ url, request }) =>
       new Promise<Record<string, unknown>>((resolve, reject) => {
         const worker = new Worker(url, { type: 'module' });
-        const timer = setTimeout(() => reject(new Error('OPFS policy worker timeout')), 20_000);
+        const timer = setTimeout(() => {
+          worker.terminate();
+          reject(new Error('OPFS policy worker timeout'));
+        }, 20_000);
         worker.onmessage = (event: MessageEvent<Record<string, unknown>>) => {
           clearTimeout(timer);
           worker.terminate();
@@ -112,18 +116,37 @@ test('preservation: direct sync OPFS works without COI and survives a page reloa
     bytes: exactBytes,
   });
   logArtifact(browser, 'direct-capability-reload', { write, read });
-  expect(write).toMatchObject({
+  expect(write).toEqual({
     ok: true,
+    workerId: expect.any(String),
     backend: 'opfs',
     facts: {
       crossOriginIsolated: false,
       sharedArrayBufferType: 'undefined',
       opfsSyncSupported: true,
       opfsAsyncSupported: true,
+      detected: 'opfs',
     },
+    initChoice: null,
     flushResult: { total: 0, failures: [] },
+    syncHandlesClosed: true,
   });
-  expect(read).toMatchObject({ ok: true, backend: 'opfs', actual: exactBytes });
+  expect(read).toEqual({
+    ok: true,
+    workerId: expect.any(String),
+    backend: 'opfs',
+    facts: {
+      crossOriginIsolated: false,
+      sharedArrayBufferType: 'undefined',
+      opfsSyncSupported: true,
+      opfsAsyncSupported: true,
+      detected: 'opfs',
+    },
+    initChoice: null,
+    actual: exactBytes,
+    syncHandlesClosed: true,
+  });
+  expect(read.workerId).not.toBe(write.workerId);
 });
 
 test('preservation: COI dedicated Worker keeps OPFS selection and exact reload durability', async ({
@@ -153,16 +176,40 @@ test('preservation: COI dedicated Worker keeps OPFS selection and exact reload d
     bytes: exactBytes,
   });
   logArtifact(browser, 'coi-selection-reload', { write, read });
-  expect(write).toMatchObject({
+  expect(write).toEqual({
     ok: true,
+    workerId: expect.any(String),
     backend: 'opfs',
-    facts: { opfsSyncSupported: true, detected: 'opfs' },
+    facts: {
+      crossOriginIsolated: true,
+      sharedArrayBufferType: 'function',
+      opfsSyncSupported: true,
+      opfsAsyncSupported: true,
+      detected: 'opfs',
+    },
+    initChoice: 'opfs',
     flushResult: { total: 0, failures: [] },
+    syncHandlesClosed: true,
   });
-  expect(read).toMatchObject({ ok: true, backend: 'opfs', actual: exactBytes });
+  expect(read).toEqual({
+    ok: true,
+    workerId: expect.any(String),
+    backend: 'opfs',
+    facts: {
+      crossOriginIsolated: true,
+      sharedArrayBufferType: 'function',
+      opfsSyncSupported: true,
+      opfsAsyncSupported: true,
+      detected: 'opfs',
+    },
+    initChoice: 'opfs',
+    actual: exactBytes,
+    syncHandlesClosed: true,
+  });
+  expect(read.workerId).not.toBe(write.workerId);
 });
 
-test('preservation: selected OPFS init reports a storage permission failure loudly', async ({
+test('fault quota-perm-fail: selected OPFS init reports storage permission failure loudly', async ({
   page,
   browser,
 }) => {
@@ -176,10 +223,50 @@ test('preservation: selected OPFS init reports a storage permission failure loud
     denyStorage: true,
   });
   logArtifact(browser, 'permission-failure', result);
-  expect(result).toMatchObject({
+  expect(result).toEqual({
     ok: false,
-    facts: { opfsSyncSupported: true, detected: 'opfs' },
+    workerId: expect.any(String),
+    facts: {
+      crossOriginIsolated: true,
+      sharedArrayBufferType: 'function',
+      opfsSyncSupported: true,
+      opfsAsyncSupported: true,
+      detected: 'opfs',
+    },
+    initChoice: null,
     error: 'NotAllowedError: pickup denied',
+    syncHandlesClosed: false,
+  });
+});
+
+test('preservation: dedicated Worker without sync-handle capability selects memory', async ({
+  page,
+  browser,
+}) => {
+  await installNoCoiRoute(page);
+  await assertNoCoiNavigation(page, 'goto');
+  const result = await runWorker(page, {
+    mode: 'selected',
+    operation: 'write',
+    path: `/__rifty_no_coi_opfs__/${crypto.randomUUID()}.bin`,
+    bytes: exactBytes,
+    disableSyncHandle: true,
+  });
+  logArtifact(browser, 'missing-sync-handle', result);
+  expect(result).toEqual({
+    ok: true,
+    workerId: expect.any(String),
+    facts: {
+      crossOriginIsolated: false,
+      sharedArrayBufferType: 'undefined',
+      opfsSyncSupported: false,
+      opfsAsyncSupported: true,
+      detected: 'memory',
+    },
+    initChoice: 'memory',
+    backend: 'memory',
+    flushResult: null,
+    syncHandlesClosed: false,
   });
 });
 
@@ -205,8 +292,9 @@ test('no-COI capable dedicated Worker selects OPFS and survives exact-byte reloa
   });
   logArtifact(browser, 'selected-no-coi-reload', { write, read });
 
-  expect(write).toMatchObject({
+  expect(write).toEqual({
     ok: true,
+    workerId: expect.any(String),
     backend: 'opfs',
     facts: {
       crossOriginIsolated: false,
@@ -215,7 +303,24 @@ test('no-COI capable dedicated Worker selects OPFS and survives exact-byte reloa
       opfsAsyncSupported: true,
       detected: 'opfs',
     },
+    initChoice: 'opfs',
     flushResult: { total: 0, failures: [] },
+    syncHandlesClosed: true,
   });
-  expect(read).toMatchObject({ ok: true, backend: 'opfs', actual: exactBytes });
+  expect(read).toEqual({
+    ok: true,
+    workerId: expect.any(String),
+    backend: 'opfs',
+    facts: {
+      crossOriginIsolated: false,
+      sharedArrayBufferType: 'undefined',
+      opfsSyncSupported: true,
+      opfsAsyncSupported: true,
+      detected: 'opfs',
+    },
+    initChoice: 'opfs',
+    actual: exactBytes,
+    syncHandlesClosed: true,
+  });
+  expect(read.workerId).not.toBe(write.workerId);
 });

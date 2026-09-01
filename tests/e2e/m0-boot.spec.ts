@@ -57,6 +57,34 @@ async function recordChooserProjectArtifactsOnNextDocument(page: Page): Promise<
   });
 }
 
+async function recordStoragePresentationOnNextDocument(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __riftyStoragePresentations?: string[];
+    };
+    state.__riftyStoragePresentations = [];
+    const scan = (): void => {
+      const badge = document.querySelector('[data-storage-badge]');
+      const mode = badge?.closest('[data-storage-mode]')?.getAttribute('data-storage-mode');
+      if (!(badge instanceof HTMLElement) || mode === null || mode === undefined) return;
+      const observation = `${mode}:${badge.textContent?.trim() ?? ''}`;
+      const seen = state.__riftyStoragePresentations ?? [];
+      if (seen[seen.length - 1] !== observation) seen.push(observation);
+    };
+    const start = (): void => {
+      scan();
+      new MutationObserver(scan).observe(document.documentElement, {
+        attributes: true,
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    };
+    if (document.documentElement) start();
+    else document.addEventListener('DOMContentLoaded', start, { once: true });
+  });
+}
+
 test.describe('M0 — Foundation', () => {
   test('playground loads with the chooser and opens shell terminals after project admission', async ({
     page,
@@ -215,6 +243,24 @@ test.describe('M0 — Foundation', () => {
     // The App must have rendered — the storage badge proves `bootstrapPlayground`
     // resolved (it only paints after `initBackend()` returns).
     await expect(page.locator('[data-storage-badge]')).toBeVisible();
+  });
+
+  test('owner-reported durable storage is never presented as ephemeral', async ({ page }) => {
+    await recordStoragePresentationOnNextDocument(page);
+    await page.goto('/');
+    await expect(page.locator('[data-storage-badge]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[data-storage-mode="opfs"]')).toBeVisible();
+
+    const presentations = await page.evaluate(
+      () =>
+        (
+          globalThis as typeof globalThis & {
+            __riftyStoragePresentations?: string[];
+          }
+        ).__riftyStoragePresentations ?? [],
+    );
+    expect(presentations).toContainEqual(expect.stringMatching(/^opfs:/));
+    expect(presentations).not.toContainEqual(expect.stringMatching(/^memory:/));
   });
 
   test('shell file commands round-trip through the workspace VFS', async ({ page }) => {

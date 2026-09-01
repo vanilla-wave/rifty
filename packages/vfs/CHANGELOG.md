@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **Dedicated Workers select OPFS from sync-access-handle capability, not
+  COI (ADR-0372).** `detectVfsBackend()` now uses
+  `OpfsFsSync.isSupported()` as the paired-backend authority. Capable
+  headerless Chromium Workers therefore persist exact bytes across reload;
+  Node, main-window and missing-sync-handle realms stay memory, while OPFS
+  permission/init failures remain loud.
+
 - **Chromium `.crswap` atomic-swap temps no longer leak through the OPFS
   read surface (torn-state × Storage; born as the opfs-parallel-drain-kill
   CI flake).** `OpfsVfs.readdir` and the `OpfsFsSync` boot index drop FILE
