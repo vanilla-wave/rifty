@@ -4,16 +4,12 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-packed-toolchain-surface` — **packed-surface** — real
-   workspace tarballs, offline SDK root + Workbench no-COI Worker JavaScript
-   graph, strict declarations and exact negative public types. Generic
-   manifest-install/arbitrary-installed-bin authority; no Vite semantic scope.
-2. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
+1. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
    composition for real Vite 7 build outside workbench gates + loud capability
    gate/report + spawn warn-once + cpus→1 + Vite-8 loud named error + the
    no-COI CI lane, which also pins the host document non-COI across the loop
-   (I1, I2, I3, I7 rest, I8, I9). Blocked by packed-surface.
-3. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
+   (I1, I2, I3, I7 rest, I8, I9).
+2. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
    HMR through SW preview + worker-died event + restore primitive + boot marker
    for unflushed writes (I4, I6, I10). Blocked by build-loop.
 

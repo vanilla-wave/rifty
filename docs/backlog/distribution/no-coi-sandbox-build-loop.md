@@ -4,7 +4,6 @@ status: draft
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
-blocked_by: [distribution/no-coi-packed-toolchain-surface]
 why: the real-Vite composition (esbuild-wasm adapter, bin execution, npm/shell wiring) exists only behind workbench COI gates; the sandbox tier needs the same loop composed in the single worker, a capability report making every gap loud, and a CI lane that serves NO COOP/COEP — today zero browser lanes do
 user_story: As an agent platform, I want createSandbox → install → vite build → dist on a headerless page with a report naming what throws/degrades, but today the composition throws at the workbench gate and no lane proves any of it
 sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0374, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
@@ -453,8 +452,6 @@ pnpm test:packed-consumer
 
 ## Out of scope
 
-- Packed SDK/Workbench JavaScript and strict declaration graphs are the
-  blocking `distribution/no-coi-packed-toolchain-surface` child.
 - Vite dev/HMR, SW preview binding, restart/death event and pending-write boot
   marker remain `distribution/no-coi-dev-hmr-restore`, blocked by this unit.
   The report says `toolchain.dev-hmr` throwing until that child lands.
@@ -503,6 +500,6 @@ review: checkpoints — runtime/network/parity public SDK slice.
   realm-scoped truthy shared-memory guard; protocol admission already rejects
   and terminates, and host lifecycle already remains interactive.
 - Split resolution: packed-only obligation moved to
-  `distribution/no-coi-packed-toolchain-surface`; this item is draft and
-  blocked until that child lands. Checkpoint attempt lineage remains here and
-  is copied to the split successor.
+  the packed-surface predecessor, now landed at `0a2e64422`; this item is
+  unblocked and stays draft until its user-scope recompile. Checkpoint attempt
+  lineage remains here and was copied to the split successor.
