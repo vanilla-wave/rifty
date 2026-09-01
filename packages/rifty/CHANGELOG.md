@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Explicit shared-memory-free toolchain sandbox (ADR-0373).**
+  `createSandbox({requireCrossOriginIsolation:false, toolchain:{workerUrl}})`
+  handshakes one Workbench Worker and exposes frozen capability reporting,
+  manifest install, and run-to-completion installed-bin execution.
+
 - **`@riftydev/sdk/ts-language-service`** — subpath re-export for `@riftydev/ts-language-service`.
 
 - **ADR-0131 — `sandbox.fs` for AI-agent file IO.** `createSandbox()` now exposes

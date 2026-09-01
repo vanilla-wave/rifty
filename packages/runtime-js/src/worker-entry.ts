@@ -22,6 +22,7 @@ import { installTimerGlobals } from './builtins/timers.ts';
 import { setVmEngineOverride } from './builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from './builtins/web-globals.ts';
+import { initializeEventLoopKeepalive } from './internal/event-loop-keepalive.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
@@ -34,6 +35,7 @@ import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
 declare const self: DedicatedWorkerGlobalScope;
 
 installProcessGlobals();
+initializeEventLoopKeepalive();
 installTimerGlobals();
 installWebGlobals();
 (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
@@ -113,8 +115,9 @@ async function handleEval(req: EvalRequest): Promise<EvalResult> {
 // posted only after `boot` resolves, so a post-marker write (OPFS round-trip
 // e2e) lands on the wired backend.
 const boot = (async () => {
+  let backend: 'opfs' | 'memory';
   try {
-    await initBackend();
+    backend = await initBackend();
   } catch (err) {
     // OPFS init failed for this realm — degrade to in-memory so the runtime still
     // boots (mirrors the playground bootstrap fallback). Persistence is lost but
@@ -122,6 +125,7 @@ const boot = (async () => {
     const reason = err instanceof Error ? err.message : String(err);
     post({ type: 'stderr', chunk: `[rifty] VFS backend init failed, using memory: ${reason}\n` });
     installMemoryFs();
+    backend = 'memory';
   }
 
   // Preload the QuickJS WASM engine into the boot promise (ADR-0142) so a
@@ -153,8 +157,11 @@ const boot = (async () => {
   (self as unknown as { __riftyImport: typeof replImport }).__riftyImport = replImport;
 
   installConsole(sink);
-  return loader;
+  return { backend, loader };
 })();
+
+/** Selected backend after the runtime Worker has one authoritative VFS. */
+export const runtimeWorkerBackend: Promise<'opfs' | 'memory'> = boot.then(({ backend }) => backend);
 
 self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   const msg = event.data;
@@ -175,7 +182,7 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   }
   // `eval`/`load-fixture` need the wired backend + loader. Awaiting `boot` lets
   // an eval posted before readiness run against the wired tree instead of being lost.
-  const loader = await boot;
+  const { loader } = await boot;
   switch (msg.type) {
     case 'load-fixture': {
       // Keep the loader alive across editor saves, dropping only the module cache.

@@ -160,7 +160,11 @@ const SPEC = {
       './dist/node-worker.js',
       './dist/dev-server-worker.js',
       './dist/typescript-worker.js',
+      './dist/no-coi-toolchain-worker.js',
     ],
+    addExports: {
+      './no-coi-toolchain-worker': './src/workers/no-coi-toolchain-worker.ts',
+    },
     keywords: ['workbench', 'development-environment', 'browser-runtime'],
   },
   '@riftydev/shadow-registry': {

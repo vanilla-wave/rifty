@@ -69,9 +69,11 @@ export function cpus(): Array<{
   times: { user: number; nice: number; sys: number; idle: number; irq: number };
 }> {
   const count =
-    typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
-      ? navigator.hardwareConcurrency
-      : 1;
+    globalThis.crossOriginIsolated === false
+      ? 1
+      : typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
+        ? navigator.hardwareConcurrency
+        : 1;
   const stub = {
     model: 'rifty-virtual-cpu',
     speed: 1000,
@@ -245,9 +247,11 @@ export const constants = {
 } as const;
 
 export function availableParallelism(): number {
-  return typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
-    ? navigator.hardwareConcurrency
-    : 1;
+  return globalThis.crossOriginIsolated === false
+    ? 1
+    : typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
+      ? navigator.hardwareConcurrency
+      : 1;
 }
 
 export function getPriority(_pid?: number): number {

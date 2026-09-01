@@ -48,11 +48,37 @@ export interface SerializedRuntimeError {
   readonly stack?: string;
   readonly code?: string;
   readonly path?: string;
+  readonly feature?: string;
 }
 
 export type FsResult =
   | { readonly id: number; readonly ok: true; readonly value?: string | Uint8Array }
   | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
+
+export interface ToolchainInstallRequest {
+  readonly cwd: string;
+  readonly registryUrl: string;
+}
+
+export interface ToolchainRunBinRequest {
+  readonly cwd: string;
+  readonly binPath: string;
+  readonly args: readonly string[];
+}
+
+export type ToolchainRequest =
+  | { readonly id: number; readonly op: 'install'; readonly input: ToolchainInstallRequest }
+  | { readonly id: number; readonly op: 'run-bin'; readonly input: ToolchainRunBinRequest };
+
+export type ToolchainResult =
+  | {
+      readonly id: number;
+      readonly ok: true;
+      readonly value?: { readonly exitCode: number };
+    }
+  | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
+
+export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v1' as const;
 
 /** `node:vm` sandbox engine (ADR-0142): the real-realm QuickJS engine (default
  * after the T17 cutover) or the opt-in hardened-rewrite engine. */
@@ -61,6 +87,7 @@ export type VmEngineName = 'quickjs' | 'rewrite';
 export type HostMessage =
   | { readonly type: 'eval'; readonly request: EvalRequest }
   | { readonly type: 'fs'; readonly request: FsRequest }
+  | { readonly type: 'toolchain'; readonly request: ToolchainRequest }
   | { readonly type: 'ping' }
   | { readonly type: 'load-fixture'; readonly files: Readonly<Record<string, string>> }
   | { readonly type: 'stdin'; readonly data: string | Uint8Array }
@@ -70,10 +97,16 @@ export type HostMessage =
 
 export type WorkerMessage =
   | { readonly type: 'ready' }
+  | {
+      readonly type: 'toolchain-ready';
+      readonly protocol: typeof SANDBOX_TOOLCHAIN_PROTOCOL;
+      readonly vfsBackend: 'opfs' | 'memory';
+    }
   | { readonly type: 'stdout'; readonly chunk: string }
   | { readonly type: 'stderr'; readonly chunk: string }
   | { readonly type: 'result'; readonly result: EvalResult }
   | { readonly type: 'fs-result'; readonly result: FsResult }
+  | { readonly type: 'toolchain-result'; readonly result: ToolchainResult }
   | { readonly type: 'pong' }
   /** Divergence / NotImplemented telemetry snapshot (T15). Posted by the worker
    * when the snapshot changes; surfaced host-side for the playground panel (T16). */

@@ -60,8 +60,6 @@ const STATEMENT_HEADS = [
 ];
 
 function looksLikeStatement(code: string): boolean {
-  // Multi-line input is almost always statement-shaped in a REPL.
-  if (code.includes('\n')) return true;
   for (const head of STATEMENT_HEADS) {
     if (code.startsWith(head)) return true;
   }

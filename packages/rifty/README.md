@@ -11,13 +11,17 @@ gives you a framework-free `createSandbox()` to boot it in one call.
 
 ## Requirements (read this first)
 
-rifty needs a **cross-origin isolated** page (so `SharedArrayBuffer` + `Atomics`
-are available) and module Workers. Serve your app with:
+The full rifty runtime needs a **cross-origin isolated** page (so
+`SharedArrayBuffer` + `Atomics` are available) and module Workers. Serve your
+app with:
 
 ```
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp   # or: credentialless
 ```
+
+The explicit shared-memory-free toolchain mode below runs in an existing
+headerless page; threaded-WASM toolchains remain a loud named gap.
 
 `createSandbox()` cannot ship host wiring for you. Consumers still own:
 
@@ -90,18 +94,40 @@ async function main(): Promise<void> {
 void main();
 ```
 
+### Headerless build toolchain
+
+Install `@riftydev/workbench`, bundle its
+`@riftydev/workbench/no-coi-toolchain-worker` entry as a module Worker, then:
+
+```ts
+const sandbox = await createSandbox({
+  requireCrossOriginIsolation: false,
+  toolchain: { workerUrl: toolchainWorkerUrl },
+});
+await sandbox.fs.writeFile('/project/package.json', manifest);
+await sandbox.toolchain.install({ cwd: '/project', registryUrl: '/npm-registry' });
+await sandbox.toolchain.runBin({
+  cwd: '/project',
+  binPath: '/project/node_modules/.bin/vite',
+  args: ['build'],
+});
+console.log(sandbox.capabilityReport);
+```
+
+This mode owns runtime, VFS, npm install, shadow-asset admission, and bin
+execution in one Worker. It exposes build-only run-to-completion bins; Vite
+dev/HMR/preview and threaded WASM throw by named feature.
+
 `createSandbox` degrades gracefully: OPFS init failure falls back to in-memory
 storage (`sandbox.vfs.reason`), and service-worker registration failure only
 disables the preview path (`sandbox.swError`) — the REPL keeps working. Pass
 `skipServiceWorker: true` for headless eval-only use, or
 `requireCrossOriginIsolation: false` to inspect capabilities without throwing.
 
-> **One sandbox per realm (v0.1).** The VFS backend and the service worker are
-> realm-global singletons, so call `createSandbox()` **once per page/worker
-> realm**. A second call in the same realm gets its own runtime worker but shares
-> the filesystem and SW registration; `dispose()` tears down the runtime worker
-> only. Register `sandbox.runtime.on(...)` right after the call resolves so you
-> don't miss early events.
+> **One sandbox per realm (v0.1).** Generic mode's page VFS and the service
+> worker are realm-global. Toolchain mode owns VFS/runtime inside its one Worker;
+> service-worker registration remains page-global. Register
+> `sandbox.runtime.on(...)` right after boot so you don't miss early events.
 
 ## Subpaths — reach any layer directly
 

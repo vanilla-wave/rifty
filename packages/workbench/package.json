@@ -27,7 +27,8 @@
     "./dist/kernel-worker.js",
     "./dist/node-worker.js",
     "./dist/dev-server-worker.js",
-    "./dist/typescript-worker.js"
+    "./dist/typescript-worker.js",
+    "./dist/no-coi-toolchain-worker.js"
   ],
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -39,7 +40,8 @@
     "./kernel-worker": "./src/workers/kernel-worker-entry.ts",
     "./node-worker": "./src/workers/node-entry-bootstrap.ts",
     "./dev-server-worker": "./src/workers/dev-server-child-bootstrap.ts",
-    "./typescript-worker": "./src/workers/ts-lsp-worker-entry.ts"
+    "./typescript-worker": "./src/workers/ts-lsp-worker-entry.ts",
+    "./no-coi-toolchain-worker": "./src/workers/no-coi-toolchain-worker.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -75,6 +77,10 @@
       "./typescript-worker": {
         "types": "./dist/typescript-worker.d.ts",
         "import": "./dist/typescript-worker.js"
+      },
+      "./no-coi-toolchain-worker": {
+        "types": "./dist/no-coi-toolchain-worker.d.ts",
+        "import": "./dist/no-coi-toolchain-worker.js"
       }
     }
   },

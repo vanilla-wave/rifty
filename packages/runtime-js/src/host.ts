@@ -1,3 +1,5 @@
+import { NotImplementedError } from '@riftydev/io';
+import { normalizePath } from '@riftydev/vfs';
 import type {
   EvalResult,
   FsReadEncoding,
@@ -6,9 +8,14 @@ import type {
   HostMessage,
   SerializedRuntimeError,
   TelemetrySnapshot,
+  ToolchainInstallRequest,
+  ToolchainRequest,
+  ToolchainResult,
+  ToolchainRunBinRequest,
   VmEngineName,
   WorkerMessage,
 } from './protocol.ts';
+import { SANDBOX_TOOLCHAIN_PROTOCOL as TOOLCHAIN_PROTOCOL } from './protocol.ts';
 
 export interface RuntimeOptions {
   /** URL of the worker entry module. */
@@ -65,6 +72,16 @@ export interface RuntimeController {
   readonly isReady: () => boolean;
 }
 
+export interface RuntimeToolchain {
+  install(input: ToolchainInstallRequest): Promise<void>;
+  runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
+}
+
+export interface ToolchainRuntimeController extends RuntimeController {
+  readonly toolchain: RuntimeToolchain;
+  readonly toolchainReady: Promise<'opfs' | 'memory'>;
+}
+
 /**
  * Host-side filesystem surface backed by the runtime Worker's VFS (ADR-0131).
  *
@@ -90,26 +107,80 @@ interface PendingEval {
   reject(err: unknown): void;
 }
 
-interface PendingFs {
-  resolve(result: FsResult): void;
-  reject(err: unknown): void;
-}
+type PendingRequest =
+  | {
+      readonly kind: 'fs';
+      resolve(result: FsResult): void;
+      reject(err: unknown): void;
+    }
+  | {
+      readonly kind: 'toolchain';
+      resolve(result: ToolchainResult): void;
+      reject(err: unknown): void;
+    };
 
 interface RuntimeError extends Error {
   code?: string;
   path?: string;
+  feature?: string;
 }
 
-/**
- * Host-side controller for the JS runtime Worker. Hides the message protocol.
- */
+const TOOLCHAIN_HANDSHAKE_TIMEOUT_MS = 10_000;
+
+/** Host-side controller for the JS runtime Worker. Hides the message protocol. */
 export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
+  return createRuntimeController(opts, false);
+}
+
+/** Runtime controller with the sandbox toolchain v1 handshake/control plane. */
+export function spawnToolchainRuntime(opts: RuntimeOptions): ToolchainRuntimeController {
+  return createRuntimeController(opts, true);
+}
+
+function createRuntimeController(opts: RuntimeOptions, toolchainMode: false): RuntimeController;
+function createRuntimeController(
+  opts: RuntimeOptions,
+  toolchainMode: true,
+): ToolchainRuntimeController;
+function createRuntimeController(
+  opts: RuntimeOptions,
+  toolchainMode: boolean,
+): RuntimeController | ToolchainRuntimeController {
   const handlers = new Set<(event: RuntimeEvent) => void>();
   let worker: Worker | null = null;
   let nextId = 1;
   let ready = false;
   const pending = new Map<number, PendingEval>();
-  const pendingFs = new Map<number, PendingFs>();
+  const pendingRequests = new Map<number, PendingRequest>();
+  let toolchainBackend: 'opfs' | 'memory' | null = null;
+  let toolchainReadySettled = false;
+  let resolveToolchainReady: ((backend: 'opfs' | 'memory') => void) | undefined;
+  let rejectToolchainReady: ((error: unknown) => void) | undefined;
+  const toolchainReady = toolchainMode
+    ? new Promise<'opfs' | 'memory'>((resolve, reject) => {
+        resolveToolchainReady = resolve;
+        rejectToolchainReady = reject;
+      })
+    : null;
+  let toolchainHandshakeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function toolchainHandshakeError(message: string): NotImplementedError {
+    return new NotImplementedError('sandbox.toolchain.worker', message);
+  }
+
+  function settleToolchainReady(): void {
+    if (!toolchainMode || toolchainReadySettled || !ready || toolchainBackend === null) return;
+    toolchainReadySettled = true;
+    if (toolchainHandshakeTimer !== undefined) clearTimeout(toolchainHandshakeTimer);
+    resolveToolchainReady?.(toolchainBackend);
+  }
+
+  function rejectToolchainHandshake(error: unknown): void {
+    if (!toolchainMode || toolchainReadySettled) return;
+    toolchainReadySettled = true;
+    if (toolchainHandshakeTimer !== undefined) clearTimeout(toolchainHandshakeTimer);
+    rejectToolchainReady?.(error);
+  }
 
   function emit(event: RuntimeEvent): void {
     for (const h of handlers) {
@@ -138,14 +209,15 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
     if (error.stack !== undefined) err.stack = error.stack;
     if (error.code !== undefined) err.code = error.code;
     if (error.path !== undefined) err.path = error.path;
+    if (error.feature !== undefined) err.feature = error.feature;
     return err;
   }
 
-  function rejectPendingFs(err: unknown): void {
-    for (const p of pendingFs.values()) {
+  function rejectPendingRequests(err: unknown): void {
+    for (const p of pendingRequests.values()) {
       p.reject(err);
     }
-    pendingFs.clear();
+    pendingRequests.clear();
   }
 
   function requestFs(request: FsRequest): Promise<FsResult> {
@@ -157,12 +229,30 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
       return Promise.reject(err);
     }
     const promise = new Promise<FsResult>((resolve, reject) => {
-      pendingFs.set(request.id, { resolve, reject });
+      pendingRequests.set(request.id, { kind: 'fs', resolve, reject });
     });
     try {
       send({ type: 'fs', request });
     } catch (err) {
-      pendingFs.delete(request.id);
+      pendingRequests.delete(request.id);
+      return Promise.reject(err);
+    }
+    return promise;
+  }
+
+  function requestToolchain(request: ToolchainRequest): Promise<ToolchainResult> {
+    if (!worker) {
+      const err = workerTerminatedError('Runtime is not running');
+      err.code = 'RUNTIME_NOT_RUNNING';
+      return Promise.reject(err);
+    }
+    const promise = new Promise<ToolchainResult>((resolve, reject) => {
+      pendingRequests.set(request.id, { kind: 'toolchain', resolve, reject });
+    });
+    try {
+      send({ type: 'toolchain', request });
+    } catch (err) {
+      pendingRequests.delete(request.id);
       return Promise.reject(err);
     }
     return promise;
@@ -203,6 +293,18 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
           if (opts.vmEngine) send({ type: 'vm-config', engine: opts.vmEngine });
           if (opts.fixture) send({ type: 'load-fixture', files: opts.fixture });
           emit({ type: 'ready' });
+          settleToolchainReady();
+          break;
+        case 'toolchain-ready':
+          if (!toolchainMode) break;
+          if (msg.protocol !== TOOLCHAIN_PROTOCOL) {
+            rejectToolchainHandshake(
+              toolchainHandshakeError(`unsupported toolchain Worker protocol: ${msg.protocol}`),
+            );
+            break;
+          }
+          toolchainBackend = msg.vfsBackend;
+          settleToolchainReady();
           break;
         case 'stdout':
           emit({ type: 'stdout', chunk: msg.chunk });
@@ -220,9 +322,17 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
           break;
         }
         case 'fs-result': {
-          const p = pendingFs.get(msg.result.id);
-          if (p) {
-            pendingFs.delete(msg.result.id);
+          const p = pendingRequests.get(msg.result.id);
+          if (p?.kind === 'fs') {
+            pendingRequests.delete(msg.result.id);
+            p.resolve(msg.result);
+          }
+          break;
+        }
+        case 'toolchain-result': {
+          const p = pendingRequests.get(msg.result.id);
+          if (p?.kind === 'toolchain') {
+            pendingRequests.delete(msg.result.id);
             p.resolve(msg.result);
           }
           break;
@@ -248,10 +358,13 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
         );
       }
       pending.clear();
-      rejectPendingFs(
+      rejectPendingRequests(
         Object.assign(new Error(`Worker crashed: ${event.message}`), {
           code: 'WORKER_CRASHED',
         }),
+      );
+      rejectToolchainHandshake(
+        toolchainHandshakeError(`toolchain Worker crashed during handshake: ${event.message}`),
       );
       emit({
         type: 'stderr',
@@ -266,11 +379,20 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
     });
   }
 
+  if (toolchainMode) {
+    toolchainHandshakeTimer = setTimeout(() => {
+      rejectToolchainHandshake(
+        toolchainHandshakeError(
+          `toolchain Worker did not complete ${TOOLCHAIN_PROTOCOL} handshake within ${TOOLCHAIN_HANDSHAKE_TIMEOUT_MS}ms`,
+        ),
+      );
+    }, TOOLCHAIN_HANDSHAKE_TIMEOUT_MS);
+  }
   start();
 
   const fs: RuntimeFs = { readFile, writeFile };
 
-  return {
+  const controller: RuntimeController = {
     eval(code, options) {
       const id = nextId++;
       const promise = new Promise<EvalResult>((resolve, reject) => {
@@ -295,7 +417,7 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
           });
         }
         pending.clear();
-        rejectPendingFs(workerTerminatedError('Worker was reset'));
+        rejectPendingRequests(workerTerminatedError('Worker was reset'));
         worker = null;
         ready = false;
         emit({ type: 'exit', reason: 'reset' });
@@ -307,7 +429,9 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
         worker.terminate();
         worker = null;
       }
-      rejectPendingFs(workerTerminatedError('Worker was disposed'));
+      const terminated = workerTerminatedError('Worker was disposed');
+      rejectPendingRequests(terminated);
+      rejectToolchainHandshake(terminated);
       handlers.clear();
       pending.clear();
       ready = false;
@@ -321,4 +445,116 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
     },
     isReady: () => ready,
   };
+  if (!toolchainMode || toolchainReady === null) return controller;
+
+  const toolchain: RuntimeToolchain = {
+    async install(input) {
+      const validated = validateInstallRequest(input);
+      await toolchainReady;
+      const result = await requestToolchain({ id: nextId++, op: 'install', input: validated });
+      if (!result.ok) throw deserializeError(result.error);
+    },
+    async runBin(input) {
+      const validated = validateRunBinRequest(input);
+      await toolchainReady;
+      const result = await requestToolchain({ id: nextId++, op: 'run-bin', input: validated });
+      if (!result.ok) throw deserializeError(result.error);
+      if (result.value === undefined) {
+        throw new Error('Invalid toolchain run-bin response');
+      }
+      return result.value;
+    },
+  };
+  return {
+    ...controller,
+    async reset() {
+      throw new NotImplementedError(
+        'sandbox.toolchain.restart',
+        'toolchain Worker restart is not available in build-only mode',
+      );
+    },
+    toolchain,
+    toolchainReady,
+  };
+}
+
+function exactInput(
+  input: unknown,
+  fields: readonly string[],
+  label: string,
+): Record<string, unknown> {
+  if (
+    input === null ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    Object.getPrototypeOf(input) !== Object.prototype
+  ) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  if (Object.getOwnPropertySymbols(input).length > 0) {
+    throw new TypeError(`${label} has symbol fields`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  for (const descriptor of Object.values(descriptors)) {
+    if (!('value' in descriptor)) throw new TypeError(`${label} has accessor fields`);
+  }
+  const record = input as Record<string, unknown>;
+  const actual = Object.keys(descriptors).toSorted();
+  const expected = [...fields].toSorted();
+  if (
+    actual.length !== expected.length ||
+    actual.some((field, index) => field !== expected[index])
+  ) {
+    throw new TypeError(`${label} has extra or missing fields`);
+  }
+  return record;
+}
+
+function absolutePath(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.length === 0 || !value.startsWith('/')) {
+    throw new TypeError(`${label} must be an absolute VFS path`);
+  }
+  const normalized = normalizePath(value);
+  if (normalized !== value || value === '/') {
+    throw new TypeError(`${label} must be a normalized non-root VFS path`);
+  }
+  return value;
+}
+
+function validateInstallRequest(input: ToolchainInstallRequest): ToolchainInstallRequest {
+  const record = exactInput(input, ['cwd', 'registryUrl'], 'toolchain.install input');
+  const cwd = absolutePath(record.cwd, 'toolchain.install cwd');
+  if (typeof record.registryUrl !== 'string' || record.registryUrl.length === 0) {
+    throw new TypeError('toolchain.install registryUrl must be a non-empty string');
+  }
+  return Object.freeze({ cwd, registryUrl: record.registryUrl });
+}
+
+function validateRunBinRequest(input: ToolchainRunBinRequest): ToolchainRunBinRequest {
+  const record = exactInput(input, ['args', 'binPath', 'cwd'], 'toolchain.runBin input');
+  const cwd = absolutePath(record.cwd, 'toolchain.runBin cwd');
+  const binPath = absolutePath(record.binPath, 'toolchain.runBin binPath');
+  const binPrefix = `${cwd}/node_modules/.bin/`;
+  if (!binPath.startsWith(binPrefix) || binPath.slice(binPrefix.length).includes('/')) {
+    throw new TypeError('toolchain.runBin binPath must name an installed node_modules/.bin entry');
+  }
+  if (!Array.isArray(record.args) || Object.getOwnPropertySymbols(record.args).length > 0) {
+    throw new TypeError('toolchain.runBin args must be a dense string array');
+  }
+  const args = record.args;
+  const descriptors = Object.getOwnPropertyDescriptors(args);
+  const indexKeys = Object.keys(descriptors).filter((key) => key !== 'length');
+  if (
+    indexKeys.length !== args.length ||
+    indexKeys.some((key, index) => key !== String(index)) ||
+    indexKeys.some((key) => {
+      const descriptor = descriptors[key];
+      return (
+        descriptor === undefined || !('value' in descriptor) || typeof descriptor.value !== 'string'
+      );
+    })
+  ) {
+    throw new TypeError('toolchain.runBin args must be a dense string array');
+  }
+  return Object.freeze({ cwd, binPath, args: Object.freeze([...args] as string[]) });
 }

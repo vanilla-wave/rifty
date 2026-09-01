@@ -43,6 +43,7 @@ const PACKAGE_TREE_CONTEXTS = new Map([
       'reassertTemplateNodeModules',
     ]),
   ],
+  ['packages/workbench/src/workers/no-coi-toolchain-worker.ts', new Set(['installManifest'])],
 ]);
 
 /** Path operands for filesystem mutations. Both operands of move/copy count:

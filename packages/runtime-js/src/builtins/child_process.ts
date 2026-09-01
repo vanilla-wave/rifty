@@ -371,6 +371,7 @@ function spawnViaSameRealm(
   opts: SpawnOptions,
   stdio: ReturnType<typeof resolveWorkerStdio>,
 ): ChildProcess {
+  warnSameRealmFallbackOnce();
   // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
   // it's registered. A mutable container lets the handler read them on the next
   // microtask without an extra `await` boundary, which would delay the script
@@ -441,6 +442,16 @@ function spawnViaSameRealm(
     stderr.on('data', (chunk) => stdio.stderr?.write(chunk));
   }
   return child;
+}
+
+let sameRealmWarningFired = false;
+
+function warnSameRealmFallbackOnce(): void {
+  if (globalThis.crossOriginIsolated !== false || sameRealmWarningFired) return;
+  sameRealmWarningFired = true;
+  console.warn(
+    '[rifty:child_process] Falling back to same-realm execution: child shares the parent event loop.',
+  );
 }
 
 function renderPs(args: readonly string[]): string {
