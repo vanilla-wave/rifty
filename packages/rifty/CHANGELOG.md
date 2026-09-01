@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Explicit shared-memory-free toolchain sandbox (ADR-0373).**
+- **Explicit shared-memory-free toolchain sandbox (ADR-0374).**
   `createSandbox({requireCrossOriginIsolation:false, toolchain:{workerUrl}})`
   handshakes one Workbench Worker and exposes frozen capability reporting,
   manifest install, and run-to-completion installed-bin execution. The

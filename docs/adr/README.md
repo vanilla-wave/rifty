@@ -298,7 +298,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0311 | Registry-owned esbuild runtime removes the host asset URL |
 | 0319 | Preserve admitted mutations across project close |
 | 0341 | Project terminal runs expose authoritative shell status |
-| 0373 | No-COI sandbox toolchain control plane |
+| 0374 | No-COI sandbox toolchain distribution authority |
 
 ## Superseded (removed)
 
@@ -339,6 +339,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0318 | 0371 | verified exact bytes retained; separate manager-lifetime CAS falls to the installed registry twin |
 | 0320 | 0371 | instant offline availability retained; the restored installed tree replaces the separate runtime CAS |
 | 0321 | 0371 | strict lifecycle motive retained; the ninth correlation engine is deleted with its only consumer |
+| 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
 
 ## Corrections (active)
 
@@ -347,7 +348,6 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
-| 0373 original SDK-owned/dual-URL/every-sandbox/Vite-only clauses | 0373 / note 2026-09-01 | Workbench owns the toolchain entry; nested URL only; report belongs to toolchain sandbox; direct shared WASM uses the named boundary |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |

@@ -39,7 +39,7 @@
 
 ### Added
 
-- **No-COI SDK toolchain Worker (ADR-0373).** One Worker owns runtime/VFS, real
+- **No-COI SDK toolchain Worker (ADR-0374).** One Worker owns runtime/VFS, real
   npm-client + installed registry-twin esbuild admission, build-only installed
   `.bin` execution, loud overlap/death/clean-close settlement, and named
   shared-WASM/Vite-8 boundaries. Dev/serve/preview and build-watch stay loud.

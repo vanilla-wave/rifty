@@ -4,7 +4,7 @@
 
 ### Added
 
-- Runtime Worker protocol carries the ADR-0373 toolchain handshake and
+- Runtime Worker protocol carries the ADR-0374 toolchain handshake and
   install/run-bin results through its existing correlation owner, including
   exact protocol/backend decoding and Worker crash/disposal/clean-close
   settlement.
