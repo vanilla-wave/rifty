@@ -313,8 +313,11 @@ behavior throughout.
    before returning and exposes the ADR-0374 install/run-bin methods over the
    same `runtime`/`fs` Worker. A valid backend paired with any mismatched
    protocol rejects `NotImplementedError('sandbox.toolchain.worker')` and
-   terminates that Worker; it is never ignored or later admitted. Its packed
-   JS/declaration prerequisite is proven by the blocking packed-surface child.
+   terminates that Worker; it is never ignored or later admitted. The authority
+   is generic: install the exact project manifest, then run any admitted
+   installed `node_modules/.bin` path to completion. SDK/runtime/control-plane,
+   package and distribution code never branches on Vite identity, version,
+   callbacks, paths, types or lifecycle.
 4. The immutable report contains exactly these no-COI feature outcomes:
    `fs`, `npm.install`, `node_modules.bin`, `child_process.spawn.stdio` working;
    `child_process.spawn`, `worker_threads.Worker`, `os.parallelism`
@@ -339,15 +342,19 @@ behavior throughout.
    contains the marker exactly twice, matching the frozen source's two sites;
    equality is not count-only or filename-only.
 8. A real `vite@8.0.16` install followed by its installed `.bin/vite build` in
-   the no-COI sandbox rejects before Rolldown pthread startup with
-   `NotImplementedError`, `feature==='toolchain.threaded-wasm'`, and a message
-   naming Vite 8, Rolldown/WASI pthreads and COI/SharedArrayBuffer. It writes no
-   successful `dist/` claim. Direct guest construction of shared
+   the no-COI sandbox reaches the realm-local shared-memory boundary and rejects
+   with `NotImplementedError`, `feature==='toolchain.threaded-wasm'`, and a
+   message naming shared WebAssembly memory, COI and SharedArrayBuffer. It writes
+   no successful `dist/` claim. Vite/Rolldown identity is fixture provenance,
+   never rejection policy: a Vite-8-named installed bin that makes no shared-
+   memory request runs normally. Direct guest construction of shared
    `WebAssembly.Memory` rejects with the same feature, while non-shared memory
    still constructs. WebIDL-truthy `shared:1` and `shared:'yes'` reject beside
    own/inherited/accessor literal-true descriptors through REPL, CJS, ESM and
    an installed bin; non-shared native constructor/prototype identity stays.
-9. Toolchain input is validated once before mutation. A malformed cwd/bin/args
+9. A separate real `nanoid@3.3.18` exact manifest installs and its arbitrary
+   admitted `.bin/nanoid --size 7` exits 0 with one seven-character ID, independent
+   of Vite. Toolchain input is validated once before mutation. A malformed cwd/bin/args
    rejects loudly; a second install/run overlapping one admitted operation
    rejects immediately as `SandboxToolchainBusyError` rather than racing or
    queuing. Dispose/Worker death rejects the admitted promise; none hangs.
@@ -373,10 +380,11 @@ behavior throughout.
    CPU count and execSync feature. Artifact: Node v24.16.0 behavior is the
    external semantic baseline where applicable; the same real sandbox Worker
    carrier `pnpm test:no-coi -g "capability.*designed RED"` is the RED target.
-4. Vite 8/Rolldown: exact installed `vite@8.0.16`, real `.bin` request, named
-   pre-pthread rejection plus direct shared/non-shared `WebAssembly.Memory`
-   boundary, including WebIDL-truthy number/string descriptors across all four
-   guest entry forms. Artifact: current COI product proof is
+4. Threaded-WASM boundary: exact installed `vite@8.0.16` reaches the generic
+   realm-local shared-memory rejection; an identity-equivalent non-threaded bin
+   and exact real `nanoid@3.3.18` bin run normally. Direct shared/non-shared
+   `WebAssembly.Memory` includes WebIDL-truthy number/string descriptors across
+   all four guest entry forms. Artifact: current COI product proof is
    `tests/browser-unit/esbuild-vite-contract.spec.ts`; no-COI RED target is
    `pnpm test:no-coi -g "threaded-WASM guard covers real installed bin"`.
 5. Default COI admission remains loud; generic createSandbox no-COI eval/fs
@@ -396,11 +404,11 @@ behavior throughout.
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
 | `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; valid-backend protocol mismatch named + Worker terminated | Acceptance 3-4; Evidence R5-HANDSHAKE; no-COI preservation + capability RED |
-| `corrupt-input` + `observable-order` × install/run-bin request | exact fields validated before VFS/process mutation; ordered output precedes one terminal result | Acceptance 5-6, 9; capability/build RED |
+| `corrupt-input` + `observable-order` × install/run-bin request | exact fields validated before VFS/process mutation; arbitrary admitted bin identity does not change policy; ordered output precedes one terminal result | Acceptance 3, 5-6, 9; capability/build/generic-bin carriers |
 | `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry-twin acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
 | `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0374; `toolchain overlap` designed RED |
 | Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
-| `false-fallback` × Vite 8/threaded WASM | Vite 8 and literal/WebIDL-truthy shared-memory construction reach the same named boundary; no generic wasm crash or successful dist | Acceptance/Parity 8/4; Evidence R5-REALM; threaded-WASM RED |
+| `false-fallback` × threaded WASM | real Vite 8 and literal/WebIDL-truthy shared-memory construction reach the same generic named boundary; an identity-equivalent bin without a shared-memory request runs; no generic wasm crash or successful dist | Acceptance/Parity 8/4; Evidence R5-REALM/R6-IDENTITY; threaded-WASM RED |
 | `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
 | `observable-order` × host lifecycle | opener round-trip + image reload complete while install/run stay admitted at held network boundaries, then release completes them; stable time origin proves no reload | Acceptance/Parity 1-2/2; Evidence R5-ORDER; preservation control |
 
@@ -439,6 +447,15 @@ pnpm test:no-coi -g \
   "host stays interactive while admitted install and run wait at network boundaries"
 # 1 passed; BusyError proved admission, opener/image completed before release,
 # then both original operations completed
+```
+
+Evidence R6-IDENTITY (current-tree expected RED, Chrome 148.0.7778.96,
+Playwright 1.60.0):
+
+```sh
+pnpm test:no-coi -g "installed-bin admission ignores Vite identity"
+# RED before implementation: plain Vite-8-named fixture bin rejects as
+# toolchain.threaded-wasm despite making no shared-memory request.
 ```
 
 Evidence R5-PACKED (product `2f1063608`, Node 24.16.0, Vite 5.4.21):
@@ -503,3 +520,9 @@ review: checkpoints — runtime/network/parity public SDK slice.
   the packed-surface predecessor, now landed at `0a2e64422`; this item is
   unblocked and stays draft until its user-scope recompile. Checkpoint attempt
   lineage remains here and was copied to the split successor.
+- Recompile after packed predecessor: user authority is exact-manifest install
+  plus arbitrary admitted installed-bin execution. Vite 7 only represents the
+  class; Vite 8 only exercises the actual threaded-WASM boundary. Expected RED:
+  identity-decoy bin and WebIDL-truthy shared descriptors. Real nanoid bin,
+  protocol mismatch and host interactivity are GREEN preservation controls.
+- No post-packed production edit started before this Contract+RED recompile.

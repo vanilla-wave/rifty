@@ -920,6 +920,110 @@ test('non-shared WebAssembly.Memory keeps native constructor/global identity', a
   });
 });
 
+test('installed-bin admission ignores Vite identity without a shared-memory request', async ({
+  page,
+}) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    const outcome = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            fs: { writeFile(path: string, value: string): Promise<void> };
+            runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
+            toolchain: {
+              runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+            };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      const root = '/identity-decoy';
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/vite/package.json`,
+        JSON.stringify({ name: 'vite', version: '8.0.16' }),
+      );
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/.bin/vite`,
+        "#!/usr/bin/env node\nconsole.log('__RIFTY_GENERIC_BIN__identity-only')\n",
+      );
+      const output: string[] = [];
+      const off = sandbox.runtime.on((event) => {
+        if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+          output.push(event.chunk);
+        }
+      });
+      try {
+        const result = await sandbox.toolchain.runBin({
+          cwd: root,
+          binPath: `${root}/node_modules/.bin/vite`,
+          args: ['--version'],
+        });
+        return { result, output: output.join('') };
+      } finally {
+        off();
+      }
+    });
+    expect(outcome.result).toEqual({ exitCode: 0 });
+    expect(outcome.output).toBe('__RIFTY_GENERIC_BIN__identity-only\n');
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
+test('exact nanoid manifest runs its installed bin without Vite authority', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    const outcome = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            fs: { writeFile(path: string, value: string): Promise<void> };
+            runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
+            toolchain: {
+              install(input: Record<string, unknown>): Promise<void>;
+              runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+            };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      const root = '/generic-nanoid';
+      await sandbox.fs.writeFile(
+        `${root}/package.json`,
+        JSON.stringify({
+          name: 'generic-nanoid',
+          private: true,
+          dependencies: { nanoid: '3.3.18' },
+        }),
+      );
+      await sandbox.toolchain.install({ cwd: root, registryUrl: '/npm-registry' });
+      const output: string[] = [];
+      const off = sandbox.runtime.on((event) => {
+        if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+          output.push(event.chunk);
+        }
+      });
+      try {
+        const result = await sandbox.toolchain.runBin({
+          cwd: root,
+          binPath: `${root}/node_modules/.bin/nanoid`,
+          args: ['--size', '7'],
+        });
+        return { result, output: output.join('') };
+      } finally {
+        off();
+      }
+    });
+    expect(outcome.result).toEqual({ exitCode: 0 });
+    expect(outcome.output.trim()).toMatch(/^[A-Za-z0-9_-]{7}$/u);
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
 test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descriptors', async ({
   page,
 }) => {
