@@ -200,6 +200,8 @@ pnpm exec playwright test --config playwright.no-coi.config.ts \
 
 ## Decisions
 
+ready-verdict: 2026-09-02 — Contract+RED @ 57cd3e375
+
 review: checkpoints — package-generic runtime fidelity at the existing
 toolchain realm seam.
 
