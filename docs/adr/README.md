@@ -18,6 +18,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
 | 0276 | Semantic VFS replacements use applied owner evidence |
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
+| 0372 | Dedicated-Worker sync capability selects OPFS without COI |
 
 ### kernel
 
@@ -344,6 +345,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
+| 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
 | 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
 | 0009 unconditional async-wrapper assumption | 0348 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |

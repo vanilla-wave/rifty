@@ -74,3 +74,11 @@ IRREVERSIBLE per CLAUDE.md checklist item 4 (>2 files / >100 lines, alters behav
 - **A-005 Closed — permanent, not deferred (2026-05-26).** Sync-OPFS directory ops `OpfsFsSync.readdirSync` / `mkdirSync` / `rmSync` throw `NotImplementedError` as FINAL scope. `FileSystemSyncAccessHandle` has no directory variant by design; callers route directory work through the paired async `OpfsVfs`. Scope fixed, never to be filled.
 - **Circular-dep gotcha.** Shared `FsSync` interface lives in `packages/vfs/src/fs-sync.ts` so backend modules don't import the swap-in registry (the one circular-dep risk).
 - **QuotaExceededError** (0013 follow-up) is now resolved in code — `opfs-errors.ts` maps `QuotaExceededError` → `EDQUOT`. No further action.
+
+## Correction (2026-09-01)
+
+ADR-0372 replaces only the inherited backend-selector predicate above:
+dedicated-Worker `OpfsFsSync.isSupported()` is authoritative, so COI is no
+longer required and async-only `OpfsVfs.isSupported()` is insufficient. The
+realm split, paired backend, cache/preload/write-through and failure behavior
+remain unchanged.
