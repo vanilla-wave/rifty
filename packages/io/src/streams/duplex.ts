@@ -85,7 +85,9 @@ export interface DuplexFromWebOptions {
 }
 
 type DuplexReadableConstructor = Omit<typeof Readable, 'toWeb'> &
-  (new (opts?: ReadableOptions) => Readable);
+  (new (
+    opts?: ReadableOptions,
+  ) => Readable);
 
 // Runtime inheritance stays exact; only the incompatible static `toWeb` is
 // removed from the base constructor's type before Duplex declares Node's pair.
