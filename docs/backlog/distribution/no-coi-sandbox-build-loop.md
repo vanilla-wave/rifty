@@ -16,7 +16,7 @@ The durable spike proved the loop, but its worker deep-imported Workbench
 internals and installed globals by hand. Current source still has only the
 generic `createSandbox` eval/fs protocol; the real install + adapter + bin
 composition lives in Worker-only Workbench code. ADR-0373 selects the narrow
-product seam: explicit `toolchain:true`, one SDK-owned Worker, manifest install
+product seam: explicit `toolchain:{workerUrl}`, one SDK-owned Worker, manifest install
 and run-to-completion `.bin` execution. It deliberately does not absorb the
 broader `sandbox.exec()` or the next child's dev/preview lifecycle.
 
@@ -56,12 +56,14 @@ records the route out of scope; no premise problem remains open here.
 
 An existing app opens its ordinary same-origin SDK page from an opener. The
 page response has no COOP/COEP. It explicitly calls
-`createSandbox({requireCrossOriginIsolation:false, toolchain:true, workerUrl})`,
+`createSandbox({requireCrossOriginIsolation:false, workerUrl,
+toolchain:{workerUrl:toolchainWorkerUrl}})`,
 writes the canonical react-class project, installs from the configured registry,
 and runs `/project/node_modules/.bin/vite build`. It reads the complete `dist/`
 tree through the same sandbox and gets the exact bytes the current COI product
 emits for the identical project. The app document, opener and a cross-origin
-image that needs no CORS/CORP keep their original behavior throughout.
+image from a second loopback origin that needs no CORS/CORP keep their original
+behavior throughout.
 
 ## Reference contract
 
@@ -87,11 +89,11 @@ image that needs no CORS/CORP keep their original behavior throughout.
    the same document/time-origin reports `crossOriginIsolated===false` and
    `typeof SharedArrayBuffer==='undefined'`; no bootstrap reload occurs.
 2. The host is opened from an existing same-origin app. Its live
-   `window.opener` message round-trip and a no-CORS/no-CORP image from the same
-   server's alternate host name work before/during/after exactly as at entry.
+   `window.opener` message round-trip and a no-CORS/no-CORP image from a second
+   headerless loopback origin work before/during/after exactly as at entry.
 3. `createSandbox` admits no-COI only through the explicit existing
    `requireCrossOriginIsolation:false`; default admission still throws
-   `COI_REQUIRED_MESSAGE`. `toolchain:true` handshakes the SDK toolchain Worker
+   `COI_REQUIRED_MESSAGE`. `toolchain:{workerUrl}` handshakes the SDK toolchain Worker
    before returning and exposes the ADR-0373 install/run-bin methods over the
    same `runtime`/`fs` Worker.
 4. The immutable report contains exactly these no-COI feature outcomes:
@@ -169,14 +171,14 @@ image that needs no CORS/CORP keep their original behavior throughout.
 | `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
 | `observable-order` × host lifecycle | entry behavior sampled before/during/after; stable time origin proves no reload | Acceptance/Parity 1-2/2; preservation control |
 
-Evidence C148-NPM (Node 24.16.0, Vitest 2.1.9; command output recorded at
-pickup after the RED carrier lands):
+Evidence C148-NPM (Node 24.16.0, Vitest 2.1.9):
 
 ```sh
 pnpm exec vitest run --project unit \
   packages/npm-client/src/eddy-bundle-stream.test.ts \
   packages/npm-client/src/internal/shadow/source.fault.test.ts \
   packages/npm-client/src/installer-concurrency.test.ts --reporter=dot
+# 3 files passed; 26 tests passed
 ```
 
 ## Out of scope

@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-09-01
 
-> TL;DR: explicit `toolchain:true` boots one SDK-owned Worker and exposes only
+> TL;DR: explicit `toolchain:{workerUrl}` boots one SDK-owned Worker and exposes only
 > manifest install + run-to-completion `.bin` execution beside the existing
 > runtime/fs handles.
 
@@ -29,9 +29,10 @@ Workbench owner or queue.
 
 ## Decision
 
-1. `CreateSandboxOptions.toolchain?: boolean` defaults false. `true` requires
-   the caller's `workerUrl` to be the new
-   `@riftydev/sdk/toolchain-worker` entry. Boot handshakes before returning;
+1. `CreateSandboxOptions.toolchain?: {workerUrl:string|URL}` defaults absent.
+   Presence selects the new `@riftydev/sdk/toolchain-worker` entry while the
+   legacy top-level `workerUrl` remains the generic-runtime input. Only the
+   selected toolchain Worker is spawned in this mode. Boot handshakes before returning;
    mismatch rejects `NotImplementedError('sandbox.toolchain.worker')`, never a
    controller whose methods hang.
 2. A toolchain sandbox exposes `Sandbox.toolchain`:
