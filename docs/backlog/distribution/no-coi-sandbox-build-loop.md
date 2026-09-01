@@ -532,3 +532,9 @@ review: checkpoints — runtime/network/parity public SDK slice.
 - Final review convergence: find 1 blocker, fresh tail 0 new blockers,
   adjudication HOLDS. Callable WebIDL object descriptors bypassed the realm
   guard; one in-place fix/proof batch follows.
+- `final-green: 2026-09-01 — blocker @ 6f86d2e7f`
+- Final verify: prior callable blocker closed; 1 new blocker, concerns 0.
+  Convergence valve 1→1 stops this unit. Bounded cause projection reads a
+  ninth `Error.cause` after its declared eight-link limit; actual getter probe
+  threw `ninth cause read`. Fault class `observable-order`; missing RED is a
+  depth-eight boundary with zero reads of the next getter. No fix started.
