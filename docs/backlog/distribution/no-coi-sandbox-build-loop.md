@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
@@ -661,3 +661,18 @@ review: checkpoints — runtime/network/parity public SDK slice.
   and Parity remain verbatim above. The child landed Final+GREEN at
   `40ded47585bd04c62b2407210d515ed4f1f65ae1`; build-loop is draft and
   unblocked. No same-unit round N+1 and no weakened user behavior.
+- Post-split PICKUP revalidation: the child is certified and outside this
+  review boundary. Against pre-demotion tree `99325ca4e`, frozen/current
+  Acceptance are byte-identical (4781 bytes,
+  `fecc6058ea588189c6363c879408925c5a871d65d5d55e62c5927aff7dec4991`),
+  Parity byte-identical (2405 bytes,
+  `c8e93b122e008d05e3db726afcc5847eb9d4a8a7848ad08d0b536164168b2ab5`),
+  and Fault behavior byte-identical (830 bytes,
+  `080e19d6bfa2d09f622773a2a3bb98a897d36d61a4e5b3339e3f9c901c2d909d`).
+  No clause, carrier, test or product code changed; Vite remains fixture-only
+  and product code remains Vite-free.
+- Post-split recompile band: 0–0 new expected REDs. Original 5–6 and
+  post-packed 2–3 bands, all predecessor Contract/Final lineage and certified
+  child carry. Status recompiled `draft`→`ready`; a fresh external
+  Contract+RED checkpoint is required before implementation resumes. Existing
+  `ready-verdict:` lines are predecessor lineage, not that fresh verdict.
