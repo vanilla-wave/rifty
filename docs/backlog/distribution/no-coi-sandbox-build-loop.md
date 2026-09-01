@@ -695,3 +695,15 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
   `63746dfb9507ca39fe5bf06c17e489adcaa9269d1f00d991aec6778f06a5f2cc`.
   All three historical/current comparisons are exact; the separately headed
   frozen bounded-split Acceptance/Parity bodies remain exact too.
+- `final-green: 2026-09-02 — blocker @ 01465c6ae`
+- Final continuation: `pnpm pr:check` PASS; no-COI Chromium 14/14 PASS;
+  34/38 coverage pass and four weak rows all map to B1; one unit residual.
+  Native Node v24.16.0 and Chrome 148 read descriptor
+  initial→maximum→shared once. The real headerless public-SDK Worker reads
+  shared→initial→maximum→shared; a stateful false→true `shared` getter
+  creates SharedArrayBuffer while non-COI instead of native non-shared/named
+  guard. Fault `observable-order`/`false-fallback`; missing RED is a same-realm
+  differential for count/order/stateful getter, with sibling sweep across
+  REPL/CJS/ESM/installed-bin.
+- Convergence valve 1→1; no fix, RED, next review round, dev-HMR or rechart
+  started.
