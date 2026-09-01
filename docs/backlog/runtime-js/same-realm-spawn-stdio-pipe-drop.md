@@ -163,3 +163,5 @@ contract-red: 2026-08-31 — blocker @ 5ee6f7c9fba30b3305953d9e4707b4ac48c297f5
 - REVERSIBLE: correction behind the existing `child_process.spawn` surface.
 
 final-green: 2026-09-01 — blocker @ 98b5829272de0a2653342ac44dcd9e6e5c247472
+
+final-green: 2026-09-01 — blocker @ 166bee3f195d5cdbe5111a06e80d2c52d45b1df4
