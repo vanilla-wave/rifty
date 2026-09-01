@@ -4,12 +4,16 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
+1. `runtime-js/bounded-not-implemented-cause-projection` — **bounded cause
+   projection** — generic eight-link Error.cause projection at the existing
+   toolchain serialization seam; exact ninth-getter boundary, cycle/non-Error/
+   throwing-getter outer-error preservation; no public API or state (I3).
+2. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
    composition for real Vite 7 build outside workbench gates + loud capability
    gate/report + spawn warn-once + cpus→1 + Vite-8 loud named error + the
    no-COI CI lane, which also pins the host document non-COI across the loop
-   (I1, I2, I3, I7 rest, I8, I9).
-2. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
+   (I1, I2, I3, I7 rest, I8, I9). Blocked by bounded cause projection.
+3. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
    HMR through SW preview + worker-died event + restore primitive + boot marker
    for unflushed writes (I4, I6, I10). Blocked by build-loop.
 
