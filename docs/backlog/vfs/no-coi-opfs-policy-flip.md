@@ -161,6 +161,7 @@ back. No test-only backend force participates in this acceptance path.
 
 ready-verdict: 2026-09-01 — Contract+RED @ 61cf57f9b0f2283215b93e25d2d3462379b4a6b1
 final-green: 2026-09-01 — blocker @ 7308d2c9ae2551a34ac9d5c9ae83652e4ec07b60
+final-green: 2026-09-01 — pass @ 029f9726dbec274b3552bbc010486b1a62f03e5e
 
 review: checkpoints — persistence/browser policy and reload durability.
 
