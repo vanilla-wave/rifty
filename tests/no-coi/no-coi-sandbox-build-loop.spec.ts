@@ -1150,6 +1150,114 @@ test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descripto
   }
 });
 
+test('package-generic bounded cause projection preserves the honest serialized error', async ({
+  browser,
+  page,
+}) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    const outcomes = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            fs: { writeFile(path: string, value: string): Promise<void> };
+            toolchain: { runBin(input: Record<string, unknown>): Promise<unknown> };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      const root = '/generic-cause-projection';
+      const binPath = `${root}/node_modules/.bin/cause-probe`;
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/cause-probe/package.json`,
+        JSON.stringify({ name: 'cause-probe', type: 'module' }),
+      );
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/cause-probe/cli.js`,
+        `
+const wrap = (error, count) => {
+  let current = error;
+  for (let index = 0; index < count; index += 1) {
+    current = new Error('package wrapper ' + index, { cause: current });
+  }
+  return current;
+};
+if (process.argv[2] === 'bounded-gap') {
+  let gap;
+  try {
+    new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true });
+  } catch (error) {
+    gap = error;
+  }
+  throw wrap(gap, 8);
+}
+const boundary = new Error('depth-eight ordinary');
+let reads = 0;
+Object.defineProperty(boundary, 'cause', {
+  get() {
+    reads += 1;
+    throw new Error('forbidden ninth cause read ' + reads);
+  },
+});
+const outer = wrap(boundary, 8);
+outer.name = 'PackageLoaderError';
+outer.code = 'ERR_PACKAGE_LOADER';
+outer.path = '/generic-cause-projection/node_modules/package/cli.js';
+outer.feature = 'package.loader';
+outer.message = 'ordinary package loader failure';
+throw outer;
+`,
+      );
+      await sandbox.fs.writeFile(
+        binPath,
+        "#!/usr/bin/env node\nimport('../cause-probe/cli.js');\n",
+      );
+      const run = async (mode: string) => {
+        try {
+          await sandbox.toolchain.runBin({ cwd: root, binPath, args: [mode] });
+          return { resolved: true };
+        } catch (error) {
+          const inspected = error as Error & {
+            readonly code?: string;
+            readonly path?: string;
+            readonly feature?: string;
+          };
+          return {
+            resolved: false,
+            name: inspected.name,
+            message: inspected.message,
+            code: inspected.code,
+            path: inspected.path,
+            feature: inspected.feature,
+          };
+        }
+      };
+      return { boundedGap: await run('bounded-gap'), exactBound: await run('exact-bound') };
+    });
+    console.log(`[bounded-cause] Chrome/${browser.version()} ${JSON.stringify(outcomes)}`);
+    expect(outcomes.boundedGap).toEqual({
+      resolved: false,
+      name: 'NotImplementedError',
+      message:
+        'Not implemented: toolchain.threaded-wasm (shared WebAssembly.Memory requires cross-origin isolation and SharedArrayBuffer)',
+      code: undefined,
+      path: undefined,
+      feature: 'toolchain.threaded-wasm',
+    });
+    expect(outcomes.exactBound).toEqual({
+      resolved: false,
+      name: 'PackageLoaderError',
+      message: 'ordinary package loader failure',
+      code: 'ERR_PACKAGE_LOADER',
+      path: '/generic-cause-projection/node_modules/package/cli.js',
+      feature: 'package.loader',
+    });
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
 test('runBin uses the requested installed-bin path as its only authority', async ({ page }) => {
   const { host } = await openHeaderlessHost(page);
   try {

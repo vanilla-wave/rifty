@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: bounded NotImplementedError cause projection through the toolchain error seam
 created: 2026-09-01
 epic: no-coi-sandbox-tier
@@ -104,6 +104,44 @@ throwing getter cannot hang or replace the honest outer loader Error.
    identity remains the outer ordinary error; package names and bin paths never
    affect projection.
 
+## Evidence
+
+RED-UNIT, source HEAD `9654060844dee4139be6c6f2c4e0f940bd3ae5f3`,
+Node 24.16.0, pnpm 11.5.2, Vitest 2.1.9:
+
+```sh
+pnpm exec vitest run --project unit \
+  packages/workbench/src/workers/declared-gap-cause.test.ts --reporter=verbose
+# Tests 2 failed | 2 passed (4)
+# exact bound received:
+# { reads:1, projected:undefined,
+#   thrown:{ name:'Error', message:'forbidden ninth cause read 1' } }
+# expected: { reads:0, projected:null, thrown:null }
+# hostile getter received:
+# { reads:1, projected:undefined,
+#   thrown:{ name:'Error', message:'hostile cause read 1' } }
+# expected: { reads:1, projected:null, thrown:null }
+```
+
+The passing controls execute direct/eight-link real gaps, depth-nine gap,
+ordinary/non-Error tails, forged identity, self-cycle and two-node cycle. The
+two REDs fail only on the missing bounded/getter-failure behavior.
+
+RED-BROWSER, Playwright 1.60.0, Chrome 148.0.7778.96:
+
+```sh
+pnpm test:no-coi -g "package-generic bounded cause projection"
+# boundedGap: NotImplementedError / exact toolchain.threaded-wasm message + feature
+# exactBound received: Error / "forbidden ninth cause read 1" / no code,path,feature
+# expected: PackageLoaderError / "ordinary package loader failure" /
+# ERR_PACKAGE_LOADER / exact package path / package.loader
+# 1 failed
+```
+
+The browser carrier writes an ordinary package-generic `.bin` launcher and
+entry into the real VFS, then observes the existing no-COI toolchain Worker
+result through SDK deserialization. It uses no Vite package or Vite identity.
+
 ## Fault matrix
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
@@ -128,6 +166,9 @@ review: checkpoints — runtime error fidelity on an existing Worker/browser
 serialization seam.
 
 predecessor: `distribution/no-coi-sandbox-build-loop`
+
+Copied predecessor checkpoint lineage (verbatim); the fresh child
+Contract+RED verdict follows outside PICKUP:
 
 - `ready-verdict: 2026-09-01 — Contract+RED @ ead27000f`
 - `ready-verdict: 2026-09-01 — Contract+RED @ f0066d4d2`
