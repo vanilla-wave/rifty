@@ -1,0 +1,8 @@
+# Ledger — fast-project-open-reopen (append-only)
+
+- 2026-09-01 — fitted from refine-closed drafts `vfs/segmented-opfs-replica` + `perf/project-vfs-targeted-page-reads` (interview 2026-08-31..09-01; five user forks carried to goal.md §Decisions). Evidence: `vfs/reference/storage-journal-design-benchmarks-2026-08-31.md`, `vfs/reference/storage-open-reopen-candidate-benchmarks-2026-09-01.md` — PR #298 closed unmerged, both reference docs ride this PR.
+- 2026-09-01 — observed: per-file handle open is half of reopen (C1 cached burst: open 2,071 ms vs read 1,497 ms, ≈0.14 ms/file) — any per-file layout floors at 2–3 s on S.
+- 2026-09-01 — observed: no persisted "dirty" mark affects open/reopen (13 mechanisms swept; only `scratch.dirty` in `catalog.json` and `durability: 'pending'` in the stamp persist, both O(1) reads).
+- 2026-09-01 — observed: `git.status()` on open does not hash `node_modules` (vendored isomorphic-git 1.38.5 skips `.gitignore`d subtrees) — suspicion removed, not a lever.
+- 2026-09-01 — observed: `apps/playground/src/glue/app-project-store.ts` `createAppProjectStore` (+ `page-store.ts` `markDirty` / `onScratchDirty`) is re-exported from `App.tsx` but never instantiated in-repo — dead-code candidate; rides the first playground-touching slice, not this docs PR.
+- 2026-09-01 — challenge: 10 problems, 1 blocking (cheaper direct authority: re-apply a matching baked snapshot on reopen instead of persisting `node_modules` — route R). Goal stays `draft`; fork recorded as OPEN in goal.md §Decisions + map fog → `rifty-refine`. Advisory 2–6 answered in goal.md; 7 → touch-fraction probe; 9 → map re-cut (replica = fresh-format projects; legacy re-materialization + route R unseeded).

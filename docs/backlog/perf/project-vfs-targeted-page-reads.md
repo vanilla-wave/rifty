@@ -5,6 +5,8 @@ title: Project VFS page reads copy the whole owner tree
 created: 2026-08-31
 why: each page read-file/read-directory request calls full OwnerVfsAuthority.snapshot; one target read on a 98.2 MB / 14,492-file tree measured 46.5 ms versus 0.01 ms direct
 user_story: As a developer opening files and expanding directories in a large project, I want each editor/explorer read to scale with the requested entry, but today every request copies every file in the owner tree.
+epic: fast-project-open-reopen
+blocked_by: []
 sources: [docs/backlog/vfs/reference/storage-journal-design-benchmarks-2026-08-31.md, docs/backlog/vfs/reference/storage-open-reopen-candidate-benchmarks-2026-09-01.md]
 code: [packages/workbench/src/workers/workbench-project-vfs.ts, packages/workbench/src/workers/owner-vfs-authority.ts]
 ---

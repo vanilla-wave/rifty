@@ -5,6 +5,8 @@ title: OPFS replica format for fast first open and reopen
 created: 2026-08-31
 why: per-file OPFS persistence takes 7.18 s and eager reopen 4.91 s on a 98.2 MB / 14,492-file tree; a traced validated mini-journal measured 1.15 s append and 1.08 s read+replay
 user_story: As an SDK embedder opening and reopening a project with a baked 98.2 MB dependency snapshot, I want the multi-second storage wait reduced without weakening reload honesty.
+epic: fast-project-open-reopen
+blocked_by: []
 sources: ["issues #255/#256", ADR-0072, ADR-0358, docs/backlog/vfs/reference/storage-journal-design-benchmarks-2026-08-31.md, docs/backlog/vfs/reference/storage-open-reopen-candidate-benchmarks-2026-09-01.md]
 code: [packages/vfs/src/opfs-sync.ts, packages/vfs/src/opfs.ts, packages/vfs/src/opfs-drain-scheduler.ts, packages/workbench/src/glue/install-stamp.ts, packages/workbench/src/glue/install-stamp-authority.ts]
 ---
@@ -89,3 +91,38 @@ fresh-process read+replay is 1.14 s and also removes the 7.18 s first-persist
 tail. Plain deferred promotion returns a non-executable session until the
 trusted stamp. Cheaper-route challenge closed; journal complexity still needs
 the fault and migration evidence above before ADR/ready.
+
+## Decisions
+
+Fit-time (goal `epics/fast-project-open-reopen`, 2026-09-01); the compile at
+PICKUP prepends its `ready-verdict` line.
+
+- OPEN (goal `## Decisions` first line, blocks ready): route R — re-apply a
+  matching baked snapshot on reopen instead of persisting its `node_modules`
+  — decides this item's persona (installed trees only) or existence; answered
+  via `rifty-refine` before PICKUP.
+- Scope after FIT re-cut: projects FIRST persisted under the new format +
+  loud refusal of a legacy per-file layout; legacy re-materialization is an
+  unseeded goal child (playground-loss fog).
+- Format ADR is IRREVERSIBLE (new persistence authority): ≥2 radically
+  different candidates kept/killed by named evidence — current per-file
+  baseline (B4/C3), B index + lazy hydration (C1/C2: killed, +1.70 s burst,
+  Promise-valued handle open vs sync `FsSync`), A traced segment replica
+  (B2/B3/C3: 1.15 s append, 1.14 s replay).
+- Legacy per-file layout: cold restore (user) — never read as project state;
+  owner names the layout, re-materializes from the definition; unsourced edits
+  are not kept (goal I3). Playground-catalog consequence is goal fog
+  (owner: user) and fires at this PICKUP.
+- One writer per origin is already loud on main (`WorkbenchOriginOccupiedError`
+  via Web Lock `rifty:workbench:v1`); the ADR states it as the clause the
+  replica's epoch/digest honesty depends on (C2 probe). No new lock.
+- Readiness: `openProject` resolution stays the named executable + durable
+  await (goal Outcome (a)); the write path never replies before the trusted
+  stamp; pending-ready is declined (`docs/adr/README.md` §Declined concepts).
+- Reserved, not built: symlink / hardlink / mode fields; content addressing as
+  the cross-project dedup route; manifests for fork/export.
+- Neighbour `cold-npm-install-speedup` rejected bulk-write consolidation for
+  per-file `require()` addressability — inapplicable here (guests read the
+  Memory VFS); the ADR says so.
+- Sibling `fault-honest-opfs-persistence` rows are re-proven on this substrate
+  in `## Fault matrix`, never dropped (goal map.md fog).
