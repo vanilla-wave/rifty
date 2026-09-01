@@ -4,30 +4,67 @@ import { declaredGapCause } from './declared-gap-cause.ts';
 
 function wrapped(error: Error, count: number): Error {
   let current = error;
-  for (let index = 0; index < count; index += 1) current = new Error('wrapper', { cause: current });
+  for (let index = 0; index < count; index += 1) {
+    current = new Error(`wrapper-${index}`, { cause: current });
+  }
   return current;
 }
 
+type ThrownObservation =
+  | { readonly kind: 'error'; readonly name: string; readonly message: string }
+  | { readonly kind: 'value'; readonly value: string }
+  | null;
+
+function observeProjection(error: unknown): {
+  readonly projected: NotImplementedError | null | undefined;
+  readonly thrown: ThrownObservation;
+} {
+  let projected: NotImplementedError | null | undefined;
+  let thrown: ThrownObservation = null;
+  try {
+    projected = declaredGapCause(error);
+  } catch (error) {
+    thrown =
+      error instanceof Error
+        ? { kind: 'error', name: error.name, message: error.message }
+        : { kind: 'value', value: String(error) };
+  }
+  return { projected, thrown };
+}
+
 describe('declaredGapCause', () => {
-  it('returns a direct or eight-link named gap', () => {
-    const gap = new NotImplementedError('toolchain.threaded-wasm');
-    expect(declaredGapCause(gap)).toBe(gap);
-    expect(declaredGapCause(wrapped(gap, 8))).toBe(gap);
+  it('returns the first real package gap at every in-bound depth', () => {
+    for (let depth = 0; depth <= 8; depth += 1) {
+      const gap = new NotImplementedError('package.feature');
+      expect(gap).toMatchObject({
+        name: 'NotImplementedError',
+        message: 'Not implemented: package.feature',
+        feature: 'package.feature',
+      });
+      expect(declaredGapCause(wrapped(gap, depth)), `depth ${depth}`).toBe(gap);
+    }
+
+    const innerGap = new NotImplementedError('package.inner');
+    const outerGap = new NotImplementedError('package.outer');
+    outerGap.cause = innerGap;
+    expect(declaredGapCause(wrapped(outerGap, 3))).toBe(outerGap);
   });
 
-  it('leaves deeper, ordinary and cyclic errors at their loud outer boundary', () => {
-    const gap = new NotImplementedError('toolchain.threaded-wasm');
+  it('leaves deeper, ordinary, cyclic, impostor and non-Error tails unprojected', () => {
+    const gap = new NotImplementedError('package.feature');
     expect(declaredGapCause(wrapped(gap, 9))).toBeNull();
     expect(declaredGapCause(new Error('ordinary'))).toBeNull();
-    expect(
-      declaredGapCause(
-        Object.assign(new Error('forged'), {
-          name: 'NotImplementedError',
-          feature: 'package.feature',
-        }),
-      ),
-    ).toBeNull();
-    expect(declaredGapCause(new Error('non-error tail', { cause: 'not an error' }))).toBeNull();
+
+    const impostor = Object.assign(new Error('Not implemented: package.feature'), {
+      name: 'NotImplementedError',
+      feature: 'package.feature',
+    });
+    expect(declaredGapCause(impostor)).toBeNull();
+    expect(declaredGapCause(wrapped(impostor, 2))).toBeNull();
+
+    expect(declaredGapCause(new Error('primitive tail', { cause: 'not an error' }))).toBeNull();
+    expect(declaredGapCause(new Error('object tail', { cause: { cause: gap } }))).toBeNull();
+
     const cyclic = new Error('cyclic');
     cyclic.cause = cyclic;
     expect(declaredGapCause(cyclic)).toBeNull();
@@ -46,42 +83,42 @@ describe('declaredGapCause', () => {
         throw new Error(`forbidden ninth cause read ${reads}`);
       },
     });
-    let projected: NotImplementedError | null | undefined;
-    let thrown: unknown;
-    try {
-      projected = declaredGapCause(wrapped(boundary, 8));
-    } catch (error) {
-      thrown = error;
-    }
-    expect({
-      reads,
-      projected,
-      thrown:
-        thrown instanceof Error ? { name: thrown.name, message: thrown.message } : (thrown ?? null),
-    }).toEqual({ reads: 0, projected: null, thrown: null });
+    const observed = observeProjection(wrapped(boundary, 8));
+    expect({ reads, projected: observed.projected, thrown: observed.thrown }).toEqual({
+      reads: 0,
+      projected: null,
+      thrown: null,
+    });
   });
 
-  it('keeps the outer boundary when an inspected cause getter throws', () => {
-    const outer = new Error('ordinary package loader failure');
-    let reads = 0;
-    Object.defineProperty(outer, 'cause', {
-      get() {
-        reads += 1;
-        throw new Error(`hostile cause read ${reads}`);
+  it('does not let inspected throwing getters replace the outer boundary', () => {
+    const cases: ReadonlyArray<{
+      readonly label: string;
+      readonly depth: number;
+      readonly thrownValue: unknown;
+    }> = [
+      { label: 'intermediate Error', depth: 3, thrownValue: new Error('hostile cause error') },
+      { label: 'primitive', depth: 4, thrownValue: 17 },
+      {
+        label: 'real NotImplementedError',
+        depth: 5,
+        thrownValue: new NotImplementedError('getter.feature'),
       },
+    ];
+    const observations = cases.map(({ label, depth, thrownValue }) => {
+      let reads = 0;
+      const boundary = new Error(`${label} boundary`);
+      Object.defineProperty(boundary, 'cause', {
+        get() {
+          reads += 1;
+          throw thrownValue;
+        },
+      });
+      const observed = observeProjection(wrapped(boundary, depth));
+      return { label, reads, projected: observed.projected, thrown: observed.thrown };
     });
-    let projected: NotImplementedError | null | undefined;
-    let thrown: unknown;
-    try {
-      projected = declaredGapCause(outer);
-    } catch (error) {
-      thrown = error;
-    }
-    expect({
-      reads,
-      projected,
-      thrown:
-        thrown instanceof Error ? { name: thrown.name, message: thrown.message } : (thrown ?? null),
-    }).toEqual({ reads: 1, projected: null, thrown: null });
+    expect(observations).toEqual(
+      cases.map(({ label }) => ({ label, reads: 1, projected: null, thrown: null })),
+    );
   });
 });

@@ -1182,30 +1182,61 @@ const wrap = (error, count) => {
   }
   return current;
 };
-if (process.argv[2] === 'bounded-gap') {
-  let gap;
+const makeGap = (feature) => {
   try {
     new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true });
   } catch (error) {
-    gap = error;
+    return new error.constructor(feature);
   }
-  throw wrap(gap, 8);
+  throw new Error('shared-memory gap constructor did not throw');
+};
+const decorateOuter = (error, label) => {
+  error.name = 'PackageLoaderError';
+  error.code = 'ERR_' + label.toUpperCase().replaceAll('-', '_');
+  error.path = '/generic-cause-projection/node_modules/cause-probe/' + label + '.js';
+  error.feature = 'package.' + label;
+  error.message = 'ordinary ' + label + ' outer';
+  return error;
+};
+const mode = process.argv[2];
+if (mode.startsWith('gap-depth-')) {
+  throw wrap(makeGap('package.feature'), Number(mode.slice('gap-depth-'.length)));
 }
-const boundary = new Error('depth-eight ordinary');
-let reads = 0;
+if (mode === 'two-gaps') {
+  const inner = makeGap('package.inner');
+  const outer = makeGap('package.outer');
+  outer.cause = inner;
+  throw wrap(outer, 3);
+}
+const impostor = Object.assign(new Error('Not implemented: package.feature'), {
+  name: 'NotImplementedError',
+  feature: 'package.feature',
+});
+if (mode === 'impostor-direct') throw impostor;
+if (mode === 'impostor-wrapped') {
+  throw decorateOuter(new Error('seed', { cause: impostor }), 'impostor-wrapped');
+}
+if (mode === 'object-tail') {
+  throw decorateOuter(
+    new Error('seed', { cause: { cause: makeGap('package.hidden') } }),
+    'object-tail',
+  );
+}
+const getterCases = {
+  'exact-bound': { depth: 8, thrown: new Error('forbidden ninth cause read 1') },
+  'getter-error': { depth: 3, thrown: new Error('hostile intermediate getter') },
+  'getter-primitive': { depth: 4, thrown: 17 },
+  'getter-gap': { depth: 5, thrown: makeGap('getter.feature') },
+};
+const selected = getterCases[mode];
+if (selected === undefined) throw new Error('unknown cause probe mode: ' + mode);
+const boundary = new Error(mode + ' boundary');
 Object.defineProperty(boundary, 'cause', {
   get() {
-    reads += 1;
-    throw new Error('forbidden ninth cause read ' + reads);
+    throw selected.thrown;
   },
 });
-const outer = wrap(boundary, 8);
-outer.name = 'PackageLoaderError';
-outer.code = 'ERR_PACKAGE_LOADER';
-outer.path = '/generic-cause-projection/node_modules/package/cli.js';
-outer.feature = 'package.loader';
-outer.message = 'ordinary package loader failure';
-throw outer;
+throw decorateOuter(wrap(boundary, selected.depth), mode);
 `,
       );
       await sandbox.fs.writeFile(
@@ -1232,25 +1263,97 @@ throw outer;
           };
         }
       };
-      return { boundedGap: await run('bounded-gap'), exactBound: await run('exact-bound') };
+      const gapDepths = [];
+      for (let depth = 0; depth <= 8; depth += 1) {
+        gapDepths.push({ depth, failure: await run(`gap-depth-${depth}`) });
+      }
+      return {
+        gapDepths,
+        twoGaps: await run('two-gaps'),
+        impostorDirect: await run('impostor-direct'),
+        impostorWrapped: await run('impostor-wrapped'),
+        exactBound: await run('exact-bound'),
+        getterError: await run('getter-error'),
+        getterPrimitive: await run('getter-primitive'),
+        getterGap: await run('getter-gap'),
+        objectTail: await run('object-tail'),
+      };
     });
     console.log(`[bounded-cause] Chrome/${browser.version()} ${JSON.stringify(outcomes)}`);
-    expect(outcomes.boundedGap).toEqual({
+    const packageGap = {
       resolved: false,
       name: 'NotImplementedError',
-      message:
-        'Not implemented: toolchain.threaded-wasm (shared WebAssembly.Memory requires cross-origin isolation and SharedArrayBuffer)',
+      message: 'Not implemented: package.feature',
       code: undefined,
       path: undefined,
-      feature: 'toolchain.threaded-wasm',
-    });
-    expect(outcomes.exactBound).toEqual({
-      resolved: false,
-      name: 'PackageLoaderError',
-      message: 'ordinary package loader failure',
-      code: 'ERR_PACKAGE_LOADER',
-      path: '/generic-cause-projection/node_modules/package/cli.js',
-      feature: 'package.loader',
+      feature: 'package.feature',
+    };
+    expect(outcomes).toEqual({
+      gapDepths: Array.from({ length: 9 }, (_, depth) => ({ depth, failure: packageGap })),
+      twoGaps: {
+        resolved: false,
+        name: 'NotImplementedError',
+        message: 'Not implemented: package.outer',
+        code: undefined,
+        path: undefined,
+        feature: 'package.outer',
+      },
+      impostorDirect: {
+        resolved: false,
+        name: 'NotImplementedError',
+        message: 'Not implemented: package.feature',
+        code: undefined,
+        path: undefined,
+        feature: 'package.feature',
+      },
+      impostorWrapped: {
+        resolved: false,
+        name: 'PackageLoaderError',
+        message: 'ordinary impostor-wrapped outer',
+        code: 'ERR_IMPOSTOR_WRAPPED',
+        path: '/generic-cause-projection/node_modules/cause-probe/impostor-wrapped.js',
+        feature: 'package.impostor-wrapped',
+      },
+      exactBound: {
+        resolved: false,
+        name: 'PackageLoaderError',
+        message: 'ordinary exact-bound outer',
+        code: 'ERR_EXACT_BOUND',
+        path: '/generic-cause-projection/node_modules/cause-probe/exact-bound.js',
+        feature: 'package.exact-bound',
+      },
+      getterError: {
+        resolved: false,
+        name: 'PackageLoaderError',
+        message: 'ordinary getter-error outer',
+        code: 'ERR_GETTER_ERROR',
+        path: '/generic-cause-projection/node_modules/cause-probe/getter-error.js',
+        feature: 'package.getter-error',
+      },
+      getterPrimitive: {
+        resolved: false,
+        name: 'PackageLoaderError',
+        message: 'ordinary getter-primitive outer',
+        code: 'ERR_GETTER_PRIMITIVE',
+        path: '/generic-cause-projection/node_modules/cause-probe/getter-primitive.js',
+        feature: 'package.getter-primitive',
+      },
+      getterGap: {
+        resolved: false,
+        name: 'PackageLoaderError',
+        message: 'ordinary getter-gap outer',
+        code: 'ERR_GETTER_GAP',
+        path: '/generic-cause-projection/node_modules/cause-probe/getter-gap.js',
+        feature: 'package.getter-gap',
+      },
+      objectTail: {
+        resolved: false,
+        name: 'PackageLoaderError',
+        message: 'ordinary object-tail outer',
+        code: 'ERR_OBJECT_TAIL',
+        path: '/generic-cause-projection/node_modules/cause-probe/object-tail.js',
+        feature: 'package.object-tail',
+      },
     });
   } finally {
     await disposeSandbox(host);

@@ -66,15 +66,19 @@ throwing getter cannot hang or replace the honest outer loader Error.
 
 1. The existing toolchain error serialization path surfaces the first real
    `NotImplementedError` at depth zero through eight of an ordinary
-   `Error.cause` chain, preserving its exact name, message and feature. A plain
-   Error that only copies those fields is not promoted.
+   `Error.cause` chain, preserving its exact name, message and feature. Every
+   depth 0..8 is executed. With two in-bound real gaps, the outermost/first
+   encountered identity and exact fields win. A plain Error that only copies
+   canonical name/message/feature is not promoted, direct or wrapped.
 2. Projection inspects at most eight cause links. After inspecting an ordinary
    Error at depth eight it does not invoke or read that Error's `cause` getter.
    An executed depth-eight carrier installs a throwing ninth getter and proves
    zero getter calls plus serialization of the exact outer Error.
-3. Cycles, a non-Error cause, a deeper real gap and any cause getter that throws
-   terminate with the honest original outer Error. They never hang, surface the
-   getter failure, or claim the deeper gap.
+3. Cycles, primitive or object-shaped non-Error causes, a deeper real gap and
+   any cause getter that throws terminate with the honest original outer Error.
+   Intermediate getters throwing an Error, primitive `17`, or a real
+   `NotImplementedError` value cannot replace the outer error. Non-Error
+   `{cause: gap}` is never traversed.
 4. Ordinary errors without a bounded real gap retain the existing serialized
    name/message/code/path/feature behavior. Direct and bounded named gaps keep
    their current behavior through focused runtime, Worker and real-Chromium
@@ -86,61 +90,77 @@ throwing getter cannot hang or replace the honest outer loader Error.
 ## Parity cases
 
 1. Generic bounded gap: an arbitrary `package.feature`
-   `NotImplementedError`, direct and behind one/eight ordinary wrappers,
-   surfaces by identity before serialization and by exact name/message/feature
-   through the Worker. Existing direct/eight-link unit cases are preservation
-   controls; a package-generic real-Chromium installed-bin case closes the
-   observable seam.
+   `NotImplementedError` at every depth 0..8 surfaces by identity before
+   serialization and by exact name/message/feature through the Worker. A chain
+   with real `package.outer` then `package.inner` gaps selects the first one's
+   identity and exact Worker fields. The package-generic real-Chromium
+   installed-bin case closes the observable seam.
 2. Exact bound RED: eight ordinary links end in an ordinary Error whose own
    `cause` accessor increments then throws. The accessor is the forbidden ninth
    read; the executed test asserts zero reads and the exact outer Error. Current
    implementation throws `ninth cause read` after one read.
-3. Honest termination: self/two-node cycles, non-Error tails, depth-nine real
-   gaps and throwing getters return no projection, so the existing serializer
-   emits the original outer Error. The carrier proves termination and error
-   identity, not only absence of a named gap.
-4. False identity control: an Error with
-   `name:'NotImplementedError'`/`feature:'package.feature'` but no real class
-   identity remains the outer ordinary error; package names and bin paths never
-   affect projection.
+3. Honest termination: self/two-node cycles, primitive and object-shaped
+   non-Error tails, depth-nine real gaps and intermediate throwing getters
+   return no projection, so the existing serializer emits the original outer
+   Error. Getter throws cover an Error, primitive `17` and a real
+   `NotImplementedError('getter.feature')`; none becomes the result. The
+   `{cause: gap}` object tail proves no arbitrary object traversal.
+4. False identity control: an Error with exact copied
+   `name:'NotImplementedError'`, message `Not implemented: package.feature`
+   and `feature:'package.feature'` but no real class identity is not promoted,
+   direct or wrapped. Direct serialization retains that outer impostor's exact
+   fields; wrapped serialization retains the exact ordinary outer fields.
 
 ## Evidence
 
-RED-UNIT, source HEAD `9654060844dee4139be6c6f2c4e0f940bd3ae5f3`,
-Node 24.16.0, pnpm 11.5.2, Vitest 2.1.9:
+RED-UNIT re-cut, base HEAD
+`a75be43cd786a6d11adbdc126b8bd57d8404a1b3`, Node 24.16.0, pnpm
+11.5.2, TypeScript 5.9.3, Vitest 2.1.9:
 
 ```sh
+pnpm --filter @riftydev/workbench typecheck
+# tsc -p tsconfig.json --noEmit
+# exit 0
+
 pnpm exec vitest run --project unit \
   packages/workbench/src/workers/declared-gap-cause.test.ts --reporter=verbose
 # Tests 2 failed | 2 passed (4)
 # exact bound received:
-# { reads:1, projected:undefined,
-#   thrown:{ name:'Error', message:'forbidden ninth cause read 1' } }
+# { reads:1, projected:undefined, thrown:
+#   { kind:'error', name:'Error', message:'forbidden ninth cause read 1' } }
 # expected: { reads:0, projected:null, thrown:null }
-# hostile getter received:
-# { reads:1, projected:undefined,
-#   thrown:{ name:'Error', message:'hostile cause read 1' } }
-# expected: { reads:1, projected:null, thrown:null }
+# hostile getters received, each reads:1/projected:undefined:
+# Error -> {kind:'error',name:'Error',message:'hostile cause error'}
+# 17 -> {kind:'value',value:'17'}
+# real gap -> {kind:'error',name:'NotImplementedError',
+#              message:'Not implemented: getter.feature'}
+# expected each: reads:1, projected:null, thrown:null
 ```
 
-The passing controls execute direct/eight-link real gaps, depth-nine gap,
-ordinary/non-Error tails, forged identity, self-cycle and two-node cycle. The
-two REDs fail only on the missing bounded/getter-failure behavior.
+The two passing controls execute every `package.feature` depth 0..8, first of
+two real gaps, depth-nine gap, exact direct/wrapped impostor, primitive and
+object-shaped non-Error tails, self-cycle and two-node cycle. The two REDs fail
+only on the missing bounded/getter-failure behavior.
 
 RED-BROWSER, Playwright 1.60.0, Chrome 148.0.7778.96:
 
 ```sh
 pnpm test:no-coi -g "package-generic bounded cause projection"
-# boundedGap: NotImplementedError / exact toolchain.threaded-wasm message + feature
-# exactBound received: Error / "forbidden ninth cause read 1" / no code,path,feature
-# expected: PackageLoaderError / "ordinary package loader failure" /
-# ERR_PACKAGE_LOADER / exact package path / package.loader
+# depth 0..8 package.feature, first package.outer of two gaps, direct/wrapped
+# canonical impostor and object-shaped non-Error tail: exact expected fields
+# exact bound received: Error / "forbidden ninth cause read 1"
+# intermediate Error getter received: Error / "hostile intermediate getter"
+# primitive getter received: Error / "17"
+# real-gap getter received: NotImplementedError / getter.feature
+# expected each hostile case: its exact PackageLoaderError outer
 # 1 failed
 ```
 
 The browser carrier writes an ordinary package-generic `.bin` launcher and
 entry into the real VFS, then observes the existing no-COI toolchain Worker
-result through SDK deserialization. It uses no Vite package or Vite identity.
+result through SDK deserialization. It obtains the actual io
+`NotImplementedError` constructor from one real realm-local named gap, then
+instantiates arbitrary package features. It uses no Vite package or identity.
 
 ## Fault matrix
 
@@ -167,8 +187,14 @@ serialization seam.
 
 predecessor: `distribution/no-coi-sandbox-build-loop`
 
-Copied predecessor checkpoint lineage (verbatim); the fresh child
-Contract+RED verdict follows outside PICKUP:
+Child checkpoint lines prepend copied predecessor lineage (verbatim):
+
+- `contract-red: 2026-09-01 — blocker @ a75be43cd`
+- Contract+RED attempt 1: 7 HOLDS, tail 0 new blockers — Workbench TS2551;
+  incomplete depth 0..8 selector/browser matrix; no intermediate throwing
+  getter exact-outer carrier; no two-gap first-identity proof; incomplete
+  canonical impostor proof; no primitive/real-gap getter-throw cases; no
+  object-shaped non-Error tail selector/serialization proof.
 
 - `ready-verdict: 2026-09-01 — Contract+RED @ ead27000f`
 - `ready-verdict: 2026-09-01 — Contract+RED @ f0066d4d2`
