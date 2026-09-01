@@ -95,6 +95,29 @@ test('preservation: no-COI main window stays memory when only async OPFS is avai
   });
 });
 
+test('preservation: COI main window stays memory without sync-handle capability', async ({
+  page,
+  browser,
+}) => {
+  await page.goto('/unit-harness.html');
+  const result = await page.evaluate(async (moduleUrl) => {
+    const vfs = await import(/* @vite-ignore */ moduleUrl);
+    return {
+      crossOriginIsolated: globalThis.crossOriginIsolated,
+      opfsAsyncSupported: vfs.OpfsVfs.isSupported(),
+      opfsSyncSupported: vfs.OpfsFsSync.isSupported(),
+      detected: vfs.detectVfsBackend(),
+    };
+  }, vfsModuleUrl);
+  logArtifact(browser, 'coi-main-window', result);
+  expect(result).toEqual({
+    crossOriginIsolated: true,
+    opfsAsyncSupported: true,
+    opfsSyncSupported: false,
+    detected: 'memory',
+  });
+});
+
 test('preservation: direct sync OPFS works without COI and survives a page reload', async ({
   page,
   browser,
@@ -190,6 +213,8 @@ test('preservation: COI dedicated Worker keeps OPFS selection and exact reload d
     initChoice: 'opfs',
     flushResult: { total: 0, failures: [] },
     syncHandlesClosed: true,
+    publicAsyncBackend: 'opfs',
+    crossSurfaceActual: exactBytes,
   });
   expect(read).toEqual({
     ok: true,
@@ -267,6 +292,40 @@ test('preservation: dedicated Worker without sync-handle capability selects memo
     backend: 'memory',
     flushResult: null,
     syncHandlesClosed: false,
+    publicAsyncBackend: 'memory',
+    crossSurfaceActual: exactBytes,
+  });
+});
+
+test('preservation: COI dedicated Worker without sync-handle capability selects memory', async ({
+  page,
+  browser,
+}) => {
+  await page.goto('/unit-harness.html');
+  const result = await runWorker(page, {
+    mode: 'selected',
+    operation: 'write',
+    path: `/__rifty_no_coi_opfs__/${crypto.randomUUID()}.bin`,
+    bytes: exactBytes,
+    disableSyncHandle: true,
+  });
+  logArtifact(browser, 'coi-missing-sync-handle', result);
+  expect(result).toEqual({
+    ok: true,
+    workerId: expect.any(String),
+    facts: {
+      crossOriginIsolated: true,
+      sharedArrayBufferType: 'function',
+      opfsSyncSupported: false,
+      opfsAsyncSupported: true,
+      detected: 'memory',
+    },
+    initChoice: 'memory',
+    backend: 'memory',
+    flushResult: null,
+    syncHandlesClosed: false,
+    publicAsyncBackend: 'memory',
+    crossSurfaceActual: exactBytes,
   });
 });
 
@@ -306,6 +365,8 @@ test('no-COI capable dedicated Worker selects OPFS and survives exact-byte reloa
     initChoice: 'opfs',
     flushResult: { total: 0, failures: [] },
     syncHandlesClosed: true,
+    publicAsyncBackend: 'opfs',
+    crossSurfaceActual: exactBytes,
   });
   expect(read).toEqual({
     ok: true,

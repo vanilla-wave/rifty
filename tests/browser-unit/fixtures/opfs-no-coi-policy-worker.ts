@@ -1,6 +1,14 @@
 /// <reference lib="webworker" />
 
-import { OpfsFsSync, OpfsVfs, detectVfsBackend, initBackend, syncMirror } from '@riftydev/vfs';
+import {
+  MemoryVfs,
+  OpfsFsSync,
+  OpfsVfs,
+  asyncVfs,
+  detectVfsBackend,
+  initBackend,
+  syncMirror,
+} from '@riftydev/vfs';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -28,6 +36,7 @@ self.onmessage = (event: MessageEvent<PolicyRequest>) => {
     const { mode, operation, path, bytes, denyStorage, disableSyncHandle } = event.data;
     const workerId = crypto.randomUUID();
     let fs: ReturnType<typeof syncMirror> | undefined;
+    let publicAsyncVfs: ReturnType<typeof asyncVfs> = null;
     let initChoice: 'opfs' | 'memory' | null = null;
 
     try {
@@ -60,6 +69,7 @@ self.onmessage = (event: MessageEvent<PolicyRequest>) => {
       } else {
         initChoice = await initBackend();
         fs = syncMirror();
+        publicAsyncVfs = asyncVfs();
       }
 
       if (operation === 'write') {
@@ -75,6 +85,19 @@ self.onmessage = (event: MessageEvent<PolicyRequest>) => {
               }
             : report;
         const syncHandlesClosed = fs instanceof OpfsFsSync;
+        const selectedPair =
+          mode === 'selected'
+            ? {
+                publicAsyncBackend:
+                  publicAsyncVfs instanceof OpfsVfs
+                    ? 'opfs'
+                    : publicAsyncVfs instanceof MemoryVfs
+                      ? 'memory'
+                      : null,
+                crossSurfaceActual:
+                  publicAsyncVfs === null ? null : Array.from(await publicAsyncVfs.readFile(path)),
+              }
+            : {};
         if (syncHandlesClosed) fs.closeAll();
         self.postMessage({
           ok: true,
@@ -84,6 +107,7 @@ self.onmessage = (event: MessageEvent<PolicyRequest>) => {
           backend: fs instanceof OpfsFsSync ? 'opfs' : 'memory',
           flushResult,
           syncHandlesClosed,
+          ...selectedPair,
         });
         return;
       }
