@@ -66,9 +66,11 @@ python3: sha256(raw) == pinned snapshotId; one pass over nodeModules.files: entr
 | journal replay | 73.6 MB × 1,142.7 ms / 98.2 MB | 0.86 s |
 | journal append | 73.6 MB / 85.5 MB/s | 0.86 s |
 
-Real 0.4.0 cold open = 1.05 ms/file end-to-end vs 0.50 ms/file bench drain:
-the benchmarks are ≈ 2× optimistic on the whole open; how much of the gap is
-drain vs decode/parse/apply is unknown until measured on T.
+Real 0.4.0 cold open = 1.05 ms/file end-to-end vs 0.50 ms/file bench drain.
+Measured on main the same day (`tracker-snapshot-open-split-2026-09-01.md`):
+drain 11.47 s (0.737 ms/file — this table's 7.72 s is 1.49× optimistic),
+reopen 10.03 s (4.95 s here is 2.03× optimistic; `preloadContent` alone is
+6.17 s). Storage owns 85.8 % of the cold open and 83.9 % of the reopen.
 
 ## Consequences
 

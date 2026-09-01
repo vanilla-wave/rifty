@@ -6,9 +6,9 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 1. `perf/project-vfs-targeted-page-reads` — **targeted-page-reads** — I4;
    independent of the format, no new mechanism; leads as the smallest slice,
-   and its RED derives T's manifest from the embedder asset and measures the
-   real open/reopen split — the measurement carrier every later slice reuses.
-   After it: one editor read on T costs the same as on a 521-entry tree.
+   and its RED commits T's manifest (paths + sizes from the embedder asset) as
+   the fixture every later slice reuses. After it: one editor read on T costs
+   the same as on a 521-entry tree.
 2. `vfs/segmented-opfs-replica` — **replica-base-segment** (slice A) — I1,
    I2: the IRREVERSIBLE format ADR (candidates: current per-file baseline; B
    index + lazy — measured, killed; A traced segment replica — measured),
@@ -34,11 +34,6 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Open questions
 
-- Split of the real 16.3 s cold open on T (fetch / gunzip / JSON.parse /
-  base64 decode / apply / git baseline / drain) and the never-measured reopen
-  on T — owner: agent — measured in slice 1's RED on T's manifest; the drain
-  share decides how much of the open this goal can win versus
-  `playground/snapshot-carries-substituted-bytes-twice`.
 - Post-open touch fraction: what share of T does a real workload (`node -e`,
   `vite build`, `tsc`) read before the first reload? — owner: agent — probe
   (count distinct files read on T) before slice A PICKUP; < ~15 % re-opens
@@ -78,4 +73,9 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
   `playground/snapshot-carries-substituted-bytes-twice`.
 - Committing the 28.5 MB tracker-plugin asset — only its path/size manifest
   enters the repo.
+- Re-baking the embedder's 0.4.0 snapshot against main (unrestorable today:
+  identity + shadow-catalog drift) — `playground/baked-snapshot-regeneration`.
+- `createScratch` rebuilding a clean same-starter scratch (40.7 s reopen in
+  the embedder's sequence) —
+  `playground/create-scratch-clean-same-starter-rematerializes`.
 - Owner `#assignSubtree`, lockfile hashing — measured non-levers.

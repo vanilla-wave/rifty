@@ -3,8 +3,8 @@ kind: epic
 status: ready
 title: Project open/reopen at Tracker scale — storage wait in seconds, honesty intact
 created: 2026-09-01
-value: Opening or reloading a Tracker-scale project (216 packages / 15.6k files / 74 MB) waits ≤2 s at the storage boundary instead of a projected 7.7 s drain inside a real 16.3 s cold open and a projected 5 s reopen, every editor read scales with the entry it asks for, and reload honesty is exactly today's.
-user_story: As a developer or embedder whose project carries a Tracker-scale tree (216 packages / 15,568 files / 73.6 MB) that must survive reload without a network round trip, I want first open and every reload to be storage-fast and honestly ready, but today the real embedder's cold open is 16.3 s with the per-file OPFS drain projected at 7.7 s of it, reopen is projected at 5 s, and each editor open copies the whole tree.
+value: Opening or reloading a Tracker-scale project (216 packages / 15.6k files / 74 MB) waits ≤2 s at the storage boundary instead of a measured 11.5 s drain inside a 13.4 s cold open and 8.4 s of walk + preload inside a 10.0 s reopen, every editor read scales with the entry it asks for, and reload honesty is exactly today's.
+user_story: As a developer or embedder whose project carries a Tracker-scale tree (216 packages / 15,568 files / 73.6 MB) that must survive reload without a network round trip, I want first open and every reload to be storage-fast and honestly ready, but today the per-file OPFS drain is 11.5 s of a 13.4 s cold open on main (16.3 s in the embedder), reopen walks and preloads every file for 8.4 s of 10.0 s, and each editor open copies the whole tree.
 tier: production
 ---
 
@@ -18,9 +18,14 @@ opens snapshot T — 216 packages / 15,568 files / 73,637,414 logical bytes,
 reference benchmarks ran on surrogate S (14,492 files / 98,200,000 bytes —
 the issue's base64 size, ×1.33 the real content): per-file drain 7.18 s
 (ADR-0358, B4), fresh-process reopen 4.60 s (walk 1.71 s + preload 2.86 s,
-C3), owner assignment 20 ms. Projected on T: drain 7.72 s, reopen 4.95 s —
-the benches are ≈ 2× optimistic on the whole open; the drain share of the
-16.3 s is unmeasured (map.md probe). Per-file handle open is half the reopen
+C3), owner assignment 20 ms. Measured on main with T's real `node_modules`
+(`vfs/reference/tracker-snapshot-open-split-2026-09-01.md`): cold open
+13.37 s end-to-end, of which the per-file drain is **11.47 s (85.8 %)** and
+every non-storage phase together — fetch, sha256, JSON, base64 decode,
+apply, git baseline, tools, boot — 1.10 s (8.2 %); reopen 10.03 s, of which
+walk 2.24 s + preload 6.17 s (83.9 %), `openProject` itself 18 ms. The
+benches were optimistic 1.49× (drain) and 2.03× (reopen); storage owns the
+open. Per-file handle open is half the reopen
 cost (C1: 2.07 s open vs 1.50 s read, ≈ 0.14 ms/file), so ANY per-file layout
 floors at 2–3 s on T whatever laziness or caching it adds — only a format that
 reads few files escapes. A traced content-addressed segment replica measured
@@ -72,13 +77,12 @@ a consistent tree or the loud cold-restore path.
 ## Invariants
 
 <!-- Each false on 1a851d7bc (origin/main, 2026-09-01). Evidence:
-     I1 — real embedder cold `openProject` on T: 16.3 s (workbench 0.4.0,
-          quoted); B4 per-file drain of S: median 7,183.9 ms standalone →
-          7.72 s projected on T; `openProject` awaits promotion/flush (C4).
-          The drain share of the real 16.3 s is UNMEASURED — the run's first
-          RED measures it on T's manifest.
-     I2 — C3 current fresh-process reopen median 4,603.7 ms on S → 4.95 s
-          projected on T; never timed by the embedder.
+     I1 — measured on main 1a851d7bc with T's real `node_modules` (T′):
+          per-file drain median 11,466.2 ms inside a 12,604.0 ms
+          `openProject` / 13,369.7 ms session-ready; 0.737 ms per file
+          (open-split reference). Embedder on 0.4.0: 16.3 s (quoted).
+     I2 — measured reopen on main: walk 2,239.1 ms + preloadContent
+          6,171.3 ms of a 10,029.5 ms reopen (open-split reference).
      I3 — `packages/vfs/src/opfs-sync.ts` `refreshIndex`/`preloadContent` read
           the per-file layout as project state; the store namespace
           `/.rifty/workbench/v1` (`workbench-project-store.ts`) is the only
@@ -98,11 +102,10 @@ a consistent tree or the loud cold-restore path.
 
 1. I1. First open of T (manifest of the real tracker-plugin snapshot): the
    durable-flush tail before `openProject` resolves takes ≤ 2.0 s median
-   under reference conditions — today the per-file drain alone projects to
-   7.7 s inside a real 16.3 s open.
+   under reference conditions — today 11.5 s measured on main.
 2. I2. Reopen of T in a fresh Chromium process, network off: storage restore
-   before the session is executable takes ≤ 2.0 s median — today projected
-   4.95 s (4.60 s measured on S).
+   before the session is executable takes ≤ 2.0 s median — today 8.4 s
+   (walk + preload) measured on main.
 3. I3. A project last persisted by the per-file layout is never read as
    project state: the owner reports the legacy layout by name and
    re-materializes from the project definition; edits absent from that
@@ -174,7 +177,15 @@ user's call and they proceeded.
   fewer files. The asset never enters the repo.
 - Budgets I1/I2 = 2.0 s: measured 1.15 s append / 1.14 s replay on S →
   0.86 s each on T; headroom ≈ 2.3× for ledger, stamp, owner hydration, and
-  the two 12–16 MB wasm blobs. OS page cache stayed warm in C3
+  the two 12–16 MB wasm blobs. Against the measured main numbers that is
+  5.7× (drain) and 4.2× (walk + preload) below today.
+- Precondition for the embedder, not a slice: the shipped 0.4.0 asset is
+  unrestorable on main (install-artifact identity mismatch + shadow catalog
+  drift → `EBROKENLOCK`; open-split reference §Blocker) — re-bake against
+  main; tracked in `playground/baked-snapshot-regeneration`. The embedder's
+  own `createScratch`-on-every-open sequence rebuilds a clean scratch from
+  scratch (40.7 s) — `playground/create-scratch-clean-same-starter-rematerializes`,
+  outside this goal. OS page cache stayed warm in C3
   — accepted limit; a cold-OS number is a probe (map.md), not a re-fit.
 - Migration = cold restore (user, 2026-09-01): the legacy per-file layout is
   not read; re-materialize from the definition; edits without a source are not
@@ -232,10 +243,8 @@ user's call and they proceeded.
 - rejected route: network re-derivation of an installed tree on reopen
   (re-install via lockfile/eddy instead of persisting `node_modules`) —
   violates Outcome (f).
-- Snapshot decode tax on the open path (gunzip + `JSON.parse` 104.8 MB +
-  base64 decode 98.2 M chars) is NOT this goal — owned by
-  `playground/snapshot-carries-substituted-bytes-twice`; the map probe
-  measures how much of the real 16.3 s is drain versus decode so neither goal
-  claims the other's share.
+- Snapshot decode tax on the open path (base64 decode + plan 0.51 s,
+  `JSON.parse` 14 ms, sha256 43 ms — 4 % of the open, measured) is NOT this
+  goal — owned by `playground/snapshot-carries-substituted-bytes-twice`.
 - not a lever (measured): owner `#assignSubtree` 20 ms / 0.4 % (B1); sync
   lockfile SHA-256 ≤ 11 ms at 3 MB (B5).

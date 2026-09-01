@@ -28,5 +28,9 @@ reload. `required`/`preferred` are for projects whose edits must survive
 reload; their storage cost on large trees is the
 `docs/backlog/epics/fast-project-open-reopen` goal. Neither mode lifts
 cross-origin isolation: guest `readFileSync` blocks on the SAB sync ring.
+Reopening a starter: call `catalog.createScratch` only when the catalog
+snapshot has no scratch for that starter; otherwise `activate` it — a clean
+same-starter `createScratch` reseeds the whole tree by contract (ADR-0278),
+which on a large tree costs more than a cold open.
 
 See ADR-0263 and ADR-0282.
