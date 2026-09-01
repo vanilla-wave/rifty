@@ -676,3 +676,22 @@ review: checkpoints — runtime/network/parity public SDK slice.
   child carry. Status recompiled `draft`→`ready`; a fresh external
   Contract+RED checkpoint is required before implementation resumes. Existing
   `ready-verdict:` lines are predecessor lineage, not that fresh verdict.
+
+ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
+
+- Fresh revalidation: 38/38 coverage; 0 blockers; unit residuals empty.
+  Original bands/RED lineage carry; the certified child is outside scope;
+  Final continuation not started.
+- Comparison artifact correction: the earlier 4781/830 labels called JavaScript
+  `String.length` body-slice counts bytes, and the 830 slice stopped before the
+  Fault evidence. They are non-authoritative transcript. Authority is exact
+  equality of each full anchored section from its `##` heading to the next
+  `##` heading in pre-split `99325ca4e` and current: Acceptance 4795 characters,
+  4797 UTF-8 bytes,
+  `e9dc28528f17733a984fcd5d9ae631b3041708daa571a836d2908496f8e09780`;
+  Parity 2421 characters/UTF-8 bytes,
+  `6783596ad9483a2ebb781d44758df9f6105f5b743ec61d83e26908d386142caf`;
+  full Fault 4135 characters, 4144 UTF-8 bytes,
+  `63746dfb9507ca39fe5bf06c17e489adcaa9269d1f00d991aec6778f06a5f2cc`.
+  All three historical/current comparisons are exact; the separately headed
+  frozen bounded-split Acceptance/Parity bodies remain exact too.
