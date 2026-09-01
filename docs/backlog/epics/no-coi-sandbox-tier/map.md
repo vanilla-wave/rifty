@@ -12,35 +12,35 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
    residual stays.
 3. `vfs/no-coi-opfs-policy-flip` — **opfs-no-coi** — drop the COI condition in
    detectVfsBackend + no-COI reload-durability proof (I5).
-4. `distribution/no-coi-sandbox-build-loop` — **build-loop** — PICKUP
-   prerequisite: settle Open question 1 (shim probe) first — sandbox
+4. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
    composition for real Vite 7 build outside workbench gates + loud capability
    gate/report + spawn warn-once + cpus→1 + Vite-8 loud named error + the
-   no-COI CI lane (I1, I2, I3, I7 rest, I8).
+   no-COI CI lane, which also pins the host document non-COI across the loop
+   (I1, I2, I3, I7 rest, I8, I9).
 5. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
-   HMR through SW preview + worker-died event + restore primitive (I4, I6).
-   Blocked by build-loop.
+   HMR through SW preview + worker-died event + restore primitive + boot marker
+   for unflushed writes (I4, I6, I10). Blocked by build-loop.
 
 ## Open questions
 
-- Does a coi-serviceworker-style header-faking shim deliver full COI (SAB
-  usable) on GH-Pages-class hosting, collapsing part of this tier's hosting
-  value? Settle: minimal static page + shim + SAB/crossOriginIsolated probe
-  (mentioned once at docs/public/hosting-netlify.md:82, never built). MUST be
-  settled before build-loop (slice 4) Contract+RED — it sizes the epic's
-  largest spend; a collapsing answer is a re-fit trigger, not a silent narrowing.
-- Does the works contract need a boot-time detectability marker for
-  "unflushed writes were pending at last termination" (dirty flag, NOT a
-  journal)? Kill-before-flush leaves silently mixed-generation trees (spike
-  record); user decision at dev-hmr pickup.
-- util-types.ts:27,31 bare-SAB sibling — reachable from a no-COI realm via
-  util.types.*? Settle inside bare-sab-guard sweep.
+<!-- Empty by construction after the 2026-08-31 re-fit: all three lines were
+     closed, none graduated into the run. Owner-typed form for any new line:
+     `<question> — owner: user|agent — <what settles it; for owner: user, why
+     not answerable now>` (rifty-goal FIT 3). -->
+
+- (none)
 
 ## Out of scope
 
 - execSync/spawnSync no-COI (loud NotImplementedError stays — correct as-is).
 - Vite 8 / Rolldown and any threaded-wasm guest (platform: pthread shared
-  memory needs COI) — loud named error only.
+  memory needs COI) — loud named error only. Not a gap: these sit outside the
+  shared-memory-free class this goal delivers, by their own requirement
+  (user, 2026-08-31).
+- A site built from scratch (docs site, course platform): no existing posture to
+  preserve, so it should take real isolation instead — a header-faking SW gets
+  it (`distribution/reference/sw-coi-shim-probe.md`). Removed from the audience
+  at the 2026-08-31 re-fit (user).
 - Kernel no-COI protocol redesign (ring-less spawn, async remote-fs, snapshot
   children) and cross-worker sync without SAB (sync-XHR-to-SW: zero code, no
   spike).
@@ -48,3 +48,7 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - Workspace transaction/journal + auto WS reconnect (epoch/heartbeat) — robust-
   class machinery, declined at works.
 - Playground app no-COI mode (ADR-0165 pins its COI hard-assert).
+- SW-delivered COI (header-faking Service Worker): rejected route, not fog —
+  it works (probe: `distribution/reference/sw-coi-shim-probe.md`) but isolates
+  the whole host document, violating I9. Never graduates; a future goal wanting
+  an isolated rifty-owned page may reuse the probe.
