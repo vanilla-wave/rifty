@@ -1,5 +1,11 @@
 # Storage open/reopen candidate benchmarks — 2026-09-01
 
+> Correction (2026-09-01): the dataset's 98,200,000 bytes reproduced the
+> issue's *serialized base64* size; the real tracker-plugin snapshot holds
+> 73,637,414 logical bytes in 15,568 files / 216 packages. Byte-linear
+> results here scale ×0.75 on the real tree, file-linear ×1.07; details:
+> `tracker-embedder-snapshot-facts-2026-09-01.md`.
+
 Evidence for candidate B (per-file content + durable index + lazy hydration),
 fresh-process reopen, deferred flush, and real editor-read impact. Disposable
 browser-unit spike; code removed after measurement.

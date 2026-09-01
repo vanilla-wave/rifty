@@ -3,32 +3,37 @@ kind: epic
 status: draft
 title: Project open/reopen at Tracker scale — storage wait in seconds, honesty intact
 created: 2026-09-01
-value: Opening or reloading a 98 MB / 14.5k-file project waits ≤2 s at the storage boundary instead of 7.2 s (first open) / 4.6 s (reopen), every editor read scales with the entry it asks for, and reload honesty is exactly today's.
-user_story: As a developer or embedder whose project carries a Tracker-scale tree (98.2 MB / 14,492 files) that must survive reload without a network round trip, I want first open and every reload to be storage-fast and honestly ready, but today the per-file OPFS layout costs 7.18 s to persist and 4.60 s to re-read, and each editor open copies the whole tree.
+value: Opening or reloading a Tracker-scale project (216 packages / 15.6k files / 74 MB) waits ≤2 s at the storage boundary instead of a projected 7.7 s drain inside a real 16.3 s cold open and a projected 5 s reopen, every editor read scales with the entry it asks for, and reload honesty is exactly today's.
+user_story: As a developer or embedder whose project carries a Tracker-scale tree (216 packages / 15,568 files / 73.6 MB) that must survive reload without a network round trip, I want first open and every reload to be storage-fast and honestly ready, but today the real embedder's cold open is 16.3 s with the per-file OPFS drain projected at 7.7 s of it, reopen is projected at 5 s, and each editor open copies the whole tree.
 tier: production
 ---
 
 ## Outcome
 
-Storage is the whole wait. On surrogate S (deterministic 14,492-path /
-98,200,000-byte selection from `tests/browser-unit/fixtures/real-tree-manifest.json`
-— a real `npm install` gravity-ui tree, i.e. entirely dependency content;
-conditions in `vfs/reference/`) the per-file OPFS layout costs 7.18 s per-file
-drain (ADR-0358, B4) and 4.60 s fresh-process reopen (walk 1.71 s + preload
-2.86 s, C3); owner assignment is 20 ms. Per-file handle open is half the
-reopen cost (C1: 2.07 s open vs 1.50 s read, ≈0.14 ms/file), so ANY per-file
-layout floors at 2–3 s whatever laziness or caching it adds — only a format
-that reads few files escapes. A traced content-addressed segment replica
-measured 1.15 s append / 1.14 s validated replay (B2/B3, C3). ADR-0358 named
-this exit: ">10x needs a pack-format layout change — separate strategic
-decision".
+Storage is most of the wait. The real embedder (tracker4, workbench 0.4.0)
+opens snapshot T — 216 packages / 15,568 files / 73,637,414 logical bytes,
+28.5 MB gzip, two wasm blobs holding 37.5 % of the bytes — in 16.3 s cold
+(0.3.0: ≈ 50 s, 40.4 s of it stamp promotion); reopen was never timed
+(`vfs/reference/tracker-embedder-snapshot-facts-2026-09-01.md`). The
+reference benchmarks ran on surrogate S (14,492 files / 98,200,000 bytes —
+the issue's base64 size, ×1.33 the real content): per-file drain 7.18 s
+(ADR-0358, B4), fresh-process reopen 4.60 s (walk 1.71 s + preload 2.86 s,
+C3), owner assignment 20 ms. Projected on T: drain 7.72 s, reopen 4.95 s —
+the benches are ≈ 2× optimistic on the whole open; the drain share of the
+16.3 s is unmeasured (map.md probe). Per-file handle open is half the reopen
+cost (C1: 2.07 s open vs 1.50 s read, ≈ 0.14 ms/file), so ANY per-file layout
+floors at 2–3 s on T whatever laziness or caching it adds — only a format that
+reads few files escapes. A traced content-addressed segment replica measured
+1.15 s append / 1.14 s validated replay on S (B2/B3, C3) → 0.86 s each way on
+T. ADR-0358 named this exit: ">10x needs a pack-format layout change —
+separate strategic decision".
 
 Independently, every page read-file / read-directory copies the whole owner
-tree: 46.5 ms per read on S (B0, 14,492 files) and 82.4 % of a real
+tree: 46.5 ms per read on S (B0, 14,492 files; T has 7 % more files) and 82.4 % of a real
 `ProjectDocument.open()` on a 521-entry / 51 MB template tree where the
 absolute is 4.3 ms (C5) — each read transiently slices every file's bytes
-(~98 MB on S). The two measurements are different trees; no whole document
-open on S exists yet.
+(~74 MB on T). The two measurements are different trees; no whole document
+open on T exists yet.
 
 Clauses every slice keeps — the discriminators the rejected routes cite:
 
@@ -53,10 +58,10 @@ Clauses every slice keeps — the discriminators the rejected routes cite:
 ## User scenario
 
 A developer opens a project, runs `npm install` producing a tree the size of
-S (or an embedder materializes one), and `await openProject(def)` returns a
-session whose `node -e` runs; the durable flush before that return took ≤ 2 s,
-not 7 s. They reload the tab (fresh Chromium process, network off): the
-session is executable again after ≤ 2 s of storage restore, not 4.6 s, with
+T (or an embedder materializes T itself), and `await openProject(def)` returns
+a session whose `node -e` runs; the durable flush before that return took
+≤ 2 s, not the projected 7.7 s. They reload the tab (fresh Chromium process, network off): the
+session is executable again after ≤ 2 s of storage restore, not ≈ 5 s, with
 edits made before the reload present. Opening one source file in the editor
 or expanding one directory costs work proportional to that entry, not a copy
 of the tree. A project last persisted by the old per-file layout is reported
@@ -67,13 +72,13 @@ a consistent tree or the loud cold-restore path.
 ## Invariants
 
 <!-- Each false on 1a851d7bc (origin/main, 2026-09-01). Evidence:
-     I1 — B4 per-file drain of S: median 7,183.9 ms standalone (reference
-          2026-08-31); `openProject` awaits promotion/flush (C4: backgrounding
-          `#completePromotion` moves the reply). A real `openProject` on S is
-          UNMEASURED on main — the drain bounds the tail from below; the run's
-          first RED measures the real number.
-     I2 — C3 current fresh-process reopen median 4,603.7 ms (reference
-          2026-09-01).
+     I1 — real embedder cold `openProject` on T: 16.3 s (workbench 0.4.0,
+          quoted); B4 per-file drain of S: median 7,183.9 ms standalone →
+          7.72 s projected on T; `openProject` awaits promotion/flush (C4).
+          The drain share of the real 16.3 s is UNMEASURED — the run's first
+          RED measures it on T's manifest.
+     I2 — C3 current fresh-process reopen median 4,603.7 ms on S → 4.95 s
+          projected on T; never timed by the embedder.
      I3 — `packages/vfs/src/opfs-sync.ts` `refreshIndex`/`preloadContent` read
           the per-file layout as project state with no layout-version check;
           `packages/workbench/src/glue/project-deps.ts` re-materializes
@@ -85,16 +90,18 @@ a consistent tree or the loud cold-restore path.
           `#snapshotEntry` slices every file's bytes: 46.5 ms on S (B0) vs
           4.3 ms on 521 entries (C5) — tree-size bound. -->
 
-1. I1. First open of S: the durable-flush tail before `openProject` resolves
-   takes ≤ 2.0 s median under reference conditions — today the per-file drain
-   of S alone is 7.18 s.
-2. I2. Reopen of S in a fresh Chromium process, network off: storage restore
-   before the session is executable takes ≤ 2.0 s median — today 4.60 s.
+1. I1. First open of T (manifest of the real tracker-plugin snapshot): the
+   durable-flush tail before `openProject` resolves takes ≤ 2.0 s median
+   under reference conditions — today the per-file drain alone projects to
+   7.7 s inside a real 16.3 s open.
+2. I2. Reopen of T in a fresh Chromium process, network off: storage restore
+   before the session is executable takes ≤ 2.0 s median — today projected
+   4.95 s (4.60 s measured on S).
 3. I3. A project last persisted by the per-file layout is never read as
    project state: the owner reports the legacy layout by name and
    re-materializes from the project definition; edits absent from that
    definition do not reappear.
-4. I4. A page read-file / read-directory costs the same on S as on a
+4. I4. A page read-file / read-directory costs the same on T as on a
    521-entry tree (≤ 2× apart) and ≤ 1 ms median for a ≤ 4 KB file or a
    ≤ 64-entry directory; a read never copies bytes of files outside the
    requested path — today 46.5 ms vs 4.3 ms, full-tree byte copy per read.
@@ -140,11 +147,14 @@ user's call (report Risks).
 - tier: production (2026-09-01) — a persistence format's product IS reload
   consistency; torn segment, compaction crash, and legacy layout are proven by
   a real-browser kill + reopen, not a unit fault decorator alone.
-- Target scale = Tracker (user, 2026-09-01): the real 171-package trace is
-  unreachable (issues #255/#256 hold aggregates only); surrogate S with exact
-  cardinality + bytes is the accepted proof substrate.
-- Budgets I1/I2 = 2.0 s: measured 1.15 s append / 1.14 s replay × ~1.75
-  headroom for ledger, stamp, owner hydration. OS page cache stayed warm in C3
+- Target scale = Tracker (user, 2026-09-01). Re-verified 2026-09-01 against
+  the real embedder: the snapshot asset IS reachable locally (28.5 MB gz,
+  pinned sha256) — its path/size manifest T replaces surrogate S as the proof
+  substrate; S's 98.2 MB was the base64 size (×1.33 real content), S has 7 %
+  fewer files. The asset never enters the repo.
+- Budgets I1/I2 = 2.0 s: measured 1.15 s append / 1.14 s replay on S →
+  0.86 s each on T; headroom ≈ 2.3× for ledger, stamp, owner hydration, and
+  the two 12–16 MB wasm blobs. OS page cache stayed warm in C3
   — accepted limit; a cold-OS number is a probe (map.md), not a re-fit.
 - Migration = cold restore (user, 2026-09-01): the legacy per-file layout is
   not read; re-materialize from the definition; edits without a source are not
@@ -194,5 +204,10 @@ user's call (report Risks).
 - rejected route: network re-derivation of an installed tree on reopen
   (re-install via lockfile/eddy instead of persisting `node_modules`) —
   violates Outcome (f).
+- Snapshot decode tax on the open path (gunzip + `JSON.parse` 104.8 MB +
+  base64 decode 98.2 M chars) is NOT this goal — owned by
+  `playground/snapshot-carries-substituted-bytes-twice`; the map probe
+  measures how much of the real 16.3 s is drain versus decode so neither goal
+  claims the other's share.
 - not a lever (measured): owner `#assignSubtree` 20 ms / 0.4 % (B1); sync
   lockfile SHA-256 ≤ 11 ms at 3 MB (B5).

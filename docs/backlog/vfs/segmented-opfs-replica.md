@@ -20,6 +20,13 @@ replayed the real 16,502-op drain trace: 1.15 s append at 85.5 MB/s and 1.08 s
 validated read+replay. The ≥50 MB/s design gate passes; owner assignment is not
 the ceiling. Evidence conditions and samples are in the reference doc.
 
+Real embedder re-verified 2026-09-01 (`reference/tracker-embedder-snapshot-facts-2026-09-01.md`):
+snapshot T = 216 packages / 15,568 files / 73.6 MB logical (the "98.2 MB"
+was base64); cold `openProject` on workbench 0.4.0 is 16.3 s end-to-end
+(0.3.0: ≈ 50 s, 40.4 s promotion), reopen never timed. Projections on T:
+per-file drain 7.72 s, per-file reopen 4.95 s, journal 0.86 s each way.
+T's manifest, not S, is this item's proof substrate.
+
 Issue #256's end-to-end owner probe places the durability flush inside
 `openProject`: 40.4 s of a 42 s first materialization before `createProject`.
 ADR-0358 changed the drain mechanism; this session remeasured that same

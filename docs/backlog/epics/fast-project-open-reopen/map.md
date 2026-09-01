@@ -9,7 +9,7 @@ Goal is `draft`: nothing is picked up until the OPEN user fork in goal.md
 1. `perf/project-vfs-targeted-page-reads` — **targeted-page-reads** — I4;
    independent of the format and of the open fork, no new mechanism; leads as
    the smallest slice, and its real-page-request regression proof is the
-   measurement carrier later slices reuse. After it: one editor read on S
+   measurement carrier later slices reuse. After it: one editor read on T
    costs the same as on a 521-entry tree.
 2. `vfs/segmented-opfs-replica` — **replica-format** — I1, I2 for a project
    FIRST persisted under the new format: the IRREVERSIBLE format ADR
@@ -18,7 +18,7 @@ Goal is `draft`: nothing is picked up until the OPEN user fork in goal.md
    ledger/scheduler/stamp contracts, validated replay, loud refusal of a
    legacy per-file layout (I3 first half), `## Fault matrix` at production
    tier (rows enumerated in the item). Its persona depends on the open fork:
-   option (1)/(3) keep it; option (2) deletes it. After it: I1–I2 hold on S.
+   option (1)/(3) keep it; option (2) deletes it. After it: I1–I2 hold on T.
 
 Unseeded (contract depends on fog): legacy-layout re-materialization (I3
 second half — detect, name, re-materialize from the definition) waits on the
@@ -37,7 +37,12 @@ OPEN fork.
   user — surfaced at FIT after the 2026-09-01 interview closed; the
   cold-restore decision was taken on the embedder scenario. Fires with the
   fork above → `rifty-refine`.
-- Post-open touch fraction: what share of S does a real workload (`node -e`,
+- Split of the real 16.3 s cold open on T (fetch / gunzip / JSON.parse /
+  base64 decode / apply / git baseline / drain) and the never-measured reopen
+  on T — owner: agent — first RED of targeted-page-reads derives T's manifest
+  from the embedder asset and measures both; the drain share decides how much
+  of the open this goal can win versus `playground/snapshot-carries-substituted-bytes-twice`.
+- Post-open touch fraction: what share of T does a real workload (`node -e`,
   `vite build`, `tsc`) read before the first reload? — owner: agent — probe
   (count distinct files read on S) before ready; < ~15 % re-opens candidate B
   as a re-fit (goal Decisions), ≥ that confirms the full-scan kill.
@@ -66,5 +71,8 @@ OPEN fork.
 - COI-free ephemeral mode — sync reads need the SAB ring.
 - Changing the public `storage.persistence` default.
 - Multi-tab shared project — loud refusal stays.
-- Real Tracker trace acquisition — surrogate S is the accepted substrate.
+- Snapshot encoding / JSON-parse tax on the open path — owned by
+  `playground/snapshot-carries-substituted-bytes-twice`.
+- Committing the 28.5 MB tracker-plugin asset — only its path/size manifest
+  enters the repo.
 - Owner `#assignSubtree`, lockfile hashing — measured non-levers.
