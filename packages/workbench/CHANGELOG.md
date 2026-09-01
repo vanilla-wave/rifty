@@ -40,8 +40,9 @@
 ### Added
 
 - **No-COI SDK toolchain Worker (ADR-0373).** One Worker owns runtime/VFS, real
-  npm-client + shadow esbuild admission, installed `.bin` execution, loud
-  overlap/death settlement, and named shared-WASM/Vite-8 boundaries.
+  npm-client + installed registry-twin esbuild admission, build-only installed
+  `.bin` execution, loud overlap/death/clean-close settlement, and named
+  shared-WASM/Vite-8 boundaries. Dev/serve/preview and build-watch stay loud.
 
 - **Owner-authoritative command completion and direct VFS entries (ADR-0362).**
   `ProjectTerminal.complete()` uses a bounded, correlated PTY request against

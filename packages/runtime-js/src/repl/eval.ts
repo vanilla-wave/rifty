@@ -6,26 +6,29 @@
  * "free-form code", not a module. M1 uses this directly; M3+ event loop work
  * will refine the host-call semantics.
  */
-export async function evalInRepl(code: string): Promise<unknown> {
+export async function evalInRepl(
+  code: string,
+  globals: { readonly WebAssembly?: typeof WebAssembly } = {},
+): Promise<unknown> {
   const trimmed = code.trim();
   if (trimmed === '') return undefined;
 
   // Detect statement-shaped input (let/const/var/function/class declarations,
   // ifs, loops) and execute as a statement-list rather than as an expression.
   if (looksLikeStatement(trimmed)) {
-    const fn = new Function(`return (async () => { ${code}\n})()`);
-    return await fn();
+    const fn = new Function('WebAssembly', `return (async () => { ${code}\n})()`);
+    return await fn(globals.WebAssembly ?? globalThis.WebAssembly);
   }
 
   try {
-    const fn = new Function(`return (async () => (${code}\n))()`);
-    return await fn();
+    const fn = new Function('WebAssembly', `return (async () => (${code}\n))()`);
+    return await fn(globals.WebAssembly ?? globalThis.WebAssembly);
   } catch (err) {
     // Expression parse failed — fall back to statement form so things like
     // `let x = 1` still work without a leading semicolon hack.
     if (err instanceof SyntaxError) {
-      const fn = new Function(`return (async () => { ${code}\n})()`);
-      return await fn();
+      const fn = new Function('WebAssembly', `return (async () => { ${code}\n})()`);
+      return await fn(globals.WebAssembly ?? globalThis.WebAssembly);
     }
     throw err;
   }

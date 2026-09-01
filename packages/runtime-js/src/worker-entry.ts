@@ -22,7 +22,7 @@ import { installTimerGlobals } from './builtins/timers.ts';
 import { setVmEngineOverride } from './builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from './builtins/web-globals.ts';
-import { initializeEventLoopKeepalive } from './internal/event-loop-keepalive.ts';
+import { sandboxToolchainWebAssembly } from './internal/sandbox-toolchain-realm.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
@@ -35,7 +35,6 @@ import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
 declare const self: DedicatedWorkerGlobalScope;
 
 installProcessGlobals();
-initializeEventLoopKeepalive();
 installTimerGlobals();
 installWebGlobals();
 (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
@@ -75,7 +74,7 @@ async function handleEval(req: EvalRequest): Promise<EvalResult> {
     setProcessCwd(req.cwd);
   }
   try {
-    const value = await evalInRepl(req.code);
+    const value = await evalInRepl(req.code, { WebAssembly: sandboxToolchainWebAssembly() });
     if (value !== undefined) {
       post({ type: 'stdout', chunk: `${inspect(value)}\n` });
     }

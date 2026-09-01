@@ -30,6 +30,7 @@ import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
 import {
@@ -447,7 +448,7 @@ function spawnViaSameRealm(
 let sameRealmWarningFired = false;
 
 function warnSameRealmFallbackOnce(): void {
-  if (globalThis.crossOriginIsolated !== false || sameRealmWarningFired) return;
+  if (!isSandboxToolchainRealm() || sameRealmWarningFired) return;
   sameRealmWarningFired = true;
   console.warn(
     '[rifty:child_process] Falling back to same-realm execution: child shares the parent event loop.',

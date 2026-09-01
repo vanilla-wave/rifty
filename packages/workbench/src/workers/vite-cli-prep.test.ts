@@ -8,10 +8,13 @@ import {
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   prepareViteBinSpawnRequest,
+  prepareViteBuildCli,
+  prepareViteBuildCliAcquisitionFiles,
   prepareViteCli,
   prepareViteCliAcquisitionFiles,
   viteCliMode,
   viteCliPreparationFromArgs,
+  viteCliRequiresResidentLifecycle,
 } from './vite-cli-prep.ts';
 import { decideViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
 
@@ -218,6 +221,31 @@ describe('prepareViteCliAcquisitionFiles — pre-promotion CLI keepalive patch',
     await prepareViteCliAcquisitionFiles('/app');
     expect(fsSync.existsSync(CLI_PATH)).toBe(false);
     expect(g.__riftyTrackCliPromise).toBeUndefined();
+  });
+});
+
+describe('build-only Vite preparation', () => {
+  it('prepares and validates the CLI without consulting the root watcher', async () => {
+    const fsSync = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    const watcherBefore = readText(fsSync, CONFIG_PATH);
+
+    await prepareViteBuildCliAcquisitionFiles('/app');
+    expect(readText(fsSync, CONFIG_PATH)).toBe(watcherBefore);
+    await expect(
+      prepareViteBuildCli({ root: '/app', mode: 'info', executedBinPath: VITE_BIN }),
+    ).resolves.toBeUndefined();
+  });
+
+  it.each([
+    [[], true],
+    [['dev'], true],
+    [['serve'], true],
+    [['preview'], true],
+    [['build', '--watch'], true],
+    [['build', '-w'], true],
+    [['build'], false],
+  ] as const)('classifies resident argv %j', (args, resident) => {
+    expect(viteCliRequiresResidentLifecycle(args)).toBe(resident);
   });
 });
 

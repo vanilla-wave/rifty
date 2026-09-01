@@ -45,7 +45,6 @@ export { FS_RPC_CHUNK } from './ipc/fs-rpc-protocol.ts';
 export { installConsole, type ConsoleSink } from './repl/console.ts';
 export {
   awaitDrain,
-  initializeEventLoopKeepalive,
   installEventLoopKeepalive,
   releaseNodeEvalDrainOwnership,
   trackKeepalivePromise,

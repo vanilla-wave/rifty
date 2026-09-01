@@ -2,7 +2,52 @@ import type { RuntimeController } from '@riftydev/runtime-js';
 import type { FsReadEncoding } from '@riftydev/runtime-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { CapabilityCheck } from './capabilities.ts';
-import { COI_REQUIRED_MESSAGE, type SandboxDeps, createSandbox } from './sandbox.ts';
+import {
+  COI_REQUIRED_MESSAGE,
+  type CreateSandboxOptions,
+  type Sandbox,
+  type SandboxDeps,
+  type ToolchainCreateSandboxOptions,
+  type ToolchainSandbox,
+  createSandbox,
+} from './sandbox.ts';
+
+function publicCreateSandboxTypeCarrier(options: CreateSandboxOptions): void {
+  const union: Promise<Sandbox | ToolchainSandbox> = createSandbox(options);
+  const generic: Promise<Sandbox> = createSandbox({ workerUrl: '/generic-worker.js' });
+  const toolchain: Promise<ToolchainSandbox> = createSandbox({
+    requireCrossOriginIsolation: false,
+    toolchain: { workerUrl: '/toolchain-worker.js' },
+  });
+  // @ts-expect-error toolchain admission requires an explicit literal false.
+  const omittedFalse: ToolchainCreateSandboxOptions = {
+    toolchain: { workerUrl: '/toolchain-worker.js' },
+  };
+  const trueFlag: ToolchainCreateSandboxOptions = {
+    // @ts-expect-error true cannot admit the shared-memory-free toolchain tier.
+    requireCrossOriginIsolation: true,
+    toolchain: { workerUrl: '/toolchain-worker.js' },
+  };
+  const legacyTopLevelWorker: ToolchainCreateSandboxOptions = {
+    requireCrossOriginIsolation: false,
+    toolchain: { workerUrl: '/toolchain-worker.js' },
+    // @ts-expect-error toolchain mode selects only its nested Worker URL.
+    workerUrl: '/legacy-worker.js',
+  };
+  const spawnToolchainIsNotPublic: false = false as 'spawnToolchain' extends keyof SandboxDeps
+    ? true
+    : false;
+  void [
+    union,
+    generic,
+    toolchain,
+    omittedFalse,
+    trueFlag,
+    legacyTopLevelWorker,
+    spawnToolchainIsNotPublic,
+  ];
+}
+void publicCreateSandboxTypeCarrier;
 
 /** A typed no-op controller — these tests assert wiring, never drive eval. */
 function fakeRuntime(onDispose: () => void = () => {}): RuntimeController {
@@ -95,7 +140,28 @@ describe('createSandbox', () => {
     );
     expect(spawn).toHaveBeenCalledOnce();
     expect(sandbox.capabilities.capabilities.crossOriginIsolated).toBe(false);
+    expect('toolchain' in sandbox).toBe(false);
+    expect('capabilityReport' in sandbox).toBe(false);
   });
+
+  it.each([undefined, true] as const)(
+    'rejects toolchain admission unless the runtime flag is literal false (%s)',
+    async (requireCrossOriginIsolation) => {
+      const options = {
+        ...(requireCrossOriginIsolation === undefined ? {} : { requireCrossOriginIsolation }),
+        toolchain: { workerUrl: '/toolchain-worker.js' },
+      };
+      await expect(
+        createSandbox(
+          options as unknown as CreateSandboxOptions,
+          deps({ detect: () => capabilityCheck(false) }),
+        ),
+      ).rejects.toMatchObject({
+        name: 'TypeError',
+        message: expect.stringContaining('false'),
+      });
+    },
+  );
 
   it('falls back to memory and records the reason when VFS init throws', async () => {
     const warn = vi.fn();

@@ -102,6 +102,7 @@ export type WorkerMessage =
       readonly protocol: typeof SANDBOX_TOOLCHAIN_PROTOCOL;
       readonly vfsBackend: 'opfs' | 'memory';
     }
+  | { readonly type: 'toolchain-terminal'; readonly reason: 'closed' }
   | { readonly type: 'stdout'; readonly chunk: string }
   | { readonly type: 'stderr'; readonly chunk: string }
   | { readonly type: 'result'; readonly result: EvalResult }

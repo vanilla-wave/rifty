@@ -4,7 +4,10 @@ import {
   applyEmnapiCoreOrphanedReferencePatch,
   emnapiCoreOrphanedReferencePatchPolicy,
 } from './emnapi-core-install-policy.ts';
-import { prepareViteCliAcquisitionFiles } from './vite-cli-prep.ts';
+import {
+  prepareViteBuildCliAcquisitionFiles,
+  prepareViteCliAcquisitionFiles,
+} from './vite-cli-prep.ts';
 
 export interface PackageInstallFinalizerOptions {
   readonly root: string;
@@ -74,4 +77,13 @@ export async function finalizePackageInstallFiles(
   options.seedTemplateFiles?.();
   patchEmnapiCoreCopies(options);
   await prepareViteCliAcquisitionFiles(options.root);
+}
+
+/** Build-only installed-tree finalizer. */
+export async function finalizeBuildPackageInstallFiles(
+  options: PackageInstallFinalizerOptions,
+): Promise<void> {
+  options.seedTemplateFiles?.();
+  patchEmnapiCoreCopies(options);
+  await prepareViteBuildCliAcquisitionFiles(options.root);
 }

@@ -160,7 +160,7 @@ behavior throughout.
    `pnpm exec vitest run --project unit packages/rifty/src/sandbox.test.ts
    --reporter=dot` and the no-COI preservation carrier.
 6. Network/admission inheritance: bounded registry reads, required fetch
-   failures, corrupt shadow bytes and concurrent same-key acquisition stay
+   failures, corrupt registry-twin bytes and concurrent same-key acquisition stay
    loud/deduplicated. Artifact: focused npm-client fault command recorded in
    Evidence C148-NPM below; the SDK layer adds no cache/retry authority.
 
@@ -170,7 +170,7 @@ behavior throughout.
 |---|---|---|
 | `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; handshake mismatch named | Acceptance 3-4; no-COI preservation + capability RED |
 | `corrupt-input` + `observable-order` × install/run-bin request | exact fields validated before VFS/process mutation; ordered output precedes one terminal result | Acceptance 5-6, 9; capability/build RED |
-| `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry/shadow acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
+| `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry-twin acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
 | `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0373; `toolchain overlap` designed RED |
 | Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
 | `false-fallback` × Vite 8/threaded WASM | Vite 8 and direct shared-memory construction reach the same named boundary; no generic wasm crash or successful dist | Acceptance/Parity 8/4; threaded-WASM RED |
@@ -181,10 +181,10 @@ Evidence C148-NPM (Node 24.16.0, Vitest 2.1.9):
 
 ```sh
 pnpm exec vitest run --project unit \
-  packages/npm-client/src/eddy-bundle-stream.test.ts \
-  packages/npm-client/src/internal/shadow/source.fault.test.ts \
-  packages/npm-client/src/installer-concurrency.test.ts --reporter=dot
-# 3 files passed; 26 tests passed
+  packages/npm-client/src/internal/shadow/installer.contract.test.ts \
+  packages/workbench/src/workers/owner-package-runtime-bindings.contract.test.ts \
+  packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts --reporter=dot
+# 3 files passed; 51 tests passed
 ```
 
 ## Out of scope
@@ -223,3 +223,4 @@ review: checkpoints — runtime/network/parity public SDK slice.
   current COI product; only network stall/image endpoints are external-boundary
   fixtures.
 - `contract-red: 2026-09-01 — blocker @ 326f5b70e`
+- `final-green: 2026-09-01 — blocker @ 07d370651`

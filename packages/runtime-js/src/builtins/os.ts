@@ -6,6 +6,7 @@
  * NotImplementedError so callers see the gap.
  */
 import { NotImplementedError } from '@riftydev/io';
+import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 
 export const EOL = '\n';
 
@@ -68,12 +69,11 @@ export function cpus(): Array<{
   speed: number;
   times: { user: number; nice: number; sys: number; idle: number; irq: number };
 }> {
-  const count =
-    globalThis.crossOriginIsolated === false
-      ? 1
-      : typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
-        ? navigator.hardwareConcurrency
-        : 1;
+  const count = isSandboxToolchainRealm()
+    ? 1
+    : typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
+      ? navigator.hardwareConcurrency
+      : 1;
   const stub = {
     model: 'rifty-virtual-cpu',
     speed: 1000,
@@ -247,7 +247,7 @@ export const constants = {
 } as const;
 
 export function availableParallelism(): number {
-  return globalThis.crossOriginIsolated === false
+  return isSandboxToolchainRealm()
     ? 1
     : typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
       ? navigator.hardwareConcurrency

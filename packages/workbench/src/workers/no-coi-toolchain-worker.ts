@@ -3,13 +3,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
-import {
-  createMemoryShadowAssetStorage,
-  createOriginExclusiveShadowAssetManager,
-  createRegistryShadowAssetSource,
-  createShadowAssetPortClient,
-  shadowAssetPlanForInstallResult,
-} from '@riftydev/npm-client/internal';
+import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
 import {
   SANDBOX_TOOLCHAIN_PROTOCOL,
   type SerializedRuntimeError,
@@ -21,21 +15,31 @@ import {
 } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
-import { runtimeWorkerBackend } from '@riftydev/runtime-js/worker';
-import { syncMirror } from '@riftydev/vfs';
+import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
-import { prepareViteCli, viteCliPreparationFromArgs } from './vite-cli-prep.ts';
+import { finalizeBuildPackageInstallFiles } from './package-install-finalizer.ts';
 import {
-  type WorkbenchRuntimeAssetClient,
+  prepareViteBuildCli,
+  viteCliPreparationFromArgs,
+  viteCliRequiresResidentLifecycle,
+} from './vite-cli-prep.ts';
+import {
+  type WorkbenchRuntimeBinding,
   activateWorkbenchRuntimeAdapters,
 } from './workbench-runtime-adapters.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
+const TOOLCHAIN_REALM = Symbol.for('rifty.runtime-js.sandbox-toolchain.v1');
+Object.defineProperty(globalThis, TOOLCHAIN_REALM, {
+  value: true,
+  configurable: false,
+  enumerable: false,
+  writable: false,
+});
 installEventLoopKeepalive();
 registerNetBuiltins();
-installThreadedWasmBoundary();
+installToolchainCloseSignal();
 
 function post(message: ToolchainResult): void {
   self.postMessage({ type: 'toolchain-result', result: message });
@@ -48,24 +52,17 @@ async function flushMirror(): Promise<void> {
 
 async function activateInstallRuntime(
   cwd: string,
-  registry: RegistryClient,
   result: Awaited<ReturnType<typeof install>>,
 ): Promise<void> {
-  const manager = createOriginExclusiveShadowAssetManager({
-    storage: createMemoryShadowAssetStorage(),
-    source: createRegistryShadowAssetSource(registry),
-  });
-  let server: { dispose(): void } | undefined;
-  try {
-    const ready = await manager.ensure(shadowAssetPlanForInstallResult(result));
-    const channel = new MessageChannel();
-    server = manager.serve(ready, channel.port2);
-    const client: WorkbenchRuntimeAssetClient = createShadowAssetPortClient(channel.port1);
-    await activateWorkbenchRuntimeAdapters({ assets: client, fs: syncMirror(), cwd });
-  } finally {
-    server?.dispose();
-    await manager.close();
-  }
+  const bindings: readonly WorkbenchRuntimeBinding[] = Object.freeze(
+    shadowSubstitutionPlanForInstallResult(result).bindings.map((binding) =>
+      Object.freeze({
+        adapterId: binding.adapterId,
+        packagePath: normalizePath(`${cwd}/${binding.packagePath}`),
+      }),
+    ),
+  );
+  await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd });
 }
 
 async function installManifest(input: Extract<ToolchainRequest, { op: 'install' }>['input']) {
@@ -75,8 +72,8 @@ async function installManifest(input: Extract<ToolchainRequest, { op: 'install' 
     cwd: input.cwd,
     registry,
   });
-  await finalizePackageInstallFiles({ root: input.cwd });
-  await activateInstallRuntime(input.cwd, registry, result);
+  await finalizeBuildPackageInstallFiles({ root: input.cwd });
+  await activateInstallRuntime(input.cwd, result);
   await flushMirror();
 }
 
@@ -121,14 +118,14 @@ async function runInstalledBin(
     args: input.args,
     executedBinPath: input.binPath,
   });
-  if (preparation?.mode === 'dev' || preparation?.mode === 'preview') {
+  if (preparation !== null && viteCliRequiresResidentLifecycle(input.args)) {
     throw new NotImplementedError(
       'toolchain.dev-hmr',
-      'resident Vite dev/preview lifecycle is unavailable in the build-only toolchain mode',
+      'resident Vite dev/serve/preview/build-watch lifecycle is unavailable in build-only toolchain mode',
     );
   }
   rejectThreadedVite(input.cwd, input.binPath);
-  if (preparation !== null) await prepareViteCli(preparation);
+  if (preparation !== null) await prepareViteBuildCli(preparation);
 
   const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
   process.argv = ['node', input.binPath, ...input.args];
@@ -201,26 +198,26 @@ self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?
     });
 });
 
-void runtimeWorkerBackend.then((vfsBackend) => {
-  installFetchKeepalive();
-  self.postMessage({ type: 'toolchain-ready', protocol: SANDBOX_TOOLCHAIN_PROTOCOL, vfsBackend });
-});
+void import('@riftydev/runtime-js/worker')
+  .then(({ runtimeWorkerBackend }) => runtimeWorkerBackend)
+  .then((vfsBackend) => {
+    installFetchKeepalive();
+    self.postMessage({ type: 'toolchain-ready', protocol: SANDBOX_TOOLCHAIN_PROTOCOL, vfsBackend });
+  });
 
-function installThreadedWasmBoundary(): void {
-  const NativeMemory = WebAssembly.Memory;
-  class SharedMemoryFreeMemory extends NativeMemory {
-    constructor(descriptor: WebAssembly.MemoryDescriptor) {
-      if (descriptor.shared === true) {
-        throw new NotImplementedError(
-          'toolchain.threaded-wasm',
-          'shared WebAssembly.Memory requires cross-origin isolation and SharedArrayBuffer',
-        );
+function installToolchainCloseSignal(): void {
+  const closeWorker = self.close.bind(self);
+  let signalled = false;
+  Object.defineProperty(self, 'close', {
+    configurable: true,
+    enumerable: false,
+    writable: false,
+    value() {
+      if (!signalled) {
+        signalled = true;
+        self.postMessage({ type: 'toolchain-terminal', reason: 'closed' });
       }
-      super(descriptor);
-    }
-  }
-  Object.defineProperty(WebAssembly, 'Memory', {
-    ...Object.getOwnPropertyDescriptor(WebAssembly, 'Memory'),
-    value: SharedMemoryFreeMemory,
+      closeWorker();
+    },
   });
 }

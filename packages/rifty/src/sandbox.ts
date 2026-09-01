@@ -3,7 +3,6 @@ import {
   type RuntimeFs,
   type RuntimeOptions,
   type RuntimeToolchain,
-  type ToolchainRuntimeController,
   spawnRuntime,
   spawnToolchainRuntime,
 } from '@riftydev/runtime-js';
@@ -29,25 +28,21 @@ interface CreateSandboxCommonOptions {
   readonly serviceWorkerUrl?: string;
   /** Skip service-worker registration (eval-only / headless use). Default false. */
   readonly skipServiceWorker?: boolean;
-  /**
-   * Throw when the realm is not cross-origin isolated (no SAB/Atomics, so no
-   * sync IPC). Default true — the runtime cannot function without it (ADR-0002,
-   * D-001). Set false to boot anyway (e.g. to inspect {@link Sandbox.capabilities}).
-   */
-  readonly requireCrossOriginIsolation?: boolean;
   /** Sink for the non-fatal fallback warnings. Default `console`. */
   readonly logger?: Pick<Console, 'warn' | 'error'>;
 }
 
 export interface GenericCreateSandboxOptions extends CreateSandboxCommonOptions {
+  /** Require COI by default; explicit false admits the generic no-COI baseline. */
+  readonly requireCrossOriginIsolation?: boolean;
   /** Bundler-resolved generic `@riftydev/runtime-js/worker` URL. */
   readonly workerUrl: string | URL;
   readonly toolchain?: undefined;
 }
 
 export interface ToolchainCreateSandboxOptions extends CreateSandboxCommonOptions {
-  /** Ignored in toolchain mode; retained so callers can share generic wiring objects. */
-  readonly workerUrl?: string | URL;
+  /** Explicit admission for the shared-memory-free tier. */
+  readonly requireCrossOriginIsolation: false;
   /** Bundler-resolved `@riftydev/workbench/no-coi-toolchain-worker` URL. */
   readonly toolchain: { readonly workerUrl: string | URL };
 }
@@ -116,7 +111,6 @@ export interface SandboxDeps {
   readonly initVfs?: () => Promise<VfsBackend>;
   readonly registerSw?: (url: string) => Promise<unknown>;
   readonly spawn?: (opts: RuntimeOptions) => RuntimeController;
-  readonly spawnToolchain?: (opts: RuntimeOptions) => ToolchainRuntimeController;
   readonly logger?: Pick<Console, 'warn' | 'error'>;
 }
 
@@ -199,6 +193,10 @@ export function createSandbox(
   options: GenericCreateSandboxOptions,
   deps?: SandboxDeps,
 ): Promise<Sandbox>;
+export function createSandbox(
+  options: CreateSandboxOptions,
+  deps?: SandboxDeps,
+): Promise<Sandbox | ToolchainSandbox>;
 export async function createSandbox(
   options: CreateSandboxOptions,
   deps: SandboxDeps = {},
@@ -207,20 +205,19 @@ export async function createSandbox(
   const detect = deps.detect ?? detectCapabilities;
   const capabilities = detect();
 
+  if (options.toolchain !== undefined && options.requireCrossOriginIsolation !== false) {
+    throw new TypeError('sandbox toolchain mode requires requireCrossOriginIsolation: false');
+  }
   if (
     (options.requireCrossOriginIsolation ?? true) &&
     !capabilities.capabilities.crossOriginIsolated
   ) {
     throw new Error(COI_REQUIRED_MESSAGE);
   }
-  if (options.toolchain !== undefined && options.requireCrossOriginIsolation !== false) {
-    throw new TypeError('sandbox toolchain mode requires requireCrossOriginIsolation: false');
-  }
 
   if (options.toolchain !== undefined) {
     const { swError } = await bootServiceWorker(options, deps, logger);
-    const spawn = deps.spawnToolchain ?? spawnToolchainRuntime;
-    const runtime = spawn({ workerUrl: String(options.toolchain.workerUrl) });
+    const runtime = spawnToolchainRuntime({ workerUrl: String(options.toolchain.workerUrl) });
     let backend: VfsBackend;
     try {
       backend = await runtime.toolchainReady;

@@ -11,7 +11,7 @@ Date: 2026-09-01
 
 `createSandbox({requireCrossOriginIsolation:false})` boots the generic runtime
 Worker, but its public control plane can only eval and read/write known files.
-The proven no-COI Vite loop needs npm-client, shadow-asset admission, the
+The proven no-COI Vite loop needs npm-client, installed registry-twin admission, the
 esbuild adapter and `runNodeEntry` in that same VFS/Worker realm. Page-side npm
 cannot see the Worker mirror; a private eval global would be a hidden API; the
 COI Workbench owner/kernel topology is the capability this tier cannot use.
@@ -102,4 +102,7 @@ sandboxes, and named only Vite/Rolldown's threaded boundary. Contract+RED
 corrected those clauses before implementation: Workbench owns the legal worker
 composition; the toolchain overload needs only its nested URL; generic
 sandboxes retain `capabilities`; direct shared WebAssembly memory reaches the
-same named boundary. The narrow install/run-bin surface is unchanged.
+same named boundary. Current-main ADR-0371 further replaces the retired
+shadow-asset port/CAS path with frozen installed-tree runtime bindings and
+`activateWorkbenchRuntimeAdapters({bindings,fs,cwd})`. The narrow install/run-bin
+surface is unchanged.

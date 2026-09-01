@@ -6,7 +6,8 @@
 
 - Runtime Worker protocol carries the ADR-0373 toolchain handshake and
   install/run-bin results through its existing correlation owner, including
-  Worker death/disposal settlement.
+  exact protocol/backend decoding and Worker crash/disposal/clean-close
+  settlement.
 
 - **Measured child-FS sync-RPC hot path.** The completed one-hop/binary-request
   goal carries baseline, post-I1, and post-I2 two-lane Chromium artifacts while
@@ -72,10 +73,12 @@
 
 ### Fixed
 
-- Headerless same-realm `child_process.spawn` warns once; `os.cpus()` and
-  `availableParallelism()` report one. Multiline async REPL expressions now
-  settle before `runtime.eval()` resolves. Worker drain state captures native
-  timers before installing tracked timer globals.
+- Selected toolchain Worker realms warn once for same-realm
+  `child_process.spawn`; `os.cpus()` and `availableParallelism()` report one.
+  Generic explicit no-COI sandboxes retain their prior hardware report and no
+  new spawn warning. Multiline async REPL expressions settle before
+  `runtime.eval()` resolves; toolchain boot captures native timers before the
+  dynamic runtime entry installs tracked timer globals.
 
 - Same-realm spawned children now bind one private Node-compatible console to
   their stdout/stderr pipes; global console and both module aliases share it.

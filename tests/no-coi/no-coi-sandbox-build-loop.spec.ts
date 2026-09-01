@@ -13,6 +13,7 @@ const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
 const runtimeWorkerUrl = `/@fs${workspacePath}/packages/runtime-js/src/worker-entry.ts`;
 const toolchainWorkerUrl = `/@fs${workspacePath}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`;
+const memoryIdentityWorkerUrl = `/@fs${workspacePath}/tests/no-coi/fixtures/toolchain-memory-identity-worker.ts`;
 const coiPort = Number(process.env.RIFTY_NO_COI_ORACLE_PORT ?? 5412);
 const resourcePort = Number(process.env.RIFTY_NO_COI_RESOURCE_PORT ?? 5413);
 const coiBaseUrl = `http://localhost:${coiPort}`;
@@ -209,6 +210,10 @@ async function createGenericSandbox(page: Page): Promise<{
   readonly text: string;
   readonly evalOk: boolean;
   readonly stdout: string;
+  readonly stderr: string;
+  readonly hasToolchain: boolean;
+  readonly hasCapabilityReport: boolean;
+  readonly cpu: { readonly cpus: number; readonly parallelism: number; readonly hardware: number };
 }> {
   const result = await page.evaluate(
     async ({ sdkUrl, workerUrl }) => {
@@ -284,20 +289,46 @@ async function createGenericSandbox(page: Page): Promise<{
       }
     ).__riftyNoCoiSandbox;
     const stdout: string[] = [];
+    const stderr: string[] = [];
     const off = sandbox.runtime.on((event) => {
       if (event.type === 'stdout' && event.chunk) stdout.push(event.chunk);
+      if (event.type === 'stderr' && event.chunk) stderr.push(event.chunk);
     });
     await sandbox.fs.writeFile('/preservation/value.txt', seed);
+    await sandbox.fs.writeFile('/preservation/child.cjs', "console.log('generic-child');\n");
     const text = await sandbox.fs.readFile('/preservation/value.txt', 'utf8');
     const evaluated = await sandbox.runtime.eval(
-      "console.log('generic-no-coi:' + require('node:fs').readFileSync('/preservation/value.txt', 'utf8'))",
+      `(async () => {
+        console.log('generic-no-coi:' + require('node:fs').readFileSync('/preservation/value.txt', 'utf8'));
+        const os = require('node:os');
+        const cp = require('node:child_process');
+        await new Promise((resolve, reject) => {
+          const child = cp.spawn('node', ['/preservation/child.cjs']);
+          child.once('error', reject);
+          child.once('close', resolve);
+        });
+        console.log('__RIFTY_GENERIC_CPU__' + JSON.stringify({
+          cpus: os.cpus().length,
+          parallelism: os.availableParallelism(),
+          hardware: navigator.hardwareConcurrency,
+        }));
+      })()`,
     );
     off();
+    const cpuLine = stdout
+      .join('')
+      .split('\n')
+      .find((line) => line.startsWith('__RIFTY_GENERIC_CPU__'));
+    if (cpuLine === undefined) throw new Error('generic CPU marker missing');
     return {
       defaultError: holder.__riftyNoCoiDefaultError,
       text,
       evalOk: evaluated.ok,
       stdout: stdout.join(''),
+      stderr: stderr.join(''),
+      hasToolchain: 'toolchain' in sandbox,
+      hasCapabilityReport: 'capabilityReport' in sandbox,
+      cpu: JSON.parse(cpuLine.slice('__RIFTY_GENERIC_CPU__'.length)),
     };
   }, 'public-worker');
 }
@@ -309,14 +340,28 @@ async function createToolchainSandbox(page: Page): Promise<{
   readonly report: unknown;
   readonly reportFrozen: boolean;
   readonly reportDeepFrozen: boolean;
+  readonly falseFlagErrors: readonly { readonly name: string; readonly message: string }[];
 }> {
   const state = await page.evaluate(
-    async ({ sdkUrl, genericWorkerUrl, selectedToolchainWorkerUrl }) => {
+    async ({ sdkUrl, selectedToolchainWorkerUrl }) => {
       const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
         createSandbox(options: Record<string, unknown>): Promise<unknown>;
       };
+      const falseFlagErrors: Array<{ name: string; message: string }> = [];
+      for (const requireCrossOriginIsolation of [undefined, true]) {
+        try {
+          await sdk.createSandbox({
+            ...(requireCrossOriginIsolation === undefined ? {} : { requireCrossOriginIsolation }),
+            skipServiceWorker: true,
+            toolchain: { workerUrl: selectedToolchainWorkerUrl },
+          });
+          throw new Error('toolchain false-flag admission unexpectedly booted');
+        } catch (error) {
+          const inspected = error instanceof Error ? error : new Error(String(error));
+          falseFlagErrors.push({ name: inspected.name, message: inspected.message });
+        }
+      }
       const sandbox = (await sdk.createSandbox({
-        workerUrl: genericWorkerUrl,
         requireCrossOriginIsolation: false,
         serviceWorkerUrl: '/sw.js',
         toolchain: { workerUrl: selectedToolchainWorkerUrl },
@@ -342,11 +387,11 @@ async function createToolchainSandbox(page: Page): Promise<{
         report,
         reportFrozen: typeof report === 'object' && report !== null && Object.isFrozen(report),
         reportDeepFrozen: Array.isArray(features) && deepFrozen(report),
+        falseFlagErrors,
       };
     },
     {
       sdkUrl: sdkModuleUrl,
-      genericWorkerUrl: runtimeWorkerUrl,
       selectedToolchainWorkerUrl: toolchainWorkerUrl,
     },
   );
@@ -501,7 +546,10 @@ async function runNoCoiProduct(page: Page): Promise<{
     const sandbox = (
       globalThis as typeof globalThis & {
         __riftyNoCoiSandbox: {
-          fs: { readFile(path: string, encoding: 'utf8'): Promise<string> };
+          fs: {
+            readFile(path: string): Promise<Uint8Array>;
+            readFile(path: string, encoding: 'utf8'): Promise<string>;
+          };
         };
       }
     ).__riftyNoCoiSandbox;
@@ -511,13 +559,22 @@ async function runNoCoiProduct(page: Page): Promise<{
       (candidate: Record<string, unknown>) =>
         (candidate.materialization as { name?: unknown } | undefined)?.name === 'esbuild',
     );
+    const wasm = await sandbox.fs.readFile('/project/node_modules/esbuild-wasm/esbuild.wasm');
+    const wasmSha256 = Array.from(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', wasm)),
+      (byte) => byte.toString(16).padStart(2, '0'),
+    ).join('');
     return {
       protocol: trace?.protocol,
       substitutionId: recipe?.substitutionId,
       catalog: recipe?.catalog,
       recipeDigest: recipe?.recipeDigest,
+      acquisition: recipe?.acquisition,
+      binding: recipe?.binding,
       materialization: recipe?.materialization,
       lockEntry: lock.packages?.['node_modules/esbuild'],
+      twinLockEntry: lock.packages?.['node_modules/esbuild-wasm'],
+      twinMember: { bytes: wasm.byteLength, sha256: wasmSha256 },
     };
   });
   expect(await openerRoundTrip(page)).toBe(true);
@@ -663,6 +720,13 @@ test('preservation: real public createSandbox stays headerless and keeps opener/
     expect(result.text).toBe('public-worker');
     expect(result.evalOk).toBe(true);
     expect(result.stdout).toContain('generic-no-coi:public-worker');
+    expect(result.hasToolchain).toBe(false);
+    expect(result.hasCapabilityReport).toBe(false);
+    expect(result.cpu).toMatchObject({
+      cpus: result.cpu.hardware,
+      parallelism: result.cpu.hardware,
+    });
+    expect(result.stderr).not.toMatch(/\[rifty:child_process\].*same-realm/u);
     assertHostSnapshot(await hostSnapshot(host), baseline);
     expect(
       await host.evaluate(async () => {
@@ -690,6 +754,10 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
       reportFrozen: true,
       reportDeepFrozen: true,
     });
+    expect(state.falseFlagErrors).toEqual([
+      expect.objectContaining({ name: 'TypeError', message: expect.stringContaining('false') }),
+      expect.objectContaining({ name: 'TypeError', message: expect.stringContaining('false') }),
+    ]);
     const surfaces = await host.evaluate(async () => {
       const sandbox = (
         globalThis as typeof globalThis & {
@@ -741,10 +809,14 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
           catch (error) {
             sharedWasm = { name: error.name, feature: error.feature, message: error.message };
           }
-          const privateWasmBytes = new WebAssembly.Memory({ initial: 1 }).buffer.byteLength;
+          const globalMemory = globalThis.WebAssembly.Memory;
+          const privateMemory = new WebAssembly.Memory({ initial: 1 });
+          const privateWasmBytes = privateMemory.buffer.byteLength;
           console.log('__RIFTY_SURFACES__' + JSON.stringify({
             first, second, thread, cpus: os.cpus().length,
             parallelism: os.availableParallelism(), execSync, sharedWasm, privateWasmBytes,
+            privateConstructorIsGlobal: privateMemory.constructor === globalMemory,
+            privatePrototypeIsGlobal: Object.getPrototypeOf(privateMemory) === globalMemory.prototype,
           }));
         })()
       `);
@@ -773,10 +845,159 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
         feature: 'toolchain.threaded-wasm',
       }),
       privateWasmBytes: 65_536,
+      privateConstructorIsGlobal: true,
+      privatePrototypeIsGlobal: true,
     });
     expect((surfaces.stderr.match(/\[rifty:child_process\].*same-realm/gu) ?? []).length).toBe(1);
     expect((surfaces.stderr.match(/\[rifty:worker_threads\].*same-realm/gu) ?? []).length).toBe(1);
     assertHostSnapshot(await hostSnapshot(host), baseline);
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
+test('non-shared WebAssembly.Memory keeps native constructor/global identity', async ({ page }) => {
+  await page.goto('/no-coi-harness.html');
+  const identity = await page.evaluate(
+    ({ fixtureUrl, selectedToolchainWorkerUrl }) =>
+      new Promise<Record<string, unknown>>((resolve, reject) => {
+        const worker = new Worker(fixtureUrl, { type: 'module' });
+        const timer = setTimeout(() => reject(new Error('memory identity timeout')), 30_000);
+        worker.addEventListener('error', (event) => {
+          clearTimeout(timer);
+          reject(new Error(event.message));
+        });
+        worker.addEventListener('message', (event: MessageEvent<Record<string, unknown>>) => {
+          if (event.data.type !== 'memory-identity') return;
+          clearTimeout(timer);
+          worker.terminate();
+          resolve(event.data);
+        });
+        worker.postMessage({ toolchainWorkerUrl: selectedToolchainWorkerUrl });
+      }),
+    { fixtureUrl: memoryIdentityWorkerUrl, selectedToolchainWorkerUrl: toolchainWorkerUrl },
+  );
+  expect(identity).toEqual({
+    type: 'memory-identity',
+    globalConstructorUnchanged: true,
+    instanceConstructorUnchanged: true,
+    prototypeUnchanged: true,
+    bytes: 65_536,
+  });
+});
+
+test('build-only toolchain rejects every resident Vite mode by name', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    const outcomes = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            toolchain: { runBin(input: Record<string, unknown>): Promise<unknown> };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      const forms = [[], ['dev'], ['serve'], ['preview'], ['build', '--watch'], ['build', '-w']];
+      const failures: Array<{ args: string[]; name: string; feature?: string }> = [];
+      for (const args of forms) {
+        try {
+          await sandbox.toolchain.runBin({
+            cwd: '/resident',
+            binPath: '/resident/node_modules/.bin/vite',
+            args,
+          });
+          failures.push({ args, name: 'resolved' });
+        } catch (error) {
+          const inspected = error as Error & { feature?: string };
+          failures.push({ args, name: inspected.name, feature: inspected.feature });
+        }
+      }
+      return failures;
+    });
+    expect(outcomes).toEqual(
+      [[], ['dev'], ['serve'], ['preview'], ['build', '--watch'], ['build', '-w']].map((args) => ({
+        args,
+        name: 'NotImplementedError',
+        feature: 'toolchain.dev-hmr',
+      })),
+    );
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
+test('runBin uses the requested installed-bin path as its only authority', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    const failure = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            toolchain: { runBin(input: Record<string, unknown>): Promise<unknown> };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      try {
+        await sandbox.toolchain.runBin({
+          cwd: '/custom-bin',
+          binPath: '/custom-bin/node_modules/.bin/not-installed',
+          args: ['build'],
+        });
+        return { resolved: true };
+      } catch (error) {
+        const inspected = error as Error & { code?: string; path?: string };
+        return {
+          resolved: false,
+          name: inspected.name,
+          message: inspected.message,
+          code: inspected.code,
+          path: inspected.path,
+        };
+      }
+    });
+    expect(failure).toMatchObject({ resolved: false });
+    expect(failure.message).toContain('/custom-bin/node_modules/.bin/not-installed');
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
+test('clean self.close rejects an admitted toolchain request without a hang', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    await seedStalledInstall(host, '/clean-close');
+    await beginStalledInstall(host, '/clean-close');
+    const outcome = await host.evaluate(async () => {
+      const holder = globalThis as typeof globalThis & {
+        __riftyNoCoiSandbox: {
+          runtime: { eval(source: string): Promise<unknown> };
+        };
+        __riftyPendingToolchain?: Promise<void>;
+      };
+      const pending = holder.__riftyPendingToolchain;
+      if (pending === undefined) throw new Error('admitted install promise is missing');
+      void holder.__riftyNoCoiSandbox.runtime.eval('self.close()').catch(() => {});
+      try {
+        await Promise.race([
+          pending,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('settlement timeout')), 5000),
+          ),
+        ]);
+        return { resolved: true };
+      } catch (error) {
+        const inspected = error as Error & { code?: string };
+        return { resolved: false, name: inspected.name, message: inspected.message };
+      }
+    });
+    expect(outcome).toMatchObject({ resolved: false, name: 'WorkerTerminated' });
+    expect(outcome.message).not.toContain('settlement timeout');
   } finally {
     await disposeSandbox(host);
     await host.close();
@@ -810,9 +1031,15 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
         substitutionId: 'rifty.shadow-substitution.esbuild.v2',
         catalog: {
           id: 'rifty.shadow-substitutions.builtin.v2',
-          digest: '16169d78ba50a3ded324cee63fe9296dcb4884007e25730dfee78114730395f6',
+          digest: 'c9f38a0ea9218c64fdc68bca65eb34817cb51f1c1132c89048ffcb86b510d4b0',
         },
-        recipeDigest: 'b17f55f3d5905344b927c47c4b6fc9faacb122829150d603cb73a006bcbcfc28',
+        recipeDigest: '7cd677fe08657829bf151d3d97520984d81f70323cdc948f8fd0a7116e4a4afd',
+        acquisition: {
+          kind: 'registry',
+          name: 'esbuild-wasm',
+          version: '0.28.0',
+        },
+        binding: { adapterId: 'rifty.runtime-adapter.esbuild.v1' },
         materialization: {
           installPath: 'node_modules/esbuild',
           name: 'esbuild',
@@ -823,6 +1050,15 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
           version: '0.28.0',
           bin: { esbuild: 'bin/esbuild' },
           riftyShadowRecipe: 'rifty.shadow-substitution.esbuild.v2',
+        },
+        twinLockEntry: {
+          version: '0.28.0',
+          resolved: expect.stringMatching(/esbuild-wasm.*\.tgz$/u),
+          integrity: expect.stringMatching(/^sha512-/u),
+        },
+        twinMember: {
+          bytes: 13_918_738,
+          sha256: '9d99d51a13469befdcfca172855f62724b87bdfc0c87a6a0729ddbb455d0fa3b',
         },
       });
       const js = noCoi.dist.filter(({ path }) => path.endsWith('.js'));
@@ -975,60 +1211,163 @@ async function beginStalledInstall(page: Page, root: string): Promise<void> {
   await admitted;
 }
 
+async function beginStalledRun(page: Page, root: string): Promise<void> {
+  await page.evaluate(async (projectRoot) => {
+    const holder = globalThis as typeof globalThis & {
+      __riftyNoCoiSandbox: {
+        fs: { writeFile(path: string, value: string): Promise<void> };
+        runtime: {
+          on(fn: (event: { type: string; chunk?: string }) => void): () => void;
+        };
+        toolchain: { runBin(input: Record<string, unknown>): Promise<unknown> };
+      };
+      __riftyPendingToolchain?: Promise<unknown>;
+    };
+    const binPath = `${projectRoot}/node_modules/.bin/stall`;
+    await holder.__riftyNoCoiSandbox.fs.writeFile(
+      binPath,
+      "#!/usr/bin/env node\nimport('../stall-package/cli.js');\n",
+    );
+    await holder.__riftyNoCoiSandbox.fs.writeFile(
+      `${projectRoot}/node_modules/stall-package/package.json`,
+      JSON.stringify({ name: 'stall-package', type: 'commonjs' }),
+    );
+    await holder.__riftyNoCoiSandbox.fs.writeFile(
+      `${projectRoot}/node_modules/stall-package/cli.js`,
+      "console.log('__RIFTY_STALLED_RUN__'); setInterval(() => {}, 60000); module.exports = {};\n",
+    );
+    let rejectStarted: (error: Error) => void = () => {};
+    const started = new Promise<void>((resolve, reject) => {
+      rejectStarted = reject;
+      const timer = setTimeout(() => reject(new Error('stalled run start timeout')), 5000);
+      const off = holder.__riftyNoCoiSandbox.runtime.on((event) => {
+        if (event.type !== 'stdout' || !event.chunk?.includes('__RIFTY_STALLED_RUN__')) return;
+        clearTimeout(timer);
+        off();
+        resolve();
+      });
+    });
+    const operation = holder.__riftyNoCoiSandbox.toolchain.runBin({
+      cwd: projectRoot,
+      binPath,
+      args: [],
+    });
+    operation.catch((error: unknown) => {
+      const inspected = error instanceof Error ? error : new Error(String(error));
+      rejectStarted(
+        new Error(`stalled run rejected before admission marker: ${inspected.message}`),
+      );
+    });
+    holder.__riftyPendingToolchain = operation;
+    await started;
+  }, root);
+}
+
 test('toolchain overlap rejects instead of racing or queuing — designed RED', async ({ page }) => {
   const { host } = await openHeaderlessHost(page);
   try {
-    const state = await createToolchainSandbox(host);
-    expect(state.installType).toBe('function');
-    await seedStalledInstall(host, '/overlap');
+    await createToolchainSandbox(host);
+    await seedStalledInstall(host, '/malformed');
     const malformed = await host.evaluate(async () => {
       const sandbox = (
         globalThis as typeof globalThis & {
           __riftyNoCoiSandbox: {
             fs: { readFile(path: string, encoding: 'utf8'): Promise<string> };
-            toolchain: { runBin(input: Record<string, unknown>): Promise<unknown> };
+            toolchain: {
+              install(input: Record<string, unknown>): Promise<void>;
+              runBin(input: Record<string, unknown>): Promise<unknown>;
+            };
           };
         }
       ).__riftyNoCoiSandbox;
-      const before = await sandbox.fs.readFile('/overlap/package.json', 'utf8');
-      let failure: { name: string; message: string } | null = null;
-      try {
-        await sandbox.toolchain.runBin({
-          cwd: '/overlap',
-          binPath: '/overlap/node_modules/.bin/vite',
-          args: 'build',
-        });
-      } catch (error) {
-        const inspected = error instanceof Error ? error : new Error(String(error));
-        failure = { name: inspected.name, message: inspected.message };
+      const before = await sandbox.fs.readFile('/malformed/package.json', 'utf8');
+      const failures: Array<{ name: string; message: string }> = [];
+      const calls = [
+        () => sandbox.toolchain.install({ cwd: 'relative', registryUrl: '/npm-registry' }),
+        () =>
+          sandbox.toolchain.runBin({
+            cwd: '/malformed',
+            binPath: '/other/node_modules/.bin/vite',
+            args: ['build'],
+          }),
+        () =>
+          sandbox.toolchain.runBin({
+            cwd: '/malformed',
+            binPath: '/malformed/node_modules/.bin/vite',
+            args: 'build',
+          }),
+      ];
+      for (const call of calls) {
+        try {
+          await call();
+        } catch (error) {
+          const inspected = error instanceof Error ? error : new Error(String(error));
+          failures.push({ name: inspected.name, message: inspected.message });
+        }
       }
-      const after = await sandbox.fs.readFile('/overlap/package.json', 'utf8');
-      return { before, after, failure };
+      const after = await sandbox.fs.readFile('/malformed/package.json', 'utf8');
+      return { before, after, failures };
     });
-    expect(malformed.failure).toMatchObject({ name: 'TypeError' });
+    expect(malformed.failures).toHaveLength(3);
+    expect(malformed.failures).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'TypeError', message: expect.stringMatching(/cwd/i) }),
+        expect.objectContaining({ name: 'TypeError', message: expect.stringMatching(/binPath/i) }),
+        expect.objectContaining({ name: 'TypeError', message: expect.stringMatching(/args/i) }),
+      ]),
+    );
     expect(malformed.after).toBe(malformed.before);
-    await beginStalledInstall(host, '/overlap');
-    const outcome = await host.evaluate(async () => {
-      const sandbox = (
-        globalThis as typeof globalThis & {
-          __riftyNoCoiSandbox: {
-            toolchain: { install(input: Record<string, unknown>): Promise<void> };
-          };
-        }
-      ).__riftyNoCoiSandbox;
-      let second: { name: string; message: string } | null = null;
-      try {
-        await sandbox.toolchain.install({
-          cwd: '/overlap',
-          registryUrl: '/__no-coi-stall-registry',
-        });
-      } catch (error) {
-        const inspected = error instanceof Error ? error : new Error(String(error));
-        second = { name: inspected.name, message: inspected.message };
+    await disposeSandbox(host);
+
+    for (const [first, second] of [
+      ['install', 'install'],
+      ['install', 'run'],
+      ['run', 'install'],
+      ['run', 'run'],
+    ] as const) {
+      await createToolchainSandbox(host);
+      const root = `/overlap-${first}-${second}`;
+      if (first === 'install') {
+        await seedStalledInstall(host, root);
+        await beginStalledInstall(host, root);
+      } else {
+        await beginStalledRun(host, root);
       }
-      return second;
-    });
-    expect(outcome).toMatchObject({ name: 'SandboxToolchainBusyError' });
+      const outcome = await host.evaluate(
+        async ({ projectRoot, secondOperation }) => {
+          const sandbox = (
+            globalThis as typeof globalThis & {
+              __riftyNoCoiSandbox: {
+                toolchain: {
+                  install(input: Record<string, unknown>): Promise<void>;
+                  runBin(input: Record<string, unknown>): Promise<unknown>;
+                };
+              };
+            }
+          ).__riftyNoCoiSandbox;
+          try {
+            if (secondOperation === 'install') {
+              await sandbox.toolchain.install({ cwd: projectRoot, registryUrl: '/npm-registry' });
+            } else {
+              await sandbox.toolchain.runBin({
+                cwd: projectRoot,
+                binPath: `${projectRoot}/node_modules/.bin/second`,
+                args: [],
+              });
+            }
+            return { name: 'resolved', message: '' };
+          } catch (error) {
+            const inspected = error instanceof Error ? error : new Error(String(error));
+            return { name: inspected.name, message: inspected.message };
+          }
+        },
+        { projectRoot: root, secondOperation: second },
+      );
+      expect(outcome, `${first} -> ${second}`).toMatchObject({
+        name: 'SandboxToolchainBusyError',
+      });
+      await disposeSandbox(host);
+    }
   } finally {
     await disposeSandbox(host);
     await host.close();

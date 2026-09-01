@@ -182,6 +182,16 @@ function createRuntimeController(
     rejectToolchainReady?.(error);
   }
 
+  function terminateToolchainPeer(error: RuntimeError): void {
+    rejectPendingRequests(error);
+    rejectToolchainHandshake(error);
+    ready = false;
+    if (worker !== null) {
+      worker.terminate();
+      worker = null;
+    }
+  }
+
   function emit(event: RuntimeEvent): void {
     for (const h of handlers) {
       try {
@@ -295,17 +305,25 @@ function createRuntimeController(
           emit({ type: 'ready' });
           settleToolchainReady();
           break;
-        case 'toolchain-ready':
+        case 'toolchain-ready': {
           if (!toolchainMode) break;
-          if (msg.protocol !== TOOLCHAIN_PROTOCOL) {
-            rejectToolchainHandshake(
-              toolchainHandshakeError(`unsupported toolchain Worker protocol: ${msg.protocol}`),
+          const decoded = decodeToolchainReady(msg);
+          if (decoded === null) {
+            terminateToolchainPeer(
+              toolchainHandshakeError('toolchain Worker sent an invalid readiness frame'),
             );
             break;
           }
-          toolchainBackend = msg.vfsBackend;
+          toolchainBackend = decoded;
           settleToolchainReady();
           break;
+        }
+        case 'toolchain-terminal': {
+          if (!toolchainMode) break;
+          terminateToolchainPeer(workerTerminatedError('Toolchain Worker closed'));
+          emit({ type: 'exit', reason: 'error' });
+          break;
+        }
         case 'stdout':
           emit({ type: 'stdout', chunk: msg.chunk });
           break;
@@ -476,6 +494,32 @@ function createRuntimeController(
     toolchain,
     toolchainReady,
   };
+}
+
+function decodeToolchainReady(value: unknown): 'opfs' | 'memory' | null {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype ||
+    Object.getOwnPropertySymbols(value).length !== 0
+  ) {
+    return null;
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Object.keys(descriptors).toSorted();
+  if (
+    keys.length !== 3 ||
+    keys[0] !== 'protocol' ||
+    keys[1] !== 'type' ||
+    keys[2] !== 'vfsBackend'
+  ) {
+    return null;
+  }
+  if (Object.values(descriptors).some((descriptor) => !('value' in descriptor))) return null;
+  const frame = value as Record<string, unknown>;
+  if (frame.type !== 'toolchain-ready' || frame.protocol !== TOOLCHAIN_PROTOCOL) return null;
+  return frame.vfsBackend === 'opfs' || frame.vfsBackend === 'memory' ? frame.vfsBackend : null;
 }
 
 function exactInput(

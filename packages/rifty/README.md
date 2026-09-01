@@ -114,7 +114,7 @@ await sandbox.toolchain.runBin({
 console.log(sandbox.capabilityReport);
 ```
 
-This mode owns runtime, VFS, npm install, shadow-asset admission, and bin
+This mode owns runtime, VFS, npm install, installed registry-twin admission, and bin
 execution in one Worker. It exposes build-only run-to-completion bins; Vite
 dev/HMR/preview and threaded WASM throw by named feature.
 

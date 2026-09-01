@@ -147,10 +147,25 @@ export async function prepareViteCliAcquisitionFiles(
   if (installCliActionPatch(packageRoot)) installRootWatchPatch(packageRoot);
 }
 
+/** Build-only acquisition seam; intentionally distinct from resident watcher preparation. */
+export async function prepareViteBuildCliAcquisitionFiles(
+  root: string,
+  executedBinPath?: string,
+): Promise<void> {
+  installCliActionPatch(vitePackageRoot(root, executedBinPath));
+}
+
 export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
   const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
   validateCliActionPatch(packageRoot);
   validateRootWatchPatch(packageRoot);
+  await completeViteCliPreparation(options, packageRoot);
+}
+
+async function completeViteCliPreparation(
+  options: ViteCliPreparation,
+  packageRoot: string,
+): Promise<void> {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   if (options.mode === 'info') return;
   const fs = syncMirror();
@@ -158,6 +173,13 @@ export async function prepareViteCli(options: ViteCliPreparation): Promise<void>
     fs,
     packageRoot,
   });
+}
+
+/** Build-only launch seam. */
+export async function prepareViteBuildCli(options: ViteCliPreparation): Promise<void> {
+  const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
+  validateCliActionPatch(packageRoot);
+  await completeViteCliPreparation(options, packageRoot);
 }
 
 // ——— vite CLI mode/env preparation (relocated from real-vite-bootstrap so the
@@ -278,6 +300,20 @@ function parseViteCliArgs(args: readonly string[]): ViteCliParse {
 
 export function viteCliMode(args: readonly string[]): ViteCliMode {
   return parseViteCliArgs(args).mode;
+}
+
+export function viteCliRequiresResidentLifecycle(args: readonly string[]): boolean {
+  const parsed = parseViteCliArgs(args);
+  if (parsed.mode === 'dev' || parsed.mode === 'preview') return true;
+  return (
+    parsed.mode === 'build' &&
+    parsed.tokens.some(
+      (token) =>
+        token.kind === 'flag' &&
+        (token.flag === '--watch' || token.flag === '-w') &&
+        token.value !== 'false',
+    )
+  );
 }
 
 export function createPreviewScope(): string {

@@ -82,11 +82,6 @@ function keepaliveState(): KeepaliveState {
   return realm[KEEPALIVE_STATE] as KeepaliveState;
 }
 
-/** Capture native scheduling before a Worker replaces global timer functions. */
-export function initializeEventLoopKeepalive(): void {
-  keepaliveState();
-}
-
 /** Increment the active-handle count (timer/immediate/import scheduled). */
 export function ref(): void {
   keepaliveState().refCount += 1;

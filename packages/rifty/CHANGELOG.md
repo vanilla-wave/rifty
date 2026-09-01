@@ -7,7 +7,9 @@
 - **Explicit shared-memory-free toolchain sandbox (ADR-0373).**
   `createSandbox({requireCrossOriginIsolation:false, toolchain:{workerUrl}})`
   handshakes one Workbench Worker and exposes frozen capability reporting,
-  manifest install, and run-to-completion installed-bin execution.
+  manifest install, and run-to-completion installed-bin execution. The
+  toolchain option requires literal `false` plus only its nested Worker URL;
+  union-typed options remain callable while specific overloads narrow returns.
 
 - **`@riftydev/sdk/ts-language-service`** — subpath re-export for `@riftydev/ts-language-service`.
 
