@@ -15,6 +15,31 @@ const runtimeJsManifest = JSON.parse(
   ts.sys.readFile(resolve(integrationRoot, '../../packages/runtime-js/package.json')) ?? '',
 );
 
+const EXPECTED_RUNTIME_JS_PUBLISHED_SUBPATHS = [
+  '.',
+  './internal',
+  './worker',
+  './install-process',
+  './ipc/exec-sync-handler',
+  './loader',
+  './env/capabilities',
+  './builtins',
+  './builtins/fs-watch',
+  './builtins/process',
+  './builtins/timers',
+  './builtins/buffer',
+  './builtins/console',
+  './builtins/module',
+  './builtins/child_process',
+  './builtins/node-entry',
+  './builtins/node-entry-url',
+  './builtins/process-identity',
+  './builtins/os',
+  './builtins/path',
+  './builtins/perf_hooks',
+  './builtins/fs',
+] as const;
+
 function readFixtureTypeScriptConfig(): ts.ParsedCommandLine {
   const config = ts.readConfigFile(fixtureTsconfig, ts.sys.readFile);
   if (config.error !== undefined) {
@@ -111,6 +136,12 @@ describe('packed Workbench consumer TypeScript contract', () => {
       const subpath = `.${target.slice('@riftydev/runtime-js'.length)}`;
       expect(runtimeJsManifest.publishConfig.exports[subpath].import).toMatch(/^\.\/dist\//u);
     }
+  });
+
+  it('publishes exactly the existing runtime surface plus the one internal seam', () => {
+    expect(Object.keys(runtimeJsManifest.publishConfig.exports).sort()).toEqual(
+      [...EXPECTED_RUNTIME_JS_PUBLISHED_SUBPATHS].sort(),
+    );
   });
 });
 

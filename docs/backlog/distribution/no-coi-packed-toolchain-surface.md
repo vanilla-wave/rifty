@@ -207,3 +207,7 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   adjudication 4 HOLDS. One re-cut batch fixes command reachability and exact
   negative directives, and removes self-imposed workspace-consumer parity;
   packed Acceptance 1-6 is unchanged.
+- `final-green: 2026-09-01 — blocker @ 0f6482fa3`
+- Final+GREEN find 2 blockers + fresh tail 1 new blocker; independent
+  adjudication 3 HOLDS. One proof-only batch: exact runtime surface, complete
+  per-field/result negatives, and field-omitting createSandbox positive call.

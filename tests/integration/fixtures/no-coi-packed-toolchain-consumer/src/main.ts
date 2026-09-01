@@ -4,7 +4,6 @@ export async function bootToolchain(workerUrl: string | URL): Promise<ToolchainS
   return await createSandbox({
     requireCrossOriginIsolation: false,
     toolchain: { workerUrl },
-    skipServiceWorker: true,
   });
 }
 
