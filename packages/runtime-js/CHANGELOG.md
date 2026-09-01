@@ -80,9 +80,6 @@
 
 ### Fixed
 
-- Repo-only toolchain error projection walks at most eight `Error.cause`
-  links and preserves the outer error on hostile getters.
-
 - The toolchain realm applies WebIDL ToBoolean to `WebAssembly.Memory`'s
   `shared` descriptor through its lexical guard, so truthy numbers/strings join
   literal true without replacing the Worker-global constructor.

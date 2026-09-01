@@ -64,8 +64,9 @@
 
 ### Fixed
 
-- No-COI installed-bin failures preserve a real bounded `NotImplementedError`
-  cause without reading a ninth or throwing `cause` getter.
+- No-COI installed-bin failure projection never reads a forbidden ninth
+  `cause` getter. A throwing getter within the eight-link walk is read once and
+  absorbed, preserving the honest outer error.
 
 - `@emnapi/core@1.10.0` installs receive the exact upstream child-thread
   orphaned-reference cleanup backport before stamp promotion. A Vite 8

@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
-import { declaredGapCause } from '@riftydev/runtime-js/internal';
 import { describe, expect, it } from 'vitest';
+import { declaredGapCause } from './declared-gap-cause.ts';
 
 function wrapped(error: Error, count: number): Error {
   let current = error;
@@ -48,6 +48,36 @@ describe('declaredGapCause', () => {
     const outerGap = new NotImplementedError('package.outer');
     outerGap.cause = innerGap;
     expect(declaredGapCause(wrapped(outerGap, 3))).toBe(outerGap);
+  });
+
+  it('preserves noncanonical real-gap fields by identity', () => {
+    const gap = new NotImplementedError('package.custom', 'package-defined hint');
+    gap.message = 'package-defined custom gap message';
+    expect(declaredGapCause(wrapped(gap, 4))).toBe(gap);
+    expect(gap).toMatchObject({
+      name: 'NotImplementedError',
+      message: 'package-defined custom gap message',
+      feature: 'package.custom',
+    });
+  });
+
+  it('selects a real gap before reading its own hostile cause getter', () => {
+    let reads = 0;
+    const gap = new NotImplementedError('package.own-cause', 'identity wins');
+    gap.message = 'package own-cause identity';
+    Object.defineProperty(gap, 'cause', {
+      get() {
+        reads += 1;
+        throw new Error('real gap cause getter read');
+      },
+    });
+    expect(declaredGapCause(wrapped(gap, 3))).toBe(gap);
+    expect(reads).toBe(0);
+    expect(gap).toMatchObject({
+      name: 'NotImplementedError',
+      message: 'package own-cause identity',
+      feature: 'package.own-cause',
+    });
   });
 
   it('leaves deeper, ordinary, cyclic, impostor and non-Error tails unprojected', () => {

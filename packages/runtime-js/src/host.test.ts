@@ -18,6 +18,8 @@ type RawToolchainRequest = import('./index.ts').ToolchainRequest;
 type RawToolchainResult = import('./index.ts').ToolchainResult;
 // @ts-expect-error raw sandbox toolchain run-bin input is package-internal
 type RawToolchainRunBinRequest = import('./index.ts').ToolchainRunBinRequest;
+// @ts-expect-error bounded gap projection stays off the runtime root
+type RootDeclaredGapCause = typeof import('./index.ts')['declaredGapCause'];
 
 const forbiddenRootTypeProof:
   | readonly [
@@ -27,6 +29,7 @@ const forbiddenRootTypeProof:
       RawToolchainRequest,
       RawToolchainResult,
       RawToolchainRunBinRequest,
+      RootDeclaredGapCause,
     ]
   | null = null;
 void forbiddenRootTypeProof;
@@ -112,7 +115,9 @@ describe('runtime-js root surface', () => {
 
   it('does not publish the sandbox toolchain control plane', () => {
     expect(
-      ['spawnToolchainRuntime', 'SANDBOX_TOOLCHAIN_PROTOCOL'].filter((name) => name in runtimeJs),
+      ['spawnToolchainRuntime', 'SANDBOX_TOOLCHAIN_PROTOCOL', 'declaredGapCause'].filter(
+        (name) => name in runtimeJs,
+      ),
     ).toEqual([]);
   });
 });

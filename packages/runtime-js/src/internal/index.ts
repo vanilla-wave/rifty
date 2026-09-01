@@ -9,4 +9,3 @@ export type {
   ToolchainRunBinRequest,
   ToolchainWorkerMessage,
 } from '../protocol.ts';
-export { declaredGapCause } from './declared-gap-cause.ts';

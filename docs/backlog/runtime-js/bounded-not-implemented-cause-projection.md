@@ -7,7 +7,7 @@ epic: no-coi-sandbox-tier
 why: the generic toolchain error path preserves a real named product gap hidden by an ordinary Error wrapper, but its declared eight-link walk reads a ninth cause getter at depth eight; an adversarial getter throws instead of returning the honest outer error
 user_story: As a package author whose installed bin wraps a rifty NotImplementedError in an ordinary loader Error, I want the existing toolchain result to preserve that named gap within a strict finite bound, while arbitrary, cyclic or hostile cause chains remain the original loud outer failure
 sources: [ADR-0375, docs/process/fault-classes.md]
-code: [packages/runtime-js/src/internal/declared-gap-cause.ts, packages/runtime-js/src/internal/declared-gap-cause.test.ts, packages/workbench/src/workers/declared-gap-cause.test.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts]
+code: [packages/workbench/src/workers/declared-gap-cause.ts, packages/workbench/src/workers/declared-gap-cause.test.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts]
 ---
 
 ## Context
@@ -162,6 +162,37 @@ result through SDK deserialization. It obtains the actual io
 `NotImplementedError` constructor from one real realm-local named gap, then
 instantiates arbitrary package features. It uses no Vite package or identity.
 
+FINAL-FIX evidence, Node 24.16.0, TypeScript 5.9.3, Vitest 2.1.9,
+Playwright 1.60.0, Chrome 148.0.7778.96:
+
+```sh
+pnpm exec vitest run --project unit \
+  packages/workbench/src/workers/declared-gap-cause.test.ts \
+  packages/runtime-js/src/host.test.ts \
+  packages/workbench/tests/extraction-boundary.contract.test.ts
+# 30 passed
+
+pnpm --filter @riftydev/runtime-js typecheck
+pnpm --filter @riftydev/workbench typecheck
+# both exit 0
+
+pnpm test:no-coi -g "package-generic bounded cause projection"
+# 1 passed; custom message exact; own cause getter reads 0
+
+pnpm test:packed-toolchain-surface
+# 15 first-party + 72 external tarballs; packed root JS + strict types pass
+```
+
+Executed mutants, unchanged assertions:
+
+- Canonical-message filtering: focused unit 1/1 fail (`null` vs real custom
+  gap); Chromium 1/1 fail (custom/own gaps became ordinary wrappers).
+- Cause-before-identity: focused unit 1/1 fail (`null` vs real own-cause gap);
+  Chromium 1/1 fail (own gap became ordinary wrapper).
+- Runtime-root leak: workspace JS 1/1 fail (`declaredGapCause` present) and
+  types TS2578; real packed root types TS2578 and JS threw exact leak error.
+  Restoring the exact tree reran every command above GREEN.
+
 ## Fault matrix
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
@@ -233,3 +264,15 @@ Child checkpoint lines prepend copied predecessor lineage (verbatim):
   escaped) and Chromium fail 1/1 (ninth/hostile errors replaced exact outers).
   Exact committed tree restored clean; unit 6/6, typechecks and Chromium 1/1
   reran GREEN.
+- `final-green: 2026-09-01 — blocker @ 0c74c296c`
+- Final+GREEN attempt 1: 5 HOLDS — N=1 helper port drifted from the frozen
+  Workbench carrier; no exact workspace/packed public-root JS+types negative;
+  no noncanonical real-gap message proof; no identity-before-own-throwing-cause
+  proof; Workbench changelog conflated forbidden ninth and earlier getter reads.
+  No valve; one in-place proof/fix batch follows, band remains 3–3.
+- Attempt 1 fix: frozen Workbench-local N=1 carrier restored; runtime-js
+  helper/export/duplicate test/changelog removed. Workspace and real-packed
+  runtime roots now prove `declaredGapCause` absent in JS and types. Real custom
+  messages survive by class identity; a real gap wins before its own hostile
+  cause getter (`reads:0`). Workbench changelog distinguishes forbidden ninth
+  read from one absorbed in-bound throwing getter. No property-shape expansion.

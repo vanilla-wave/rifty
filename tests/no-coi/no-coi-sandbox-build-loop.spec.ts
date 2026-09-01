@@ -1182,11 +1182,11 @@ const wrap = (error, count) => {
   }
   return current;
 };
-const makeGap = (feature) => {
+const makeGap = (feature, hint) => {
   try {
     new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true });
   } catch (error) {
-    return new error.constructor(feature);
+    return new error.constructor(feature, hint);
   }
   throw new Error('shared-memory gap constructor did not throw');
 };
@@ -1207,6 +1207,27 @@ if (mode === 'two-gaps') {
   const outer = makeGap('package.outer');
   outer.cause = inner;
   throw wrap(outer, 3);
+}
+if (mode === 'custom-gap') {
+  const gap = makeGap('package.custom', 'package-defined hint');
+  gap.message = 'package-defined custom gap message';
+  throw wrap(gap, 4);
+}
+if (mode === 'own-cause-gap') {
+  let causeReads = 0;
+  const gap = makeGap('package.own-cause', 'identity wins');
+  Object.defineProperty(gap, 'cause', {
+    get() {
+      causeReads += 1;
+      throw new Error('real gap cause getter read');
+    },
+  });
+  Object.defineProperty(gap, 'message', {
+    get() {
+      return 'package own-cause identity; cause reads ' + causeReads;
+    },
+  });
+  throw wrap(gap, 3);
 }
 const impostor = Object.assign(new Error('Not implemented: package.feature'), {
   name: 'NotImplementedError',
@@ -1270,6 +1291,8 @@ throw decorateOuter(wrap(boundary, selected.depth), mode);
       return {
         gapDepths,
         twoGaps: await run('two-gaps'),
+        customGap: await run('custom-gap'),
+        ownCauseGap: await run('own-cause-gap'),
         impostorDirect: await run('impostor-direct'),
         impostorWrapped: await run('impostor-wrapped'),
         exactBound: await run('exact-bound'),
@@ -1297,6 +1320,22 @@ throw decorateOuter(wrap(boundary, selected.depth), mode);
         code: undefined,
         path: undefined,
         feature: 'package.outer',
+      },
+      customGap: {
+        resolved: false,
+        name: 'NotImplementedError',
+        message: 'package-defined custom gap message',
+        code: undefined,
+        path: undefined,
+        feature: 'package.custom',
+      },
+      ownCauseGap: {
+        resolved: false,
+        name: 'NotImplementedError',
+        message: 'package own-cause identity; cause reads 0',
+        code: undefined,
+        path: undefined,
+        feature: 'package.own-cause',
       },
       impostorDirect: {
         resolved: false,

@@ -4,6 +4,8 @@ import type { SandboxToolchain } from '@riftydev/sdk';
 type RootRuntimeToolchain = import('@riftydev/runtime-js').RuntimeToolchain;
 // @ts-expect-error raw toolchain protocol stays off the runtime root
 type RootToolchainProtocol = import('@riftydev/runtime-js').ToolchainRequest;
+// @ts-expect-error bounded gap projection stays off the packed runtime root
+type RootDeclaredGapCause = typeof import('@riftydev/runtime-js')['declaredGapCause'];
 
 declare const toolchain: SandboxToolchain;
 
@@ -67,4 +69,4 @@ const extraMethod: SandboxToolchain = {
 };
 void extraMethod;
 
-void (null as RootRuntimeToolchain | RootToolchainProtocol | null);
+void (null as RootRuntimeToolchain | RootToolchainProtocol | RootDeclaredGapCause | null);
