@@ -1,7 +1,9 @@
+import { createSandbox } from '@riftydev/sdk';
 import serviceWorkerUrl from '@riftydev/service-worker/sw?worker&url';
 import { type PreviewHandle, openWorkbench, projects } from '@riftydev/workbench';
 import devServerWorkerUrl from '@riftydev/workbench/dev-server-worker?worker&url';
 import kernelWorkerUrl from '@riftydev/workbench/kernel-worker?worker&url';
+import noCoiToolchainWorkerUrl from '@riftydev/workbench/no-coi-toolchain-worker?worker&url';
 import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
 import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
 import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
@@ -12,6 +14,8 @@ export interface PackedWorkbenchAcceptance {
   readonly previewUrl: string;
   readonly sqliteProof: string;
   readonly companionLoaded: boolean;
+  readonly sdkLoaded: boolean;
+  readonly noCoiToolchainWorkerUrl: string;
   readonly typescriptWorkerUrl: string;
   readonly hostWasm: {
     readonly sqlite: string;
@@ -142,6 +146,8 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     previewUrl: preview.url,
     sqliteProof: sqliteOutput,
     companionLoaded: typeof openPlaygroundWorkbench === 'function',
+    sdkLoaded: typeof createSandbox === 'function',
+    noCoiToolchainWorkerUrl,
     typescriptWorkerUrl,
     hostWasm: Object.freeze({ sqlite: sqlWasmUrl }),
     async writeMessage(message: string): Promise<void> {

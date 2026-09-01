@@ -198,7 +198,10 @@ behavior throughout.
    before returning and exposes the ADR-0374 install/run-bin methods over the
    same `runtime`/`fs` Worker. A valid backend paired with any mismatched
    protocol rejects `NotImplementedError('sandbox.toolchain.worker')` and
-   terminates that Worker; it is never ignored or later admitted.
+   terminates that Worker; it is never ignored or later admitted. Real packed
+   SDK and Workbench tarballs expose a buildable SDK root and
+   `no-coi-toolchain-worker` graph; neither depends on an unpublished runtime
+   subpath.
 4. The immutable report contains exactly these no-COI feature outcomes:
    `fs`, `npm.install`, `node_modules.bin`, `child_process.spawn.stdio` working;
    `child_process.spawn`, `worker_threads.Worker`, `os.parallelism`
@@ -265,11 +268,12 @@ behavior throughout.
    `pnpm test:no-coi -g "threaded-WASM guard covers real installed bin"`.
 5. Default COI admission remains loud; generic createSandbox no-COI eval/fs
    keeps working when explicitly allowed; valid-backend protocol mismatch
-   terminates through both public SDK and host-controller carriers. Artifact:
+   terminates through both public SDK and host-controller carriers. Real
+   tarballs also build the SDK root and emitted Worker graph. Artifact:
    `pnpm exec vitest run --project unit packages/rifty/src/sandbox.test.ts
    packages/runtime-js/src/host.test.ts -t "valid backend but mismatched
    protocol|public admission rejects" --reporter=dot` and the no-COI
-   preservation carrier.
+   preservation carrier; `pnpm test:packed-consumer` is the packed RED.
 6. Network/admission inheritance: bounded registry reads, required fetch
    failures, corrupt registry-twin bytes and concurrent same-key acquisition stay
    loud/deduplicated. Artifact: focused npm-client fault command recorded in
@@ -279,7 +283,7 @@ behavior throughout.
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
-| `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; valid-backend protocol mismatch named + Worker terminated | Acceptance 3-4; Evidence R5-HANDSHAKE; no-COI preservation + capability RED |
+| `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; valid-backend protocol mismatch named + Worker terminated; packed SDK/Worker resolve only published runtime seams | Acceptance 3-4; Evidence R5-HANDSHAKE/R5-PACKED; no-COI preservation + capability RED |
 | `corrupt-input` + `observable-order` × install/run-bin request | exact fields validated before VFS/process mutation; ordered output precedes one terminal result | Acceptance 5-6, 9; capability/build RED |
 | `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry-twin acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
 | `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0374; `toolchain overlap` designed RED |
@@ -325,6 +329,15 @@ pnpm test:no-coi -g \
 # then both original operations completed
 ```
 
+Evidence R5-PACKED (product `2f1063608`, Node 24.16.0, Vite 5.4.21):
+
+```sh
+pnpm test:packed-consumer
+# RED: real @riftydev/sdk + @riftydev/workbench dependency-closure tarballs,
+# offline npm install and typecheck passed; fixture Vite build failed:
+# Missing "./internal" specifier in "@riftydev/runtime-js" package
+```
+
 ## Out of scope
 
 - Vite dev/HMR, SW preview binding, restart/death event and pending-write boot
@@ -361,6 +374,7 @@ review: checkpoints — runtime/network/parity public SDK slice.
   current COI product; only network stall/image endpoints are external-boundary
   fixtures.
 - `contract-red: 2026-09-01 — blocker @ 326f5b70e`
+- `contract-red: 2026-09-01 — blocker @ 2f1063608`
 - `final-green: 2026-09-01 — blocker @ 07d370651`
 - `final-green: 2026-09-01 — blocker @ bcff49986`
 - `final-green: 2026-09-01 — blocker @ 541c4cd6c`

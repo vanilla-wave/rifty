@@ -181,7 +181,7 @@ function workspaceDependencyNames(manifest) {
 
 async function packedDependencyClosure() {
   const packages = await workspacePackages();
-  const pending = ['@riftydev/workbench'];
+  const pending = ['@riftydev/sdk', '@riftydev/workbench'];
   const closure = new Map();
   while (pending.length > 0) {
     const name = pending.pop();
@@ -1028,6 +1028,8 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         previewUrl: opened.previewUrl,
         sqliteProof: opened.sqliteProof,
         companionLoaded: opened.companionLoaded,
+        sdkLoaded: opened.sdkLoaded,
+        noCoiToolchainWorkerUrl: opened.noCoiToolchainWorkerUrl,
         typescriptWorkerUrl: opened.typescriptWorkerUrl,
         hostWasm: opened.hostWasm,
         crossOriginIsolated: globalThis.crossOriginIsolated,
@@ -1043,12 +1045,18 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     if (!acceptance.companionLoaded) {
       throw new Error('Packed Workbench playground export did not load');
     }
+    if (!acceptance.sdkLoaded) {
+      throw new Error('Packed SDK root export did not load');
+    }
     if (!acceptance.sqliteProof.includes('packed-sqlite-42')) {
       throw new Error(`Packed Workbench sqlite proof was lost: ${acceptance.sqliteProof}`);
     }
     const hostWasmUrls = [assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js')];
     if (new URL(acceptance.typescriptWorkerUrl, previewOrigin).origin !== previewOrigin) {
       throw new Error('Packed Workbench TypeScript worker did not resolve from the packed host');
+    }
+    if (new URL(acceptance.noCoiToolchainWorkerUrl, previewOrigin).origin !== previewOrigin) {
+      throw new Error('Packed no-COI toolchain Worker did not resolve from the packed host');
     }
     for (const assetUrl of hostWasmUrls) {
       if (!observedUrls.includes(assetUrl)) {
@@ -1193,9 +1201,13 @@ async function main() {
 
   let failure;
   try {
-    await run('pnpm', ['-r', '--filter', '@riftydev/workbench...', 'run', 'build'], {
-      timeoutMs: 600_000,
-    });
+    await run(
+      'pnpm',
+      ['-r', '--filter', '@riftydev/sdk...', '--filter', '@riftydev/workbench...', 'run', 'build'],
+      {
+        timeoutMs: 600_000,
+      },
+    );
     const workspaceTarballs = await packPackages(workspaceClosure, tarballRoot);
     const externalTarballs = await packInstalledPackages(
       externalClosure,
