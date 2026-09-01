@@ -4,7 +4,6 @@ status: draft
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
-blocked_by: [runtime-js/bounded-not-implemented-cause-projection]
 why: the real-Vite composition (esbuild-wasm adapter, bin execution, npm/shell wiring) exists only behind workbench COI gates; the sandbox tier needs the same loop composed in the single worker, a capability report making every gap loud, and a CI lane that serves NO COOP/COEP — today zero browser lanes do
 user_story: As an agent platform, I want createSandbox → install → vite build → dist on a headerless page with a report naming what throws/degrades, but today the composition throws at the workbench gate and no lane proves any of it
 sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
@@ -261,8 +260,10 @@ ninth `Error.cause` getter after its declared eight-link limit. User resolved
 the binding valve by SPLIT, never a same-unit round N+1. The internal child
 `runtime-js/bounded-not-implemented-cause-projection` owns only ADR-0375
 Decision 5's package-generic, Vite-free projection at the existing toolchain
-serialization seam. This build-loop is demoted, blocked on that child and will
-recompile if the landed child changes its contract. No user behavior weakens.
+serialization seam. This build-loop was demoted and blocked for that child.
+Final+GREEN landed at `40ded47585bd04c62b2407210d515ed4f1f65ae1`;
+the completed child is deleted and build-loop stays draft but unblocked for its
+next PICKUP. Its pre-demotion clauses remain exact; no user behavior weakens.
 
 ### Pre-demotion Acceptance (verbatim, bounded-cause split)
 
@@ -657,5 +658,6 @@ review: checkpoints — runtime/network/parity public SDK slice.
 - Split resolution: user-authorized `runtime-js/bounded-not-implemented-cause-projection`
   succeeds this unit only for ADR-0375 Decision 5's generic bounded projection.
   All checkpoint lineage carries to it; this item's pre-demotion Acceptance
-  and Parity remain verbatim above. Build-loop is draft and blocked until the
-  child lands; no same-unit round N+1 and no weakened user behavior.
+  and Parity remain verbatim above. The child landed Final+GREEN at
+  `40ded47585bd04c62b2407210d515ed4f1f65ae1`; build-loop is draft and
+  unblocked. No same-unit round N+1 and no weakened user behavior.
