@@ -289,7 +289,7 @@ behavior throughout.
   `runNodeEntry(..., bin:true)`, never a curated Vite callback.
 - Esbuild authority: ADR-0316 — registry-attested `esbuild-wasm@0.28.0`; no
   preview1/vendored second provider.
-- Public composition: ADR-0071/0131/0374 — explicit host Worker URL, one Worker
+- Public composition: ADR-0071/0131/0375 — explicit host Worker URL, one Worker
   VFS authority, narrow install/run-bin control plane.
 - Platform boundary: headerless Chrome exposes no SharedArrayBuffer. Vite 8's
   installed Rolldown WASI binding needs pthread shared memory; the no-COI
@@ -528,3 +528,7 @@ review: checkpoints — runtime/network/parity public SDK slice.
   identity-decoy bin and WebIDL-truthy shared descriptors. Real nanoid bin,
   protocol mismatch and host interactivity are GREEN preservation controls.
 - No post-packed production edit started before this Contract+RED recompile.
+- `final-green: 2026-09-01 — blocker @ a909a38a9`
+- Final review convergence: find 1 blocker, fresh tail 0 new blockers,
+  adjudication HOLDS. Callable WebIDL object descriptors bypassed the realm
+  guard; one in-place fix/proof batch follows.

@@ -14,7 +14,8 @@ export function sandboxToolchainWebAssembly(): typeof WebAssembly {
   const memoryHandler: ProxyHandler<typeof NativeMemory> = {
     construct(target, args, newTarget) {
       const descriptor = args[0];
-      if (descriptor !== null && typeof descriptor === 'object') {
+      const descriptorType = typeof descriptor;
+      if (descriptor !== null && (descriptorType === 'object' || descriptorType === 'function')) {
         const shared = Boolean((descriptor as { readonly shared?: unknown }).shared);
         if (shared) {
           throw new NotImplementedError(

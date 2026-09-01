@@ -26,12 +26,18 @@ const threadedWasmProbeExpression = `(() => {
     initial: { value: 1, enumerable: true },
     shared: { get: () => true, enumerable: true },
   });
+  const callable = Object.assign(function memoryDescriptor() {}, {
+    initial: 1,
+    maximum: 1,
+    shared: true,
+  });
   const shared = [
     ['own-literal-true', { initial: 1, shared: true }],
     ['inherited-literal-true', inherited],
     ['accessor-literal-true', accessor],
     ['own-truthy-number', { initial: 1, shared: 1 }],
     ['own-truthy-string', { initial: 1, shared: 'yes' }],
+    ['callable-literal-true', callable],
   ].map(([form, descriptor]) => {
     try {
       new WebAssembly.Memory(descriptor);
@@ -1117,6 +1123,7 @@ test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descripto
         'accessor-literal-true',
         'own-truthy-number',
         'own-truthy-string',
+        'callable-literal-true',
       ].map((form) => ({
         form,
         name: 'NotImplementedError',
