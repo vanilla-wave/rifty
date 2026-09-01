@@ -19,8 +19,15 @@ Scope: sandbox-surface dev composition; an agent-invokable RESTART primitive (te
 reboot + iframe reload — covers wedge, whose DETECTION stays agent-owned via timeout,
 heartbeat declined); a worker-died event for actual deaths; both proven in the no-COI lane.
 Explicit reload policy is user-decided (epic Decisions — auto-reconnect declined). Open
-question feeding this pickup: boot-time dirty-flag detectability (map fog). Blocked by
+question feeding this pickup is closed by goal I10: marker only. Blocked by
 `distribution/no-coi-sandbox-build-loop`.
+
+User scope, 2026-09-01: goal tier is `works`. Required abnormal behavior is
+only a named actual-worker-death event, an explicit restore primitive and a
+next-boot marker for unflushed writes. Heartbeat, journal, automatic reconnect,
+exactly-once recovery, hidden retry, queue, crash-proof durability and other
+robust machinery are explicitly outside this child and may not be raised as
+checkpoint requirements.
 
 ## Challenge
 
@@ -32,3 +39,10 @@ challenge: 2026-08-28 — 2 problems
      RESTART primitive (wedge detection stays agent-owned via timeout; death event covers
      real deaths only). P2 → durable record inlined at
      distribution/reference/no-coi-hmr-spike-record.md and sourced here + in goal.md. -->
+
+## Decisions
+
+- Goal tier verbatim: `tier: works`.
+- Out of scope by user decision: heartbeat, journal, automatic retry/reconnect,
+  exactly-once recovery, hidden retry, queue, crash-proof durability and any
+  other robust-class mechanism.

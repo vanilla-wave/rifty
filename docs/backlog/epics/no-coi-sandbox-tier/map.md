@@ -4,12 +4,16 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
+1. `distribution/no-coi-packed-toolchain-surface` — **packed-surface** — real
+   workspace tarballs, offline SDK root + Workbench no-COI Worker JavaScript
+   graph, strict declarations and exact negative public types. Generic
+   manifest-install/arbitrary-installed-bin authority; no Vite semantic scope.
+2. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
    composition for real Vite 7 build outside workbench gates + loud capability
    gate/report + spawn warn-once + cpus→1 + Vite-8 loud named error + the
    no-COI CI lane, which also pins the host document non-COI across the loop
-   (I1, I2, I3, I7 rest, I8, I9).
-2. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
+   (I1, I2, I3, I7 rest, I8, I9). Blocked by packed-surface.
+3. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
    HMR through SW preview + worker-died event + restore primitive + boot marker
    for unflushed writes (I4, I6, I10). Blocked by build-loop.
 
@@ -39,6 +43,14 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - Third-party iframe embeds without own origin (no SW → no preview).
 - Workspace transaction/journal + auto WS reconnect (epoch/heartbeat) — robust-
   class machinery, declined at works.
+- Heartbeat, journal, automatic retry/reconnect, exactly-once recovery, hidden
+  retry, queue, crash-proof durability and other robust-class machinery are
+  explicitly outside dev-HMR checkpoint authority; tier is `works` (user,
+  2026-09-01).
+- Vite identity/version/callbacks/paths/types/lifecycle in SDK, runtime,
+  control-plane, package or distribution infrastructure. Vite 7 is only the
+  representative shared-memory-free browser oracle; Vite 8 only the named
+  threaded-WASM boundary fixture (user, 2026-09-01).
 - Playground app no-COI mode (ADR-0165 pins its COI hard-assert).
 - SW-delivered COI (header-faking Service Worker): rejected route, not fog —
   it works (probe: `distribution/reference/sw-coi-shim-probe.md`) but isolates
