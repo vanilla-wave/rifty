@@ -15,8 +15,7 @@ export function sandboxToolchainWebAssembly(): typeof WebAssembly {
     construct(target, args, newTarget) {
       const descriptor = args[0];
       if (descriptor !== null && typeof descriptor === 'object') {
-        const shared = Object.getOwnPropertyDescriptor(descriptor, 'shared');
-        if (shared !== undefined && 'value' in shared && shared.value === true) {
+        if ((descriptor as { readonly shared?: unknown }).shared === true) {
           throw new NotImplementedError(
             'toolchain.threaded-wasm',
             'shared WebAssembly.Memory requires cross-origin isolation and SharedArrayBuffer',

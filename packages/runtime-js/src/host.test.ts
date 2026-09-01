@@ -1,16 +1,44 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawnRuntime, spawnToolchainRuntime } from './host.ts';
 import * as runtimeJs from './index.ts';
-import { type HostMessage, SANDBOX_TOOLCHAIN_PROTOCOL, type WorkerMessage } from './protocol.ts';
+import {
+  SANDBOX_TOOLCHAIN_PROTOCOL,
+  type ToolchainHostMessage,
+  type ToolchainWorkerMessage,
+} from './protocol.ts';
+// @ts-expect-error raw sandbox toolchain controller is package-internal
+type RawToolchainRuntimeController = import('./index.ts').ToolchainRuntimeController;
+// @ts-expect-error raw sandbox toolchain interface is package-internal
+type RawRuntimeToolchain = import('./index.ts').RuntimeToolchain;
+// @ts-expect-error raw sandbox toolchain install input is package-internal
+type RawToolchainInstallRequest = import('./index.ts').ToolchainInstallRequest;
+// @ts-expect-error raw sandbox toolchain requests are package-internal
+type RawToolchainRequest = import('./index.ts').ToolchainRequest;
+// @ts-expect-error raw sandbox toolchain results are package-internal
+type RawToolchainResult = import('./index.ts').ToolchainResult;
+// @ts-expect-error raw sandbox toolchain run-bin input is package-internal
+type RawToolchainRunBinRequest = import('./index.ts').ToolchainRunBinRequest;
+
+const forbiddenRootTypeProof:
+  | readonly [
+      RawToolchainRuntimeController,
+      RawRuntimeToolchain,
+      RawToolchainInstallRequest,
+      RawToolchainRequest,
+      RawToolchainResult,
+      RawToolchainRunBinRequest,
+    ]
+  | null = null;
+void forbiddenRootTypeProof;
 
 type Listener<T> = (event: MessageEvent<T>) => void;
 
 class FakeWorker {
   static instances: FakeWorker[] = [];
 
-  readonly sent: HostMessage[] = [];
+  readonly sent: ToolchainHostMessage[] = [];
   readonly listeners = {
-    message: new Set<Listener<WorkerMessage>>(),
+    message: new Set<Listener<ToolchainWorkerMessage>>(),
     error: new Set<(event: ErrorEvent) => void>(),
   };
   terminated = false;
@@ -22,18 +50,18 @@ class FakeWorker {
     FakeWorker.instances.push(this);
   }
 
-  postMessage(message: HostMessage): void {
+  postMessage(message: ToolchainHostMessage): void {
     this.sent.push(message);
   }
 
-  addEventListener(type: 'message', listener: Listener<WorkerMessage>): void;
+  addEventListener(type: 'message', listener: Listener<ToolchainWorkerMessage>): void;
   addEventListener(type: 'error', listener: (event: ErrorEvent) => void): void;
   addEventListener(
     type: 'message' | 'error',
-    listener: Listener<WorkerMessage> | ((event: ErrorEvent) => void),
+    listener: Listener<ToolchainWorkerMessage> | ((event: ErrorEvent) => void),
   ): void {
     if (type === 'message') {
-      this.listeners.message.add(listener as Listener<WorkerMessage>);
+      this.listeners.message.add(listener as Listener<ToolchainWorkerMessage>);
     } else {
       this.listeners.error.add(listener as (event: ErrorEvent) => void);
     }
@@ -43,13 +71,13 @@ class FakeWorker {
     this.terminated = true;
   }
 
-  emit(message: WorkerMessage): void {
-    const event = { data: message } as MessageEvent<WorkerMessage>;
+  emit(message: ToolchainWorkerMessage): void {
+    const event = { data: message } as MessageEvent<ToolchainWorkerMessage>;
     for (const listener of this.listeners.message) listener(event);
   }
 
   emitUnknown(message: unknown): void {
-    const event = { data: message } as MessageEvent<WorkerMessage>;
+    const event = { data: message } as MessageEvent<ToolchainWorkerMessage>;
     for (const listener of this.listeners.message) listener(event);
   }
 
@@ -80,6 +108,12 @@ describe('runtime-js root surface', () => {
   it('does not publish the keepalive initialization bootstrap detail', () => {
     expect('initializeEventLoopKeepalive' in runtimeJs).toBe(false);
     expect(typeof runtimeJs.installEventLoopKeepalive).toBe('function');
+  });
+
+  it('does not publish the sandbox toolchain control plane', () => {
+    expect(
+      ['spawnToolchainRuntime', 'SANDBOX_TOOLCHAIN_PROTOCOL'].filter((name) => name in runtimeJs),
+    ).toEqual([]);
   });
 });
 
@@ -273,10 +307,60 @@ describe('spawnToolchainRuntime trust boundary', () => {
     },
   );
 
+  it.each([
+    ['dispose', { status: 'rejected', name: 'WorkerTerminated', message: 'Worker was disposed' }],
+    [
+      'crash',
+      {
+        status: 'rejected',
+        name: 'Error',
+        code: 'WORKER_CRASHED',
+        message: 'Worker crashed: toolchain boom',
+      },
+    ],
+    [
+      'clean-close',
+      { status: 'rejected', name: 'WorkerTerminated', message: 'Toolchain Worker closed' },
+    ],
+  ] as const)(
+    'settles a pending eval exactly when the toolchain peer ends by %s',
+    async (ending, expected) => {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const worker = admitToolchain(runtime);
+      await runtime.toolchainReady;
+      const pending = runtime.eval('await new Promise(() => {})');
+      let outcome: unknown = { status: 'pending' };
+      void pending.then(
+        () => {
+          outcome = { status: 'resolved' };
+        },
+        (error: Error & { code?: string }) => {
+          outcome = {
+            status: 'rejected',
+            name: error.name,
+            ...(error.code === undefined ? {} : { code: error.code }),
+            message: error.message,
+          };
+        },
+      );
+
+      if (ending === 'dispose') runtime.dispose();
+      if (ending === 'crash') worker.crash('toolchain boom');
+      if (ending === 'clean-close') {
+        worker.emitUnknown({ type: 'toolchain-terminal', reason: 'closed' });
+      }
+      await Promise.resolve();
+
+      expect(outcome).toEqual(expected);
+    },
+  );
+
   it('validates exact install/run-bin input before posting any mutation', async () => {
     installFakeWorker();
     const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
-    const worker = fakeWorker(0);
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
     const symbol = Symbol('extra');
     const accessor = Object.defineProperty({ registryUrl: '/registry' }, 'cwd', {
       enumerable: true,
@@ -284,29 +368,66 @@ describe('spawnToolchainRuntime trust boundary', () => {
     });
     const symbolInput = { cwd: '/project', registryUrl: '/registry', [symbol]: true };
     const sparseArgs = new Array<string>(1);
+    const missingInstallField = { cwd: '/project' };
+    const extraInstallField = { cwd: '/project', registryUrl: '/registry', extra: 'ordinary' };
+    const missingRunBinField = {
+      cwd: '/project',
+      binPath: '/project/node_modules/.bin/vite',
+    };
+    const extraRunBinField = {
+      cwd: '/project',
+      binPath: '/project/node_modules/.bin/vite',
+      args: ['build'],
+      extra: 'ordinary',
+    };
 
     const calls = [
-      runtime.toolchain.install({ cwd: 'relative', registryUrl: '/registry' }),
-      runtime.toolchain.install(accessor as { cwd: string; registryUrl: string }),
-      runtime.toolchain.install(symbolInput),
-      runtime.toolchain.runBin({
-        cwd: '/project',
-        binPath: '/other/node_modules/.bin/vite',
-        args: ['build'],
-      }),
-      runtime.toolchain.runBin({
-        cwd: '/project',
-        binPath: '/project/node_modules/.bin/vite',
-        args: sparseArgs,
-      }),
-      runtime.toolchain.runBin({
-        cwd: '/project',
-        binPath: '/project/node_modules/.bin/vite',
-        args: Object.defineProperty(['build'], '0', { get: () => 'build' }),
-      }),
+      () => runtime.toolchain.install(missingInstallField as { cwd: string; registryUrl: string }),
+      () => runtime.toolchain.install(extraInstallField),
+      () => runtime.toolchain.install({ cwd: 'relative', registryUrl: '/registry' }),
+      () => runtime.toolchain.install(accessor as { cwd: string; registryUrl: string }),
+      () => runtime.toolchain.install(symbolInput),
+      () =>
+        runtime.toolchain.runBin(
+          missingRunBinField as { cwd: string; binPath: string; args: readonly string[] },
+        ),
+      () => runtime.toolchain.runBin(extraRunBinField),
+      () =>
+        runtime.toolchain.runBin({
+          cwd: '/project',
+          binPath: '/other/node_modules/.bin/vite',
+          args: ['build'],
+        }),
+      () =>
+        runtime.toolchain.runBin({
+          cwd: '/project',
+          binPath: '/project/node_modules/.bin/vite',
+          args: sparseArgs,
+        }),
+      () =>
+        runtime.toolchain.runBin({
+          cwd: '/project',
+          binPath: '/project/node_modules/.bin/vite',
+          args: Object.defineProperty(['build'], '0', { get: () => 'build' }),
+        }),
     ];
 
-    for (const call of calls) await expect(call).rejects.toMatchObject({ name: 'TypeError' });
+    for (const call of calls) {
+      const pending = call();
+      const assertion = expect(pending).rejects.toMatchObject({ name: 'TypeError' });
+      await Promise.resolve();
+      const posted = worker.sent.at(-1);
+      if (posted?.type === 'toolchain') {
+        worker.emit({
+          type: 'toolchain-result',
+          result:
+            posted.request.op === 'install'
+              ? { id: posted.request.id, ok: true }
+              : { id: posted.request.id, ok: true, value: { exitCode: 0 } },
+        });
+      }
+      await assertion;
+    }
     expect(worker.sent).toEqual([]);
   });
 });

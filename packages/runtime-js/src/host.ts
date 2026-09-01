@@ -5,15 +5,15 @@ import type {
   FsReadEncoding,
   FsRequest,
   FsResult,
-  HostMessage,
   SerializedRuntimeError,
   TelemetrySnapshot,
+  ToolchainHostMessage,
   ToolchainInstallRequest,
   ToolchainRequest,
   ToolchainResult,
   ToolchainRunBinRequest,
+  ToolchainWorkerMessage,
   VmEngineName,
-  WorkerMessage,
 } from './protocol.ts';
 import { SANDBOX_TOOLCHAIN_PROTOCOL as TOOLCHAIN_PROTOCOL } from './protocol.ts';
 
@@ -183,7 +183,7 @@ function createRuntimeController(
   }
 
   function terminateToolchainPeer(error: RuntimeError): void {
-    rejectPendingRequests(error);
+    rejectPendingCalls(error);
     rejectToolchainHandshake(error);
     ready = false;
     if (worker !== null) {
@@ -202,7 +202,7 @@ function createRuntimeController(
     }
   }
 
-  function send(message: HostMessage): void {
+  function send(message: ToolchainHostMessage): void {
     if (!worker) throw new Error('Runtime is not running');
     worker.postMessage(message);
   }
@@ -228,6 +228,14 @@ function createRuntimeController(
       p.reject(err);
     }
     pendingRequests.clear();
+  }
+
+  function rejectPendingCalls(err: unknown): void {
+    for (const call of pending.values()) {
+      call.reject(err);
+    }
+    pending.clear();
+    rejectPendingRequests(err);
   }
 
   function requestFs(request: FsRequest): Promise<FsResult> {
@@ -293,7 +301,7 @@ function createRuntimeController(
 
   function start(): void {
     worker = new Worker(opts.workerUrl, { type: 'module' });
-    worker.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
+    worker.addEventListener('message', (event: MessageEvent<ToolchainWorkerMessage>) => {
       const msg = event.data;
       switch (msg.type) {
         case 'ready':
@@ -368,19 +376,10 @@ function createRuntimeController(
       // Reject every in-flight eval so callers see the failure instead of
       // hanging forever. Match Node's pattern: synthesise an Error with a
       // stable `code` so callers can branch on it.
-      for (const p of pending.values()) {
-        p.reject(
-          Object.assign(new Error(`Worker crashed: ${event.message}`), {
-            code: 'WORKER_CRASHED',
-          }),
-        );
-      }
-      pending.clear();
-      rejectPendingRequests(
-        Object.assign(new Error(`Worker crashed: ${event.message}`), {
-          code: 'WORKER_CRASHED',
-        }),
-      );
+      const crash = Object.assign(new Error(`Worker crashed: ${event.message}`), {
+        code: 'WORKER_CRASHED',
+      });
+      rejectPendingCalls(crash);
       rejectToolchainHandshake(
         toolchainHandshakeError(`toolchain Worker crashed during handshake: ${event.message}`),
       );
@@ -448,10 +447,13 @@ function createRuntimeController(
         worker = null;
       }
       const terminated = workerTerminatedError('Worker was disposed');
-      rejectPendingRequests(terminated);
+      if (toolchainMode) rejectPendingCalls(terminated);
+      else {
+        rejectPendingRequests(terminated);
+        pending.clear();
+      }
       rejectToolchainHandshake(terminated);
       handlers.clear();
-      pending.clear();
       ready = false;
     },
     on(handler) {

@@ -21,7 +21,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      command: 'pnpm exec vite --config vite.no-coi.config.ts --force',
+      command: 'pnpm dev:no-coi',
       cwd: './apps/playground',
       url: `http://127.0.0.1:${noCoiPort}/no-coi-harness.html`,
       reuseExistingServer: false,
@@ -32,7 +32,7 @@ export default defineConfig({
       },
     },
     {
-      command: 'pnpm exec vite --config vite.no-coi.config.ts --force',
+      command: 'pnpm dev:no-coi',
       cwd: './apps/playground',
       url: `http://127.0.0.1:${resourcePort}/favicon.svg`,
       reuseExistingServer: false,

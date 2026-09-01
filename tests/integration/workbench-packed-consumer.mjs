@@ -296,10 +296,11 @@ async function assertExtractedWorkbench() {
     './node-worker',
     './dev-server-worker',
     './typescript-worker',
+    './no-coi-toolchain-worker',
   ];
   const actualExports = Object.keys(manifest.exports ?? {}).sort();
   if (JSON.stringify(actualExports) !== JSON.stringify([...expectedExports].sort())) {
-    throw new Error(`Packed Workbench requires seven sealed exports: ${actualExports.join(', ')}`);
+    throw new Error(`Packed Workbench requires eight sealed exports: ${actualExports.join(', ')}`);
   }
   const missingPaths = [];
   for (const target of Object.values(manifest.exports)) {

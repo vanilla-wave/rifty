@@ -66,12 +66,20 @@
 
 ### Changed
 
+- Sandbox toolchain controller/protocol stays on the repo-only internal seam;
+  the published runtime root exposes no admission-bypassing control plane.
+
 - **Entry-scoped runtime bindings (ADR-0371).** Node-entry v3 validates and
   freezes exact `{adapterId, packagePath}` rows in its existing clone metadata;
   recursive launches inherit them without a new channel or process-visible
   environment field.
 
 ### Fixed
+
+- Toolchain peer clean-close, dispose and crash settle pending eval, fs and
+  toolchain calls through one owner. CJS, ESM, REPL and installed bins reject
+  own/inherited/accessor shared WebAssembly memory before native construction
+  while non-shared native identity remains unchanged.
 
 - Selected toolchain Worker realms warn once for same-realm
   `child_process.spawn`; `os.cpus()` and `availableParallelism()` report one.

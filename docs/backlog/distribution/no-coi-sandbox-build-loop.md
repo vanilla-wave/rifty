@@ -224,3 +224,4 @@ review: checkpoints — runtime/network/parity public SDK slice.
   fixtures.
 - `contract-red: 2026-09-01 — blocker @ 326f5b70e`
 - `final-green: 2026-09-01 — blocker @ 07d370651`
+- `final-green: 2026-09-01 — blocker @ bcff49986`

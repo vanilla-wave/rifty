@@ -1,13 +1,10 @@
-export { spawnRuntime, spawnToolchainRuntime } from './host.ts';
-export { SANDBOX_TOOLCHAIN_PROTOCOL } from './protocol.ts';
+export { spawnRuntime } from './host.ts';
 export type {
   EvalOptions,
   RuntimeController,
   RuntimeEvent,
   RuntimeFs,
   RuntimeOptions,
-  RuntimeToolchain,
-  ToolchainRuntimeController,
 } from './host.ts';
 export type {
   EvalRequest,
@@ -18,10 +15,6 @@ export type {
   HostMessage,
   SerializedRuntimeError,
   TelemetrySnapshot,
-  ToolchainInstallRequest,
-  ToolchainRequest,
-  ToolchainResult,
-  ToolchainRunBinRequest,
   WorkerMessage,
 } from './protocol.ts';
 // Telemetry DATA types only — the `diagnostic` event/message payload. The sink's

@@ -75,6 +75,7 @@ const SPEC = {
     dir: 'packages/runtime-js',
     sideEffects: ['./dist/index.js', './dist/worker.js'],
     removeDeps: ['acorn-walk'], // declared but never imported (ADR-0070 D6)
+    dropExports: ['./internal'],
     // execSync handler seam (ipc/exec-sync-handler): a host realm that owns the
     // dispatcher (calls spawnWorker) registers the 'execSync' handler here so
     // kernel-spawned guests run execSync end-to-end (e.g. the COI-Worker e2e

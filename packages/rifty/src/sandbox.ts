@@ -2,11 +2,10 @@ import {
   type RuntimeController,
   type RuntimeFs,
   type RuntimeOptions,
-  type RuntimeToolchain,
   spawnRuntime,
-  spawnToolchainRuntime,
 } from '@riftydev/runtime-js';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
+import { type RuntimeToolchain, spawnToolchainRuntime } from '@riftydev/runtime-js/internal';
 import { registerServiceWorker } from '@riftydev/service-worker';
 import { initBackend } from '@riftydev/vfs';
 import type { CapabilityCheck } from './capabilities.ts';

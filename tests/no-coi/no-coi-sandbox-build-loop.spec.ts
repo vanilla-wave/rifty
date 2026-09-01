@@ -19,6 +19,37 @@ const resourcePort = Number(process.env.RIFTY_NO_COI_RESOURCE_PORT ?? 5413);
 const coiBaseUrl = `http://localhost:${coiPort}`;
 const marker = 'no-coi-build-parity-marker';
 
+const threadedWasmProbeExpression = `(() => {
+  const NativeMemory = globalThis.WebAssembly.Memory;
+  const inherited = Object.assign(Object.create({ shared: true }), { initial: 1 });
+  const accessor = Object.defineProperties({}, {
+    initial: { value: 1, enumerable: true },
+    shared: { get: () => true, enumerable: true },
+  });
+  const shared = [
+    ['own', { initial: 1, shared: true }],
+    ['inherited', inherited],
+    ['accessor', accessor],
+  ].map(([form, descriptor]) => {
+    try {
+      new WebAssembly.Memory(descriptor);
+      return { form, name: 'resolved' };
+    } catch (error) {
+      return { form, name: error.name, feature: error.feature };
+    }
+  });
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  return {
+    shared,
+    identity: {
+      globalConstructorUnchanged: globalThis.WebAssembly.Memory === NativeMemory,
+      instanceConstructorUnchanged: memory.constructor === NativeMemory,
+      prototypeUnchanged: Object.getPrototypeOf(memory) === NativeMemory.prototype,
+      bytes: memory.buffer.byteLength,
+    },
+  };
+})()`;
+
 interface HostSnapshot {
   readonly token: string;
   readonly phase: string;
@@ -887,6 +918,115 @@ test('non-shared WebAssembly.Memory keeps native constructor/global identity', a
   });
 });
 
+test('threaded-WASM guard covers real installed bin, CJS, ESM and REPL descriptors', async ({
+  page,
+}) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    const outcomes = await host.evaluate(
+      async ({ probeExpression }) => {
+        const sandbox = (
+          globalThis as typeof globalThis & {
+            __riftyNoCoiSandbox: {
+              fs: { writeFile(path: string, value: string): Promise<void> };
+              runtime: {
+                eval(source: string): Promise<{ ok: boolean }>;
+                on(fn: (event: { type: string; chunk?: string }) => void): () => void;
+              };
+              toolchain: {
+                runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+              };
+            };
+          }
+        ).__riftyNoCoiSandbox;
+        const root = '/threaded-wasm-twins';
+        const markers = {
+          repl: '__RIFTY_WASM_REPL__',
+          cjs: '__RIFTY_WASM_CJS__',
+          esm: '__RIFTY_WASM_ESM__',
+          bin: '__RIFTY_WASM_BIN__',
+        } as const;
+        await sandbox.fs.writeFile(`${root}/cjs.cjs`, `module.exports = ${probeExpression};\n`);
+        await sandbox.fs.writeFile(
+          `${root}/esm.mjs`,
+          `export const outcome = ${probeExpression};\n`,
+        );
+        await sandbox.fs.writeFile(
+          `${root}/node_modules/.bin/memory-probe`,
+          "#!/usr/bin/env node\nimport('../memory-probe/cli.js');\n",
+        );
+        await sandbox.fs.writeFile(
+          `${root}/node_modules/memory-probe/package.json`,
+          JSON.stringify({ name: 'memory-probe', type: 'commonjs' }),
+        );
+        await sandbox.fs.writeFile(
+          `${root}/node_modules/memory-probe/cli.js`,
+          `console.log(${JSON.stringify(markers.bin)} + JSON.stringify(${probeExpression}));\n`,
+        );
+        const stdout: string[] = [];
+        const off = sandbox.runtime.on((event) => {
+          if (event.type === 'stdout' && event.chunk) stdout.push(event.chunk);
+        });
+        const repl = await sandbox.runtime.eval(
+          `console.log(${JSON.stringify(markers.repl)} + JSON.stringify(${probeExpression}))`,
+        );
+        const cjs = await sandbox.runtime.eval(
+          `console.log(${JSON.stringify(markers.cjs)} + JSON.stringify(require(${JSON.stringify(`${root}/cjs.cjs`)})))`,
+        );
+        const esm = await sandbox.runtime.eval(
+          `__riftyImport(${JSON.stringify(`${root}/esm.mjs`)}).then(({ outcome }) => console.log(${JSON.stringify(markers.esm)} + JSON.stringify(outcome)))`,
+        );
+        const bin = await sandbox.toolchain.runBin({
+          cwd: root,
+          binPath: `${root}/node_modules/.bin/memory-probe`,
+          args: [],
+        });
+        off();
+        const text = stdout.join('');
+        const read = (selected: string) => {
+          const line = text.split('\n').find((entry) => entry.startsWith(selected));
+          if (line === undefined) throw new Error(`missing threaded-WASM marker ${selected}`);
+          return JSON.parse(line.slice(selected.length));
+        };
+        return {
+          evalOk: { repl: repl.ok, cjs: cjs.ok, esm: esm.ok },
+          bin,
+          repl: read(markers.repl),
+          cjs: read(markers.cjs),
+          esm: read(markers.esm),
+          installedBin: read(markers.bin),
+        };
+      },
+      { probeExpression: threadedWasmProbeExpression },
+    );
+    const expected = {
+      shared: ['own', 'inherited', 'accessor'].map((form) => ({
+        form,
+        name: 'NotImplementedError',
+        feature: 'toolchain.threaded-wasm',
+      })),
+      identity: {
+        globalConstructorUnchanged: true,
+        instanceConstructorUnchanged: true,
+        prototypeUnchanged: true,
+        bytes: 65_536,
+      },
+    };
+    expect(outcomes.evalOk).toEqual({ repl: true, cjs: true, esm: true });
+    expect(outcomes.bin).toEqual({ exitCode: 0 });
+    expect({
+      repl: outcomes.repl,
+      cjs: outcomes.cjs,
+      esm: outcomes.esm,
+      installedBin: outcomes.installedBin,
+    }).toEqual({ repl: expected, cjs: expected, esm: expected, installedBin: expected });
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
 test('build-only toolchain rejects every resident Vite mode by name', async ({ page }) => {
   const { host } = await openHeaderlessHost(page);
   try {
@@ -1273,6 +1413,10 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
         globalThis as typeof globalThis & {
           __riftyNoCoiSandbox: {
             fs: { readFile(path: string, encoding: 'utf8'): Promise<string> };
+            runtime: {
+              eval(source: string): Promise<{ ok: boolean }>;
+              on(fn: (event: { type: string; chunk?: string }) => void): () => void;
+            };
             toolchain: {
               install(input: Record<string, unknown>): Promise<void>;
               runBin(input: Record<string, unknown>): Promise<unknown>;
@@ -1280,9 +1424,46 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
           };
         }
       ).__riftyNoCoiSandbox;
+      const processState = async () => {
+        const stdout: string[] = [];
+        const off = sandbox.runtime.on((event) => {
+          if (event.type === 'stdout' && event.chunk) stdout.push(event.chunk);
+        });
+        const result = await sandbox.runtime.eval(
+          `console.log('__RIFTY_INPUT_STATE__' + JSON.stringify({ cwd: process.cwd(), argv: process.argv }))`,
+        );
+        off();
+        if (!result.ok) throw new Error('process state eval failed');
+        const line = stdout
+          .join('')
+          .split('\n')
+          .find((entry) => entry.startsWith('__RIFTY_INPUT_STATE__'));
+        if (line === undefined) throw new Error('process state marker missing');
+        return JSON.parse(line.slice('__RIFTY_INPUT_STATE__'.length));
+      };
       const before = await sandbox.fs.readFile('/malformed/package.json', 'utf8');
+      const processBefore = await processState();
       const failures: Array<{ name: string; message: string }> = [];
       const calls = [
+        () => sandbox.toolchain.install({ cwd: '/malformed' }),
+        () =>
+          sandbox.toolchain.install({
+            cwd: '/malformed',
+            registryUrl: '/npm-registry',
+            extra: 'ordinary',
+          }),
+        () =>
+          sandbox.toolchain.runBin({
+            cwd: '/malformed',
+            binPath: '/malformed/node_modules/.bin/vite',
+          }),
+        () =>
+          sandbox.toolchain.runBin({
+            cwd: '/malformed',
+            binPath: '/malformed/node_modules/.bin/vite',
+            args: ['build'],
+            extra: 'ordinary',
+          }),
         () => sandbox.toolchain.install({ cwd: 'relative', registryUrl: '/npm-registry' }),
         () =>
           sandbox.toolchain.runBin({
@@ -1306,9 +1487,18 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
         }
       }
       const after = await sandbox.fs.readFile('/malformed/package.json', 'utf8');
-      return { before, after, failures };
+      const processAfter = await processState();
+      return { before, after, processBefore, processAfter, failures };
     });
-    expect(malformed.failures).toHaveLength(3);
+    expect(malformed.failures).toHaveLength(7);
+    expect(malformed.failures.slice(0, 4)).toEqual(
+      Array.from({ length: 4 }, () =>
+        expect.objectContaining({
+          name: 'TypeError',
+          message: expect.stringMatching(/extra or missing fields/i),
+        }),
+      ),
+    );
     expect(malformed.failures).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'TypeError', message: expect.stringMatching(/cwd/i) }),
@@ -1317,6 +1507,7 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
       ]),
     );
     expect(malformed.after).toBe(malformed.before);
+    expect(malformed.processAfter).toEqual(malformed.processBefore);
     await disposeSandbox(host);
 
     for (const [first, second] of [

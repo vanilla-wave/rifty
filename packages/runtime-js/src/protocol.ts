@@ -87,7 +87,6 @@ export type VmEngineName = 'quickjs' | 'rewrite';
 export type HostMessage =
   | { readonly type: 'eval'; readonly request: EvalRequest }
   | { readonly type: 'fs'; readonly request: FsRequest }
-  | { readonly type: 'toolchain'; readonly request: ToolchainRequest }
   | { readonly type: 'ping' }
   | { readonly type: 'load-fixture'; readonly files: Readonly<Record<string, string>> }
   | { readonly type: 'stdin'; readonly data: string | Uint8Array }
@@ -97,18 +96,25 @@ export type HostMessage =
 
 export type WorkerMessage =
   | { readonly type: 'ready' }
+  | { readonly type: 'stdout'; readonly chunk: string }
+  | { readonly type: 'stderr'; readonly chunk: string }
+  | { readonly type: 'result'; readonly result: EvalResult }
+  | { readonly type: 'fs-result'; readonly result: FsResult }
+  | { readonly type: 'pong' }
+  /** Divergence / NotImplemented telemetry snapshot (T15). Posted by the worker
+   * when the snapshot changes; surfaced host-side for the playground panel (T16). */
+  | { readonly type: 'diagnostic'; readonly payload: TelemetrySnapshot };
+
+export type ToolchainHostMessage =
+  | HostMessage
+  | { readonly type: 'toolchain'; readonly request: ToolchainRequest };
+
+export type ToolchainWorkerMessage =
+  | WorkerMessage
   | {
       readonly type: 'toolchain-ready';
       readonly protocol: typeof SANDBOX_TOOLCHAIN_PROTOCOL;
       readonly vfsBackend: 'opfs' | 'memory';
     }
   | { readonly type: 'toolchain-terminal'; readonly reason: 'closed' }
-  | { readonly type: 'stdout'; readonly chunk: string }
-  | { readonly type: 'stderr'; readonly chunk: string }
-  | { readonly type: 'result'; readonly result: EvalResult }
-  | { readonly type: 'fs-result'; readonly result: FsResult }
-  | { readonly type: 'toolchain-result'; readonly result: ToolchainResult }
-  | { readonly type: 'pong' }
-  /** Divergence / NotImplemented telemetry snapshot (T15). Posted by the worker
-   * when the snapshot changes; surfaced host-side for the playground panel (T16). */
-  | { readonly type: 'diagnostic'; readonly payload: TelemetrySnapshot };
+  | { readonly type: 'toolchain-result'; readonly result: ToolchainResult };

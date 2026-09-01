@@ -5,16 +5,18 @@ import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
 import {
-  SANDBOX_TOOLCHAIN_PROTOCOL,
   type SerializedRuntimeError,
-  type ToolchainRequest,
-  type ToolchainResult,
   awaitDrain,
   installEventLoopKeepalive,
   installFetchKeepalive,
 } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  SANDBOX_TOOLCHAIN_PROTOCOL,
+  type ToolchainRequest,
+  type ToolchainResult,
+} from '@riftydev/runtime-js/internal';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { finalizeBuildPackageInstallFiles } from './package-install-finalizer.ts';
