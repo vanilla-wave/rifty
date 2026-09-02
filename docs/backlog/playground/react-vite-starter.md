@@ -89,7 +89,7 @@ Problems 2, 4, 5, 6 are answered in `## Context`/`## Acceptance` above and
 below (residue-only claim, benchmark budget in the go/no-go, lane handling,
 corrected facts). Problem 3 stands as a direction note (no front-end outcome
 is named anywhere; this item adds none, it re-fills an existing tile). Problem
-1 is the open user fork in `## Decisions`.
+1 is closed by the recorded user override in `## Decisions` (pole A).
 
 ## User scenario
 
@@ -174,12 +174,14 @@ failing-test-first target run as the same scenario locally and in rifty.
 
 ## Decisions
 
-- OPEN (user; critic problem 1, blocks draft→ready): app size. Pole A: the
-  PR-sized issue tracker (2026-07-02 grill: "ordinary, not minimal — agents win
-  on toys", an AI-arena reason this item does not carry). Pole B: a
-  `create-vite react-ts`-sized seed with the same four rough edges — closes
-  every Acceptance and Parity row, no file split, lighter hero and benchmark.
-  Closes with one line here naming the choice and, for A, the override.
+- 2026-09-02 (user override, critic problem 1 — closed): app size = A, the
+  PR-sized issue tracker (4 routes, 8 components, mock dataset). Override on
+  record: this starter is the arena for the later AI-mode / agent-bench
+  re-land from PR #111 (2026-07-02 grill: agents win on toys, collapse on
+  normal apps); a `create-vite react-ts`-sized seed (pole B) would carry the
+  four rough edges but not that value. Costs accepted: ≤800-line module split,
+  heavier hero and benchmark subject — both still gated by the go/no-go in
+  `## Acceptance`. Implementation deferred to a separate session.
 - 2026-09-02 (user): swap the tile, not the shared template — `vite` stays the
   internal base. Evidence: coupling inventory in `## Context`.
 - 2026-09-02 (user): `setup: 'from-scratch'`, no baked snapshot — keeps the
@@ -194,7 +196,7 @@ failing-test-first target run as the same scenario locally and in rifty.
   Vite 7 here; Vite 8 HMR stays disabled (ADR-0161/0317).
 - PR #111 is a quarry: re-author the template on main's spec shape, port its
   portability test and the two e2e specs; never cherry-pick.
-- Template source split by file group (app, pages/components, data/styles) if
-  pole A; carrier is agent-owned.
+- Template source split by file group (app, pages/components, data/styles);
+  carrier is agent-owned.
 - REVERSIBLE: registry/preset data + tests + CHANGELOG + benchmark artifact;
   no ADR.
