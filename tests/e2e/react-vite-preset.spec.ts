@@ -67,7 +67,15 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
     // per-package lines (`npm: + <name>@<version>`), never on the echoed
     // command. Every declared direct dependency shows up resolved.
     await expectTerminalContains(page, /npm: \+ react@\d+\./u, 120_000);
-    for (const dep of ['react-dom', 'react-router-dom', 'vite', '@vitejs/plugin-react']) {
+    for (const dep of [
+      'react-dom',
+      'react-router-dom',
+      'vite',
+      '@vitejs/plugin-react',
+      '@types/react',
+      '@types/react-dom',
+      'typescript',
+    ]) {
       await expectTerminalContains(page, new RegExp(`npm: \\+ ${dep}@\\d+\\.`, 'u'), 60_000);
     }
     await expectViteDevServerReady(page, PORT, 180_000);
@@ -166,13 +174,19 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
     await openShellTerminal(page);
     await runTerminalLineSettled(page, DEP_METADATA_LINE, 30_000);
     const depLines = await terminalBuffer(page);
-    for (const entry of ['react', 'react-dom', 'react-dom/client']) {
+    for (const entry of [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+    ]) {
       expect(depLines, `${entry} must be pre-bundled with CJS interop`).toContain(
         `DEP ${entry} interop=true`,
       );
     }
-    // react-router-dom is optimized too (ESM — no interop wrapper).
-    expect(depLines).toContain('DEP react-router-dom interop=');
+    // react-router-dom is optimized too, and it is ESM — no interop wrapper.
+    expect(depLines).toContain('DEP react-router-dom interop=false');
 
     problems.assertNoViteImportErrors();
   });

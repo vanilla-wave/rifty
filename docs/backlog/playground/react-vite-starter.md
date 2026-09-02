@@ -151,26 +151,34 @@ Oracle: local Node 24 + npm + Vite 7 on the identical seeded tree; each row is a
 failing-test-first target run as the same scenario locally and in rifty.
 
 - `npm install` on the seeded `package.json` resolves every declared direct
-  dependency, each reported by the installer's own `npm: + <name>@<version>`
-  line, as local npm does. Divergence stated up front, not discovered: the
+  dependency, as local npm does; the carrier reads rifty's own per-package
+  `npm: + <name>@<version>` lines (an output form local npm does not share —
+  the parity claim is the resolved SET, never the line format). Divergence
+  stated up front, not discovered: the
   browser tree carries the installer-injected `@rollup/wasm-node` shadow
   companion (ADR-0188) where the local oracle carries a native
   `@rollup/rollup-<platform>` optional. Full transitive version/lockfile replay
   is ADR-0023's contract, proven by `npm-lock-replay.spec.ts` on its own
   fixtures — out of scope here (`## Out of scope`).
 - Dev server: `.vite/deps/_metadata.json` optimizes `react`, `react-dom`,
-  `react-dom/client` with `needsInterop: true`, and `react-router-dom` (ESM,
-  no interop), naming the same entries as local.
+  `react-dom/client`, `react/jsx-runtime`, `react/jsx-dev-runtime` with
+  `needsInterop: true`, and `react-router-dom` with `needsInterop: false` (ESM)
+  — the same entry→interop verdicts as local.
 - A served COMPONENT module (`/src/App.tsx`) carries the `@vitejs/plugin-react`
   Fast-Refresh wrapper (`/@react-refresh` import, `$RefreshReg$`,
   `import.meta.hot`) and the create-vite entry `/src/main.tsx` does NOT (it
   declares no component) — the same split as local.
 - The served `index.html` carries plugin-react's global preamble
   (`injectIntoGlobalHook` from `/@react-refresh`), same as local.
-- Editing a component emits a `js-update` HMR payload and no full reload, same
-  as local.
-- `vite build` emits `dist/index.html` plus hashed assets; `vite preview` serves
-  them; same file set as local.
+- Editing a component patches the running app with no full reload, same as
+  local: the pre-edit window sentinel survives and the patched module's effect
+  is visible. (The oracle's HMR socket carries the corresponding `js-update`
+  frame for `/src/components/StatusBadge.tsx` and no `full-reload` — probe
+  recorded at Contract+RED; in-browser the same edit is asserted by its
+  observable consequence.)
+- `vite build` emits `dist/index.html` plus a hashed `assets/index-*.js` and
+  `assets/index-*.css` and no source-entry reference — the local file set;
+  `vite preview` serves it.
 - The exported seeded tree runs unchanged under local `npm i && npm run dev`.
 
 ## Out of scope
@@ -191,6 +199,7 @@ failing-test-first target run as the same scenario locally and in rifty.
 
 ## Decisions
 
+ready-verdict: 2026-09-02 — Contract+RED @ 4bd3557a6
 contract-red: 2026-09-02 — blocker @ 0493863b6
 
 - 2026-09-02 (Contract+RED attempt 1 → blocker, re-cut IN PLACE): the parity
@@ -217,6 +226,18 @@ contract-red: 2026-09-02 — blocker @ 0493863b6
   `needsInterop` grep; the Fast-Refresh edit now targets the leaf component the
   `## User scenario` names (`src/components/StatusBadge.tsx`, seeded as an open
   tab) instead of `src/App.tsx`.
+- 2026-09-02 (post-verdict concern closure, recorded for Final+GREEN): the
+  attempt-2 pass carried non-blocking concerns; four are closed in the same
+  branch and TIGHTEN their rows, never weaken them — P1 now asserts all EIGHT
+  declared direct deps (was 5) and says explicitly that the `npm: + …` line
+  form is rifty's, not npm's; P2 names all six optimizer entries with their
+  exact interop verdicts (incl. `react-router-dom interop=false`); P5 states
+  what the browser actually asserts, with the oracle's `js-update` frame kept
+  as the recorded probe; P6 names the emitted CSS asset. `react-vite` also
+  gained the `registry.test.ts` case its eight siblings have. Open concerns
+  left standing: the portability carrier is a static proxy (no committed local
+  run), and the `presets.test.ts` accept-boundary amendment is a pre-existing
+  assertion weakened in the change that admits it.
 - `review: checkpoints` — parity work (`## Parity cases` vs local Node 24 +
   Vite 7), per `fault-classes.md` §Review convergence; membership decided once,
   here, at pickup.

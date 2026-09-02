@@ -25,6 +25,23 @@ describe('resolveProjectSpec', () => {
     expect(vite.bakedNodeModulesUrl).not.toBe(vite8.bakedNodeModulesUrl);
   });
 
+  it('registers the react-vite starter as an install-only Vite 7 template', () => {
+    const spec = resolveProjectSpec('react-vite');
+    expect(spec.id).toBe('react-vite');
+    expect(spec.runtime).toBe('vite');
+    if (spec.runtime !== 'vite') throw new Error('unreachable');
+    expect(spec.entry.relativePath).toBe('/src/main.tsx');
+    expect(spec.install).toHaveProperty('react');
+    expect(spec.devDependencies).toHaveProperty('@vitejs/plugin-react');
+    // from-scratch tile: no baked snapshot, so `instant` can never select it
+    expect(spec.bakedNodeModulesUrl).toBeUndefined();
+    // its own visible config lives in the .ts slot — the vanilla template's
+    // `/vite.config.js` seed must not leak in
+    expect(Object.keys(spec.extraFiles ?? {})).toContain('/vite.config.ts');
+    expect(Object.keys(spec.extraFiles ?? {})).not.toContain('/vite.config.js');
+    expect(resolveProjectSpec('vite').extraFiles).not.toBe(spec.extraFiles);
+  });
+
   it('throws NotImplementedError for an unknown template id (no silent fallback)', () => {
     expect(() => resolveProjectSpec('svelte')).toThrow(NotImplementedError);
     expect(() => resolveProjectSpec('svelte')).toThrow(/templates\.resolveProjectSpec/);
