@@ -359,3 +359,18 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   keep product bytes unchanged unless an executed RED proves otherwise, exclude
   both recorded concerns and every sibling slice, then require a fresh
   Final+GREEN before RECHART. No remaining goal slice is authorized here.
+- Override batch is proof-only and closes exactly the three HOLDS. Node pins
+  v10-prefix rejection for both backends before runtime readiness, canonical
+  omitted/true toolchain `TypeError` and exact generic `COI_REQUIRED_MESSAGE`;
+  public headerless Chromium pins the same through the real SDK/Worker realm.
+- Discriminating mutants RED: a `startsWith` protocol decoder fails Node 2/2
+  and public Chromium 2/2; ordinary `Error{name:'TypeError'}` fails Node 2/2
+  and Chromium 1/1; prefixed `COI_REQUIRED_MESSAGE` fails Node 2/2 and
+  Chromium 1/1. Restored sources match exact SHA-256 `sandbox.ts`
+  `a135270540919a31acf8d23763018591bf8cfc6c61b3728a9798da363162fb7a`
+  and `host.ts`
+  `02c16d1e6724cad072c58c946b4519bb70c79b375747b1eecc48b3e231830ae1`.
+- Batch GREEN: focused Node 7/7; focused public Chromium 4/4 in 8.6s; full
+  no-COI 22/22 in 2.0m; SDK/runtime-js typechecks, lint and arch pass. Unit
+  residuals 0; goal residuals 5 per map; outside-goal residuals 0. Full
+  `pr:check` and fresh Final+GREEN pending; concerns and sibling scope unchanged.

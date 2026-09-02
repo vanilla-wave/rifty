@@ -439,22 +439,46 @@ describe('spawnToolchainRuntime trust boundary', () => {
       const events: unknown[] = [];
       runtime.on((event) => events.push(event));
       const worker = fakeWorker(0);
+      let outcome: unknown = { status: 'pending' };
+      void runtime.toolchainReady.then(
+        (value) => {
+          outcome = { status: 'resolved', backend: value };
+        },
+        (error: Error & { feature?: string }) => {
+          outcome = {
+            status: 'rejected',
+            name: error.name,
+            feature: error.feature,
+            canonical: error instanceof NotImplementedError,
+          };
+        },
+      );
 
       worker.emitUnknown({
         type: 'toolchain-ready',
-        protocol: 'rifty.sandbox-toolchain/v2',
+        protocol: 'rifty.sandbox-toolchain/v10',
         vfsBackend: backend,
       });
 
-      const error = await runtime.toolchainReady.catch((reason: unknown) => reason);
-      expect(error).toBeInstanceOf(NotImplementedError);
-      expect(error).toMatchObject({
+      await Promise.resolve();
+      expect(outcome).toEqual({
+        status: 'rejected',
         name: 'NotImplementedError',
         feature: 'sandbox.toolchain.worker',
+        canonical: true,
       });
       expect(worker.terminated).toBe(true);
       expect(runtime.isReady()).toBe(false);
       expect(events).toEqual([]);
+
+      worker.emit({ type: 'ready' });
+      await Promise.resolve();
+      expect(outcome).toEqual({
+        status: 'rejected',
+        name: 'NotImplementedError',
+        feature: 'sandbox.toolchain.worker',
+        canonical: true,
+      });
     },
   );
 

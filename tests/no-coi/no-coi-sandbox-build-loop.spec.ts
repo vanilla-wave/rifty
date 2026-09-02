@@ -248,6 +248,7 @@ async function waitForRuntimeReady(page: Page): Promise<void> {
 
 async function createGenericSandbox(page: Page): Promise<{
   readonly defaultError: { readonly name: string; readonly message: string };
+  readonly expectedCoiMessage: string;
   readonly text: string;
   readonly evalOk: boolean;
   readonly stdout: string;
@@ -259,6 +260,7 @@ async function createGenericSandbox(page: Page): Promise<{
   const result = await page.evaluate(
     async ({ sdkUrl, workerUrl }) => {
       const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
+        COI_REQUIRED_MESSAGE: string;
         createSandbox(options: Record<string, unknown>): Promise<unknown>;
       };
       let defaultError: { name: string; message: string } | null = null;
@@ -295,13 +297,18 @@ async function createGenericSandbox(page: Page): Promise<{
       sandbox.runtime.on((event) => {
         if (event.type === 'stdout' && event.chunk) stdout.push(event.chunk);
       });
-      return { defaultError, stored: true, stdout };
+      return {
+        defaultError,
+        expectedCoiMessage: sdk.COI_REQUIRED_MESSAGE,
+        stored: true,
+        stdout,
+      };
     },
     { sdkUrl: sdkModuleUrl, workerUrl: runtimeWorkerUrl },
   );
   expect(result.stored).toBe(true);
   await waitForRuntimeReady(page);
-  return page.evaluate(async (seed) => {
+  const state = await page.evaluate(async (seed) => {
     const holder = globalThis as typeof globalThis & {
       __riftyNoCoiSandbox: {
         runtime: {
@@ -372,6 +379,7 @@ async function createGenericSandbox(page: Page): Promise<{
       cpu: JSON.parse(cpuLine.slice('__RIFTY_GENERIC_CPU__'.length)),
     };
   }, 'public-worker');
+  return { ...state, expectedCoiMessage: result.expectedCoiMessage };
 }
 
 async function createToolchainSandbox(page: Page): Promise<{
@@ -381,14 +389,22 @@ async function createToolchainSandbox(page: Page): Promise<{
   readonly report: unknown;
   readonly reportFrozen: boolean;
   readonly reportDeepFrozen: boolean;
-  readonly falseFlagErrors: readonly { readonly name: string; readonly message: string }[];
+  readonly falseFlagErrors: readonly {
+    readonly name: string;
+    readonly message: string;
+    readonly canonicalTypeError: boolean;
+  }[];
 }> {
   const state = await page.evaluate(
     async ({ sdkUrl, selectedToolchainWorkerUrl }) => {
       const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
         createSandbox(options: Record<string, unknown>): Promise<unknown>;
       };
-      const falseFlagErrors: Array<{ name: string; message: string }> = [];
+      const falseFlagErrors: Array<{
+        name: string;
+        message: string;
+        canonicalTypeError: boolean;
+      }> = [];
       for (const requireCrossOriginIsolation of [undefined, true]) {
         try {
           await sdk.createSandbox({
@@ -399,7 +415,11 @@ async function createToolchainSandbox(page: Page): Promise<{
           throw new Error('toolchain false-flag admission unexpectedly booted');
         } catch (error) {
           const inspected = error instanceof Error ? error : new Error(String(error));
-          falseFlagErrors.push({ name: inspected.name, message: inspected.message });
+          falseFlagErrors.push({
+            name: inspected.name,
+            message: inspected.message,
+            canonicalTypeError: error instanceof TypeError,
+          });
         }
       }
       const sandbox = (await sdk.createSandbox({
@@ -756,8 +776,7 @@ test('preservation: real public createSandbox stays headerless and keeps opener/
     await setHostPhase(host, 'generic-create');
     const result = await createGenericSandbox(host);
     expect(result.defaultError.name).toBe('Error');
-    expect(result.defaultError.message).toContain('cross-origin isolation is not active');
-    expect(result.defaultError.message).toContain('requireCrossOriginIsolation: false');
+    expect(result.defaultError.message).toBe(result.expectedCoiMessage);
     expect(result.text).toBe('public-worker');
     expect(result.evalOk).toBe(true);
     expect(result.stdout).toContain('generic-no-coi:public-worker');
@@ -976,8 +995,16 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
       reportDeepFrozen: true,
     });
     expect(state.falseFlagErrors).toEqual([
-      expect.objectContaining({ name: 'TypeError', message: expect.stringContaining('false') }),
-      expect.objectContaining({ name: 'TypeError', message: expect.stringContaining('false') }),
+      expect.objectContaining({
+        name: 'TypeError',
+        message: expect.stringContaining('false'),
+        canonicalTypeError: true,
+      }),
+      expect.objectContaining({
+        name: 'TypeError',
+        message: expect.stringContaining('false'),
+        canonicalTypeError: true,
+      }),
     ]);
     const surfaces = await host.evaluate(async () => {
       const sandbox = (
@@ -1217,7 +1244,7 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
         postMessage({ type: 'ready' });
         postMessage({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v2',
+          protocol: 'rifty.sandbox-toolchain/v10',
           vfsBackend: 'memory',
         });
         postMessage({
@@ -1380,7 +1407,7 @@ test('public SDK waits for both readiness signals in either real Worker order', 
         const NativeWorker = globalThis.Worker;
         const run = async (kind: 'exact' | 'mismatch', backend: 'opfs' | 'memory') => {
           const protocol =
-            kind === 'exact' ? 'rifty.sandbox-toolchain/v1' : 'rifty.sandbox-toolchain/v2';
+            kind === 'exact' ? 'rifty.sandbox-toolchain/v1' : 'rifty.sandbox-toolchain/v10';
           const source = `
           addEventListener('message', (event) => {
             if (event.data === 'release-runtime-ready') postMessage({ type: 'ready' });
@@ -1450,7 +1477,7 @@ test('public SDK waits for both readiness signals in either real Worker order', 
             await firstSignal;
             await Promise.resolve();
             const afterToolchainReady = settled;
-            if (kind === 'exact') selectedWorker?.postMessage('release-runtime-ready');
+            selectedWorker?.postMessage('release-runtime-ready');
             const result = await creating;
             if (result.status === 'rejected') {
               return {

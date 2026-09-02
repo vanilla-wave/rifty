@@ -128,15 +128,15 @@ describe('createSandbox', () => {
     async (requireCrossOriginIsolation) => {
       const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>('opfs'));
       const spawn = vi.fn(() => fakeRuntime());
-      await expect(
-        createSandbox(
-          {
-            workerUrl: 'w',
-            ...(requireCrossOriginIsolation === undefined ? {} : { requireCrossOriginIsolation }),
-          },
-          deps({ detect: () => capabilityCheck(false), initVfs, spawn }),
-        ),
-      ).rejects.toThrow(COI_REQUIRED_MESSAGE);
+      const error = await createSandbox(
+        {
+          workerUrl: 'w',
+          ...(requireCrossOriginIsolation === undefined ? {} : { requireCrossOriginIsolation }),
+        },
+        deps({ detect: () => capabilityCheck(false), initVfs, spawn }),
+      ).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(COI_REQUIRED_MESSAGE);
       expect(initVfs).not.toHaveBeenCalled();
       expect(spawn).not.toHaveBeenCalled();
     },
@@ -161,12 +161,12 @@ describe('createSandbox', () => {
         ...(requireCrossOriginIsolation === undefined ? {} : { requireCrossOriginIsolation }),
         toolchain: { workerUrl: '/toolchain-worker.js' },
       };
-      await expect(
-        createSandbox(
-          options as unknown as CreateSandboxOptions,
-          deps({ detect: () => capabilityCheck(false) }),
-        ),
-      ).rejects.toMatchObject({
+      const error = await createSandbox(
+        options as unknown as CreateSandboxOptions,
+        deps({ detect: () => capabilityCheck(false) }),
+      ).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(TypeError);
+      expect(error).toMatchObject({
         name: 'TypeError',
         message: expect.stringContaining('false'),
       });
