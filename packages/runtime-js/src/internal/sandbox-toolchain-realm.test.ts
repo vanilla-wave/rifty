@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { NotImplementedError } from '@riftydev/io';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sandboxToolchainWebAssembly } from './sandbox-toolchain-realm.ts';
 
 const TOOLCHAIN_REALM = Symbol.for('rifty.runtime-js.sandbox-toolchain.v1');
@@ -68,6 +69,7 @@ function selectToolchainRealm(): typeof WebAssembly {
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, TOOLCHAIN_REALM);
+  vi.unstubAllGlobals();
 });
 
 describe('sandbox toolchain WebAssembly.Memory descriptor evaluation', () => {
@@ -100,6 +102,70 @@ describe('sandbox toolchain WebAssembly.Memory descriptor evaluation', () => {
       sharedReads: 1,
       error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
     });
+  });
+
+  it('throws the canonical @riftydev/io NotImplementedError identity', () => {
+    let caught: unknown;
+    try {
+      new (selectToolchainRealm().Memory)({ initial: 1, maximum: 1, shared: true });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(NotImplementedError);
+    expect((caught as Error).constructor).toBe(NotImplementedError);
+    expect(Object.getPrototypeOf(caught)).toBe(NotImplementedError.prototype);
+  });
+
+  it('rejects truthy shared before a real native construction completes', () => {
+    const NativeWebAssembly = WebAssembly;
+    const NativeMemory = NativeWebAssembly.Memory;
+    let completedNativeConstructions = 0;
+    const DecoratedMemory = new Proxy(NativeMemory, {
+      construct(target, args, newTarget) {
+        const effectiveNewTarget = newTarget.prototype === target.prototype ? target : newTarget;
+        const memory = Reflect.construct(target, args, effectiveNewTarget);
+        completedNativeConstructions += 1;
+        return memory;
+      },
+    });
+    vi.stubGlobal(
+      'WebAssembly',
+      new Proxy(NativeWebAssembly, {
+        get(target, property, receiver) {
+          return property === 'Memory' ? DecoratedMemory : Reflect.get(target, property, receiver);
+        },
+      }),
+    );
+
+    expect(
+      () => new (selectToolchainRealm().Memory)({ initial: 1, maximum: 1, shared: true }),
+    ).toThrow(NotImplementedError);
+    expect(completedNativeConstructions).toBe(0);
+  });
+
+  it('returns an actual native Memory for a false-then-true descriptor', () => {
+    const NativeMemory = WebAssembly.Memory;
+    let sharedReads = 0;
+    const descriptor = Object.defineProperties(
+      {},
+      {
+        initial: { value: 1 },
+        maximum: { value: 1 },
+        shared: {
+          get() {
+            sharedReads += 1;
+            return sharedReads > 1;
+          },
+        },
+      },
+    ) as WebAssembly.MemoryDescriptor;
+
+    const memory = new (selectToolchainRealm().Memory)(descriptor);
+    expect(sharedReads).toBe(1);
+    expect(memory).toBeInstanceOf(NativeMemory);
+    expect(memory.constructor).toBe(NativeMemory);
+    expect(Object.getPrototypeOf(memory)).toBe(NativeMemory.prototype);
   });
 
   it('keeps the caller descriptor as the receiver of private-field accessors', () => {

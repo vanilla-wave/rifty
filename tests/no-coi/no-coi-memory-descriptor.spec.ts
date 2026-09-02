@@ -4,7 +4,14 @@ const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
 const toolchainWorkerUrl = `/@fs${workspacePath}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`;
 
+const expectedNativeIdentity = {
+  instanceOfNative: true,
+  constructorIsNative: true,
+  prototypeIsNative: true,
+} as const;
+
 const descriptorProbeExpression = `(() => {
+  const NativeMemory = globalThis.WebAssembly.Memory;
   const observe = (nextShared) => {
     const log = [];
     let sharedReads = 0;
@@ -15,9 +22,28 @@ const descriptorProbeExpression = `(() => {
     });
     try {
       const memory = new WebAssembly.Memory(descriptor);
-      return { log, sharedReads, bufferBrand: Object.prototype.toString.call(memory.buffer) };
+      return {
+        log,
+        sharedReads,
+        bufferBrand: Object.prototype.toString.call(memory.buffer),
+        identity: {
+          instanceOfNative: memory instanceof NativeMemory,
+          constructorIsNative: memory.constructor === NativeMemory,
+          prototypeIsNative: Object.getPrototypeOf(memory) === NativeMemory.prototype,
+        },
+      };
     } catch (error) {
-      return { log, sharedReads, error: { name: error.name, feature: error.feature } };
+      const prototype = Object.getPrototypeOf(error);
+      return {
+        log,
+        sharedReads,
+        error: {
+          name: error.name,
+          feature: error.feature,
+          constructorName: prototype?.constructor?.name ?? null,
+          plainErrorPrototype: prototype === Error.prototype,
+        },
+      };
     }
   };
   return {
@@ -31,11 +57,17 @@ const expectedDescriptorOutcome = {
     log: ['initial', 'maximum', 'shared'],
     sharedReads: 1,
     bufferBrand: '[object ArrayBuffer]',
+    identity: expectedNativeIdentity,
   },
   firstTruthy: {
     log: ['initial', 'maximum', 'shared'],
     sharedReads: 1,
-    error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
+    error: {
+      name: 'NotImplementedError',
+      feature: 'toolchain.threaded-wasm',
+      constructorName: 'NotImplementedError',
+      plainErrorPrototype: false,
+    },
   },
 } as const;
 
@@ -104,6 +136,7 @@ test('headerless Chrome 148 native Memory reads descriptor fields once in order'
   expect(browser.version()).toBe('148.0.7778.96');
   await openHeaderlessPage(page);
   const outcome = await page.evaluate(() => {
+    const NativeMemory = globalThis.WebAssembly.Memory;
     const observe = (nextShared: (read: number) => unknown) => {
       const log: string[] = [];
       let sharedReads = 0;
@@ -137,6 +170,11 @@ test('headerless Chrome 148 native Memory reads descriptor fields once in order'
           log,
           sharedReads,
           bufferBrand: Object.prototype.toString.call(memory.buffer),
+          identity: {
+            instanceOfNative: memory instanceof NativeMemory,
+            constructorIsNative: memory.constructor === NativeMemory,
+            prototypeIsNative: Object.getPrototypeOf(memory) === NativeMemory.prototype,
+          },
         };
       } catch (error) {
         const inspected = error as Error & { readonly feature?: string };
@@ -158,6 +196,7 @@ test('headerless Chrome 148 native Memory reads descriptor fields once in order'
     log: ['initial', 'maximum', 'shared'],
     sharedReads: 1,
     bufferBrand: '[object SharedArrayBuffer]',
+    identity: expectedNativeIdentity,
   });
 });
 
