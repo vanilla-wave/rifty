@@ -2,6 +2,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { runInRiftyInCurrentRealm } from './run-in-rifty.ts';
 import type {
   NodeCliEvalBootstrapFault,
+  NodeCliEvalPreEntryFault,
   NodeCliEvalPreviewProbe,
   NodeCliEvalVfsProbe,
   PhysicalStdioDeliveryFault,
@@ -14,6 +15,7 @@ interface WorkerRequest {
   readonly nodeCliEvalVfsProbe?: NodeCliEvalVfsProbe;
   readonly nodeCliEvalPreviewProbe?: NodeCliEvalPreviewProbe;
   readonly nodeCliEvalBootstrapFault?: NodeCliEvalBootstrapFault;
+  readonly nodeCliEvalPreEntryFault?: NodeCliEvalPreEntryFault;
   readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
@@ -41,6 +43,7 @@ try {
     nodeCliEvalVfsProbe: request.nodeCliEvalVfsProbe,
     nodeCliEvalPreviewProbe: request.nodeCliEvalPreviewProbe,
     nodeCliEvalBootstrapFault: request.nodeCliEvalBootstrapFault,
+    nodeCliEvalPreEntryFault: request.nodeCliEvalPreEntryFault,
     physicalStdioDeliveryFault: request.physicalStdioDeliveryFault,
   });
   parentPort.postMessage({ ok: true, stdout });

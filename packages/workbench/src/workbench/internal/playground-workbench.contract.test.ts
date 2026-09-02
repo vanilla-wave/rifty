@@ -38,6 +38,7 @@ import {
   type InspectedProjectDefinition,
   defineNodeCliProject,
   defineNodeServerProject,
+  defineNpmDevServerProject,
   projects,
 } from '../project-definition.ts';
 import type { ProjectDocumentReadEntry } from '../project-documents.ts';
@@ -613,6 +614,8 @@ function definePlan(plan: PlaygroundProjectPlan): ProjectDefinition<unknown> {
       return projects.vite({ ...common, viteVersion: plan.viteVersion });
     case 'node-server':
       return defineNodeServerProject({ ...common, entryPath: plan.entryPath, port: plan.port });
+    case 'npm-dev-server':
+      return defineNpmDevServerProject(common);
     case 'node-cli':
       return defineNodeCliProject({ ...common, entryPath: plan.entryPath, args: plan.args });
   }

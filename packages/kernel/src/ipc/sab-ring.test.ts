@@ -1,9 +1,9 @@
 /**
  * Unit tests for the SAB request/reply ring (ADR-0011 phase 1).
  *
- * The "caller" side of the protocol uses {@link Atomics.wait}, which only
- * works inside a Worker realm. These tests run in Node (vitest's default),
- * so they exercise the protocol via the async siblings:
+ * The browser caller uses {@link Atomics.wait} inside a Worker. These tests
+ * run in Node (vitest's default), so ordinary round-trips use the async sibling
+ * and host-boundary fault cases decorate Node's wait primitives:
  *   - caller side → {@link SabRing.waitReplyAsync}
  *   - responder side → {@link SabRing.readRequest} / {@link SabRing.writeReply}
  *
@@ -11,7 +11,7 @@
  * test in `tests/conformance/kernel/sab-ring.test.ts` (Worker fixture).
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   REQ_STATE_OFFSET,
   RingPayloadTooLargeError,
@@ -20,6 +20,20 @@ import {
   SabRing,
   createSabRing,
 } from './sab-ring.ts';
+
+type WaitResult = 'ok' | 'not-equal' | 'timed-out';
+type Wait = (typedArray: Int32Array, index: number, value: number, timeout?: number) => WaitResult;
+type WaitAsyncResult =
+  | { async: false; value: WaitResult }
+  | { async: true; value: Promise<'ok' | 'timed-out'> };
+type WaitAsync = (
+  typedArray: Int32Array,
+  index: number,
+  value: number,
+  timeout?: number,
+) => WaitAsyncResult;
+
+const atomicsWait = Atomics as unknown as { wait: Wait; waitAsync: WaitAsync };
 
 describe('createSabRing', () => {
   it('allocates a buffer sized for header + 2× payload capacity', () => {
@@ -86,6 +100,222 @@ describe('SabRing — timeout', () => {
     });
     expect(() => secondCaller.writeRequest(new Uint8Array([2]))).toThrow(
       /previous request is unread/,
+    );
+  });
+});
+
+describe('SabRing — early reply wakes', () => {
+  it('waitReply re-checks an idle reply after early ok wakes, then consumes the real reply', () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+    const nativeWait = atomicsWait.wait.bind(Atomics);
+    const sleeper = new Int32Array(new SharedArrayBuffer(4));
+    const observedTimeouts: number[] = [];
+    let earlyWakes = 0;
+
+    caller.writeRequest(new Uint8Array([1, 2, 3]));
+    const waitSpy = vi
+      .spyOn(atomicsWait, 'wait')
+      .mockImplementation((words, index, value, timeout) => {
+        observedTimeouts.push(timeout ?? Number.POSITIVE_INFINITY);
+        if (earlyWakes < 2) {
+          earlyWakes++;
+          nativeWait(sleeper, 0, 0, 5);
+          return 'ok';
+        }
+
+        expect(responder.readRequest()).toEqual(new Uint8Array([1, 2, 3]));
+        responder.writeReply(new Uint8Array([4, 5, 6]));
+        return nativeWait(words, index, value, timeout);
+      });
+
+    try {
+      expect(caller.waitReply(250)).toEqual(new Uint8Array([4, 5, 6]));
+      expect(waitSpy).toHaveBeenCalledTimes(3);
+      expect(observedTimeouts[0]).toBeGreaterThan(0);
+      expect(observedTimeouts[0]).toBeLessThanOrEqual(250);
+      expect(observedTimeouts[1]).toBeLessThan(observedTimeouts[0] ?? 0);
+      expect(observedTimeouts[2]).toBeLessThan(observedTimeouts[1] ?? 0);
+    } finally {
+      waitSpy.mockRestore();
+    }
+
+    caller.writeRequest(new Uint8Array([7]));
+    expect(responder.readRequest()).toEqual(new Uint8Array([7]));
+    responder.writeReply(new Uint8Array([8]));
+    expect(caller.waitReply(0)).toEqual(new Uint8Array([8]));
+  });
+
+  it('waitReplyAsync re-checks an idle reply after early ok wakes, then consumes the real reply', async () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+    const nativeWaitAsync = atomicsWait.waitAsync.bind(Atomics);
+    const observedTimeouts: number[] = [];
+    let earlyWakes = 0;
+
+    caller.writeRequest(new Uint8Array([1, 2, 3]));
+    const waitSpy = vi
+      .spyOn(atomicsWait, 'waitAsync')
+      .mockImplementation((words, index, value, timeout) => {
+        observedTimeouts.push(timeout ?? Number.POSITIVE_INFINITY);
+        if (earlyWakes < 2) {
+          earlyWakes++;
+          return {
+            async: true,
+            value: new Promise<'ok'>((resolve) => {
+              setTimeout(() => resolve('ok'), 5);
+            }),
+          };
+        }
+
+        expect(responder.readRequest()).toEqual(new Uint8Array([1, 2, 3]));
+        responder.writeReply(new Uint8Array([4, 5, 6]));
+        return nativeWaitAsync(words, index, value, timeout);
+      });
+
+    try {
+      await expect(caller.waitReplyAsync(250)).resolves.toEqual(new Uint8Array([4, 5, 6]));
+      expect(waitSpy).toHaveBeenCalledTimes(3);
+      expect(observedTimeouts[0]).toBeGreaterThan(0);
+      expect(observedTimeouts[0]).toBeLessThanOrEqual(250);
+      expect(observedTimeouts[1]).toBeLessThan(observedTimeouts[0] ?? 0);
+      expect(observedTimeouts[2]).toBeLessThan(observedTimeouts[1] ?? 0);
+    } finally {
+      waitSpy.mockRestore();
+    }
+  });
+
+  it('repeated early sync wakes expire against one monotonic deadline', () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const secondCaller = SabRing.attach(sab, 16);
+    const observedTimeouts: number[] = [];
+    let monotonicNow = 1_000;
+
+    caller.writeRequest(new Uint8Array([1]));
+    const clockSpy = vi.spyOn(performance, 'now').mockImplementation(() => monotonicNow);
+    const waitSpy = vi
+      .spyOn(atomicsWait, 'wait')
+      .mockImplementation((_words, _index, _value, timeout) => {
+        observedTimeouts.push(timeout ?? Number.POSITIVE_INFINITY);
+        if (observedTimeouts.length > 2) return 'timed-out';
+        monotonicNow += 60;
+        return 'ok';
+      });
+
+    let caught: unknown;
+    try {
+      caller.waitReply(100);
+    } catch (error) {
+      caught = error;
+    } finally {
+      waitSpy.mockRestore();
+      clockSpy.mockRestore();
+    }
+
+    expect(caught).toBeInstanceOf(RingTimeoutError);
+    if (!(caught instanceof RingTimeoutError)) throw new Error('expected RingTimeoutError');
+    expect(caught.code).toBe('ERINGTIMEOUT');
+    expect(caught.message).toBe(
+      `SAB ring waitReply timed out after 100ms (header: version=${caller.expectedVersion} req=ready rep=idle reqLen=1 repLen=0)`,
+    );
+    expect(observedTimeouts.slice(0, 2)).toEqual([100, 40]);
+    expect(observedTimeouts.slice(2).every((timeout) => timeout <= 0)).toBe(true);
+    expect(() => secondCaller.writeRequest(new Uint8Array([2]))).toThrow(
+      /previous request is unread/,
+    );
+  });
+
+  it('repeated early async wakes expire against one monotonic deadline', async () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const secondCaller = SabRing.attach(sab, 16);
+    const observedTimeouts: number[] = [];
+    let monotonicNow = 1_000;
+
+    caller.writeRequest(new Uint8Array([1]));
+    const clockSpy = vi.spyOn(performance, 'now').mockImplementation(() => monotonicNow);
+    const waitSpy = vi
+      .spyOn(atomicsWait, 'waitAsync')
+      .mockImplementation((_words, _index, _value, timeout) => {
+        observedTimeouts.push(timeout ?? Number.POSITIVE_INFINITY);
+        if (observedTimeouts.length > 2) return { async: false, value: 'timed-out' };
+        return {
+          async: true,
+          value: Promise.resolve().then(() => {
+            monotonicNow += 60;
+            return 'ok' as const;
+          }),
+        };
+      });
+
+    let caught: unknown;
+    try {
+      await caller.waitReplyAsync(100);
+    } catch (error) {
+      caught = error;
+    } finally {
+      waitSpy.mockRestore();
+      clockSpy.mockRestore();
+    }
+
+    expect(caught).toBeInstanceOf(RingTimeoutError);
+    if (!(caught instanceof RingTimeoutError)) throw new Error('expected RingTimeoutError');
+    expect(caught.code).toBe('ERINGTIMEOUT');
+    expect(caught.message).toBe(
+      `SAB ring waitReply timed out after 100ms (header: version=${caller.expectedVersion} req=ready rep=idle reqLen=1 repLen=0)`,
+    );
+    expect(observedTimeouts.slice(0, 2)).toEqual([100, 40]);
+    expect(observedTimeouts.slice(2).every((timeout) => timeout <= 0)).toBe(true);
+    expect(() => secondCaller.writeRequest(new Uint8Array([2]))).toThrow(
+      /previous request is unread/,
+    );
+  });
+
+  it('keeps a sync timed-out result authoritative over a later reply publication', () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+    const secondCaller = SabRing.attach(sab, 16);
+
+    caller.writeRequest(new Uint8Array([1]));
+    expect(responder.readRequest()).toEqual(new Uint8Array([1]));
+    const waitSpy = vi.spyOn(atomicsWait, 'wait').mockImplementation(() => {
+      responder.writeReply(new Uint8Array([9]));
+      return 'timed-out';
+    });
+
+    try {
+      expect(() => caller.waitReply(20)).toThrow(RingTimeoutError);
+    } finally {
+      waitSpy.mockRestore();
+    }
+    expect(() => secondCaller.writeRequest(new Uint8Array([2]))).toThrow(
+      /previous reply is unread/,
+    );
+  });
+
+  it('keeps an async timed-out result authoritative when a reply precedes continuation', async () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });
+    const responder = SabRing.attach(sab, 16);
+    const secondCaller = SabRing.attach(sab, 16);
+
+    caller.writeRequest(new Uint8Array([1]));
+    expect(responder.readRequest()).toEqual(new Uint8Array([1]));
+    const waitSpy = vi.spyOn(atomicsWait, 'waitAsync').mockImplementation(() => ({
+      async: true,
+      value: new Promise<'timed-out'>((resolve) => {
+        queueMicrotask(() => {
+          resolve('timed-out');
+          responder.writeReply(new Uint8Array([9]));
+        });
+      }),
+    }));
+
+    try {
+      await expect(caller.waitReplyAsync(20)).rejects.toBeInstanceOf(RingTimeoutError);
+    } finally {
+      waitSpy.mockRestore();
+    }
+    expect(() => secondCaller.writeRequest(new Uint8Array([2]))).toThrow(
+      /previous reply is unread/,
     );
   });
 });

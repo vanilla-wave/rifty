@@ -155,6 +155,33 @@ describe('entry-scoped bootstrap envelope', () => {
     ]);
   });
 
+  it('waits for asynchronous pre-entry readiness before running guest code', async () => {
+    const order: string[] = [];
+    let resolveReadiness!: () => void;
+    const readiness = new Promise<void>((resolve) => {
+      resolveReadiness = resolve;
+    });
+    const lifecycle = runEntryLifecycle(
+      makeSpec({ kind: 'source', code: 'void 0;', sourceUrl: '/entry.js' }),
+      makeDeps({
+        preEntryHook: () => {
+          order.push('pre-entry');
+          return readiness;
+        },
+        runEntry: async () => {
+          order.push('entry');
+        },
+      }),
+    );
+
+    await Promise.resolve();
+    expect(order).toEqual(['pre-entry']);
+
+    resolveReadiness();
+    await expect(lifecycle).resolves.toEqual({ threw: false, code: 0 });
+    expect(order).toEqual(['pre-entry', 'entry']);
+  });
+
   it('publishes null before pre-entry when the entry has no envelope', async () => {
     publishKernelEntryBootstrap({ protocol: 'test:stale/v1', payload: { mustNotLeak: true } });
     const seen: Array<KernelEntryBootstrapEnvelope | null> = [];

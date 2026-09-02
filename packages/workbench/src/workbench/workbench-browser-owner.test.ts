@@ -20,6 +20,7 @@ import type { PageToWorkbenchOwnerMessage } from './owner-protocol.ts';
 import {
   defineNodeCliProject,
   defineNodeServerProject,
+  defineNpmDevServerProject,
   inspectProjectDefinition,
   projects,
 } from './project-definition.ts';
@@ -2337,9 +2338,22 @@ describe('browser Workbench owner transport', () => {
     await raw.closed;
   });
 
-  it('dispatches finite Node definitions to their exact browser runtimes', async () => {
+  it('dispatches package-owned definitions to their exact browser runtimes', async () => {
     const files = { '/src/main.mjs': 'console.log("node");\n' };
     const cases = [
+      {
+        definition: inspectProjectDefinition(
+          defineNpmDevServerProject({
+            id: 'browser-npm-dev-server',
+            files: {
+              '/package.json': '{"scripts":{"dev":"webpack serve"}}\n',
+              '/webpack.config.js': 'module.exports = {};\n',
+            },
+          }),
+        ),
+        line: 'npm run dev',
+        ready: false,
+      },
       {
         definition: inspectProjectDefinition(
           defineNodeServerProject({

@@ -669,10 +669,12 @@ async function harness(
     `${ROOT}/package.json`,
     new TextEncoder().encode(activePackageConfig.cfg.packageJson),
   );
-  authority.writeFileSync(
-    activePackageConfig.cfg.entryPath,
-    new TextEncoder().encode('export {};\n'),
-  );
+  if ('entryPath' in activePackageConfig.cfg) {
+    authority.writeFileSync(
+      activePackageConfig.cfg.entryPath,
+      new TextEncoder().encode('export {};\n'),
+    );
+  }
   authority.writeFileSync(
     `${ROOT}/node_modules/.bin/vite`,
     new TextEncoder().encode('#!/usr/bin/env node\n'),

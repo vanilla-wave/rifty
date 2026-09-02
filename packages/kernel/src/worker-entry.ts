@@ -14,7 +14,8 @@
  *      snapshot of `{pid, ppid, argv, env, cwd, stdio}`. Kernel does NOT
  *      install a Node-shape `globalThis.process`; that lives in
  *      `@riftydev/runtime-js`.
- *   5. Invokes the optional pre-entry hook ({@link setKernelPreEntryHook}).
+ *   5. Invokes and awaits the optional pre-entry hook
+ *      ({@link setKernelPreEntryHook}).
  *      Node-style hosts use it to install the Node `process` global from
  *      runtime-js before user code runs.
  *   6. Runs the entry (eval'd source or a dynamic `import(url)`).
@@ -153,13 +154,13 @@ export interface WorkerExitMessage {
  * Optional pre-entry hook signature. The kernel calls the hook (when
  * registered) right after publishing the {@link KernelProcessSpec} and
  * right before running the user's entry. Hosts that spawn Node-style
- * children register `installNodeProcessShim` from `@riftydev/runtime-js` so
+ * children register `installNodeRuntime` from `@riftydev/runtime-js` so
  * the user script sees a fully-shaped `globalThis.process`.
  *
- * The hook MAY throw — a throw is treated like any other entry failure:
- * the worker exits with code 1 and the stack lands on stderr.
+ * The hook MAY throw or return readiness. Throw/rejection is treated like any
+ * other entry failure: exit 1 with the stack on stderr.
  */
-export type KernelPreEntryHook = (spec: WorkerSpawnSpec) => void;
+export type KernelPreEntryHook = (spec: WorkerSpawnSpec) => void | Promise<void>;
 
 let preEntryHook: KernelPreEntryHook | null = null;
 
@@ -332,8 +333,8 @@ interface InternalEntryLifecycleDeps extends EntryLifecycleDeps {
 }
 
 /**
- * Run the pre-entry hook + entry, drain a run-to-completion child's event loop,
- * and compute the exit outcome — the realm-independent core of the bootstrap.
+ * Run and await the pre-entry hook + entry, drain a run-to-completion child's
+ * event loop, and compute the exit outcome — the realm-independent core.
  *
  *  - `serve!==true` child: after the entry resolves, `await`s the drain hook
  *    (when registered) so it exits on loop-empty like Node, not at top-level
@@ -355,7 +356,7 @@ async function runEntryLifecycleInternal(
     // their opaque higher-runtime envelope; URL-without-envelope and source
     // entries publish null so stale host/test state cannot cross entries.
     publishKernelEntryBootstrap(spec.entry.kind === 'url' ? (spec.entry.bootstrap ?? null) : null);
-    if (deps.preEntryHook !== null) deps.preEntryHook(spec);
+    if (deps.preEntryHook !== null) await deps.preEntryHook(spec);
     await deps.runEntry(spec.entry);
     if (spec.serve !== true && deps.drainHook !== null) {
       await deps.drainHook(spec);

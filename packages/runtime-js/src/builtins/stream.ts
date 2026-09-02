@@ -24,6 +24,25 @@ import {
   setDefaultHighWaterMark,
 } from '@riftydev/io';
 
+type StreamModule = typeof Stream & {
+  Readable: typeof Readable;
+  Writable: typeof Writable;
+  Duplex: typeof Duplex;
+  Transform: typeof Transform;
+  PassThrough: typeof PassThrough;
+  pipeline: typeof pipeline;
+  finished: typeof finished;
+  compose: typeof compose;
+  Stream: typeof Stream;
+  addAbortSignal: typeof addAbortSignal;
+  getDefaultHighWaterMark: typeof getDefaultHighWaterMark;
+  setDefaultHighWaterMark: typeof setDefaultHighWaterMark;
+  isReadable: typeof isReadable;
+  isWritable: typeof isWritable;
+  isErrored: typeof isErrored;
+  isDisturbed: typeof isDisturbed;
+};
+
 export {
   Readable,
   Writable,
@@ -51,7 +70,7 @@ export {
 // `require('stream')` in Node IS the legacy `Stream` constructor with the
 // modern classes attached as statics (and `Stream.Stream === Stream`). Match
 // that shape so `util.inherits(X, require('stream'))` works (e.g. `send`).
-const stream = Object.assign(Stream, {
+const stream: StreamModule = Object.assign(Stream, {
   Readable,
   Writable,
   Duplex,

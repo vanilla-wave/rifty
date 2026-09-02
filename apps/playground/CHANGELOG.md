@@ -29,6 +29,11 @@
   failure shows `Completion failed: <reason>` without a fabricated menu.
   Foreground Tab remains child stdin, and switching sessions invalidates the
   hidden session's pending/menu state.
+- An ordinary webpack 5 / webpack-dev-server 5 starter now cold-installs its
+  npm-owned `webpack serve` script and reaches the generic routed preview with
+  stock HMR; its companion plan carries no webpack-specific runtime fields
+  (ADR-0349).
+
 - Express, Hono, and Koa pin real `nodemon@3.1.14`; owner-VFS edits now replace
   the app Worker on the same preview port with crash recovery and teardown.
   Direct `start` and non-server templates keep their paths (ADR-0324–0327).
@@ -52,6 +57,14 @@
   persistent terminal hint explains that `+` opens a second shell while a
   program owns stdin.
 
+- The webpack starter now allow-lists only the exact Playground page hostname
+  in its visible dev-server config, so stock HMR works on deployed aliases
+  without weakening Host/Origin checks (ADR-0355).
+- A preview-readiness failure no longer marks its still-live project process as
+  stopped or disables Stop Project; physical exit remains the state authority.
+- The Vite host kernel wrapper now publishes its emitted QuickJS WASM URL
+  before loading Workbench's sealed kernel entry, so transformed Emscripten
+  chunks never fetch the playground HTML fallback (ADR-0352).
 - Node 24 `require(ESM)` no longer makes the playground dev host discover
   `cjs-module-lexer` mid-session and full-reload away the live owner. Rebaked
   TypeScript/Vite snapshots carry the new esbuild recipe identity and refresh

@@ -1,5 +1,4 @@
 import { installWorkerEntry, setKernelPreEntryHook } from '@riftydev/kernel/worker-entry';
-import type { WorkerSpawnSpec } from '@riftydev/kernel/worker-entry';
 // ADR-0011 phase 2 + ADR-0039 — entry module for `new Worker(url, { type: 'module' })`
 // invocations dispatched by `globalProcessManager.spawnWorker(...)`.
 //
@@ -12,7 +11,8 @@ import type { WorkerSpawnSpec } from '@riftydev/kernel/worker-entry';
 //      spec-seeded mutable `process` AND, gated to Node workers (`isNode = no
 //      __RIFTY_WASI_WASM_URL`), the rich extras (`Buffer` + nextTick-ordering
 //      Promise patch) — so every Node child gets a faithful process by
-//      construction, no later swap.
+//      construction, no later swap. It returns only the runtime-selected async
+//      readiness the kernel must await before guest entry (ADR-0351).
 //   2. Install the kernel `'init'` listener that consumes `WorkerInitMessage`,
 //      publishes the `KernelProcessSpec`, calls the pre-entry hook, and runs the
 //      entry script.
@@ -33,9 +33,7 @@ import { installEventLoopKeepalive, installFetchKeepalive } from '@riftydev/runt
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { installNodeRuntime } from '@riftydev/runtime-js/install-process';
 
-setKernelPreEntryHook((spec: WorkerSpawnSpec) => {
-  installNodeRuntime(spec);
-});
+setKernelPreEntryHook(installNodeRuntime);
 
 installTimerGlobals();
 installEventLoopKeepalive();

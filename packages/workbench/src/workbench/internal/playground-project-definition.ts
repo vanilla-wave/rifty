@@ -1,6 +1,7 @@
 import type {
   NodeCliPlaygroundPlan,
   NodeServerPlaygroundPlan,
+  NpmDevServerPlaygroundPlan,
   PlaygroundFirstMaterialization,
   PlaygroundProjectPlan,
   VitePlaygroundPlan,
@@ -12,6 +13,7 @@ import {
   type ProjectDefinitionWire,
   defineNodeCliProject,
   defineNodeServerProject,
+  defineNpmDevServerProject,
   inspectProjectDefinition,
   inspectProjectDefinitionWire,
   projectDefinitionWire,
@@ -357,7 +359,9 @@ export function ownPlaygroundProjectPlan(
         ? (['entryPath', 'port'] as const)
         : kind === 'node-cli'
           ? (['entryPath'] as const)
-          : fail('plan.kind', 'must be vite, node-server, or node-cli');
+          : kind === 'npm-dev-server'
+            ? ([] as const)
+            : fail('plan.kind', 'must be vite, node-server, node-cli, or npm-dev-server');
   const runtimeOptional =
     kind === 'vite' ? (['viteVersion'] as const) : kind === 'node-cli' ? (['args'] as const) : [];
   const keys = optionalKeys(
@@ -399,6 +403,12 @@ export function ownPlaygroundProjectPlan(
       entryPath: projectPath(properties.entryPath, 'plan.entryPath'),
       port: portValue(properties.port, 'plan.port'),
     }) satisfies NodeServerPlaygroundPlan;
+  }
+  if (kind === 'npm-dev-server') {
+    return Object.freeze({
+      ...common,
+      kind: 'npm-dev-server',
+    }) satisfies NpmDevServerPlaygroundPlan;
   }
   const args = ownedStringArray(properties.args, 'plan.args');
   return Object.freeze({
@@ -452,7 +462,7 @@ function identityFields(
     );
   } else if (plan.kind === 'node-server') {
     fields.push(`entry:${plan.entryPath}`, `port:${String(plan.port)}`);
-  } else {
+  } else if (plan.kind === 'node-cli') {
     fields.push(`entry:${plan.entryPath}`, `args-count:${String(plan.args?.length ?? 0)}`);
     for (const argument of plan.args ?? []) fields.push(`arg:${argument}`);
   }
@@ -477,6 +487,7 @@ function exactIdentity(prefix: string, fields: readonly string[]): string {
 
 function createRootDefinition(plan: VitePlaygroundPlan): ProjectDefinition<PreviewHandle>;
 function createRootDefinition(plan: NodeServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
+function createRootDefinition(plan: NpmDevServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
 function createRootDefinition(plan: NodeCliPlaygroundPlan): ProjectDefinition<void>;
 function createRootDefinition(plan: PlaygroundProjectPlan): ProjectDefinition<unknown>;
 function createRootDefinition(plan: PlaygroundProjectPlan): ProjectDefinition<unknown> {
@@ -490,6 +501,7 @@ function createRootDefinition(plan: PlaygroundProjectPlan): ProjectDefinition<un
   if (plan.kind === 'node-server') {
     return defineNodeServerProject({ ...common, entryPath: plan.entryPath, port: plan.port });
   }
+  if (plan.kind === 'npm-dev-server') return defineNpmDevServerProject(common);
   return defineNodeCliProject({ ...common, entryPath: plan.entryPath, args: plan.args });
 }
 
@@ -499,6 +511,10 @@ export function definePlaygroundProject(
 ): ProjectDefinition<PreviewHandle>;
 export function definePlaygroundProject(
   plan: NodeServerPlaygroundPlan,
+  urlContext: CapturedPlaygroundUrlContext,
+): ProjectDefinition<PreviewHandle>;
+export function definePlaygroundProject(
+  plan: NpmDevServerPlaygroundPlan,
   urlContext: CapturedPlaygroundUrlContext,
 ): ProjectDefinition<PreviewHandle>;
 export function definePlaygroundProject(

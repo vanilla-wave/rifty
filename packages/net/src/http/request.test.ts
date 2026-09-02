@@ -2,16 +2,16 @@
  * Tests for `IncomingMessage` and `IncomingMessageFromFetch`.
  *
  * Covers:
- *   - Minimal `req.socket` shape (Item 1 from 2026-05-25 review).
+ *   - EventEmitter-compatible `req.socket` attachment shape.
  *   - Streaming body delivery from `request.body` ReadableStream
  *     (Item 4 from 2026-05-25 review / ADR-0017 phase 1 reader-side finish).
  */
 
-import { Readable } from '@riftydev/io';
+import { type NotImplementedError, Readable } from '@riftydev/io';
 import { describe, expect, it } from 'vitest';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 
-describe('IncomingMessage.socket — minimal Node-compatible shape', () => {
+describe('IncomingMessage.socket — Node-compatible attachment shape', () => {
   it('exposes remoteAddress, localAddress, remotePort, localPort, and destroy()', () => {
     const req = new IncomingMessage(new Request('http://localhost/x'));
     expect(req.socket).toBeDefined();
@@ -20,8 +20,27 @@ describe('IncomingMessage.socket — minimal Node-compatible shape', () => {
     expect(req.socket.remotePort).toBe(0);
     expect(req.socket.localPort).toBe(0);
     expect(typeof req.socket.destroy).toBe('function');
-    // destroy() is a no-op for non-TCP — should not throw.
-    expect(() => req.socket.destroy()).not.toThrow();
+    expect(() => req.socket.destroy()).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'http.IncomingMessage.socket.destroy',
+      }) as unknown as NotImplementedError,
+    );
+  });
+
+  it.each([
+    ['server request', () => new IncomingMessage(new Request('http://localhost/x'))],
+    ['client response', () => new IncomingMessageFromFetch(new Response())],
+  ])('is an EventEmitter-compatible socket for %s lifecycle listeners', (_name, makeMessage) => {
+    const socket = makeMessage().socket;
+    const listener = (): void => {};
+
+    expect(() => {
+      socket.on('error', listener);
+      socket.on('close', listener);
+      socket.removeListener('error', listener);
+      socket.removeListener('close', listener);
+    }).not.toThrow();
   });
 });
 

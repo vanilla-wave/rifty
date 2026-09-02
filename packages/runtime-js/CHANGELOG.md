@@ -22,6 +22,9 @@
   response. Empty and small `readFileSync` calls use one sync-RPC round-trip;
   larger reads continue from the first unread offset, with no cache or bypass.
 
+- **QuickJS host asset bootstrap API (ADR-0352).**
+  `@riftydev/runtime-js/install-process` exports `QUICKJS_WASM_URL_ENV` so a
+  browser host can publish its bundler-owned WASM URL before Node pre-entry.
 - **Node 24 synchronous `require(ESM)` (ADR-0348).** Plain-JS graphs now share
   one import/require job with Node namespace, `"module.exports"`, TLA, cycle,
   race, resolver, and statically detected CJS re-export semantics;
@@ -115,6 +118,40 @@
   physical kill, preventing emnapi pthreads from running after their creator
   has torn down shared N-API state during a failed Vite build.
 
+- Runtime-global QuickJS and live Express/SQLite smokes now run in bounded
+  physical children, keeping guest process globals and `MessagePort` handles
+  out of Vitest's task-update IPC realm.
+- Detached fetch keepalive now makes Chromium's
+  `WebAssembly.compileStreaming` / `instantiateStreaming` an unconditional
+  whole-realm, Promise-rejected `NotImplementedError` gap. Arbitrary
+  Response/PromiseLike internal-slot consumption can no longer bypass
+  keepalive tracking or silently hang a finite child (ADR-0158 correction).
+- `node:stream` core constructors are callable like Node: legacy inherited
+  receivers receive their non-default options and usable stream state, while
+  no-`new`, modern subclassing, prototype, and static identity stay intact
+  (ADR-0353). This restores memfs-backed webpack asset reads.
+- Browser QuickJS preload now threads the host-published URL and owner-fetched
+  tracked bytes through upstream `wasmLocation` / `wasmBinary`, cancelling HTTP
+  fault bodies before exact failure. It shares one promise/module across
+  duplicate same-realm bundles, drops a rejected promise so boot can retry, and
+  keeps native package artifact resolution and explicit location-only overrides
+  after guest Worker globals replace `process` (ADR-0352).
+- `installNodeRuntime` returns QuickJS readiness only for Node workers selecting
+  that engine; WASI and rewrite workers remain synchronous (ADR-0351).
+- Static direct `eval('(specifier) => import(specifier)')` importers now stay on
+  the constructing CJS/ESM module's VFS resolver, including importers created
+  inside the routed `Function` constructor. Indirect, aliased, global, and
+  dynamic-scope eval forms retain their directed ceilings.
+- Routed `Function` analysis no longer mistakes ordinary opaque calls in
+  generated Tapable hook bodies for derived Function-constructor execution;
+  statically known import-bearing constructor arguments remain loud.
+- **Webpack `vm.createContext` policy parity.** Context names are accepted as
+  metadata, and the QuickJS realm now enforces Node's
+  `codeGeneration.strings` / `codeGeneration.wasm` controls without changing
+  guarded intrinsic descriptors, statics, prototypes, or native-source shape.
+  First contextification owns the policy; option access order and validation
+  codes match Node. The rewrite opt-in stays loud when either disabled policy
+  cannot be enforced.
 - Public `spawnRuntime` Worker crashes now stay owned by the runtime controller
   after it rejects pending calls and publishes stderr/exit, instead of also
   rethrowing the same error into the creator global.

@@ -9,7 +9,7 @@
  * pushed individually so chunked uploads work end-to-end.
  */
 
-import { Buffer, Readable } from '@riftydev/io';
+import { Buffer, EventEmitter, NotImplementedError, Readable } from '@riftydev/io';
 
 /**
  * Install `headers` as a lazy, WRITABLE data property (#9, gate G2).
@@ -72,31 +72,40 @@ function defineLazyHeaders(
 }
 
 /**
- * Minimal Node-compatible shape for `req.socket`. Real TCP fields aren't
- * meaningful in the browser/Service-Worker port-registry model, so we expose
- * loopback placeholders rather than `{}`. `destroy()` is a no-op since there
- * is no socket lifecycle to manage on a per-request basis.
+ * Node-compatible attachment surface for `req.socket`. Real TCP addresses and
+ * teardown are not owned by the port-registry request object, but middleware
+ * still attaches socket listeners (`on-finished` uses `error`/`close`).
  */
-export interface IncomingMessageSocket {
+export interface IncomingMessageSocket extends EventEmitter {
   remoteAddress: string;
   localAddress: string;
   remotePort: number;
   localPort: number;
   readable: boolean;
-  destroy(): void;
+  writable: boolean;
+  destroyed: boolean;
+  destroy(err?: Error): this;
+}
+
+class PortRegistrySocket extends EventEmitter implements IncomingMessageSocket {
+  readonly remoteAddress = '127.0.0.1';
+  readonly localAddress = '127.0.0.1';
+  readonly remotePort = 0;
+  readonly localPort = 0;
+  readable = true;
+  writable = true;
+  destroyed = false;
+
+  destroy(_err?: Error): this {
+    throw new NotImplementedError(
+      'http.IncomingMessage.socket.destroy',
+      'the per-request port-registry view cannot tear down its shared fetch/preview transport',
+    );
+  }
 }
 
 function makeSocket(): IncomingMessageSocket {
-  return {
-    remoteAddress: '127.0.0.1',
-    localAddress: '127.0.0.1',
-    remotePort: 0,
-    localPort: 0,
-    readable: true,
-    destroy(): void {
-      /* no-op — there's no TCP socket behind this request */
-    },
-  };
+  return new PortRegistrySocket();
 }
 
 export interface IncomingMessageInit {

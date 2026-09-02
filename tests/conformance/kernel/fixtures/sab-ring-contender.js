@@ -6,7 +6,17 @@ import { parentPort, workerData } from 'node:worker_threads';
 
 if (!parentPort) throw new Error('sab-ring-contender: must run inside a Worker');
 
-const { role, sab, payloadCapacity, protocolVersion, startSab, attemptsSab, marker } = workerData;
+const {
+  role,
+  sab,
+  payloadCapacity,
+  protocolVersion,
+  startSab,
+  attemptsSab,
+  admissionGateSab,
+  gatedMarker,
+  marker,
+} = workerData;
 const HEADER_BYTES = 20;
 const VERSION_INDEX = 0;
 const REQ_STATE_INDEX = 1;
@@ -37,10 +47,18 @@ function waitForBothAttempts() {
 
 parentPort.postMessage({ type: 'ready' });
 Atomics.wait(start, 0, STATE_IDLE);
+if (admissionGateSab !== undefined && marker === gatedMarker) {
+  const admissionGate = new Int32Array(admissionGateSab);
+  parentPort.postMessage({ type: 'admission-blocked', role, marker });
+  while (Atomics.load(admissionGate, 0) === STATE_IDLE) {
+    Atomics.wait(admissionGate, 0, STATE_IDLE);
+  }
+}
 
 if (role === 'caller') {
   const seen = Atomics.compareExchange(i32, REQ_STATE_INDEX, STATE_IDLE, STATE_WRITING);
   recordAttempt();
+  parentPort.postMessage({ type: 'attempted', role, marker, state: seen });
   if (seen !== STATE_IDLE) {
     parentPort.postMessage({ type: 'lost', role, marker, state: seen });
   } else {
@@ -50,9 +68,9 @@ if (role === 'caller') {
     Atomics.store(i32, VERSION_INDEX, protocolVersion);
     Atomics.store(i32, REQ_STATE_INDEX, STATE_READY);
     Atomics.notify(i32, REQ_STATE_INDEX);
+    parentPort.postMessage({ type: 'request-published', role, marker });
 
-    const result = Atomics.wait(i32, REP_STATE_INDEX, STATE_IDLE, 2_000);
-    if (result === 'timed-out') throw new Error('caller contender timed out');
+    Atomics.wait(i32, REP_STATE_INDEX, STATE_IDLE);
     const reply = bytes[repPayloadOffset];
     Atomics.store(i32, REP_LEN_INDEX, 0);
     Atomics.store(i32, REP_STATE_INDEX, STATE_IDLE);
@@ -66,6 +84,7 @@ if (role === 'caller') {
 } else if (role === 'responder') {
   const seen = Atomics.compareExchange(i32, REQ_STATE_INDEX, STATE_READY, STATE_HANDLING);
   recordAttempt();
+  parentPort.postMessage({ type: 'attempted', role, marker, state: seen });
   if (seen !== STATE_READY) {
     parentPort.postMessage({ type: 'lost', role, marker, state: seen });
   } else {

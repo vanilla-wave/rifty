@@ -19,6 +19,7 @@ import { SOCKET_LAB_TEMPLATE } from './socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './typescript.ts';
 import { VITE_TEMPLATE } from './vite.ts';
 import { VITE8_TEMPLATE } from './vite8.ts';
+import { WEBPACK_DEV_SERVER_TEMPLATE } from './webpack-dev-server.ts';
 
 export const DEFAULT_TEMPLATE_ID = 'vite';
 
@@ -27,6 +28,7 @@ const TEMPLATES: ReadonlyMap<string, ProjectSpec> = new Map<string, ProjectSpec>
   [VITE_TEMPLATE.id, VITE_TEMPLATE],
   [VITE8_TEMPLATE.id, VITE8_TEMPLATE],
   [REACT_VITE_TEMPLATE.id, REACT_VITE_TEMPLATE],
+  [WEBPACK_DEV_SERVER_TEMPLATE.id, WEBPACK_DEV_SERVER_TEMPLATE],
   [TYPESCRIPT_TEMPLATE.id, TYPESCRIPT_TEMPLATE],
   [EXPRESS_SQLITE_TEMPLATE.id, EXPRESS_SQLITE_TEMPLATE],
   [SOCKET_LAB_TEMPLATE.id, SOCKET_LAB_TEMPLATE],

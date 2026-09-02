@@ -619,7 +619,6 @@ export function App(props: AppProps) {
         (error: unknown) => {
           releaseTypeScriptBoot();
           if (bound() !== project) return;
-          setRunState('stopped');
           flashError(`Project start failed: ${errorMessage(error)}`);
         },
       );

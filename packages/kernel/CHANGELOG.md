@@ -33,6 +33,14 @@
 - `SIGKILL` now physically terminates a Worker before abandoning stranded
   output, so forced thread teardown cannot wait on a dead peer's stdio seal.
 
+- SabRing treats a host wait wake only as a prompt to re-check reply readiness.
+  Sync and async callers retain one monotonic timeout budget, so an early
+  browser wake cannot abandon the responder's later reply and wedge Watchpack.
+- Real-Worker SabRing and SyncRpc conformance observes exact admission and
+  publication phases before consuming. Host scheduling is bounded only by the
+  owning lifecycle, so a correct race cannot masquerade as a protocol timeout.
+- Pre-entry hooks may return readiness which the worker lifecycle awaits before
+  guest code; rejection stays loud and reaps even a serve worker (ADR-0351).
 - **Manager PID kill is idempotent during settlement (ADR-0347).** Public
   `ProcessManager.kill(pid)` now acknowledges an existing local or forwarded
   target already terminating without sending control twice. Missing and

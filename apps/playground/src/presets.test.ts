@@ -242,6 +242,42 @@ describe('playground presets', () => {
     expect(vite8.blurb).toMatch(/Vite 8|Rolldown/i);
   });
 
+  it('ships the ordinary webpack dev-server project as a from-scratch live preset', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'webpack-dev-server');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    const spec = resolveProjectSpec('webpack-dev-server');
+    if (spec.runtime !== 'npm-dev-server') throw new Error('unreachable');
+
+    expect(demo.label).toBe('Webpack dev server');
+    expect(demo.templateId).toBe('webpack-dev-server');
+    expect(demo.mode).toBe('real-vite');
+    expect(demo.setup).toBe('from-scratch');
+    expect(demo.category).toBe('Live preview');
+    expect(demo.glyph?.text).toBe('WP');
+    expect(demo.tag).toEqual({ text: 'npm install', tone: 'slow' });
+    expect((demo.files ?? []).map((file) => file.path).sort()).toEqual([
+      'README.md',
+      'public/index.html',
+      'src/index.js',
+      'src/styles.css',
+      'webpack.config.js',
+    ]);
+    expect(presetFileContent(demo, 'src/index.js')).toBe(spec.entry.content);
+    for (const [path, content] of Object.entries(spec.extraFiles)) {
+      expect(presetFileContent(demo, path.replace(/^\/+/, ''))).toBe(content);
+    }
+    expect(demo.openFiles).toEqual([
+      'src/index.js',
+      'webpack.config.js',
+      'src/styles.css',
+      'public/index.html',
+    ]);
+    expect(presetBootLines(demo, '/workspace')).toEqual([
+      'cd /workspace && npm install && npm run dev',
+    ]);
+  });
+
   it('ships Socket Lab wired to its node-server template and socket matrix rows', () => {
     const demo = PRESETS.find((preset) => preset.id === 'socket-lab');
     expect(demo).toBeDefined();

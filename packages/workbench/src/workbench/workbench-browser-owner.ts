@@ -3,6 +3,7 @@ import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame, PageToOwnerFrame, PtyPreview } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import { ClosedHandleError, ProjectBusyError, deserializeWorkbenchOwnerError } from './errors.ts';
+import { createBrowserProjectRuntime } from './internal/browser-project-runtime.ts';
 import {
   type PageToPlaygroundOwnerMessage,
   type PlaygroundCatalogCommand,
@@ -34,10 +35,6 @@ import {
   projectTerminalStateFromOwner,
 } from './internal/playground-terminal-state.ts';
 import {
-  createNodeCliProjectRuntime,
-  createNodeServerProjectRuntime,
-} from './node-project-runtime.ts';
-import {
   type OwnerProjectToken,
   type PageToWorkbenchOwnerMessage,
   type WorkbenchOwnerBootConfig,
@@ -51,11 +48,7 @@ import type {
   PlaygroundProjectOpenOptions,
   PlaygroundScmSnapshot,
 } from './playground.ts';
-import {
-  type PreviewAdvertisement,
-  type PreviewHandle,
-  createPreviewReadiness,
-} from './preview-readiness.ts';
+import { type PreviewAdvertisement, createPreviewReadiness } from './preview-readiness.ts';
 import {
   type ProjectContentTransport,
   createProjectContentTransport,
@@ -78,7 +71,6 @@ import {
   createProjectTerminal,
 } from './project-terminal.ts';
 import { proveRiftyServiceWorkerControl } from './service-worker-control.ts';
-import { createViteProjectRuntime } from './vite-project-runtime.ts';
 import {
   type BrowserOwnerDependencies,
   browserDependencies,
@@ -901,103 +893,22 @@ export function startBrowserWorkspaceOwner(
         throw new AggregateError(failures, 'Workbench project owner and preview close failed');
       }
     };
-
-    if (companion !== undefined) {
-      const runtime = companion.runtime;
-      let session: ProjectSession<unknown>;
-      if (runtime.kind === 'node-cli') {
-        if (definition.kind !== 'node-cli') {
-          throw new TypeError('Owner Playground runtime does not match the project definition');
-        }
-        session = createProjectSession<void>({
-          content,
-          runtime: createNodeCliProjectRuntime({
-            terminal,
-            entryPath: definition.entryPath,
-            args: definition.args,
-            acquisition: companion.acquisition,
-          }),
-          terminal,
-          createTerminal: openTerminal,
-          closeOwner,
-        });
-      } else {
-        if (runtime.kind === 'node-server') {
-          if (definition.kind !== 'node-server') {
-            throw new TypeError('Owner Playground runtime does not match the project definition');
-          }
-          session = createProjectSession<PreviewHandle>({
-            content,
-            runtime: createNodeServerProjectRuntime({
-              terminal,
-              ownerToken: transport.token,
-              entryPath: definition.entryPath,
-              port: definition.port,
-              createPreviewReadiness: previewReadiness,
-              acquisition: companion.acquisition,
-            }),
-            terminal,
-            createTerminal: openTerminal,
-            closeOwner,
-          });
-        } else {
-          if (definition.kind !== 'vite') {
-            throw new TypeError('Owner Playground runtime does not match the project definition');
-          }
-          session = createProjectSession<PreviewHandle>({
-            content,
-            runtime: createViteProjectRuntime({
-              terminal,
-              ownerToken: transport.token,
-              port: runtime.port,
-              createPreviewReadiness: previewReadiness,
-              acquisition: companion.acquisition,
-            }),
-            terminal,
-            createTerminal: openTerminal,
-            closeOwner,
-          });
-        }
-      }
-      // The owner-born finite runtime decision is the authority for readiness.
-      return session as ProjectSession<TReady>;
-    }
-
-    const session =
-      definition.kind === 'node-cli'
-        ? createProjectSession<void>({
-            content,
-            runtime: createNodeCliProjectRuntime({
-              terminal,
-              entryPath: definition.entryPath,
-              args: definition.args,
-            }),
-            terminal,
-            createTerminal: openTerminal,
-            closeOwner,
-          })
-        : createProjectSession<PreviewHandle>({
-            content,
-            runtime:
-              definition.kind === 'node-server'
-                ? createNodeServerProjectRuntime({
-                    terminal,
-                    ownerToken: transport.token,
-                    entryPath: definition.entryPath,
-                    port: definition.port,
-                    createPreviewReadiness: previewReadiness,
-                  })
-                : createViteProjectRuntime({
-                    terminal,
-                    ownerToken: transport.token,
-                    createPreviewReadiness: previewReadiness,
-                  }),
-            terminal,
-            createTerminal: openTerminal,
-            closeOwner,
-          });
-    // ProjectDefinition<TReady> is package-branded; the exhaustive finite kind
-    // dispatch above is the sole place that maps its phantom readiness type.
+    const session = createProjectSession({
+      content,
+      runtime: createBrowserProjectRuntime({
+        definition,
+        terminal,
+        ownerToken: transport.token,
+        createPreviewReadiness: previewReadiness,
+        ...(companion === undefined
+          ? {}
+          : { acquisition: companion.acquisition, decision: companion.runtime }),
+      }),
+      terminal,
+      createTerminal: openTerminal,
+      closeOwner,
+    });
+    // Package branding maps the finite runtime result to phantom readiness.
     return session as ProjectSession<TReady>;
   };
 

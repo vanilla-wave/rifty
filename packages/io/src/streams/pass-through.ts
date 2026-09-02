@@ -4,15 +4,39 @@
  * Trivial Transform with an identity transform; chunks in == chunks out.
  */
 
+import {
+  type CallableStreamConstructor,
+  makeCallableStreamConstructor,
+} from './callable-constructor.ts';
 import { Transform, type TransformOptions } from './transform.ts';
 
-export class PassThrough extends Transform {
+function passThroughOptions(opts: TransformOptions = {}): TransformOptions {
+  return {
+    ...opts,
+    transform(chunk, _encoding, cb) {
+      cb(null, chunk);
+    },
+  };
+}
+
+class PassThroughImplementation extends Transform {
   constructor(opts: TransformOptions = {}) {
-    super({
-      ...opts,
-      transform(chunk, _encoding, cb) {
-        cb(null, chunk);
-      },
-    });
+    super(passThroughOptions(opts));
   }
 }
+
+export interface PassThrough extends PassThroughImplementation {}
+
+export type PassThroughConstructor = CallableStreamConstructor<
+  typeof PassThroughImplementation,
+  PassThrough,
+  TransformOptions
+>;
+
+export const PassThrough: PassThroughConstructor = makeCallableStreamConstructor(
+  'PassThrough',
+  PassThroughImplementation,
+  (receiver, options) => {
+    Transform.call(receiver, passThroughOptions(options));
+  },
+);

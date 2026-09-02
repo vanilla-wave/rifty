@@ -1,12 +1,6 @@
 #!/usr/bin/env node
-/**
- * Deterministic public compat matrix generator.
- *
- * This intentionally uses static inventories tied to checked-in conformance
- * and parity files. TODO below tracks a separate Vitest JSON reporter sink;
- * milestone claim pages stay deterministic and checked in.
- * TODO(backlog: toolchain-build/compat-matrix-test-result-sink)
- */
+// Deterministic static inventories; test-result sink:
+// TODO(backlog: toolchain-build/compat-matrix-test-result-sink).
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 
 const here = new URL('.', import.meta.url);
@@ -487,7 +481,7 @@ const matrices = [
       ],
       ['`destroy` / cleanup', '✅', 'Writable destroy and async-iterator cleanup parity'],
       ['`stream/consumers`', '✅', 'Text/buffer/json-style consumers covered'],
-      ['Legacy pipe/unpipe', '✅', 'Pipe/unpipe and backpressure parity cases'],
+      ['Legacy streams', '✅', 'Pipe/unpipe and callable core constructor parity'],
       [
         '`Readable.fromWeb`',
         '⚠️',
@@ -562,14 +556,13 @@ const matrices = [
   {
     file: 'http.md',
     title: 'Compatibility matrix — `node:http` / `node:https`',
-    intro:
-      'Public claim surface for rifty HTTP in-browser servers and client loopback via the port registry.',
+    intro: 'Public claim surface for rifty HTTP servers and browser-local loopback.',
     rows: [
       ['`http.createServer`', '✅', 'Request handler, `listen(port)`, registered port dispatch'],
       [
         "`server.on('upgrade')` WebSocket",
         '✅',
-        'Bridge-backed RFC 6455 upgrade socket; real npm `ws` server and client modes tested on registered local ports',
+        'Bridge-backed RFC 6455 upgrade socket; browser Origin and target Host remain distinct; real npm `ws` server and client modes tested on registered local ports',
       ],
       ['Basic GET response', '✅', '`writeHead`, headers, status, body'],
       [
@@ -629,6 +622,11 @@ const matrices = [
         'Shape-compatible request headers, but `rawHeaders` is derived from Fetch-normalized headers; raw casing/order/duplicates are not claimed',
       ],
       [
+        '`IncomingMessage.socket` attachment surface',
+        '⚠️',
+        'EventEmitter listeners plus active `readable`/`writable`/`destroyed` shape (parity-pinned); addresses are virtual loopback values and `destroy()` is a loud gap because no per-request TCP transport exists',
+      ],
+      [
         'Response header introspection',
         '✅',
         '`getHeaders` (null-proto, value types preserved), `getHeaderNames`, `hasHeader`, `appendHeader` (array-merge); post-send `ERR_HTTP_HEADERS_SENT` (parity-pinned)',
@@ -665,6 +663,8 @@ const matrices = [
       '`tools/node-parity-runner/cases/http/*.case.ts`',
       '`tools/node-parity-runner/cases/http2/surface.case.ts`',
       '`packages/net/src/http/client.test.ts`',
+      '`packages/net/src/http/server.test.ts`',
+      '`packages/net/src/ws/browser-client-script.test.ts`',
       '`packages/net/src/http/cross-realm-request.test.ts`',
       '`packages/net/src/server-address.test.ts`',
       '`packages/service-worker/src/body-transport.test.ts`',

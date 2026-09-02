@@ -1,6 +1,20 @@
 import { NotImplementedError } from '@riftydev/vfs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { ProjectSpec } from './project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, defaultProjectSpec, resolveProjectSpec } from './registry.ts';
+
+type WebpackDevServerTemplateContract = Extract<
+  ProjectSpec,
+  { readonly runtime: 'npm-dev-server' }
+>;
+
+function resolveWebpackDevServerTemplate(): WebpackDevServerTemplateContract {
+  const spec = resolveProjectSpec('webpack-dev-server');
+  if (spec.runtime !== 'npm-dev-server') {
+    throw new Error('webpack-dev-server registry entry has the wrong runtime');
+  }
+  return spec;
+}
 
 describe('resolveProjectSpec', () => {
   it('returns the vite spec for the default id and DEFAULT_TEMPLATE_ID resolves to it', () => {
@@ -40,6 +54,103 @@ describe('resolveProjectSpec', () => {
     expect(Object.keys(spec.extraFiles ?? {})).toContain('/vite.config.ts');
     expect(Object.keys(spec.extraFiles ?? {})).not.toContain('/vite.config.js');
     expect(resolveProjectSpec('vite').extraFiles).not.toBe(spec.extraFiles);
+  });
+
+  it('registers an ordinary webpack 5 dev-server project with an npm-owned dev script', () => {
+    const spec = resolveWebpackDevServerTemplate();
+
+    expect(spec.id).toBe('webpack-dev-server');
+    expect(spec.displayName).toBe('Webpack dev server');
+    expect(spec.runtime).toBe('npm-dev-server');
+    expect(spec.install).toEqual({});
+    expect(spec.devDependencies).toEqual({
+      webpack: '^5.0.0',
+      'webpack-cli': '^5.0.0',
+      'webpack-dev-server': '^5.0.0',
+      'css-loader': '^7.0.0',
+      'style-loader': '^4.0.0',
+    });
+    expect(spec.entry.relativePath).toBe('/src/index.js');
+    expect(spec.defaultPort).toBe(5184);
+    expect(spec.packageType).toBe(false);
+    expect(spec.devCommand).toBe('webpack serve');
+  });
+
+  it('carries the exact webpack source bundle without Rifty-only compatibility switches', () => {
+    const spec = resolveWebpackDevServerTemplate();
+
+    expect(Object.keys(spec.extraFiles).sort()).toEqual([
+      '/README.md',
+      '/public/index.html',
+      '/src/styles.css',
+      '/webpack.config.js',
+    ]);
+    expect(spec.entry.content).toMatch(/import\s+['"]\.\/styles\.css['"]/);
+    expect(spec.entry.content).toContain('import.meta.webpackHot');
+
+    const config = spec.extraFiles['/webpack.config.js'] ?? '';
+    expect(config).toMatch(/require\(['"]node:path['"]\)/);
+    expect(config).toContain('module.exports');
+    expect(config).toMatch(/Number\(process\.env\.PORT\s*\?\?\s*5184\)/);
+    expect(config).toMatch(/publicPath:\s*['"]auto['"]/);
+    expect(config).toMatch(/hot:\s*true/);
+    expect(config).toMatch(/use:\s*\[['"]style-loader['"],\s*['"]css-loader['"]\]/);
+    expect(config).toMatch(/allowedHosts:\s*\[['"]localhost['"]\]/);
+    expect(config).not.toMatch(/allowedHosts:\s*['"]all['"]/);
+    expect(config).not.toMatch(/allowedHosts:\s*true/);
+    expect(config).not.toMatch(/allowedHosts:[^\n]*(?:\*|netlify\.app)/);
+    expect(config).not.toContain('0.0.0.0');
+    expect(config).not.toContain('client.webSocketURL');
+    expect(config).not.toContain('hashFunction');
+
+    expect(spec.extraFiles['/public/index.html']).toContain('id="app"');
+    expect(spec.extraFiles['/src/styles.css']?.trim().length).toBeGreaterThan(0);
+    const readme = spec.extraFiles['/README.md'] ?? '';
+    expect(readme).toMatch(/ordinary webpack project/i);
+    expect(readme).toContain('npm run dev');
+    expect(readme).toContain('webpack serve');
+    expect(readme).toMatch(/stock HMR/i);
+  });
+
+  it('[fault: provenance-lie] renders only the exact browser deployment hostname', async () => {
+    vi.stubGlobal('location', { hostname: 'preview.rifty.test' });
+    vi.resetModules();
+    try {
+      const { WEBPACK_DEV_SERVER_TEMPLATE } = await import('./webpack-dev-server.ts');
+      const config = WEBPACK_DEV_SERVER_TEMPLATE.extraFiles['/webpack.config.js'] ?? '';
+
+      expect(config).toMatch(/allowedHosts:\s*\[['"]preview\.rifty\.test['"]\]/);
+      expect(config).not.toMatch(/allowedHosts:\s*['"]all['"]/);
+      expect(config).not.toMatch(/allowedHosts:[^\n]*(?:\*|netlify\.app)/);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it('uses the explicit localhost fixture outside a browser', async () => {
+    vi.stubGlobal('location', undefined);
+    vi.resetModules();
+    try {
+      const { WEBPACK_DEV_SERVER_TEMPLATE } = await import('./webpack-dev-server.ts');
+      const config = WEBPACK_DEV_SERVER_TEMPLATE.extraFiles['/webpack.config.js'] ?? '';
+
+      expect(config).toMatch(/allowedHosts:\s*\[['"]localhost['"]\]/);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it('[fault: corrupt-input] rejects a browser location without a hostname', async () => {
+    vi.stubGlobal('location', { hostname: '' });
+    vi.resetModules();
+    try {
+      await expect(import('./webpack-dev-server.ts')).rejects.toThrow(/hostname/i);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
   });
 
   it('throws NotImplementedError for an unknown template id (no silent fallback)', () => {

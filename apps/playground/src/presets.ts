@@ -13,6 +13,7 @@ import { REACT_VITE_TEMPLATE } from './templates/react-vite/index.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
+import { WEBPACK_DEV_SERVER_TEMPLATE } from './templates/webpack-dev-server.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
 
@@ -428,6 +429,30 @@ const VITE8_PRESET: Preset = {
   files: [{ path: 'src/main.js', content: REAL_VITE_SOURCE }],
 };
 
+const WEBPACK_DEV_SERVER_PRESET: Preset = {
+  id: 'webpack-dev-server',
+  label: 'Webpack dev server',
+  category: 'Live preview',
+  icon: 'rocket',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: WEBPACK_DEV_SERVER_TEMPLATE.id,
+  blurb: 'A plain webpack app with webpack-cli, webpack-dev-server, and stock HMR.',
+  glyph: { text: 'WP', color: '#8BD3FF' },
+  tag: { text: 'npm install', tone: 'slow' },
+  openFiles: ['src/index.js', 'webpack.config.js', 'src/styles.css', 'public/index.html'],
+  files: [
+    {
+      path: WEBPACK_DEV_SERVER_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: WEBPACK_DEV_SERVER_TEMPLATE.entry.content,
+    },
+    ...Object.entries(WEBPACK_DEV_SERVER_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
+};
+
 /**
  * Fullstack demo (node-server template, see the node-server template ADR):
  * The opened tabs are ordinary seeded files. The server entry is just one file
@@ -589,6 +614,7 @@ export const PRESETS: readonly Preset[] = [
   TYPESCRIPT_LS_PRESET,
   REAL_VITE_PRESET,
   VITE8_PRESET,
+  WEBPACK_DEV_SERVER_PRESET,
   EXPRESS_SQLITE_PRESET,
   SOCKET_LAB_PRESET,
   HONO_API_PRESET,

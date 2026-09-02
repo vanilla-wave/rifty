@@ -46,6 +46,9 @@ describe('Playground owner protocol', () => {
     expect(playgroundProjectRuntimeDecision({ kind: 'node-cli' })).toEqual({
       kind: 'node-cli',
     });
+    const npmDevServer = playgroundProjectRuntimeDecision({ kind: 'npm-dev-server' });
+    expect(npmDevServer).toEqual({ kind: 'npm-dev-server' });
+    expect(Reflect.ownKeys(npmDevServer)).toEqual(['kind']);
     expect(() => playgroundProjectRuntimeDecision({ kind: 'vite' })).toThrow(
       /missing its owner port/,
     );
@@ -211,6 +214,28 @@ describe('Playground owner protocol', () => {
     ).toThrow(TypeError);
     expect(() =>
       inspectPlaygroundOwnerToPageMessage({ ...opened, runtime: { kind: 'vite', port: 0 } }),
+    ).toThrow(TypeError);
+
+    const npmDevServer = inspectPlaygroundOwnerToPageMessage({
+      ...opened,
+      runtime: { kind: 'npm-dev-server' },
+    });
+    if (npmDevServer.type !== 'workbench:playground-project-opened') {
+      throw new Error('expected npm dev-server project-opened message');
+    }
+    expect(npmDevServer.runtime).toEqual({ kind: 'npm-dev-server' });
+    expect(Reflect.ownKeys(npmDevServer.runtime)).toEqual(['kind']);
+    expect(() =>
+      inspectPlaygroundOwnerToPageMessage({
+        ...opened,
+        runtime: { kind: 'npm-dev-server', entryPath: '/package.json' },
+      }),
+    ).toThrow(TypeError);
+    expect(() =>
+      inspectPlaygroundOwnerToPageMessage({
+        ...opened,
+        runtime: { kind: 'npm-dev-server', port: 5184 },
+      }),
     ).toThrow(TypeError);
   });
 

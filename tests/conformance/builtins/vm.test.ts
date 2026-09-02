@@ -24,6 +24,12 @@ type VmRunOptions = {
 
 type VmContextOptions = {
   name?: string;
+  origin?: string;
+  codeGeneration?: {
+    strings?: boolean;
+    wasm?: boolean;
+  };
+  microtaskMode?: string;
 };
 
 type VmModule = {
@@ -552,7 +558,12 @@ describe('node:vm subset', () => {
     expect(() => vm.runInThisContext('1 + 1', { displayErrors: false })).toThrow(
       NotImplementedError,
     );
-    expect(() => vm.createContext({}, { name: 'sandbox' })).toThrow(NotImplementedError);
+    expect(() => vm.createContext({}, { origin: 'https://sandbox.test' })).toThrow(
+      NotImplementedError,
+    );
+    expect(() => vm.createContext({}, { microtaskMode: 'afterEvaluate' })).toThrow(
+      NotImplementedError,
+    );
     expect(() => vm.compileFunction('return 1;', [], { contextExtensions: [{}] })).toThrow(
       NotImplementedError,
     );

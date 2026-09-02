@@ -90,10 +90,15 @@ export interface NodeCliPlaygroundPlan extends PlaygroundPlanBase {
   readonly args?: readonly string[];
 }
 
+export interface NpmDevServerPlaygroundPlan extends PlaygroundPlanBase {
+  readonly kind: 'npm-dev-server';
+}
+
 export type PlaygroundProjectPlan =
   | VitePlaygroundPlan
   | NodeServerPlaygroundPlan
-  | NodeCliPlaygroundPlan;
+  | NodeCliPlaygroundPlan
+  | NpmDevServerPlaygroundPlan;
 
 export type PlaygroundProjectRef =
   | { readonly kind: 'scratch' }
@@ -316,6 +321,7 @@ export interface PlaygroundWorkbench extends Workbench {
   readonly playground: {
     define(plan: VitePlaygroundPlan): ProjectDefinition<PreviewHandle>;
     define(plan: NodeServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
+    define(plan: NpmDevServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
     define(plan: NodeCliPlaygroundPlan): ProjectDefinition<void>;
     define(plan: PlaygroundProjectPlan): ProjectDefinition<unknown>;
     readonly catalog: PlaygroundProjectCatalog;
