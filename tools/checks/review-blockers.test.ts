@@ -13,6 +13,7 @@ const verdict = (overrides: Record<string, unknown> = {}) => ({
     {
       row: 'Acceptance 1: offline reopen restores the tree',
       source: 'acceptance',
+      trace: 'I1',
       status: 'pass',
       citation: 'a.test.ts:10',
       note: '',
@@ -117,17 +118,33 @@ describe('evaluateVerdict', () => {
     expect(evaluateVerdict(verdict({ overall_verdict: 'blocker', axes })).code).toBe(1);
   });
 
-  it('rejects missing coverage, non-pass rows without notes, and blockers without authority', () => {
+  it('rejects missing coverage, non-pass rows without notes, rows without trace, and blockers without authority', () => {
     expect(evaluateVerdict(verdict({ coverage: [] })).code).toBe(2);
     expect(
       evaluateVerdict(
         verdict({
           coverage: [
-            { row: 'r', source: 'acceptance', status: 'weak', citation: 'a.test.ts:1', note: '' },
+            {
+              row: 'r',
+              source: 'acceptance',
+              trace: 'I1',
+              status: 'weak',
+              citation: 'a.test.ts:1',
+              note: '',
+            },
           ],
         }),
       ).code,
     ).toBe(2);
+    const untraced = evaluateVerdict(
+      verdict({
+        coverage: [
+          { row: 'r', source: 'acceptance', status: 'pass', citation: 'a.test.ts:1', note: '' },
+        ],
+      }),
+    );
+    expect(untraced.code).toBe(2);
+    expect(untraced.errors[0]).toContain('without trace');
     const axes = REQUIRED_AXES.map((axis) => ({
       axis,
       verdict: 'pass',
@@ -137,21 +154,21 @@ describe('evaluateVerdict', () => {
     expect(evaluateVerdict(verdict({ axes })).code).toBe(2);
   });
 
-  it('raw mode blocks on any non-pass coverage row', () => {
-    const result = evaluateVerdict(
-      verdict({
-        coverage: [
-          {
-            row: 'r',
-            source: 'fault-matrix',
-            status: 'weak',
-            citation: 'a.test.ts:1',
-            note: 'lossy assertion',
-          },
-        ],
-      }),
-    );
-    expect(result.code).toBe(1);
+  it('weak coverage rows are advisory; missing rows block (REV-4)', () => {
+    const row = (status: string) => ({
+      row: 'r',
+      source: 'fault-matrix',
+      trace: 'I2',
+      status,
+      citation: 'a.test.ts:1',
+      note: 'lossy assertion',
+    });
+    const weak = evaluateVerdict(verdict({ coverage: [row('weak')] }));
+    expect(weak.code).toBe(0);
+    expect(weak.uncovered).toHaveLength(1);
+    expect(evaluateVerdict(verdict({ coverage: [row('missing')] })).code).toBe(1);
+    expect(evaluateVerdict(verdict({ coverage: [row('weak')] }), []).code).toBe(0);
+    expect(evaluateVerdict(verdict({ coverage: [row('missing')] }), []).code).toBe(1);
   });
 
   it('adjudication demotes STRETCH to concern and blocks only surviving HOLDS', () => {

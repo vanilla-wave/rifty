@@ -10,7 +10,7 @@ Apply the description's scope gate first. A task stays planned even when its tit
 ## Steps
 
 1. **Root cause.** Reproduce. Cannot reproduce → record the attempt, capture (or keep the draft), stop — no speculative fix. Trace the bad value to where it is born; instrument each boundary when the path spans layers.
-2. **Class.** In `docs/process/fault-classes.md`, name the axis and boundary; add a missing model first. Strike physically excluded faults — only on the boundary where step 1 traced the birth (a friendlier row = boundary-shopping), after the full sweep, each strike listed in the PR with its row and the step-1 trace evidence; surviving axes keep fault tests. Sweep the pattern repo-wide and enumerate sibling operations. A second reachable instance → §Class-kill.
+2. **Class.** In `docs/process/rules/fault-classes.md`, name the axis and boundary; add a missing model first. Strike physically excluded faults — only on the boundary where step 1 traced the birth (a friendlier row = boundary-shopping), after the full sweep, each strike listed in the PR with its row and the step-1 trace evidence; surviving axes keep fault tests. Sweep the pattern repo-wide and enumerate sibling operations. A second reachable instance → §Class-kill.
 3. **RED.** Add a failing parity/regression/fault test before code. Assert the honest outcome. A conflicting old test means the contract changed; do not quietly retarget it.
 4. **Fix once.** Change the root owner; for a class, apply §Class-kill. Avoid wrappers and drive-by work.
 5. **Prove.** RED→GREEN, then revert-check each new guard. Run touched gates and verify the committed tree.

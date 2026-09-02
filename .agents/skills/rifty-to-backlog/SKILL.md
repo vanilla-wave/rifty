@@ -23,7 +23,7 @@ capture (cite the row); otherwise record the no-match source.
 
 ## 3. Gate
 
-Use `docs/process/fault-classes.md` §§Boundary failure models/Class-kill and
+Use `docs/process/rules/fault-classes.md` §§Boundary failure models/Class-kill and
 `docs/backlog/README.md` §Tier. Apply in order:
 
 1. Boundary model excludes the fault → void it; fix a wrong/missing model first.
@@ -56,7 +56,7 @@ capturing PR body.
 ## 6. Report
 
 Canon for EVERY backlog write-up report (capture here, FIT via
-`rifty-goal` FIT step 8). A FRESH subagent with clean context writes it from
+`docs/process/stages/fit.md` step 8). A FRESH subagent with clean context writes it from
 the recorded docs alone (no author framing — same independence as README
 §Challenge: a report the docs cannot support proves the write-up incomplete;
 fix the docs, never pad the report). Relay it in the conversation. User's
@@ -89,6 +89,6 @@ internals; fixed form:
 
 A report, not an approval ask.
 
-After capture: `decision-workflow.md` §Backlog readiness owns draft→ready;
+After capture: `docs/process/rules/readiness.md` owns draft→ready;
 verification = the unit's Contract+RED checkpoint at pickup (an unresolved
 observable fork = request manual `rifty-refine`, don't self-run the interview).

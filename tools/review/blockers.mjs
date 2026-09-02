@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// Read a rifty-review verdict, validate full coverage, print slice + goal state.
+// Read a rifty-review verdict, validate coverage + authority, print slice + goal state.
+// Rules: docs/process/rules/review.md (REV-2 authority, REV-3 severity, REV-4 coverage);
+// exit codes: docs/process/artifacts/verdict.md.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -46,6 +48,9 @@ export function evaluateVerdict(verdict, adjudication = null) {
       errors.push(`coverage row without valid status: ${row?.row ?? '?'}`);
     } else if (row.status !== 'pass' && !(typeof row.note === 'string' && row.note.length > 0)) {
       errors.push(`${row.status} coverage row without note: ${row.row}`);
+    }
+    if (!(typeof row?.trace === 'string' && row.trace.length > 0)) {
+      errors.push(`coverage row without trace (REV-4): ${row?.row ?? '?'}`);
     }
   }
   for (const axis of axes ?? []) {
@@ -132,11 +137,13 @@ export function evaluateVerdict(verdict, adjudication = null) {
   const axisBlocker =
     axes.some((axis) => axis.verdict === 'blocker') || verdict.overall_verdict === 'blocker';
   const uncovered = coverage.filter((row) => row.status !== 'pass');
-  // Adjudicated: stored axis/overall verdicts predate demotion; blocking power = surviving
-  // blockers + missing rows (weak rows report-only). Raw: reviewer verdict binds as-is.
+  const missing = coverage.some((row) => row.status === 'missing');
+  // Blocking power = surviving blockers + missing rows; weak rows are advisory in both
+  // modes (REV-4). Adjudicated: stored axis/overall verdicts predate demotion and are
+  // ignored. Raw: the reviewer's axis/overall blocker verdict binds as-is.
   const hasBlocker = adjudicated
-    ? blockers.length > 0 || coverage.some((row) => row.status === 'missing')
-    : blockers.length > 0 || axisBlocker || uncovered.length > 0;
+    ? blockers.length > 0 || missing
+    : blockers.length > 0 || axisBlocker || missing;
   return {
     code: hasBlocker ? 1 : 0,
     errors,
