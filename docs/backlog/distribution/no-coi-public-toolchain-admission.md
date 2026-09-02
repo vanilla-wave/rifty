@@ -240,3 +240,19 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   blockers / 1 concern / 0 nits, coverage 16/16; fresh tail 0 / 0 / 0,
   coverage 16/16; independent adjudication `[]`; `blockers.mjs` exit 0. Prior
   three HOLDS closed; current Contract lineage `[3]→PASS`, no valve.
+- `final-green: 2026-09-02 — blocker @ 5990557b2`
+- Final+GREEN reviewed `5990557b282965ff878b33bb4ddf4f839c2b9c50`, tree
+  `fb3aca6fdd4ea664a8f8259ec7a40a69b56cf110`, against BASE `dce86792d` /
+  tree `b1e0244ad`: external `pr:check` 24/24, Node 9/9, focused Chrome
+  5/5 and full no-COI 20/20. FIND union 4 candidates / 2 concerns, raw
+  coverage 9 pass / 7 weak / 0 missing; original tail hung and was interrupted,
+  so it is excluded. Replacement fresh tail is empty with coverage 16/16.
+  Adjudication: 3 HOLDS / 1 STRETCH / 0 FALSE; calibrated `blockers.mjs` exit 1,
+  3 blockers / 3 concerns / 0 nits.
+- HOLDS: universal non-boolean coverage includes explicit-own `undefined` plus
+  a category mutant; rejection pins the exact complete VFS/SW/Worker
+  side-effect vector; both-signal readiness pins reverse arrival order.
+  `workerUrl` and two undeclared frame-policy demands are STRETCH/concerns only.
+- Current-unit Final counts are `[3]`; inherited latest `15→3` strictly falls,
+  so no convergence valve. No blocker batch, product/test fix, next Final round
+  or RECHART started.
