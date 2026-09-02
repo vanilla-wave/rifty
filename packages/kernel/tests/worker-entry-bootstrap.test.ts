@@ -141,7 +141,9 @@ describe('entry-scoped bootstrap envelope', () => {
     const outcome = await runEntryLifecycle(
       makeSpec({ kind: 'url', url: 'https://example.invalid/entry.js', bootstrap }),
       makeDeps({
-        preEntryHook: () => seen.push({ phase: 'pre-entry', value: readKernelEntryBootstrap() }),
+        preEntryHook: () => {
+          seen.push({ phase: 'pre-entry', value: readKernelEntryBootstrap() });
+        },
         runEntry: async () => {
           seen.push({ phase: 'entry', value: readKernelEntryBootstrap() });
         },
@@ -187,7 +189,11 @@ describe('entry-scoped bootstrap envelope', () => {
     const seen: Array<KernelEntryBootstrapEnvelope | null> = [];
     await runEntryLifecycle(
       makeSpec({ kind: 'url', url: 'https://example.invalid/plain-entry.js' }),
-      makeDeps({ preEntryHook: () => seen.push(readKernelEntryBootstrap()) }),
+      makeDeps({
+        preEntryHook: () => {
+          seen.push(readKernelEntryBootstrap());
+        },
+      }),
     );
     expect(seen).toEqual([null]);
   });
