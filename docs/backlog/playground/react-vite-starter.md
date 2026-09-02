@@ -202,6 +202,23 @@ failing-test-first target run as the same scenario locally and in rifty.
 ready-verdict: 2026-09-02 — Contract+RED @ 4bd3557a6
 contract-red: 2026-09-02 — blocker @ 0493863b6
 final-green: 2026-09-02 — blocker @ eed9e4268
+final-green: 2026-09-02 — pass @ 712deeee3 (verify pass; 1 finding adjudicated STRETCH → concern + capture)
+
+- 2026-09-02 (Final+GREEN verify pass @ 712deeee3): coverage 28/28 pass, prior
+  findings settled. One new blocker — the playground TS language service shows
+  23 false Problems in the tile's TSX tabs (`Could not find a declaration file
+  for module 'react'`/`'react/jsx-runtime'`, 18× `JSX.IntrinsicElements`,
+  a false `key`) while local `tsc --noEmit` on the identical seed exits 0 —
+  adjudicated STRETCH: the contract declares no diagnostics clause, the
+  service (`packages/ts-language-service`) is untouched by this unit, and its
+  `@types/*` fallback has no carrier on main either. Captured as
+  `toolchain-build/ts-language-service-types-package-fallback` (draft, with
+  the reproduced probe); the runtime, build and Fast Refresh are unaffected.
+  Post-pass carrier hardening, no obligation change: the `dist/assets`
+  listing is polled (`expectTerminalContains`) instead of read once after
+  "settled" — the verify reviewer saw the settled read return early under
+  in-suite contention. No further checkpoint round by user decision
+  (product verified; process cost capped).
 
 - 2026-09-02 (Final+GREEN round 1 — find + tail pass, adjudicated): five
   blockers HOLD, fixed in one batch: exact dependency ranges/majors pinned

@@ -93,10 +93,12 @@ test.describe('React + Vite template production build', () => {
     // Printed as `ASSET <name>` lines from a real readdir: the echoed command
     // carries the expression, never a concatenated result, and Vite's own
     // build report / the cat above never print this prefix.
-    await runTerminalLineSettled(page, ASSET_LISTING_LINE, 20_000);
-    const assetListing = await terminalBuffer(page);
-    expect(assetListing).toMatch(/^ASSET index-[\w-]+\.js$/mu);
-    expect(assetListing).toMatch(/^ASSET index-[\w-]+\.css$/mu);
+    // Polled, not read once after "settled": the idle-prompt fallback in
+    // runTerminalLineSettled can return before a command's output lands under
+    // in-suite contention (traps.md), so wait for the lines themselves.
+    await runTerminalLine(page, ASSET_LISTING_LINE);
+    await expectTerminalContains(page, /^ASSET index-[\w-]+\.js$/mu, 30_000);
+    await expectTerminalContains(page, /^ASSET index-[\w-]+\.css$/mu, 30_000);
 
     await runTerminalLine(page, 'npm run preview');
     await expect
