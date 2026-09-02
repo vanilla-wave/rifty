@@ -4,6 +4,12 @@
 
 ### Added
 
+- Dev-only snapshot fault seam: cookie `rifty-e2e-snapshot-fault`
+  (`delay:<ms>` / `status:<code>`) stalls or fails baked-snapshot delivery in
+  the dev server for restore-visibility e2e — the fetch is SW-mediated and
+  unreachable for playwright routing (backlog:
+  playground/cold-restore-progress-visibility).
+
 - **Live terminal command completion (ADR-0362).** Tab completion now queries
   the active owner Shell instead of a page-side inventory, so registered
   commands, installed ancestor `.bin` names, cwd changes, and direct VFS paths

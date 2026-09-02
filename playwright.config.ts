@@ -16,6 +16,7 @@ const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
 // lane (no shared state, no overlap → fidelity preserved). firefox/webkit keep
 // the full spec set for the weekly cross-browser run.
 const HEAVY_SPECS = [
+  '**/restore-progress-visibility.spec.ts',
   '**/ts-language-service.spec.ts',
   '**/project-management.spec.ts',
   '**/project-switch.spec.ts',

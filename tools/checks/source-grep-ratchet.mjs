@@ -40,6 +40,12 @@ import { fileURLToPath } from 'node:url';
  *  why-behavioral-is-impossible constraint). */
 export const ALLOWLIST = [
   {
+    file: 'tests/e2e/restore-progress-visibility.spec.ts',
+    count: 3,
+    digest: '88b90289bb0d',
+    why: 'committed pre-implementation RED for declared dead-machinery removal (backlog: playground/cold-restore-progress-visibility Acceptance 3): the obligation IS source removal — an erased interface property has no runtime surface in the real-owner lanes, and a behavioral harness would have to stub sibling workbench modules (forbidden mock); expected-RED cannot live in pr:check lanes. The implementing PR deletes this entry with the machinery.',
+  },
+  {
     file: 'apps/playground/src/App.test.ts',
     count: 40,
     digest: 'f4aaffe99107',
@@ -90,7 +96,12 @@ export const ALLOWLIST = [
   },
 ];
 
-export const SCAN_ROOTS = ['apps/playground/src', 'packages/workbench/src', 'tests/browser-unit'];
+export const SCAN_ROOTS = [
+  'apps/playground/src',
+  'packages/workbench/src',
+  'tests/browser-unit',
+  'tests/e2e',
+];
 /** Window after a binding's `=` in which the readFileSync target path must
  *  appear — covers the multi-line `fileURLToPath(new URL('…', import.meta.url))`
  *  formatting without swallowing the whole file. */
