@@ -50,3 +50,15 @@ manually bumped version.
 ## Reversibility
 
 REVERSIBLE — provisional judgment recorded here; the asset, the bake script, and the restore path can each be swapped independently.
+
+Update 2026-09-01 (embedder asset on a newer build): the tracker-plugin
+snapshot baked against `@riftydev/workbench` 0.4.0 is unrestorable on main —
+`snapshot-rejected:install-artifact-identity-mismatch`, then
+`snapshot-rejected:snapshot-restore-plan-failed: EBROKENLOCK: applied shadow
+substitution catalog identity drifted` (`planShadowSubstitutionsFromLockfile`).
+Acquisition falls to `install`; with the embedder's unreachable registry
+`openProject` returns in 295 ms with NO `node_modules`. The drift class is the
+one this item owns (freshness identity vs catalog drift); the embedder-side
+consequence — a session that opens fast and is not the project — needs its
+own loud surface at pickup. Evidence:
+`docs/backlog/vfs/reference/tracker-snapshot-open-split-2026-09-01.md` §Blocker.
