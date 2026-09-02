@@ -281,3 +281,13 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   unchanged until the blocker batch.
 - Current-unit Final counts are `3→1`, strictly falling; no convergence valve.
   No bookkeeping fix, next Final round or RECHART started.
+- Residual correction supersedes the earlier false
+  `Unit/goal/outside-goal residuals empty` claim without rewriting it: current
+  admission unit residuals 0 after behavior proof; goal residuals 5 —
+  `distribution/no-coi-toolchain-operation-lifecycle`,
+  `distribution/no-coi-sandbox-package-install`,
+  `distribution/no-coi-sandbox-build-loop`,
+  `distribution/no-coi-host-posture-preservation` and
+  `distribution/no-coi-dev-hmr-restore` (including final I8); outside-goal
+  residuals 0. Authority: `docs/backlog/epics/no-coi-sandbox-tier/map.md` and
+  AGENTS.md DoD's required separate slice/goal status.
