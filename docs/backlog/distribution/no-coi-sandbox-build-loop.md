@@ -626,8 +626,10 @@ behavior throughout.
    native count/order/stateful differential and all four package-generic guest
    entries. This item retains their live Vite 8 integration. Artifact: current
    COI product proof is `tests/browser-unit/esbuild-vite-contract.spec.ts`;
-   no-COI integration target is `pnpm test:no-coi -g "threaded-WASM guard
-   covers real installed bin"`.
+   no-COI in-unit integration is `pnpm test:no-coi -g "installed-bin admission
+   ignores Vite identity|exact nanoid manifest|threaded-WASM: Vite 8 Rolldown
+   fails at named boundary" --reporter=line` — Node 24.16.0, Playwright 1.60.0,
+   Chrome 148.0.7778.96; lines 929/985/1557, 3/3 passed.
 5. Default COI admission remains loud; generic createSandbox no-COI eval/fs
    keeps working when explicitly allowed; valid-backend protocol mismatch
    terminates through both public SDK and host-controller carriers. Artifact:
@@ -890,3 +892,12 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
   Contract blocker, no Contract escalation; no two consecutive blocker rounds,
   no convergence valve. No fix, RED, contract/product/test edit or next review
   round started.
+- Contract+RED blocker batch on clean `99030e8f8`: `pnpm test:no-coi -g
+  "installed-bin admission ignores Vite identity|exact nanoid manifest|threaded-WASM:
+  Vite 8 Rolldown fails at named boundary" --reporter=line` reported `Running 3
+  tests`; lines 929, 985 and 1557 all ran, `3 passed (16.2s)`. Version probes:
+  `node --version` → `v24.16.0`; `pnpm exec playwright --version` → `Version
+  1.60.0`; Playwright Chromium `browser.version()` → `148.0.7778.96`.
+- The batch corrects only Parity 4 artifact selection. Acceptance/Parity/Fault
+  behavior, REDs, product/tests and the certified descriptor carriers remain
+  unchanged; the recorded HOLDS is addressed, external verify pending.
