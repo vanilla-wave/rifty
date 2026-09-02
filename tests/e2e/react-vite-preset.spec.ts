@@ -20,10 +20,19 @@ import {
   expectViteDevServerReady,
   openShellTerminal,
   pickStarter,
-  runTerminalLine,
+  runTerminalLineSettled,
+  terminalBuffer,
 } from './helpers/playground.ts';
 
 const PORT = 5174;
+
+/**
+ * Prints one `DEP <name> interop=<bool>` line per optimizer entry. The
+ * assertions read the OUTPUT lines: the echoed command carries the expression,
+ * never a concatenated result, so an echo can never satisfy them.
+ */
+const DEP_METADATA_LINE =
+  "node -e \"const m=JSON.parse(require('node:fs').readFileSync('node_modules/.vite/deps/_metadata.json','utf8'));for(const [k,v] of Object.entries(m.optimized)) console.log('DEP '+k+' interop='+v.needsInterop)\"";
 
 async function fetchPreviewText(page: Page, port: number, path: string): Promise<string> {
   return page.evaluate(
@@ -54,8 +63,13 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
     await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 15_000 });
     await pickStarter(page, 'real-vite');
 
-    // from-scratch: the install is a real, visible terminal command.
-    await expectTerminalContains(page, /npm install/u, 90_000);
+    // from-scratch: the install really runs — asserted on the installer's OWN
+    // per-package lines (`npm: + <name>@<version>`), never on the echoed
+    // command. Every declared direct dependency shows up resolved.
+    await expectTerminalContains(page, /npm: \+ react@\d+\./u, 120_000);
+    for (const dep of ['react-dom', 'react-router-dom', 'vite', '@vitejs/plugin-react']) {
+      await expectTerminalContains(page, new RegExp(`npm: \\+ ${dep}@\\d+\\.`, 'u'), 60_000);
+    }
     await expectViteDevServerReady(page, PORT, 180_000);
 
     const frame = page.frameLocator(`iframe[title="Preview port ${PORT}"]`);
@@ -70,11 +84,20 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
     // optimizer's ESM interop chunks — CJS react is served pre-bundled from
     // node_modules/.vite/deps, never raw.
     const mainSource = await fetchPreviewText(page, PORT, '/src/main.tsx');
-    expect(mainSource).toMatch(/\.vite\/deps\/react/u);
-    // Parity: a served component module carries the plugin-react Fast-Refresh
-    // preamble (user vite.config.ts + @vitejs/plugin-react really loaded).
+    expect(mainSource).toMatch(/\.vite\/deps\/react\.js/u);
+    // Parity (oracle-checked shape): plugin-react wraps modules that DECLARE
+    // components — the served component module carries the Fast-Refresh
+    // registration wrapper; the create-vite entry (declares none) does not.
     const appSource = await fetchPreviewText(page, PORT, '/src/App.tsx');
-    expect(appSource).toContain('@react-refresh');
+    expect(appSource).toContain('/@react-refresh');
+    expect(appSource).toContain('$RefreshReg$');
+    expect(appSource).toContain('import.meta.hot');
+    expect(mainSource).not.toContain('$RefreshReg$');
+    // Parity: the entry-level preamble lives in the served HTML, injected by
+    // plugin-react — proof the user vite.config.ts really loaded the plugin.
+    const indexHtml = await fetchPreviewText(page, PORT, '/');
+    expect(indexHtml).toContain('injectIntoGlobalHook');
+    expect(indexHtml).toContain('/@react-refresh');
 
     // Client-side navigation inside the preview iframe (React Router).
     await frame.getByRole('link', { name: 'Issues' }).click();
@@ -95,10 +118,16 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
         'alive';
     });
 
-    // Edit a component (src/App.tsx — the active editor tab) through Monaco's
-    // real input path: prepend a line that keeps stamping a marker into the
-    // always-visible brand element. HMR re-evaluates the module; the marker
-    // appearing in the preview proves the patched module ran.
+    // Edit the leaf component the user scenario names (src/components/
+    // StatusBadge.tsx — a seeded editor tab) through Monaco's real input path:
+    // prepend a line that keeps stamping a marker into the always-visible brand
+    // element. Fast Refresh re-evaluates the module; the marker appearing in the
+    // preview proves the patched module ran.
+    const badgeTab = page
+      .locator('[role="tablist"][aria-label="Open editors"] [role="tab"]')
+      .filter({ hasText: /^StatusBadge\.tsx/u });
+    await badgeTab.click();
+    await expect(badgeTab).toHaveAttribute('aria-selected', 'true');
     const marker = `hmr-${Date.now()}`;
     const editor = page.locator('[data-testid="editor"]');
     const editorInput = editor.locator('textarea.inputarea').first();
@@ -131,13 +160,19 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
       )
       .toBe('alive');
 
-    // Parity: the dep optimizer COMPLETED on the guest tree — metadata file on
-    // disk with the react entry marked for CJS interop, as on local Node.
+    // Parity: the dep optimizer COMPLETED on the guest tree — metadata on disk,
+    // with the SAME entries marked for CJS interop as a local Node 24 run of
+    // the identical tree (oracle recorded in the item's `## Decisions`).
     await openShellTerminal(page);
-    await runTerminalLine(page, 'ls node_modules/.vite/deps');
-    await expectTerminalContains(page, '_metadata.json', 20_000);
-    await runTerminalLine(page, 'grep needsInterop node_modules/.vite/deps/_metadata.json');
-    await expectTerminalContains(page, '"needsInterop": true', 20_000);
+    await runTerminalLineSettled(page, DEP_METADATA_LINE, 30_000);
+    const depLines = await terminalBuffer(page);
+    for (const entry of ['react', 'react-dom', 'react-dom/client']) {
+      expect(depLines, `${entry} must be pre-bundled with CJS interop`).toContain(
+        `DEP ${entry} interop=true`,
+      );
+    }
+    // react-router-dom is optimized too (ESM — no interop wrapper).
+    expect(depLines).toContain('DEP react-router-dom interop=');
 
     problems.assertNoViteImportErrors();
   });

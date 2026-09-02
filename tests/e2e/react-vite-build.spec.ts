@@ -17,10 +17,12 @@ import {
   runTerminalLine,
   runTerminalLineSettled,
   terminalBuffer,
+  terminalHistoryExitCode,
 } from './helpers/playground.ts';
 
 const PORT = 5174;
 const PREVIEW_PORT = 4173;
+const BUILD_LINE = 'npm run build';
 
 async function fetchPreview(
   page: Page,
@@ -57,13 +59,19 @@ test.describe('React + Vite template production build', () => {
     await expectViteDevServerReady(page, PORT, 180_000);
 
     await openShellTerminal(page);
-    // `&& echo` pins the REAL exit code — the marker only prints on exit 0.
-    await runTerminalLineSettled(page, 'npm run build && echo RIFTY_REACT_BUILD_OK', 240_000);
-    await expectTerminalContains(page, 'RIFTY_REACT_BUILD_OK', 20_000);
+    // The exit code comes from the terminal's own history record, not from an
+    // echoed marker: an `&& echo MARKER` line puts MARKER in the buffer as part
+    // of the command echo, so it passes even when the build fails.
+    await runTerminalLineSettled(page, BUILD_LINE, 240_000);
+    expect(await terminalHistoryExitCode(page, BUILD_LINE)).toBe(0);
     expect(await terminalBuffer(page)).not.toContain('NotImplementedError');
 
+    // Same file set as a local `vite build`: hashed JS + hashed CSS, no source
+    // entry reference left in the emitted HTML.
     await runTerminalLine(page, 'cat dist/index.html');
     await expectTerminalContains(page, /assets\/index-[^"]+\.js/u, 20_000);
+    await expectTerminalContains(page, /assets\/index-[^"]+\.css/u, 20_000);
+    expect(await terminalBuffer(page)).not.toContain('/src/main.tsx');
 
     await runTerminalLine(page, 'npm run preview');
     await expect

@@ -394,7 +394,13 @@ const REAL_VITE_PRESET: Preset = {
   blurb: 'Installs React 19 + Router from npm, then boots the Vite dev server with Fast Refresh.',
   glyph: { text: 'RE', color: '#61DAFB' },
   tag: { text: 'npm install', tone: 'slow' },
-  openFiles: ['src/App.tsx', 'src/pages/IssueList.tsx', 'src/data/issues.ts', 'README.md'],
+  openFiles: [
+    'src/App.tsx',
+    'src/components/StatusBadge.tsx',
+    'src/pages/IssueList.tsx',
+    'src/data/issues.ts',
+    'README.md',
+  ],
   files: [
     {
       path: REACT_VITE_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),

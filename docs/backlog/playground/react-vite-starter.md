@@ -150,13 +150,23 @@ run locally with `npm i && npm run dev`, serves the same app.
 Oracle: local Node 24 + npm + Vite 7 on the identical seeded tree; each row is a
 failing-test-first target run as the same scenario locally and in rifty.
 
-- `npm install` on the seeded `package.json` resolves the same package set and
-  versions as local npm (lockfile replay parity, ADR-0023).
+- `npm install` on the seeded `package.json` resolves every declared direct
+  dependency, each reported by the installer's own `npm: + <name>@<version>`
+  line, as local npm does. Divergence stated up front, not discovered: the
+  browser tree carries the installer-injected `@rollup/wasm-node` shadow
+  companion (ADR-0188) where the local oracle carries a native
+  `@rollup/rollup-<platform>` optional. Full transitive version/lockfile replay
+  is ADR-0023's contract, proven by `npm-lock-replay.spec.ts` on its own
+  fixtures — out of scope here (`## Out of scope`).
 - Dev server: `.vite/deps/_metadata.json` optimizes `react`, `react-dom`,
-  `react-dom/client`, `react-router-dom`, with `needsInterop: true` on the CJS
-  members, same as local.
-- Served `/src/main.tsx` carries the `@vitejs/plugin-react` refresh preamble
-  (`$RefreshReg$`, `import.meta.hot`) of the same shape as local.
+  `react-dom/client` with `needsInterop: true`, and `react-router-dom` (ESM,
+  no interop), naming the same entries as local.
+- A served COMPONENT module (`/src/App.tsx`) carries the `@vitejs/plugin-react`
+  Fast-Refresh wrapper (`/@react-refresh` import, `$RefreshReg$`,
+  `import.meta.hot`) and the create-vite entry `/src/main.tsx` does NOT (it
+  declares no component) — the same split as local.
+- The served `index.html` carries plugin-react's global preamble
+  (`injectIntoGlobalHook` from `/@react-refresh`), same as local.
 - Editing a component emits a `js-update` HMR payload and no full reload, same
   as local.
 - `vite build` emits `dist/index.html` plus hashed assets; `vite preview` serves
@@ -175,9 +185,38 @@ failing-test-first target run as the same scenario locally and in rifty.
   main does today is observed at pickup and captured separately if still broken.
 - Fixing the four planted rough edges (they are the point of the seed).
 - SSR, a backend, state/query libraries.
+- Transitive version/lockfile replay parity for this dependency set — ADR-0023's
+  contract, carried by `npm-lock-replay.spec.ts` on its own committed fixtures;
+  this item asserts only that every declared DIRECT dependency resolves.
 
 ## Decisions
 
+contract-red: 2026-09-02 — blocker @ 0493863b6
+
+- 2026-09-02 (Contract+RED attempt 1 → blocker, re-cut IN PLACE): the parity
+  row "served `/src/main.tsx` carries the refresh preamble" asserted a FALSE
+  oracle fact. Pinned probe on the identical seeded tree (node v24.16.0,
+  npm 11.17.0, react 19.2.8, react-dom 19.2.8, react-router-dom 7.18.3,
+  vite 7.3.6, `@vitejs/plugin-react` 5.2.0, registry.npmjs.org):
+  `curl -s localhost:5188/src/main.tsx | grep -c 'RefreshReg\$'` → `0`, while
+  `/src/App.tsx` → `3` and `curl -s localhost:5188/` carries
+  `injectIntoGlobalHook(window)`. plugin-react wraps only modules that DECLARE
+  components; the entry-level preamble lives in the HTML. Row split into the
+  two true facts. Same batch: the `npm install` package-set row had no carrier
+  and was unsatisfiable as written (the browser tree carries the ADR-0188
+  `@rollup/wasm-node` companion where the oracle carries a native rollup
+  optional) — restated to direct-dependency resolution with the installer's own
+  `npm: + <name>@<version>` lines as its carrier, transitive replay moved to
+  `## Out of scope` under ADR-0023.
+  Concerns fixed in the same re-cut: the build spec's `&& echo MARKER` pin was
+  inert (the marker matched the command ECHO — proven by an executed run where
+  `npm: missing script 'build'` still satisfied it), now the terminal history's
+  exact exit code; the install proof now reads per-package installer lines
+  instead of the echoed `npm install`; the optimizer assertion now names
+  `react`/`react-dom`/`react-dom/client` identities instead of a single
+  `needsInterop` grep; the Fast-Refresh edit now targets the leaf component the
+  `## User scenario` names (`src/components/StatusBadge.tsx`, seeded as an open
+  tab) instead of `src/App.tsx`.
 - `review: checkpoints` — parity work (`## Parity cases` vs local Node 24 +
   Vite 7), per `fault-classes.md` §Review convergence; membership decided once,
   here, at pickup.
