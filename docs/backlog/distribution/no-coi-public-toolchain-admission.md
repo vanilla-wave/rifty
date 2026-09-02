@@ -171,6 +171,8 @@ never returns a partially live sandbox.
 
 ## Decisions
 
+ready-verdict: 2026-09-02 — Contract+RED @ b40ad7c37
+
 review: checkpoints — public SDK/Worker trust boundary and real Chromium I1
 projection.
 
@@ -233,3 +235,8 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   post-terminate RED was physically impossible and is removed, not converted
   into an implementation demand. Current Contract counts remain `[3]`; review
   verification is pending and no next checkpoint was run.
+- Contract+RED VERIFY reviewed `b40ad7c37f975a9c2d447e4d64b5abbad60db0f6`,
+  tree `0490e0379`, against BASE `dce86792d` / tree `b1e0244ad`: find 0
+  blockers / 1 concern / 0 nits, coverage 16/16; fresh tail 0 / 0 / 0,
+  coverage 16/16; independent adjudication `[]`; `blockers.mjs` exit 0. Prior
+  three HOLDS closed; current Contract lineage `[3]→PASS`, no valve.
