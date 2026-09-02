@@ -80,6 +80,9 @@
 
 ### Fixed
 
+- Sandbox toolchain `WebAssembly.Memory` preserves native descriptor getter
+  order/cardinality and consumes stateful `shared` once before its named gap.
+
 - The toolchain realm applies WebIDL ToBoolean to `WebAssembly.Memory`'s
   `shared` descriptor through its lexical guard, so truthy numbers/strings join
   literal true without replacing the Worker-global constructor.

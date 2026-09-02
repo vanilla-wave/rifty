@@ -15,17 +15,26 @@ export function sandboxToolchainWebAssembly(): typeof WebAssembly {
     construct(target, args, newTarget) {
       const descriptor = args[0];
       const descriptorType = typeof descriptor;
+      let effectiveArgs = args;
       if (descriptor !== null && (descriptorType === 'object' || descriptorType === 'function')) {
-        const shared = Boolean((descriptor as { readonly shared?: unknown }).shared);
-        if (shared) {
-          throw new NotImplementedError(
-            'toolchain.threaded-wasm',
-            'shared WebAssembly.Memory requires cross-origin isolation and SharedArrayBuffer',
-          );
-        }
+        const guardedDescriptor = new Proxy(descriptor, {
+          get(targetDescriptor, property) {
+            const value = Reflect.get(targetDescriptor, property, targetDescriptor);
+            if (property !== 'shared') return value;
+            if (value) {
+              throw new NotImplementedError(
+                'toolchain.threaded-wasm',
+                'shared WebAssembly.Memory requires cross-origin isolation and SharedArrayBuffer',
+              );
+            }
+            return value;
+          },
+        });
+        effectiveArgs = [...args];
+        effectiveArgs[0] = guardedDescriptor;
       }
       const effectiveNewTarget = newTarget.prototype === target.prototype ? target : newTarget;
-      return Reflect.construct(target, args, effectiveNewTarget);
+      return Reflect.construct(target, effectiveArgs, effectiveNewTarget);
     },
   };
   const GuardedMemory = new Proxy(NativeMemory, memoryHandler);
