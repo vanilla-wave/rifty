@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
@@ -849,3 +849,24 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
   Parity `c8e93b122e008d05e3db726afcc5847eb9d4a8a7848ad08d0b536164168b2ab5`.
 - No production edit, RED, implementation checkpoint or dev-HMR work started
   during this RECHART.
+- Post-descriptor PICKUP revalidation: Final+GREEN PASS at `dce86792d`, tree
+  `b1e0244ad432b5813bd9c2ff3a9e98ccf2cc7153`, is certified and outside this
+  review boundary. Acceptance 8, Parity 4 and the threaded-WASM fault row
+  consume its package-generic proof; live Vite 8 installed-bin integration
+  remains this unit. Only dependency-state wording changed at RECHART; active
+  behavior, tests and product code stay exact.
+- Current active-section proof at post-RECHART `3b97a484a`, tree
+  `852e03966b56cb7355b67e1a5c179af5d38d3e6e`: Acceptance 4874 UTF-8 bytes,
+  `6091352eea186fbc67c664f6a82f0cc3e65d17c87d459aa8c117a133517f7c0e`;
+  Parity 2530 bytes,
+  `a24d7f8f8bcbad3c4405bd84a7d75f105f7f50b8305fc959a0d4473bcd64e095`;
+  full Fault 4172 bytes,
+  `07ebdcdc1a574209b73ea414c0bc22cdb6e721c496598c27d515ab28d5a6721c`.
+  Raw UTF-8 is measured with `sed -n` ranges `536,604`, `605,642`, `643,710`
+  piped to `wc -c` / `shasum -a 256`. Sections are unchanged by this PICKUP;
+  frozen descriptor-split
+  Acceptance/Parity remain verbatim and their stopped-head proof above binds.
+- Post-descriptor recompile band: 0–0 new expected REDs. Original 5–6,
+  post-packed 2–3 and post-bounded 0–0 bands plus all Contract/Final lineage
+  carry. Review remains `checkpoints`; status recompiled `draft`→`ready` and a
+  fresh external Contract+RED is required; its verdict is intentionally absent.
