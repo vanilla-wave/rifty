@@ -789,9 +789,11 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
       async ({ sdkUrl, genericWorkerUrl, selectedToolchainWorkerUrl }) => {
         const NativeWorker = globalThis.Worker;
         const workers: string[] = [];
+        let activeTrace: string[] | undefined;
         class ObservedWorker extends NativeWorker {
           constructor(url: string | URL, options?: WorkerOptions) {
             super(url, options);
+            activeTrace?.push('toolchain-worker');
             workers.push(String(url));
           }
         }
@@ -802,21 +804,44 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
         });
         try {
           const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
-            createSandbox(options: Record<string, unknown>): Promise<{ dispose(): void }>;
+            createSandbox(
+              options: Record<string, unknown>,
+              deps?: Record<string, unknown>,
+            ): Promise<{ dispose(): void }>;
+          };
+          const fakeRuntime = {
+            eval: () => Promise.resolve({ id: 0, ok: true, value: undefined }),
+            fs: {
+              readFile: () => Promise.resolve(new Uint8Array()),
+              writeFile: () => Promise.resolve(),
+            },
+            reset: () => Promise.resolve(),
+            dispose: () => {},
+            on: () => () => {},
+            writeFile: () => {},
+            writeStdin: () => {},
+            isReady: () => true,
           };
           const values = [
+            { label: 'explicit-undefined', value: undefined },
             { label: 'zero', value: 0 },
             { label: 'empty-string', value: '' },
             { label: 'NaN', value: Number.NaN },
             { label: 'null', value: null },
             { label: 'one', value: 1 },
             { label: 'string-false', value: 'false' },
+            { label: 'bigint-zero', value: 0n },
+            { label: 'bigint-one', value: 1n },
+            { label: 'symbol', value: Symbol('isolation') },
+            { label: 'function', value: () => false },
             { label: 'object', value: {} },
             { label: 'array', value: [] },
           ];
           const results: Array<Record<string, unknown>> = [];
           for (const mode of ['generic', 'toolchain']) {
             for (const { label, value } of values) {
+              const trace: string[] = [];
+              activeTrace = trace;
               const before = workers.length;
               let error: unknown;
               try {
@@ -825,13 +850,41 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
                     ? {
                         workerUrl: genericWorkerUrl,
                         requireCrossOriginIsolation: value,
-                        skipServiceWorker: true,
                       }
                     : {
                         requireCrossOriginIsolation: value,
-                        skipServiceWorker: true,
                         toolchain: { workerUrl: selectedToolchainWorkerUrl },
                       },
+                  {
+                    detect: () => {
+                      trace.push('detect');
+                      return {
+                        capabilities: {
+                          crossOriginIsolated: false,
+                          sharedArrayBuffer: false,
+                          atomicsWaitAsync: false,
+                          opfsSyncAccessHandle: true,
+                          serviceWorker: true,
+                          worker: true,
+                        },
+                        missing: ['crossOriginIsolated'],
+                        sufficient: true,
+                        summary: 'browser admission vector',
+                      };
+                    },
+                    initVfs: () => {
+                      trace.push('vfs');
+                      return Promise.resolve('opfs');
+                    },
+                    registerSw: () => {
+                      trace.push('sw');
+                      return Promise.resolve();
+                    },
+                    spawn: () => {
+                      trace.push('generic-worker');
+                      return fakeRuntime;
+                    },
+                  },
                 );
                 sandbox.dispose();
               } catch (caught) {
@@ -845,7 +898,9 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
                     ? { name: error.name, message: error.message }
                     : { name: typeof error, message: String(error) },
                 workerConstructions: workers.length - before,
+                effects: trace,
               });
+              activeTrace = undefined;
             }
           }
           return { crossOriginIsolated, results };
@@ -867,17 +922,30 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
     expect(outcomes.crossOriginIsolated).toBe(false);
     expect(outcomes.results).toEqual(
       ['generic', 'toolchain'].flatMap((mode) =>
-        ['zero', 'empty-string', 'NaN', 'null', 'one', 'string-false', 'object', 'array'].map(
-          (value) => ({
-            mode,
-            value,
-            error: {
-              name: 'TypeError',
-              message: expect.stringContaining(mode === 'generic' ? 'boolean' : 'false'),
-            },
-            workerConstructions: 0,
-          }),
-        ),
+        [
+          'explicit-undefined',
+          'zero',
+          'empty-string',
+          'NaN',
+          'null',
+          'one',
+          'string-false',
+          'bigint-zero',
+          'bigint-one',
+          'symbol',
+          'function',
+          'object',
+          'array',
+        ].map((value) => ({
+          mode,
+          value,
+          error: {
+            name: 'TypeError',
+            message: expect.stringMatching(/boolean.*false/u),
+          },
+          workerConstructions: 0,
+          effects: [],
+        })),
       ),
     );
   } finally {
@@ -1220,6 +1288,186 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
       terminations: 1,
       received: ['ready', 'toolchain-ready'],
     });
+  } finally {
+    await host.close();
+  }
+});
+
+test('public SDK waits for both readiness signals in either real Worker order', async ({
+  page,
+}) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    const outcomes = await host.evaluate(
+      async ({ sdkUrl }) => {
+        const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
+          createSandbox(options: Record<string, unknown>): Promise<{
+            runtime: { isReady(): boolean };
+            vfs: { backend: 'opfs' | 'memory' };
+            dispose(): void;
+          }>;
+        };
+        const NativeWorker = globalThis.Worker;
+        const run = async (kind: 'exact' | 'mismatch', backend: 'opfs' | 'memory') => {
+          const protocol =
+            kind === 'exact' ? 'rifty.sandbox-toolchain/v1' : 'rifty.sandbox-toolchain/v2';
+          const source = `
+          addEventListener('message', (event) => {
+            if (event.data === 'release-runtime-ready') postMessage({ type: 'ready' });
+          });
+          postMessage({
+            type: 'toolchain-ready',
+            protocol: ${JSON.stringify(protocol)},
+            vfsBackend: ${JSON.stringify(backend)},
+          });
+        `;
+          const workerUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+          let selectedWorker: Worker | undefined;
+          let constructions = 0;
+          let terminations = 0;
+          let resolveFirstSignal: () => void = () => {};
+          const firstSignal = new Promise<void>((resolve) => {
+            resolveFirstSignal = resolve;
+          });
+          class ObservedWorker extends NativeWorker {
+            constructor(url: string | URL, options?: WorkerOptions) {
+              super(url, options);
+              constructions += 1;
+              selectedWorker = this;
+              this.addEventListener(
+                'message',
+                (event: MessageEvent<{ type?: unknown }>) => {
+                  if (event.data?.type === 'toolchain-ready') resolveFirstSignal();
+                },
+                { once: true },
+              );
+              const nativeTerminate = this.terminate.bind(this);
+              Object.defineProperty(this, 'terminate', {
+                value() {
+                  terminations += 1;
+                  nativeTerminate();
+                },
+              });
+            }
+          }
+          Object.defineProperty(globalThis, 'Worker', {
+            configurable: true,
+            value: ObservedWorker,
+            writable: true,
+          });
+          let settled = 'pending';
+          try {
+            const creating = sdk
+              .createSandbox({
+                requireCrossOriginIsolation: false,
+                skipServiceWorker: true,
+                toolchain: { workerUrl },
+              })
+              .then(
+                (sandbox) => {
+                  settled = 'resolved';
+                  return { status: 'resolved' as const, sandbox };
+                },
+                (error: Error & { feature?: string }) => {
+                  settled = 'rejected';
+                  return {
+                    status: 'rejected' as const,
+                    name: error.name,
+                    feature: error.feature,
+                  };
+                },
+              );
+            await firstSignal;
+            await Promise.resolve();
+            const afterToolchainReady = settled;
+            if (kind === 'exact') selectedWorker?.postMessage('release-runtime-ready');
+            const result = await creating;
+            if (result.status === 'rejected') {
+              return {
+                kind,
+                backend,
+                afterToolchainReady,
+                status: result.status,
+                name: result.name,
+                feature: result.feature,
+                constructions,
+                terminations,
+              };
+            }
+            const admitted = {
+              kind,
+              backend,
+              afterToolchainReady,
+              status: result.status,
+              publicBackend: result.sandbox.vfs.backend,
+              runtimeReady: result.sandbox.runtime.isReady(),
+              constructions,
+              terminationsBeforeDispose: terminations,
+            };
+            result.sandbox.dispose();
+            return admitted;
+          } finally {
+            Object.defineProperty(globalThis, 'Worker', {
+              configurable: true,
+              value: NativeWorker,
+              writable: true,
+            });
+            URL.revokeObjectURL(workerUrl);
+          }
+        };
+
+        const results: unknown[] = [];
+        for (const backend of ['opfs', 'memory'] as const) {
+          results.push(await run('exact', backend));
+          results.push(await run('mismatch', backend));
+        }
+        return results;
+      },
+      { sdkUrl: sdkModuleUrl },
+    );
+
+    expect(outcomes).toEqual([
+      {
+        kind: 'exact',
+        backend: 'opfs',
+        afterToolchainReady: 'pending',
+        status: 'resolved',
+        publicBackend: 'opfs',
+        runtimeReady: true,
+        constructions: 1,
+        terminationsBeforeDispose: 0,
+      },
+      {
+        kind: 'mismatch',
+        backend: 'opfs',
+        afterToolchainReady: 'pending',
+        status: 'rejected',
+        name: 'NotImplementedError',
+        feature: 'sandbox.toolchain.worker',
+        constructions: 1,
+        terminations: 1,
+      },
+      {
+        kind: 'exact',
+        backend: 'memory',
+        afterToolchainReady: 'pending',
+        status: 'resolved',
+        publicBackend: 'memory',
+        runtimeReady: true,
+        constructions: 1,
+        terminationsBeforeDispose: 0,
+      },
+      {
+        kind: 'mismatch',
+        backend: 'memory',
+        afterToolchainReady: 'pending',
+        status: 'rejected',
+        name: 'NotImplementedError',
+        feature: 'sandbox.toolchain.worker',
+        constructions: 1,
+        terminations: 1,
+      },
+    ]);
   } finally {
     await host.close();
   }

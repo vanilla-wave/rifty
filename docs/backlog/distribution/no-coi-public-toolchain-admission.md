@@ -256,3 +256,16 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
 - Current-unit Final counts are `[3]`; inherited latest `15→3` strictly falls,
   so no convergence valve. No blocker batch, product/test fix, next Final round
   or RECHART started.
+- Post-Final expected RED band is 2–2: one Node and one real headerless
+  Chromium universal-admission test fail only for explicit-own `undefined` in
+  generic+toolchain paths. Current tree: Node 1 failed / 8 passed; Chrome
+  1 failed / 4 passed. Bigint/symbol/function/category, exact effect-vector and
+  reverse exact/mismatch readiness controls are GREEN. Original 3–3 and active
+  2–2 pickup bands remain append-only history.
+- Post-Final batch GREEN: omitted remains default while own `undefined` and all
+  non-boolean categories reject before the exact zero-effect vector. Node 9/9,
+  focused Chrome 5/5, full no-COI 21/21; incomplete category whitelist,
+  pre-guard duplicate VFS and removed-readiness-gate mutants restore the exact
+  REDs, then source hashes restore exactly. SDK/runtime-js typechecks and arch
+  pass; outside-sandbox `pr:check` 24/24 (`test:run` 193.2s, parity 69.2s).
+  Unit/goal/outside-goal residuals empty; Final verification pending.

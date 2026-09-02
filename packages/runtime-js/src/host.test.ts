@@ -389,6 +389,64 @@ describe('spawnToolchainRuntime trust boundary', () => {
     await expect(runtime.toolchainReady).resolves.toBe('memory');
   });
 
+  it.each(['opfs', 'memory'] as const)(
+    'waits for runtime readiness when exact %s toolchain readiness arrives first',
+    async (backend) => {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const worker = fakeWorker(0);
+      let outcome: unknown = { status: 'pending' };
+      void runtime.toolchainReady.then(
+        (value) => {
+          outcome = { status: 'resolved', backend: value };
+        },
+        (error: Error) => {
+          outcome = { status: 'rejected', name: error.name };
+        },
+      );
+
+      worker.emit({
+        type: 'toolchain-ready',
+        protocol: SANDBOX_TOOLCHAIN_PROTOCOL,
+        vfsBackend: backend,
+      });
+      await Promise.resolve();
+      expect(outcome).toEqual({ status: 'pending' });
+      expect(runtime.isReady()).toBe(false);
+
+      worker.emit({ type: 'ready' });
+      await Promise.resolve();
+      expect(outcome).toEqual({ status: 'resolved', backend });
+      expect(runtime.isReady()).toBe(true);
+      runtime.dispose();
+    },
+  );
+
+  it.each(['opfs', 'memory'] as const)(
+    'rejects mismatched %s toolchain readiness before runtime readiness',
+    async (backend) => {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const events: unknown[] = [];
+      runtime.on((event) => events.push(event));
+      const worker = fakeWorker(0);
+
+      worker.emitUnknown({
+        type: 'toolchain-ready',
+        protocol: 'rifty.sandbox-toolchain/v2',
+        vfsBackend: backend,
+      });
+
+      await expect(runtime.toolchainReady).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'sandbox.toolchain.worker',
+      });
+      expect(worker.terminated).toBe(true);
+      expect(runtime.isReady()).toBe(false);
+      expect(events).toEqual([]);
+    },
+  );
+
   it.each(['dispose', 'crash', 'clean-close'] as const)(
     'rejects an admitted request when its peer ends by %s',
     async (ending) => {

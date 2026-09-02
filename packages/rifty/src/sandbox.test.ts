@@ -175,12 +175,17 @@ describe('createSandbox', () => {
 
   it('rejects every non-boolean no-COI admission before boot — designed RED', async () => {
     const values = [
+      { label: 'explicit-undefined', value: undefined },
       { label: 'zero', value: 0 },
       { label: 'empty-string', value: '' },
       { label: 'NaN', value: Number.NaN },
       { label: 'null', value: null },
       { label: 'one', value: 1 },
       { label: 'string-false', value: 'false' },
+      { label: 'bigint-zero', value: 0n },
+      { label: 'bigint-one', value: 1n },
+      { label: 'symbol', value: Symbol('isolation') },
+      { label: 'function', value: () => false },
       { label: 'object', value: {} },
       { label: 'array', value: [] },
     ] as const;
@@ -188,9 +193,11 @@ describe('createSandbox', () => {
 
     for (const mode of ['generic', 'toolchain'] as const) {
       for (const { label, value } of values) {
+        const trace: string[] = [];
         let workerConstructions = 0;
         class UnexpectedWorker {
           constructor() {
+            trace.push('toolchain-worker');
             workerConstructions += 1;
           }
         }
@@ -210,10 +217,22 @@ describe('createSandbox', () => {
           await createSandbox(
             options as unknown as CreateSandboxOptions,
             deps({
-              detect: () => capabilityCheck(false),
-              initVfs,
-              registerSw,
-              spawn,
+              detect: () => {
+                trace.push('detect');
+                return capabilityCheck(false);
+              },
+              initVfs: () => {
+                trace.push('vfs');
+                return initVfs();
+              },
+              registerSw: () => {
+                trace.push('sw');
+                return registerSw();
+              },
+              spawn: () => {
+                trace.push('generic-worker');
+                return spawn();
+              },
             }),
           );
         } catch (caught) {
@@ -231,6 +250,7 @@ describe('createSandbox', () => {
             registerSw: registerSw.mock.calls.length,
             spawn: spawn.mock.calls.length,
             worker: workerConstructions,
+            order: trace,
           },
         });
       }
@@ -243,11 +263,168 @@ describe('createSandbox', () => {
           value: label,
           error: {
             name: 'TypeError',
-            message: expect.stringContaining(mode === 'generic' ? 'boolean' : 'false'),
+            message: expect.stringMatching(/boolean.*false/u),
           },
-          sideEffects: { initVfs: 0, registerSw: 0, spawn: 0, worker: 0 },
+          sideEffects: { initVfs: 0, registerSw: 0, spawn: 0, worker: 0, order: [] },
         })),
       ),
+    );
+  });
+
+  it('pins exact boot-effect vectors for omitted, true, false and invalid admission', async () => {
+    const cases = [
+      {
+        mode: 'generic',
+        flag: 'omitted',
+        own: false,
+        value: undefined,
+        expected: { status: 'rejected', name: 'Error', trace: ['detect'] },
+      },
+      {
+        mode: 'generic',
+        flag: 'true',
+        own: true,
+        value: true,
+        expected: { status: 'rejected', name: 'Error', trace: ['detect'] },
+      },
+      {
+        mode: 'generic',
+        flag: 'false',
+        own: true,
+        value: false,
+        expected: {
+          status: 'resolved',
+          name: undefined,
+          trace: ['detect', 'vfs', 'sw', 'generic-worker'],
+        },
+      },
+      {
+        mode: 'generic',
+        flag: 'bigint-zero',
+        own: true,
+        value: 0n,
+        expected: { status: 'rejected', name: 'TypeError', trace: [] },
+      },
+      {
+        mode: 'toolchain',
+        flag: 'omitted',
+        own: false,
+        value: undefined,
+        expected: { status: 'rejected', name: 'TypeError', trace: ['detect'] },
+      },
+      {
+        mode: 'toolchain',
+        flag: 'true',
+        own: true,
+        value: true,
+        expected: { status: 'rejected', name: 'TypeError', trace: ['detect'] },
+      },
+      {
+        mode: 'toolchain',
+        flag: 'false',
+        own: true,
+        value: false,
+        expected: {
+          status: 'resolved',
+          name: undefined,
+          trace: ['detect', 'sw', 'toolchain-worker'],
+        },
+      },
+      {
+        mode: 'toolchain',
+        flag: 'bigint-zero',
+        own: true,
+        value: 0n,
+        expected: { status: 'rejected', name: 'TypeError', trace: [] },
+      },
+    ] as const;
+    const outcomes: Array<Record<string, unknown>> = [];
+
+    for (const testCase of cases) {
+      const trace: string[] = [];
+      let resolveWorker: (worker: VectorWorker) => void = () => {};
+      const workerConstructed = new Promise<VectorWorker>((resolve) => {
+        resolveWorker = resolve;
+      });
+      class VectorWorker {
+        readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+
+        constructor() {
+          trace.push('toolchain-worker');
+          resolveWorker(this);
+        }
+
+        addEventListener(type: string, listener: EventListener): void {
+          if (type === 'message') {
+            this.listeners.add(listener as (event: MessageEvent<unknown>) => void);
+          }
+        }
+
+        postMessage(): void {}
+
+        terminate(): void {}
+
+        emit(data: unknown): void {
+          const event = { data } as MessageEvent<unknown>;
+          for (const listener of this.listeners) listener(event);
+        }
+      }
+      vi.stubGlobal('Worker', VectorWorker);
+      const flag = testCase.own ? { requireCrossOriginIsolation: testCase.value } : {};
+      const options =
+        testCase.mode === 'generic'
+          ? { workerUrl: '/generic-worker.js', ...flag }
+          : { ...flag, toolchain: { workerUrl: '/toolchain-worker.js' } };
+      const creating = createSandbox(
+        options as unknown as CreateSandboxOptions,
+        deps({
+          detect: () => {
+            trace.push('detect');
+            return capabilityCheck(false);
+          },
+          initVfs: () => {
+            trace.push('vfs');
+            return Promise.resolve('opfs');
+          },
+          registerSw: () => {
+            trace.push('sw');
+            return Promise.resolve();
+          },
+          spawn: () => {
+            trace.push('generic-worker');
+            return fakeRuntime();
+          },
+        }),
+      ).then(
+        (sandbox) => ({ status: 'resolved', name: undefined, sandbox }),
+        (error: Error) => ({ status: 'rejected', name: error.name, sandbox: undefined }),
+      );
+      if (testCase.mode === 'toolchain' && testCase.value === false) {
+        const worker = await workerConstructed;
+        worker.emit({ type: 'ready' });
+        worker.emit({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v1',
+          vfsBackend: 'opfs',
+        });
+      }
+      const result = await creating;
+      outcomes.push({
+        mode: testCase.mode,
+        flag: testCase.flag,
+        status: result.status,
+        name: result.name,
+        trace,
+      });
+      result.sandbox?.dispose();
+    }
+
+    expect(outcomes).toEqual(
+      cases.map((testCase) => ({
+        mode: testCase.mode,
+        flag: testCase.flag,
+        ...testCase.expected,
+      })),
     );
   });
 

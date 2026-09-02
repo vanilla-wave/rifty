@@ -202,7 +202,8 @@ export async function createSandbox(
 ): Promise<Sandbox | ToolchainSandbox> {
   const requireCrossOriginIsolation: unknown = options.requireCrossOriginIsolation;
   if (
-    requireCrossOriginIsolation !== undefined &&
+    (requireCrossOriginIsolation !== undefined ||
+      Object.hasOwn(options, 'requireCrossOriginIsolation')) &&
     typeof requireCrossOriginIsolation !== 'boolean'
   ) {
     throw new TypeError(
