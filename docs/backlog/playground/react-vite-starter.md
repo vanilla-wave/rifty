@@ -173,8 +173,8 @@ failing-test-first target run as the same scenario locally and in rifty.
 - Editing a component patches the running app with no full reload, same as
   local: the pre-edit window sentinel survives and the patched module's effect
   is visible. (The oracle's HMR socket carries the corresponding `js-update`
-  frame for `/src/components/StatusBadge.tsx` and no `full-reload` — probe
-  recorded at Contract+RED; in-browser the same edit is asserted by its
+  frame for `/src/components/StatusBadge.tsx` and no `full-reload` — probe recorded in
+  `## Decisions` (2026-09-02 local oracle); in-browser the same edit is asserted by its
   observable consequence.)
 - `vite build` emits `dist/index.html` plus a hashed `assets/index-*.js` and
   `assets/index-*.css` and no source-entry reference — the local file set;
@@ -202,6 +202,62 @@ failing-test-first target run as the same scenario locally and in rifty.
 ready-verdict: 2026-09-02 — Contract+RED @ 4bd3557a6
 contract-red: 2026-09-02 — blocker @ 0493863b6
 final-green: 2026-09-02 — blocker @ eed9e4268
+
+- 2026-09-02 (Final+GREEN round 1 — find + tail pass, adjudicated): five
+  blockers HOLD, fixed in one batch: exact dependency ranges/majors pinned
+  (`vite@^7`, React 19, Router 7, plugin-react 5) in the unit test and the
+  installer-line regexes; client-side navigation now proven by a window
+  sentinel set BEFORE the clicks plus the router pathname; the four rough
+  edges pinned in page/component code (text sort, no search input, state-only
+  filters, no form/creation) so fixing one fails the unit test; the built
+  `dist/assets` listed from a real readdir and the hashed JS/CSS fetched
+  through `vite preview` (200, bundle carries `Trackline`, stylesheet `.brand`);
+  and the local oracle executed for every Parity row (below). STRETCH findings
+  closed alongside as cheap strengthening: exact `real-vite` tile metadata
+  test, deep-link asserts `npm: + react@19.` + the dashboard, alias-collision
+  test for `projectScripts`, issue identity `#1..#25` + 12 `Open` badges, LIVE
+  pill asserted directly. STRETCH left as concerns: caret ranges without a
+  seeded lock (7/7 from-scratch presets on main do the same), stable-id
+  baseline change (ADR-0278 reseed rule, mechanism untouched), Vite 8 closes
+  over no esbuild (`why` of the carried draft says "every Vite project").
+- 2026-09-02 (local oracle — identical seed materialized from
+  `REACT_VITE_TEMPLATE` + `buildProjectPackageJson`, 17 files; node v24.16.0,
+  npm 11.17.0, `--registry=https://registry.npmjs.org`; a mirror in the local
+  npm config failed with `notarget react-router@7.18.2`, hence the explicit
+  registry):
+  - P1 `npm install` → `added 72 packages`; `npm ls --depth=0` →
+    `@types/react-dom@19.2.5 @types/react@19.2.18 @vitejs/plugin-react@5.2.0
+    react-dom@19.2.8 react-router-dom@7.18.3 react@19.2.8 typescript@5.9.3
+    vite@7.3.6` (all eight direct deps; the browser asserts the same set by
+    `npm: + <name>@<major>.` lines).
+  - P2 `vite --port 5188`, requests `/`, `/src/main.tsx`, `/src/App.tsx`,
+    `/src/pages/IssueList.tsx`, then `node_modules/.vite/deps/_metadata.json`
+    → `DEP react interop=true`, `DEP react-dom interop=true`,
+    `DEP react/jsx-dev-runtime interop=true`, `DEP react/jsx-runtime
+    interop=true`, `DEP react-dom/client interop=true`, `DEP react-router-dom
+    interop=false` — the six entries the e2e asserts verbatim.
+  - P3 `curl /src/main.tsx` → `RefreshReg$` 0, `.vite/deps/react.js` 1;
+    `curl /src/App.tsx` → `RefreshReg$` 3, `/@react-refresh` 1,
+    `import.meta.hot` 4.
+  - P4 `curl /` → `injectIntoGlobalHook` 2, `/@react-refresh` 1.
+  - P5 HMR websocket (`new WebSocket('ws://localhost:5188/?token=<from
+    /@vite/client>', 'vite-hmr')`), append a line to
+    `src/components/StatusBadge.tsx`, then restore → frames `connected`,
+    `js-update /src/components/StatusBadge.tsx` ×2, no `full-reload`.
+  - P6 `vite build` → `dist/index.html`, `dist/assets/index-BM1zeB2_.css`,
+    `dist/assets/index-CD-EbVqY.js`; `index.html` references `/src/main.tsx`
+    0 times; `vite preview --port 4173` → `GET /` 200,
+    `GET /assets/index-CD-EbVqY.js` 200.
+  - P7 is the same run: the tree served, patched and built unchanged.
+  Parity row P5 reworded from "probe recorded at Contract+RED" (no such output
+  existed) to "probe recorded in `## Decisions`" — the only Parity text change.
+- 2026-09-02 (lineage — Final+GREEN blocker HOLDS): the implementation landed
+  in 0493863b6 before both Contract+RED verdicts, and 8bf5df9c8 tightened RED
+  rows after the pass without a verify pass (`fault-classes.md` Checkpoints +
+  Lineage rows). Remedy on record: override instead of a RED-only Contract+RED
+  re-run — carrier quality is certified by this Final+GREEN checkpoint (the
+  round found and fixed four weak carriers). Recorded by the agent after the
+  user asked whether the gap was process-only; the user confirms at merge.
 
 - 2026-09-02 (Contract+RED attempt 1 → blocker, re-cut IN PLACE): the parity
   row "served `/src/main.tsx` carries the refresh preamble" asserted a FALSE
