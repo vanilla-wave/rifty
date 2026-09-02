@@ -200,3 +200,17 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   the existing toolchain `TypeError`; omitted/true behavior is unchanged. No
   production implementation, sibling lifecycle/package/build/host behavior or
   Vite fixture entered this boundary.
+- `contract-red: 2026-09-02 — blocker @ 2ba023fff`
+- Contract+RED reviewed tree
+  `cda178d66bb8d651b860fefad4d96f19506185f4` against certified BASE
+  `dce86792d` / tree `b1e0244ad`: find 3 blockers / 3 concerns / 0 nits,
+  coverage 10 pass / 6 weak / 0 missing of 16; fresh tail 0 / 0 / 0,
+  coverage 16/16; adjudication 3 HOLDS / 0 STRETCH / 0 FALSE;
+  `blockers.mjs` exit 1.
+- HOLDS: Parity 1's command omits its claimed omitted/true cases; an accessor
+  protocol structured-clones into an exact admitted data property; frames
+  injected through `FakeWorker` after `terminate()` are physically excluded by
+  a real Worker and cannot prove the declared late-frame behavior.
+- Current-unit Contract blocker counts are `[3]`; no consecutive Contract
+  blocker, Contract-escalation or convergence valve. No fix, re-cut,
+  implementation or next review round started.
