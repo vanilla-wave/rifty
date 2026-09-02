@@ -274,3 +274,10 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
 - Valve audit: current descriptor-unit Final counts `[3]`; no two consecutive
   current-unit rounds, so no convergence valve. The predecessor's carried
   `1→1` stop is a different unit boundary. No fix started.
+- `final-green: 2026-09-02 — PASS @ dce86792d`
+- Final verify on tree `b1e0244ad432b5813bd9c2ff3a9e98ccf2cc7153`:
+  `pnpm pr:check` 24/24 PASS; coverage 19/19 pass; 0 blockers / 0 concerns /
+  0 nits; unit residuals empty; 2 goal residuals (build-loop, dev-HMR);
+  `blockers.mjs` exit 0. Carriers:
+  `packages/runtime-js/src/internal/sandbox-toolchain-realm.test.ts` and
+  `tests/no-coi/no-coi-memory-descriptor.spec.ts`.
