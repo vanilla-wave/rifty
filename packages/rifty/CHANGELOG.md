@@ -38,6 +38,9 @@
 
 ### Changed
 
+- `createSandbox` rejects a non-boolean `requireCrossOriginIsolation` before
+  VFS, service-worker or Worker boot; omitted/true/literal-false behavior stays
+  unchanged.
 - Corrected Vite host-wiring examples to use a production-emitted
   `@riftydev/runtime-js/worker?worker&url` asset with an ESM Worker build instead
   of an indirect package URL that Vite could not bundle.

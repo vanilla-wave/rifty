@@ -200,17 +200,23 @@ export async function createSandbox(
   options: CreateSandboxOptions,
   deps: SandboxDeps = {},
 ): Promise<Sandbox | ToolchainSandbox> {
+  const requireCrossOriginIsolation: unknown = options.requireCrossOriginIsolation;
+  if (
+    requireCrossOriginIsolation !== undefined &&
+    typeof requireCrossOriginIsolation !== 'boolean'
+  ) {
+    throw new TypeError(
+      'sandbox requireCrossOriginIsolation must be a boolean; use literal false to disable isolation',
+    );
+  }
   const logger = deps.logger ?? options.logger ?? console;
   const detect = deps.detect ?? detectCapabilities;
   const capabilities = detect();
 
-  if (options.toolchain !== undefined && options.requireCrossOriginIsolation !== false) {
+  if (options.toolchain !== undefined && requireCrossOriginIsolation !== false) {
     throw new TypeError('sandbox toolchain mode requires requireCrossOriginIsolation: false');
   }
-  if (
-    (options.requireCrossOriginIsolation ?? true) &&
-    !capabilities.capabilities.crossOriginIsolated
-  ) {
+  if ((requireCrossOriginIsolation ?? true) && !capabilities.capabilities.crossOriginIsolated) {
     throw new Error(COI_REQUIRED_MESSAGE);
   }
 
