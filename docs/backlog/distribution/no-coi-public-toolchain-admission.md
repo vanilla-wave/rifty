@@ -308,3 +308,21 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   Calibrated rule needs two consecutive non-decreases: `3→1` decreases, then
   `1→2` increases, so no valve now. Next round `X≥2` would fire on `1→2→X`.
   No blocker batch, product/test fix or next Final round started.
+- Post-identity expected RED band is 0–0 new REDs: current product already
+  returns realm-canonical classes. Node canonical generic/toolchain TypeError
+  plus protocol/backend NotImplementedError siblings pass 6/6; real headerless
+  Chromium through public SDK + `@riftydev/sdk/io` passes 3/3. Product stays
+  unchanged; forged-class mutant proof follows in this batch. All prior bands
+  and Final lineage carry.
+- Post-identity batch GREEN with no product change: Node canonical matrix 6/6,
+  focused public Chromium 3/3, full no-COI 22/22. Forged ordinary
+  `Error{name:'TypeError'}` fails the generic+toolchain Node carrier 1/1 and
+  Chromium carrier 1/1; forged ordinary
+  `Error{name:'NotImplementedError',feature:'sandbox.toolchain.worker'}` fails
+  Node protocol/backend siblings 5/5 and public Chromium protocol/backend 2/2.
+  Product hashes restore exactly (`sandbox.ts`
+  `a135270540919a31acf8d23763018591bf8cfc6c61b3728a9798da363162fb7a`,
+  `host.ts` `02c16d1e6724cad072c58c946b4519bb70c79b375747b1eecc48b3e231830ae1`).
+  SDK/runtime-js typechecks, arch and outside-sandbox `pr:check` 24/24 pass
+  (`test:run` 202.1s, parity 69.9s). Residual classification remains unit 0,
+  goal 5 per map, outside-goal 0; Final verification pending.

@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawnRuntime, spawnToolchainRuntime } from './host.ts';
 import * as runtimeJs from './index.ts';
@@ -266,7 +267,9 @@ describe('spawnToolchainRuntime trust boundary', () => {
       vfsBackend: 'indexeddb',
     });
 
-    await expect(runtime.toolchainReady).rejects.toMatchObject({
+    const error = await runtime.toolchainReady.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(NotImplementedError);
+    expect(error).toMatchObject({
       name: 'NotImplementedError',
       feature: 'sandbox.toolchain.worker',
     });
@@ -284,7 +287,9 @@ describe('spawnToolchainRuntime trust boundary', () => {
       vfsBackend: 'memory',
     });
 
-    await expect(runtime.toolchainReady).rejects.toMatchObject({
+    const error = await runtime.toolchainReady.catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(NotImplementedError);
+    expect(error).toMatchObject({
       name: 'NotImplementedError',
       feature: 'sandbox.toolchain.worker',
     });
@@ -341,6 +346,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         (error: Error & { feature?: string }) => ({
           name: error.name,
           feature: error.feature,
+          canonical: error instanceof NotImplementedError,
         }),
       );
       const handshake = runtime.toolchainReady.then(
@@ -348,6 +354,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         (error: Error & { feature?: string }) => ({
           name: error.name,
           feature: error.feature,
+          canonical: error instanceof NotImplementedError,
         }),
       );
       worker.emitUnknown(frame());
@@ -370,10 +377,12 @@ describe('spawnToolchainRuntime trust boundary', () => {
         handshake: {
           name: 'NotImplementedError',
           feature: 'sandbox.toolchain.worker',
+          canonical: true,
         },
         pendingEval: {
           name: 'NotImplementedError',
           feature: 'sandbox.toolchain.worker',
+          canonical: true,
         },
         terminated: true,
         readyAtTermination: false,
@@ -437,7 +446,9 @@ describe('spawnToolchainRuntime trust boundary', () => {
         vfsBackend: backend,
       });
 
-      await expect(runtime.toolchainReady).rejects.toMatchObject({
+      const error = await runtime.toolchainReady.catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(NotImplementedError);
+      expect(error).toMatchObject({
         name: 'NotImplementedError',
         feature: 'sandbox.toolchain.worker',
       });

@@ -11,6 +11,7 @@ import {
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
+const sdkIoModuleUrl = `/@fs${workspacePath}/packages/rifty/src/io.ts`;
 const sdkVfsModuleUrl = `/@fs${workspacePath}/packages/rifty/src/vfs.ts`;
 const runtimeWorkerUrl = `/@fs${workspacePath}/packages/runtime-js/src/worker-entry.ts`;
 const toolchainWorkerUrl = `/@fs${workspacePath}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`;
@@ -895,8 +896,16 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
                 value: label,
                 error:
                   error instanceof Error
-                    ? { name: error.name, message: error.message }
-                    : { name: typeof error, message: String(error) },
+                    ? {
+                        name: error.name,
+                        message: error.message,
+                        canonicalTypeError: error instanceof TypeError,
+                      }
+                    : {
+                        name: typeof error,
+                        message: String(error),
+                        canonicalTypeError: false,
+                      },
                 workerConstructions: workers.length - before,
                 effects: trace,
               });
@@ -942,6 +951,7 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
           error: {
             name: 'TypeError',
             message: expect.stringMatching(/boolean.*false/u),
+            canonicalTypeError: true,
           },
           workerConstructions: 0,
           effects: [],
@@ -1202,7 +1212,7 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
   const { host } = await openHeaderlessHost(page);
   try {
     const outcome = await host.evaluate(
-      async ({ sdkUrl }) => {
+      async ({ sdkUrl, ioUrl }) => {
         const source = `
         postMessage({ type: 'ready' });
         postMessage({
@@ -1248,6 +1258,9 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
           const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
             createSandbox(options: Record<string, unknown>): Promise<unknown>;
           };
+          const io = (await import(/* @vite-ignore */ ioUrl)) as {
+            NotImplementedError: typeof Error;
+          };
           let result: Record<string, unknown>;
           try {
             await sdk.createSandbox({
@@ -1262,6 +1275,7 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
               status: 'rejected',
               name: inspected.name,
               feature: inspected.feature,
+              canonical: error instanceof io.NotImplementedError,
             };
           }
           await new Promise<void>((resolve) =>
@@ -1277,16 +1291,72 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
           URL.revokeObjectURL(workerUrl);
         }
       },
-      { sdkUrl: sdkModuleUrl },
+      { sdkUrl: sdkModuleUrl, ioUrl: sdkIoModuleUrl },
     );
 
     expect(outcome).toEqual({
       status: 'rejected',
       name: 'NotImplementedError',
       feature: 'sandbox.toolchain.worker',
+      canonical: true,
       constructions: 1,
       terminations: 1,
       received: ['ready', 'toolchain-ready'],
+    });
+  } finally {
+    await host.close();
+  }
+});
+
+test('public SDK backend mismatch throws the canonical NotImplementedError', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    const outcome = await host.evaluate(
+      async ({ sdkUrl, ioUrl }) => {
+        const source = `
+          postMessage({ type: 'ready' });
+          postMessage({
+            type: 'toolchain-ready',
+            protocol: 'rifty.sandbox-toolchain/v1',
+            vfsBackend: 'indexeddb',
+          });
+        `;
+        const workerUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+        try {
+          const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
+            createSandbox(options: Record<string, unknown>): Promise<unknown>;
+          };
+          const io = (await import(/* @vite-ignore */ ioUrl)) as {
+            NotImplementedError: typeof Error;
+          };
+          try {
+            await sdk.createSandbox({
+              requireCrossOriginIsolation: false,
+              skipServiceWorker: true,
+              toolchain: { workerUrl },
+            });
+            return { status: 'resolved' };
+          } catch (error) {
+            const inspected = error as Error & { feature?: string };
+            return {
+              status: 'rejected',
+              name: inspected.name,
+              feature: inspected.feature,
+              canonical: error instanceof io.NotImplementedError,
+            };
+          }
+        } finally {
+          URL.revokeObjectURL(workerUrl);
+        }
+      },
+      { sdkUrl: sdkModuleUrl, ioUrl: sdkIoModuleUrl },
+    );
+
+    expect(outcome).toEqual({
+      status: 'rejected',
+      name: 'NotImplementedError',
+      feature: 'sandbox.toolchain.worker',
+      canonical: true,
     });
   } finally {
     await host.close();

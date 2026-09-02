@@ -243,8 +243,16 @@ describe('createSandbox', () => {
           value: label,
           error:
             error instanceof Error
-              ? { name: error.name, message: error.message }
-              : { name: typeof error, message: String(error) },
+              ? {
+                  name: error.name,
+                  message: error.message,
+                  canonicalTypeError: error instanceof TypeError,
+                }
+              : {
+                  name: typeof error,
+                  message: String(error),
+                  canonicalTypeError: false,
+                },
           sideEffects: {
             initVfs: initVfs.mock.calls.length,
             registerSw: registerSw.mock.calls.length,
@@ -264,6 +272,7 @@ describe('createSandbox', () => {
           error: {
             name: 'TypeError',
             message: expect.stringMatching(/boolean.*false/u),
+            canonicalTypeError: true,
           },
           sideEffects: { initVfs: 0, registerSw: 0, spawn: 0, worker: 0, order: [] },
         })),
