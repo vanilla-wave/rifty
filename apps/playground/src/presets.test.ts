@@ -278,6 +278,34 @@ describe('playground presets', () => {
     ]);
   });
 
+  it('ships the node-ws class-proof as a hidden from-scratch npm-dev-server preset', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'npm-dev-server-node-ws');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    const spec = resolveProjectSpec('npm-dev-server-node-ws');
+    if (spec.runtime !== 'npm-dev-server') throw new Error('unreachable');
+
+    expect(demo.hidden).toBe(true);
+    expect(demo.templateId).toBe('npm-dev-server-node-ws');
+    expect(demo.setup).toBe('from-scratch');
+    expect(demo.tag).toEqual({ text: 'npm install', tone: 'slow' });
+    expect((demo.files ?? []).map((file) => file.path).sort()).toEqual([
+      'README.md',
+      'public/index.html',
+      'public/message.txt',
+      'server.mjs',
+    ]);
+    expect(presetFileContent(demo, 'server.mjs')).toBe(spec.entry.content);
+    for (const [path, content] of Object.entries(spec.extraFiles)) {
+      expect(presetFileContent(demo, path.replace(/^\/+/, ''))).toBe(content);
+    }
+    expect(presetBootLines(demo, '/workspace')).toEqual([
+      'cd /workspace && npm install && npm run dev',
+    ]);
+    expect(presetFileContent(demo, 'README.md')).toContain('node server.mjs');
+    expect(presetFileContent(demo, 'server.mjs')).not.toMatch(/webpack/i);
+  });
+
   it('ships Socket Lab wired to its node-server template and socket matrix rows', () => {
     const demo = PRESETS.find((preset) => preset.id === 'socket-lab');
     expect(demo).toBeDefined();

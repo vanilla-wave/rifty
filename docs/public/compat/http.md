@@ -9,7 +9,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `http.createServer` | ✅ | Request handler, `listen(port)`, registered port dispatch |
-| `server.on('upgrade')` WebSocket | ✅ | Bridge-backed RFC 6455 upgrade socket; browser Origin and target Host remain distinct; real npm `ws` server and client modes tested on registered local ports |
+| `server.on('upgrade')` WebSocket | ✅ | Bridge-backed RFC 6455 upgrade socket; browser Origin and target Host remain distinct; real npm `ws` server and client modes tested on registered local ports. Servers that validate Origin (webpack-dev-server, Angular CLI, Storybook on webpack-dev-server) must allow-list the exact Playground page hostname in their own visible config; the bridge does not rewrite Host or Origin. |
 | Basic GET response | ✅ | `writeHead`, headers, status, body |
 | POST request body | ✅ | Readable streaming request body, chunk boundaries, `drain`, and `end` |
 | 204 / 304 null-body statuses | ✅ | No invalid fetch `Response` body |

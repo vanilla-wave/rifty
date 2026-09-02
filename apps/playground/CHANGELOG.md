@@ -33,6 +33,11 @@
   npm-owned `webpack serve` script and reaches the generic routed preview with
   stock HMR; its companion plan carries no webpack-specific runtime fields
   (ADR-0349).
+- Hidden `npm-dev-server-node-ws` class-proof: the same zero-field
+  `kind: 'npm-dev-server'` seam with `scripts.dev` = `node server.mjs` (no extra
+  npm deps). Deep-link only (`?preset=npm-dev-server-node-ws`); not a gallery
+  tile. Hosted e2e proves LIVE + HTTP 200 + WS through the preview bridge on a
+  non-webpack tool that allow-lists the exact Playground page origin.
 
 - Express, Hono, and Koa pin real `nodemon@3.1.14`; owner-VFS edits now replace
   the app Worker on the same preview port with crash recovery and teardown.

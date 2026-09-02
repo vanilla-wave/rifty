@@ -332,6 +332,43 @@ describe('toPlaygroundProjectPlan registry differential contract', () => {
     );
   });
 
+  it('maps the hidden node-ws class-proof to a zero-field npm-dev-server plan', () => {
+    const preset = PRESETS.find((candidate) => candidate.id === 'npm-dev-server-node-ws');
+    if (preset === undefined) throw new Error('missing npm-dev-server-node-ws preset');
+    const plan = mapPlan({
+      projectId: 'node-ws-project',
+      starter: starterFromPreset(preset),
+      setup: 'from-scratch',
+    });
+    if (plan.kind !== 'npm-dev-server') {
+      throw new Error('node-ws preset mapped to the wrong plan kind');
+    }
+
+    expect(Reflect.ownKeys(plan).map(String).sort()).toEqual([
+      'dependencies',
+      'files',
+      'firstMaterialization',
+      'id',
+      'kind',
+      'starterId',
+      'templateId',
+    ]);
+    expect(plan.kind).toBe('npm-dev-server');
+    expect(plan.dependencies).toEqual({});
+    expect('devDependencies' in plan).toBe(false);
+    for (const field of ['port', 'entryPath', 'command', 'bin']) {
+      expect(plan, field).not.toHaveProperty(field);
+    }
+
+    const manifest = JSON.parse(text(plan.files['/package.json'], '/package.json')) as {
+      readonly scripts?: Readonly<Record<string, string>>;
+      readonly type?: string;
+    };
+    expect(manifest.scripts).toEqual({ dev: 'node server.mjs' });
+    expect(manifest.type).toBe('module');
+    expect(text(plan.files['/server.mjs'], '/server.mjs')).not.toMatch(/webpack/i);
+  });
+
   it('rejects a Starter whose durable self-id disagrees with its registry id', () => {
     const starter = syntheticStarter(resolveProjectSpec('vite'));
 

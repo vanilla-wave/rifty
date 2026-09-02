@@ -3,17 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ProjectSpec } from './project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, defaultProjectSpec, resolveProjectSpec } from './registry.ts';
 
-type WebpackDevServerTemplateContract = Extract<
-  ProjectSpec,
-  { readonly runtime: 'npm-dev-server' }
->;
+type NpmDevServerTemplateContract = Extract<ProjectSpec, { readonly runtime: 'npm-dev-server' }>;
 
-function resolveWebpackDevServerTemplate(): WebpackDevServerTemplateContract {
-  const spec = resolveProjectSpec('webpack-dev-server');
+function resolveNpmDevServerTemplate(id: string): NpmDevServerTemplateContract {
+  const spec = resolveProjectSpec(id);
   if (spec.runtime !== 'npm-dev-server') {
-    throw new Error('webpack-dev-server registry entry has the wrong runtime');
+    throw new Error(`${id} registry entry has the wrong runtime`);
   }
   return spec;
+}
+
+function resolveWebpackDevServerTemplate(): NpmDevServerTemplateContract {
+  return resolveNpmDevServerTemplate('webpack-dev-server');
 }
 
 describe('resolveProjectSpec', () => {
@@ -147,6 +148,82 @@ describe('resolveProjectSpec', () => {
     vi.resetModules();
     try {
       await expect(import('./webpack-dev-server.ts')).rejects.toThrow(/hostname/i);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it('registers a second npm-dev-server tool whose visible script is node, not webpack', () => {
+    const spec = resolveNpmDevServerTemplate('npm-dev-server-node-ws');
+
+    expect(spec.id).toBe('npm-dev-server-node-ws');
+    expect(spec.runtime).toBe('npm-dev-server');
+    expect(spec.devCommand).toBe('node server.mjs');
+    expect(spec.install).toEqual({});
+    expect(spec.devDependencies).toBeUndefined();
+    expect(spec.entry.relativePath).toBe('/server.mjs');
+    expect(spec.defaultPort).toBe(5191);
+    expect(spec.defaultPort).not.toBe(resolveWebpackDevServerTemplate().defaultPort);
+    expect(spec.entry.content).toContain('createServer');
+    expect(spec.entry.content).not.toMatch(/webpack/i);
+    expect(JSON.stringify(spec.extraFiles)).not.toMatch(/webpack/i);
+    expect(Object.keys(spec.extraFiles).sort()).toEqual([
+      '/README.md',
+      '/public/index.html',
+      '/public/message.txt',
+    ]);
+    expect(spec.extraFiles['/public/index.html']).toContain('new WebSocket');
+    expect(spec.extraFiles['/public/message.txt']).toContain('node-ws ready');
+  });
+
+  it('[fault: provenance-lie] bakes only the exact browser page origin into the node-ws server', async () => {
+    vi.stubGlobal('location', { origin: 'https://preview.rifty.test:5376' });
+    vi.resetModules();
+    try {
+      const { NPM_DEV_SERVER_NODE_WS_TEMPLATE } = await import('./npm-dev-server-node-ws.ts');
+      expect(NPM_DEV_SERVER_NODE_WS_TEMPLATE.entry.content).toContain(
+        'const ALLOWED_ORIGIN = "https://preview.rifty.test:5376"',
+      );
+      expect(NPM_DEV_SERVER_NODE_WS_TEMPLATE.entry.content).not.toContain(
+        'const ALLOWED_ORIGIN = "http://localhost"',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it('uses the explicit localhost origin fixture outside a browser for node-ws', async () => {
+    vi.stubGlobal('location', undefined);
+    vi.resetModules();
+    try {
+      const { NPM_DEV_SERVER_NODE_WS_TEMPLATE } = await import('./npm-dev-server-node-ws.ts');
+      expect(NPM_DEV_SERVER_NODE_WS_TEMPLATE.entry.content).toContain(
+        'const ALLOWED_ORIGIN = "http://localhost"',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it('[fault: corrupt-input] rejects a browser location without an origin for node-ws', async () => {
+    vi.stubGlobal('location', { origin: '' });
+    vi.resetModules();
+    try {
+      await expect(import('./npm-dev-server-node-ws.ts')).rejects.toThrow(/origin/i);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it('[fault: corrupt-input] rejects an opaque null origin for node-ws', async () => {
+    vi.stubGlobal('location', { origin: 'null' });
+    vi.resetModules();
+    try {
+      await expect(import('./npm-dev-server-node-ws.ts')).rejects.toThrow(/origin/i);
     } finally {
       vi.unstubAllGlobals();
       vi.resetModules();

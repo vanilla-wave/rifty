@@ -8,6 +8,7 @@ import {
 import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
 import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
+import { NPM_DEV_SERVER_NODE_WS_TEMPLATE } from './templates/npm-dev-server-node-ws.ts';
 import { terminalDevLine } from './templates/project-spec.ts';
 import { REACT_VITE_TEMPLATE } from './templates/react-vite/index.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
@@ -60,6 +61,8 @@ export interface Preset {
   readonly files: readonly PresetFile[];
   /** Workspace-relative files opened as editor tabs when this preset loads; first is active. */
   readonly openFiles?: readonly string[];
+  /** Deep-link / class-proof only — omitted from the gallery and command palette. */
+  readonly hidden?: true;
 }
 
 const PROJECT_FILES_SOURCE = `import project from './project.json';
@@ -453,6 +456,31 @@ const WEBPACK_DEV_SERVER_PRESET: Preset = {
   ],
 };
 
+const NPM_DEV_SERVER_NODE_WS_PRESET: Preset = {
+  id: NPM_DEV_SERVER_NODE_WS_TEMPLATE.id,
+  label: 'npm-dev-server node ws',
+  category: 'Live preview',
+  icon: 'rocket',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: NPM_DEV_SERVER_NODE_WS_TEMPLATE.id,
+  hidden: true,
+  blurb: 'Hidden class-proof: generic npm-dev-server seam with node server.mjs.',
+  glyph: { text: 'NW', color: '#8FE3C0' },
+  tag: { text: 'npm install', tone: 'slow' },
+  openFiles: ['server.mjs', 'public/index.html', 'public/message.txt'],
+  files: [
+    {
+      path: NPM_DEV_SERVER_NODE_WS_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: NPM_DEV_SERVER_NODE_WS_TEMPLATE.entry.content,
+    },
+    ...Object.entries(NPM_DEV_SERVER_NODE_WS_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
+};
+
 /**
  * Fullstack demo (node-server template, see the node-server template ADR):
  * The opened tabs are ordinary seeded files. The server entry is just one file
@@ -615,6 +643,7 @@ export const PRESETS: readonly Preset[] = [
   REAL_VITE_PRESET,
   VITE8_PRESET,
   WEBPACK_DEV_SERVER_PRESET,
+  NPM_DEV_SERVER_NODE_WS_PRESET,
   EXPRESS_SQLITE_PRESET,
   SOCKET_LAB_PRESET,
   HONO_API_PRESET,
