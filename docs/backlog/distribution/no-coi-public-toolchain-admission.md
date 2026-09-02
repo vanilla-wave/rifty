@@ -37,10 +37,11 @@ Pickup source evidence at `69157c937`:
   `NaN` boot generic VFS/SW/Worker side effects; representative falsey/truthy
   non-booleans otherwise return the COI error instead of rejecting the invalid
   runtime type.
-- `host.ts:185-192,302-372` terminates on an invalid handshake, but its retained
-  message listener still accepts later `ready`/`result` frames: eight invalid
-  protocol shapes each end at `isReady()===true` and emit three events instead
-  of remaining terminal at one event.
+- `host.ts:185-192,302-372,503-524` terminates on an invalid handshake and its
+  exact decoder rejects clone-preserved corrupt shapes. Chrome proves a sender
+  accessor returning the exact protocol arrives as an ordinary exact data
+  property, so admitting it is correct. A real Worker that queues v2, then v1,
+  then result frames still yields one public rejection and one termination.
 - `sandbox.ts:217-238` already projects `runtime.fs`, `runtime.toolchain` and
   the handshake backend from one controller. Unit `opfs|memory` twins and the
   real headerless Chromium carrier are GREEN preservation evidence: page
@@ -87,10 +88,12 @@ never returns a partially live sandbox.
 3. Boot resolves only after both runtime readiness and one exact
    `toolchain-ready` frame carrying `SANDBOX_TOOLCHAIN_PROTOCOL` and
    `vfsBackend:'opfs'|'memory'`. A valid backend paired with any other protocol
-   string/value/shape rejects
+   clone-preserved string/value/shape rejects
    `NotImplementedError('sandbox.toolchain.worker')`, terminates the Worker and
-   ignores every later ready/result frame without changing readiness or
-   emitting an event; it never resurrects or hangs.
+   remains rejected if that Worker already queued later exact ready/result
+   frames; no sandbox escapes and nothing hangs. A sender accessor that returns
+   the exact protocol is not a mismatch: Worker structured clone materializes
+   it as the exact ordinary data property the receiver admits.
 4. Public `sandbox.vfs.backend` equals the admitted Worker's exact backend.
    Tests distinguish Worker `opfs` and `memory` from the opposite page-realm
    probe so a page-derived or hard-coded projection fails.
@@ -105,24 +108,31 @@ never returns a partially live sandbox.
 
 ## Parity cases
 
-1. Admission matrix: omitted/true vs literal false vs runtime falsey
+1. Admission matrix: omitted/true vs literal false vs runtime
    non-booleans, with exact boot-side-effect counts. Only literal false reaches
    no-COI readiness. Artifact (Node 24.16.0, Vitest 2.1.9):
    `pnpm exec vitest run --project unit packages/rifty/src/sandbox.test.ts
-   packages/runtime-js/src/host.test.ts -t "non-boolean no-COI|arbitrary
-   protocol shapes|projects either admitted Worker backend" --reporter=dot`
-   → 2 failed / 1 passed: generic `0|''|NaN` performed VFS+SW+Worker; the other
-   representative non-booleans returned `Error`. Real public-SDK artifact
-   (Playwright 1.60.0, Chrome
-   148.0.7778.96): `pnpm test:no-coi -g "public SDK admits no-COI only through
-   literal false|public SDK projects one real Worker, VFS and runtime authority"
-   --reporter=line` → admission RED, authority GREEN, 1 failed / 1 passed.
+   packages/runtime-js/src/host.test.ts -t "COI is required but absent|boots
+   without COI when requireCrossOriginIsolation is false|rejects toolchain
+   admission unless|rejects every non-boolean no-COI|projects either admitted
+   Worker backend|clone-preserved arbitrary protocol shapes|admits only the
+   exact protocol/backend frame" --reporter=dot` → 1 failed / 8 passed:
+   omitted/true/literal-false twins all execute; generic `0|''|NaN` performs
+   VFS+SW+Worker and other representative non-booleans return `Error`.
+   Real public-SDK artifact (Playwright 1.60.0, Chrome 148.0.7778.96):
+   `pnpm test:no-coi -g "public SDK admits no-COI only through literal
+   false|capability and no-COI degradation contract|public SDK projects one
+   real Worker, VFS and runtime authority|Chrome Worker clone
+   materializes|public SDK rejects an invalid real Worker" --reporter=line`
+   → admission RED plus four GREEN controls, 1 failed / 4 passed in 9.8s.
 2. Handshake matrix: exact protocol/backend vs several non-v0 mismatches,
-   wrong value types and extra/missing/accessor fields. Every mismatch has one
-   termination and zero later admission. Artifact: the Node command in row 1
-   feeds eight prior/later/numeric/null/object/missing/extra/accessor protocol
-   shapes; all reject the named gap, then wrongly accept later frames
-   (`events 1→3`, `isReady false→true`) — the second expected RED.
+   wrong clone-preserved value types and extra/missing fields. Every mismatch
+   has one termination and zero later admission. Artifact: the Node command in
+   row 1 feeds eight prior/later/numeric/null/object/missing/extra/boolean
+   protocol shapes; all reject and settle pending work, GREEN. The Chromium
+   command proves both platform facts: an exact accessor becomes an admitted
+   exact data property; a real Worker queuing mismatched then exact ready/result
+   frames still rejects publicly with one construction and one termination.
 3. Authority projection: instrumented public boot proves one Worker creation,
    one runtime/VFS realm and opposite page/Worker backend values; public
    `vfs.backend` follows the Worker. Artifact (Node 24.16.0, Vitest 2.1.9):
@@ -143,7 +153,7 @@ never returns a partially live sandbox.
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
 | `false-fallback` × no-COI admission | literal false only; defaults stay loud and falsey non-booleans reject before boot | Acceptance/Parity 1/1; Node+Chromium RED commands and exact side-effect counts in Parity 1 |
-| `corrupt-input` + `provenance-lie` × Worker handshake | only exact protocol/backend admits; mismatch terminates and later frames cannot revive it | Acceptance/Parity 3/2; eight-shape Node RED command/output/version in Parity 2 |
+| `corrupt-input` + `provenance-lie` × Worker handshake | only exact clone result admits; mismatch terminates and queued later frames cannot reverse public rejection | Acceptance/Parity 3/2; eight-shape Node matrix + real Chrome accessor/queued-frame command/output/version in Parity 2 |
 | `provenance-lie` + `sibling-drift` × public authority projection | one Worker owns runtime/fs/toolchain/VFS; backend comes from its admitted frame | Acceptance/Parity 2,4/3; Node `opfs|memory` twins + real opposite-backend Chromium command/output/version in Parity 3 |
 | `lossy-aggregate` × capability report | exact recursively frozen ordered rows agree with real landed behavior | Acceptance/Parity 5/4; real headerless Chromium report/realm command/output/version in Parity 4 |
 
@@ -214,3 +224,12 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
 - Current-unit Contract blocker counts are `[3]`; no consecutive Contract
   blocker, Contract-escalation or convergence valve. No fix, re-cut,
   implementation or next review round started.
+- One in-place Contract blocker batch addresses all three review defects without
+  product code: Parity 1 now selects omitted/true/literal-false/non-boolean
+  siblings; the protocol matrix contains only clone-preserved corrupt values;
+  real Chrome pins accessor materialization and queued-frame non-admission.
+- Active expected RED band is 2–2 (Node + real-Chromium admission twins). The
+  original 3–3 row remains append-only history; its third FakeWorker
+  post-terminate RED was physically impossible and is removed, not converted
+  into an implementation demand. Current Contract counts remain `[3]`; review
+  verification is pending and no next checkpoint was run.

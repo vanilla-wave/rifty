@@ -1081,6 +1081,150 @@ test('public SDK projects one real Worker, VFS and runtime authority', async ({ 
   }
 });
 
+test('Chrome Worker clone materializes an accessor protocol as exact data', async ({ page }) => {
+  await page.goto('/no-coi-harness.html');
+  const cloned = await page.evaluate(async () => {
+    const source = `
+      const frame = { type: 'toolchain-ready', vfsBackend: 'memory' };
+      Object.defineProperty(frame, 'protocol', {
+        enumerable: true,
+        get: () => 'rifty.sandbox-toolchain/v1',
+      });
+      postMessage(frame);
+    `;
+    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+    try {
+      return await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const worker = new Worker(url, { type: 'module' });
+        worker.addEventListener('error', (event) => reject(new Error(event.message)), {
+          once: true,
+        });
+        worker.addEventListener(
+          'message',
+          (event: MessageEvent<Record<string, unknown>>) => {
+            const descriptors = Object.getOwnPropertyDescriptors(event.data);
+            const protocol = descriptors.protocol;
+            worker.terminate();
+            resolve({
+              plain: Object.getPrototypeOf(event.data) === Object.prototype,
+              keys: Object.keys(descriptors).toSorted(),
+              protocolKind: protocol && 'value' in protocol ? 'data' : 'accessor',
+              protocolValue: protocol && 'value' in protocol ? protocol.value : undefined,
+            });
+          },
+          { once: true },
+        );
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  });
+
+  expect(cloned).toEqual({
+    plain: true,
+    keys: ['protocol', 'type', 'vfsBackend'],
+    protocolKind: 'data',
+    protocolValue: 'rifty.sandbox-toolchain/v1',
+  });
+});
+
+test('public SDK rejects an invalid real Worker before queued later frames can admit', async ({
+  page,
+}) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    const outcome = await host.evaluate(
+      async ({ sdkUrl }) => {
+        const source = `
+        postMessage({ type: 'ready' });
+        postMessage({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v2',
+          vfsBackend: 'memory',
+        });
+        postMessage({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v1',
+          vfsBackend: 'memory',
+        });
+        postMessage({ type: 'ready' });
+        postMessage({ type: 'result', result: { id: 1, ok: true, value: 42 } });
+      `;
+        const workerUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+        const NativeWorker = globalThis.Worker;
+        const received: string[] = [];
+        let constructions = 0;
+        let terminations = 0;
+        class ObservedWorker extends NativeWorker {
+          constructor(url: string | URL, options?: WorkerOptions) {
+            super(url, options);
+            constructions += 1;
+            this.addEventListener('message', (event: MessageEvent<{ type?: unknown }>) => {
+              received.push(String(event.data?.type));
+            });
+            const nativeTerminate = this.terminate.bind(this);
+            Object.defineProperty(this, 'terminate', {
+              value() {
+                terminations += 1;
+                nativeTerminate();
+              },
+            });
+          }
+        }
+        Object.defineProperty(globalThis, 'Worker', {
+          configurable: true,
+          value: ObservedWorker,
+          writable: true,
+        });
+        try {
+          const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
+            createSandbox(options: Record<string, unknown>): Promise<unknown>;
+          };
+          let result: Record<string, unknown>;
+          try {
+            await sdk.createSandbox({
+              requireCrossOriginIsolation: false,
+              skipServiceWorker: true,
+              toolchain: { workerUrl },
+            });
+            result = { status: 'resolved' };
+          } catch (error) {
+            const inspected = error as Error & { feature?: string };
+            result = {
+              status: 'rejected',
+              name: inspected.name,
+              feature: inspected.feature,
+            };
+          }
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          );
+          return { ...result, constructions, terminations, received };
+        } finally {
+          Object.defineProperty(globalThis, 'Worker', {
+            configurable: true,
+            value: NativeWorker,
+            writable: true,
+          });
+          URL.revokeObjectURL(workerUrl);
+        }
+      },
+      { sdkUrl: sdkModuleUrl },
+    );
+
+    expect(outcome).toEqual({
+      status: 'rejected',
+      name: 'NotImplementedError',
+      feature: 'sandbox.toolchain.worker',
+      constructions: 1,
+      terminations: 1,
+      received: ['ready', 'toolchain-ready'],
+    });
+  } finally {
+    await host.close();
+  }
+});
+
 test('non-shared WebAssembly.Memory keeps native constructor/global identity', async ({ page }) => {
   await page.goto('/no-coi-harness.html');
   const identity = await page.evaluate(

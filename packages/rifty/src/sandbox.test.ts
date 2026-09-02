@@ -123,18 +123,24 @@ describe('createSandbox', () => {
     expect(spawn).toHaveBeenCalledWith({ workerUrl: 'http://x/worker.js' });
   });
 
-  it('throws and boots nothing when COI is required but absent', async () => {
-    const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>('opfs'));
-    const spawn = vi.fn(() => fakeRuntime());
-    await expect(
-      createSandbox(
-        { workerUrl: 'w' },
-        deps({ detect: () => capabilityCheck(false), initVfs, spawn }),
-      ),
-    ).rejects.toThrow(COI_REQUIRED_MESSAGE);
-    expect(initVfs).not.toHaveBeenCalled();
-    expect(spawn).not.toHaveBeenCalled();
-  });
+  it.each([undefined, true] as const)(
+    'throws and boots nothing when COI is required but absent (%s)',
+    async (requireCrossOriginIsolation) => {
+      const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>('opfs'));
+      const spawn = vi.fn(() => fakeRuntime());
+      await expect(
+        createSandbox(
+          {
+            workerUrl: 'w',
+            ...(requireCrossOriginIsolation === undefined ? {} : { requireCrossOriginIsolation }),
+          },
+          deps({ detect: () => capabilityCheck(false), initVfs, spawn }),
+        ),
+      ).rejects.toThrow(COI_REQUIRED_MESSAGE);
+      expect(initVfs).not.toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
+    },
+  );
 
   it('boots without COI when requireCrossOriginIsolation is false', async () => {
     const spawn = vi.fn(() => fakeRuntime());
