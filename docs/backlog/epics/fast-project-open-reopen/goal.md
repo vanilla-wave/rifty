@@ -246,5 +246,15 @@ user's call and they proceeded.
 - Snapshot decode tax on the open path (base64 decode + plan 0.51 s,
   `JSON.parse` 14 ms, sha256 43 ms — 4 % of the open, measured) is NOT this
   goal — owned by `playground/snapshot-carries-substituted-bytes-twice`.
+- not a lever for THIS goal: honest pnpm (content-addressable store +
+  symlink/hardlink layout). The measured cost is per physical file at the
+  OPFS boundary (0.737 ms/file write, ≈ 0.3 ms/file walk + open + read);
+  pnpm's layout dedups across projects and installs, not inside one
+  project's first materialization or reopen — the same ~15k content files
+  still hit OPFS (`perf/reference/dependency-store-and-vfs-links.md`:
+  cold single project ~0–10 %, links = memory/cross-project play). Its
+  packed "store" IS the content-addressed replica; symlink/hardlink
+  fidelity supersedes ADR-0050 and is its own epic — the format reserves
+  the fields (user, 2026-09-01).
 - not a lever (measured): owner `#assignSubtree` 20 ms / 0.4 % (B1); sync
   lockfile SHA-256 ≤ 11 ms at 3 MB (B5).
