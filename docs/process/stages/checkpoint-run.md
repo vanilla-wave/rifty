@@ -50,6 +50,9 @@ stdin).
    any fix.
 5. **Stop check** (`STOP-2`, `STOP-3`): rounds spent ≥ declared, or a blocker
    unchanged since the previous verify → `STOP-4` re-cut, not another round.
+   Spent rounds and a performed re-cut are read from the unit's `## Decisions`
+   lines since its last pass (`REV-8`), never from session memory — a
+   re-invoked run continues the count.
 6. **Batch fix** — one re-cut in place fixing ALL surviving blockers; never
    weaken a ready contract silently (`RDY-5`); never edit a test to pass.
 7. **Verify pass** — same command, prior verdicts attached as settled. Exit 0

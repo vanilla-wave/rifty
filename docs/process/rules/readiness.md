@@ -104,7 +104,10 @@ At pickup the ledger row declares band + rounds: `<date> — <slice> band
 expected-RED batch the compiled contract implies. `rounds` is the Final+GREEN
 budget (default 2); Contract+RED has exactly one verify round by construction
 — a 2nd blocker there is contract escalation (`stops.md` `STOP-5`). Raising a
-declared budget is the user's, never the agent's (`STOP-2`).
+declared budget is the user's, never the agent's (`STOP-2`). A unit picked up
+before 2026-09-02 carries no `rounds:` line: the default applies, the reviewer
+notes its absence as a concern, and the next re-cut adds the line — never a
+blocker (replay 2026-09-02: the legacy `build-loop` unit drew one).
 
 A split successor that only carries rows and RED tests already certified in
 its predecessor's Contract+RED skips that checkpoint: first `## Decisions` line
