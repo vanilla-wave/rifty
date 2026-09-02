@@ -84,5 +84,5 @@ carrier or drops it explicitly.
 ```md
 - <YYYY-MM-DD> — <slice> band <lo>–<hi> rounds <n> declared at pickup
 - <YYYY-MM-DD> — decided <one line>; full answer: <link>
-- <YYYY-MM-DD> — <slice> ready-verdict: Contract+RED @ <sha>
+- <YYYY-MM-DD> — re-chart after <slice> (final-green PASS @ <sha>): <n> graduated / <m> invalidated
 ```

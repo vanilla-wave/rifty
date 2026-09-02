@@ -7,7 +7,9 @@ The runner is a worker session; the reviewer is a fresh `codex exec`. Rules:
 ## Setup
 
 - With a PR: `gh pr view <n> --json body,headRefName,baseRefName`; raw body =
-  the unit's claim. `BASE` per `REV-1`. Name `CHECKPOINT`; ambiguity stops.
+  the unit's claim. `BASE` = the `<sha>` of the last `re-chart after … (final-green
+  PASS @ <sha>)` ledger line reachable from HEAD, else the branch base
+  (`REV-1`, `REV-8`). Name `CHECKPOINT`; ambiguity stops.
 - Refuse a dirty tree. Never poll or read reviewer stdout: the verdict is the
   `-o` JSON, liveness is the process state; the log is post-mortem only.
 - Run the reviewer and any test battery as background tasks with a completion
@@ -46,17 +48,23 @@ stdin).
    `node tools/review/blockers.mjs "$RUN/verdict.json" "$RUN/adjudication.json"`.
    Only HOLDS + `missing` rows force the re-cut; STRETCH/FALSE join the
    concern batch. The verdict file stays untouched (lineage).
-4. **Record** the verdict line in the unit's `## Decisions` (`REV-8`) — before
-   any fix.
-5. **Stop check** (`STOP-2`, `STOP-3`): rounds spent ≥ declared, or a blocker
-   unchanged since the previous verify → `STOP-4` re-cut, not another round.
-   Spent rounds and a performed re-cut are read from the unit's `## Decisions`
-   lines since its last pass (`REV-8`), never from session memory — a
-   re-invoked run continues the count.
-6. **Batch fix** — one re-cut in place fixing ALL surviving blockers; never
-   weaken a ready contract silently (`RDY-5`); never edit a test to pass.
+4. **Record** — overwrite the checkpoint's status line in the unit's
+   `## Decisions`: `final-green: round <n>/<budget> — blocker @ <sha>`
+   (`REV-8`). Leave it uncommitted; it commits with the fix batch.
+5. **Stop check** (`STOP-2`, `STOP-3`): `<n>` ≥ budget, or a blocker unchanged
+   since the previous verify → `STOP-4` re-cut, not another round. `<n>` and a
+   spent re-cut (`re-cut:` line) are read from the unit doc, never from
+   session memory — a re-invoked run continues the count.
+6. **Batch fix** — one re-cut in place fixing ALL surviving blockers, committed
+   together with the status line; never weaken a ready contract silently
+   (`RDY-5`); never edit a test to pass.
 7. **Verify pass** — same command, prior verdicts attached as settled. Exit 0
-   → done. Exit 1 → back to 4. Exit 2 → retry once, then stop.
+   → done: Contract+RED writes `ready-verdict:`; Final+GREEN lands and RECHART
+   writes `re-chart after <slice> (final-green PASS @ <sha>)`. Exit 1 → back
+   to 4. Exit 2 → retry once, then stop.
+
+A PASS holds while `git diff --quiet <sha> HEAD -- . ':!docs/backlog'
+':!CHANGELOG.md'` is empty (`REV-8`); check it before merge.
 
 Concerns never spend a round: batch them to backlog (`rifty-to-backlog`) or
 fix at the agent's choice after the verdict.

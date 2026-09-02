@@ -86,14 +86,26 @@ citation.
 
 ## REV-8 Lineage
 
-Verdicts bind content, not commit: `git rev-parse HEAD^{tree}`; a tree change
-invalidates, rebase with an identical tree keeps, merge requires PR head tree
-== reviewed tree. A blocker iterates on the SAME branch; the count is only real
-if written: every blocker verdict appends `contract-red: <date> — blocker @
-<sha>` (or `final-green:`) to the unit's `## Decisions`; a pass is the
-`ready-verdict:` line at Contract+RED and `final-green: <date> — PASS @ <sha>`
-at Final+GREEN; a split successor copies the predecessor's lines and names it.
-Rounds are read from these lines (`stops.md` `STOP-2`).
+Three records, nothing else:
+
+- **Contract+RED pass** — `ready-verdict: <date> — Contract+RED @ <sha>`, first
+  line of the unit's `## Decisions` (`readiness.md` `RDY-2`).
+- **Rounds** — one status line per checkpoint in `## Decisions`, overwritten
+  each round: `final-green: round <n>/<budget> — blocker @ <sha>` (or
+  `contract-red: round <n> — blocker @ <sha>`). The runner writes it right
+  after the verdict; it commits with the fix batch — no separate verdict
+  commit. The round history is the file's git log.
+- **Final+GREEN pass** — recorded where the slice lands: the ledger's
+  `re-chart after <slice> (final-green PASS @ <sha>): …` line
+  (`../artifacts/ledger.md`). Nothing is written to the unit.
+
+Binding: a PASS at `<sha>` holds while
+`git diff --quiet <sha> HEAD -- . ':!docs/backlog' ':!CHANGELOG.md'` is empty —
+bookkeeping commits never break it, any product/test change after it does;
+merge requires it against the last PASS. `BASE` of the next slice = the `<sha>`
+of the last such rechart line reachable from HEAD, else the branch base. A
+blocker iterates on the SAME branch. A split successor names its predecessor
+in its `re-cut:` line (`RDY-5`); nothing is copied.
 
 ## REV-9 Closure
 
@@ -109,7 +121,7 @@ source grep, a warning, a backlog record, or one green slice.
 3. Goal drift — delivery matches the named `goal.md`, else the ready contract;
    a ready `goal.md` never changed; `ledger.md` only grew; a `draft→ready`
    flip carries its `ready-verdict:`; every landed slice carries its
-   `re-chart after <slice>` line.
+   `re-chart after <slice> (final-green PASS @ <sha>)` line.
 4. Approach cost — `REV-7`.
 5. Budget — every carried slice declared with band + rounds in `ledger.md`;
    modified files inspected against them.

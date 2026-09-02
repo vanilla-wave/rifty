@@ -57,8 +57,8 @@ const VERDICT = {
     pass: { type: 'boolean' },
     blockers: { type: 'array', items: { type: 'string' } },
     premise: { type: ['string', 'null'] }, // REV-6 premise concern raised by the reviewer → STOP-1b
-    roundsSpent: { type: ['number', 'null'] }, // blocker verdict lines of this checkpoint since the unit's last pass (REV-8)
-    recutRecorded: { type: 'boolean' }, // a `re-cut:` line since the unit's last pass (STOP-4 already used)
+    roundsSpent: { type: ['number', 'null'] }, // round number on the checkpoint's status line before this pass (REV-8)
+    recutRecorded: { type: 'boolean' }, // the unit carries a `re-cut:` line (STOP-4 already used)
   },
 }
 const RECUT = {
@@ -91,7 +91,7 @@ const stop = async (kind, child, question, extra = {}) => {
 // (STOP-3); a 2nd consecutive Contract+RED blocker is contract escalation (STOP-5); all three
 // route to ONE agent-owned re-cut against the destination (STOP-4); blockers surviving that
 // re-cut stop to the user (STOP-1c). A premise concern stops at once (STOP-1b, REV-6).
-// Budget state is read back from the unit's verdict lines (REV-8) so a re-invoked run
+// Budget state is read back from the unit's status line (REV-8) so a re-invoked run
 // continues the count instead of restarting it.
 async function checkpoint(name, child, rounds) {
   let current = child // the unit under verification — a STOP-4 split moves it to the successor
@@ -101,8 +101,8 @@ async function checkpoint(name, child, rounds) {
   for (let attempt = 1; ; attempt++) {
     const v = await agent(
       attempt === 1
-        ? `Run the ${name} checkpoint for goal ${goal}, unit ${current}, per ${STAGES}/checkpoint-run.md (you are the runner, codex is the reviewer: find pass, tail pass only when band ≥ 5, adjudication, blockers.mjs). Record the verdict line in the unit doc's ## Decisions BEFORE anything else (REV-8). Return pass=true only on exit 0; otherwise list surviving HOLDS blockers verbatim as '<authority> — <summary>'. A premise concern in the verdict (REV-6) goes verbatim into 'premise'. Also report roundsSpent = the number of '${name === 'Contract+RED' ? 'contract-red' : 'final-green'}: … blocker' lines recorded in the unit's ## Decisions since its last pass (excluding the one you just added), and recutRecorded = whether a 're-cut:' line exists since that pass.`
-        : `Run the ${name} VERIFY pass for goal ${goal}, unit ${current}, per ${STAGES}/checkpoint-run.md step 7 (same reviewer command, prior verdicts attached as settled; adjudication; blockers.mjs). Record the verdict line (REV-8). Return pass=true only on exit 0; otherwise list surviving HOLDS blockers verbatim as '<authority> — <summary>'. A premise concern (REV-6) goes verbatim into 'premise'. Also report roundsSpent and recutRecorded as in the find pass.`,
+        ? `Run the ${name} checkpoint for goal ${goal}, unit ${current}, per ${STAGES}/checkpoint-run.md (you are the runner, codex is the reviewer: find pass, tail pass only when band ≥ 5, adjudication, blockers.mjs). On blockers overwrite the checkpoint status line in the unit doc's ## Decisions ('${name === 'Contract+RED' ? 'contract-red: round <n>' : 'final-green: round <n>/<budget>'} — blocker @ <sha>', REV-8) and leave it uncommitted — it commits with the fix batch. Return pass=true only on exit 0; otherwise list surviving HOLDS blockers verbatim as '<authority> — <summary>'. A premise concern in the verdict (REV-6) goes verbatim into 'premise'. Also report roundsSpent = the round number the status line carried BEFORE this pass (0 when absent), and recutRecorded = whether the unit's ## Decisions holds a 're-cut:' line.`
+        : `Run the ${name} VERIFY pass for goal ${goal}, unit ${current}, per ${STAGES}/checkpoint-run.md step 7 (same reviewer command, prior verdicts attached as settled; adjudication; blockers.mjs). On blockers overwrite the status line (REV-8), uncommitted. Return pass=true only on exit 0; otherwise list surviving HOLDS blockers verbatim as '<authority> — <summary>'. A premise concern (REV-6) goes verbatim into 'premise'. Also report roundsSpent and recutRecorded as in the find pass.`,
       { schema: VERDICT, label: `${current}:${name}#${attempt}`, phase: 'Slices' },
     )
     if (v?.premise) return stop('STOP-1b', current, `premise concern at ${name}: ${v.premise}`)
@@ -110,7 +110,7 @@ async function checkpoint(name, child, rounds) {
     const blockers = v?.blockers ?? []
     if (!blockers.length) return { pass: false, kind: 'invalid-verdict', child: current, stop: `${name} returned no pass and no blockers` }
     history.push(blockers.length)
-    // Rounds spent = fix batches so far, continued across re-invocations from the verdict lines.
+    // Rounds spent = fix batches so far, continued across re-invocations from the status line.
     const spent = Math.max(attempt - 1, v.roundsSpent ?? 0)
     if (v.recutRecorded === true) recut = true
     const escalation = name === 'Contract+RED' && (attempt >= 2 || spent >= 1)
@@ -138,7 +138,7 @@ async function checkpoint(name, child, rounds) {
       continue
     }
     await agent(
-      `Goal ${goal}, unit ${current}: batch re-cut IN PLACE (same branch, lineage carries — never a fresh start) fixing ALL surviving ${name} blockers in one batch, then commit (round ${spent + 1} of ${rounds}):\n${blockers.map((b) => `- ${b}`).join('\n')}\nNever weaken a ready contract silently (RDY-5: record 're-cut:'; a user-traced row change is a fork), never edit a test to pass. Concerns are advisory — do not spend this round on them.`,
+      `Goal ${goal}, unit ${current}: batch re-cut IN PLACE (same branch, lineage carries — never a fresh start) fixing ALL surviving ${name} blockers in one batch, then commit together with the uncommitted status line (round ${spent + 1} of ${rounds}):\n${blockers.map((b) => `- ${b}`).join('\n')}\nNever weaken a ready contract silently (RDY-5: record 're-cut:'; a user-traced row change is a fork), never edit a test to pass. Concerns are advisory — do not spend this round on them.`,
       { label: `${current}:fix#${attempt}`, phase: 'Slices' },
     )
     previous = new Set(blockers)
@@ -147,7 +147,7 @@ async function checkpoint(name, child, rounds) {
 
 const rechart = (after) =>
   agent(
-    `Run RECHART per ${STAGES}/rechart.md for goal ${goal}, date ${date}${after ? ` after slice ${after}` : ''}: ledger one-liners, graduate phrasable fog into draft children (rifty-to-backlog shape incl. '## Challenge' via a fresh critic subagent), invalidate/reorder, append the 're-chart after <slice>' line. Commit.`,
+    `Run RECHART per ${STAGES}/rechart.md for goal ${goal}, date ${date}${after ? ` after slice ${after}` : ''}: ledger one-liners, graduate phrasable fog into draft children (rifty-to-backlog shape incl. '## Challenge' via a fresh critic subagent), invalidate/reorder, append the 're-chart after <slice> (final-green PASS @ <sha>)' line with the reviewed commit of the PASS (REV-8). Commit.`,
     { label: `rechart${after ? `:${after}` : ''}`, phase: 'Slices' },
   )
 

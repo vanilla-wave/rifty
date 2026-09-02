@@ -8,9 +8,11 @@ Runner: `checkpoint-run.md`.
 - Evidence bar: `REV-5` Final+GREEN — `pass` judged adversarially, bounded by
   the clause as declared; strengthening beyond it is a concern (`REV-2`,
   `REV-3`).
-- Pass → `final-green: <date> — PASS @ <sha>` in `## Decisions` + ledger
-  lineage line; the slice has landed on the goal branch → `rechart.md`.
-- Blocker → `final-green: <date> — blocker @ <sha>`; batch fix; verify; rounds
-  per `RDY-9`; stall or exhaustion → `../rules/stops.md` `STOP-3`/`STOP-4`.
+- Pass → the slice has landed on the goal branch; `rechart.md` records
+  `re-chart after <slice> (final-green PASS @ <sha>)` — the only PASS record
+  and the next slice's `BASE` (`REV-8`).
+- Blocker → status line `final-green: round <n>/<budget> — blocker @ <sha>`;
+  batch fix; verify; rounds per `RDY-9`; stall or exhaustion →
+  `../rules/stops.md` `STOP-3`/`STOP-4`.
 - Unit residuals must be empty to land (`REV-9`); goal residuals continue the
   run.

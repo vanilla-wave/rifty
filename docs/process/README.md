@@ -10,7 +10,7 @@ rule has exactly one home; other files link, never restate.
 |---|---|---|---|
 | Destination (frozen) | `goal.md`: Outcome, User scenario, Invariants `I#`, tier, rejected routes | user | never inside a run; amend = CLOSE + FIT |
 | Path (live) | `map.md`, unit contracts, bands, rounds, mechanisms, splits | agent | any time, one ledger line each (`RDY-5`); membership + budget fixed at pickup (`RDY-8`, `RDY-9`) |
-| Journal (append-only) | `ledger.md`, verdict lines in unit `## Decisions` | agent writes, never edits | grows only |
+| Journal (append-only) | `ledger.md`; one status line per checkpoint in the unit | agent writes | ledger grows only; status line overwritten per round (`REV-8`) |
 
 An obligation is a contract row traced to the destination (`→ I3`), the user
 scenario, an ADR, or a rule id (`RDY-3`). Untraced rows are notes: no coverage
@@ -36,7 +36,7 @@ A decision leaves a session only through the journal (`DEC-5`).
 | PICKUP | `stages/pickup.md` | frontier child → ready unit + band + rounds | `RDY-2..4`, `RDY-8..9` |
 | Contract+RED | `stages/contract-red.md` | contract + RED → `ready-verdict:` | `REV-5`, `STOP-5` |
 | IMPLEMENT | `stages/implement.md` | RED → GREEN, `pr:check` | band |
-| Final+GREEN | `stages/final-green.md` | slice tree → `final-green:` PASS | `REV`, `STOP-2..4` |
+| Final+GREEN | `stages/final-green.md` | slice tree → PASS recorded by RECHART | `REV`, `STOP-2..4` |
 | RECHART | `stages/rechart.md` | landed slice → map + ledger | `re-chart after` line |
 | CLOSE | `stages/close.md` | empty map → deleted goal dir | invariants proof |
 

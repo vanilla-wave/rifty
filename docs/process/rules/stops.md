@@ -28,9 +28,10 @@ asking "may I split?" has misread this list.
 
 The Final+GREEN rounds are declared at pickup (`readiness.md` `RDY-9`);
 Contract+RED has one round by construction (`STOP-5`). Spent rounds are read
-from the unit's verdict lines (`review.md` `REV-8`). One round = one batch fix
-+ one verify pass. The count is observable or it does not exist. Raising a
-declared budget is the user's; the agent's release valve is `STOP-4`.
+from the checkpoint's status line in the unit (`review.md` `REV-8`). One round
+= one batch fix + one verify pass. The count is observable or it does not
+exist. Raising a declared budget is the user's; the agent's release valve is
+`STOP-4`.
 
 ## STOP-3 Stall
 
@@ -46,8 +47,8 @@ adjudication, never to a round.
 1. Trim the unit to its traced obligations; demote untraced rows to notes or
    backlog; rows the trace target does not require in the demanded exactness
    become concerns (`review.md` `REV-3`).
-2. Over `RDY-4` limits → split by trace; the successor inherits verdict lines
-   (`RDY-9`).
+2. Over `RDY-4` limits → split by trace; the successor's `re-cut:` line names
+   the predecessor (`RDY-9`).
 3. Record `re-cut: <date> — <what> — trace: none` (or `fork:` → `STOP-1a`).
 4. One verify pass on the new tree. Pass → continue. Blockers survive → stop
    (`STOP-1c`) with the `STOP-6` report.

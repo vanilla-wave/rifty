@@ -15,7 +15,7 @@ gate: `backlog:check`.
 | `## Parity cases` | agent, traced | enumerated oracle behaviors, each a RED target with its artifact (command + output + version) |
 | `## Fault matrix` | agent, traced | infra only: `axis × operation \| honest outcome \| artifact / fault target → trace` (`fault-classes.md`) |
 | `## Out of scope` | agent (user for scope cuts) | named loud throws + compat ❌; never "…" |
-| `## Decisions` | agent + verdict lines | one-line records only, forms below |
+| `## Decisions` | agent + runner status line | one-line records only, forms below |
 
 `## Decisions` line forms (each one line, dated):
 
@@ -23,14 +23,16 @@ gate: `backlog:check`.
 ready-verdict: <date> — Contract+RED @ <sha>          first line at pickup, verbatim
 ready-verdict: <date> — inherited from <area>/<slug> @ <sha>
 review: checkpoints rounds:<n> | ordinary               RDY-8 / RDY-9
-contract-red: <date> — blocker @ <sha>                  each blocker verdict (REV-8)
-final-green: <date> — blocker @ <sha>
-final-green: <date> — PASS @ <sha>                      landed (REV-8)
-re-cut: <date> — <what changed> — trace: none           RDY-5
+contract-red: round <n> — blocker @ <sha>               status line, overwritten each round (REV-8)
+final-green: round <n>/<budget> — blocker @ <sha>       status line, overwritten each round
+re-cut: <date> — <what changed> — trace: none           RDY-5; a split names its predecessor here
 re-cut: <date> — fork: <what> — trace: I#               resolved via rifty-refine
-override: <date> — <challenge problem> — <user words>   README §Challenge
+override: <date> — <challenge problem> — <user words>   docs/backlog/README.md §Challenge
 - <fork resolved or ADR-linked; no open "Decide X">
 ```
+
+A Final+GREEN PASS is not written here: it lands in the ledger's `re-chart
+after` line (`ledger.md`).
 
 Not in a unit: evidence blocks (→ `docs/backlog/<area>/reference/<slug>-evidence.md`),
 fork narratives and diagnoses (→ ledger / `reference/`), review reasoning (→

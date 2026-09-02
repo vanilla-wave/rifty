@@ -62,8 +62,8 @@ scenario does not need is a clause the reviewer will grade.
 A ready unit may be re-cut at any time by the agent: trim, split, merge,
 re-order, demote rows to notes. Record one line in `## Decisions`
 (`re-cut: <date> — <what changed> — trace: none`) and one ledger line; a split
-successor names its predecessor and copies its verdict lines (`review.md`
-`REV-8`).
+successor names its predecessor in that line — history stays on the
+predecessor, nothing is copied (`review.md` `REV-8`).
 
 Dropping or weakening a row traced to `I#` or `scenario` changes observable
 scope: that is the user's (`STOP-1a`) — demote to `draft`, record the fork and
@@ -111,5 +111,7 @@ blocker (replay 2026-09-02: the legacy `build-loop` unit drew one).
 
 A split successor that only carries rows and RED tests already certified in
 its predecessor's Contract+RED skips that checkpoint: first `## Decisions` line
-`ready-verdict: <date> — inherited from <predecessor> @ <sha>`. Band ≤ 4 →
-each checkpoint is one find pass + adjudication, no tail pass.
+`ready-verdict: <date> — inherited from <predecessor> @ <sha>`. A successor
+minted by `STOP-4` starts with its `re-cut:` line, so the one re-cut of the
+lineage is already spent. Band ≤ 4 → each checkpoint is one find pass +
+adjudication, no tail pass.
