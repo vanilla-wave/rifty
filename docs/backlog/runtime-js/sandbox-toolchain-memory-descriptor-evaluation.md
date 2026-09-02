@@ -252,3 +252,25 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   frozen goal behavior stay unchanged; this child owns only package-generic
   `WebAssembly.Memory` descriptor evaluation at the existing runtime-js realm
   seam.
+- `final-green: 2026-09-02 — blocker @ fe89fc33e`
+- Final find on tree `67102dcdd9401eebeadf282dae5f7d02466cba4e`:
+  `pnpm pr:check` 24/24 PASS; 4 blockers / 3 concerns / 0 nits;
+  coverage 19 = 14 pass / 5 weak / 0 missing; 4 raw unit residuals and
+  2 goal residuals. Fresh tail: 0 new blockers / 0 concerns / 0 nits;
+  coverage 19/19 pass; 0 unit residuals and 2 goal residuals.
+- Independent adjudication: union 4 → 3 HOLDS / 1 STRETCH / 0 FALSE;
+  calibrated `blockers.mjs` exit 1 with 3 blockers / 4 concerns / 0 nits.
+  Three unit blockers survive; the fourth raw residual is the STRETCH concern;
+  2 goal residuals remain.
+- HOLDS — Fault `provenance-lie`: `{name,feature}` projection lets a forged
+  plain Error pass. Missing RED: same-realm class identity; sibling sweep
+  remains REPL/CJS/ESM/bin.
+- HOLDS — Fault `provenance-lie`: completing valid shared-memory construction
+  and then throwing passes. Missing RED: zero completed native constructions;
+  sibling sweep remains REPL/CJS/ESM/bin.
+- HOLDS — Fault `provenance-lie`: a conditional fake `{buffer}` result passes
+  accessor assertions. Missing RED: instance/constructor/prototype identity on
+  false→true descriptor; sibling sweep remains REPL/CJS/ESM/bin.
+- Valve audit: current descriptor-unit Final counts `[3]`; no two consecutive
+  current-unit rounds, so no convergence valve. The predecessor's carried
+  `1→1` stop is a different unit boundary. No fix started.
