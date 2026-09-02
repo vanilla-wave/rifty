@@ -396,3 +396,14 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   `a135270540919a31acf8d23763018591bf8cfc6c61b3728a9798da363162fb7a`.
   Unit residuals return to 0; goal 5 / outside 0; full no-COI, `pr:check` and
   Final verification pending. No other concern or sibling changed.
+- `final-green: 2026-09-02 — PASS @ 182f01b4c`
+- Final+GREEN VERIFY reviewed `182f01b4cea906ceb34a90f9be8d090e5efa28a7`,
+  tree `a7d28416b284c7f251af085e8da094659706d7da`, against BASE `dce86792d` /
+  `b1e0244ad`: fresh FIND 0 blockers / 1 post-PASS PR-body concern / 0 nits,
+  coverage 16/16; fresh tail 0 / 0 / 0, coverage 16/16; independent
+  adjudication `[]`; `blockers.mjs` exit 0. Unit residuals 0; goal residuals 5;
+  outside-goal residuals 0; `goal_complete:false`.
+- Final tree proof: full no-COI 22/22 in 2.2m; full outside-sandbox
+  `pr:check` 24/24 (`test:run` 225.1s, parity 77.4s). Product hashes remain
+  exact. The sole concern requires the user-ordered post-PASS PR head/body sync,
+  not another unit change. Admission is landed and ready for one RECHART.
