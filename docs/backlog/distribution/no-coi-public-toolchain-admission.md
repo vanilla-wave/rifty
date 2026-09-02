@@ -291,3 +291,20 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   `distribution/no-coi-dev-hmr-restore` (including final I8); outside-goal
   residuals 0. Authority: `docs/backlog/epics/no-coi-sandbox-tier/map.md` and
   AGENTS.md DoD's required separate slice/goal status.
+- `final-green: 2026-09-02 — blocker @ e38fd5aa7`
+- Final+GREEN reviewed `e38fd5aa7a2e670c2c2919a0256eecc92e8f0050`, tree
+  `978d8599053b770adf3b2f2e512c9246428789a1`, against BASE `dce86792d` /
+  `b1e0244ad`: fresh FIND 3 candidates, coverage 9 pass / 7 weak; fresh tail
+  0 / 0 / 0, coverage 16/16; adjudication 2 HOLDS / 1 STRETCH / 0 FALSE;
+  calibrated `blockers.mjs` exit 1, 2 blockers / 1 concern / 0 nits. Full
+  `pr:check` 24/24.
+- HOLDS: invalid generic/toolchain admission proves canonical `TypeError`
+  identity in Node and public Chromium; protocol/backend failure proves
+  canonical `NotImplementedError` identity in Node and public Chromium.
+  Exhaustive missing-`vfsBackend`/coercion siblings remain STRETCH concern,
+  not scope.
+- Exact Final counts are `3@5990557b2 → 1@6da3ccd35 → 2@e38fd5aa7`.
+  Raw FIND merge text incorrectly claimed convergence at unadjudicated 3.
+  Calibrated rule needs two consecutive non-decreases: `3→1` decreases, then
+  `1→2` increases, so no valve now. Next round `X≥2` would fire on `1→2→X`.
+  No blocker batch, product/test fix or next Final round started.
