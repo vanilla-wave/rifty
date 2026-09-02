@@ -9,6 +9,7 @@ import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
 import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
 import { terminalDevLine } from './templates/project-spec.ts';
+import { REACT_VITE_TEMPLATE } from './templates/react-vite/index.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
@@ -374,6 +375,14 @@ const TYPESCRIPT_LS_PRESET: Preset = {
   ],
 };
 
+/**
+ * The "Real npm project" tile: an ordinary React 19 + Router + TypeScript SPA
+ * built from scratch — visible `npm install`, then the real `vite` CLI with the
+ * template's own `vite.config.ts`. Fast Refresh comes from
+ * `@vitejs/plugin-react`, not from hand-written `import.meta.hot.accept`
+ * boundaries. The preset id is unchanged: the launch deep-link, the landing
+ * card, and `tools/perf/bench.mjs` all address this tile by `real-vite`.
+ */
 const REAL_VITE_PRESET: Preset = {
   id: 'real-vite',
   label: 'Real npm project',
@@ -381,12 +390,21 @@ const REAL_VITE_PRESET: Preset = {
   icon: 'rocket',
   mode: 'real-vite',
   setup: 'from-scratch',
-  templateId: 'vite',
-  blurb: 'Runs a visible npm install in the terminal, then boots the Vite dev server.',
-  glyph: { text: 'V', color: '#5FCE96' },
+  templateId: REACT_VITE_TEMPLATE.id,
+  blurb: 'Installs React 19 + Router from npm, then boots the Vite dev server with Fast Refresh.',
+  glyph: { text: 'RE', color: '#61DAFB' },
   tag: { text: 'npm install', tone: 'slow' },
-  openFiles: ['src/main.js'],
-  files: [{ path: 'src/main.js', content: REAL_VITE_SOURCE }],
+  openFiles: ['src/App.tsx', 'src/pages/IssueList.tsx', 'src/data/issues.ts', 'README.md'],
+  files: [
+    {
+      path: REACT_VITE_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: REACT_VITE_TEMPLATE.entry.content,
+    },
+    ...Object.entries(REACT_VITE_TEMPLATE.extraFiles ?? {}).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 const VITE8_PRESET: Preset = {

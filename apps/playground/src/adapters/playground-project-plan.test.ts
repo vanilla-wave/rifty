@@ -330,18 +330,16 @@ describe('toPlaygroundProjectPlan preset policy differential contract', () => {
     },
   );
 
+  // The rule is (setup, spec), not "some preset happens to pair them": no
+  // shipped preset combines from-scratch with a snapshot-backed template today,
+  // so the differential runs over a synthetic starter on such a template.
   it('keeps from-scratch on the install path even when its template has a baked snapshot', () => {
-    const preset = PRESETS.find((candidate) => {
-      if (candidate.setup !== 'from-scratch') return false;
-      const spec = resolveProjectSpec(candidate.templateId ?? 'vite');
-      return spec.bakedNodeModulesUrl !== undefined;
-    });
-    if (preset === undefined) throw new Error('missing from-scratch snapshot-backed fixture');
-    const spec = resolveProjectSpec(preset.templateId ?? 'vite');
+    const spec = allProjectSpecs().find((candidate) => candidate.bakedNodeModulesUrl !== undefined);
+    if (spec === undefined) throw new Error('missing snapshot-backed template fixture');
 
     const plan = mapPlan({
-      projectId: `from-scratch-${preset.id}`,
-      starter: starterFromPreset(preset),
+      projectId: `from-scratch-${spec.id}`,
+      starter: syntheticStarter(spec),
       setup: 'from-scratch',
     });
 

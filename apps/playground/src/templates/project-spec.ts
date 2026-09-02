@@ -67,6 +67,12 @@ interface ProjectSpecBase {
   readonly install: Readonly<Record<string, string>>;
   /** npm devDependencies to install into the worker-local node_modules. */
   readonly devDependencies?: Readonly<Record<string, string>>;
+  /**
+   * Extra package.json `scripts` seeded verbatim (e.g. a Vite template's own
+   * `build`/`preview`). Never a dev alias: the derived dev names always win,
+   * and only they boot the co-resident dev server ({@link isDevScriptName}).
+   */
+  readonly scripts?: Readonly<Record<string, string>>;
   readonly entry: ProjectEntry;
   readonly defaultPort: number;
   readonly estimatedBootSeconds: number;
@@ -150,10 +156,12 @@ export function devScriptCommand(spec: ProjectSpec): string {
 
 /**
  * Is `name` one of the seeded auto-boot aliases? Runtime execution still
- * selects from the exact resolved script body, not this name.
+ * selects from the exact resolved script body, not this name. A template's own
+ * `scripts` (build/preview) are deliberately NOT dev aliases — `npm run build`
+ * must never boot the dev server.
  */
 export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
-  return Object.hasOwn(projectScripts(spec), name);
+  return Object.hasOwn(devScriptAliases(spec), name);
 }
 
 /**
@@ -172,14 +180,23 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
 }
 
 /**
- * package.json `scripts` for a spec. Node projects keep `start` on the direct
- * entry while `dev` may deliberately select an installed supervisor.
+ * The auto-boot aliases derived from the spec. Node projects keep `start` on
+ * the direct entry while `dev` may deliberately select an installed supervisor.
  */
-export function projectScripts(spec: ProjectSpec): Record<string, string> {
+function devScriptAliases(spec: ProjectSpec): Record<string, string> {
   const dev = devScriptCommand(spec);
   if (spec.runtime === 'vite') return { dev, vite: dev };
   const start = `node ${spec.entry.relativePath.replace(/^\/+/, '')}`;
   return { dev, start };
+}
+
+/**
+ * package.json `scripts` for a spec: the template's own scripts first, then the
+ * derived dev aliases — the aliases win, so a template can never redefine the
+ * line the playground boots.
+ */
+export function projectScripts(spec: ProjectSpec): Record<string, string> {
+  return { ...spec.scripts, ...devScriptAliases(spec) };
 }
 
 const GIT_INIT_CONFIG = `[core]

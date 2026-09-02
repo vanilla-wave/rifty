@@ -120,6 +120,12 @@ describe('playground presets', () => {
     expect(presetText(demo)).toContain('summarizeShape');
   });
 
+  // An HMR-enabled Vite preset must own an accept boundary, otherwise every
+  // edit degrades to a full reload. Hand-written `import.meta.hot.accept` is
+  // one way; a framework plugin that injects one (React Fast Refresh via
+  // `@vitejs/plugin-react`) is the other — which one a preset uses is visible
+  // in its seeded `vite.config.*`. The no-full-reload behavior itself is proven
+  // in the browser by tests/e2e/react-vite-preset.spec.ts (survive-sentinel).
   it('keeps HMR-enabled browser Vite presets as accept boundaries', () => {
     const browserVitePresets = PRESETS.filter((preset) => {
       const spec = resolveProjectSpec(preset.templateId ?? 'vite');
@@ -137,7 +143,11 @@ describe('playground presets', () => {
       'real-vite',
     ]);
     for (const preset of browserVitePresets) {
-      expect(presetText(preset)).toContain('import.meta.hot.accept');
+      const spec = resolveProjectSpec(preset.templateId ?? 'vite');
+      const fastRefreshPlugin =
+        spec.runtime === 'vite' &&
+        (spec.extraFiles?.['/vite.config.ts']?.includes('@vitejs/plugin-react') ?? false);
+      if (!fastRefreshPlugin) expect(presetText(preset)).toContain('import.meta.hot.accept');
       expect(presetText(preset)).not.toContain('location.reload');
     }
   });

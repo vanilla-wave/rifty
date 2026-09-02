@@ -21,6 +21,11 @@ const HEAVY_SPECS = [
   '**/project-switch.spec.ts',
   '**/fullstack-demo.spec.ts',
   '**/npm-lock-replay.spec.ts',
+  // The "Real npm project" tile is a from-scratch React install (71 packages)
+  // + dep-optimizer cold boot — far past the light lane's per-test budget.
+  '**/react-vite-preset.spec.ts',
+  '**/react-vite-build.spec.ts',
+  '**/preset-deep-link.spec.ts',
 ];
 
 export default defineConfig({

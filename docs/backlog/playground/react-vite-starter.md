@@ -1,13 +1,13 @@
 ---
 area: playground
-status: draft
+status: ready
 title: React + Vite issue-tracker starter replaces the `real-vite` tile
 created: 2026-09-02
 why: an ordinary React SPA on Vite is the front-end shape PR #111's AI-arena decision and most real Vite projects assume, yet the "Real npm project" hero boots a one-file vanilla page and main has no proof of `@vitejs/plugin-react`, React's `needsInterop` prebundle, TSX dev-serve, or Fast Refresh on the registry esbuild runtime
 user_story: As a developer trying rifty, I want the "Real npm project" starter to npm-install and boot an ordinary React 19 + Router + TypeScript app with Fast Refresh in the preview, but today that tile boots a one-file vanilla Vite page and React is unproven on the current runtime
 blocked_by: []
 sources: [docs/backlog/playground/launch-deeplink-real-npm.md, docs/backlog/playground/outcome-oriented-launcher.md, docs/backlog/epics/open-auditable-launch.md, docs/public/hosting-eddy.md, ADR-0078, ADR-0135, ADR-0174, ADR-0226, ADR-0316]
-code: [apps/playground/src/presets.ts, apps/playground/src/templates/registry.ts, apps/playground/src/templates/vite.ts, apps/playground/src/templates/project-spec.ts, tests/e2e/preset-deep-link.spec.ts, tests/browser-unit/esbuild-vite-contract.spec.ts, tools/perf/bench.mjs, perf/benchmarks.json, playwright.config.ts]
+code: [apps/playground/src/presets.ts, apps/playground/src/templates/registry.ts, apps/playground/src/templates/vite.ts, apps/playground/src/templates/project-spec.ts, apps/playground/src/templates/react-vite, tests/e2e/preset-deep-link.spec.ts, tests/e2e/react-vite-preset.spec.ts, tests/e2e/react-vite-build.spec.ts, tests/browser-unit/esbuild-vite-contract.spec.ts, tools/perf/bench.mjs, perf/benchmarks.json, playwright.config.ts]
 ---
 
 ## Context
@@ -119,7 +119,11 @@ run locally with `npm i && npm run dev`, serves the same app.
   the default fallback, and the browser-unit fixture untouched.
 - `preset-deep-link.spec.ts` asserts the new tile's `npm install` → Vite
   preview; it moves into `HEAVY_SPECS` if its cold install exceeds the light
-  lane's per-test budget (measured at RED). The landing prod spec stays green.
+  lane's per-test budget (measured at RED — measurement + verdict in
+  `## Decisions`). The landing prod spec stays green.
+- The seeded package.json carries `build`/`preview` next to the dev aliases, and
+  `npm run build` still does NOT boot the dev server (`isDevScriptName` keeps
+  the dev-alias set derived, never the template's own scripts).
 - CI heavy-lane e2e (ported `react-vite-preset.spec.ts`), RED first on main:
   visible install → `vite` → dashboard renders all mock issues → client-side
   route change inside the iframe → `node_modules/.vite/deps/_metadata.json`
@@ -174,6 +178,58 @@ failing-test-first target run as the same scenario locally and in rifty.
 
 ## Decisions
 
+- `review: checkpoints` — parity work (`## Parity cases` vs local Node 24 +
+  Vite 7), per `fault-classes.md` §Review convergence; membership decided once,
+  here, at pickup.
+- 2026-09-02 (pickup, lane — measured): `preset-deep-link.spec.ts` moves into
+  `HEAVY_SPECS`. Same machine, same session: 8.8 s on main's vanilla tile
+  (`/tmp/rifty-red-main`, `chromium-light`) → 21.2 s on the React tile
+  (`chromium-heavy`), against the light lane's ~13 s/test sizing (`ci.yml`
+  comment). `react-vite-preset.spec.ts` (23.2 s) and `react-vite-build.spec.ts`
+  (25.9 s) join it there.
+- 2026-09-02 (pickup, budget (a) — GREEN): cold-install + boot of the
+  from-scratch React tile on the heavy lane, local chromium: preset boot to
+  LIVE + dashboard + client route + Fast Refresh = 23.2 s end-to-end;
+  `npm run build` + `npm run preview` = 25.9 s. Both inside the heavy lane's
+  per-spec budget (its neighbours: ts-language-service, fullstack-demo).
+- 2026-09-02 (pickup, budget (b) — RED, STOP to the user): `node
+  tools/perf/bench.mjs --runs 5` against `registry.rifty.dev` +
+  `eddy.rifty.dev`.
+  - eddy transport: `npmInstallToFirstViteResponseMs.status = "unmeasured"` —
+    0/5 runs carried the `via eddy (fast)` proof. NOT tile-specific: the SAME
+    bench on main's vanilla tile is equally unmeasured, and a direct probe
+    returns `HTTP 422 {"kind":"unsupported","feature":"integrity-missing",
+    "message":"no integrity for esbuild@0.28.0"}` for BOTH dependency sets
+    (`{vite@^7}` and the React set) — the deployed resolver predates main's
+    esbuild registry-twin delivery (#289), so the launch figure is
+    unreproducible on main today either.
+  - standard transport, same machine/session: main's vanilla tile 4038 ms
+    (samples 4040/4037/4041/3786/4038) vs this tile 9084 ms (samples
+    9085/8825/9081/9084/9085) — +5046 ms, 2.25×, and past
+    `open-auditable-launch`'s "<5s cold start" on the only transport measurable
+    today.
+  - Consequence, per the go/no-go clause: the tile question returns to the user
+    (instant tile after re-cutting `launch-deeplink-real-npm`, or a different
+    benchmark subject). `perf/benchmarks.json` and the figure quoted in
+    `docs/public/hosting-eddy.md` are deliberately NOT regenerated — a partial
+    or standard-transport number would silently replace the launch claim.
+- 2026-09-02 (pickup, carrier): a template may seed its own package.json
+  `scripts` (`ProjectSpecBase.scripts`); `projectScripts` merges them UNDER the
+  derived dev aliases and `isDevScriptName` now reads the alias set only, so
+  `npm run build` still cannot boot the dev server (the pinned #1 bug).
+  Rejected: giving every vite template `build`/`preview` — wider blast radius
+  (`vite`, `vite8`, `typescript` package.json bytes) for one tile's need.
+- 2026-09-02 (pickup, carrier): the template overrides the generated
+  `index.html` with its own (`#root`, `/src/main.tsx`) — an ordinary create-vite
+  shape; absolute subresource paths inside the routed preview resolve through
+  the SW's preview frame context (ADR-0097/0160), proven by the e2e.
+- 2026-09-02 (pickup, test amendment): `presets.test.ts` "HMR-enabled browser
+  Vite presets are accept boundaries" now admits a plugin-injected boundary
+  (`@vitejs/plugin-react` in the seeded `vite.config.ts`) beside a hand-written
+  `import.meta.hot.accept`; the no-full-reload behavior itself moves to the e2e
+  survive-sentinel. `playground-project-plan.test.ts`'s from-scratch × baked
+  snapshot differential now runs over a synthetic starter — no shipped preset
+  pairs those two after the swap.
 - 2026-09-02 (user override, critic problem 1 — closed): app size = A, the
   PR-sized issue tracker (4 routes, 8 components, mock dataset). Override on
   record: this starter is the arena for the later AI-mode / agent-bench
