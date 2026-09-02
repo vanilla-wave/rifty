@@ -273,6 +273,22 @@ contract-red: 2026-09-02 — blocker @ 0493863b6
     benchmark subject). `perf/benchmarks.json` and the figure quoted in
     `docs/public/hosting-eddy.md` are deliberately NOT regenerated — a partial
     or standard-transport number would silently replace the launch claim.
+- 2026-09-02 (user override, go/no-go (b) — closes the stop): keep the swap;
+  the launch benchmark subject is this tile from now on and
+  `open-auditable-launch`'s "<5s cold start" is retired to "measured cold
+  start (`perf/benchmarks.json`)" (its `## Decisions`). `perf/benchmarks.json`
+  regenerated on this tile (2026-09-02, `--runs 5`, `registry.rifty.dev` +
+  `eddy.rifty.dev`): cold-start-to-interactive 444 ms; install → first Vite
+  response standard 9820 ms (samples 10331/9307/10576/9820/9560); eddy pass
+  `unmeasured` (0/5 `via eddy (fast)`). Own probe reproduces the decline:
+  `POST eddy.rifty.dev {"dependencies":{"vite":"^7"}}` → `HTTP 422
+  {"kind":"unsupported","feature":"integrity-missing","message":"no integrity
+  for esbuild@0.28.0"}`; the deployed image (2026-08-23) resolves esbuild
+  through the pre-#289 catalog shape (no integrity; main acquires it as the
+  `esbuild-wasm@0.28.0` registry twin) → captured
+  `distribution/eddy-live-esbuild-closure-decline` (draft).
+  `docs/public/hosting-eddy.md` now states the artifact's honest state: the
+  1.88x (2026-07-07, vanilla tile) is not quotable until re-measured.
 - 2026-09-02 (pickup, carrier): a template may seed its own package.json
   `scripts` (`ProjectSpecBase.scripts`); `projectScripts` merges them UNDER the
   derived dev aliases and `isDevScriptName` now reads the alias set only, so

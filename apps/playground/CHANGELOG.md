@@ -14,7 +14,13 @@
   address the same tile. The vanilla `vite` template is untouched and stays the
   internal base for the instant presets. A template may now seed its own
   package.json `scripts` (here `build`/`preview`); dev aliases stay derived, so
-  `npm run build` never boots the dev server.
+  `npm run build` never boots the dev server. The launch benchmark (`pnpm
+  bench`) now measures this tile: `perf/benchmarks.json` regenerated
+  2026-09-02 — cold start 444 ms, install → first Vite response 9820 ms on the
+  standard transport; the eddy pass is `unmeasured` because the deployed
+  resolver (image 2026-08-23) resolves `esbuild@0.28.0` through the pre-#289
+  catalog shape, which carries no integrity, and declines every esbuild
+  closure (`distribution/eddy-live-esbuild-closure-decline`).
 
 - **Live terminal command completion (ADR-0362).** Tab completion now queries
   the active owner Shell instead of a page-side inventory, so registered
