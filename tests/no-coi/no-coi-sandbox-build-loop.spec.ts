@@ -11,6 +11,7 @@ import {
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
+const sdkVfsModuleUrl = `/@fs${workspacePath}/packages/rifty/src/vfs.ts`;
 const runtimeWorkerUrl = `/@fs${workspacePath}/packages/runtime-js/src/worker-entry.ts`;
 const toolchainWorkerUrl = `/@fs${workspacePath}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`;
 const memoryIdentityWorkerUrl = `/@fs${workspacePath}/tests/no-coi/fixtures/toolchain-memory-identity-worker.ts`;
@@ -781,6 +782,109 @@ test('preservation: real public createSandbox stays headerless and keeps opener/
   }
 });
 
+test('public SDK admits no-COI only through literal false — designed RED', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    const outcomes = await host.evaluate(
+      async ({ sdkUrl, genericWorkerUrl, selectedToolchainWorkerUrl }) => {
+        const NativeWorker = globalThis.Worker;
+        const workers: string[] = [];
+        class ObservedWorker extends NativeWorker {
+          constructor(url: string | URL, options?: WorkerOptions) {
+            super(url, options);
+            workers.push(String(url));
+          }
+        }
+        Object.defineProperty(globalThis, 'Worker', {
+          configurable: true,
+          value: ObservedWorker,
+          writable: true,
+        });
+        try {
+          const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
+            createSandbox(options: Record<string, unknown>): Promise<{ dispose(): void }>;
+          };
+          const values = [
+            { label: 'zero', value: 0 },
+            { label: 'empty-string', value: '' },
+            { label: 'NaN', value: Number.NaN },
+            { label: 'null', value: null },
+            { label: 'one', value: 1 },
+            { label: 'string-false', value: 'false' },
+            { label: 'object', value: {} },
+            { label: 'array', value: [] },
+          ];
+          const results: Array<Record<string, unknown>> = [];
+          for (const mode of ['generic', 'toolchain']) {
+            for (const { label, value } of values) {
+              const before = workers.length;
+              let error: unknown;
+              try {
+                const sandbox = await sdk.createSandbox(
+                  mode === 'generic'
+                    ? {
+                        workerUrl: genericWorkerUrl,
+                        requireCrossOriginIsolation: value,
+                        skipServiceWorker: true,
+                      }
+                    : {
+                        requireCrossOriginIsolation: value,
+                        skipServiceWorker: true,
+                        toolchain: { workerUrl: selectedToolchainWorkerUrl },
+                      },
+                );
+                sandbox.dispose();
+              } catch (caught) {
+                error = caught;
+              }
+              results.push({
+                mode,
+                value: label,
+                error:
+                  error instanceof Error
+                    ? { name: error.name, message: error.message }
+                    : { name: typeof error, message: String(error) },
+                workerConstructions: workers.length - before,
+              });
+            }
+          }
+          return { crossOriginIsolated, results };
+        } finally {
+          Object.defineProperty(globalThis, 'Worker', {
+            configurable: true,
+            value: NativeWorker,
+            writable: true,
+          });
+        }
+      },
+      {
+        sdkUrl: sdkModuleUrl,
+        genericWorkerUrl: runtimeWorkerUrl,
+        selectedToolchainWorkerUrl: toolchainWorkerUrl,
+      },
+    );
+
+    expect(outcomes.crossOriginIsolated).toBe(false);
+    expect(outcomes.results).toEqual(
+      ['generic', 'toolchain'].flatMap((mode) =>
+        ['zero', 'empty-string', 'NaN', 'null', 'one', 'string-false', 'object', 'array'].map(
+          (value) => ({
+            mode,
+            value,
+            error: {
+              name: 'TypeError',
+              message: expect.stringContaining(mode === 'generic' ? 'boolean' : 'false'),
+            },
+            workerConstructions: 0,
+          }),
+        ),
+      ),
+    );
+  } finally {
+    await host.close();
+  }
+});
+
 test('capability and no-COI degradation contract — designed RED', async ({ page }) => {
   const { host, baseline } = await openHeaderlessHost(page);
   try {
@@ -892,6 +996,87 @@ test('capability and no-COI degradation contract — designed RED', async ({ pag
     assertHostSnapshot(await hostSnapshot(host), baseline);
   } finally {
     await disposeSandbox(host);
+    await host.close();
+  }
+});
+
+test('public SDK projects one real Worker, VFS and runtime authority', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    const authority = await host.evaluate(
+      async ({ sdkUrl, vfsUrl, selectedToolchainWorkerUrl }) => {
+        const NativeWorker = globalThis.Worker;
+        const workers: Array<{ url: string; type: string | null }> = [];
+        class ObservedWorker extends NativeWorker {
+          constructor(url: string | URL, options?: WorkerOptions) {
+            super(url, options);
+            workers.push({ url: String(url), type: options?.type ?? null });
+          }
+        }
+        Object.defineProperty(globalThis, 'Worker', {
+          configurable: true,
+          value: ObservedWorker,
+          writable: true,
+        });
+        try {
+          const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
+            createSandbox(options: Record<string, unknown>): Promise<{
+              runtime: { readonly fs: unknown; readonly toolchain?: unknown; isReady(): boolean };
+              fs: unknown;
+              toolchain: unknown;
+              vfs: { readonly backend: 'opfs' | 'memory' };
+              dispose(): void;
+            }>;
+          };
+          const vfs = (await import(/* @vite-ignore */ vfsUrl)) as {
+            detectVfsBackend(): 'opfs' | 'memory';
+          };
+          const pageBackend = vfs.detectVfsBackend();
+          const sandbox = await sdk.createSandbox({
+            requireCrossOriginIsolation: false,
+            skipServiceWorker: true,
+            toolchain: { workerUrl: selectedToolchainWorkerUrl },
+          });
+          try {
+            return {
+              crossOriginIsolated,
+              pageBackend,
+              publicBackend: sandbox.vfs.backend,
+              workerCount: workers.length,
+              workers,
+              runtimeReady: sandbox.runtime.isReady(),
+              fsIdentity: sandbox.fs === sandbox.runtime.fs,
+              toolchainIdentity: sandbox.toolchain === sandbox.runtime.toolchain,
+            };
+          } finally {
+            sandbox.dispose();
+          }
+        } finally {
+          Object.defineProperty(globalThis, 'Worker', {
+            configurable: true,
+            value: NativeWorker,
+            writable: true,
+          });
+        }
+      },
+      {
+        sdkUrl: sdkModuleUrl,
+        vfsUrl: sdkVfsModuleUrl,
+        selectedToolchainWorkerUrl: toolchainWorkerUrl,
+      },
+    );
+
+    expect(authority).toEqual({
+      crossOriginIsolated: false,
+      pageBackend: 'memory',
+      publicBackend: 'opfs',
+      workerCount: 1,
+      workers: [{ url: toolchainWorkerUrl, type: 'module' }],
+      runtimeReady: true,
+      fsIdentity: true,
+      toolchainIdentity: true,
+    });
+  } finally {
     await host.close();
   }
 });

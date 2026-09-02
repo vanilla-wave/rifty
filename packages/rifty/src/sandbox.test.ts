@@ -167,6 +167,153 @@ describe('createSandbox', () => {
     },
   );
 
+  it('rejects every non-boolean no-COI admission before boot — designed RED', async () => {
+    const values = [
+      { label: 'zero', value: 0 },
+      { label: 'empty-string', value: '' },
+      { label: 'NaN', value: Number.NaN },
+      { label: 'null', value: null },
+      { label: 'one', value: 1 },
+      { label: 'string-false', value: 'false' },
+      { label: 'object', value: {} },
+      { label: 'array', value: [] },
+    ] as const;
+    const outcomes: Array<Record<string, unknown>> = [];
+
+    for (const mode of ['generic', 'toolchain'] as const) {
+      for (const { label, value } of values) {
+        let workerConstructions = 0;
+        class UnexpectedWorker {
+          constructor() {
+            workerConstructions += 1;
+          }
+        }
+        vi.stubGlobal('Worker', UnexpectedWorker);
+        const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>('opfs'));
+        const registerSw = vi.fn(() => Promise.resolve());
+        const spawn = vi.fn(() => fakeRuntime());
+        const options =
+          mode === 'generic'
+            ? { workerUrl: '/generic-worker.js', requireCrossOriginIsolation: value }
+            : {
+                requireCrossOriginIsolation: value,
+                toolchain: { workerUrl: '/toolchain-worker.js' },
+              };
+        let error: unknown;
+        try {
+          await createSandbox(
+            options as unknown as CreateSandboxOptions,
+            deps({
+              detect: () => capabilityCheck(false),
+              initVfs,
+              registerSw,
+              spawn,
+            }),
+          );
+        } catch (caught) {
+          error = caught;
+        }
+        outcomes.push({
+          mode,
+          value: label,
+          error:
+            error instanceof Error
+              ? { name: error.name, message: error.message }
+              : { name: typeof error, message: String(error) },
+          sideEffects: {
+            initVfs: initVfs.mock.calls.length,
+            registerSw: registerSw.mock.calls.length,
+            spawn: spawn.mock.calls.length,
+            worker: workerConstructions,
+          },
+        });
+      }
+    }
+
+    expect(outcomes).toEqual(
+      (['generic', 'toolchain'] as const).flatMap((mode) =>
+        values.map(({ label }) => ({
+          mode,
+          value: label,
+          error: {
+            name: 'TypeError',
+            message: expect.stringContaining(mode === 'generic' ? 'boolean' : 'false'),
+          },
+          sideEffects: { initVfs: 0, registerSw: 0, spawn: 0, worker: 0 },
+        })),
+      ),
+    );
+  });
+
+  it('projects either admitted Worker backend through one public runtime authority', async () => {
+    for (const workerBackend of ['opfs', 'memory'] as const) {
+      const workers: Array<{
+        readonly url: string;
+        emit(data: unknown): void;
+        terminate(): void;
+      }> = [];
+      let resolveWorker: (worker: (typeof workers)[number]) => void = () => {};
+      const workerConstructed = new Promise<(typeof workers)[number]>((resolve) => {
+        resolveWorker = resolve;
+      });
+      class ProjectedBackendWorker {
+        readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+
+        constructor(readonly url: string) {
+          workers.push(this);
+          resolveWorker(this);
+        }
+
+        addEventListener(type: string, listener: EventListener): void {
+          if (type === 'message') {
+            this.listeners.add(listener as (event: MessageEvent<unknown>) => void);
+          }
+        }
+
+        postMessage(): void {}
+
+        terminate(): void {}
+
+        emit(data: unknown): void {
+          const event = { data } as MessageEvent<unknown>;
+          for (const listener of this.listeners) listener(event);
+        }
+      }
+      vi.stubGlobal('Worker', ProjectedBackendWorker);
+      const pageBackend = workerBackend === 'opfs' ? 'memory' : 'opfs';
+      const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>(pageBackend));
+      const genericSpawn = vi.fn(() => fakeRuntime());
+      const creating = createSandbox(
+        {
+          requireCrossOriginIsolation: false,
+          skipServiceWorker: true,
+          toolchain: { workerUrl: `/toolchain-${workerBackend}.js` },
+        },
+        deps({ detect: () => capabilityCheck(false), initVfs, spawn: genericSpawn }),
+      );
+      const worker = await workerConstructed;
+      worker.emit({ type: 'ready' });
+      worker.emit({
+        type: 'toolchain-ready',
+        protocol: 'rifty.sandbox-toolchain/v1',
+        vfsBackend: workerBackend,
+      });
+      const sandbox = await creating;
+
+      expect(workers).toHaveLength(1);
+      expect(worker.url).toBe(`/toolchain-${workerBackend}.js`);
+      expect(initVfs).not.toHaveBeenCalled();
+      expect(genericSpawn).not.toHaveBeenCalled();
+      expect(sandbox.vfs).toEqual({ backend: workerBackend });
+      expect(sandbox.vfs.backend).not.toBe(pageBackend);
+      expect(sandbox.fs).toBe(sandbox.runtime.fs);
+      expect(sandbox.toolchain).toBe(
+        (sandbox.runtime as RuntimeController & { readonly toolchain: unknown }).toolchain,
+      );
+      sandbox.dispose();
+    }
+  });
+
   it('public admission rejects and terminates a valid-backend mismatched-protocol Worker', async () => {
     const listeners = new Set<(event: MessageEvent<unknown>) => void>();
     const terminate = vi.fn();

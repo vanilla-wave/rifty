@@ -291,6 +291,113 @@ describe('spawnToolchainRuntime trust boundary', () => {
     expect(worker.terminated).toBe(true);
   });
 
+  it('rejects arbitrary protocol shapes and quarantines every later frame — designed RED', async () => {
+    const invalidFrames: ReadonlyArray<readonly [string, () => unknown]> = [
+      [
+        'prior version',
+        () => ({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v0',
+          vfsBackend: 'memory',
+        }),
+      ],
+      [
+        'later version',
+        () => ({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v2',
+          vfsBackend: 'memory',
+        }),
+      ],
+      ['numeric protocol', () => ({ type: 'toolchain-ready', protocol: 1, vfsBackend: 'memory' })],
+      ['null protocol', () => ({ type: 'toolchain-ready', protocol: null, vfsBackend: 'memory' })],
+      ['object protocol', () => ({ type: 'toolchain-ready', protocol: {}, vfsBackend: 'memory' })],
+      ['missing protocol', () => ({ type: 'toolchain-ready', vfsBackend: 'memory' })],
+      [
+        'extra field',
+        () => ({
+          type: 'toolchain-ready',
+          protocol: SANDBOX_TOOLCHAIN_PROTOCOL,
+          vfsBackend: 'memory',
+          extra: true,
+        }),
+      ],
+      [
+        'accessor protocol',
+        () =>
+          Object.defineProperty({ type: 'toolchain-ready', vfsBackend: 'memory' }, 'protocol', {
+            enumerable: true,
+            get: () => SANDBOX_TOOLCHAIN_PROTOCOL,
+          }),
+      ],
+    ];
+    const outcomes: Array<Record<string, unknown>> = [];
+
+    for (const [label, frame] of invalidFrames) {
+      installFakeWorker();
+      const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+      const events: unknown[] = [];
+      runtime.on((event) => events.push(event));
+      const worker = fakeWorker(0);
+      worker.emit({ type: 'ready' });
+      const pendingEval = runtime.eval('41 + 1').then(
+        () => ({ name: 'resolved' }),
+        (error: Error & { feature?: string }) => ({
+          name: error.name,
+          feature: error.feature,
+        }),
+      );
+      const handshake = runtime.toolchainReady.then(
+        () => ({ name: 'resolved' }),
+        (error: Error & { feature?: string }) => ({
+          name: error.name,
+          feature: error.feature,
+        }),
+      );
+      worker.emitUnknown(frame());
+      const rejectedHandshake = await handshake;
+      const rejectedEval = await pendingEval;
+      const eventsAtTermination = events.length;
+
+      worker.emitUnknown({
+        type: 'toolchain-ready',
+        protocol: SANDBOX_TOOLCHAIN_PROTOCOL,
+        vfsBackend: 'opfs',
+      });
+      worker.emit({ type: 'ready' });
+      worker.emit({ type: 'result', result: { id: 1, ok: true, value: 42 } });
+      await Promise.resolve();
+      outcomes.push({
+        label,
+        handshake: rejectedHandshake,
+        pendingEval: rejectedEval,
+        terminated: worker.terminated,
+        readyAfterLaterFrames: runtime.isReady(),
+        eventsAtTermination,
+        eventsAfterLaterFrames: events.length,
+      });
+      runtime.dispose();
+    }
+
+    expect(outcomes).toEqual(
+      invalidFrames.map(([label]) => ({
+        label,
+        handshake: {
+          name: 'NotImplementedError',
+          feature: 'sandbox.toolchain.worker',
+        },
+        pendingEval: {
+          name: 'NotImplementedError',
+          feature: 'sandbox.toolchain.worker',
+        },
+        terminated: true,
+        readyAfterLaterFrames: false,
+        eventsAtTermination: 1,
+        eventsAfterLaterFrames: 1,
+      })),
+    );
+  });
+
   it('admits only the exact protocol/backend frame', async () => {
     installFakeWorker();
     const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
