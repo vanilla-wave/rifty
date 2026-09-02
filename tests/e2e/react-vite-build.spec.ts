@@ -23,23 +23,39 @@ import {
 const PORT = 5174;
 const PREVIEW_PORT = 4173;
 const BUILD_LINE = 'npm run build';
+const ASSET_LISTING_LINE =
+  "node -e \"for (const f of require('node:fs').readdirSync('dist/assets')) console.log('ASSET '+f)\"";
+
+async function fetchPreviewPath(
+  page: Page,
+  port: number,
+  path: string,
+): Promise<{ readonly ok: boolean; readonly status: number; readonly body: string }> {
+  return page.evaluate(
+    async ({ targetPort, targetPath }) => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 4_000);
+      try {
+        const r = await fetch(`/preview/${targetPort}${targetPath}`, {
+          cache: 'no-store',
+          signal: ac.signal,
+        });
+        return { ok: r.ok, status: r.status, body: await r.text() };
+      } catch (err) {
+        return { ok: false, status: 0, body: String((err as Error).message ?? err) };
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    { targetPort: port, targetPath: path },
+  );
+}
 
 async function fetchPreview(
   page: Page,
   port: number,
 ): Promise<{ readonly ok: boolean; readonly status: number; readonly body: string }> {
-  return page.evaluate(async (targetPort) => {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 4_000);
-    try {
-      const r = await fetch(`/preview/${targetPort}/`, { cache: 'no-store', signal: ac.signal });
-      return { ok: r.ok, status: r.status, body: await r.text() };
-    } catch (err) {
-      return { ok: false, status: 0, body: String((err as Error).message ?? err) };
-    } finally {
-      clearTimeout(timer);
-    }
-  }, port);
+  return fetchPreviewPath(page, port, '/');
 }
 
 test.describe('React + Vite template production build', () => {
@@ -72,6 +88,15 @@ test.describe('React + Vite template production build', () => {
     await expectTerminalContains(page, /assets\/index-[^"]+\.js/u, 20_000);
     await expectTerminalContains(page, /assets\/index-[^"]+\.css/u, 20_000);
     expect(await terminalBuffer(page)).not.toContain('/src/main.tsx');
+    // The referenced files really exist on disk (rollup-wasm wrote them), not
+    // only their names in the HTML.
+    // Printed as `ASSET <name>` lines from a real readdir: the echoed command
+    // carries the expression, never a concatenated result, and Vite's own
+    // build report / the cat above never print this prefix.
+    await runTerminalLineSettled(page, ASSET_LISTING_LINE, 20_000);
+    const assetListing = await terminalBuffer(page);
+    expect(assetListing).toMatch(/^ASSET index-[\w-]+\.js$/mu);
+    expect(assetListing).toMatch(/^ASSET index-[\w-]+\.css$/mu);
 
     await runTerminalLine(page, 'npm run preview');
     await expect
@@ -83,5 +108,16 @@ test.describe('React + Vite template production build', () => {
     const html = await fetchPreview(page, PREVIEW_PORT);
     expect(html.body).toMatch(/assets\/index-[^"]+\.js/u);
     expect(html.body).not.toContain('/src/main.tsx');
+    // `vite preview` serves the hashed bundle + stylesheet the HTML references —
+    // the built app, not just its shell.
+    const jsPath = /(\/assets\/index-[^"]+\.js)/u.exec(html.body)?.[1];
+    const cssPath = /(\/assets\/index-[^"]+\.css)/u.exec(html.body)?.[1];
+    if (!jsPath || !cssPath) throw new Error('built index.html references no hashed js/css');
+    const js = await fetchPreviewPath(page, PREVIEW_PORT, jsPath);
+    expect(js).toMatchObject({ ok: true, status: 200 });
+    expect(js.body).toContain('Trackline');
+    const css = await fetchPreviewPath(page, PREVIEW_PORT, cssPath);
+    expect(css).toMatchObject({ ok: true, status: 200 });
+    expect(css.body).toContain('.brand');
   });
 });

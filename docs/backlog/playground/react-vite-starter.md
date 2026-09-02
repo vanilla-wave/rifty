@@ -201,6 +201,7 @@ failing-test-first target run as the same scenario locally and in rifty.
 
 ready-verdict: 2026-09-02 — Contract+RED @ 4bd3557a6
 contract-red: 2026-09-02 — blocker @ 0493863b6
+final-green: 2026-09-02 — blocker @ eed9e4268
 
 - 2026-09-02 (Contract+RED attempt 1 → blocker, re-cut IN PLACE): the parity
   row "served `/src/main.tsx` carries the refresh preamble" asserted a FALSE

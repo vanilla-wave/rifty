@@ -11,6 +11,7 @@ import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
 import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
 import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
+import { REACT_VITE_TEMPLATE } from './templates/react-vite/index.ts';
 import { resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
@@ -197,6 +198,38 @@ describe('playground presets', () => {
 
     expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(demo.openFiles?.every((path) => openablePaths(demo).has(path))).toBe(true);
+  });
+
+  it('ships the "Real npm project" tile as the from-scratch react-vite starter', () => {
+    const tile = PRESETS.find((preset) => preset.id === 'real-vite');
+    expect(tile).toBeDefined();
+    if (!tile) throw new Error('unreachable');
+    expect(tile.templateId).toBe('react-vite');
+    expect(tile.setup).toBe('from-scratch');
+    expect(tile.mode).toBe('real-vite');
+    expect(tile.category).toBe('Live preview');
+    expect(tile.label).toBe('Real npm project');
+    expect(tile.blurb).toMatch(/React 19/u);
+    expect(tile.blurb).toMatch(/Fast Refresh/u);
+    expect(tile.tag).toEqual({ text: 'npm install', tone: 'slow' });
+    expect(tile.openFiles).toEqual([
+      'src/App.tsx',
+      'src/components/StatusBadge.tsx',
+      'src/pages/IssueList.tsx',
+      'src/data/issues.ts',
+      'README.md',
+    ]);
+    expect(presetFileContent(tile, 'src/main.tsx')).toBe(REACT_VITE_TEMPLATE.entry.content);
+    // page-side explorer mirrors the worker-seeded template files in lockstep
+    const filePaths = new Set((tile.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(REACT_VITE_TEMPLATE.extraFiles ?? {})) {
+      expect(filePaths.has(relPath.replace(/^\//u, ''))).toBe(true);
+    }
+    for (const file of tile.files ?? []) {
+      if (file.path === 'src/main.tsx') continue;
+      expect(REACT_VITE_TEMPLATE.extraFiles?.[`/${file.path}`]).toBe(file.content);
+    }
+    expect(resolveProjectSpec('react-vite').bakedNodeModulesUrl).toBeUndefined();
   });
 
   it('ships Vite 8 as an opt-in instant preset distinct from default Vite 7', () => {

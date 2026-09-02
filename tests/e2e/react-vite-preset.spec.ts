@@ -66,19 +66,26 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
     // from-scratch: the install really runs — asserted on the installer's OWN
     // per-package lines (`npm: + <name>@<version>`), never on the echoed
     // command. Every declared direct dependency shows up resolved.
-    await expectTerminalContains(page, /npm: \+ react@\d+\./u, 120_000);
-    for (const dep of [
-      'react-dom',
-      'react-router-dom',
-      'vite',
-      '@vitejs/plugin-react',
-      '@types/react',
-      '@types/react-dom',
-      'typescript',
-    ]) {
-      await expectTerminalContains(page, new RegExp(`npm: \\+ ${dep}@\\d+\\.`, 'u'), 60_000);
+    // Every declared direct dependency shows up resolved, at the MAJOR the
+    // contract pins (React 19, Router 7, Vite 7, plugin-react 5).
+    await expectTerminalContains(page, /npm: \+ react@19\./u, 120_000);
+    for (const [dep, major] of [
+      ['react-dom', 19],
+      ['react-router-dom', 7],
+      ['vite', 7],
+      ['@vitejs/plugin-react', 5],
+      ['@types/react', 19],
+      ['@types/react-dom', 19],
+      ['typescript', 5],
+    ] as const) {
+      await expectTerminalContains(page, new RegExp(`npm: \\+ ${dep}@${major}\\.`, 'u'), 60_000);
     }
     await expectViteDevServerReady(page, PORT, 180_000);
+    // The LIVE pill itself lights for this port — the scenario names the pill;
+    // the readiness helper alone also accepts the terminal's `VITE ready` line.
+    await expect(
+      page.locator('.rf-livepill[data-state="running"]', { hasText: `LIVE :${PORT}` }),
+    ).toBeVisible({ timeout: 30_000 });
 
     const frame = page.frameLocator(`iframe[title="Preview port ${PORT}"]`);
 
@@ -107,24 +114,44 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
     expect(indexHtml).toContain('injectIntoGlobalHook');
     expect(indexHtml).toContain('/@react-refresh');
 
-    // Client-side navigation inside the preview iframe (React Router).
-    await frame.getByRole('link', { name: 'Issues' }).click();
-    await expect(frame.locator('.issue-card')).toHaveCount(25, { timeout: 30_000 });
-
-    // The status filter narrows the list (12 open issues in the dataset).
-    await frame.locator('.filter-bar select').first().selectOption('open');
-    await expect(frame.locator('.issue-card')).toHaveCount(12);
-
-    // Card click → issue detail route.
-    await frame.locator('.issue-card').first().click();
-    await expect(frame.locator('.issue-detail')).toBeVisible({ timeout: 15_000 });
-
-    // Sentinel on the iframe's window: a Fast-Refresh patch must NOT reload the
-    // document, so the sentinel survives the edit below.
+    // Sentinel on the iframe's window BEFORE any navigation: a React Router
+    // transition must not reload the document, so it survives the clicks below
+    // and the Fast-Refresh edit later.
     await frame.locator('body').evaluate(() => {
       (globalThis as typeof globalThis & { __riftyHmrSentinel?: string }).__riftyHmrSentinel =
         'alive';
     });
+    const sentinel = () =>
+      frame
+        .locator('body')
+        .evaluate(
+          () =>
+            (globalThis as typeof globalThis & { __riftyHmrSentinel?: string }).__riftyHmrSentinel,
+        );
+
+    // Client-side navigation inside the preview iframe (React Router).
+    await frame.getByRole('link', { name: 'Issues' }).click();
+    await expect(frame.locator('.issue-card')).toHaveCount(25, { timeout: 30_000 });
+    // Identity, not a count: every dataset id #1..#25 exactly once.
+    const allIds = (await frame.locator('.issue-card__id').allTextContents()).sort();
+    expect(allIds).toEqual(Array.from({ length: 25 }, (_, i) => `#${i + 1}`).sort());
+
+    // The status filter narrows the list to the 12 open issues — every card
+    // left carries the Open badge.
+    await frame.locator('.filter-bar select').first().selectOption('open');
+    await expect(frame.locator('.issue-card')).toHaveCount(12);
+    expect(await frame.locator('.issue-card .badge').allTextContents()).toEqual(
+      Array.from({ length: 12 }, () => 'Open'),
+    );
+
+    // Card click → issue detail route. Same document throughout: the pre-click
+    // sentinel is still there and the router moved the pathname.
+    await frame.locator('.issue-card').first().click();
+    await expect(frame.locator('.issue-detail')).toBeVisible({ timeout: 15_000 });
+    expect(await sentinel()).toBe('alive');
+    expect(await frame.locator('body').evaluate(() => location.pathname)).toMatch(
+      /\/issues\/\d+$/u,
+    );
 
     // Edit the leaf component the user scenario names (src/components/
     // StatusBadge.tsx — a seeded editor tab) through Monaco's real input path:
@@ -156,17 +183,7 @@ test.describe('Real npm project (React + Vite issue tracker)', () => {
 
     await expect(frame.locator('.brand')).toHaveText(marker, { timeout: 30_000 });
     // No full reload: the pre-edit sentinel is still on the iframe's window.
-    await expect
-      .poll(() =>
-        frame
-          .locator('body')
-          .evaluate(
-            () =>
-              (globalThis as typeof globalThis & { __riftyHmrSentinel?: string })
-                .__riftyHmrSentinel,
-          ),
-      )
-      .toBe('alive');
+    await expect.poll(sentinel).toBe('alive');
 
     // Parity: the dep optimizer COMPLETED on the guest tree — metadata on disk,
     // with the SAME entries marked for CJS interop as a local Node 24 run of

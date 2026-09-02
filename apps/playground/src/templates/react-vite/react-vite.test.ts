@@ -34,15 +34,15 @@ describe('react-vite template portability', () => {
       'react-dom': '^19.0.0',
       'react-router-dom': '^7.0.0',
     });
-    expect(Object.keys(pkg.devDependencies)).toEqual(
-      expect.arrayContaining([
-        '@types/react',
-        '@types/react-dom',
-        '@vitejs/plugin-react',
-        'typescript',
-        'vite',
-      ]),
-    );
+    // exact ranges: the contract pins Vite ^7 + plugin-react 5 (Fast Refresh
+    // evidence exists only there — Vite 8 HMR stays disabled, ADR-0161/0317)
+    expect(pkg.devDependencies).toEqual({
+      '@types/react': '^19.0.0',
+      '@types/react-dom': '^19.0.0',
+      '@vitejs/plugin-react': '^5.0.0',
+      typescript: '^5.0.0',
+      vite: '^7.0.0',
+    });
   });
 
   it('keeps build/preview OUT of the dev aliases — `npm run build` must not boot the dev server', () => {
@@ -99,5 +99,28 @@ describe('react-vite template portability', () => {
     // the dataset really carries the planted unpadded dates edge #1 relies on
     const data = REACT_VITE_TEMPLATE.extraFiles?.['/src/data/issues.ts'] ?? '';
     expect(data).toMatch(/createdAt: '2025-9-14'/u);
+  });
+
+  it('keeps the four rough edges planted in the code — fixing one must fail here', () => {
+    const files = allFiles();
+    const dashboard = files['/src/pages/Dashboard.tsx'] ?? '';
+    const list = files['/src/pages/IssueList.tsx'] ?? '';
+    // component/page code only — the dataset's prose may say "new issue"
+    const code = Object.entries(files).filter(
+      ([path]) => path.startsWith('/src/pages/') || path.startsWith('/src/components/'),
+    );
+    // #1 text sort on createdAt (no date parsing)
+    expect(dashboard).toMatch(/a\.createdAt > b\.createdAt/u);
+    expect(dashboard).not.toMatch(/new Date\(|Date\.parse|localeCompare/u);
+    // #2 no search box
+    expect(list).not.toMatch(/<input|search/iu);
+    // #3 filters live in component state only, never in the URL
+    expect(list).toMatch(/useState\('all'\)/u);
+    expect(list).not.toMatch(/useSearchParams|URLSearchParams|useLocation|useNavigate/u);
+    // #4 no way to file an issue: no form outside Settings, no issue creation
+    for (const [path, content] of code) {
+      if (path !== '/src/pages/Settings.tsx') expect(content, path).not.toContain('<form');
+      expect(content, path).not.toMatch(/NewIssue|createIssue|issues\.push\(/u);
+    }
   });
 });
