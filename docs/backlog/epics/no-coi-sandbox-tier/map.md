@@ -4,14 +4,21 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-sandbox-build-loop` — **build-loop** — sandbox
-   composition for real Vite 7 build outside workbench gates + loud capability
-   gate/report + spawn warn-once + cpus→1 + Vite-8 loud named error + the
-   no-COI CI lane, which also pins the host document non-COI across the loop
-   (I1, I2, I3, I7 rest, I8, I9).
-2. `distribution/no-coi-dev-hmr-restore` — **dev-hmr** — resident vite dev +
-   HMR through SW preview + worker-died event + restore primitive + boot marker
-   for unflushed writes (I4, I6, I10). Blocked by build-loop.
+1. `distribution/no-coi-public-toolchain-admission` — **I1** — literal-false
+   public admission, exact report/handshake/backend and one Worker/VFS/runtime.
+2. `distribution/no-coi-toolchain-operation-lifecycle` — **shared I2/I3** —
+   one Worker-owned install/run slot, immutable input and terminal settlement;
+   blocked by public admission.
+3. `distribution/no-coi-sandbox-package-install` — **I2** — real exact-manifest
+   install plus inherited npm bounds/fault evidence; blocked by all prior.
+4. `distribution/no-coi-sandbox-build-loop` — **I3** — generic installed-bin
+   build bytes, exact output and identity-decoy proofs; blocked by all prior.
+5. `distribution/no-coi-host-posture-preservation` — **I9** — exact host,
+   opener and no-CORS/no-CORP subresource posture across the loop; blocked by
+   all prior.
+6. `distribution/no-coi-dev-hmr-restore` — **I4/I6/I10 + final I8** — generic
+   resident dev/HMR proof, worker-death/restart and unflushed marker; explicitly
+   blocked by all five build prerequisites.
 
 ## Open questions
 

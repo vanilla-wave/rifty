@@ -1,13 +1,14 @@
 ---
 area: distribution
-status: ready
-title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
+status: draft
+title: no-COI installed-bin build parity through the generic sandbox authority
 created: 2026-08-28
 epic: no-coi-sandbox-tier
-why: the real-Vite composition (esbuild-wasm adapter, bin execution, npm/shell wiring) exists only behind workbench COI gates; the sandbox tier needs the same loop composed in the single worker, a capability report making every gap loud, and a CI lane that serves NO COOP/COEP — today zero browser lanes do
-user_story: As an agent platform, I want createSandbox → install → vite build → dist on a headerless page with a report naming what throws/degrades, but today the composition throws at the workbench gate and no lane proves any of it
-sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
-code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/workbench/src/workers/vite-esbuild-runtime.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/os.ts]
+blocked_by: [distribution/no-coi-public-toolchain-admission, distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install]
+why: the generic public no-COI sandbox can run installed bins, but Final review did not prove request-identical Vite 7/8 decoys, exact installed Vite 8/nanoid fixture provenance, or the exact full Vite 7 module line before claiming byte-identical build output
+user_story: As an agent platform, I want an arbitrary installed bin to build my project in a headerless sandbox and return the exact same dist bytes as the COI product, while a real shared-memory request fails by name and package identity never selects policy
+sources: [ADR-0137, ADR-0174, ADR-0316, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, distribution/no-coi-public-toolchain-admission, distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install]
+code: [packages/workbench/src/workers/no-coi-toolchain-worker.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts, tools/perf/child-fs/scenario.mjs]
 ---
 
 ## Context
@@ -490,50 +491,42 @@ lineage and the exact 1→1 stop carry; the observable goal is unchanged.
    loud/deduplicated. Artifact: focused npm-client fault command recorded in
    Evidence C148-NPM below; the SDK layer adds no cache/retry authority.
 
-## Challenge
+## Discovered fork — 2026-09-02 Final invariant decomposition
 
-challenge: 2026-08-28 — 1 problem
-- Cheaper-route question the epic itself recorded is unsettled before the biggest slice: map.md §Open questions says a coi-serviceworker header-faking shim probe (minimal static page + SAB probe, near-zero cost) could deliver full COI on GH-Pages-class hosting and 'collapse part of this tier's hosting value', yet build-loop — the composition + gate + report + CI lane centerpiece — carries no ordering requirement to run that probe first, so the epic's largest investment lands while the cheap experiment that sizes its value share stays unrun.
+Final+GREEN adjudication left 15 HOLDS and fired convergence on counted rounds
+`1→15`. Draft PR 294 already fixed the PR-body band row; binding stop
+`e5347179f` therefore leaves 14 current HOLDS. User authorized an invariant-
+closed re-cut, never another same-unit review round.
 
-<!-- Post-challenge edit: the shim probe is now a hard PICKUP prerequisite of this slice
-     (map item 4); a value-collapsing probe result is a re-fit trigger. -->
+Five children are minimal: I1, I2, I3 and I9 are distinct frozen observable
+invariants, while one necessary Worker operation-lifecycle invariant is shared
+by I2/I3 and cannot be duplicated into either. This item remains the natural
+lineage carrier and narrows to I3. Four sibling drafts take the other bands.
 
-Disposition: closed before this PICKUP. The 2026-08-31 probe says the shim
-works, but the user-owned discriminator is now frozen goal I9: it changes the
-whole host document's policy and requires reload. `map.md` has empty fog and
-records the route out of scope; no premise problem remains open here.
+| current HOLD | child owner |
+|---|---|
+| any protocol mismatch and later-frame non-admission | `distribution/no-coi-public-toolchain-admission` (I1) |
+| public Worker `vfs.backend` projection | `distribution/no-coi-public-toolchain-admission` (I1) |
+| exactly one Worker/VFS/runtime | `distribution/no-coi-public-toolchain-admission` (I1) |
+| literal-false-only generic admission | `distribution/no-coi-public-toolchain-admission` (I1) |
+| frozen npm bounds/required-failure/same-key-concurrency evidence | `distribution/no-coi-sandbox-package-install` (I2) |
+| overlap zero rejected-operation dispatch/effects | `distribution/no-coi-toolchain-operation-lifecycle` (shared I2/I3) |
+| `runBin` peer-end settlement matrix | `distribution/no-coi-toolchain-operation-lifecycle` (shared I2/I3) |
+| post-validation caller mutation snapshot | `distribution/no-coi-toolchain-operation-lifecycle` (shared I2/I3) |
+| exact stdout/stderr order then one terminal result | `distribution/no-coi-toolchain-operation-lifecycle` (shared I2/I3) |
+| current Class-kill sweep/forcing-constraint authority | `distribution/no-coi-toolchain-operation-lifecycle` (shared I2/I3) |
+| request-identical Vite 7/8 fixture decoys | this item (I3) |
+| exact installed Vite 8/nanoid fixture identities | this item (I3) |
+| exact full `✓ 2180 modules transformed.` line | this item (I3) |
+| no-CORS/no-CORP image request/response provenance | `distribution/no-coi-host-posture-preservation` (I9) |
 
-## User scenario
+I5 and I7 implementation already landed; the I1 child retains I7's report and
+real-realm truth obligation. The committed lane remains shared proof, with
+full I8 closing only after dev-HMR. Vite 7/8 are proof fixtures only; no
+product or infrastructure authority may depend on Vite identity, version,
+path, callback, type or lifecycle.
 
-An existing app opens its ordinary same-origin SDK page from an opener. The
-page response has no COOP/COEP. It explicitly calls
-`createSandbox({requireCrossOriginIsolation:false,
-toolchain:{workerUrl:toolchainWorkerUrl}})`,
-writes the canonical react-class project, installs from the configured registry,
-and runs `/project/node_modules/.bin/vite build`. It reads the complete `dist/`
-tree through the same sandbox and gets the exact bytes the current COI product
-emits for the identical project. The app document, opener and a cross-origin
-image from a second loopback origin that needs no CORS/CORP keep their original
-behavior throughout.
-
-## Reference contract
-
-- Browser/product oracle: C148-BUILD above plus the frozen live scenario from
-  `tools/perf/child-fs/scenario.mjs`: exact Vite `7.3.6`, React `19.2.8`,
-  React DOM `19.2.8`, Gravity UI `7.48.1`, Gravity icons `2.22.0`, date-fns
-  `4.4.0` (Express remains the existing scenario's non-build preservation
-  dependency). The Contract+RED carrier runs both products with one marker.
-- Vite/bin authority: ADR-0137/0174 — installed `node_modules/.bin/vite` and
-  `runNodeEntry(..., bin:true)`, never a curated Vite callback.
-- Esbuild authority: ADR-0316 — registry-attested `esbuild-wasm@0.28.0`; no
-  preview1/vendored second provider.
-- Public composition: ADR-0071/0131/0375 — explicit host Worker URL, one Worker
-  VFS authority, narrow install/run-bin control plane.
-- Platform boundary: headerless Chrome exposes no SharedArrayBuffer. Vite 8's
-  installed Rolldown WASI binding needs pthread shared memory; the no-COI
-  outcome is the named `toolchain.threaded-wasm` error, not a wasm crash.
-
-## Acceptance
+### Pre-demotion Acceptance (verbatim, Final invariant decomposition)
 
 1. A navigation response served by the dedicated no-COI Vite config has no
    COOP/COEP. Before sandbox boot, during install, during build and after build,
@@ -602,7 +595,7 @@ behavior throughout.
     live COI oracle; it is never a route-intercept header simulation and never
     boots the Playground app no-COI.
 
-## Parity cases
+### Pre-demotion Parity cases (verbatim, Final invariant decomposition)
 
 1. Current COI product vs no-COI toolchain Worker: one project/dependency
    digest, exact installed versions, real `.bin/vite`, exit/module count, full
@@ -642,94 +635,147 @@ behavior throughout.
    loud/deduplicated. Artifact: focused npm-client fault command recorded in
    Evidence C148-NPM below; the SDK layer adds no cache/retry authority.
 
+## Challenge
+
+challenge: 2026-08-28 — 1 problem
+- Cheaper-route question the epic itself recorded is unsettled before the biggest slice: map.md §Open questions says a coi-serviceworker header-faking shim probe (minimal static page + SAB probe, near-zero cost) could deliver full COI on GH-Pages-class hosting and 'collapse part of this tier's hosting value', yet build-loop — the composition + gate + report + CI lane centerpiece — carries no ordering requirement to run that probe first, so the epic's largest investment lands while the cheap experiment that sizes its value share stays unrun.
+
+<!-- Post-challenge edit: the shim probe is now a hard PICKUP prerequisite of this slice
+     (map item 4); a value-collapsing probe result is a re-fit trigger. -->
+
+Disposition: closed before this PICKUP. The 2026-08-31 probe says the shim
+works, but the user-owned discriminator is now frozen goal I9: it changes the
+whole host document's policy and requires reload. `map.md` has empty fog and
+records the route out of scope; no premise problem remains open here.
+
+challenge: 2026-09-02 — 2 problems
+- Project direction: Acceptance/Parity compare only no-COI with the sibling COI product; without a real Node Vite 7 oracle, equal logs/artifacts can preserve shared drift and do not prove Node-faithful build behavior.
+- User impact remains unsized: the goal narrows value to existing own-origin apps unwilling to change headers and excludes greenfield sites served by cheaper SW isolation, but provides no evidence for the size or frequency of that residual audience relative to this slice’s multi-fixture proof cost.
+
+Disposition:
+
+- P1 answered by adding a pinned real Node Vite 7 proof run for the same
+  project/dependency/marker input. The live Node artifact is the external
+  oracle; COI/no-COI equality alone cannot claim Node fidelity. Vite remains a
+  test fixture and contributes no product/infrastructure policy.
+- P2 retained as the frozen goal's user-accepted premise risk (2026-08-31):
+  adopter share remains unsized, but the existing-app posture is the explicit
+  chosen audience and cannot be amended during RECHART.
+
+## User scenario
+
+After admission, lifecycle and exact-manifest install are certified, an agent
+runs an arbitrary admitted installed bin against project bytes in the same
+Worker VFS. The representative Vite 7 fixture builds successfully; the agent
+reads the complete `dist/` tree and gets the exact bytes the live COI product
+emits for the identical project. Identity-equivalent fixture bins prove that
+Vite name/version/path/argv cannot select behavior. A real Vite 8 fixture
+reaches the already-certified generic shared-memory boundary by what its bytes
+do, not by what package it is.
+
+## Reference contract
+
+- Browser/product proof fixture: C148-BUILD above plus the frozen live scenario from
+  `tools/perf/child-fs/scenario.mjs`: exact Vite `7.3.6`, React `19.2.8`,
+  React DOM `19.2.8`, Gravity UI `7.48.1`, Gravity icons `2.22.0`, date-fns
+  `4.4.0` (Express remains the existing scenario's non-build preservation
+  dependency). The differential runs both products with one marker. None of
+  these identities is product or infrastructure authority.
+- External oracle prerequisite: the same frozen files, manifest, lock/input
+  digest and marker run under pinned real Node 24.16.0 with Vite 7.3.6. Its
+  normalized output and complete `dist` bytes are captured before this draft
+  compiles; shared COI/no-COI drift cannot define success.
+- Installed-bin authority: ADR-0137/0174 — the caller's admitted installed
+  `node_modules/.bin/*` launcher and `runNodeEntry(..., bin:true)`, never a
+  curated package callback.
+- Esbuild authority: ADR-0316 — registry-attested `esbuild-wasm@0.28.0`; no
+  preview1/vendored second provider.
+- Certified prerequisites: public admission/one Worker, shared operation
+  lifecycle and exact-manifest install are owned by the three `blocked_by`
+  chain entries and consumed here without reopening them.
+- Platform boundary: headerless Chrome exposes no SharedArrayBuffer. Vite 8's
+  installed Rolldown WASI binding needs pthread shared memory; the no-COI
+  outcome is the already-certified generic `toolchain.threaded-wasm` error,
+  not a wasm crash or identity rule.
+
+## Acceptance
+
+1. Using the certified exact installed tree, the public no-COI sandbox invokes
+   the caller-selected `/project/node_modules/.bin/vite` with args exactly
+   `['build']`. The Vite 7 proof fixture exits 0 through the generic installed-
+   bin path, with no curated callback/deep import. Its normalized output
+   contains the exact full line `✓ 2180 modules transformed.` once; prefixed
+   counts such as `12180` and substring-only matches fail.
+2. Pinned real Node 24.16.0/Vite 7.3.6, the live no-COI product and the live
+   COI product receive one byte-identical frozen project/dependency digest and
+   marker. Their complete normalized `dist/` relative-path sets are equal;
+   every triplet has equal length, bytes and SHA-256. The JS contains the
+   marker exactly twice, matching the frozen source's two sites; sibling
+   product equality alone is insufficient.
+3. Request-identical Vite 7 and Vite 8 decoy fixtures use the same public
+   install/run request fields, package name/version, installed bin path and
+   `['build']` argv as their real counterparts; only registry-served fixture
+   bytes differ. A non-threaded decoy runs normally and its own output/artifact
+   wins. No product/infrastructure branch may select preparation, rejection or
+   output by Vite identity, version, path, callback, type or lifecycle.
+4. Before execution, the carrier reads exact installed `vite@8.0.16` and
+   `nanoid@3.3.18` package manifests and declared bin targets from the Worker
+   VFS. The real nanoid installed bin exits 0 with one seven-character id.
+   These exact identities are fixture provenance only, never authority.
+5. The real installed Vite 8 fixture reaches the certified realm-local shared-
+   memory boundary and rejects with
+   `NotImplementedError('toolchain.threaded-wasm')` before successful `dist/`.
+   The identity-equivalent non-threaded decoy in Acceptance 3 proves the
+   rejection follows actual shared-memory behavior. Descriptor/cause semantics
+   remain certified predecessor scope.
+6. The generic lifecycle predecessor supplies immutable requests, exact
+   stream→single-terminal order and terminal settlement. This child consumes
+   those facts and adds no Worker, VFS, protocol, busy, queue or lifecycle
+   mechanism. The committed Chromium lane is a proof carrier only.
+
+## Parity cases
+
+1. Pinned real Node vs current live COI product vs public no-COI sandbox: one
+   project/dependency digest, exact Vite 7 installed-bin request, exact
+   normalized module line, exit 0 and complete `dist` paths+bytes+SHA with the
+   two-site marker.
+2. Request-identity discrimination: real and alternate-byte Vite 7 fixtures
+   receive the same install/build request; real and non-threaded Vite 8
+   fixtures receive the same install/build request. Fixture bytes alone decide
+   output vs shared-memory boundary.
+3. Installed provenance: exact Vite 8 and nanoid manifest versions plus bin
+   targets are observed before execution; nanoid provides the arbitrary
+   non-Vite installed-bin control.
+4. Threaded-WASM integration: real Vite 8 reaches the already-certified
+   generic boundary, while the request-identical non-threaded decoy runs. The
+   certified descriptor and bounded-cause children remain outside this review
+   boundary.
+
 ## Fault matrix
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
-| `false-fallback` + `provenance-lie` × no-COI/toolchain admission and report | explicit opt-in + exact report; default remains COI throw; valid-backend protocol mismatch named + Worker terminated | Acceptance 3-4; Evidence R5-HANDSHAKE; no-COI preservation + capability RED |
-| `corrupt-input` + `observable-order` × install/run-bin request | exact fields validated before VFS/process mutation; arbitrary admitted bin identity does not change policy; ordered output precedes one terminal result | Acceptance 3, 5-6, 9; capability/build/generic-bin carriers |
-| `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry-twin acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
-| `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0375; `toolchain overlap` designed RED |
-| Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
-| `false-fallback` × threaded WASM | real Vite 8 reaches the generic named boundary; an identity-equivalent bin without a shared-memory request runs; the certified child proves native-order descriptor conversion and no stateful shared-memory success | Acceptance/Parity 8/4; descriptor-evaluation child + R6-IDENTITY; live Vite 8 integration target |
-| `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
-| `observable-order` × host lifecycle | opener round-trip + image reload complete while install/run stay admitted at held network boundaries, then release completes them; stable time origin proves no reload | Acceptance/Parity 1-2/2; Evidence R5-ORDER; preservation control |
-
-Evidence C148-NPM (Node 24.16.0, Vitest 2.1.9):
-
-```sh
-pnpm exec vitest run --project unit \
-  packages/npm-client/src/internal/shadow/installer.contract.test.ts \
-  packages/workbench/src/workers/owner-package-runtime-bindings.contract.test.ts \
-  packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts --reporter=dot
-# 3 files passed; 51 tests passed
-```
-
-Evidence R5-HANDSHAKE (product `6ba50d605`, Node 24.16.0, Vitest 2.1.9):
-
-```sh
-pnpm exec vitest run --project unit \
-  packages/rifty/src/sandbox.test.ts packages/runtime-js/src/host.test.ts \
-  -t "valid backend but mismatched protocol|public admission rejects" --reporter=dot
-# 2 files passed; 2 tests passed; both reject sandbox.toolchain.worker + terminate
-```
-
-Evidence R5-REALM (product `6ba50d605`, Chrome 148.0.7778.96, Playwright 1.60.0):
-
-```sh
-pnpm test:no-coi -g \
-  "threaded-WASM guard covers real installed bin, CJS, ESM and REPL descriptors"
-# RED: 1 failed; shared:1 and shared:'yes' returned native TypeError, not
-# NotImplementedError(toolchain.threaded-wasm), in REPL/CJS/ESM/installed-bin
-```
-
-Evidence R5-ORDER (product `6ba50d605`, Chrome 148.0.7778.96, Playwright 1.60.0):
-
-```sh
-pnpm test:no-coi -g \
-  "host stays interactive while admitted install and run wait at network boundaries"
-# 1 passed; BusyError proved admission, opener/image completed before release,
-# then both original operations completed
-```
-
-Evidence R6-IDENTITY (current-tree expected RED, Chrome 148.0.7778.96,
-Playwright 1.60.0):
-
-```sh
-pnpm test:no-coi -g "installed-bin admission ignores Vite identity"
-# RED before implementation: plain Vite-8-named fixture bin rejects as
-# toolchain.threaded-wasm despite making no shared-memory request.
-```
-
-Evidence R5-PACKED (product `2f1063608`, Node 24.16.0, Vite 5.4.21):
-
-```sh
-pnpm test:packed-consumer
-# RED: real @riftydev/sdk + @riftydev/workbench dependency-closure tarballs,
-# offline npm install and typecheck passed; fixture Vite build failed:
-# Missing "./internal" specifier in "@riftydev/runtime-js" package
-```
+| `provenance-lie` × package/build policy | request-identical Vite 7/8 decoys follow installed bytes, never package identity | Acceptance/Parity 3/2; same-request alternate-byte fixtures |
+| `frozen-assumption` × installed-bin fixture identity | exact Vite 8/nanoid manifest version and bin target observed before use | Acceptance/Parity 4/3; Worker-VFS manifest/bin reads |
+| `lossy-aggregate` × module output | exact full normalized line once; `12180` and substring mutants fail | Acceptance/Parity 1/1; exact-line carrier |
+| `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × Node/COI/no-COI build | pinned live Node plus twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 1-2/1; three-way build differential |
+| `false-fallback` × threaded WASM | real Vite 8 reaches the generic named boundary; request-identical non-threaded bytes run | Acceptance/Parity 3,5/2,4; certified realm seam + live fixtures |
 
 ## Out of scope
 
-- Native-order `WebAssembly.Memory` descriptor evaluation, stateful getter
-  safety and the REPL/CJS/ESM/installed-bin sibling sweep remain the certified
-  predecessor's scope, outside this build-loop review boundary.
-- Vite dev/HMR, SW preview binding, restart/death event and pending-write boot
-  marker remain `distribution/no-coi-dev-hmr-restore`, blocked by this unit.
-  The report says `toolchain.dev-hmr` throwing until that child lands.
-- `sandbox.exec()` streaming, shell grammar, stdin, cancellation and normalized
-  preview URL remain `distribution/public-api-ai-agent-exec-preview`.
-- `spawnSync`/execSync implementation, kernel ring-less spawn, real parallel
-  worker_threads and arbitrary threaded-WASM emulation remain out. Gaps stay
-  report-visible or named throws.
-- No Playground app no-COI mode, no SW-delivered COI, no page reload, no header
-  mutation, no third-party iframe tier.
-- No SDK/runtime/control-plane/package/distribution coupling to Vite identity,
-  version, callbacks, paths, types or lifecycle. Vite 7 remains only the live
-  representative oracle; Vite 8 only the named threaded-WASM fixture.
-- No dev/HMR acceptance, restart, forced-kill durability or workspace journal
-  is smuggled into this build-only unit.
+- Public admission/report/protocol/one-Worker proof, exact-manifest install,
+  request lifecycle/busy/stream settlement and host posture remain their
+  named predecessor/sibling contracts; this item consumes without reopening.
+- Native `WebAssembly.Memory` descriptor evaluation and bounded cause
+  projection remain certified predecessor scope.
+- Vite 7/8 identity, version, path, callback, type and lifecycle are fixture
+  provenance only. No product/infrastructure authority may depend on them.
+- No resident dev/HMR, SW preview binding, restart/death event or pending-write
+  marker; `distribution/no-coi-dev-hmr-restore` stays blocked.
+- No `sandbox.exec()`, shell grammar, stdin, cancellation, preview URL,
+  spawnSync/execSync implementation or threaded-WASM emulation.
+- No heartbeat, journal, automatic reconnect/retry, exactly-once recovery,
+  hidden retry, queue or crash durability.
 
 ## Decisions
 
@@ -951,3 +997,25 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
   `15 @ c2b13d0f3`. Latest pair `1→15` is not strictly falling: convergence
   valve fires. No blocker batch, fix, RED, next review, dev-HMR or rechart
   started.
+- Final-stop resolution: user-authorized invariant decomposition at binding
+  stop `e5347179f`; the already-fixed PR-body band row is removed from the
+  current set. Fourteen HOLDS are exhaustively owned by four new siblings plus
+  this re-cut; no STRETCH/FALSE demand was restored.
+- Demoted `ready`→`draft`. Pre-demotion Acceptance and Parity are copied
+  verbatim above from `e5347179f` (Acceptance body 4861 UTF-8 bytes,
+  `650b13afa960ac79313177555b60456dc03fa0d9a79c3253b01e8f11cb3fbb99`;
+  Parity body 2705 bytes,
+  `14c79a94cf9815ede0586c4366dd7f6402017741b187e1684b8205c9b87289f1`).
+  Every predecessor verdict and count line remains in this document and is
+  copied to each split successor.
+- Current ownership is I3 only: request-identical Vite 7/8 fixture decoys,
+  exact installed Vite 8/nanoid fixture provenance and the exact full module
+  line. Public admission, shared lifecycle, I2 install and I9 host posture are
+  reverse-linked siblings; certified descriptor/cause work remains outside.
+- Fresh challenge strengthened I3 with a pinned real Node Vite 7 proof; the
+  audience-sizing problem remains the frozen goal's accepted premise risk.
+- Dependencies: `distribution/no-coi-toolchain-operation-lifecycle` and
+  `distribution/no-coi-sandbox-package-install`. No implementation, RED,
+  Contract+RED, Final round, PICKUP or dev-HMR work starts in this RECHART.
+- Vite 7/8 remain proof fixtures only. No product/infrastructure authority may
+  depend on Vite identity, version, path, callback, type or lifecycle.
