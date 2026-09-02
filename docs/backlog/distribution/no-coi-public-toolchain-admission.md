@@ -269,3 +269,15 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   REDs, then source hashes restore exactly. SDK/runtime-js typechecks and arch
   pass; outside-sandbox `pr:check` 24/24 (`test:run` 193.2s, parity 69.2s).
   Unit/goal/outside-goal residuals empty; Final verification pending.
+- `final-green: 2026-09-02 — blocker @ 6da3ccd35`
+- Final+GREEN VERIFY reviewed `6da3ccd358d6e5ad8f3208289286b77b9411c498`,
+  tree `1410b38e1969c6a617e7847219baba8b32d31d6a`: external `pr:check`
+  24/24, Node 9/9 and Chrome 5/5; coverage 16/16. Prior three HOLDS closed;
+  fresh tail found one goal-drift candidate, adjudicated 1 HOLDS;
+  `blockers.mjs` exit 1 with 1 blocker / 0 new concerns / 0 nits.
+- HOLD: current Decisions and ledger claim unit/goal/outside-goal residuals are
+  all empty while the map still carries five downstream goal children. AGENTS
+  DoD requires unit and goal status separately; the false statement remains
+  unchanged until the blocker batch.
+- Current-unit Final counts are `3→1`, strictly falling; no convergence valve.
+  No bookkeeping fix, next Final round or RECHART started.
