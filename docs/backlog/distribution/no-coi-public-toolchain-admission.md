@@ -388,3 +388,11 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   pass while violating the already-recorded omitted/true HOLD. Current
   residuals: unit 1 / goal 5 / outside 0. This is the first post-override Final
   blocker round; one same-HOLD proof correction is pending, no new scope.
+- Same-HOLD correction adds public generic omitted/true twins with exact
+  exported `COI_REQUIRED_MESSAGE`, zero Worker construction and only capability
+  detection before rejection. A browser-only explicit-true suffix mutant keeps
+  Node 2/2 GREEN but fails public Chromium 1/1; restored Chromium carrier passes
+  1/1 in 6.6s and `sandbox.ts` returns to SHA-256
+  `a135270540919a31acf8d23763018591bf8cfc6c61b3728a9798da363162fb7a`.
+  Unit residuals return to 0; goal 5 / outside 0; full no-COI, `pr:check` and
+  Final verification pending. No other concern or sibling changed.

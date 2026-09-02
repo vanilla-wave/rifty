@@ -824,6 +824,7 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
         });
         try {
           const sdk = (await import(/* @vite-ignore */ sdkUrl)) as {
+            COI_REQUIRED_MESSAGE: string;
             createSandbox(
               options: Record<string, unknown>,
               deps?: Record<string, unknown>,
@@ -842,6 +843,65 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
             writeStdin: () => {},
             isReady: () => true,
           };
+          const depsForTrace = (trace: string[]) => ({
+            detect: () => {
+              trace.push('detect');
+              return {
+                capabilities: {
+                  crossOriginIsolated: false,
+                  sharedArrayBuffer: false,
+                  atomicsWaitAsync: false,
+                  opfsSyncAccessHandle: true,
+                  serviceWorker: true,
+                  worker: true,
+                },
+                missing: ['crossOriginIsolated'],
+                sufficient: true,
+                summary: 'browser admission vector',
+              };
+            },
+            initVfs: () => {
+              trace.push('vfs');
+              return Promise.resolve('opfs');
+            },
+            registerSw: () => {
+              trace.push('sw');
+              return Promise.resolve();
+            },
+            spawn: () => {
+              trace.push('generic-worker');
+              return fakeRuntime;
+            },
+          });
+          const genericRequired: Array<Record<string, unknown>> = [];
+          for (const { label, options } of [
+            { label: 'omitted', options: { workerUrl: genericWorkerUrl } },
+            {
+              label: 'true',
+              options: { workerUrl: genericWorkerUrl, requireCrossOriginIsolation: true },
+            },
+          ]) {
+            const trace: string[] = [];
+            activeTrace = trace;
+            const before = workers.length;
+            let error: unknown;
+            try {
+              const sandbox = await sdk.createSandbox(options, depsForTrace(trace));
+              sandbox.dispose();
+            } catch (caught) {
+              error = caught;
+            }
+            genericRequired.push({
+              value: label,
+              error:
+                error instanceof Error
+                  ? { name: error.name, message: error.message }
+                  : { name: typeof error, message: String(error) },
+              workerConstructions: workers.length - before,
+              effects: trace,
+            });
+            activeTrace = undefined;
+          }
           const values = [
             { label: 'explicit-undefined', value: undefined },
             { label: 'zero', value: 0 },
@@ -875,36 +935,7 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
                         requireCrossOriginIsolation: value,
                         toolchain: { workerUrl: selectedToolchainWorkerUrl },
                       },
-                  {
-                    detect: () => {
-                      trace.push('detect');
-                      return {
-                        capabilities: {
-                          crossOriginIsolated: false,
-                          sharedArrayBuffer: false,
-                          atomicsWaitAsync: false,
-                          opfsSyncAccessHandle: true,
-                          serviceWorker: true,
-                          worker: true,
-                        },
-                        missing: ['crossOriginIsolated'],
-                        sufficient: true,
-                        summary: 'browser admission vector',
-                      };
-                    },
-                    initVfs: () => {
-                      trace.push('vfs');
-                      return Promise.resolve('opfs');
-                    },
-                    registerSw: () => {
-                      trace.push('sw');
-                      return Promise.resolve();
-                    },
-                    spawn: () => {
-                      trace.push('generic-worker');
-                      return fakeRuntime;
-                    },
-                  },
+                  depsForTrace(trace),
                 );
                 sandbox.dispose();
               } catch (caught) {
@@ -931,7 +962,12 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
               activeTrace = undefined;
             }
           }
-          return { crossOriginIsolated, results };
+          return {
+            crossOriginIsolated,
+            genericRequired,
+            requiredMessage: sdk.COI_REQUIRED_MESSAGE,
+            results,
+          };
         } finally {
           Object.defineProperty(globalThis, 'Worker', {
             configurable: true,
@@ -948,6 +984,20 @@ test('public SDK admits no-COI only through literal false — designed RED', asy
     );
 
     expect(outcomes.crossOriginIsolated).toBe(false);
+    expect(outcomes.genericRequired).toEqual([
+      {
+        value: 'omitted',
+        error: { name: 'Error', message: outcomes.requiredMessage },
+        workerConstructions: 0,
+        effects: ['detect'],
+      },
+      {
+        value: 'true',
+        error: { name: 'Error', message: outcomes.requiredMessage },
+        workerConstructions: 0,
+        effects: ['detect'],
+      },
+    ]);
     expect(outcomes.results).toEqual(
       ['generic', 'toolchain'].flatMap((mode) =>
         [
