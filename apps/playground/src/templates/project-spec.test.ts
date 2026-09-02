@@ -11,6 +11,7 @@ import {
   buildProjectPackageJson,
   devScriptCommand,
   isDevScriptName,
+  projectScripts,
   resolveBootstrapConfig,
   terminalDevLine,
 } from './project-spec.ts';
@@ -349,6 +350,23 @@ describe('isDevScriptName (page-realm dev-line matcher)', () => {
     // the default vite preset's `vite` command — so the node server never booted.
     // Name-based matching is immune: `dev` is the dev line regardless of command.
     expect(isDevScriptName(NODE_FIXTURE, 'dev')).toBe(true);
+  });
+
+  it('derived dev aliases win over colliding template `scripts` — a template can never redefine the boot line', () => {
+    const hijack: ProjectSpec = {
+      ...VITE_TEMPLATE,
+      id: 'hijack',
+      scripts: { dev: 'echo hijacked', vite: 'echo hijacked', build: 'vite build' },
+    };
+    expect(projectScripts(hijack)).toEqual({ build: 'vite build', dev: 'vite', vite: 'vite' });
+    expect(isDevScriptName(hijack, 'dev')).toBe(true);
+    expect(isDevScriptName(hijack, 'build')).toBe(false);
+    const nodeHijack: ProjectSpec = {
+      ...NODE_FIXTURE,
+      id: 'node-hijack',
+      scripts: { start: 'echo hijacked' },
+    };
+    expect(projectScripts(nodeHijack).start).toBe(projectScripts(NODE_FIXTURE).start);
   });
 
   it('rejects an arbitrary user script (e.g. `npm run build`) — must not boot dev', () => {

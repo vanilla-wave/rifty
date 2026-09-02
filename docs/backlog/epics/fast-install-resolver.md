@@ -36,6 +36,9 @@ coverage/integrity gates, the standard verifying install runs instead.
   real-browser transport matrix artifact or keep h3 unquoted. (ready)
 - `distribution/eddy-package-and-deploy` — delivered except first npm publish,
   which is operator-confirm-first and user-deferred. (ready)
+- `distribution/eddy-live-esbuild-closure-decline` — the deployed resolver
+  declines every esbuild closure (`422 integrity-missing`), so the launch eddy
+  figure is unmeasurable until it is fixed, redeployed and re-measured. (draft)
 
 Delivered and removed from the backlog: resolver service, client opt-in,
 wire protocol v1.1, learned pins, S3 durable bundle store, direct npmjs upstream
