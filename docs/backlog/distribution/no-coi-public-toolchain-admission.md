@@ -326,3 +326,31 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   SDK/runtime-js typechecks, arch and outside-sandbox `pr:check` 24/24 pass
   (`test:run` 202.1s, parity 69.9s). Residual classification remains unit 0,
   goal 5 per map, outside-goal 0; Final verification pending.
+- `final-green: 2026-09-02 — blocker @ 3006ca1f1`
+- Final+GREEN reviewed `3006ca1f139b757117e0f7504ac4aa60e2c674fa`, tree
+  `18de6be3998c66f66f4e7785306b701ae9c3a65c`, against BASE `dce86792d` /
+  `b1e0244ad`. The sandbox gate was invalid only from TSX IPC and loopback
+  `listen EPERM`; the required outside-sandbox rerun passed 24/24
+  (`test:run` 185.2s, parity 84.8s).
+- Fresh FIND: 4 raw blocker findings / 2 concerns / 0 nits, including one
+  process-valve finding; coverage 9 pass / 7 weak / 0 missing of 16 and three
+  behavioral unit residuals. Fresh tail: 0 new findings, coverage 16/16, unit
+  residuals 0 and the same five goal residuals. Independent adjudication:
+  4 HOLDS / 0 STRETCH / 0 FALSE; `blockers.mjs` exit 1 with 4 blockers /
+  2 concerns / 0 nits. The valve finding is not counted as its own behavioral
+  defect, so exact calibrated current count is `X=3`.
+- HOLDS: exact-protocol proof does not kill a `startsWith` decoder admitting
+  `rifty.sandbox-toolchain/v10` through Node and the public real Worker across
+  backend/readiness siblings; toolchain omitted/true proof admits an ordinary
+  `Error{name:'TypeError'}` instead of canonical `TypeError` in Node and public
+  Chromium; generic omitted/true proof admits prefixed/suffixed
+  `COI_REQUIRED_MESSAGE` instead of exact equality in Node and public Chromium.
+  Singleton-array coercion and exact extra report-key closure remain concerns,
+  not additional HOLDS; no sibling lifecycle/package/build/host/HMR demand
+  entered this unit.
+- Exact Final lineage is
+  `3@5990557b2 → 1@6da3ccd35 → 2@e38fd5aa7 → 3@3006ca1f1`.
+  The latest `1→2→3` has two consecutive non-decreases, so the Final
+  convergence valve fires. Current residuals: admission unit 3; goal 5
+  (lifecycle, package-install, build-loop, host-posture, dev-HMR/final I8);
+  outside-goal 0. No fix batch, another review, RECHART or next unit may start.
