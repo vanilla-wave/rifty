@@ -374,3 +374,17 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   no-COI 22/22 in 2.0m; SDK/runtime-js typechecks, lint and arch pass. Unit
   residuals 0; goal residuals 5 per map; outside-goal residuals 0. Full
   `pr:check` and fresh Final+GREEN pending; concerns and sibling scope unchanged.
+- `final-green: 2026-09-02 — blocker @ 46b4679b0`
+- Final+GREEN reviewed `46b4679b049311b60abe65e9a3f447d2847198b2`, tree
+  `c8082fab7ed7fc3d7914a685e69bd64627fd677e`, against BASE `dce86792d` /
+  `b1e0244ad`: `pr:check` 24/24 (`test:run` 240.1s, parity 75.2s),
+  focused Node 7/7, Chromium 4/4 and full no-COI 22/22.
+- Fresh FIND had one behavioral candidate plus one PR-body concern, coverage
+  12 pass / 4 weak / 0 missing of 16; fresh tail 0 new findings, coverage
+  16/16. Independent adjudication: 1 HOLDS / 0 STRETCH / 0 FALSE;
+  `blockers.mjs` exit 1 with 1 blocker / 1 concern / 0 nits.
+- HOLD: the public Chromium exact-message carrier exercises generic omission
+  but not generic explicit `true`, so a browser-only true-branch suffix can
+  pass while violating the already-recorded omitted/true HOLD. Current
+  residuals: unit 1 / goal 5 / outside 0. This is the first post-override Final
+  blocker round; one same-HOLD proof correction is pending, no new scope.
