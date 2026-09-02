@@ -6,7 +6,10 @@ invokes `rifty-fix` (expected RED is not a defect).
 1. Expected RED first (the certified tests), then the smallest honest
    mechanism to GREEN (`AGENTS.md` §Simplicity, §Fidelity). Stay within the
    declared band; a band trip → re-cut in place (`../rules/readiness.md`
-   `RDY-5`), never a fresh start.
+   `RDY-5`), never a fresh start. Budget rows (cold start, lane time) are
+   proven here by their RED; a breach on a row traced to `I#`/`scenario` is
+   not the agent's to relax → `STOP-1a`; a carrier choice (which CI lane) is
+   the agent's, one `## Decisions` line.
 2. Classify every discovery against the frozen goal/tier/Fidelity: required
    → reverse-linked draft child (`rifty-to-backlog` shape, `## Challenge`);
    outside → `rifty-to-backlog`. Never narrow the goal or detach required work.

@@ -21,10 +21,18 @@ never a precondition for starting one.
    request manual `rifty-refine`; never interview mid-task.
 4. Every Parity/Fault row carries a reproducible artifact — command + output +
    version; model memory is not evidence; a prescribed carrier with no
-   spike/ADR fact = frozen assumption. An open blocking `## Challenge` premise
-   problem (value does not follow / cheaper direct authority —
-   `docs/backlog/README.md` §Challenge) is answered in the doc or overridden
-   by the user on the record; never flip past it.
+   spike/ADR fact = frozen assumption. Evidence is about the ORACLE and the
+   baseline (real Node, the current product, a disposable spike), never about
+   the deliverable: a number that exists only once the unit is built (its own
+   cold start, its own lane time) is an Acceptance row traced to `I#` /
+   `scenario`, whose artifact is the RED that IMPLEMENT turns green. A spike
+   that is the deliverable is implementation. A "go/no-go at pickup" that
+   depends on measuring the deliverable is a premise question — FIT/refine
+   (`review.md` `REV-6`), not a pickup step (2026-09-02
+   `react-vite-starter`: the tile was built inside pickup to measure it). An
+   open blocking `## Challenge` premise problem (value does not follow /
+   cheaper direct authority — `docs/backlog/README.md` §Challenge) is answered
+   in the doc or overridden by the user on the record; never flip past it.
 5. All forks resolved + rows evidenced + `RDY-3`/`RDY-4` satisfied → set
    `ready`, run `pnpm backlog:check`, continue. No «settled with caveats».
    Verification is the unit's Contract+RED at pickup (fresh reviewer, raw

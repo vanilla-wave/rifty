@@ -8,9 +8,11 @@ review membership; no implementation started. Fresh worker session.
 1. **Choose.** The user-named child, else the first frontier child
    (`../artifacts/map.md`).
 2. **Compile** draft → ready per `../rules/readiness.md` `RDY-2`: evidence per
-   row; internal forks resolved yourself; a user-observable fork or an `owner:
-   user` fog line the slice depends on → stop (`STOP-1a`), request manual
-   `rifty-refine`, never interview.
+   row about the oracle and baseline only — nothing about the deliverable is
+   measured here, a budget on it becomes a traced Acceptance row with a RED
+   carrier; internal forks resolved yourself; a user-observable fork or an
+   `owner: user` fog line the slice depends on → stop (`STOP-1a`), request
+   manual `rifty-refine`, never interview.
 3. **Trace + size** (`RDY-3`, `RDY-4`): every Acceptance/Parity/Fault row
    traced; ≤ 15 traced rows, ≤ 200 lines, one-sentence `title`. Over → split
    now, before any review; successors reference each other.
@@ -24,4 +26,5 @@ review membership; no implementation started. Fresh worker session.
 6. **Hand off.** Implementation is `implement.md`; this stage ends here.
 
 Done when verdict, membership, band and rounds are recorded and no
-implementation has started.
+implementation has started — no product, template, fixture, lane or harness
+code exists on the branch that the contract's REDs do not require.
