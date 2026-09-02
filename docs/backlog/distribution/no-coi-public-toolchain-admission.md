@@ -354,3 +354,8 @@ predecessor: `distribution/no-coi-sandbox-build-loop`
   convergence valve fires. Current residuals: admission unit 3; goal 5
   (lifecycle, package-install, build-loop, host-posture, dev-HMR/final I8);
   outside-goal 0. No fix batch, another review, RECHART or next unit may start.
+- User override 2026-09-02 resolves the binding stop at `c33b3aa27`: resume
+  this unit only for one proof-only batch covering the three recorded HOLDS,
+  keep product bytes unchanged unless an executed RED proves otherwise, exclude
+  both recorded concerns and every sibling slice, then require a fresh
+  Final+GREEN before RECHART. No remaining goal slice is authorized here.
