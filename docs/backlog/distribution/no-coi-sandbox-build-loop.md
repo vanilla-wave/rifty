@@ -910,3 +910,44 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
   148.0.7778.96 artifact selected identity-decoy, exact nanoid and real Vite 8
   installed-bin lines 929/985/1557, 3/3 passed. Prior Parity 4 HOLDS closed;
   descriptor carrier remains certified outside scope; Final+GREEN next.
+- `final-green: 2026-09-02 — blocker @ c2b13d0f3`
+- Final+GREEN reviewed clean tree
+  `935862567bf8743e8c559deba01eaf1bf533704a` against certified descriptor BASE
+  `dce86792d` / tree `b1e0244ad432b5813bd9c2ff3a9e98ccf2cc7153`.
+  Descriptor seam/tests stayed outside coverage; build-loop carriers stayed in
+  by role. Fresh `pnpm pr:check` rerun outside the sandbox passed 24/24
+  (`test:run` 179.8s, parity 69.3s); the first run failed only sandbox
+  TSX/loopback `listen EPERM`.
+- Final find: 14 finding blockers / 14 matching unit residuals / 1 concern /
+  0 nits; coverage 47 = 13 pass / 29 weak / 5 missing; 1 goal residual. Fresh
+  tail: 4 new finding blockers / 3 matching unit residuals / 0 concerns /
+  0 nits; coverage 34 = 29 pass / 5 weak / 0 missing; 1 goal residual.
+  Independent adjudication: union 18 → 15 HOLDS / 1 STRETCH / 2 FALSE.
+  Calibrated union `blockers.mjs` exit 1: 15 blockers / 4 concerns / 0 nits;
+  14 surviving residual entries cover the 15 HOLDS; dev-HMR is the sole goal
+  residual. Five raw missing rows map to FALSE C12/C13 and remain transcript,
+  not surviving blockers.
+- HOLDS C1–C5: request-identical Vite 7/8 build identity decoys absent; exact
+  installed Vite 8/nanoid identities unobserved; protocol mismatch proves only
+  v0; no-CORS/no-CORP image provenance unasserted; public Worker VFS-backend
+  projection unpinned.
+- HOLDS C7–C11: frozen npm command omits bounds/concurrency carriers; BusyError
+  does not prove zero rejected-operation dispatch; peer-end matrix omits
+  `runBin`; post-validation input mutation passes; exact stdout/stderr order
+  and one terminal frame are unpinned.
+- HOLDS C14: ADR-0375 ports realm-global busy coordination without the required
+  repo-wide mechanism sweep/forcing-constraint record. Tail HOLDS: module count
+  accepts `12180`; successful SDK proof does not pin one Worker/VFS/runtime;
+  PR body omits explicit carried build-loop 5–6, 2–3 and post-bounded 0–0 band
+  rows; generic `createSandbox` truthiness admits `0`, `''` and `NaN` instead
+  of only literal `false`.
+- Demoted: C6 public registry-fault crossing is STRETCH; C12/C13 public-type
+  demands are FALSE because their earlier landed role is outside this unit.
+- Final valve audit: earlier carried blocker verdicts `07d370651`, `bcff49986`
+  and `541c4cd6c` have no stored counts. Exact counted lineage is
+  `1 @ a909a38a9 → 1 @ 6f86d2e7f` (convergence stop; user-authorized bounded-
+  cause split → PASS `40ded4758`), then `1 @ 01465c6ae` (carried 1→1 stop;
+  user-authorized descriptor split → PASS `dce86792d`), then
+  `15 @ c2b13d0f3`. Latest pair `1→15` is not strictly falling: convergence
+  valve fires. No blocker batch, fix, RED, next review, dev-HMR or rechart
+  started.
