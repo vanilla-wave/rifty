@@ -4,7 +4,6 @@ status: draft
 title: no-COI build loop — sandbox composition for real Vite 7 + loud capability gate + no-COI CI lane
 created: 2026-08-28
 epic: no-coi-sandbox-tier
-blocked_by: [runtime-js/sandbox-toolchain-memory-descriptor-evaluation]
 why: the real-Vite composition (esbuild-wasm adapter, bin execution, npm/shell wiring) exists only behind workbench COI gates; the sandbox tier needs the same loop composed in the single worker, a capability report making every gap loud, and a CI lane that serves NO COOP/COEP — today zero browser lanes do
 user_story: As an agent platform, I want createSandbox → install → vite build → dist on a headerless page with a report naming what throws/degrades, but today the composition throws at the workbench gate and no lane proves any of it
 sources: [ADR-0071, ADR-0131, ADR-0137, ADR-0174, ADR-0316, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, distribution/iframe-embed]
@@ -382,9 +381,10 @@ The internal child
 `runtime-js/sandbox-toolchain-memory-descriptor-evaluation` owns only the
 package-generic, Vite-free evaluation defect at the existing runtime-js realm
 seam: native count/order, the stateful false→true outcome, and matching
-REPL/CJS/ESM/installed-bin siblings. This build-loop is demoted and blocked on
-that child. All Contract/Final lineage and the exact 1→1 stop carry; no fix,
-RED or implementation checkpoint has started. The observable goal is unchanged.
+REPL/CJS/ESM/installed-bin siblings. Final+GREEN PASS landed at `dce86792d` on
+tree `b1e0244ad432b5813bd9c2ff3a9e98ccf2cc7153`; the completed child is deleted
+and build-loop stays draft but unblocked for its next PICKUP. All Contract/Final
+lineage and the exact 1→1 stop carry; the observable goal is unchanged.
 
 ### Pre-demotion Acceptance (verbatim, descriptor-evaluation split)
 
@@ -588,7 +588,7 @@ behavior throughout.
    memory request runs normally. Direct guest construction of shared
    `WebAssembly.Memory` rejects with the same feature, while non-shared memory
    still constructs and retains native constructor/prototype identity. The
-   blocking runtime-js child owns native descriptor count/order, the stateful
+   certified runtime-js child proves native descriptor count/order, the stateful
    false→true outcome and package-generic REPL/CJS/ESM/installed-bin siblings;
    this item consumes that proof for the live public-SDK Vite 8 boundary.
 9. A separate real `nanoid@3.3.18` exact manifest installs and its arbitrary
@@ -621,8 +621,8 @@ behavior throughout.
    carrier `pnpm test:no-coi -g "capability.*designed RED"` is the RED target.
 4. Threaded-WASM boundary: exact installed `vite@8.0.16` reaches the generic
    realm-local shared-memory rejection; an identity-equivalent non-threaded bin
-   and exact real `nanoid@3.3.18` bin run normally. The blocking
-   `runtime-js/sandbox-toolchain-memory-descriptor-evaluation` child owns the
+   and exact real `nanoid@3.3.18` bin run normally. The certified
+   `runtime-js/sandbox-toolchain-memory-descriptor-evaluation` child proves the
    native count/order/stateful differential and all four package-generic guest
    entries. This item retains their live Vite 8 integration. Artifact: current
    COI product proof is `tests/browser-unit/esbuild-vite-contract.spec.ts`;
@@ -649,7 +649,7 @@ behavior throughout.
 | `unbounded-read` + `poisoned-cache` + `provenance-lie` × registry-twin acquisition | inherited bounded fetch + exact integrity/admission; failure rejects, no adapter success | Evidence C148-NPM; Acceptance 6, 9 |
 | `concurrent-same-key` × realm-global install/run | one admitted operation; overlap loud `SandboxToolchainBusyError`; no hidden FIFO/lock | ADR-0375; `toolchain overlap` designed RED |
 | Worker peer death × admitted toolchain request | every pending request rejects `WorkerTerminated`/crash signal; never hangs or claims applied | `toolchain disposal` designed RED; MessagePort failure model |
-| `false-fallback` × threaded WASM | real Vite 8 reaches the generic named boundary; an identity-equivalent bin without a shared-memory request runs; the blocking child proves native-order descriptor conversion and no stateful shared-memory success | Acceptance/Parity 8/4; descriptor-evaluation child + R6-IDENTITY; live Vite 8 integration target |
+| `false-fallback` × threaded WASM | real Vite 8 reaches the generic named boundary; an identity-equivalent bin without a shared-memory request runs; the certified child proves native-order descriptor conversion and no stateful shared-memory success | Acceptance/Parity 8/4; descriptor-evaluation child + R6-IDENTITY; live Vite 8 integration target |
 | `sibling-drift` + `frozen-assumption` + `lossy-aggregate` × COI/no-COI build | live twin products, one frozen scenario/marker, exact path+byte+SHA equality | Acceptance/Parity 6-7/1; build differential RED |
 | `observable-order` × host lifecycle | opener round-trip + image reload complete while install/run stay admitted at held network boundaries, then release completes them; stable time origin proves no reload | Acceptance/Parity 1-2/2; Evidence R5-ORDER; preservation control |
 
@@ -711,8 +711,8 @@ pnpm test:packed-consumer
 ## Out of scope
 
 - Native-order `WebAssembly.Memory` descriptor evaluation, stateful getter
-  safety and the REPL/CJS/ESM/installed-bin sibling sweep are the blocking
-  `runtime-js/sandbox-toolchain-memory-descriptor-evaluation` child.
+  safety and the REPL/CJS/ESM/installed-bin sibling sweep remain the certified
+  predecessor's scope, outside this build-loop review boundary.
 - Vite dev/HMR, SW preview binding, restart/death event and pending-write boot
   marker remain `distribution/no-coi-dev-hmr-restore`, blocked by this unit.
   The report says `toolchain.dev-hmr` throwing until that child lands.
@@ -838,8 +838,9 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
   `runtime-js/sandbox-toolchain-memory-descriptor-evaluation` succeeds this
   unit only for the package-generic native count/order/stateful descriptor
   defect at the existing runtime-js realm seam. All Contract/Final lineage and
-  the exact 1→1 stop carry to it. This item is demoted, re-cut and blocked;
-  no same-unit round N+1 and no weakened goal behavior.
+  the exact 1→1 stop carry to it. The child landed Final+GREEN PASS at
+  `dce86792d` on tree `b1e0244ad432b5813bd9c2ff3a9e98ccf2cc7153`; this item
+  stays draft but unblocked. No same-unit round N+1 and no weakened goal behavior.
 - The pre-demotion Acceptance and Parity are copied verbatim above. Active
   Acceptance 8, Parity 4 and the threaded-WASM fault row delegate only that
   internal predecessor; live Vite 8 integration remains here.
