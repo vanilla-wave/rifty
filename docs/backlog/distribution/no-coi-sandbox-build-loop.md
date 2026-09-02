@@ -870,3 +870,23 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
   post-packed 2–3 and post-bounded 0–0 bands plus all Contract/Final lineage
   carry. Review remains `checkpoints`; status recompiled `draft`→`ready` and a
   fresh external Contract+RED is required; its verdict is intentionally absent.
+- `contract-red: 2026-09-02 — blocker @ 41d63c086`
+- Contract+RED find: 1 finding blocker / 1 matching unit residual / 1 concern /
+  0 nits; coverage 31 = 30 pass / 1 weak / 0 missing; 2 goal residuals. Fresh
+  tail: 0 new blockers / concerns / nits; coverage 34/34 pass; 0 unit and 2 goal
+  residuals. Independent adjudication: union 1 → 1 HOLDS / 0 STRETCH / 0 FALSE;
+  calibrated `blockers.mjs` exit 1 with 1 blocker / 1 concern / 0 nits.
+- HOLDS — Parity 4's declared command selected one synthetic `.bin/memory-probe`
+  test and passed instead of running the in-unit real `vite@8.0.16` install +
+  installed `.bin/vite` carrier. Executed on Node 24.16.0, Playwright 1.60.0,
+  Chrome 148.0.7778.96: `pnpm test:no-coi -g "threaded-WASM guard covers real
+  installed bin" --reporter=line` reported `Running 1 test`,
+  `tests/no-coi/no-coi-sandbox-build-loop.spec.ts:1037`, `1 passed (7.2s)`;
+  the real Vite 8 carrier is at line 1557. Fault `provenance-lie` /
+  `sibling-drift`; identity-decoy and nanoid siblings stay pinned, descriptor
+  siblings remain certified outside this boundary.
+- Valve audit: latest prior exact current-unit Contract verdict is PASS at
+  `df3cc811d`; current blocker-round counts `[1]`. No second consecutive
+  Contract blocker, no Contract escalation; no two consecutive blocker rounds,
+  no convergence valve. No fix, RED, contract/product/test edit or next review
+  round started.
