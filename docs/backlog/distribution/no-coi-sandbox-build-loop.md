@@ -733,6 +733,8 @@ pnpm test:packed-consumer
 
 ## Decisions
 
+ready-verdict: 2026-09-02 — Contract+RED @ 15dbca164
+
 ready-verdict: 2026-09-01 — Contract+RED @ ead27000f
 
 ready-verdict: 2026-09-01 — Contract+RED @ f0066d4d2
@@ -901,3 +903,10 @@ ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d
 - The batch corrects only Parity 4 artifact selection. Acceptance/Parity/Fault
   behavior, REDs, product/tests and the certified descriptor carriers remain
   unchanged; the recorded HOLDS is addressed, external verify pending.
+- Contract+RED VERIFY PASS on clean `15dbca164`, tree
+  `2dafc1593c96f9deb6109075b5fa00a1276cfa6f`: 34/34 coverage pass; 0 blockers /
+  0 concerns / 0 nits; unit residuals empty; 2 goal residuals;
+  `blockers.mjs` exit 0. Fresh Node 24.16.0 / Playwright 1.60.0 / Chrome
+  148.0.7778.96 artifact selected identity-decoy, exact nanoid and real Vite 8
+  installed-bin lines 929/985/1557, 3/3 passed. Prior Parity 4 HOLDS closed;
+  descriptor carrier remains certified outside scope; Final+GREEN next.
