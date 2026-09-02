@@ -4,7 +4,6 @@ status: draft
 title: no-COI toolchain install/run operation lifecycle
 created: 2026-09-02
 epic: no-coi-sandbox-tier
-blocked_by: [distribution/no-coi-public-toolchain-admission]
 why: install and run-bin mutate one Worker realm, but Final review did not prove zero dispatch for rejected overlap, run-bin peer-end settlement, immutable post-validation inputs, ordered streams before one terminal result, or the required current mechanism sweep and forcing constraint
 user_story: As an agent issuing install and installed-bin operations, I want each admitted call to settle once with ordered output while overlap fails before effects, so shared realm state cannot race or leave a promise hanging
 sources: [ADR-0375, docs/process/fault-classes.md, distribution/no-coi-sandbox-build-loop]

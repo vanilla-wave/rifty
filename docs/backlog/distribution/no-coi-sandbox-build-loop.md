@@ -4,7 +4,7 @@ status: draft
 title: no-COI installed-bin build parity through the generic sandbox authority
 created: 2026-08-28
 epic: no-coi-sandbox-tier
-blocked_by: [distribution/no-coi-public-toolchain-admission, distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install]
+blocked_by: [distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install]
 why: the generic public no-COI sandbox can run installed bins, but Final review did not prove request-identical Vite 7/8 decoys, exact installed Vite 8/nanoid fixture provenance, or the exact full Vite 7 module line before claiming byte-identical build output
 user_story: As an agent platform, I want an arbitrary installed bin to build my project in a headerless sandbox and return the exact same dist bytes as the COI product, while a real shared-memory request fails by name and package identity never selects policy
 sources: [ADR-0137, ADR-0174, ADR-0316, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, distribution/no-coi-public-toolchain-admission, distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install]
