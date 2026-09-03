@@ -61,10 +61,12 @@ Candidates:
    request, then assign a cache-busted preview URL to the supplied iframe-like
    `{src}` target. Concurrent restart rejects; wedge detection stays caller-
    owned.
-4. `onLifecycle` emits `worker-death` only for an unexpected Worker exit, not
-   explicit restart/dispose. The event and the next restart report carry
-   `unflushedWrites`, set when a public `fs.writeFile` was pending at peer end;
-   a settled write reports false. The marker promises no rollback or repair.
+4. Existing `sandbox.runtime.on` remains the sole public lifecycle
+   subscription: an unexpected Worker end emits
+   `{type:'exit',reason:'error'}`; explicit restart emits reset and dispose
+   emits nothing. The next restart report carries `unflushedWrites`, set when
+   a public `fs.writeFile` was pending at peer end; a settled write reports
+   false. No second callback owner is added.
 5. Existing cross-realm preview/SW protocols, OPFS backend, install/run
    admission and Worker terminal settlement remain unchanged. Resident late
    errors surface through the existing Worker death path.

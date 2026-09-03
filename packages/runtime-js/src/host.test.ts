@@ -617,7 +617,10 @@ describe('spawnToolchainRuntime trust boundary', () => {
       port: 5174,
     };
 
-    const started = toolchain.startBin(input);
+    let settled = false;
+    const started = toolchain.startBin(input).finally(() => {
+      settled = true;
+    });
     input.cwd = '/changed';
     input.binPath = '/changed/node_modules/.bin/other';
     input.port = 6000;
@@ -625,6 +628,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
     const worker = admitToolchain(runtime);
     await runtime.toolchainReady;
     await Promise.resolve();
+    expect(settled).toBe(false);
     expect(worker.sent).toEqual([
       {
         type: 'toolchain',
@@ -646,14 +650,28 @@ describe('spawnToolchainRuntime trust boundary', () => {
     } as never);
     await expect(started).resolves.toEqual({ port: 5174 });
 
-    await expect(
-      toolchain.startBin({
-        cwd: '/dev',
-        binPath: '/dev/node_modules/.bin/tool',
-        args: [],
-        port: 0,
-      }),
-    ).rejects.toMatchObject({ name: 'TypeError' });
+    const symbol = Symbol('extra');
+    const invalid = [
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 0 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 65_536 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174.5 },
+      { cwd: '/dev', binPath: '/other/node_modules/.bin/tool', args: [], port: 5174 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: new Array(1), port: 5174 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174, extra: true },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174, [symbol]: true },
+      Object.defineProperty(
+        { binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174 },
+        'cwd',
+        { enumerable: true, get: () => '/dev' },
+      ),
+    ];
+    for (const value of invalid) {
+      await expect(
+        toolchain.startBin(
+          value as { cwd: string; binPath: string; args: readonly string[]; port: number },
+        ),
+      ).rejects.toMatchObject({ name: 'TypeError' });
+    }
     expect(worker.sent).toHaveLength(1);
   });
 

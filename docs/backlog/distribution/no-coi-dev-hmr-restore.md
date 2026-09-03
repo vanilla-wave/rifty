@@ -64,12 +64,13 @@ new Worker restores the resident tool, reloads the iframe and resumes HMR.
    renders marker A; acknowledged `fs.writeFile` renders marker B through HMR
    with the same random bootId and no full reload. → I4
 3. A real Vite plugin infinite loop makes a new public fs request remain
-   pending without a `worker-death` event. Caller-invoked restart terminates
+   pending without a runtime `exit:error` event. Caller-invoked restart terminates
    it, restores exact activation without npm/network, runs `beforeStart`,
    restarts the resident bin, assigns a new iframe URL and resumes one further
    same-bootId HMR update. → I6, scenario
-4. Actual Worker `self.close()` emits exactly one `worker-death`; pending calls
-   reject. Explicit restart/dispose emit none. → I6, ADR-0377
+4. Actual Worker `self.close()` emits exactly one existing runtime
+   `{type:'exit',reason:'error'}` event and pending calls reject. Explicit
+   restart emits reset; dispose emits nothing. → I6, ADR-0377
 5. Restart after a pending public write reports `unflushedWrites:true` on the
    next boot; a restart after every write acknowledgement reports false. No
    tree consistency, rollback or recovery is claimed. → I10, ADR-0377
@@ -93,9 +94,9 @@ new Worker restores the resident tool, reloads the iframe and resumes HMR.
 |---|---|---|
 | `provenance-lie` × resident start | Vite/non-Vite identical requests follow installed bytes | identity-decoy Worker/Chromium matrix → ADR-0377 |
 | `observable-order` × ready/restart | port precedes start result; activation+repair+resident precede iframe assignment | held-step unit + Chromium timeline → I4, I6 |
-| `peer-death` × resident/pending calls | unexpected death emits once and settles; wedge emits none until explicit restart | real Worker close+wedge carrier → I6 |
-| `lost-write` × generation replacement | pending public write sets next-boot marker; acknowledged sibling stays clean | delayed-write host/Chromium pair → I10 |
-| `concurrent` × restart | one host generation owner rejects overlap; no queue/retry/second Worker survives | host unit + Worker-count carrier → ADR-0377 |
+| `false-fallback` × resident/pending calls | unexpected death emits once and settles; wedge emits none until explicit restart | real Worker close+wedge carrier → I6 |
+| `torn-state` × generation replacement | pending public write sets next-boot marker; acknowledged sibling stays clean | delayed-write host/Chromium pair → I10 |
+| `concurrent-same-key` × restart | one host generation owner rejects overlap; no queue/retry/second Worker survives | host unit + Worker-count carrier → ADR-0377 |
 
 ## Out of scope
 
@@ -109,5 +110,6 @@ new Worker restores the resident tool, reloads the iframe and resumes HMR.
 ## Decisions
 
 review: checkpoints rounds:2
+contract-red: round 1 — blocker @ 54ed1f153
 re-cut: 2026-09-04 — compiled the final I4/I6/I10/I8 product slice and removed obsolete prerequisite history — trace: none
 - 2026-09-04 — expected RED band 4–4: public start/preview, real HMR, wedge restart/dirty marker, actual-death/overlap siblings.

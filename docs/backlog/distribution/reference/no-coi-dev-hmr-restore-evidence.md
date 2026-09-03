@@ -34,6 +34,23 @@ pnpm exec vitest run --project unit packages/runtime-js/src/host.test.ts -t "res
 # 1 failed / 28 skipped: toolchain.startBin is not a function
 ```
 
-All failures occur after the public sandbox boots; no import/typecheck/setup
-failure substitutes for the missing behavior. Existing no-COI lane was GREEN
-before these designed REDs.
+All Chromium failures occur after the public sandbox boots; the host unit fails
+on the missing method before readiness because that is its exact subject. No
+import/typecheck/setup failure substitutes for missing behavior. Existing
+no-COI lane was GREEN before these designed REDs.
+
+Post-review RED batch:
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 4 failed / 1 passed in 15.3s
+# exact failures: capability still throwing; restart missing; generic and real startBin missing
+# preservation: existing runtime exit:error + pending settlement passed
+
+pnpm exec vitest run --project unit packages/runtime-js/src/host.test.ts -t "resident-bin input" --reporter=dot
+# 1 failed / 28 skipped: startBin missing
+```
+
+The host RED now also pins immutable input, invalid exact shapes/ports and
+pending-before-result. The Chromium overlap RED counts physical Worker
+constructions and requires one fail-fast rejection.
