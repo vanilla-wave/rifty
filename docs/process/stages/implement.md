@@ -1,6 +1,6 @@
 # IMPLEMENT — RED → GREEN inside the band
 
-Input: a unit with `ready-verdict:`. Fresh worker session; planned work never
+Input: a unit with `ready-verdict:`. Driver session (`DEC-5`); planned work never
 invokes `rifty-fix` (expected RED is not a defect).
 
 1. Expected RED first (the certified tests), then the smallest honest

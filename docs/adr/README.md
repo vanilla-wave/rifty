@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps history) and its load-bearing context grafted into the successor. When only a single *wrong/evolved clause* of an otherwise-active ADR is overtaken, it is corrected in place with a dated note and listed in [Corrections (active)](#corrections-active) — never a silent edit, never a remove of the still-active remainder. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
+ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW ADR citing it — nothing removed, nothing grafted. An ADR whose every decision is overturned is REMOVED (git keeps history) and listed under [Superseded (removed)](#superseded-removed), the successor naming the overturned decisions; when only some decisions (or a single *wrong/evolved clause*) are overtaken, the ADR stays active with a dated note listed in [Corrections (active)](#corrections-active) — never a silent edit, never a remove of the still-active remainder. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
 
 ## Index
 

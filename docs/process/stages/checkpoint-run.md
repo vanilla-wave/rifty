@@ -1,6 +1,6 @@
 # Checkpoint run — runner procedure (both checkpoints)
 
-The runner is a worker session; the reviewer is a fresh `codex exec`. Rules:
+The runner is the driver session; the reviewer is a fresh `codex exec`. Rules:
 `../rules/review.md`, budget/stops: `../rules/stops.md`, output:
 `../artifacts/verdict.md`.
 
@@ -11,11 +11,12 @@ The runner is a worker session; the reviewer is a fresh `codex exec`. Rules:
   PASS @ <sha>)` ledger line reachable from HEAD — for slices landed before
   2026-09-03 the ledger's `Final+GREEN PASS @ <sha>` line — else the branch
   base (`REV-1`, `REV-8`). Name `CHECKPOINT`; ambiguity stops.
-- Refuse a dirty tree. Never poll or read reviewer stdout: the verdict is the
-  `-o` JSON, liveness is the process state; the log is post-mortem only.
-- Run the reviewer and any test battery as background tasks with a completion
-  notification; work meanwhile (next-slice prep, PR text). Idle polling is a
-  defect (`../rules/decisions.md` `DEC-5`).
+- Refuse a dirty tree. Never read reviewer stdout: the verdict is the `-o`
+  JSON, liveness is the process state — a wait has no deadline; the log is
+  post-mortem only.
+- Wait per the harness (`../rules/decisions.md` `DEC-5`): Claude — background
+  task + completion notification; Codex — one empty `write_stdin` per 5 min,
+  nothing between polls (no status message, no `ps`, no log).
 
 ```sh
 RUN=$(mktemp -d -t rifty-review.XXXX)
@@ -24,8 +25,8 @@ codex exec -C "$(git rev-parse --show-toplevel)" --approve-for-me \
   --skip-git-repo-check --output-schema tools/review/review-schema.json -o "$RUN/verdict.json" \
   "Invoke the rifty-review skill for the $CHECKPOINT checkpoint against BASE $BASE. \
 Read docs/process/rules/review.md fully and apply it by rule id: REV-1 scope (BASE is the unit-of-work boundary; certified slices and carriers raise no row), \
-REV-2 authority (a blocker cites I#, a scenario line, a traced unit row, an ADR, a rule id, or baseline; untraced rows and strengthening beyond the clause are concerns), \
-REV-3 severity, REV-4 coverage (one row per TRACED obligation in boundary, with its trace; weak = advisory), REV-5 evidence bar for $CHECKPOINT, REV-10 axes in order. \
+REV-2 authority (a blocker cites I#, a scenario line, a traced unit row, an ADR, baseline, or a REV-2-listed rule; any other rule id, untraced rows and strengthening beyond the clause are concerns), \
+REV-3 severity, REV-4 coverage (one row per obligation traced to I#/scenario/ADR in boundary, with its trace; rule-id-only rows raise none; weak = advisory), REV-5 evidence bar for $CHECKPOINT, REV-10 axes in order. \
 Do not modify tracked files. Single exhaustive pass: partition the diff, spawn parallel read-only subagents, merge and dedupe. Return only schema JSON with file:line citations." \
   </dev/null >"$RUN/log" 2>&1
 node tools/review/blockers.mjs "$RUN/verdict.json"   # missing verdict → tail -n 40 "$RUN/log"

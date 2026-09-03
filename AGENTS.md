@@ -39,7 +39,7 @@ Checklist + subagent budget: `docs/process/rules/decisions.md`. Core:
 - REVERSIBLE behavior-preserving → CHANGELOG line.
 - REVERSIBLE + judgment call → `docs/backlog/<area>/<slug>.md` + `// TODO(backlog: <area>/<slug>)`.
 - IRREVERSIBLE (public API / new dep / contradicts ADR / genuine design choice) → `pnpm adr:new <area> "Title"`.
-- Overturn recorded decision → decision subagent → superseding ADR. Active ADRs immutable; superseded = removed + pointer in `docs/adr/README.md`.
+- Add a decision on a seam an ADR owns → new short ADR citing it; nothing removed, nothing grafted. Overturn a recorded decision → decision subagent → superseding ADR naming the overturned decisions; all overturned = old ADR removed + pointer in `docs/adr/README.md`, some = dated §Corrections note (`DEC-2`).
 - Confirm-first only: publish, spend, delete user data (`DEC-3`). The only user stops in a run: `docs/process/rules/stops.md` `STOP-1`.
 
 ## Goal runs

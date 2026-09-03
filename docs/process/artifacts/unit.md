@@ -11,7 +11,7 @@ gate: `backlog:check`.
 | `## Challenge` | critic | `challenge: <date> — clear \| N problems` (`docs/backlog/README.md` §Challenge) |
 | `## User scenario` | user scope, agent words | required without `epic:`; real software, exact call, result |
 | `## Reference contract` | agent | external oracle only: implementation + exact version, mechanism reused |
-| `## Acceptance` | agent, traced | numbered rows, each `… → I3` / `→ scenario` / `→ ADR-NNNN` / `→ <rule-id>` (`RDY-3`); an approximation must fail |
+| `## Acceptance` | agent, traced | numbered rows, each `… → I3` / `→ scenario` / `→ ADR-NNNN` (`RDY-3`; a rule-id-only trace is a note); an approximation must fail |
 | `## Parity cases` | agent, traced | enumerated oracle behaviors, each a RED target with its artifact (command + output + version) |
 | `## Fault matrix` | agent, traced | infra only: `axis × operation \| honest outcome \| artifact / fault target → trace` (`fault-classes.md`) |
 | `## Out of scope` | agent (user for scope cuts) | named loud throws + compat ❌; never "…" |

@@ -10,7 +10,7 @@ against `tools/review/review-schema.json`; evaluated by
 | `unit_goal_source` | exact contract path + `BASE` used |
 | `axes[]` | the 8 rubric axes in order (`REV-10`), each with `verdict` + `findings[]` |
 | `findings[].severity` | `blocker` \| `concern` \| `nit` (`REV-3`) |
-| `findings[].authority` | mandatory for blockers: `I#`, scenario line, traced row, `ADR-NNNN`, rule id, baseline (`REV-2`) |
+| `findings[].authority` | mandatory for blockers: `I#`, scenario line, traced row, `ADR-NNNN`, baseline, or a `REV-2`-listed rule |
 | `coverage[]` | one row per traced obligation in boundary: `row, source, trace, status pass\|weak\|missing, citation, note` (`REV-4`) |
 | `unit_residuals` / `goal_residuals` | slice blockers / goal continuation |
 | `goal_complete` | true only with both residual sets empty + end-to-end proof |

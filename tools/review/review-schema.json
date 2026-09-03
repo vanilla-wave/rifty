@@ -79,7 +79,7 @@
           },
           "trace": {
             "type": "string",
-            "description": "The obligation's declared trace copied from the contract row (RDY-3): I#, scenario, ADR-NNNN, or a rule id such as REV-7; a public API entry or frozen artifact traces to the clause/ADR introducing it. Several are joined with '+'."
+            "description": "The obligation's declared trace copied from the contract row (RDY-3): I#, scenario, ADR-NNNN (a rule-id-only trace such as REV-7 is a note and raises no row, RDY-3); a public API entry or frozen artifact traces to the clause/ADR introducing it. Several are joined with '+'."
           },
           "status": {
             "type": "string",
@@ -134,7 +134,7 @@
                 },
                 "authority": {
                   "type": "string",
-                  "description": "For blockers: the violated DECLARED authority (REV-2) — an invariant I#, a `## User scenario` line, a traced unit row (e.g. `Acceptance 3 → I3`), an active ADR-NNNN, a rule id (DEC/RDY/REV/STOP/PR), an AGENTS.md rule quoted by heading, or named baseline behavior. A blocker without one is invalid. Empty for concern/nit."
+                  "description": "For blockers: the violated DECLARED authority (REV-2) — an invariant I#, a `## User scenario` line, a traced unit row (e.g. `Acceptance 3 → I3`), an active ADR-NNNN, named baseline behavior, or one of the rules REV-2 lists as blocker-capable (AGENTS.md §Fidelity, REV-7, REV-11, REV-10 axis 3); any other rule id is a concern. A blocker without one is invalid. Empty for concern/nit."
                 }
               },
               "required": ["severity", "location", "summary", "authority"]

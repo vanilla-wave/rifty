@@ -20,7 +20,8 @@ owns — 3 human interventions, 0 decisions about the destination.
 - **e. Destination conflict** — the run needs `goal.md` to change (amend =
   CLOSE + FIT).
 
-Never a stop: push, draft PR, split, re-cut, demotion of untraced rows, band or
+Never a stop: the end of a stage, push, draft PR, split, re-cut, demotion of
+untraced rows, band or
 rounds declaration, rechart, choosing carriers, ordinary review fixes. An agent
 asking "may I split?" has misread this list.
 

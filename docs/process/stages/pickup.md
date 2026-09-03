@@ -1,7 +1,7 @@
 # PICKUP — compile and gate the next slice
 
 Input: a ready goal with a frontier. Output: one ready unit with band, rounds,
-review membership; no implementation started. Fresh worker session.
+review membership; no implementation started. Driver session (`DEC-5`).
 
 0. **Re-chart debt.** Ledger tail shows a landed slice without its `re-chart
    after <slice>` line → run `rechart.md` first.

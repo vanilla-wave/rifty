@@ -2,7 +2,7 @@
 
 Runs after every landed slice (Final+GREEN on the goal branch) or whenever
 facts arrive that touch this goal. The map is a live hypothesis; only
-`goal.md` is frozen. Fresh worker session.
+`goal.md` is frozen. Driver session (`DEC-5`).
 
 1. **Ledger.** One-liners for what the slice learned or decided — gist + link.
    A diagnosis with no carrier gets a `reference/` file now; never a contract

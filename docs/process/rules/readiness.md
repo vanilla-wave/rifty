@@ -44,13 +44,17 @@ never a precondition for starting one.
 ## RDY-3 Trace — obligations come from the destination
 
 Every `## Acceptance` / `## Parity cases` row and every `## Fault matrix` row
-ends with a trace: `→ I3`, `→ scenario`, `→ ADR-0375`, `→ REV-7`, or several.
-The trace names WHY the row exists: an invariant, a `## User scenario` line, an
-ADR, or a rule id. Trace targets are the only declared authorities a review may
-block on (`review.md` `REV-2`).
+ends with a trace: `→ I3`, `→ scenario`, `→ ADR-0375`, or several. The trace
+names WHY the row exists: an invariant, a `## User scenario` line, or an ADR.
+Trace targets are the only declared authorities a review may block on
+(`review.md` `REV-2`).
 
-An untraced row is a carrier note: it raises no coverage row and no blocker.
-Wanting a row to bind = find its trace; none exists = it is not an obligation.
+An untraced row is a carrier note: it raises no coverage row and no blocker. A
+row traced only to a rule id (`→ REV-7`, `→ DEC-2`) is a carrier note too —
+the syntax stays legal for `backlog:check`, but rule compliance is graded as a
+concern (`review.md` `REV-3`), never as coverage; the only rules that block
+are the ones `REV-2` lists. Wanting a row to bind = find its trace; none
+exists = it is not an obligation.
 Machine gate: `backlog:check` requires traces on ready items `created ≥
 2026-09-03`; older ready items get traces at their next re-cut.
 
