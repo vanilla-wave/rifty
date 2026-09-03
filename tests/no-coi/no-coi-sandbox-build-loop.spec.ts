@@ -87,6 +87,14 @@ interface HostSnapshot {
   readonly imageWidth: number;
 }
 
+interface HostPostureObservation {
+  readonly method: string;
+  readonly url: string;
+  readonly secFetchMode: string | null;
+  readonly secFetchSite: string | null;
+  readonly cookie: string | null;
+}
+
 interface DistFile {
   readonly path: string;
   readonly size: number;
@@ -220,6 +228,77 @@ async function renewCrossOriginImage(page: Page): Promise<void> {
     return outcome;
   });
   expect(status).toBe('loaded');
+}
+
+async function assertCrossOriginSubresource(
+  page: Page,
+  baseline: HostSnapshot,
+  phase: string,
+): Promise<void> {
+  const expectedOrigin = `http://127.0.0.1:${resourcePort}`;
+  if (phase === 'before-boot') {
+    const seed = await page.request.get(
+      `${expectedOrigin}/__no-coi-host-resource-seed?probe=${encodeURIComponent(baseline.token)}`,
+    );
+    expect(seed.status()).toBe(204);
+  }
+  const responsePromise = page.waitForResponse(
+    (response) => {
+      const url = new URL(response.url());
+      return (
+        url.origin === expectedOrigin &&
+        url.pathname === '/__no-coi-host-resource.svg' &&
+        url.searchParams.get('probe') === baseline.token &&
+        url.searchParams.get('phase') === phase
+      );
+    },
+    { timeout: 5000 },
+  );
+  const status = await page.evaluate(
+    async ({ nextPhase, probe }) => {
+      const image = document.getElementById('cross-origin-probe') as HTMLImageElement | null;
+      if (image === null) throw new Error('cross-origin probe image is missing');
+      image.dataset.status = 'loading';
+      const loaded = new Promise<string>((resolve) => {
+        image.addEventListener('load', () => resolve('loaded'), { once: true });
+        image.addEventListener('error', () => resolve('error'), { once: true });
+      });
+      const next = new URL(image.src);
+      next.pathname = '/__no-coi-host-resource.svg';
+      next.search = '';
+      next.searchParams.set('probe', probe);
+      next.searchParams.set('phase', nextPhase);
+      next.searchParams.set('nonce', crypto.randomUUID());
+      image.src = next.href;
+      const outcome = await loaded;
+      image.dataset.status = outcome;
+      return outcome;
+    },
+    { nextPhase: phase, probe: baseline.token },
+  );
+  expect(status).toBe('loaded');
+  const response = await responsePromise;
+  expect(response.request().resourceType()).toBe('image');
+  const responseHeaders = await response.allHeaders();
+  expect(responseHeaders['access-control-allow-origin']).toBeUndefined();
+  expect(responseHeaders['cross-origin-resource-policy']).toBeUndefined();
+  expect(responseHeaders['cross-origin-opener-policy']).toBeUndefined();
+  expect(responseHeaders['cross-origin-embedder-policy']).toBeUndefined();
+
+  const receipt = await page.request.get(
+    `${expectedOrigin}/__no-coi-host-resource-receipt?probe=${encodeURIComponent(baseline.token)}&phase=${encodeURIComponent(phase)}`,
+  );
+  expect(receipt.ok()).toBe(true);
+  const observation = (await receipt.json()) as HostPostureObservation | null;
+  expect(observation).toEqual({
+    method: 'GET',
+    url: expect.stringContaining(
+      `/__no-coi-host-resource.svg?probe=${baseline.token}&phase=${phase}`,
+    ),
+    secFetchMode: 'no-cors',
+    secFetchSite: 'same-site',
+    cookie: expect.stringContaining(`rifty_no_coi_sentinel=${baseline.token}`),
+  });
 }
 
 function assertHostCore(actual: HostSnapshot, baseline: HostSnapshot): void {
@@ -2631,6 +2710,7 @@ test('host stays interactive while admitted install and run wait at network boun
   const holdInstall = (route: Route) => resolveInstallRoute(route);
   const holdRun = (route: Route) => resolveRunRoute(route);
   try {
+    await assertCrossOriginSubresource(host, baseline, 'before-boot');
     await createToolchainSandbox(host);
     await seedStalledInstall(host, '/interactive-install');
     await context.route(installPattern, holdInstall, { times: 1 });
@@ -2667,7 +2747,7 @@ test('host stays interactive while admitted install and run wait at network boun
     await setHostPhase(host, 'during-admitted-install');
     assertHostSnapshot(await hostSnapshot(host), baseline);
     expect(await openerRoundTrip(host)).toBe(true);
-    await renewCrossOriginImage(host);
+    await assertCrossOriginSubresource(host, baseline, 'during-admitted-install');
     await heldInstall.continue();
     await host.evaluate(async () => {
       const pending = (
@@ -2743,7 +2823,7 @@ test('host stays interactive while admitted install and run wait at network boun
     await setHostPhase(host, 'during-admitted-build');
     assertHostSnapshot(await hostSnapshot(host), baseline);
     expect(await openerRoundTrip(host)).toBe(true);
-    await renewCrossOriginImage(host);
+    await assertCrossOriginSubresource(host, baseline, 'during-admitted-build');
     await heldRun.continue();
     const run = await host.evaluate(async () => {
       const pending = (
@@ -2760,7 +2840,7 @@ test('host stays interactive while admitted install and run wait at network boun
     await setHostPhase(host, 'after-admitted-operations');
     assertHostSnapshot(await hostSnapshot(host), baseline);
     expect(await openerRoundTrip(host)).toBe(true);
-    await renewCrossOriginImage(host);
+    await assertCrossOriginSubresource(host, baseline, 'after-admitted-operations');
   } finally {
     await context.unroute(installPattern, holdInstall);
     await context.unroute(runPattern, holdRun);

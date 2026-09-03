@@ -6,7 +6,7 @@ created: 2026-09-02
 epic: no-coi-sandbox-tier
 why: the headerless host, opener and cross-origin image stay live, but the image carrier does not prove request credentials or absence of CORS/CORP substitution
 user_story: As an existing app, I want sandbox install and build to preserve my exact host document, opener and ordinary credentialed cross-origin subresources
-sources: [docs/backlog/distribution/reference/sw-coi-shim-probe.md, docs/backlog/distribution/reference/no-coi-sandbox-build-loop-evidence.md]
+sources: [docs/backlog/distribution/reference/sw-coi-shim-probe.md, docs/backlog/distribution/reference/no-coi-sandbox-build-loop-evidence.md, docs/backlog/distribution/reference/no-coi-host-posture-preservation-evidence.md]
 code: [apps/playground/no-coi-harness.html, apps/playground/vite.no-coi.config.ts, playwright.no-coi.config.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts]
 ---
 

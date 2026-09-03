@@ -32,14 +32,14 @@ export default defineConfig({
       },
     },
     {
-      command: 'pnpm dev:no-coi',
-      cwd: './apps/playground',
+      command: 'pnpm exec node tests/no-coi/fixtures/host-posture-resource-server.mjs',
+      cwd: '.',
       url: `http://127.0.0.1:${resourcePort}/favicon.svg`,
       reuseExistingServer: false,
       timeout: 90_000,
       env: {
         ...(process.env as Record<string, string>),
-        RIFTY_NO_COI_PORT: String(resourcePort),
+        RIFTY_NO_COI_RESOURCE_PORT: String(resourcePort),
       },
     },
     {
