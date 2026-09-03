@@ -4,7 +4,6 @@ status: draft
 title: no-COI public sandbox exact-manifest package install proof
 created: 2026-09-02
 epic: no-coi-sandbox-tier
-blocked_by: [distribution/no-coi-toolchain-operation-lifecycle]
 why: the public no-COI install path is green, but Final review did not execute the frozen npm bounds, required-failure and same-key-concurrency evidence that supports the real Vite 7 dependency-set install
 user_story: As an agent on a headerless page, I want one exact project manifest installed through the ordinary npm authority, with the installed tree and inherited failure bounds proven rather than inferred from a later successful build
 sources: [ADR-0371, ADR-0376, docs/backlog/distribution/reference/no-coi-build-spike-record.md, distribution/no-coi-sandbox-build-loop]

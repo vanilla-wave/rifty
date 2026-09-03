@@ -4,7 +4,7 @@ status: draft
 title: no-COI dev+HMR — generic resident tool lifecycle + restart/death/unflushed marker
 created: 2026-08-28
 epic: no-coi-sandbox-tier
-blocked_by: [distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install, distribution/no-coi-sandbox-build-loop, distribution/no-coi-host-posture-preservation]
+blocked_by: [distribution/no-coi-sandbox-package-install, distribution/no-coi-sandbox-build-loop, distribution/no-coi-host-posture-preservation]
 why: HMR proof showed a resident shared-memory-free dev tool can run no-COI, but the public sandbox has no package-generic resident-tool lifecycle, restart/death surface or unflushed-write boot marker; a wedge stays alive-but-blocked and preview recovery requires explicit iframe reload
 user_story: As an agent platform, I want a resident installed dev tool with HMR preview plus an invokable restart when my timeout says the realm wedged, but today the sandbox exposes only build-to-completion and dispose, no death event or pending-write marker
 sources: [docs/backlog/distribution/reference/no-coi-hmr-spike-record.md]
