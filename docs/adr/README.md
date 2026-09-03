@@ -526,7 +526,7 @@ Removed, no successor (resolve to git history):
 - `docs/backlog/playground/terminal-node-command.md` — completed backlog item, removed on close; the record is ADR-0155 + the code (ADR-0130/0155 still cite it)
 - `docs/backlog/runtime-js/in-process-harness-vitest-ipc-noise.md` — completed backlog item, removed on close; physical-child runtime smokes and their lifecycle tests are the record (ADR-0130 still cites it)
 - `docs/backlog/npm-client/shadow-cache-ledger-independent-completion-order.md` — completed backlog item, removed on close; forced alternate completion plus exact-multiset shadow cache ledgers are the record
-- `docs/backlog/kernel/sab-real-contender-admission-timeout.md` — completed backlog item, removed on close; explicit contender/reply phase proofs and owner-bounded Worker cleanup are the record
+- `docs/backlog/kernel/sab-ring-protocol-violation-flake.md` — completed backlog item, removed on close; explicit contender/reply phase proofs and owner-bounded Worker cleanup are the record
 - `docs/backlog/runtime-js/execsync-node-entry-loader.md` — completed backlog item, removed on close; `execSync`'s child now routes through the node-entry module loader (shebang + relative imports), the record is ADR-0137/0143/0150 + the code (ADR-0137/0143/0146 + `docs/backlog/shell/d-owner-worker-milestone.md` still cite it)
 - `docs/backlog/kernel/worker-per-process-residuals.md` — completed backlog item, removed on close; ADR-0230 + runtime stdin parity are the record (ADR-0155/0157 still cite it)
 - `docs/backlog/shell/pty-live-resize.md` — completed backlog item, removed on close; ADR-0225 + terminal/worker resize tests are the record
