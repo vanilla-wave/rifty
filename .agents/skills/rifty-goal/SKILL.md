@@ -4,13 +4,16 @@ description: Drive one rifty goal (epic) through its lifecycle — fit an outcom
 ---
 
 Owns transitions of ONE goal directory `docs/backlog/epics/<slug>/`. Canon:
-`docs/process/README.md` (layers, roles, stages, stops). Plan, don't build:
-every mode ends where implementation begins. Review, the user interview
-(`rifty-refine`), unplanned defects (`rifty-fix`), and intake
+`docs/process/README.md` (layers, roles, stages, stops). Review, the user
+interview (`rifty-refine`), unplanned defects (`rifty-fix`), and intake
 (`rifty-to-backlog`) are other actors — hand off, never inline their work.
 
-Detect the mode from state; run exactly one mode per invocation, in a fresh
-session per mode (`DEC-5`):
+Detect the mode from state. A whole-goal hand-off runs the README §Stages loop
+— PICKUP → Contract+RED → IMPLEMENT → Final+GREEN → RECHART until the map is
+empty, then CLOSE — in this session (`DEC-5`), stopping only on a `STOP-1`
+item; the end of a stage is never the end of a turn. Claude sessions may hand
+the loop to `.claude/workflows/goal-run.js`. A single-mode ask ("fit X",
+"re-chart", "close") runs that mode only:
 
 | State | Mode → procedure |
 |---|---|

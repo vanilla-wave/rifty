@@ -17,13 +17,17 @@ get ordinary treatment — fixed in place, never a blocker, never a round.
 ## REV-2 Authority — a blocker cites what it violates
 
 Admissible authorities: an invariant `I#`; a `## User scenario` line; a traced
-unit row (`Acceptance 3 → I3`); an active `ADR-NNNN`; a rule id; an
-`AGENTS.md` rule quoted by heading (§Fidelity, §Architecture); named baseline
-behavior. The `authority` field is mandatory (`blockers.mjs` rejects
-a blocker without one). An untraced row, a strengthening beyond the clause as
-written (stricter assertion, deeper mutant, extra hardening, exactness the
-trace target does not state), or taste = advisory (`REV-3`). Issuing it as a
-blocker is reviewer error, symmetric to a miss.
+unit row (`Acceptance 3 → I3`); an active `ADR-NNNN`; named baseline
+behavior; and only these rules, which name the blocker themselves:
+`AGENTS.md` §Fidelity (fake implementation, silent gap), `REV-7` (machinery
+the contract is deliverable without), `REV-11` (a checkpoint without a fresh
+reviewer), `REV-10` axis 3 (a changed ready `goal.md`, an edited ledger line).
+The `authority` field is mandatory (`blockers.mjs` rejects a blocker without
+one). Any other rule id (`DEC-2` graft, `RDY-4` size, `REV-8` line forms, …),
+an untraced row, a strengthening beyond the clause as written (stricter
+assertion, deeper mutant, extra hardening, exactness the trace target does not
+state), or taste = advisory (`REV-3`). Issuing it as a blocker is reviewer
+error, symmetric to a miss.
 
 ## REV-3 Severity
 
@@ -39,9 +43,10 @@ the trace target itself states the exactness (I3 "byte-identical" does;
 
 ## REV-4 Coverage
 
-One row per traced obligation inside the `REV-1` boundary: Fault-matrix line,
-Acceptance/Parity clause, public API entry the diff adds or changes, frozen
-oracle/golden. Each row carries its `trace`. `pass` = a committed carrier
+One row per obligation traced to `I#`, scenario, or ADR inside the `REV-1`
+boundary: Fault-matrix line, Acceptance/Parity clause, public API entry the
+diff adds or changes, frozen oracle/golden. Each row carries its `trace`;
+rule-id-only rows raise none (`readiness.md` `RDY-3`). `pass` = a committed carrier
 discriminates it; `weak` = a carrier exists but a named plausible wrong
 implementation passes while violating the clause AS DECLARED — advisory,
 report-only; `missing` = no carrier — blocks. At Contract+RED a `weak` row
@@ -97,7 +102,9 @@ Three records, nothing else:
   commit. The round history is the file's git log.
 - **Final+GREEN pass** — recorded where the slice lands: the ledger's
   `re-chart after <slice> (final-green PASS @ <sha>): …` line
-  (`../artifacts/ledger.md`). Nothing is written to the unit.
+  (`../artifacts/ledger.md`). Nothing is written to the unit. A `review:
+  ordinary` unit lands the same way with `(ordinary PASS @ <sha>)` — same
+  binding, same `BASE` role.
 
 Binding: a PASS at `<sha>` holds while
 `git diff --quiet <sha> HEAD -- . ':!docs/backlog' ':!CHANGELOG.md'` is empty —

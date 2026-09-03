@@ -147,7 +147,7 @@ async function checkpoint(name, child, rounds) {
 
 const rechart = (after) =>
   agent(
-    `Run RECHART per ${STAGES}/rechart.md for goal ${goal}, date ${date}${after ? ` after slice ${after}` : ''}: ledger one-liners, graduate phrasable fog into draft children (rifty-to-backlog shape incl. '## Challenge' via a fresh critic subagent), invalidate/reorder, append the 're-chart after <slice> (final-green PASS @ <sha>)' line with the reviewed commit of the PASS (REV-8). Commit.`,
+    `Run RECHART per ${STAGES}/rechart.md for goal ${goal}, date ${date}${after ? ` after slice ${after}` : ''}: ledger one-liners, graduate phrasable fog into draft children (rifty-to-backlog shape incl. '## Challenge' via a fresh critic subagent), invalidate/reorder, append the 're-chart after <slice> (final-green PASS @ <sha>)' line ('ordinary PASS @ <sha>' for a review: ordinary unit) with the reviewed commit of the PASS (REV-8). Commit.`,
     { label: `rechart${after ? `:${after}` : ''}`, phase: 'Slices' },
   )
 
@@ -184,7 +184,7 @@ while (!st.mapEmpty) {
   let rounds = st.childRounds ?? DEFAULT_ROUNDS['Final+GREEN']
   if (!st.pickedChildReady) {
     const p = await agent(
-      `Run PICKUP per ${STAGES}/pickup.md for goal ${goal}, child ${child}, date ${date}: compile draft→ready (RDY-2), trace every Acceptance/Parity/Fault row and enforce size (RDY-3, RDY-4 — split now if over), decide membership and rounds (RDY-8, RDY-9: 'review: checkpoints rounds:<n>' or 'review: ordinary' in the unit doc), append the ledger band+rounds row, commit. Return ordinaryReview=true for docs/CI/process/tooling/harness units and rounds as declared. A remaining user-observable fork (STOP-1a): return it in 'fork' and change nothing further — never interview. Do NOT run the checkpoint, do NOT implement.`,
+      `Run PICKUP per ${STAGES}/pickup.md for goal ${goal}, child ${child}, date ${date}: compile draft→ready (RDY-2), trace every Acceptance/Parity/Fault row and enforce size (RDY-3, RDY-4 — split now if over), decide membership and rounds (RDY-8, RDY-9: 'review: checkpoints rounds:<n>' or 'review: ordinary' in the unit doc), append the ledger band+rounds row, commit. Return ordinaryReview=true for docs/CI/process/tooling/harness units and for proof-only units (no product delta expected — RDY-8, 'review: ordinary — proof-only'), and rounds as declared. A remaining user-observable fork (STOP-1a): return it in 'fork' and change nothing further — never interview. Do NOT run the checkpoint, do NOT implement.`,
       { schema: PICKUP, label: `pickup:${child}`, phase: 'Slices' },
     )
     if (p?.fork) return stop('STOP-1a', child, `pickup found an observable-scope fork — manual rifty-refine: ${p.fork}`)
@@ -204,7 +204,7 @@ while (!st.mapEmpty) {
   )
   if (ordinary) {
     const r = await agent(
-      `Goal ${goal}, unit ${child} is 'review: ordinary' (RDY-8): run ONE rifty-review pass on this tree per ${RULES}/review.md, fix every blocker in place, then re-run pnpm pr:check. No checkpoint, no lineage. Return pass=true when the gate is green and no blocker is left.`,
+      `Goal ${goal}, unit ${child} is 'review: ordinary' (RDY-8): for a proof-only unit first verify the product diff from BASE is empty (RDY-8) — a product change reclassifies it to checkpoints: return pass=false naming that as the blocker; then run ONE rifty-review pass on this tree per ${RULES}/review.md, fix every blocker in place, then re-run pnpm pr:check. No checkpoint, no lineage. Return pass=true when the gate is green and no blocker is left.`,
       { schema: VERDICT, label: `${child}:ordinary-review`, phase: 'Slices' },
     )
     if (!r?.pass) return { stop: `ordinary review left blockers on ${child}`, kind: 'precondition', child, blockers: r?.blockers }

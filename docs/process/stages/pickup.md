@@ -1,7 +1,7 @@
 # PICKUP — compile and gate the next slice
 
 Input: a ready goal with a frontier. Output: one ready unit with band, rounds,
-review membership; no implementation started. Fresh worker session.
+review membership; no implementation started. Driver session (`DEC-5`).
 
 0. **Re-chart debt.** Ledger tail shows a landed slice without its `re-chart
    after <slice>` line → run `rechart.md` first.
@@ -17,7 +17,8 @@ review membership; no implementation started. Fresh worker session.
    traced; ≤ 15 traced rows, ≤ 200 lines, one-sentence `title`. Over → split
    now, before any review; successors reference each other.
 4. **Membership + budget** (`RDY-8`, `RDY-9`): record `review: checkpoints
-   rounds:<n>` or `review: ordinary` in the unit; append the ledger row
+   rounds:<n>` or `review: ordinary` (`— proof-only` when no product delta is
+   expected, whatever the subject) in the unit; append the ledger row
    `<date> — <slice> band <lo>–<hi> rounds <n>`, band sized from the
    expected-RED batch. Far above any prior estimate = too big: split.
 5. **Contract+RED** — `checkpoints` units only — via `contract-red.md`

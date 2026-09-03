@@ -1,6 +1,6 @@
 # IMPLEMENT — RED → GREEN inside the band
 
-Input: a unit with `ready-verdict:`. Fresh worker session; planned work never
+Input: a unit with `ready-verdict:`. Driver session (`DEC-5`); planned work never
 invokes `rifty-fix` (expected RED is not a defect).
 
 1. Expected RED first (the certified tests), then the smallest honest
@@ -15,7 +15,9 @@ invokes `rifty-fix` (expected RED is not a defect).
    outside → `rifty-to-backlog`. Never narrow the goal or detach required work.
 3. Append ledger lines for decisions and observations; run-state stays out of
    the contract (`RDY-4`).
-4. `pnpm pr:check` green; commit (short one-line subject); push; tree clean.
+4. `pnpm pr:check` green — under Codex escalated from the first attempt
+   (`../traps.md` codex-sandbox-listen-eperm); commit (short one-line subject); push; tree
+   clean.
    Open the goal's draft PR if absent (`../rules/pr.md` `PR-3`); update its
    body (goal, carried slices with band + rounds rows).
 

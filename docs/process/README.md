@@ -13,20 +13,20 @@ rule has exactly one home; other files link, never restate.
 | Journal (append-only) | `ledger.md`; one status line per checkpoint in the unit | agent writes | ledger grows only; status line overwritten per round (`REV-8`) |
 
 An obligation is a contract row traced to the destination (`→ I3`), the user
-scenario, an ADR, or a rule id (`RDY-3`). Untraced rows are notes: no coverage
-row, no blocker (`REV-2`). Size: one intent, one session (`RDY-4`).
+scenario, or an ADR (`RDY-3`). Untraced and rule-id-only rows are notes: no
+coverage row, no blocker (`REV-2`). Size: one intent, one session (`RDY-4`).
 
-## Roles — one per session
+## Roles
 
 | Role | Session | Edits | Never |
 |---|---|---|---|
 | user | interactive | `goal.md` via FIT/refine; stop resolutions | — |
-| orchestrator | long-lived observer | nothing tracked while a run is live | implement, review, poll faster than 20 min |
-| worker | fresh per stage | path + journal | its own checkpoint |
+| driver (orchestrator + worker + runner) | the hand-off session; one fresh session per stage only where a harness driver exists (`goal-run.js`) | path + journal | its own checkpoint verdict; narrating a wait (`DEC-5`) |
 | reviewer | fresh, read-only per checkpoint | `verdict.json` | tracked files |
 | critic / adjudicator | fresh, read-only | `challenge:` line, `adjudication.json` | fix |
 
-A decision leaves a session only through the journal (`DEC-5`).
+Fresh context only where it is the evidence: reviewer, critic (`REV-11`). A
+decision leaves a session only through the journal (`DEC-5`).
 
 ## Stages
 
@@ -45,8 +45,9 @@ Checkpoint mechanics (runner, passes, adjudication, lineage):
 hand-off (never for single items, fixes, or process work) and loops PICKUP →
 Contract+RED → IMPLEMENT → Final+GREEN → RECHART until the map is empty, then
 CLOSE. Claude sessions may drive it via `.claude/workflows/goal-run.js`; the
-script owns order and bookkeeping only, its prompts point here. Entry points
-outside the loop: `rifty-refine` (user input), `rifty-to-backlog` (agent
+script owns order and bookkeeping only, its prompts point here; any other
+session drives the loop itself (`rifty-goal`) and never ends a turn between
+stages. Entry points outside the loop: `rifty-refine` (user input), `rifty-to-backlog` (agent
 intake), `rifty-fix` (unplanned defect).
 
 ## Stops

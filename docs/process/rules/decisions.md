@@ -25,9 +25,14 @@ naming what they overturn.
 
 ## DEC-2 Reconsidering a recorded decision
 
-Overturning an active ADR/dependency gets a decision subagent and a superseding
-ADR. Remove the old ADR, preserve load-bearing context in the successor, add
-the old→new pointer to `docs/adr/README.md`.
+Adding a decision on a seam an ADR already owns is not reconsidering: a new
+short ADR citing the prior one — nothing removed, nothing grafted. Overturning
+an active ADR/dependency gets a decision subagent and a superseding ADR that
+names the overturned decisions by number. All overturned → remove the old ADR,
+add the old→new pointer to `docs/adr/README.md`; some → the old ADR stays
+active with a dated note under §Corrections (active) pointing at the
+successor. What was not overturned was not moved: graft completeness is never
+a review finding.
 
 ## DEC-3 Confirm-first
 
@@ -49,8 +54,22 @@ merge permission persists once given. The closed list of run stops is
 
 ## DEC-5 Session hygiene
 
-One role per session (`../README.md` §Roles). A decision leaves a session only
-through the journal (ledger line, verdict line, `## Decisions` line) — written
-before it can fall out of context. Long-running children (reviewer, test
-battery) run as background tasks with a completion notification; the waiting
-session works or sleeps ≥ 20 min, never polls per minute.
+Fresh isolated context is required only where the fresh context is the
+evidence: reviewer and critic/adjudicator (`review.md` `REV-11`) — always a
+fresh `codex exec` or subagent, read-only. Orchestrator, worker and runner are
+one driver: on a hand-off, the interactive session itself; one fresh session
+per stage only where a harness driver exists (`.claude/workflows/goal-run.js`).
+A decision leaves a session only through the journal (ledger line, verdict
+line, `## Decisions` line) — written before it can fall out of context; the
+journal, not a session boundary, is what survives compaction.
+
+Waiting on a child (reviewer, test battery) is harness-bound:
+
+- Claude: background task + completion notification; never poll.
+- Codex: `exec_command` is clamped at 30 s and an empty `write_stdin` at 300 s
+  (`MAX_YIELD_TIME_MS`, `DEFAULT_MAX_BACKGROUND_TERMINAL_TIMEOUT_MS`), and
+  unified-exec children die when the turn ends — so the turn stays open and
+  waits with one `write_stdin({chars:"", yield_time_ms:300000})` per 5 min,
+  nothing between polls: no status message, no log read, no `ps`.
+
+A wait has no deadline: liveness is the process state, never elapsed time.

@@ -14,6 +14,7 @@ Line forms (`<date>` = `YYYY-MM-DD`):
 - <date> — <slice> re-cut: <what> — trace: none | fork: <what> — trace: I#
 - <date> — <slice> stop: STOP-1<letter> — <question asked>
 - <date> — re-chart after <slice> (final-green PASS @ <sha>): <n> graduated / <m> invalidated / no changes
+- <date> — re-chart after <slice> (ordinary PASS @ <sha>): …      review: ordinary units (RDY-8)
 - <date> — dropped: <reason>                              (CLOSE walk only)
 ```
 
