@@ -14,7 +14,9 @@ facts arrive that touch this goal. The map is a live hypothesis; only
    delete freely; a ready item re-cuts per `RDY-5` (traced-row weakening →
    `STOP-1a`); mis-scoped work → one `## Out of scope` line. Classify every
    discovery: required → reverse-linked draft child; outside →
-   `rifty-to-backlog`.
+   `rifty-to-backlog`. A review finding is not a discovery: its `REV-12`
+   disposition is final — `rejected:` / `note:` lines never graduate; a NOTE
+   becomes scope only via `rifty-refine`.
 4. **Reorder** seed order if dependencies changed.
 5. **Record** `re-chart after <slice> (final-green PASS @ <sha>): <n>
    graduated / <m> invalidated / no changes` (`ordinary PASS @ <sha>` for a

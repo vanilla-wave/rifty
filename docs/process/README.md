@@ -23,7 +23,7 @@ coverage row, no blocker (`REV-2`). Size: one intent, one session (`RDY-4`).
 | user | interactive | `goal.md` via FIT/refine; stop resolutions | — |
 | driver (orchestrator + worker + runner) | the hand-off session; one fresh session per stage only where a harness driver exists (`goal-run.js`) | path + journal | its own checkpoint verdict; narrating a wait (`DEC-5`) |
 | reviewer | fresh, read-only per checkpoint | `verdict.json` | tracked files |
-| critic / adjudicator | fresh, read-only | `challenge:` line, `adjudication.json` | fix |
+| critic / adjudicator | fresh, read-only | `challenge:` line, `adjudication.json`, `rejected:` / `note:` lines (`REV-12`) | fix; mint a unit from a finding |
 
 Fresh context only where it is the evidence: reviewer, critic (`REV-11`). A
 decision leaves a session only through the journal (`DEC-5`).
@@ -63,7 +63,7 @@ escalation · slice cap · destination conflict. Everything else never asks
 |---|---|---|
 | `DEC` | `rules/decisions.md` | reversibility, reconsidering, confirm-first, subagents, session hygiene |
 | `RDY` | `rules/readiness.md` | draft → ready, trace, size, re-cut ownership, membership, budget |
-| `REV` | `rules/review.md` | scope, authority, severity, coverage, evidence bar, lineage, rubric |
+| `REV` | `rules/review.md` | scope, authority, severity, coverage, evidence bar, lineage, rubric, reception |
 | `STOP` | `rules/stops.md` | closed stop list, budget, stall, re-cut, escalation, stop report |
 | `PR` | `rules/pr.md` | unit of delivery, goal-run PR, referees |
 | — | `rules/fault-classes.md` | fault taxonomy, boundary failure models, class-kill, seam |

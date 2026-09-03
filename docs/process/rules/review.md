@@ -34,7 +34,7 @@ error, symmetric to a miss.
 | severity | meaning | effect |
 |---|---|---|
 | `blocker` | violates a cited authority, or a traced obligation has no carrier | re-cut; spends a round |
-| `concern` | advisory: weak evidence, deeper mutant, hardening, premise doubt, taste | report-only; batched to backlog or fixed at the agent's choice; never spends a round |
+| `concern` | advisory: weak evidence, deeper mutant, hardening, premise doubt, taste | NOTE (`REV-12`): report-only, fixed in place at the agent's choice; never spends a round |
 | `nit` | style | report-only |
 
 Gates are calibrated, not maximal: "prove more exactly" is a concern unless
@@ -148,3 +148,33 @@ One fresh isolated reviewer per checkpoint — raw evidence only, never the
 implementer's diagnosis; the implementer's own pass never counts. An inline
 review in a shared context (`.claude/commands/rifty-review-inline.md`) is a
 look, not a checkpoint: no attempt, no merge authority.
+
+## REV-12 Reception — a finding is dispositioned, never inherited
+
+Every finding of every verdict gets exactly one disposition BEFORE any fix,
+one ledger line each (`../artifacts/ledger.md`). A fresh read-only critic
+rules where a blocker would spend a round or force a re-cut — the checkpoints
+(`../stages/checkpoint-run.md` §One round 3); on a `review: ordinary` unit the
+driver dispositions inline, quoting the clause as written.
+
+| disposition | when | effect |
+|---|---|---|
+| `FIX` | HOLDS: the cited clause AS WRITTEN states the property, carrier absent | fixed in this slice; spends the round |
+| `REJECT` | STRETCH / FALSE: clause broader than the demand, carrier exists, citation misread, "prove more exactly" (`REV-3`) | `rejected: <finding> — <clause as written>`; never re-raised, never backlog |
+| `NOTE` | concern, nit, `weak` row | `note: <finding>`; report-only; the agent may still fix it in place |
+
+Verify before dispositioning (grafted from obra/superpowers
+`receiving-code-review`): restate the demand, read the cited clause and the
+carrier, check the codebase — never "you're right", never implement first.
+Cannot verify → say what is missing; the finding stays a NOTE.
+
+Route to the owner (Spec Kit `analyze`): requirement gap → a contract row at
+PICKUP, `STOP-1a` if it widens observable scope; design gap → ADR; carrier
+gap → the RED. A finding never becomes a unit, a fog line or a split seed on
+agent authority: a NOTE graduates only through `rifty-refine` — the user
+owns scope (`readiness.md` `RDY-6`). A product defect the reviewer saw
+outside the unit's boundary is a discovery, not a finding → `rifty-to-backlog`.
+
+Why (2026-09-02/03 `no-coi-sandbox-tier`): a 15-blocker Final was split into
+four "proof HOLD" children; 8 h and three proof-only slices later, product
+lines changed: 0. Findings had become the plan.
