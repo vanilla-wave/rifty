@@ -8,8 +8,9 @@ The runner is a worker session; the reviewer is a fresh `codex exec`. Rules:
 
 - With a PR: `gh pr view <n> --json body,headRefName,baseRefName`; raw body =
   the unit's claim. `BASE` = the `<sha>` of the last `re-chart after … (final-green
-  PASS @ <sha>)` ledger line reachable from HEAD, else the branch base
-  (`REV-1`, `REV-8`). Name `CHECKPOINT`; ambiguity stops.
+  PASS @ <sha>)` ledger line reachable from HEAD — for slices landed before
+  2026-09-03 the ledger's `Final+GREEN PASS @ <sha>` line — else the branch
+  base (`REV-1`, `REV-8`). Name `CHECKPOINT`; ambiguity stops.
 - Refuse a dirty tree. Never poll or read reviewer stdout: the verdict is the
   `-o` JSON, liveness is the process state; the log is post-mortem only.
 - Run the reviewer and any test battery as background tasks with a completion

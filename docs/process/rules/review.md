@@ -103,9 +103,12 @@ Binding: a PASS at `<sha>` holds while
 `git diff --quiet <sha> HEAD -- . ':!docs/backlog' ':!CHANGELOG.md'` is empty —
 bookkeeping commits never break it, any product/test change after it does;
 merge requires it against the last PASS. `BASE` of the next slice = the `<sha>`
-of the last such rechart line reachable from HEAD, else the branch base. A
-blocker iterates on the SAME branch. A split successor names its predecessor
-in its `re-cut:` line (`RDY-5`); nothing is copied.
+of the last such rechart line reachable from HEAD, else the branch base.
+Slices landed before 2026-09-03 recorded their PASS as a ledger
+`Final+GREEN PASS @ <sha>` line and a unit `final-green:` line: read those as
+the same record — never fall back to the branch base while such a line
+exists. A blocker iterates on the SAME branch. A split successor names its
+predecessor in its `re-cut:` line (`RDY-5`); nothing is copied.
 
 ## REV-9 Closure
 
