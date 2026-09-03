@@ -145,6 +145,7 @@ The same seeded bytes run unchanged under local Node 24/npm.
 
 ## Decisions
 
+ready-verdict: 2026-09-03 — Contract+RED @ 8527a285c
 contract-red: 2026-09-03 — blocker @ 9ec90d54b
 
 - `review: checkpoints` — parity, network, worker concurrency, and lifecycle
