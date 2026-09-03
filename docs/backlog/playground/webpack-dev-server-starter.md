@@ -66,29 +66,27 @@ The same seeded bytes run unchanged under local Node 24/npm.
 - The visible seed is ordinary webpack 5 + webpack-cli 5 +
   webpack-dev-server 5 + css/style loaders. `/package.json` owns exactly
   `scripts.dev = "webpack serve"`; the CommonJS webpack config owns
-  `publicPath: "auto"` and the preferred port.
+  `publicPath: "auto"` and the preferred port. → ADR-0349, ADR-0355
 - The public Playground plan adds only `kind: "npm-dev-server"`. It exposes no
   webpack field, command, bin, entry path, port, host, or readiness regex.
-  Workbench validates the exact manifest and runs root-pinned `npm run dev`.
+  Workbench validates the exact manifest and runs root-pinned `npm run dev`;
+  a hidden bare-Node+WS fixture proves the path has no webpack branch.
+  → ADR-0349
 - Preview readiness comes from the first owner/PTY-correlated routed HTTP
   candidate. Only physical child exit owns stopped state; a failed HTTP proof
-  leaves the live run stoppable.
+  leaves the live run stoppable. → ADR-0349
 - Local development and emitted-production Chromium journeys cold-install the
-  real graph, reach LIVE/HTTP 200, complete stock no-navigation HMR, then
-  reload/restart over persisted edited source.
+  real graph, reach LIVE/HTTP 200, independently update JS and CSS through stock
+  no-navigation HMR, then reload/restart over persisted edits. → scenario
 - A CI-active HTTPS journey at the reserved non-local hostname proves the
   visible exact-host allow-list, truthful browser Origin, HTTP 200, and stock
   HMR. Wildcards, `allowedHosts: "all"`, and Host/Origin rewrites fail the
-  contract.
-- A hidden deep-link-only `node server.mjs` fixture uses the identical
-  zero-field plan and proves LIVE, HTTP, WebSocket update, and no webpack
-  dependency/branch. It is test evidence, not a gallery tile.
+  contract. → ADR-0355
 - Webpack's reached Node surfaces retain their separate parity proofs:
   ArrayBuffer-backed Buffer aliasing, callable legacy stream constructors,
   `vm.createContext` name/code-generation policy, routed static eval imports,
   request-socket EventEmitter methods, and monotonic SAB reply deadlines.
-- `pnpm pr:check`, browser-unit, dev/prod/hosted e2e, and packed-consumer gates
-  pass on the committed merge candidate.
+  → scenario
 
 ## Reference contract
 
@@ -102,30 +100,27 @@ The same seeded bytes run unchanged under local Node 24/npm.
 
 - Exact seeded tree under local Node 24 and rifty: `npm install` resolves the
   five declared tools; `npm run dev` serves generated HTML/JS/CSS; JS+CSS edits
-  trigger a second successful compilation and visible update.
-- `pnpm -s test:parity buffer/from-backing-store` — raw ArrayBuffer/SAB/WASM
-  inputs preserve Node aliasing, offsets, bounds, and resize/growth behavior.
-- `pnpm -s test:parity stream/callable` — Readable, Writable, Duplex,
-  Transform, and PassThrough preserve call/construct, prototype, re-entry, and
-  option initialization behavior.
+  trigger a second successful compilation and visible update. → scenario
+- `pnpm -s test:parity buffer/from-backing-store` and
+  `pnpm -s test:parity stream/callable` preserve Node backing-store aliasing,
+  bounds/growth, and all five streams' call/construct, prototype, re-entry, and
+  option behavior. → ADR-0350, ADR-0353
 - `pnpm -s test:parity vm/create-context-webpack` and
-  `pnpm -s test:parity modules/function-constructor-import` — webpack-reached
-  VM and static eval-import behavior matches Node; unsafe forms stay loud.
-- `pnpm -s test:parity http/server-request-socket` — request sockets expose the
-  EventEmitter surface middleware observes.
+  `pnpm -s test:parity modules/function-constructor-import` preserve
+  webpack-reached VM/static eval-import behavior; unsafe forms stay loud.
+  `pnpm -s test:parity http/server-request-socket` preserves the request-socket
+  EventEmitter surface middleware observes. → scenario
 
 ## Fault matrix
 
 | Axis | Boundary | Honest outcome / proof |
 |---|---|---|
-| frozen-assumption | hosted browser | non-local HTTPS Host/Origin completes stock HMR; localhost-only proof cannot close acceptance |
-| provenance-lie | plan/manifest/network | exact manifest owns command; exact page hostname is rendered; bridge preserves browser Origin and target Host |
-| corrupt-input | plan/preview/SAB | malformed manifest/identity/hostname rejects; reply state, never an early wake, authorizes consume |
-| observable-order | worker/HTTP/SAB | listener+URL precede init; primary QuickJS HTTP error survives cleanup; native timeout remains terminal |
-| unbounded-read | preview/SAB | preview proof and repeated early wakes share finite monotonic deadlines |
-| sibling-drift | runtime twins | CJS/ESM/eval, five stream constructors, browser/programmatic Origin, sync/async ring waits share owning contracts |
-| poisoned-cache | QuickJS preload | rejected preload is removed and a later boot retries |
-| torn-state | project lifecycle | exact bytes/command survive reload; HMR keeps frame identity; physical exit alone owns stopped |
+| frozen-assumption | hosted browser | non-local HTTPS Host/Origin completes stock HMR; localhost-only proof cannot close acceptance → ADR-0355 |
+| provenance-lie / corrupt-input | plan/manifest/network/SAB | exact manifest owns command; exact Host/Origin survive; malformed identity/hostname rejects; reply state authorizes consume → ADR-0331, ADR-0349, ADR-0354, ADR-0355 |
+| observable-order / poisoned-cache | worker/QuickJS/SAB | listener+URL precede init; HTTP cleanup preserves primary failure; rejected preload retries; native timeout stays terminal → ADR-0331, ADR-0351, ADR-0352 |
+| unbounded-read | preview/SAB | preview proof and repeated early wakes share finite monotonic deadlines → ADR-0331, ADR-0349 |
+| sibling-drift | runtime twins | CJS/ESM/eval, five streams, browser/programmatic Origin, and sync/async waits share owners → REV-7 |
+| torn-state | project lifecycle | exact bytes/command survive reload; HMR keeps frame identity; physical exit alone owns stopped → scenario |
 
 ## Out of scope
 
@@ -146,17 +141,11 @@ The same seeded bytes run unchanged under local Node 24/npm.
 ## Decisions
 
 ready-verdict: 2026-09-03 — Contract+RED @ 76e669240
-contract-red: 2026-09-03 — blocker @ 75802657a
-final-green: 2026-09-03 — pass @ f068554e6
+review: checkpoints rounds:2
+contract-red: round 1 — blocker @ 75802657a
+final-green: 2026-09-03 — pass @ f068554e6 (legacy pre-RDY-3 record)
+re-cut: 2026-09-03 — grouped 21 legacy rows into 15 traced rows after concurrent RDY-3/RDY-4 merge — trace: none
 
-- `review: checkpoints` — parity, network, worker concurrency, and lifecycle
-  surfaces require Contract+RED and Final+GREEN.
-- ADR-0349 owns the minimal zero-field npm-dev-server plan; ADR-0355 owns the
-  exact deployed-host policy; ADR-0354 forbids Host/Origin rewriting.
-- Challenge answer: hidden bare Node is the genericity control, not a cheaper
-  substitute for the separately promised real-webpack compatibility journey.
-  The item claims no adoption percentage and stays bounded to the existing
-  preset-deglue scenario.
-- Process repair 2026-09-03: the implementation predates this unit document.
-  Contract+RED therefore must execute its declared REDs against `origin/main`,
-  not mistake the already-implemented branch for a valid RED baseline.
+- ADR-0349 owns the zero-field plan; ADR-0355 owns exact-host policy; ADR-0354 forbids Host/Origin rewriting.
+- Challenge answer: hidden bare Node proves genericity, not real-webpack compatibility.
+- Process repair 2026-09-03: implementation predates this unit document.
