@@ -122,3 +122,4 @@
 - 2026-09-03 — distribution/no-coi-sandbox-build-loop re-cut: fresh-main RDY-8 reclassifies zero-product carrier delivery to `review: ordinary — proof-only`; prior rounds declaration is superseded, band 3–4 mutant list unchanged — trace: none.
 - 2026-09-03 — fresh-main DEC-2 restores ADR-0375 as active and makes ADR-0376 additive lifecycle authority; no behavior/product change.
 - 2026-09-03 — distribution/no-coi-sandbox-build-loop proof-only IMPLEMENT GREEN: product sources unchanged; focused no-COI Chromium 4/4, typecheck and `pr:check` PASS 24/24 (`test:run` 301.2s after one isolated timeout-file rerun, parity 78.9s); ADR-0375 active and ADR-0376 additive.
+- 2026-09-03 — requested rebase onto `5a0aa5b29` remaps reviewed lifecycle `a7e2470f9`→`4330d50c9`, package-install `1ce2ab930`→`a019347f6`, and build proof tree `370befdf5`→`a8a0052db`; current ordinary-review BASE is `a019347f6`.
