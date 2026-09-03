@@ -147,6 +147,7 @@ The same seeded bytes run unchanged under local Node 24/npm.
 
 ready-verdict: 2026-09-03 — Contract+RED @ 8527a285c
 contract-red: 2026-09-03 — blocker @ 9ec90d54b
+final-green: 2026-09-03 — pass @ 3be009a81
 
 - `review: checkpoints` — parity, network, worker concurrency, and lifecycle
   surfaces require Contract+RED and Final+GREEN.
