@@ -4,7 +4,6 @@ status: draft
 title: no-COI dev+HMR — generic resident tool lifecycle + restart/death/unflushed marker
 created: 2026-08-28
 epic: no-coi-sandbox-tier
-blocked_by: [distribution/no-coi-host-posture-preservation]
 why: HMR proof showed a resident shared-memory-free dev tool can run no-COI, but the public sandbox has no package-generic resident-tool lifecycle, restart/death surface or unflushed-write boot marker; a wedge stays alive-but-blocked and preview recovery requires explicit iframe reload
 user_story: As an agent platform, I want a resident installed dev tool with HMR preview plus an invokable restart when my timeout says the realm wedged, but today the sandbox exposes only build-to-completion and dispose, no death event or pending-write marker
 sources: [docs/backlog/distribution/reference/no-coi-hmr-spike-record.md]
@@ -24,9 +23,9 @@ proven in the no-COI lane. Vite 7 supplies only I4 proof bytes/HMR behavior; no 
 runtime, control-plane, package or distribution authority may depend on its identity,
 version, path, callback, type or lifecycle.
 Explicit reload policy is user-decided (epic Decisions — auto-reconnect declined). Open
-question feeding this pickup is closed by goal I10: marker only. Explicit `blocked_by`
-links keep this child behind all five re-cut build prerequisites; full I8 remains open
-until their proof plus this child's I4/I6/I10 proof certify together.
+question feeding this pickup is closed by goal I10: marker only. All re-cut
+prerequisites are now certified; full I8 remains open until this child's
+I4/I6/I10 proof certifies with them.
 
 User scope, 2026-09-01: goal tier is `works`. Required abnormal behavior is
 only a named actual-worker-death event, an explicit restore primitive and a

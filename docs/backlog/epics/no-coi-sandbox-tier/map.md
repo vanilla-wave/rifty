@@ -4,12 +4,9 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-host-posture-preservation` — **I9** — exact host,
-   opener and no-CORS/no-CORP subresource posture across the loop; blocked by
-   all prior.
-2. `distribution/no-coi-dev-hmr-restore` — **I4/I6/I10 + final I8** — generic
-   resident dev/HMR proof, worker-death/restart and unflushed marker; explicitly
-   blocked by the open prerequisite.
+1. `distribution/no-coi-dev-hmr-restore` — **I4/I6/I10 + final I8** — generic
+   resident dev/HMR proof, worker-death/restart and unflushed marker; all
+   prerequisites certified.
 
 ## Open questions
 
