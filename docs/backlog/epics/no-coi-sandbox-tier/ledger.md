@@ -116,3 +116,5 @@
 - 2026-09-03 — distribution/no-coi-sandbox-package-install band 0–0 rounds 2; existing public Chromium install and 13-case npm bounds/failure/concurrency carriers selected exactly, no product/test change.
 - 2026-09-03 — distribution/no-coi-sandbox-package-install Contract+RED PASS @ `5a26cfa2a`: 0 blockers / 5 concerns; coverage 10 pass / 0 weak / 0 missing; implementation not started.
 - 2026-09-03 — distribution/no-coi-sandbox-package-install IMPLEMENT GREEN: product/tests unchanged; public Chromium 1/1, npm fault selection 13/13, standalone Vitest 9713/9713 and final `pr:check` PASS 24/24 (`test:run` 249.6s, parity 78.8s); two prior full-run exits did not reproduce with a named failure, so no speculative fix.
+- 2026-09-03 — I2 package install proof is exact at the public Worker VFS plus inherited npm bounds/failure/concurrency authority; focused Chromium 1/1, npm 13/13, product/tests unchanged.
+- 2026-09-03 — re-chart after distribution/no-coi-sandbox-package-install (final-green PASS @ 1ce2ab930): 0 graduated / 4 invalidated (completed child deleted; three package-install prerequisite edges removed); frontier build-loop → host-posture → dev-HMR.

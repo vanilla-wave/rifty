@@ -4,16 +4,14 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-sandbox-package-install` — **I2** — real exact-manifest
-   install plus inherited npm bounds/fault evidence; blocked by all prior.
-2. `distribution/no-coi-sandbox-build-loop` — **I3** — generic installed-bin
+1. `distribution/no-coi-sandbox-build-loop` — **I3** — generic installed-bin
    build bytes, exact output and identity-decoy proofs; blocked by all prior.
-3. `distribution/no-coi-host-posture-preservation` — **I9** — exact host,
+2. `distribution/no-coi-host-posture-preservation` — **I9** — exact host,
    opener and no-CORS/no-CORP subresource posture across the loop; blocked by
    all prior.
-4. `distribution/no-coi-dev-hmr-restore` — **I4/I6/I10 + final I8** — generic
+3. `distribution/no-coi-dev-hmr-restore` — **I4/I6/I10 + final I8** — generic
    resident dev/HMR proof, worker-death/restart and unflushed marker; explicitly
-   blocked by all three open prerequisites.
+   blocked by both open prerequisites.
 
 ## Open questions
 
