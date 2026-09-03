@@ -21,7 +21,7 @@ code: []
 
 challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
-<!-- A draft stops here. Ready rules: README + decision-workflow §Backlog readiness. -->
+<!-- A draft stops here. Ready rules: README + docs/process/rules/readiness.md (RDY-2..4). -->
 
 ## User scenario
 
@@ -29,7 +29,10 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
 ## Acceptance
 
-<Testable done-definition + proof path. An approximation must fail.>
+<!-- Each row ends with its trace: → I3 | → scenario | → ADR-NNNN | → REV-7 (RDY-3).
+     Untraced rows are notes, never obligations. ≤ 15 traced rows per unit (RDY-4). -->
+
+1. <Testable done-definition + proof path; an approximation must fail> → I#
 
 ## Reference contract
 
@@ -40,12 +43,15 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
 ## Parity cases
 
-<Exact reference behaviors to pin — each a failing-test-first target, run as the same scenario against oracle and rifty. Include observable identity/reflection/lifecycle/error order. Enumerate them; never "plus parity cases".>
+1. <Exact reference behavior — a failing-test-first target, same scenario against oracle and rifty; include observable identity/reflection/lifecycle/error order. Artifact: command + output + version. Never "plus parity cases"> → I#
 
 ## Fault matrix
 
-<!-- Keep for infra. Reachable axis × operation → honest outcome + fault target.
+<!-- Keep for infra. Reachable axis × operation → honest outcome + fault target → trace.
      Shared mutable state names every writer and one serializing owner. -->
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
 
 ## Out of scope
 
@@ -53,10 +59,12 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
 ## Decisions
 
-<!-- At pickup the first line is the Contract+RED verdict, copied verbatim:
-     ready-verdict: <date> — Contract+RED @ <sha>   (decision-workflow §Backlog readiness)
-     Each blocker verdict before it is recorded too — the attempt count is only
-     real if written down (fault-classes.md §Review convergence, Lineage):
-     contract-red: <date> — blocker @ <sha> -->
+<!-- One-line records only (docs/process/artifacts/unit.md). At pickup the first
+     line is the Contract+RED verdict, copied verbatim:
+     ready-verdict: <date> — Contract+RED @ <sha>
+     review: checkpoints rounds:<n> | ordinary          (RDY-8, RDY-9)
+     final-green: round <n>/<budget> — blocker @ <sha>   (status line, overwritten per round, REV-8)
+     re-cut: <date> — <what> — trace: none               (RDY-5)
+     Evidence blocks go to reference/<slug>-evidence.md, never here (RDY-4). -->
 
 <Every fork resolved, or linked to its ADR. No open "Decide X".>

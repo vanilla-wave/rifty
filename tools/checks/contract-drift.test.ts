@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { closeItemDependencies, evaluate, statusOf } from './contract-drift.mjs';
+import { closeItemDependencies, evaluate, statusOf, userTracedRows } from './contract-drift.mjs';
 
 const item = (status: string) =>
   `---\narea: playground\nstatus: ${status}\ntitle: T\n---\n\nbody\n`;
@@ -59,18 +59,71 @@ describe('evaluate', () => {
   const src = { status: 'M', path: 'packages/vfs/src/index.ts' };
   const contract = { status: 'M', path: 'docs/backlog/playground/x.md' };
 
-  it('flags an aggregate ready-contract rewrite beside source changes', () => {
+  it('flags an aggregate ready-contract rewrite beside source changes without a re-cut line', () => {
     const violations = evaluate([src, contract], read(item('ready'), `${item('ready')} rewritten`));
     expect(violations).toHaveLength(1);
-    expect(violations[0]).toContain('content must match merge-base');
+    expect(violations[0]).toContain('without a re-cut line');
     expect(violations[0]).toContain('docs/backlog/playground/x.md');
+  });
+
+  const traced = (rows: string, decisions = '') => `---
+area: playground
+status: ready
+title: T
+---
+
+## Acceptance
+
+${rows}
+
+## Decisions
+
+${verdict}${decisions}`;
+  const recut = 're-cut: 2026-09-02 — dropped exactness demand — trace: none\n';
+  const fork = 're-cut: 2026-09-02 — fork: byte-identical dropped — trace: I1\n';
+
+  it('allows a re-cut of untraced or rule-traced rows when a re-cut line is recorded (RDY-5)', () => {
+    const base = traced('1. exact bytes → I1\n2. stream order pinned → REV-7\n3. hardening note');
+    const head = traced('1. exact bytes → I1', recut);
+    expect(evaluate([src, contract], read(base, head))).toHaveLength(0);
+    expect(evaluate([src, contract], read(base, traced('1. exact bytes → I1')))).toHaveLength(1);
+  });
+
+  it('requires fork: in the re-cut line when a user-traced row changes', () => {
+    const base = traced('1. exact bytes → I1\n   wrapped continuation\n2. opener works → scenario');
+    const dropped = traced('2. opener works → scenario', recut);
+    const violations = evaluate([src, contract], read(base, dropped));
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain('without a recorded fork');
+    expect(violations[0]).toContain('exact bytes');
+    expect(
+      evaluate([src, contract], read(base, traced('2. opener works → scenario', fork))),
+    ).toHaveLength(0);
+    const reworded = traced('1. roughly equal bytes → I1\n2. opener works → scenario', recut);
+    expect(evaluate([src, contract], read(base, reworded))).toHaveLength(1);
+  });
+
+  it('treats lineage lines as journal, never a rewrite', () => {
+    const base = traced('1. exact bytes → I1');
+    const head = traced(
+      '1. exact bytes → I1',
+      'review: checkpoints rounds:2\ncontract-red: 2026-09-02 — blocker @ abc\nfinal-green: 2026-09-02 — blocker @ def\n',
+    );
+    expect(evaluate([src, contract], read(base, head))).toHaveLength(0);
+  });
+
+  it('joins wrapped rows and keeps only user-traced ones', () => {
+    const text = traced(
+      '1. exact bytes\n   → I1\n2. order → REV-7\n\n## Fault matrix\n\n| a | b | c | trace |\n|---|---|---|---|\n| x | y | z | → scenario |',
+    );
+    expect(userTracedRows(text)).toEqual(['1. exact bytes → I1', '| x | y | z | → scenario |']);
   });
 
   it('flags an in-place ready→in-progress edit as a rewrite', () => {
     expect(evaluate([src, contract], read(item('ready'), item('in-progress')))).toHaveLength(1);
   });
 
-  it('allows head equal to merge-base modulo ready-verdict lines', () => {
+  it('allows head equal to merge-base modulo lineage lines', () => {
     expect(evaluate([src, contract], read(item('ready'), item('ready')))).toHaveLength(0);
     expect(evaluate([src, contract], read(item('ready'), item('ready') + verdict))).toHaveLength(0);
     expect(evaluate([src, contract], read(item('ready') + verdict, item('ready')))).toHaveLength(0);
@@ -130,6 +183,18 @@ describe('evaluate', () => {
     expect(
       evaluate([src, epicEntry], read(epic('draft'), epic('draft', 'Rewritten.'))),
     ).toHaveLength(0);
+  });
+
+  it('guards frozen fields of a dir-format goal.md beside source; map/ledger stay free', () => {
+    const goal = { status: 'M', path: 'docs/backlog/epics/e/goal.md' };
+    const frozen = evaluate([src, goal], read(epic('ready'), epic('ready', 'Rewritten.')));
+    expect(frozen).toHaveLength(1);
+    expect(frozen[0]).toBe('docs/backlog/epics/e/goal.md: frozen Outcome changed beside source');
+    expect(
+      evaluate([src, goal], read(epic('ready'), epic('ready', 'Ship it.', 'closed.'))),
+    ).toHaveLength(0);
+    const map = { status: 'M', path: 'docs/backlog/epics/e/map.md' };
+    expect(evaluate([src, map], read('## Items\n\n1. a\n', '## Items\n\n1. b\n'))).toHaveLength(0);
   });
 
   it('skips README/TEMPLATE', () => {

@@ -6,9 +6,9 @@
   journal). Template: `epics/TEMPLATE.md`. Legacy single-file epics remain
   valid until re-typed or closed; no new ones.
 
-Routing: `AGENTS.md` + `docs/process/decision-workflow.md`; goal lifecycle
-(FIT / PICKUP / RE-CHART / CLOSE): `rifty-goal` skill. Delete completed work;
-there is no done status.
+Routing: `AGENTS.md` + `docs/process/README.md`; artifact shapes and
+owners: `docs/process/artifacts/`; goal lifecycle (FIT / PICKUP / RECHART /
+CLOSE): `docs/process/stages/`. Delete completed work; there is no done status.
 
 ## Shape
 
@@ -46,18 +46,22 @@ A ready item needs:
   admission/policy surface names the organic request form it admits — a pinned
   fixture alone is not reach;
 - `## Parity cases`: enumerated oracle behaviors and RED targets;
+- every Acceptance/Parity/Fault row traced (`→ I#` / `→ scenario` /
+  `→ ADR-NNNN` / `→ <rule-id>`; `docs/process/rules/readiness.md` `RDY-3`);
+  ≤ 15 traced rows, ≤ 200 lines (`RDY-4`; gated by `backlog:check` for items
+  `created ≥ 2026-09-03`), one-sentence `title`;
 - `## Out of scope`: named loud throws + compat ❌;
-- `## Decisions`: every fork resolved or ADR-linked;
+- `## Decisions`: every fork resolved or ADR-linked; one-line records only
+  (`docs/process/artifacts/unit.md`);
 - once picked up: `ready-verdict: <date> — Contract+RED @ <sha>` from the
-  unit's checkpoint, recorded before implementation
-  (`decision-workflow.md` §Backlog readiness).
+  unit's checkpoint, recorded before implementation (`RDY-2`).
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
 semantic copies require an ADR + differential suite.
 
 Infra work also needs `## Fault matrix`: each reachable axis × operation →
 fallback, visible degradation, or loud throw; each row is a fault-test target.
-Use `docs/process/fault-classes.md`. Template: `TEMPLATE.md`.
+Use `docs/process/rules/fault-classes.md`. Template: `TEMPLATE.md`.
 
 ## Challenge
 
@@ -91,14 +95,14 @@ runnable.
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
 `ledger.md` opens empty. Seeded children stay `draft` — a ready goal hands off
 with draft children; each compiles to `ready` at its own PICKUP, never at FIT
-(`decision-workflow.md` §Backlog readiness, WHEN).
+(`docs/process/rules/readiness.md` `RDY-1`).
 
 Fog is owner-typed. A user-owned observable-scope question (what the value
 requires, what must NOT change, whose scenario counts) is asked at FIT while
 the user is there — a probe existing for its technical half is not a reason to
-park it (`rifty-goal` FIT 3). It reaches fog only when it is not answerable
+park it (`docs/process/stages/fit.md` 3). It reaches fog only when it is not answerable
 yet, tagged `owner: user` + why; PICKUP routes such a line to `rifty-refine`,
-never to a probe. Every fog line: `<question> — owner: user|agent — <what
+never to a probe (`docs/process/artifacts/map.md`). Every fog line: `<question> — owner: user|agent — <what
 settles it>`. A rejected rival route is recorded checkable in goal `##
 Decisions`: `rejected route: <route> — violates <I#|Outcome clause>` — the
 clause a later agent cites instead of re-deriving the comparison. Seed order proves the minimal pattern first (the
@@ -106,7 +110,7 @@ null/install-only case of a shared mechanism lands before machinery for the
 maximal case); a child whose contract depends on an open question is not
 seeded. A mechanism shared by two children needs an existing owner, a first
 substrate item, or an ADR explaining separation. Procedure, incl.
-probe-or-fog and the completion report: `rifty-goal` FIT.
+probe-or-fog and the completion report: `docs/process/stages/fit.md`.
 
 ## Report
 
@@ -122,40 +126,19 @@ ledger — no separate report per graduation.
 ## Goal run
 
 An explicit whole-ready-goal hand-off starts a run; the goal directory is the
-run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
-
-- One draft PR per goal by default — opened at the goal's first Contract+RED,
-  carrying every slice; splitting into several PRs is allowed, never required.
-  The PR body names the goal and each carried slice's ledger band row
-  (convention, review-checked — `rifty-review` axis 5).
-- Review-owned rules: scope outside `ready` items: 0; ready-contract edits
-  after pickup: 0 (items: `check:contract-drift`); new coordination
-  mechanisms: 0 unless a named substrate item owns one; hand-written insertions
-  far above the declared band, or an expected-RED batch far above it → the unit
-  is too big: re-cut/split before implementation.
-- A ready `goal.md` never changes once a run has started — amend = close +
-  re-fit. Before the first PICKUP, report-driven user pushback re-fits it in
-  place (no run state to protect yet). `ledger.md` only
-  grows. `map.md` is live: RE-CHART graduates fog into drafts, re-cuts or
-  deletes unpicked items, reorders; weakening a `ready` item stays a demotion
-  with its fork recorded (§Backlog readiness 5). Every landed slice gets a
-  `re-chart after <slice>` ledger line; the next PICKUP and CLOSE refuse while
-  it is missing.
-- A slice lands when its Final+GREEN passes on the goal branch; merge is the
-  goal PR's, at the end by default. Slices land serially — the next PICKUP
-  waits for the prior slice's Final+GREEN; with split PRs, never stack one on
-  an unmerged other.
-- Close only with no linked children, empty unit/goal residuals, end-to-end
-  proof of `## Invariants`, and the ledger + fog walk exporting every ledger
-  and `## Open questions` line to a durable carrier or an explicit drop
-  (`rifty-goal` CLOSE); then delete the directory whole.
+run id. Stages, roles, stops, PR rules: `docs/process/README.md`. Store-level
+facts that hold inside a run: a ready `goal.md` never changes (amend = CLOSE +
+FIT); `ledger.md` only grows; `map.md` and unit contracts are re-cut by the
+agent (`RDY-5`); every landed slice gets a `re-chart after <slice>` ledger
+line; scope outside `ready` items: 0; new coordination mechanisms: 0 unless a
+named substrate item owns one.
 
 ## Gates
 
 | Owner | Enforces |
 |---|---|
-| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence |
-| `check:contract-drift` | ready item contracts vs merge-base beside source |
+| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence; trace + size on ready items `created ≥ 2026-09-03` |
+| `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract change carries `re-cut:`, a user-traced row change carries `fork:`; referees land separately |
 | Final review | frozen goal, append-only ledger, run membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
 
 Machine gates prove only the listed local facts; review owns everything else —
