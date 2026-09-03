@@ -1,12 +1,12 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: no-COI toolchain install/run operation lifecycle
 created: 2026-09-02
 epic: no-coi-sandbox-tier
-why: install and run-bin mutate one Worker realm, but Final review did not prove zero dispatch for rejected overlap, run-bin peer-end settlement, immutable post-validation inputs, ordered streams before one terminal result, or the required current mechanism sweep and forcing constraint
-user_story: As an agent issuing install and installed-bin operations, I want each admitted call to settle once with ordered output while overlap fails before effects, so shared realm state cannot race or leave a promise hanging
-sources: [ADR-0375, docs/process/fault-classes.md, distribution/no-coi-sandbox-build-loop]
+why: install and run-bin share one Worker realm, but Final review did not prove zero dispatch for rejected overlap, run-bin peer-end settlement, immutable post-validation inputs, ordered streams before one terminal result, or the required mechanism sweep
+user_story: As an agent issuing install and installed-bin operations, I want each admitted call to settle once with ordered output while another install/run fails before effects, so those operations cannot race or leave a promise hanging
+sources: [ADR-0376, docs/process/fault-classes.md, docs/backlog/distribution/reference/no-coi-toolchain-operation-lifecycle-evidence.md, distribution/no-coi-sandbox-build-loop]
 code: [packages/runtime-js/src/host.ts, packages/runtime-js/src/protocol.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/runtime-js/src/host.test.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts]
 ---
 
@@ -18,19 +18,17 @@ lineage. This child owns one necessary shared mechanism invariant supporting
 I2 and I3. It does not own install correctness or build parity.
 
 The forcing constraint is one Worker realm's mutable process cwd/argv/exitCode,
-VFS tree and activated runtime bindings. The Worker is the sole operation
-admission/terminal owner. The host validates, snapshots and correlates request
-ids; it is not a second scheduler. MessagePort FIFO carries existing
-stdout/stderr and the terminal result, so no sequence/ack/replay layer is
-needed.
+VFS tree and activated runtime bindings. Its binary slot is the sole outer
+admission owner for install/run frames. The host validates, snapshots and
+correlates requests and owns public-promise settlement on result or signalled
+peer end; it never schedules operations. MessagePort FIFO carries existing
+stdout/stderr and the result, so no sequence/ack/replay layer is needed.
 
-Current Class-kill inventory: Workbench/PTY active-run gates own distinct
-project/session scopes; npm semaphores/in-flight maps own network acquisition;
-the runtime host's `pendingRequests` owns correlation and peer fan-out; queued
-package/stamp authorities deliberately conflict with this contract's no-queue
-choice. The existing Worker-local binary slot is the smallest mechanism. The
-active ADR-0375 carries behavior but omitted this current sweep/forcing record;
-its immutable authority must be superseded at PICKUP before product work.
+ADR-0376 records the Class-kill inventory and rejects host admission,
+project/package FIFOs and per-operation Workers. Workbench/PTY gates own other
+project/session scopes; npm semaphores/in-flight maps own acquisition;
+`pendingRequests` owns correlation/peer settlement. The existing Worker slot
+is the smallest mechanism.
 
 It owns five current HOLDS: overlap zero-dispatch; run-bin peer settlement;
 post-validation mutation snapshot; exact cross-stream/terminal order; and the
@@ -56,13 +54,11 @@ Disposition:
   cannot service any request; goal I6 deliberately leaves detection to the
   agent timeout and explicit restart. This child makes no wedge-settlement
   claim.
-- P2 answered: the Worker is the sole mutating-realm boundary and its existing
-  slot protects every delivered protocol operation regardless of host-client
-  version. Replacing it with a host gate would leave the Worker invariant to a
-  trusted client; keeping both would add a second admission owner. Neither is
-  cheaper than retaining the existing slot. “Settled” below means the Worker
-  posts its one terminal result after drain/flush; MessagePort order prevents a
-  later delivered operation from overtaking it.
+- P2 answered: the Worker slot protects install/run frames regardless of host
+  client. Replacing it with a host gate leaves raw delivered frames to a
+  trusted client; keeping both adds a second admission owner. “Published”
+  below means the Worker posts its result after drain/flush; the host separately
+  settles the correlated public promise.
 - P3 answered: `clean-close` means the Worker's intercepted explicit
   `self.close()` terminal frame, not an unobservable silent port disappearance.
   Dispose is host-known and crash is the Worker error event. Silent peer loss
@@ -84,9 +80,8 @@ operation instead of hanging or claiming rollback.
 
 ## Reference contract
 
-- ADR-0375 Decisions 1 and 3 retain immediate busy rejection and existing
-  Worker terminal settlement; active authority lacks the required Class-kill
-  evidence and must be superseded, not edited.
+- ADR-0376 retains the generic ADR-0375 authority and now fixes install/run
+  admission, host settlement, forcing constraint and Class-kill sweep.
 - `docs/process/fault-classes.md` Class-kill and Seam contract require one owner
   and one fault proof across admission/close. The MessagePort model gives
   ordered exactly-once delivery only while both peers live; peer death loses
@@ -99,58 +94,57 @@ operation instead of hanging or claiming rollback.
 
 ## Acceptance
 
-1. Before implementation, a superseding decision record inventories the
-   current repo-wide class, states the shared-realm forcing constraint and
-   keeps one Worker-local binary admission slot. Host correlation remains
-   correlation only. No new lock, FIFO, queue, map, scheduler or state owner is
-   introduced.
+1. ADR-0376 inventories the repo-wide class, states the install/run
+   shared-realm forcing constraint and keeps one Worker-local binary admission
+   slot. Host validation/correlation/peer settlement remain separate. No new
+   lock, FIFO, queue, map, scheduler or state owner is introduced. → REV-7
 2. Across install→install, install→run, run→install and run→run, a first
    operation held at a yielding real boundary is admitted and the second rejects
    `SandboxToolchainBusyError`. An operation-boundary sentinel proves the
    rejected request never calls install/run dispatch, performs no VFS/process/
    binding/network effect and emits no output; the original later settles.
+   → I2, I3
 3. Install and run inputs are exact-validated and copied once before the first
    await/post/effect. Mutating the caller object or args after invocation cannot
    alter the posted request. Missing/extra/symbol/accessor/sparse fields reject
-   with zero post and zero mutation.
+   with zero post and zero mutation. → I2, I3
 4. The full matrix `install|runBin × dispose|crash|explicit self.close`
    settles the admitted promise exactly once with the existing typed peer
    failure. No signalled case hangs or reports success; because death cannot
-   prove non-application, no rollback/retry claim is made.
+   prove non-application, no rollback/retry claim is made. → scenario
 5. A package-generic installed bin emits interleaved stdout/stderr markers and
    exits. Public runtime events preserve their exact cross-stream order; one
    correlated terminal result follows all output and only then resolves
-   `runBin`. Drain/flush precede that result. No duplicate terminal frame or
-   post-terminal output is admitted.
-6. Slot release happens after the terminal result post on success/failure. A
-   later Worker-delivered operation cannot overtake that terminal frame;
-   rejection never queues or retries itself.
+   `runBin`. Drain/flush precede that result. No post-terminal output is
+   observed; rejection never queues or retries itself.
+   → scenario
 
 ## Parity cases
 
 1. Four-way overlap matrix with a held real boundary plus dispatch/effect
    sentinels distinguishes immediate rejection from hidden execution or FIFO.
+   Artifact: lifecycle evidence §Overlap. → I2, I3
 2. Caller mutation matrix covers install cwd/registry and run cwd/binPath/args
    while readiness/post is held; the wire snapshot remains the first validated
-   values.
+   values. Artifact: lifecycle evidence §Snapshot. → I2, I3
 3. Peer-end matrix covers both operations and three observable terminal modes
    (dispose, error event, explicit `self.close()` frame), exact one rejection
-   and no settlement timeout.
+   and no settlement timeout. Artifact: lifecycle evidence §Peer end. → scenario
 4. Ordered-output bin emits `stdout A → stderr B → stdout C`, then exits;
    Worker-port frames and public runtime events retain that order before one
-   toolchain result.
-5. Mechanism sweep compares the Worker slot with PTY/project gates, npm
-   acquisition dedupe and queued package/stamp authorities, recording why none
-   can own or replace this boundary.
+   toolchain result. Artifact: lifecycle evidence §Order. → scenario
+5. Mechanism sweep compares Worker, host, PTY/project, package/stamp, npm, Git,
+   TypeScript and OPFS mechanisms. Artifact: lifecycle evidence §Class sweep.
+   → REV-7
 
 ## Fault matrix
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
-| `concurrent-same-key` × install/run admission | one Worker-owned slot; rejected overlap has zero operation dispatch/effects and no queue | Acceptance/Parity 1-2/1,5; four-way held-boundary matrix |
-| `corrupt-input` + `observable-order` × request validation | exact snapshot before await/post/effect; caller mutation cannot alter it | Acceptance/Parity 3/2; readiness-held mutation matrix |
-| Worker peer death × admitted install/run | every promise rejects once; no hang, retry, rollback or not-applied claim | Acceptance/Parity 4/3; six-case seam fault matrix |
-| `observable-order` + `lossy-aggregate` × run output/terminal | exact cross-stream order, then one result after drain/flush | Acceptance/Parity 5-6/4; raw frame timeline |
+| `concurrent-same-key` × install/run admission | one Worker-owned slot; rejected overlap has zero dispatch/effects and no queue | four-way held-boundary matrix → I2, I3 |
+| `corrupt-input` + `observable-order` × request validation | exact snapshot before await/post/effect | readiness-held mutation matrix → I2, I3 |
+| Worker peer death × admitted install/run | each promise rejects once; no hang/retry/rollback claim | six-case seam fault matrix → scenario |
+| `observable-order` + `lossy-aggregate` × run output/result | exact cross-stream order, then one result after drain/flush | raw frame timeline → scenario |
 
 ## Out of scope
 
@@ -165,39 +159,11 @@ operation instead of hanging or claiming rollback.
 - No promise that an alive-but-blocked Worker can process BusyError or terminal
   frames; agent timeout and the dev-HMR restart child own that works-tier case.
 - No new public method, protocol field, correlation map or process/VFS owner.
+- No claim that public `runtime.eval`/`fs` is serialized with toolchain calls.
 
 ## Decisions
 
-review: checkpoints — concurrency and MessagePort lifecycle seam.
-
-predecessor: `distribution/no-coi-sandbox-build-loop`
-
-- Owns Final HOLDS: overlap non-dispatch, run-bin peer settlement, immutable
-  validated inputs, exact stream/terminal order and ADR-0375 mechanism sweep.
-- Dependency direction: public admission first; both I2 install and I3 build
-  depend on this substrate; host posture and dev-HMR remain downstream.
-- User override, 2026-09-02: the five lifecycle HOLDS remain required as one
-  shared I2/I3 substrate despite the critic's impact-sizing objection.
-- `contract-red: 2026-09-01 — blocker @ 326f5b70e`
-- `ready-verdict: 2026-09-01 — Contract+RED @ f0066d4d2`
-- `final-green: 2026-09-01 — blocker @ 07d370651`
-- `final-green: 2026-09-01 — blocker @ bcff49986`
-- `final-green: 2026-09-01 — blocker @ 541c4cd6c`
-- `contract-red: 2026-09-01 — blocker @ 2f1063608`
-- `ready-verdict: 2026-09-01 — Contract+RED @ ead27000f`
-- `final-green: 2026-09-01 — blocker @ a909a38a9`
-- `final-green: 2026-09-01 — blocker @ 6f86d2e7f`
-- Bounded-cause split successor certified Final+GREEN at `40ded4758`.
-- `ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d`
-- `final-green: 2026-09-02 — blocker @ 01465c6ae`
-- Descriptor split successor certified Final+GREEN at `dce86792d`.
-- `contract-red: 2026-09-02 — blocker @ 41d63c086`
-- `ready-verdict: 2026-09-02 — Contract+RED @ 15dbca164`
-- `final-green: 2026-09-02 — blocker @ c2b13d0f3`
-- Count lineage: `07d370651`/`bcff49986`/`541c4cd6c` counts are unavailable;
-  counted Final rounds are `1@a909a38a9 → 1@6f86d2e7f` (stop, bounded child
-  PASS), `1@01465c6ae` (carried stop, descriptor child PASS), then
-  `15@c2b13d0f3`; latest `1→15` fired convergence. Contract continuation was
-  `1@41d63c086 → PASS@15dbca164`.
-- Binding stop is recorded at `e5347179f`. Its PR-body band HOLD was already
-  fixed in draft PR 294 and is excluded from this child's five current HOLDS.
+review: checkpoints rounds:2
+re-cut: 2026-09-03 — split successor of distribution/no-coi-sandbox-build-loop for five lifecycle proof HOLDS — trace: none
+- 2026-09-03 — owns overlap non-dispatch, run-bin peer settlement, immutable input, stream/result order and ADR-0376 mechanism proof.
+- 2026-09-02 — user override: retain these as one shared I2/I3 substrate.

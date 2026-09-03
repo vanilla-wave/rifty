@@ -7,7 +7,7 @@ epic: no-coi-sandbox-tier
 blocked_by: [distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install]
 why: the generic public no-COI sandbox can run installed bins, but Final review did not prove request-identical Vite 7/8 decoys, exact installed Vite 8/nanoid fixture provenance, or the exact full Vite 7 module line before claiming byte-identical build output
 user_story: As an agent platform, I want an arbitrary installed bin to build my project in a headerless sandbox and return the exact same dist bytes as the COI product, while a real shared-memory request fails by name and package identity never selects policy
-sources: [ADR-0137, ADR-0174, ADR-0316, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, distribution/no-coi-public-toolchain-admission, distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install]
+sources: [ADR-0137, ADR-0174, ADR-0316, ADR-0376, docs/backlog/distribution/reference/no-coi-build-spike-record.md, distribution/no-coi-public-toolchain-admission, distribution/no-coi-toolchain-operation-lifecycle, distribution/no-coi-sandbox-package-install]
 code: [packages/workbench/src/workers/no-coi-toolchain-worker.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts, tools/perf/child-fs/scenario.mjs]
 ---
 
@@ -16,7 +16,7 @@ code: [packages/workbench/src/workers/no-coi-toolchain-worker.ts, tests/no-coi/n
 The durable spike proved the loop, but its worker deep-imported Workbench
 internals and installed globals by hand. Current source still has only the
 generic `createSandbox` eval/fs protocol; the real install + adapter + bin
-composition lives in Worker-only Workbench code. ADR-0375 selects the narrow
+composition lives in Worker-only Workbench code. ADR-0376 selects the narrow
 product seam: explicit `toolchain:{workerUrl}`, one Workbench-owned Worker, manifest install
 and run-to-completion `.bin` execution. It deliberately does not absorb the
 broader `sandbox.exec()` or the next child's dev/preview lifecycle.
@@ -51,7 +51,7 @@ bytes, bounded reads, loud required-fetch/corruption failures and deduplicated
 same-key acquisition. The carrier/authority fork must be recompiled and
 re-reviewed; it cannot ride the old verdict.
 
-Recompiled resolution: ADR-0375 grafts ADR-0371's installed registry-twin
+Recompiled resolution: ADR-0376 grafts ADR-0371's installed registry-twin
 authority; Evidence C148-NPM uses the 51-test registry-twin carrier. Acceptance
 and user-observable parity remain unchanged and are strengthened below by the
 three Final+GREEN blocker carriers.

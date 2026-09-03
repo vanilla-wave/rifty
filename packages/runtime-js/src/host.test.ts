@@ -482,25 +482,46 @@ describe('spawnToolchainRuntime trust boundary', () => {
     },
   );
 
-  it.each(['dispose', 'crash', 'clean-close'] as const)(
-    'rejects an admitted request when its peer ends by %s',
-    async (ending) => {
+  it.each(
+    (['install', 'run-bin'] as const).flatMap((operation) =>
+      (['dispose', 'crash', 'clean-close'] as const).map((ending) => [operation, ending] as const),
+    ),
+  )(
+    'rejects one admitted %s request exactly once when its peer ends by %s',
+    async (operation, ending) => {
       installFakeWorker();
       const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
       const worker = admitToolchain(runtime);
       await runtime.toolchainReady;
-      const pending = runtime.toolchain.install({ cwd: '/project', registryUrl: '/registry' });
-      await Promise.resolve();
-      expect(worker.sent).toEqual([
-        {
-          type: 'toolchain',
-          request: {
-            id: 1,
-            op: 'install',
-            input: { cwd: '/project', registryUrl: '/registry' },
-          },
+      const pending =
+        operation === 'install'
+          ? runtime.toolchain.install({ cwd: '/project', registryUrl: '/registry' })
+          : runtime.toolchain.runBin({
+              cwd: '/project',
+              binPath: '/project/node_modules/.bin/tool',
+              args: [],
+            });
+      let settlements = 0;
+      const observed = pending.then(
+        () => {
+          settlements++;
+          return { status: 'resolved' } as const;
         },
-      ]);
+        (error: Error & { code?: string }) => {
+          settlements++;
+          return {
+            status: 'rejected',
+            name: error.name,
+            ...(error.code === undefined ? {} : { code: error.code }),
+          } as const;
+        },
+      );
+      await Promise.resolve();
+      expect(worker.sent).toHaveLength(1);
+      expect(worker.sent[0]).toMatchObject({
+        type: 'toolchain',
+        request: { id: 1, op: operation },
+      });
 
       if (ending === 'dispose') runtime.dispose();
       if (ending === 'crash') worker.crash('toolchain boom');
@@ -508,11 +529,74 @@ describe('spawnToolchainRuntime trust boundary', () => {
         worker.emitUnknown({ type: 'toolchain-terminal', reason: 'closed' });
       }
 
-      await expect(pending).rejects.toMatchObject(
-        ending === 'crash' ? { code: 'WORKER_CRASHED' } : { name: 'WorkerTerminated' },
+      expect(await observed).toMatchObject(
+        ending === 'crash'
+          ? { status: 'rejected', code: 'WORKER_CRASHED' }
+          : { status: 'rejected', name: 'WorkerTerminated' },
       );
+      if (ending === 'dispose') runtime.dispose();
+      if (ending === 'crash') worker.crash('duplicate terminal signal');
+      if (ending === 'clean-close') {
+        worker.emitUnknown({ type: 'toolchain-terminal', reason: 'closed' });
+      }
+      await Promise.resolve();
+      expect(settlements).toBe(1);
     },
   );
+
+  it('snapshots validated install and run-bin inputs before readiness awaits', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const installInput = { cwd: '/install', registryUrl: '/registry-before' };
+    const args = ['before'];
+    const runInput = {
+      cwd: '/run',
+      binPath: '/run/node_modules/.bin/tool-before',
+      args,
+    };
+
+    const install = runtime.toolchain.install(installInput);
+    const run = runtime.toolchain.runBin(runInput);
+    installInput.cwd = '/changed-install';
+    installInput.registryUrl = '/registry-after';
+    runInput.cwd = '/changed-run';
+    runInput.binPath = '/changed-run/node_modules/.bin/tool-after';
+    args[0] = 'after';
+    args.push('extra');
+
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'install',
+          input: { cwd: '/install', registryUrl: '/registry-before' },
+        },
+      },
+      {
+        type: 'toolchain',
+        request: {
+          id: 2,
+          op: 'run-bin',
+          input: {
+            cwd: '/run',
+            binPath: '/run/node_modules/.bin/tool-before',
+            args: ['before'],
+          },
+        },
+      },
+    ]);
+    worker.emit({ type: 'toolchain-result', result: { id: 1, ok: true } });
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 2, ok: true, value: { exitCode: 0 } },
+    });
+    await expect(install).resolves.toBeUndefined();
+    await expect(run).resolves.toEqual({ exitCode: 0 });
+  });
 
   it.each([
     ['dispose', { status: 'rejected', name: 'WorkerTerminated', message: 'Worker was disposed' }],

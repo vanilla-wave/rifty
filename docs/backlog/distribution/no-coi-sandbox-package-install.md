@@ -7,7 +7,7 @@ epic: no-coi-sandbox-tier
 blocked_by: [distribution/no-coi-toolchain-operation-lifecycle]
 why: the public no-COI install path is green, but Final review did not execute the frozen npm bounds, required-failure and same-key-concurrency evidence that supports the real Vite 7 dependency-set install
 user_story: As an agent on a headerless page, I want one exact project manifest installed through the ordinary npm authority, with the installed tree and inherited failure bounds proven rather than inferred from a later successful build
-sources: [ADR-0371, ADR-0375, docs/backlog/distribution/reference/no-coi-build-spike-record.md, distribution/no-coi-sandbox-build-loop]
+sources: [ADR-0371, ADR-0376, docs/backlog/distribution/reference/no-coi-build-spike-record.md, distribution/no-coi-sandbox-build-loop]
 code: [packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/npm-client/src/internal/shadow/installer.contract.test.ts, packages/workbench/src/workers/owner-package-runtime-bindings.contract.test.ts, packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts]
 ---
 
@@ -50,7 +50,7 @@ dependency identities and required esbuild runtime from the same Worker VFS.
 - Goal I2 requires the real Vite 7 dependency set to install inside the
   sandbox. The durable spike and frozen scenario pin its direct versions.
 - ADR-0371 owns registry-twin bytes, integrity, bounded acquisition and
-  same-key dedupe. ADR-0375 Decision 2 delegates exact-manifest install to that
+  same-key dedupe. ADR-0376 Decision 2 delegates exact-manifest install to that
   ordinary npm-client path.
 - The shared lifecycle predecessor owns request admission/settlement; this
   child owns the installed tree and npm evidence only.

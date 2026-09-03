@@ -2513,6 +2513,36 @@ async function beginStalledRun(page: Page, root: string): Promise<void> {
   }, root);
 }
 
+async function seedRejectedOperationSentinel(page: Page, root: string): Promise<void> {
+  await page.evaluate(async (projectRoot) => {
+    const sandbox = (
+      globalThis as typeof globalThis & {
+        __riftyNoCoiSandbox: { fs: { writeFile(path: string, value: string): Promise<void> } };
+      }
+    ).__riftyNoCoiSandbox;
+    await sandbox.fs.writeFile(
+      `${projectRoot}/package.json`,
+      JSON.stringify({
+        name: 'rejected-operation-sentinel',
+        private: true,
+        dependencies: { kleur: '4.1.5' },
+      }),
+    );
+    await sandbox.fs.writeFile(
+      `${projectRoot}/node_modules/.bin/rejected-operation-sentinel`,
+      "#!/usr/bin/env node\nimport('../rejected-operation-sentinel/cli.js');\n",
+    );
+    await sandbox.fs.writeFile(
+      `${projectRoot}/node_modules/rejected-operation-sentinel/package.json`,
+      JSON.stringify({ name: 'rejected-operation-sentinel', type: 'commonjs' }),
+    );
+    await sandbox.fs.writeFile(
+      `${projectRoot}/node_modules/rejected-operation-sentinel/cli.js`,
+      "require('node:fs').writeFileSync(process.cwd() + '/rejected-dispatch.txt', 'ran'); process.stdout.write('__RIFTY_REJECTED_DISPATCH__');\n",
+    );
+  }, root);
+}
+
 test('host stays interactive while admitted install and run wait at network boundaries', async ({
   page,
 }) => {
@@ -2784,6 +2814,8 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
     ] as const) {
       await createToolchainSandbox(host);
       const root = `/overlap-${first}-${second}`;
+      const rejectedRoot = `${root}-rejected`;
+      await seedRejectedOperationSentinel(host, rejectedRoot);
       if (first === 'install') {
         await seedStalledInstall(host, root);
         await beginStalledInstall(host, root);
@@ -2795,6 +2827,11 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
           const sandbox = (
             globalThis as typeof globalThis & {
               __riftyNoCoiSandbox: {
+                fs: { readFile(path: string, encoding: 'utf8'): Promise<string> };
+                runtime: {
+                  eval(source: string): Promise<{ ok: boolean }>;
+                  on(fn: (event: { type: string; chunk?: string }) => void): () => void;
+                };
                 toolchain: {
                   install(input: Record<string, unknown>): Promise<void>;
                   runBin(input: Record<string, unknown>): Promise<unknown>;
@@ -2802,29 +2839,135 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
               };
             }
           ).__riftyNoCoiSandbox;
-          try {
-            if (secondOperation === 'install') {
-              await sandbox.toolchain.install({ cwd: projectRoot, registryUrl: '/npm-registry' });
-            } else {
-              await sandbox.toolchain.runBin({
-                cwd: projectRoot,
-                binPath: `${projectRoot}/node_modules/.bin/second`,
-                args: [],
-              });
+          const output: string[] = [];
+          const off = sandbox.runtime.on((event) => {
+            if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+              output.push(event.chunk);
             }
-            return { name: 'resolved', message: '' };
+          });
+          const before = await sandbox.runtime.eval(
+            'globalThis.__riftyRejectedState = JSON.stringify({ cwd: process.cwd(), argv: process.argv })',
+          );
+          if (!before.ok) throw new Error('rejected-operation pre-state failed');
+          let rejection: { name: string; message: string };
+          try {
+            const call =
+              secondOperation === 'install'
+                ? sandbox.toolchain.install({ cwd: projectRoot, registryUrl: '/npm-registry' })
+                : sandbox.toolchain.runBin({
+                    cwd: projectRoot,
+                    binPath: `${projectRoot}/node_modules/.bin/rejected-operation-sentinel`,
+                    args: [],
+                  });
+            await Promise.race([
+              call,
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('busy rejection timeout')), 2000),
+              ),
+            ]);
+            rejection = { name: 'resolved', message: '' };
           } catch (error) {
             const inspected = error instanceof Error ? error : new Error(String(error));
-            return { name: inspected.name, message: inspected.message };
+            rejection = { name: inspected.name, message: inspected.message };
           }
+          const after = await sandbox.runtime.eval(
+            'globalThis.__riftyRejectedStateAfter = JSON.stringify({ cwd: process.cwd(), argv: process.argv })',
+          );
+          if (!after.ok) throw new Error('rejected-operation post-state failed');
+          const processState = await sandbox.runtime.eval(
+            `console.log('__RIFTY_REJECTED_STATE__' + JSON.stringify([globalThis.__riftyRejectedState, globalThis.__riftyRejectedStateAfter]))`,
+          );
+          if (!processState.ok) throw new Error('rejected-operation state read failed');
+          const stateLine = output
+            .join('')
+            .split('\n')
+            .find((line) => line.startsWith('__RIFTY_REJECTED_STATE__'));
+          const exists = async (path: string) => {
+            try {
+              await sandbox.fs.readFile(path, 'utf8');
+              return true;
+            } catch {
+              return false;
+            }
+          };
+          off();
+          return {
+            rejection,
+            dispatchMarker: await exists(`${projectRoot}/rejected-dispatch.txt`),
+            installMarker: await exists(`${projectRoot}/package-lock.json`),
+            sentinelOutput: output.some((chunk) => chunk.includes('__RIFTY_REJECTED_DISPATCH__')),
+            processState:
+              stateLine && JSON.parse(stateLine.slice('__RIFTY_REJECTED_STATE__'.length)),
+          };
         },
-        { projectRoot: root, secondOperation: second },
+        { projectRoot: rejectedRoot, secondOperation: second },
       );
-      expect(outcome, `${first} -> ${second}`).toMatchObject({
+      expect(outcome.rejection, `${first} -> ${second}`).toMatchObject({
         name: 'SandboxToolchainBusyError',
       });
+      expect(outcome.dispatchMarker, `${first} -> ${second} dispatch`).toBe(false);
+      expect(outcome.installMarker, `${first} -> ${second} install`).toBe(false);
+      expect(outcome.sentinelOutput, `${first} -> ${second} output`).toBe(false);
+      expect(outcome.processState, `${first} -> ${second} process`).toHaveLength(2);
+      expect(outcome.processState?.[1], `${first} -> ${second} process`).toBe(
+        outcome.processState?.[0],
+      );
       await disposeSandbox(host);
     }
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
+test('runBin preserves cross-stream output before one terminal result', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    const timeline = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            fs: { writeFile(path: string, value: string): Promise<void> };
+            runtime: {
+              on(fn: (event: { type: string; chunk?: string }) => void): () => void;
+            };
+            toolchain: {
+              runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+            };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      const root = '/ordered-output';
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/.bin/ordered-output`,
+        "#!/usr/bin/env node\nimport('../ordered-output/cli.js');\n",
+      );
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/ordered-output/package.json`,
+        JSON.stringify({ name: 'ordered-output', type: 'commonjs' }),
+      );
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/ordered-output/cli.js`,
+        "console.log('A'); setTimeout(() => { console.error('B'); queueMicrotask(() => console.log('C')); }, 25);\n",
+      );
+      const entries: string[] = [];
+      const off = sandbox.runtime.on((event) => {
+        if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+          entries.push(`${event.type}:${event.chunk}`);
+        }
+      });
+      const result = await sandbox.toolchain.runBin({
+        cwd: root,
+        binPath: `${root}/node_modules/.bin/ordered-output`,
+        args: [],
+      });
+      entries.push(`result:${result.exitCode}`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      off();
+      return entries;
+    });
+    expect(timeline).toEqual(['stdout:A\n', 'stderr:B\n', 'stdout:C\n', 'result:0']);
   } finally {
     await disposeSandbox(host);
     await host.close();
