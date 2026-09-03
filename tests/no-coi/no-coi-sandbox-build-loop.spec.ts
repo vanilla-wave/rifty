@@ -21,6 +21,19 @@ const resourcePort = Number(process.env.RIFTY_NO_COI_RESOURCE_PORT ?? 5413);
 const coiBaseUrl = `http://localhost:${coiPort}`;
 const marker = 'no-coi-build-parity-marker';
 
+function moduleTransformLines(output: string): readonly string[] {
+  const escape = String.fromCharCode(27);
+  const ansi = new RegExp(`${escape}\\[[0-?]*[ -/]*[@-~]`, 'gu');
+  const lineRestart = new RegExp(`${escape}\\[(?:1)?G`, 'gu');
+  return output
+    .replace(/\r\n/gu, '\n')
+    .replaceAll('\r', '\n')
+    .replace(lineRestart, '\n')
+    .replace(ansi, '')
+    .split('\n')
+    .filter((line) => line.includes('modules transformed.'));
+}
+
 const threadedWasmProbeExpression = `(() => {
   const NativeMemory = globalThis.WebAssembly.Memory;
   const inherited = Object.assign(Object.create({ shared: true }), { initial: 1 });
@@ -566,7 +579,7 @@ async function runCoiProduct(
   await writeOwnerFile(page, '/scratch/src/Panel.jsx', panelWithMarker(panel));
   const build = await execLineOutcome(page, 'vite build');
   assertCommandSuccess(build, 'COI vite build');
-  expect((build.out.match(/2180 modules transformed\./gu) ?? []).length).toBe(1);
+  expect(moduleTransformLines(build.out)).toEqual(['✓ 2180 modules transformed.']);
   return { dist: await collectProjectDist(page), output: build.out };
 }
 
@@ -1650,56 +1663,88 @@ test('non-shared WebAssembly.Memory keeps native constructor/global identity', a
   });
 });
 
-test('installed-bin admission ignores Vite identity without a shared-memory request', async ({
+test('request-identical Vite 7/8 decoys follow installed bytes, never identity', async ({
   page,
 }) => {
   const { host } = await openHeaderlessHost(page);
   try {
     await createToolchainSandbox(host);
-    const outcome = await host.evaluate(async () => {
-      const sandbox = (
-        globalThis as typeof globalThis & {
-          __riftyNoCoiSandbox: {
-            fs: { writeFile(path: string, value: string): Promise<void> };
-            runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
-            toolchain: {
-              runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+    for (const fixture of [
+      { version: '7.3.6', root: '/project', marker: 'vite7-decoy' },
+      { version: '8.0.16', root: '/vite8', marker: 'vite8-decoy' },
+    ]) {
+      const outcome = await host.evaluate(
+        async ({ fixture }) => {
+          const sandbox = (
+            globalThis as typeof globalThis & {
+              __riftyNoCoiSandbox: {
+                fs: {
+                  writeFile(path: string, value: string): Promise<void>;
+                  readFile(path: string, encoding: 'utf8'): Promise<string>;
+                };
+                runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
+                toolchain: {
+                  runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+                };
+              };
+            }
+          ).__riftyNoCoiSandbox;
+          await sandbox.fs.writeFile(
+            `${fixture.root}/node_modules/vite/package.json`,
+            JSON.stringify({
+              name: 'vite',
+              version: fixture.version,
+              type: 'module',
+              bin: { vite: 'bin/vite.js' },
+            }),
+          );
+          await sandbox.fs.writeFile(
+            `${fixture.root}/node_modules/vite/bin/vite.js`,
+            `console.log(${JSON.stringify('__RIFTY_GENERIC_BIN__')} + ${JSON.stringify(fixture.marker)})\n`,
+          );
+          await sandbox.fs.writeFile(
+            `${fixture.root}/node_modules/.bin/vite`,
+            "#!/usr/bin/env node\nimport('../vite/bin/vite.js');\n",
+          );
+          const manifest = JSON.parse(
+            await sandbox.fs.readFile(`${fixture.root}/node_modules/vite/package.json`, 'utf8'),
+          );
+          const output: string[] = [];
+          const off = sandbox.runtime.on((event) => {
+            if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+              output.push(event.chunk);
+            }
+          });
+          try {
+            const request = {
+              cwd: fixture.root,
+              binPath: `${fixture.root}/node_modules/.bin/vite`,
+              args: ['build'],
             };
-          };
-        }
-      ).__riftyNoCoiSandbox;
-      const root = '/identity-decoy';
-      await sandbox.fs.writeFile(
-        `${root}/node_modules/vite/package.json`,
-        JSON.stringify({ name: 'vite', version: '8.0.16', type: 'module' }),
+            const result = await sandbox.toolchain.runBin(request);
+            return { request, result, manifest, output: output.join('') };
+          } finally {
+            off();
+          }
+        },
+        { fixture },
       );
-      await sandbox.fs.writeFile(
-        `${root}/node_modules/vite/bin/vite.js`,
-        "console.log('__RIFTY_GENERIC_BIN__identity-only')\n",
-      );
-      await sandbox.fs.writeFile(
-        `${root}/node_modules/.bin/vite`,
-        "#!/usr/bin/env node\nimport('../vite/bin/vite.js');\n",
-      );
-      const output: string[] = [];
-      const off = sandbox.runtime.on((event) => {
-        if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
-          output.push(event.chunk);
-        }
+      expect(outcome).toEqual({
+        request: {
+          cwd: fixture.root,
+          binPath: `${fixture.root}/node_modules/.bin/vite`,
+          args: ['build'],
+        },
+        result: { exitCode: 0 },
+        manifest: {
+          name: 'vite',
+          version: fixture.version,
+          type: 'module',
+          bin: { vite: 'bin/vite.js' },
+        },
+        output: `__RIFTY_GENERIC_BIN__${fixture.marker}\n`,
       });
-      try {
-        const result = await sandbox.toolchain.runBin({
-          cwd: root,
-          binPath: `${root}/node_modules/.bin/vite`,
-          args: ['--version'],
-        });
-        return { result, output: output.join('') };
-      } finally {
-        off();
-      }
-    });
-    expect(outcome.result).toEqual({ exitCode: 0 });
-    expect(outcome.output).toBe('__RIFTY_GENERIC_BIN__identity-only\n');
+    }
   } finally {
     await disposeSandbox(host);
     await host.close();
@@ -1714,7 +1759,10 @@ test('exact nanoid manifest runs its installed bin without Vite authority', asyn
       const sandbox = (
         globalThis as typeof globalThis & {
           __riftyNoCoiSandbox: {
-            fs: { writeFile(path: string, value: string): Promise<void> };
+            fs: {
+              writeFile(path: string, value: string): Promise<void>;
+              readFile(path: string, encoding: 'utf8'): Promise<string>;
+            };
             runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
             toolchain: {
               install(input: Record<string, unknown>): Promise<void>;
@@ -1733,6 +1781,10 @@ test('exact nanoid manifest runs its installed bin without Vite authority', asyn
         }),
       );
       await sandbox.toolchain.install({ cwd: root, registryUrl: '/npm-registry' });
+      const manifest = JSON.parse(
+        await sandbox.fs.readFile(`${root}/node_modules/nanoid/package.json`, 'utf8'),
+      );
+      const launcher = await sandbox.fs.readFile(`${root}/node_modules/.bin/nanoid`, 'utf8');
       const output: string[] = [];
       const off = sandbox.runtime.on((event) => {
         if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
@@ -1745,13 +1797,19 @@ test('exact nanoid manifest runs its installed bin without Vite authority', asyn
           binPath: `${root}/node_modules/.bin/nanoid`,
           args: ['--size', '7'],
         });
-        return { result, output: output.join('') };
+        return { result, output: output.join(''), manifest, launcher };
       } finally {
         off();
       }
     });
     expect(outcome.result).toEqual({ exitCode: 0 });
     expect(outcome.output.trim()).toMatch(/^[A-Za-z0-9_-]{7}$/u);
+    expect(outcome.manifest).toMatchObject({
+      name: 'nanoid',
+      version: '3.3.18',
+      bin: './bin/nanoid.cjs',
+    });
+    expect(outcome.launcher).toContain('../nanoid/bin/nanoid.cjs');
   } finally {
     await disposeSandbox(host);
     await host.close();
@@ -2219,7 +2277,7 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
       });
       const noCoi = await runNoCoiProduct(host);
       expect(noCoi.exitCode).toBe(0);
-      expect((noCoi.output.match(/2180 modules transformed\./gu) ?? []).length).toBe(1);
+      expect(moduleTransformLines(noCoi.output)).toEqual(['✓ 2180 modules transformed.']);
       expect(noCoi.dist).toEqual(coi.dist);
       expect(noCoi.esbuildAdmission).toMatchObject({
         protocol: 'rifty.shadow-substitutions/v2',
@@ -2267,7 +2325,7 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
       assertHostSnapshot(await hostSnapshot(host), baseline);
       expect(await openerRoundTrip(host)).toBe(true);
       await renewCrossOriginImage(host);
-      expect(coi.output).toContain('2180 modules transformed.');
+      expect(moduleTransformLines(coi.output)).toEqual(['✓ 2180 modules transformed.']);
     } finally {
       await disposeSandbox(host);
       await host.close();
@@ -2327,6 +2385,11 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
       );
       await sandbox.fs.writeFile(`${root}/src.js`, "document.body.textContent='vite8';\n");
       await sandbox.toolchain.install({ cwd: root, registryUrl: '/npm-registry' });
+      const manifest = JSON.parse(
+        await sandbox.fs.readFile(`${root}/node_modules/vite/package.json`, 'utf8'),
+      );
+      const launcher = await sandbox.fs.readFile(`${root}/node_modules/.bin/vite`, 'utf8');
+      const provenance = { manifest, launcher };
       const replaceOnce = (source: string, needle: string, replacement: string): string => {
         if (source.split(needle).length !== 2) {
           throw new Error(`Vite 8 boundary fixture anchor drifted: ${needle}`);
@@ -2366,7 +2429,7 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
           binPath: `${root}/node_modules/.bin/vite`,
           args: ['build'],
         });
-        return { threw: false, result, output: output.join('') };
+        return { threw: false, result, output: output.join(''), provenance };
       } catch (error) {
         const inspected = error as Error & { cause?: unknown; feature?: string };
         let dist: string;
@@ -2391,6 +2454,7 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
               : inspected.cause,
           dist,
           output: output.join(''),
+          provenance,
         };
       } finally {
         off();
@@ -2410,6 +2474,12 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
     expect(failure.message).toMatch(/shared WebAssembly\.Memory/i);
     expect(failure.message).toMatch(/SharedArrayBuffer/i);
     expect(failure.message).toMatch(/cross-origin isolation/i);
+    expect(failure.provenance.manifest).toMatchObject({
+      name: 'vite',
+      version: '8.0.16',
+      bin: { vite: 'bin/vite.js' },
+    });
+    expect(failure.provenance.launcher).toContain('../vite/bin/vite.js');
   } finally {
     await disposeSandbox(host);
     await host.close();
