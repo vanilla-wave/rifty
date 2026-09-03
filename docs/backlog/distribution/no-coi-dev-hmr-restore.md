@@ -1,58 +1,113 @@
 ---
 area: distribution
-status: draft
-title: no-COI dev+HMR — generic resident tool lifecycle + restart/death/unflushed marker
+status: ready
+title: no-COI resident installed bin supports HMR and explicit whole-realm restart
 created: 2026-08-28
 epic: no-coi-sandbox-tier
-why: HMR proof showed a resident shared-memory-free dev tool can run no-COI, but the public sandbox has no package-generic resident-tool lifecycle, restart/death surface or unflushed-write boot marker; a wedge stays alive-but-blocked and preview recovery requires explicit iframe reload
-user_story: As an agent platform, I want a resident installed dev tool with HMR preview plus an invokable restart when my timeout says the realm wedged, but today the sandbox exposes only build-to-completion and dispose, no death event or pending-write marker
-sources: [docs/backlog/distribution/reference/no-coi-hmr-spike-record.md]
-code: [packages/rifty/src/sandbox.ts, packages/service-worker/src/route-preview.ts, packages/net/src/cross-realm/preview-port.ts]
+why: build-to-completion works, but the public sandbox cannot start a resident installed bin, mount its preview, restart a wedged realm or report an unacknowledged write
+user_story: As an agent platform, I want a resident installed dev tool with HMR preview and an explicit restart after my timeout detects a wedge
+sources: [ADR-0377, docs/backlog/distribution/reference/no-coi-hmr-spike-record.md, docs/backlog/distribution/reference/no-coi-dev-hmr-restore-evidence.md]
+code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/runtime-js/src/protocol.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, tests/no-coi/no-coi-dev-hmr.spec.ts]
 ---
 
 ## Context
 
-Spike record (durable numbers: sources): the Vite 7 proof fixture boots in
-~0.5s listen + ~4.3s optimizeDeps; HMR steady;
-wedge blocks agent+fs+dev together, worker ALIVE-but-blocked — no death event can cover it;
-terminate → dev ready 6.6s; preview WS does NOT auto-reconnect — iframe reload required.
-Scope: package-generic sandbox resident-tool composition; an agent-invokable RESTART
-primitive (terminate + reboot + iframe reload — covers wedge, whose DETECTION stays
-agent-owned via timeout, heartbeat declined); a worker-died event for actual deaths; both
-proven in the no-COI lane. Vite 7 supplies only I4 proof bytes/HMR behavior; no SDK,
-runtime, control-plane, package or distribution authority may depend on its identity,
-version, path, callback, type or lifecycle.
-Explicit reload policy is user-decided (epic Decisions — auto-reconnect declined). Open
-question feeding this pickup is closed by goal I10: marker only. All re-cut
-prerequisites are now certified; full I8 remains open until this child's
-I4/I6/I10 proof certifies with them.
+All I1/I2/I3/I5/I7/I9 prerequisites are certified. The current public Worker
+can install and run a bin to completion, but has no resident-port operation,
+page preview wiring or restart surface. The durable spike proves real Vite
+7.3.6 HMR works in this one realm and that an infinite plugin loop leaves the
+Worker alive-but-blocked; only page-side termination plus iframe reload
+recovers it.
 
-User scope, 2026-09-01: goal tier is `works`. Required abnormal behavior is
-only a named actual-worker-death event, an explicit restore primitive and a
-next-boot marker for unflushed writes. Heartbeat, journal, automatic reconnect,
-exactly-once recovery, hidden retry, queue, crash-proof durability and other
-robust machinery are explicitly outside this child and may not be raised as
-checkpoint requirements.
+The destination stays package-generic. Vite supplies proof bytes only.
+Heartbeat, journal, automatic reconnect/retry and crash durability remain
+outside tier `works`.
 
 ## Challenge
 
 challenge: 2026-08-28 — 2 problems
-- Wedge recovery is claimed but undelivered by the proposed primitives: the user_story promises 'documented recovery when a plugin wedges the realm', yet the spike (FINDINGS-HMR.md §4) shows a wedged worker stays alive-but-blocked and was only recovered via external worker.terminate() — a worker-died event never fires for the flagship wedge scenario (epic scenario 6 'worker-died event fires' contradicts the spike), and with heartbeat/epoch detection user-declined the item names no terminate/kill API on the sandbox surface (sandbox.ts exposes only dispose()) nor who detects the wedge, leaving the causal chain from proposed work to claimed value broken for its headline failure case.
-- All load-bearing evidence (p50 244ms 100/100, storm 50/50, heap plateau, 6.6s reboot, WS no-reconnect) is cited only from throwaway branch t3code/prototype-hmr-agent-scenarios commit 61aeec95f FINDINGS-HMR.md, while the item's sole listed source docs/backlog/runtime-js/reference/no-coi-degradation-probes.md contains zero HMR data and itself states 'Branch artifacts rot ... the observed table is inlined here as the durable record' — the epic goal.md even mislabels that file as the durable record for the dev+HMR spike, so the item's premise rests on evidence the repo's own convention says will rot before pickup.
+- A Worker-death event cannot detect the flagship alive-but-blocked wedge.
+- Original HMR/recovery numbers lived on a throwaway branch.
 
-<!-- Post-challenge edits: P1 → item and epic I6/scenario re-scoped to an agent-invokable
-     RESTART primitive (wedge detection stays agent-owned via timeout; death event covers
-     real deaths only). P2 → durable record inlined at
-     distribution/reference/no-coi-hmr-spike-record.md and sourced here + in goal.md. -->
+Disposition: goal I6 makes wedge detection caller-owned and requires an
+invokable restart; actual death is a separate event. The complete spike facts
+are in `distribution/reference/no-coi-hmr-spike-record.md`.
+
+## User scenario
+
+On one real headerless Chromium page, the agent writes and installs a Vite 7
+project, starts its installed bin, loads the SW preview, writes+flushes an
+update and sees HMR without reload. A real plugin wedge blocks the realm; the
+agent's timeout invokes restart with a repair callback and preview target. One
+new Worker restores the resident tool, reloads the iframe and resumes HMR.
+
+## Reference contract
+
+- ADR-0375: one generic Worker/VFS/runtime; no Vite identity policy.
+- ADR-0376: one fail-fast finite operation slot and exact peer settlement.
+- ADR-0377: resident start, host activation snapshot, page preview bridge,
+  explicit restart, death event and unflushed marker.
+- Spike: Vite HMR stable bootId; wedge stays alive; terminate+reboot works;
+  existing WS needs iframe reload; pending tree consistency is not promised.
+- Baseline probe: installed no-COI Vite CLI is unpatched
+  (`viteCliPatched:false`); resident support cannot depend on COI Workbench
+  Vite preparation.
+
+## Acceptance
+
+1. Public `startBin({cwd,binPath,args,port})` exact-validates and snapshots the
+   request, starts one caller-selected installed bin in the existing Worker,
+   waits for that port and returns its `/preview/<port>/` URL. A request-
+   identical non-Vite server works; identity/version never selects policy.
+   → I4, ADR-0377
+2. Real Vite 7.3.6 boots with the page and Worker non-COI. The SW-served iframe
+   renders marker A; acknowledged `fs.writeFile` renders marker B through HMR
+   with the same random bootId and no full reload. → I4
+3. A real Vite plugin infinite loop makes a new public fs request remain
+   pending without a `worker-death` event. Caller-invoked restart terminates
+   it, restores exact activation without npm/network, runs `beforeStart`,
+   restarts the resident bin, assigns a new iframe URL and resumes one further
+   same-bootId HMR update. → I6, scenario
+4. Actual Worker `self.close()` emits exactly one `worker-death`; pending calls
+   reject. Explicit restart/dispose emit none. → I6, ADR-0377
+5. Restart after a pending public write reports `unflushedWrites:true` on the
+   next boot; a restart after every write acknowledgement reports false. No
+   tree consistency, rollback or recovery is claimed. → I10, ADR-0377
+6. The committed no-COI Chromium lane proves I1–I7, I9 and I10 together on a
+   document that stays `crossOriginIsolated===false`; capability report marks
+   `toolchain.dev-hmr` working. → I8
+
+## Parity cases
+
+1. Vite and a request-identical ordinary HTTP bin reach the same start/port/
+   preview lifecycle; installed bytes alone determine behavior. Artifact:
+   Worker unit plus Chromium fixture. → ADR-0377
+2. Initial load→HMR→wedge→restart+iframe reload→HMR exposes exact Worker,
+   document and bootId generations. Artifact: Chromium timeline. → I4, I6
+3. Pending-write termination and acknowledged-write restart differ only in
+   the boot marker. Artifact: host unit and Chromium recovery. → I10
+
+## Fault matrix
+
+| axis × operation | honest outcome | reproducible artifact / fault target |
+|---|---|---|
+| `provenance-lie` × resident start | Vite/non-Vite identical requests follow installed bytes | identity-decoy Worker/Chromium matrix → ADR-0377 |
+| `observable-order` × ready/restart | port precedes start result; activation+repair+resident precede iframe assignment | held-step unit + Chromium timeline → I4, I6 |
+| `peer-death` × resident/pending calls | unexpected death emits once and settles; wedge emits none until explicit restart | real Worker close+wedge carrier → I6 |
+| `lost-write` × generation replacement | pending public write sets next-boot marker; acknowledged sibling stays clean | delayed-write host/Chromium pair → I10 |
+| `concurrent` × restart | one host generation owner rejects overlap; no queue/retry/second Worker survives | host unit + Worker-count carrier → ADR-0377 |
+
+## Out of scope
+
+- No heartbeat or automatic wedge detection; caller timeout owns detection.
+- No automatic WS reconnect: restart visibly assigns a new iframe URL.
+- No journal, rollback, transaction, exactly-once, hidden retry or crash-proof
+  workspace durability.
+- No COI Workbench child process fabric or Vite-specific product branch.
+- No resident build concurrency, stdin/cancel/stop API or multi-resident realm.
 
 ## Decisions
 
-- Goal tier verbatim: `tier: works`.
-- Vite 7 is an I4/HMR proof fixture only. Resident-tool public and infrastructure
-  authority is package-generic and cannot branch on Vite identity, version, path,
-  callback, type or lifecycle.
-- Dependencies: all five build prerequisites must certify before this child may
-  PICKUP; no transitive shortcut removes an explicit edge.
-- Out of scope by user decision: heartbeat, journal, automatic retry/reconnect,
-  exactly-once recovery, hidden retry, queue, crash-proof durability and any
-  other robust-class mechanism.
+review: checkpoints rounds:2
+re-cut: 2026-09-04 — compiled the final I4/I6/I10/I8 product slice and removed obsolete prerequisite history — trace: none
+- 2026-09-04 — expected RED band 4–4: public start/preview, real HMR, wedge restart/dirty marker, actual-death/overlap siblings.

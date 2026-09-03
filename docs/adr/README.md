@@ -307,6 +307,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0341 | Project terminal runs expose authoritative shell status |
 | 0375 | Generic no-COI toolchain authority |
 | 0376 | No-COI toolchain operation lifecycle authority |
+| 0377 | No-COI resident tool and restart lifecycle |
 
 ## Superseded (removed)
 

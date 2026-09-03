@@ -598,6 +598,65 @@ describe('spawnToolchainRuntime trust boundary', () => {
     await expect(run).resolves.toEqual({ exitCode: 0 });
   });
 
+  it('snapshots and exact-validates resident-bin input before readiness awaits — designed RED', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const toolchain = runtime.toolchain as typeof runtime.toolchain & {
+      startBin(input: {
+        cwd: string;
+        binPath: string;
+        args: readonly string[];
+        port: number;
+      }): Promise<{ readonly port: number }>;
+    };
+    const args = ['--port', '5174'];
+    const input = {
+      cwd: '/dev',
+      binPath: '/dev/node_modules/.bin/tool',
+      args,
+      port: 5174,
+    };
+
+    const started = toolchain.startBin(input);
+    input.cwd = '/changed';
+    input.binPath = '/changed/node_modules/.bin/other';
+    input.port = 6000;
+    args[1] = '6000';
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'start-bin',
+          input: {
+            cwd: '/dev',
+            binPath: '/dev/node_modules/.bin/tool',
+            args: ['--port', '5174'],
+            port: 5174,
+          },
+        },
+      },
+    ]);
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 1, ok: true, value: { port: 5174 } },
+    } as never);
+    await expect(started).resolves.toEqual({ port: 5174 });
+
+    await expect(
+      toolchain.startBin({
+        cwd: '/dev',
+        binPath: '/dev/node_modules/.bin/tool',
+        args: [],
+        port: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'TypeError' });
+    expect(worker.sent).toHaveLength(1);
+  });
+
   it.each([
     ['dispose', { status: 'rejected', name: 'WorkerTerminated', message: 'Worker was disposed' }],
     [

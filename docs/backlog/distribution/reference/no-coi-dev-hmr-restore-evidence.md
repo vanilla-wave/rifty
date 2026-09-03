@@ -1,0 +1,39 @@
+# no-COI dev/HMR restore evidence — 2026-09-04
+
+## Baseline
+
+Current public `ToolchainSandbox` exposes install/run only; its capability
+report marks `toolchain.dev-hmr` throwing. Toolchain runtime reset throws
+`NotImplementedError('sandbox.toolchain.restart')`. No resident start, sandbox
+lifecycle event or pending-write marker exists.
+
+Disposable real install probe, Playwright 1.60.0 / Chromium 148.0.7778.96:
+
+```sh
+pnpm test:no-coi -g "build parity: headerless SDK" --reporter=line
+# 1 passed (1.6m)
+# [no-coi-dev-probe] ... "viteCliPatched":false
+```
+
+The temporary observation was reverted. It proves the resident implementation
+cannot rely on the COI Workbench Vite CLI preparation path. Historical HMR,
+wedge, restart and durability observations remain in
+`distribution/reference/no-coi-hmr-spike-record.md`.
+
+## Contract RED
+
+Playwright 1.60.0 / Chromium 148.0.7778.96:
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 3 failed in 13.8s
+# generic + real Vite: SandboxToolchain.startBin is missing
+# peer death: ToolchainSandbox.onLifecycle is missing
+
+pnpm exec vitest run --project unit packages/runtime-js/src/host.test.ts -t "resident-bin input" --reporter=dot
+# 1 failed / 28 skipped: toolchain.startBin is not a function
+```
+
+All failures occur after the public sandbox boots; no import/typecheck/setup
+failure substitutes for the missing behavior. Existing no-COI lane was GREEN
+before these designed REDs.
