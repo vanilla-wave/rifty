@@ -163,6 +163,7 @@ operation instead of hanging or claiming rollback.
 
 ## Decisions
 
+ready-verdict: 2026-09-03 — Contract+RED @ 58745a877
 review: checkpoints rounds:2
 re-cut: 2026-09-03 — split successor of distribution/no-coi-sandbox-build-loop for five lifecycle proof HOLDS — trace: none
 - 2026-09-03 — owns overlap non-dispatch, run-bin peer settlement, immutable input, stream/result order and ADR-0376 mechanism proof.
