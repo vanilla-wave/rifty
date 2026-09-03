@@ -1,13 +1,13 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: no-COI public sandbox exact-manifest package install proof
 created: 2026-09-02
 epic: no-coi-sandbox-tier
 why: the public no-COI install path is green, but Final review did not execute the frozen npm bounds, required-failure and same-key-concurrency evidence that supports the real Vite 7 dependency-set install
 user_story: As an agent on a headerless page, I want one exact project manifest installed through the ordinary npm authority, with the installed tree and inherited failure bounds proven rather than inferred from a later successful build
-sources: [ADR-0371, ADR-0376, docs/backlog/distribution/reference/no-coi-build-spike-record.md, distribution/no-coi-sandbox-build-loop]
-code: [packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/npm-client/src/internal/shadow/installer.contract.test.ts, packages/workbench/src/workers/owner-package-runtime-bindings.contract.test.ts, packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts]
+sources: [ADR-0371, ADR-0376, docs/backlog/distribution/reference/no-coi-build-spike-record.md, docs/backlog/distribution/reference/no-coi-sandbox-package-install-evidence.md, distribution/no-coi-sandbox-build-loop]
+code: [packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/npm-client/src/registry.fault.test.ts, packages/npm-client/src/installer-concurrency.test.ts, packages/npm-client/src/internal/shadow/installer.contract.test.ts, packages/workbench/src/workers/owner-package-runtime-bindings.contract.test.ts, packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts]
 ---
 
 ## Context
@@ -23,8 +23,7 @@ installed-bin fixture provenance belongs to I3, not this I2 contract. The
 earlier demand to inject registry faults through the public SDK was adjudicated
 STRETCH and is not restored.
 
-Upstream: `distribution/no-coi-public-toolchain-admission` through
-`distribution/no-coi-toolchain-operation-lifecycle`. Downstream:
+Upstream: certified public admission and ADR-0376 lifecycle. Downstream:
 `distribution/no-coi-sandbox-build-loop`,
 `distribution/no-coi-host-posture-preservation` and
 `distribution/no-coi-dev-hmr-restore`.
@@ -62,28 +61,33 @@ dependency identities and required esbuild runtime from the same Worker VFS.
    through the configured registry. Every direct dependency has its exact
    manifest version in the same Worker VFS; the admitted
    `esbuild-wasm@0.28.0` runtime and registry-twin attestation are exact.
+   → I2
 2. One frozen focused npm command executes the existing bounded-read,
    required-fetch-failure, corrupt registry-twin and concurrent same-key
    acquisition cases, quoting tool versions and selected case names/counts.
    The SDK layer adds no cache, retry, semaphore or registry authority.
+   → I2, ADR-0371
 3. Successful install exposes one exact installed tree only after existing
    finalization, runtime binding activation and VFS flush. A required
    acquisition/integrity failure rejects without an adapter-success claim.
+   → I2, ADR-0371
 
 ## Parity cases
 
-1. Frozen Vite 7 project: public no-COI install vs the current COI product use
+1. Frozen Vite 7 project: public no-COI install and the current COI product use
    one dependency digest and expose the same exact direct installed versions.
+   Artifact: package-install evidence §Public install. → I2
 2. npm inheritance: named existing cases pin byte bounds, required fetch
    rejection, corrupt-twin rejection and one concurrent same-key acquisition.
+   Artifact: package-install evidence §npm faults. → I2, ADR-0371
 
 ## Fault matrix
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
-| `provenance-lie` + `frozen-assumption` × installed tree | read exact direct manifest versions and attested runtime from the Worker VFS | Acceptance/Parity 1/1; frozen Vite-7 dependency fixture |
-| `unbounded-read` + `poisoned-cache` × registry acquisition | inherited byte bounds/integrity; required/corrupt input rejects without success | Acceptance/Parity 2-3/2; frozen named npm cases |
-| `concurrent-same-key` × package acquisition | inherited one acquisition/deduplicated result, not a new sandbox queue | Acceptance/Parity 2/2; existing npm concurrency carrier |
+| `provenance-lie` + `frozen-assumption` × installed tree | exact direct versions and attested runtime from Worker VFS | frozen public fixture → I2 |
+| `unbounded-read` + `poisoned-cache` × registry acquisition | inherited bounds/integrity; required/corrupt input rejects | frozen 13-case npm command → ADR-0371 |
+| `concurrent-same-key` × package acquisition | inherited one acquisition/deduplicated result, no sandbox queue | npm concurrency carrier → ADR-0371 |
 
 ## Out of scope
 
@@ -100,34 +104,7 @@ dependency identities and required esbuild runtime from the same Worker VFS.
 
 ## Decisions
 
-review: checkpoints — real network/package evidence for I2.
-
-predecessor: `distribution/no-coi-sandbox-build-loop`
-
-- Owns Final HOLD: frozen npm bounds/required-failure/same-key-concurrency
-  evidence. Exact Vite-8/nanoid installed-bin identities stay with I3.
-- Dependency direction: public admission → shared lifecycle → this install
-  proof → I3 build; host posture and dev-HMR remain downstream.
-- `contract-red: 2026-09-01 — blocker @ 326f5b70e`
-- `ready-verdict: 2026-09-01 — Contract+RED @ f0066d4d2`
-- `final-green: 2026-09-01 — blocker @ 07d370651`
-- `final-green: 2026-09-01 — blocker @ bcff49986`
-- `final-green: 2026-09-01 — blocker @ 541c4cd6c`
-- `contract-red: 2026-09-01 — blocker @ 2f1063608`
-- `ready-verdict: 2026-09-01 — Contract+RED @ ead27000f`
-- `final-green: 2026-09-01 — blocker @ a909a38a9`
-- `final-green: 2026-09-01 — blocker @ 6f86d2e7f`
-- Bounded-cause split successor certified Final+GREEN at `40ded4758`.
-- `ready-verdict: 2026-09-01 — Contract+RED @ df3cc811d`
-- `final-green: 2026-09-02 — blocker @ 01465c6ae`
-- Descriptor split successor certified Final+GREEN at `dce86792d`.
-- `contract-red: 2026-09-02 — blocker @ 41d63c086`
-- `ready-verdict: 2026-09-02 — Contract+RED @ 15dbca164`
-- `final-green: 2026-09-02 — blocker @ c2b13d0f3`
-- Count lineage: `07d370651`/`bcff49986`/`541c4cd6c` counts are unavailable;
-  counted Final rounds are `1@a909a38a9 → 1@6f86d2e7f` (stop, bounded child
-  PASS), `1@01465c6ae` (carried stop, descriptor child PASS), then
-  `15@c2b13d0f3`; latest `1→15` fired convergence. Contract continuation was
-  `1@41d63c086 → PASS@15dbca164`.
-- Binding stop is recorded at `e5347179f`. Its PR-body band HOLD was already
-  fixed in draft PR 294 and is excluded from this child's one current HOLD.
+review: checkpoints rounds:2
+re-cut: 2026-09-03 — split successor of distribution/no-coi-sandbox-build-loop for the I2 package-install proof HOLD — trace: none
+- 2026-09-03 — owns frozen public install plus npm bounds/required-failure/same-key evidence; Vite-8/nanoid execution stays I3.
+- 2026-09-03 — expected RED band is 0–0: existing certified carriers are selected exactly; product/tests unchanged.
