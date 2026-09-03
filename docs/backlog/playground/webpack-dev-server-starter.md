@@ -136,10 +136,16 @@ The same seeded bytes run unchanged under local Node 24/npm.
   inferred from this starter.
 - Public `WebAssembly.compileStreaming` and `instantiateStreaming` remain
   explicit compat ❌ Promise-rejected gaps under ADR-0158.
+- `IncomingMessage.socket.destroy()` remains an explicit HTTP compat ⚠️ loud
+  gap because a port-registry request has no per-request TCP transport;
+  middleware's listener surface is covered, but a finalhandler headers-sent
+  error path can surface that `NotImplementedError`.
 - Response clone keepalive remains
   `runtime-js/fetch-keepalive-response-clone-lifecycle` (draft).
 
 ## Decisions
+
+contract-red: 2026-09-03 — blocker @ 9ec90d54b
 
 - `review: checkpoints` — parity, network, worker concurrency, and lifecycle
   surfaces require Contract+RED and Final+GREEN.

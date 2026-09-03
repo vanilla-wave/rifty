@@ -1,23 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { expectTerminalContains, pickStarter } from '../e2e/helpers/playground.ts';
 
-const BREAKPOINTS = [
-  {
-    urlRegex: 'quickjs-kernel-worker-host-[A-Za-z0-9_-]+\\.js$',
-    lineNumber: 0,
-    columnNumber: 47_947,
-  },
-  {
-    urlRegex: 'node-entry-bootstrap-[A-Za-z0-9_-]+\\.js$',
-    lineNumber: 0,
-    columnNumber: 60_722,
-  },
-  {
-    urlRegex: 'dev-server-child-bootstrap-[A-Za-z0-9_-]+\\.js$',
-    lineNumber: 0,
-    columnNumber: 22_771,
-  },
+const BREAKPOINT_SCRIPT_PATTERNS = [
+  /quickjs-kernel-worker-host-[A-Za-z0-9_-]+\.js$/u,
+  /node-entry-bootstrap-[A-Za-z0-9_-]+\.js$/u,
+  /dev-server-child-bootstrap-[A-Za-z0-9_-]+\.js$/u,
 ];
+const CONSUME_REPLY_GUARD = 'SabRing: cannot consume reply unless reply is ready';
 const CYCLES = 8;
 const PHASE_MS = 30_000;
 
@@ -88,6 +77,13 @@ function remoteValue(response) {
   return response.result?.value ?? response.result?.description ?? null;
 }
 
+function sourceLocation(source, offset) {
+  const prefix = source.slice(0, offset);
+  const lineNumber = prefix.match(/\n/gu)?.length ?? 0;
+  const lastNewline = prefix.lastIndexOf('\n');
+  return { lineNumber, columnNumber: offset - lastNewline - 1 };
+}
+
 test('captures the Chromium lifecycle wake at the existing consumeReply guard', async ({
   browserName,
   context,
@@ -98,6 +94,7 @@ test('captures the Chromium lifecycle wake at the existing consumeReply guard', 
   const targetByPath = new Map();
   const scriptUrlByPathAndId = new Map();
   const initializing = new Set();
+  const armedScripts = new Set();
   let phase = { state: 'boot', cycle: 0, enteredAt: startedAt };
   let capture;
   let capturing = false;
@@ -131,6 +128,7 @@ test('captures the Chromium lifecycle wake at the existing consumeReply guard', 
       }
       if (method === 'Debugger.scriptParsed') {
         scriptUrlByPathAndId.set(`${path.join('/')}:${params.scriptId}`, params.url);
+        void armConsumeReplyBreakpoint(path, params).catch(failHarness);
         return;
       }
       if (method === 'Debugger.paused') {
@@ -162,6 +160,21 @@ test('captures the Chromium lifecycle wake at the existing consumeReply guard', 
       name: property.name,
       value: property.value?.value ?? property.value?.description ?? null,
     }));
+  }
+
+  async function armConsumeReplyBreakpoint(path, params) {
+    if (!BREAKPOINT_SCRIPT_PATTERNS.some((pattern) => pattern.test(params.url))) return;
+    const key = `${path.join('/')}:${params.scriptId}`;
+    if (armedScripts.has(key)) return;
+    armedScripts.add(key);
+    const source = await nested.send(path, 'Debugger.getScriptSource', {
+      scriptId: params.scriptId,
+    });
+    const offset = source.scriptSource.indexOf(CONSUME_REPLY_GUARD);
+    if (offset === -1) return;
+    await nested.send(path, 'Debugger.setBreakpoint', {
+      location: { scriptId: params.scriptId, ...sourceLocation(source.scriptSource, offset) },
+    });
   }
 
   async function captureGuard(path, params) {
@@ -248,9 +261,6 @@ test('captures the Chromium lifecycle wake at the existing consumeReply guard', 
           };
         })()`,
       });
-      for (const breakpoint of BREAKPOINTS) {
-        await nested.send(path, 'Debugger.setBreakpointByUrl', breakpoint);
-      }
       await nested.send(path, 'Target.setAutoAttach', {
         autoAttach: true,
         waitForDebuggerOnStart: true,

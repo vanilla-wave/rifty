@@ -413,8 +413,12 @@ describe('Node server project runtime Contract+RED', () => {
   });
 });
 
-describe('npm-owned dev-server project runtime Contract+RED', () => {
+describe('npm-owned dev-server project runtime Contract+RED reach', () => {
   it('pins the conventional dev lifecycle to project root without changing restored cwd', async () => {
+    expect(typeof createNpmDevServerProjectRuntime, 'npm dev-server runtime capability').toBe(
+      'function',
+    );
+    if (typeof createNpmDevServerProjectRuntime !== 'function') return;
     const h = createNpmDevServerHarness('/src/nested');
     h.session.run();
 
@@ -424,57 +428,62 @@ describe('npm-owned dev-server project runtime Contract+RED', () => {
     expect(h.pty.execCalls[0]?.line).toBe('npm --prefix ../.. run dev');
     expect(h.terminal.snapshot().cwd).toBe('/src/nested');
   });
-
-  it('runs npm run dev and readies the first actual port from its exact admitted PTY run', async () => {
-    const h = createNpmDevServerHarness();
-    const run = h.session.run();
-
-    h.pty.resolveOpen(TERMINAL_SID);
-    await settleMicrotasks();
-    expect(h.pty.execCalls).toHaveLength(1);
-    expect(h.pty.execCalls[0]).toMatchObject({ sid: TERMINAL_SID, line: 'npm run dev' });
-    expect(h.previews.requests).toBe(0);
-
-    h.pty.admit(0, 'npm-run-1');
-    await settleMicrotasks();
-    expect(h.previews.requests).toBe(1);
-
-    const exact = advertisement({
-      ptyRid: 'npm-run-1',
-      port: 6123,
-      url: '/preview/6123/',
-      source: 'preview',
-      label: 'ordinary package dev server',
-      sid: 'ordinary-package-child',
-    });
-    h.previews.publish([
-      advertisement({
-        ownerToken: 'owner-sibling',
-        ptyRid: 'npm-run-1',
-        port: 6121,
-        url: '/preview/6121/',
-      }),
-      advertisement({
-        ptyRid: 'stale-run',
-        port: 6122,
-        url: '/preview/6122/',
-      }),
-      exact,
-    ]);
-
-    expect(h.previews.mounted).toEqual([exact]);
-    h.previews.swProofs[0]?.resolve();
-    await settleMicrotasks();
-    h.previews.httpProofs[0]?.resolve({ ok: true, status: 200 });
-    await expect(run.ready).resolves.toEqual({ port: 6123, url: '/preview/6123/' });
-
-    h.pty.exit(0, { code: 0, signal: null });
-    const closing = h.session.close();
-    await settleMicrotasks();
-    h.previews.swProofs[1]?.resolve();
-    await closing;
-  });
 });
+
+describe.skipIf(typeof createNpmDevServerProjectRuntime !== 'function')(
+  'npm-owned dev-server project runtime regression',
+  () => {
+    it('runs npm run dev and readies the first actual port from its exact admitted PTY run', async () => {
+      const h = createNpmDevServerHarness();
+      const run = h.session.run();
+
+      h.pty.resolveOpen(TERMINAL_SID);
+      await settleMicrotasks();
+      expect(h.pty.execCalls).toHaveLength(1);
+      expect(h.pty.execCalls[0]).toMatchObject({ sid: TERMINAL_SID, line: 'npm run dev' });
+      expect(h.previews.requests).toBe(0);
+
+      h.pty.admit(0, 'npm-run-1');
+      await settleMicrotasks();
+      expect(h.previews.requests).toBe(1);
+
+      const exact = advertisement({
+        ptyRid: 'npm-run-1',
+        port: 6123,
+        url: '/preview/6123/',
+        source: 'preview',
+        label: 'ordinary package dev server',
+        sid: 'ordinary-package-child',
+      });
+      h.previews.publish([
+        advertisement({
+          ownerToken: 'owner-sibling',
+          ptyRid: 'npm-run-1',
+          port: 6121,
+          url: '/preview/6121/',
+        }),
+        advertisement({
+          ptyRid: 'stale-run',
+          port: 6122,
+          url: '/preview/6122/',
+        }),
+        exact,
+      ]);
+
+      expect(h.previews.mounted).toEqual([exact]);
+      h.previews.swProofs[0]?.resolve();
+      await settleMicrotasks();
+      h.previews.httpProofs[0]?.resolve({ ok: true, status: 200 });
+      await expect(run.ready).resolves.toEqual({ port: 6123, url: '/preview/6123/' });
+
+      h.pty.exit(0, { code: 0, signal: null });
+      const closing = h.session.close();
+      await settleMicrotasks();
+      h.previews.swProofs[1]?.resolve();
+      await closing;
+    });
+  },
+);
 
 describe('Node CLI project runtime Contract+RED', () => {
   it('resolves the project-rooted entry from restored terminal cwd', async () => {

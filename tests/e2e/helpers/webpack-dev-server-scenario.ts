@@ -284,6 +284,26 @@ if (import.meta.webpackHot) {
   );
   await expectNoLoudFailure(page, hostProblems);
 
+  const cssMarker = `webpack-css-hmr-${String(Date.now())}`;
+  const updatedCss = `body {
+  --rifty-webpack-css-hmr: ${cssMarker};
+  background: rgb(17, 34, 51);
+}
+`;
+  await runTerminalLineSettled(page, `printf %s ${shellWord(updatedCss)} > src/styles.css`, 60_000);
+  await expect
+    .poll(
+      () =>
+        frameBody.evaluate(() =>
+          getComputedStyle(document.body).getPropertyValue('--rifty-webpack-css-hmr').trim(),
+        ),
+      { timeout: 120_000 },
+    )
+    .toBe(cssMarker);
+  await expect(iframe).toHaveAttribute('data-e2e-identity', identity);
+  expect(previewNavigations).toBe(0);
+  await expectNoLoudFailure(page, hostProblems);
+
   const preReloadMarker = `webpack-pre-reload-${String(Date.now())}`;
   await runTerminalLineSettled(page, `echo ${preReloadMarker}`, 30_000);
   expect(await terminalBuffer(page)).toContain(preReloadMarker);
@@ -306,6 +326,18 @@ if (import.meta.webpackHot) {
   await expect(
     page.frameLocator(`iframe[title="Preview port ${String(PORT)}"]`).locator('h1'),
   ).toHaveText(updatedText, { timeout: 120_000 });
+  await expect
+    .poll(
+      () =>
+        page
+          .frameLocator(`iframe[title="Preview port ${String(PORT)}"]`)
+          .locator('body')
+          .evaluate((body) =>
+            getComputedStyle(body).getPropertyValue('--rifty-webpack-css-hmr').trim(),
+          ),
+      { timeout: 120_000 },
+    )
+    .toBe(cssMarker);
   await expect(page.locator(`iframe[title="Preview port ${String(PORT)}"]`)).toHaveCount(1);
   await expect(page.locator('.rf-preview__switcher option[value]')).toHaveCount(1);
   await openShellTerminal(page);

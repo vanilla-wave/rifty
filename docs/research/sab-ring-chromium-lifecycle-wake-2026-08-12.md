@@ -28,8 +28,9 @@ RIFTY_SAB_DIAGNOSTIC_URL="$PREVIEW_URL" \
 ```
 
 The carrier recursively auto-attaches CDP before child bootstrap, installs the wrapper below in
-every attached realm, and arms the existing emitted `consumeReply()` throw branch. It then boots
-the real webpack starter and cycles the page through 30 seconds frozen / 30 seconds active.
+every attached realm, finds the `consumeReply()` guard by its stable error string in each parsed
+worker script, and arms that exact throw branch. It then boots the real webpack starter and cycles
+the page through 30 seconds frozen / 30 seconds active.
 
 ```js
 const nativeWait = Atomics.wait;

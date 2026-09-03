@@ -27,6 +27,11 @@ export interface WorkbenchOptions {
     readonly wasm: {
       readonly sqlite: string;
     };
+    /**
+     * Budget for service-worker control and, once a matching preview is
+     * advertised, its routed HTTP proof. Does not bound install/start silence
+     * before the first preview candidate.
+     */
     readonly previewProbeTimeoutMs?: number;
     /**
      * ADR-0360: budget of owner `durability-progress` SILENCE per owner
