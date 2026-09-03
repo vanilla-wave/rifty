@@ -34,4 +34,9 @@ A PR the user explicitly asks for is their call: open it, name what it carries
 
 ## PR-6 DoD
 
-`AGENTS.md` §DoD is the checklist; `pnpm pr:check` is its machine half.
+`AGENTS.md` §DoD is the checklist; `pnpm pr:check` is its machine half. Its
+lanes follow the diff class (`tools/checks/ci-change-scope.mjs`, the CI
+classifier): a docs-only tree never runs `typecheck`, `build:libs`,
+`check:arch`, `test:run`, `test:parity`; a red `test:run` reruns its failed
+files once in isolation, labelled with the time-out count — a failure that
+reproduces in isolation stays red, a pass on rerun is reported, never hidden.
