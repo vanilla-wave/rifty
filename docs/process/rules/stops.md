@@ -49,7 +49,9 @@ adjudication, never to a round.
    backlog; rows the trace target does not require in the demanded exactness
    become concerns (`review.md` `REV-3`).
 2. Over `RDY-4` limits → split by trace; the successor's `re-cut:` line names
-   the predecessor (`RDY-9`).
+   the predecessor (`RDY-9`). A successor carrying only proof rows — no
+   product delta expected — is `review: ordinary — proof-only`
+   (`readiness.md` `RDY-8`), never a checkpoint lineage.
 3. Record `re-cut: <date> — <what> — trace: none` (or `fork:` → `STOP-1a`).
 4. One verify pass on the new tree. Pass → continue. Blockers survive → stop
    (`STOP-1c`) with the `STOP-6` report.

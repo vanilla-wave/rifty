@@ -22,7 +22,7 @@ gate: `backlog:check`.
 ```md
 ready-verdict: <date> — Contract+RED @ <sha>          first line at pickup, verbatim
 ready-verdict: <date> — inherited from <area>/<slug> @ <sha>
-review: checkpoints rounds:<n> | ordinary               RDY-8 / RDY-9
+review: checkpoints rounds:<n> | ordinary [— proof-only]  RDY-8 / RDY-9
 contract-red: round <n> — blocker @ <sha>               status line, overwritten each round (REV-8)
 final-green: round <n>/<budget> — blocker @ <sha>       status line, overwritten each round
 re-cut: <date> — <what changed> — trace: none           RDY-5; a split names its predecessor here

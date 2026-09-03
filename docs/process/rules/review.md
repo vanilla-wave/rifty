@@ -102,7 +102,9 @@ Three records, nothing else:
   commit. The round history is the file's git log.
 - **Final+GREEN pass** — recorded where the slice lands: the ledger's
   `re-chart after <slice> (final-green PASS @ <sha>): …` line
-  (`../artifacts/ledger.md`). Nothing is written to the unit.
+  (`../artifacts/ledger.md`). Nothing is written to the unit. A `review:
+  ordinary` unit lands the same way with `(ordinary PASS @ <sha>)` — same
+  binding, same `BASE` role.
 
 Binding: a PASS at `<sha>` holds while
 `git diff --quiet <sha> HEAD -- . ':!docs/backlog' ':!CHANGELOG.md'` is empty —

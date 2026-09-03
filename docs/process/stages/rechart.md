@@ -17,8 +17,9 @@ facts arrive that touch this goal. The map is a live hypothesis; only
    `rifty-to-backlog`.
 4. **Reorder** seed order if dependencies changed.
 5. **Record** `re-chart after <slice> (final-green PASS @ <sha>): <n>
-   graduated / <m> invalidated / no changes` — `<sha>` is the reviewed commit
-   of the PASS; this line is the slice's PASS record and the next slice's
+   graduated / <m> invalidated / no changes` (`ordinary PASS @ <sha>` for a
+   `review: ordinary` unit) — `<sha>` is the reviewed commit of the PASS;
+   this line is the slice's PASS record and the next slice's
    `BASE` (`REV-8`). PICKUP and CLOSE refuse while the last landed slice lacks
    it.
 

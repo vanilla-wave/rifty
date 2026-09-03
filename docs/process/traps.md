@@ -33,6 +33,7 @@
 - **verify-committed-not-worktree**: gates prove the WORKING TREE, not the commit → uncommitted/unstaged edits keep gates green while the push misses files → re-run the decisive check on the committed state before push.
 - **parity-runner-in-process**: parity cases run rifty builtins in-process in the Node host → `globalThis.process` is REAL Node; bare `Buffer`/`process`/`console`/`global` in a case is Node==Node tautology (false-green) → builtins resolving "the live process" must `instanceof NodeProcess` check; cases must `require('node:buffer')` etc. explicitly; RED-check by stashing `packages/`.
 - **parity-win32-alias**: rifty ships `path.win32 === posix` → never parity-test `path.win32.*` (real Node diverges).
+- **codex-sandbox-listen-eperm**: `pnpm pr:check` / playwright / `tsx` lanes die 3–4 min in with `listen EPERM …/tsx-501/*.pipe` or a loopback `listen` refusal, no failing test → the Codex `workspace-write` sandbox denies IPC pipes and local ports by construction (21 hits on #294, twice on 2026-09-03), and every retry then passes through an LLM guardian → run those lanes with `sandbox_permissions: require_escalated` from the FIRST attempt; never read their in-sandbox failure as a code failure. Optional: `~/.codex/rules` prefix rules for `pnpm pr:check` / `pnpm test:*` skip the guardian.
 
 ## e2e
 

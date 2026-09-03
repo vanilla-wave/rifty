@@ -41,3 +41,11 @@ This points to the gate's host-load envelope, not a repeatable product test
 failure. Refine with bounded-concurrency measurements and the exact child exit
 signal/resource telemetry. The fix must keep every current check and must not
 raise test timeouts or hide a real Vitest failure.
+
+Recurred 2026-09-03 on a docs-only diff (#305): `test:run` 332 s vs 196 s on
+the previous clean run of the same tree; two timeouts
+(`apps/landing/src/public-snippets.test.ts` Vite production build 34.9 s > 30 s,
+`tools/node-parity-runner/src/run-in-rifty.test.ts` eval-only probe > 5 s)
+while another worktree's Vitest run (8 workers) shared the host; both files
+pass standalone (5.8 s / 1.8 s). Cross-worktree load is now the common case
+(parallel agent runs), so the envelope must assume a shared host.

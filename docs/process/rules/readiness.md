@@ -102,12 +102,21 @@ tier. Raising tier requires an ADR.
 
 ## RDY-8 Review membership
 
-Decided ONCE at pickup per unit from its OWN subject, recorded in the unit doc:
-parity, cache, persistence, network, or concurrency → `review: checkpoints
-rounds:<n>`; docs/CI/process/tooling/harness → `review: ordinary` (one review
-after implementation, blockers fixed in place, no lineage). A loop that
-checkpoints every child regardless is the defect that put a CI unit through 12
-rounds (2026-08-30, `no-coi-substrate-lane`).
+Decided ONCE at pickup per unit, recorded in the unit doc. By subject: parity,
+cache, persistence, network, or concurrency → `review: checkpoints rounds:<n>`;
+docs/CI/process/tooling/harness → `review: ordinary` (one review after
+implementation, blockers fixed in place, no lineage). By delivery, overriding
+subject: a unit whose expected product delta is zero — carriers for landed
+behavior, a mechanism record, evidence, an ADR — is `review: ordinary —
+proof-only` whatever its subject: no Contract+RED, no rounds; its RED is a
+mutant kill-list (apply → run → revert, output kept in `reference/`); the one
+review first verifies `git diff --quiet <BASE>..HEAD -- packages apps services
+':!*.test.*' ':!*.spec.*' ':!**/tests/**'` — a product change reclassifies the
+unit to `checkpoints` there. A loop that checkpoints every child regardless is
+the defect that put a CI unit through 12 rounds (2026-08-30,
+`no-coi-substrate-lane`) and a proof-only successor through four reviewer runs
+and a round for zero product lines (2026-09-03,
+`no-coi-toolchain-operation-lifecycle`).
 
 ## RDY-9 Budget
 
