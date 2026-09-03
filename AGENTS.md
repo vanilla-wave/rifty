@@ -53,7 +53,7 @@ One PR = one reviewable delivered behavior; rules `docs/process/rules/pr.md` (`P
 - [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately
 - [ ] implementation aligned with project goal
 - [ ] no machinery the contract is deliverable without (§Simplicity, `REV-7`)
-- [ ] `pnpm pr:check` pass
+- [ ] `pnpm pr:check` pass — lanes follow the diff: a docs-only working tree runs the doc gates and names the skipped source lanes (`--all` forces the full gate); a `test:run` red reruns its failed files once in isolation and says so (time-outs counted; a failure that reproduces stays red)
 - [ ] touches cache/persistence/network/concurrency → traced `## Fault matrix` rows covered by fault tests (`RDY-3`)
 - [ ] shipped capability carries observable acceptance proof (e2e/parity) in the same PR — source greps, fakes, and opt-in lanes do not close acceptance
 - [ ] `CHANGELOG.md` in affected packages

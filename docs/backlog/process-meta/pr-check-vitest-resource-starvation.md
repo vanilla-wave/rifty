@@ -49,3 +49,12 @@ the previous clean run of the same tree; two timeouts
 while another worktree's Vitest run (8 workers) shared the host; both files
 pass standalone (5.8 s / 1.8 s). Cross-worktree load is now the common case
 (parallel agent runs), so the envelope must assume a shared host.
+
+Narrowed 2026-09-03: `pr-check.mjs` now runs `test:run` with the JSON
+reporter, reruns every failed file once in isolation (labelled with the
+vitest time-out count and the host load average; a reproducing failure stays
+red) and skips the source lanes on a docs-only tree. Load-induced failures
+are not only vitest time-outs: the 2026-09-03 run also hit a
+`preview-first listening timeout` inside `run-in-rifty.test.ts`. Remaining scope here: the worker-count policy
+(`maxWorkers` vs measured envelope) and telemetry for the July abort-without-
+assertion shape, which yields no JSON results and therefore no rerun.
