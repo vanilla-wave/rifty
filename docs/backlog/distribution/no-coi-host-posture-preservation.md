@@ -4,10 +4,9 @@ status: draft
 title: no-COI host document posture preservation across the sandbox loop
 created: 2026-09-02
 epic: no-coi-sandbox-tier
-blocked_by: [distribution/no-coi-sandbox-build-loop]
 why: the headerless host controls stay green, but Final review found that the cross-origin image did not prove its request mode or response lacked CORS/CORP, so the test could not certify the existing app's unchanged subresource posture
 user_story: As an existing app that cannot change its security posture, I want sandbox install and build to leave my same document, opener and ordinary cross-origin no-CORS/no-CORP subresources unchanged from entry through completion
-sources: [docs/backlog/distribution/reference/sw-coi-shim-probe.md, distribution/no-coi-sandbox-build-loop]
+sources: [docs/backlog/distribution/reference/sw-coi-shim-probe.md, docs/backlog/distribution/reference/no-coi-sandbox-build-loop-evidence.md]
 code: [apps/playground/no-coi-harness.html, apps/playground/vite.no-coi.config.ts, playwright.no-coi.config.ts, tests/no-coi/no-coi-sandbox-build-loop.spec.ts]
 ---
 
