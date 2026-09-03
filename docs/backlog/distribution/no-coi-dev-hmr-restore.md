@@ -109,7 +109,7 @@ new Worker restores the resident tool, reloads the iframe and resumes HMR.
 
 ## Decisions
 
+ready-verdict: 2026-09-04 — Contract+RED @ c53c08ad2
 review: checkpoints rounds:2
-contract-red: round 1 — blocker @ 54ed1f153
 re-cut: 2026-09-04 — compiled the final I4/I6/I10/I8 product slice and removed obsolete prerequisite history — trace: none
 - 2026-09-04 — expected RED band 4–4: public start/preview, real HMR, wedge restart/dirty marker, actual-death/overlap siblings.

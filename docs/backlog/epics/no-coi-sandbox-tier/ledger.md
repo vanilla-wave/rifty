@@ -135,3 +135,4 @@
 - 2026-09-04 — dev-HMR Contract RED: Chromium 3/3 fail after boot on missing `startBin`/`onLifecycle`; runtime host unit 1/1 fails on missing exact resident request. No import/typecheck/setup failure.
 - 2026-09-04 — dev-HMR Contract+RED round 1/1 blocker @ `54ed1f153`: 3 HOLDS after adjudication — reuse `runtime.on`; add capability-report working RED; add overlapping-restart/Worker-count RED. Coverage 10 pass / 2 weak / 2 missing of 14.
 - 2026-09-04 — dev-HMR Contract blocker batch: duplicate `onLifecycle` deleted in favor of existing stable runtime `exit` events; Chromium capability/overlap REDs added (4 failed / 1 existing death carrier passed); start input exactness and pending-before-result strengthened. Contract verify pending.
+- 2026-09-04 — distribution/no-coi-dev-hmr-restore Contract+RED PASS @ `c53c08ad2`: 14/14 coverage, 0 blockers / concerns / nits; implementation not started.
