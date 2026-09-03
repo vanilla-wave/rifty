@@ -36,5 +36,5 @@ after` line (`ledger.md`).
 
 Not in a unit: evidence blocks (→ `docs/backlog/<area>/reference/<slug>-evidence.md`),
 fork narratives and diagnoses (→ ledger / `reference/`), review reasoning (→
-verdict files). Limits for `created ≥ 2026-09-02`: ≤ 15 traced rows, ≤ 200
+verdict files). Limits for `created ≥ 2026-09-03`: ≤ 15 traced rows, ≤ 200
 lines (`RDY-4`, `backlog:check`).

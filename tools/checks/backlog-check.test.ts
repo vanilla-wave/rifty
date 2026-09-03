@@ -109,7 +109,7 @@ Install and run the package.
     }
   });
 
-  it('enforces trace and size on ready items created at/after 2026-09-02 (RDY-3, RDY-4)', () => {
+  it('enforces trace and size on ready items created at/after 2026-09-03 (RDY-3, RDY-4)', () => {
     const run = (body: string) => {
       const root = mkdtempSync(join(tmpdir(), 'rifty-backlog-check-'));
       try {
@@ -125,13 +125,13 @@ Install and run the package.
 area: vfs
 status: ready
 title: One intent
-created: 2026-09-02
+created: 2026-09-03
 why: gate
 ---
 
 ## Challenge
 
-challenge: 2026-09-02 — clear
+challenge: 2026-09-03 — clear
 
 ## User scenario
 
@@ -174,8 +174,8 @@ ${extra}`;
     expect(long.status).toBe(1);
     expect(long.stderr).toContain('lines > 200');
     const older = ready('1. hardening demand').replace(
+      'created: 2026-09-03',
       'created: 2026-09-02',
-      'created: 2026-09-01',
     );
     expect(run(older).status).toBe(0);
   });

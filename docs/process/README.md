@@ -80,7 +80,7 @@ section, line forms. Store rules (areas, statuses, challenge, tier, gates):
 
 | Gate | Enforces |
 |---|---|
-| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge; trace + size on ready items `created ≥ 2026-09-02` (`RDY-3`, `RDY-4`) |
+| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge; trace + size on ready items `created ≥ 2026-09-03` (`RDY-3`, `RDY-4`) |
 | `check:contract-drift` | frozen goal fields beside source (single-file and `epics/<slug>/goal.md`); ready contract change carries `re-cut:`; user-traced row (`→ I#`/`→ scenario`) change carries `fork:` (`RDY-5`); referees land separately (`PR-4`) |
 | `tools/review/blockers.mjs` | verdict shape, authority on blockers, trace on coverage rows, exit codes (`artifacts/verdict.md`) |
 | `refs:check` | dangling doc/ADR references cited from `docs/adr` and `docs/backlog` |

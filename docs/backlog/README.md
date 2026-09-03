@@ -49,7 +49,7 @@ A ready item needs:
 - every Acceptance/Parity/Fault row traced (`→ I#` / `→ scenario` /
   `→ ADR-NNNN` / `→ <rule-id>`; `docs/process/rules/readiness.md` `RDY-3`);
   ≤ 15 traced rows, ≤ 200 lines (`RDY-4`; gated by `backlog:check` for items
-  `created ≥ 2026-09-02`), one-sentence `title`;
+  `created ≥ 2026-09-03`), one-sentence `title`;
 - `## Out of scope`: named loud throws + compat ❌;
 - `## Decisions`: every fork resolved or ADR-linked; one-line records only
   (`docs/process/artifacts/unit.md`);
@@ -137,7 +137,7 @@ named substrate item owns one.
 
 | Owner | Enforces |
 |---|---|
-| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence; trace + size on ready items `created ≥ 2026-09-02` |
+| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence; trace + size on ready items `created ≥ 2026-09-03` |
 | `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract change carries `re-cut:`, a user-traced row change carries `fork:`; referees land separately |
 | Final review | frozen goal, append-only ledger, run membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
 

@@ -52,12 +52,12 @@ block on (`review.md` `REV-2`).
 An untraced row is a carrier note: it raises no coverage row and no blocker.
 Wanting a row to bind = find its trace; none exists = it is not an obligation.
 Machine gate: `backlog:check` requires traces on ready items `created ≥
-2026-09-02`; older ready items get traces at their next re-cut.
+2026-09-03`; older ready items get traces at their next re-cut.
 
 ## RDY-4 Size — one intent, one session
 
 A ready unit is one intent its `title` states in one sentence. Limits, gated by
-`backlog:check` for items `created ≥ 2026-09-02`: ≤ 15 traced rows, body ≤ 200
+`backlog:check` for items `created ≥ 2026-09-03`: ≤ 15 traced rows, body ≤ 200
 lines. Over either → split at PICKUP, before any review. Run state never lives
 in the contract: evidence blocks (command + output) go to
 `docs/backlog/<area>/reference/<slug>-evidence.md`, fork narratives and
@@ -113,7 +113,7 @@ expected-RED batch the compiled contract implies. `rounds` is the Final+GREEN
 budget (default 2); Contract+RED has exactly one verify round by construction
 — a 2nd blocker there is contract escalation (`stops.md` `STOP-5`). Raising a
 declared budget is the user's, never the agent's (`STOP-2`). A unit picked up
-before 2026-09-02 carries no `rounds:` line: the default applies, the reviewer
+before 2026-09-03 carries no `rounds:` line: the default applies, the reviewer
 notes its absence as a concern, and the next re-cut adds the line — never a
 blocker (replay 2026-09-02: the legacy `build-loop` unit drew one).
 

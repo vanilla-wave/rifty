@@ -45,7 +45,7 @@ const EPIC_REQUIRED_KEYS = ['kind', 'status', 'title', 'created', 'value'];
 const READY_ITEM_SECTIONS = ['Acceptance', 'Parity cases', 'Out of scope', 'Decisions'];
 // Trace + size gates on ready items (docs/process/rules/readiness.md RDY-3, RDY-4);
 // ratchet by creation date — older ready items get traces at their next re-cut.
-const TRACE_SINCE = '2026-09-02';
+const TRACE_SINCE = '2026-09-03';
 const TRACED_SECTIONS = ['Acceptance', 'Parity cases', 'Fault matrix'];
 const TRACE_RE = /→\s*(?:I\d+|scenario|ADR-\d{4}|[A-Z]{2,5}-\d+)\b/u;
 const MAX_TRACED_ROWS = 15;
