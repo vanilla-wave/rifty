@@ -114,3 +114,4 @@
 - 2026-09-03 — ADR-0376 now preserves the exact generic toolchain, WebIDL/native-identity and bounded-cause contracts while adding the one Worker admission/host settlement lifecycle authority; proof carriers remain product-byte-identical.
 - 2026-09-03 — re-chart after distribution/no-coi-toolchain-operation-lifecycle (final-green PASS @ a7e2470f9): 0 graduated / 5 invalidated (completed child deleted; four lifecycle prerequisite edges removed); frontier package-install → build-loop → host-posture → dev-HMR.
 - 2026-09-03 — distribution/no-coi-sandbox-package-install band 0–0 rounds 2; existing public Chromium install and 13-case npm bounds/failure/concurrency carriers selected exactly, no product/test change.
+- 2026-09-03 — distribution/no-coi-sandbox-package-install Contract+RED PASS @ `5a26cfa2a`: 0 blockers / 5 concerns; coverage 10 pass / 0 weak / 0 missing; implementation not started.

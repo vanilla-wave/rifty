@@ -104,6 +104,7 @@ dependency identities and required esbuild runtime from the same Worker VFS.
 
 ## Decisions
 
+ready-verdict: 2026-09-03 — Contract+RED @ 5a26cfa2a
 review: checkpoints rounds:2
 re-cut: 2026-09-03 — split successor of distribution/no-coi-sandbox-build-loop for the I2 package-install proof HOLD — trace: none
 - 2026-09-03 — owns frozen public install plus npm bounds/required-failure/same-key evidence; Vite-8/nanoid execution stays I3.
