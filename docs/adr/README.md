@@ -305,6 +305,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0311 | Registry-owned esbuild runtime removes the host asset URL |
 | 0319 | Preserve admitted mutations across project close |
 | 0341 | Project terminal runs expose authoritative shell status |
+| 0375 | Generic no-COI toolchain authority |
 | 0376 | No-COI toolchain operation lifecycle authority |
 
 ## Superseded (removed)
@@ -348,7 +349,6 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0321 | 0371 | strict lifecycle motive retained; the ninth correlation engine is deleted with its only consumer |
 | 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
 | 0374 | 0375 | explicit Worker/API/registry authority retained; Vite identity, lifecycle and build-only finalizer removed from generic no-COI control |
-| 0375 | 0376 | generic package/runtime authority retained; install/run admission forcing constraint, class sweep and host/Worker settlement seam added |
 
 ## Corrections (active)
 

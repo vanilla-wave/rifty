@@ -119,3 +119,6 @@
 - 2026-09-03 — I2 package install proof is exact at the public Worker VFS plus inherited npm bounds/failure/concurrency authority; focused Chromium 1/1, npm 13/13, product/tests unchanged.
 - 2026-09-03 — re-chart after distribution/no-coi-sandbox-package-install (final-green PASS @ 1ce2ab930): 0 graduated / 4 invalidated (completed child deleted; three package-install prerequisite edges removed); frontier build-loop → host-posture → dev-HMR.
 - 2026-09-03 — distribution/no-coi-sandbox-build-loop band 3–4 rounds 2; exact-line, request-identical Vite decoy, installed-provenance and live Node/COI/no-COI differential RED batch; product code unchanged.
+- 2026-09-03 — distribution/no-coi-sandbox-build-loop re-cut: fresh-main RDY-8 reclassifies zero-product carrier delivery to `review: ordinary — proof-only`; prior rounds declaration is superseded, band 3–4 mutant list unchanged — trace: none.
+- 2026-09-03 — fresh-main DEC-2 restores ADR-0375 as active and makes ADR-0376 additive lifecycle authority; no behavior/product change.
+- 2026-09-03 — distribution/no-coi-sandbox-build-loop proof-only IMPLEMENT GREEN: product sources unchanged; focused no-COI Chromium 4/4, typecheck and `pr:check` PASS 24/24 (`test:run` 301.2s after one isolated timeout-file rerun, parity 78.9s); ADR-0375 active and ADR-0376 additive.

@@ -133,7 +133,7 @@ request shared memory.
 
 ## Decisions
 
-review: checkpoints rounds:2
+review: ordinary — proof-only
 re-cut: 2026-09-03 — removed copied predecessor lineage and retained only the active 15-row I3 contract — trace: none
 - 2026-09-03 — expected RED band 3–4: exact module line, two-version request decoys, installed Vite8/nanoid provenance and live build differential.
 - 2026-09-03 — historical 2195-module Node golden is not silently updated; current live Node closure/output is a dated evidence record.
