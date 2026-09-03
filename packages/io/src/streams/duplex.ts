@@ -14,6 +14,10 @@
  * field any cast can pass through.
  */
 
+import {
+  type CallableStreamConstructor,
+  makeCallableStreamConstructor,
+} from './callable-constructor.ts';
 import { acquireDuplexFromWeb } from './from-web-validation.ts';
 import { Readable, type ReadableOptions } from './readable.ts';
 import {
@@ -32,6 +36,10 @@ type WriteOverride = (
 
 type FinalOverride = (this: Duplex, cb: (err?: Error | null) => void) => void;
 type DuplexEndCallback = (error?: Error | null) => void;
+
+const DUPLEX_WRITE_HOOK = Symbol('rifty/io:duplex-write-hook');
+const DUPLEX_WRITEV_HOOK = Symbol('rifty/io:duplex-writev-hook');
+const DUPLEX_FINAL_HOOK = Symbol('rifty/io:duplex-final-hook');
 
 function ownFunction(target: object, name: '_write' | '_final'): unknown {
   if (!Object.prototype.hasOwnProperty.call(target, name)) return undefined;
@@ -93,77 +101,79 @@ type DuplexReadableConstructor = Omit<typeof Readable, 'toWeb'> &
 // removed from the base constructor's type before Duplex declares Node's pair.
 const DuplexReadableBase = Readable as DuplexReadableConstructor;
 
-export class Duplex extends DuplexReadableBase {
+function initializeDuplex(receiver: Duplex, opts: DuplexOptions = {}): void {
+  const target = receiver as unknown as {
+    allowHalfOpen: boolean;
+    writableSide: Writable;
+    [DUPLEX_WRITE_HOOK]?: NonNullable<WritableOptions['write']>;
+    [DUPLEX_WRITEV_HOOK]?: NonNullable<WritableOptions['writev']>;
+    [DUPLEX_FINAL_HOOK]?: NonNullable<WritableOptions['final']>;
+  };
+  target.allowHalfOpen = opts.allowHalfOpen ?? true;
+  const factory = (opts as DuplexInternalOptions)[INTERNAL_WRITABLE_SIDE];
+  if (typeof opts.write === 'function') target[DUPLEX_WRITE_HOOK] = opts.write;
+  if (typeof opts.writev === 'function') target[DUPLEX_WRITEV_HOOK] = opts.writev;
+  if (typeof opts.final === 'function') target[DUPLEX_FINAL_HOOK] = opts.final;
+  const writeOpt = target[DUPLEX_WRITE_HOOK];
+  const writevOpt = target[DUPLEX_WRITEV_HOOK];
+  const finalOpt = target[DUPLEX_FINAL_HOOK];
+  target.writableSide = factory
+    ? factory(opts, receiver)
+    : new Writable({
+        ...opts,
+        write: (chunk, encoding, cb): void => {
+          const override = ownWriteOverride(receiver);
+          if (override) {
+            override.call(receiver, chunk, encoding, cb);
+            return;
+          }
+          if (writeOpt) {
+            writeOpt.call(target.writableSide, chunk, encoding, cb);
+            return;
+          }
+          cb();
+        },
+        writev: writevOpt,
+        final: (cb): void => {
+          const override = ownFinalOverride(receiver);
+          if (override) {
+            override.call(receiver, cb);
+            return;
+          }
+          if (finalOpt) {
+            finalOpt.call(target.writableSide, cb);
+            return;
+          }
+          cb();
+        },
+      });
+  target.writableSide.on('finish', () => receiver.emit('finish'));
+  target.writableSide.on('prefinish', () => receiver.emit('prefinish'));
+  target.writableSide.on('error', (err) => {
+    if (receiver._readableState.destroyed) return;
+    receiver._readableState.errored = err as Error;
+    receiver._readableState.destroyed = true;
+    receiver._readableState.disturbed = true;
+    receiver.emit('error', err);
+    receiver.emit('close');
+  });
+  target.writableSide.on('drain', () => receiver.emit('drain'));
+  if (!target.allowHalfOpen) {
+    receiver.once('end', () => {
+      if (!target.writableSide.writableEnded) target.writableSide.end();
+    });
+  }
+}
+
+class DuplexImplementation extends DuplexReadableBase {
   /** Internal `Writable` side. Exposed for tests/debugging only — drive the duplex via `d.write`/`d.end`. */
-  readonly writableSide: Writable;
+  readonly writableSide!: Writable;
   /** Node's `allowHalfOpen` — see {@link DuplexOptions}. */
-  readonly allowHalfOpen: boolean;
+  readonly allowHalfOpen!: boolean;
 
   constructor(opts: DuplexOptions = {}) {
     super(opts);
-    this.allowHalfOpen = opts.allowHalfOpen ?? true;
-    // Symbol-keyed factory is the only override path; public callers can't reach
-    // the Symbol. `Transform` injects it via `super({...})` — see `transform.ts`.
-    const factory = (opts as DuplexInternalOptions)[INTERNAL_WRITABLE_SIDE];
-    const writeOpt = opts.write;
-    const finalOpt = opts.final;
-    this.writableSide = factory
-      ? factory(opts, this)
-      : new Writable({
-          ...opts,
-          write: (chunk, encoding, cb): void => {
-            const override = ownWriteOverride(this);
-            if (override) {
-              override.call(this, chunk, encoding, cb);
-              return;
-            }
-            if (writeOpt) {
-              writeOpt.call(this.writableSide, chunk, encoding, cb);
-              return;
-            }
-            cb();
-          },
-          final: (cb): void => {
-            const override = ownFinalOverride(this);
-            if (override) {
-              override.call(this, cb);
-              return;
-            }
-            if (finalOpt) {
-              finalOpt.call(this.writableSide, cb);
-              return;
-            }
-            cb();
-          },
-        });
-    this.writableSide.on('finish', () => {
-      this.emit('finish');
-    });
-    this.writableSide.on('prefinish', () => {
-      this.emit('prefinish');
-    });
-    this.writableSide.on('error', (err) => {
-      if (this._readableState.destroyed) return;
-      // Writable owns the deferred public completion stack. Close the readable
-      // half on that same stack: write errors have already published end
-      // callbacks, while final errors publish them after this public close.
-      this._readableState.errored = err as Error;
-      this._readableState.destroyed = true;
-      this._readableState.disturbed = true;
-      this.emit('error', err);
-      this.emit('close');
-    });
-    this.writableSide.on('drain', () => {
-      this.emit('drain');
-    });
-    // Half-open coupling (Node parity): when `allowHalfOpen` is false, the
-    // readable side ending auto-ends the writable side — a socket-shaped Duplex
-    // and `Duplex.fromWeb` rely on this (a closed web-readable ends the writer).
-    if (!this.allowHalfOpen) {
-      this.once('end', () => {
-        if (!this.writableSide.writableEnded) this.writableSide.end();
-      });
-    }
+    initializeDuplex(this as unknown as Duplex, opts);
   }
 
   /**
@@ -392,6 +402,23 @@ export class Duplex extends DuplexReadableBase {
     throw err;
   }
 }
+
+export interface Duplex extends DuplexImplementation {}
+
+export type DuplexConstructor = CallableStreamConstructor<
+  typeof DuplexImplementation,
+  Duplex,
+  DuplexOptions
+>;
+
+export const Duplex: DuplexConstructor = makeCallableStreamConstructor(
+  'Duplex',
+  DuplexImplementation,
+  (receiver, options) => {
+    Readable.call(receiver, options);
+    initializeDuplex(receiver, options);
+  },
+);
 
 /** Node `{ readable, writable }` halves (each a stream with the right state bag). */
 function isStreamHalvesPair(src: unknown): src is { readable: Readable; writable: Writable } {

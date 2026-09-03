@@ -130,6 +130,7 @@ export function createPreviewReadiness(
     const current = attempt;
     attempt = null;
     if (current === null) return null;
+    clearTimeoutIfNeeded();
     current.abort.abort(reason);
     try {
       current.tearDown();
@@ -212,6 +213,10 @@ export function createPreviewReadiness(
     const current: Attempt = { key: keyOf(entry), entry, abort, tearDown };
     attempt = current;
     if (pending.settled || closed || wait !== pending) return;
+    timeout = setTimeout(
+      () => fail(new Error(`Preview readiness timed out after ${dependencies.timeoutMs}ms`)),
+      dependencies.timeoutMs,
+    );
 
     void (async () => {
       try {
@@ -306,10 +311,6 @@ export function createPreviewReadiness(
         settled: false,
       };
       wait = pending;
-      timeout = setTimeout(
-        () => fail(new Error(`Preview readiness timed out after ${dependencies.timeoutMs}ms`)),
-        dependencies.timeoutMs,
-      );
       let attaching = true;
       let synchronousEntries: readonly PreviewAdvertisement[] | null = null;
       const listener = (entries: readonly PreviewAdvertisement[]): void => {

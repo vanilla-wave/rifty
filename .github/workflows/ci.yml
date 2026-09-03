@@ -106,7 +106,7 @@ jobs:
     # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
     if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    # Run the three lanes as PARALLEL matrix jobs (separate runners), not
+    # Run the four lanes as PARALLEL matrix jobs (separate runners), not
     # sequential steps in one job: e2e wall-clock becomes max(lane) instead of
     # the sum. Separate runners also remove heavy<->light contention entirely
     # (the reason the old global workers=1 / same-job lane-split existed), so each
@@ -134,6 +134,7 @@ jobs:
           - { lane: light, shard: 7, shardTotal: 8 }
           - { lane: light, shard: 8, shardTotal: 8 }
           - { lane: prod }
+          - { lane: hosted }
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
@@ -168,8 +169,9 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       # One lane per matrix job. heavy = serialized TS-LS/fullstack specs
       # (--workers=1); light = the rest; prod = prod-artifact smoke (builds the
-      # app + `pnpm preview` with Netlify COI headers, asserts the owner boots —
-      # catches prod-only regressions the dev-server e2e can't).
+      # app + `pnpm preview` with Netlify COI headers); hosted = the webpack
+      # journey under a non-local HTTPS hostname, including stock HMR. The last
+      # two catch production/deployment paths the localhost dev carrier cannot.
       #
       # light is serialized --workers=1 IN CI ONLY: on the shared CI runner, ≥2
       # dev-server specs cold-booting a Vite-WASI stack (owner + dev-server child +

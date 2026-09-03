@@ -335,7 +335,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 143 → 142 (2026-08-31, ADR-0371): delete the N=1 owner asset authority.
     // 142 → 143 (2026-09-01, ADR-0375): public no-COI toolchain Worker.
     // 143 → 145 (2026-09-01, ADR-0375): generic finalizer + bounded gap provenance.
-    expect(packageProductionFiles).toHaveLength(145);
+    // 145 → 146 (PR #122): browser-project-runtime.ts owns kind dispatch.
+    expect(packageProductionFiles).toHaveLength(146);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

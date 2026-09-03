@@ -15,6 +15,8 @@
   orchestration, and public types (530 lines). Public API unchanged; the
   file-size ratchet pin is deleted.
 
+- Test ledgers accept scheduler-valid completion order for independent shadow
+  cache writes while retaining exact event membership and ordered publication.
 - Lockfile root entries preserve the project's declared dependency maps and
   requested ranges; hoisted transitive packages no longer acquire false root
   authority.

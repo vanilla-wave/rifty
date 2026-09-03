@@ -26,6 +26,7 @@ const HEAVY_SPECS = [
   '**/react-vite-preset.spec.ts',
   '**/react-vite-build.spec.ts',
   '**/preset-deep-link.spec.ts',
+  '**/webpack-dev-server.spec.ts',
 ];
 
 export default defineConfig({

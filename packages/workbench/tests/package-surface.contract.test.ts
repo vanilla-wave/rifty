@@ -55,6 +55,7 @@ describe('@riftydev/workbench package surface', () => {
     expect(manifest.exports).toEqual(EXPECTED_DEV_EXPORTS);
     expect(manifest.publishConfig.exports).toEqual(EXPECTED_PUBLISHED_EXPORTS);
     expect(manifest.sideEffects).toEqual([
+      './src/workers/kernel-worker-entry.ts',
       './dist/owner-worker.js',
       './dist/kernel-worker.js',
       './dist/node-worker.js',

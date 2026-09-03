@@ -31,7 +31,13 @@ interface RealWsConnection {
 }
 
 interface RealWsServer {
-  on(event: 'connection', cb: (socket: RealWsConnection) => void): void;
+  on(
+    event: 'connection',
+    cb: (
+      socket: RealWsConnection,
+      request?: { readonly headers: Record<string, string | undefined> },
+    ) => void,
+  ): void;
   close(cb?: () => void): void;
 }
 
@@ -298,7 +304,11 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     const port = 4111; // NOT 4110 — the double-listen EADDRINUSE test above holds that claim
     const httpServer = createServer();
     const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-    wss.on('connection', (socket) => {
+    let upgradeHost: string | undefined;
+    let upgradeOrigin: string | undefined;
+    wss.on('connection', (socket, request) => {
+      upgradeHost = request?.headers.host;
+      upgradeOrigin = request?.headers.origin;
       socket.send('remap-ok');
     });
     httpServer.listen({ port });
@@ -316,12 +326,15 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
       cid: 'remap-cid-1',
       url: 'ws://localhost:5273/ws',
       protocols: [],
+      origin: 'http://localhost:5273',
     });
     await waitFor(() =>
       seen.some((frame) => frame.type === 'msg' && String(frame.data) === 'remap-ok'),
     );
 
     expect(seen.some((frame) => frame.type === 'open-ack')).toBe(true);
+    expect(upgradeHost).toBe('localhost:5273');
+    expect(upgradeOrigin).toBe('http://localhost:5273');
     channel.postMessage({
       type: 'close',
       cid: 'remap-cid-1',
@@ -333,6 +346,45 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     channel.close();
     wss.close();
     httpServer.close();
+  });
+
+  it('forwards an explicit local http.request Origin through the upgrade bridge', async () => {
+    const { WebSocketServer } = requireFromHere('ws') as {
+      WebSocketServer: RealWsServerCtor;
+    };
+    const port = 4119;
+    const server = createServer();
+    const wss = new WebSocketServer({ server, path: '/ws' });
+    let upgradeOrigin: string | undefined;
+    wss.on('connection', (_socket, request) => {
+      upgradeOrigin = request?.headers.origin;
+    });
+    await listenOn(server, port);
+
+    const socket = await new Promise<{ destroy(): void }>((resolve, reject) => {
+      const request = httpDefault.request({
+        hostname: 'localhost',
+        port,
+        path: '/ws',
+        headers: {
+          connection: 'Upgrade',
+          upgrade: 'websocket',
+          'sec-websocket-version': '13',
+          'sec-websocket-key': 'AQIDBAUGBwgJCgsMDQ4PEA==',
+          origin: 'null',
+        },
+      });
+      request.on('upgrade', (_response: unknown, upgraded: unknown) =>
+        resolve(upgraded as { destroy(): void }),
+      );
+      request.on('error', reject);
+      request.end();
+    });
+
+    expect(upgradeOrigin).toBe('null');
+    socket.destroy();
+    wss.close();
+    server.close();
   });
 
   it('propagates real ws terminate() to the bridged client', async () => {
@@ -451,6 +503,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
       const head = args[2] as Uint8Array;
       expect(req.url).toBe('/socket?room=1');
       expect(req.headers.upgrade).toBe('websocket');
+      expect(req.headers.origin).toBeUndefined();
       const connection = req.headers.connection;
       expect(connection).toBeDefined();
       expect(connection?.toLowerCase()).toContain('upgrade');

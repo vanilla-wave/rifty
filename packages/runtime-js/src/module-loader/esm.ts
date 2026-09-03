@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 
 interface GuardNodeShape {
   readonly type: string;
@@ -31,6 +32,7 @@ interface EsmFunctionGuardCtx {
 // finite guard for known Function/eval import escapes, not proof-complete JS alias analysis.
 const functionRoutingAnalysisToken =
   /\bFunction\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
+const directEvalImportProbeHelper = '__riftyDynamicImport';
 
 export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): void {
   if (!functionRoutingAnalysisToken.test(source)) return;
@@ -455,21 +457,17 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
       if (guardCalleeMayBeDerivedHostFunction(callee, ctx) && constructorArgsMayImport(args)) {
         ctx.hasDerivedHostFunctionConstructor = true;
       }
-      if (guardCalleeMayBeEval(callee, ctx)) {
+      const canRouteDirectEvalImport =
+        rewriteDirectEvalImportCallArgument(
+          n,
+          directEvalImportProbeHelper,
+          isGuardShadowed(ctx, 'eval'),
+        ) !== null;
+      if (guardExpressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
-      }
-      if (
-        callee?.type === 'Identifier' &&
-        (callee as unknown as { name?: string }).name === 'eval' &&
-        !isGuardShadowed(ctx, 'eval')
-      ) {
-        ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
-      }
-      if (callee?.type === 'MemberExpression' && isGlobalEvalCallMember(callee, ctx)) {
-        ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
+        ctx.hasFunctionEvalText =
+          ctx.hasFunctionEvalText ||
+          (!canRouteDirectEvalImport && evalArgumentMayTouchFunction(args[0]));
       }
       walkEsmFunctionGuard(callee, ctx);
       for (const arg of args) walkEsmFunctionGuard(arg, ctx);
@@ -1411,13 +1409,12 @@ function guardExpressionMayBeGlobalEval(node: unknown, ctx: EsmFunctionGuardCtx)
   const n = unwrapGuardChain(node) as GuardNodeShape;
   if (n.type === 'Identifier') {
     const name = (n as unknown as { name?: string }).name;
-    return name === 'eval' || (typeof name === 'string' && isGuardMaybeEvalAlias(ctx, name));
+    return (
+      (name === 'eval' && !isGuardShadowed(ctx, name)) ||
+      (typeof name === 'string' && isGuardMaybeEvalAlias(ctx, name))
+    );
   }
   return n.type === 'MemberExpression' && isGlobalEvalCallMember(n, ctx);
-}
-
-function guardCalleeMayBeEval(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
-  return guardExpressionMayBeGlobalEval(node, ctx);
 }
 
 function isGlobalFunctionUnknownReadMember(

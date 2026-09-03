@@ -11,7 +11,11 @@
 
 import { Buffer, type Encoding } from '../buffer.ts';
 import { EventEmitter } from '../event-emitter.ts';
-import { getDefaultHighWaterMark } from './default-highwatermark.ts';
+import {
+  type CallableStreamConstructor,
+  initializeWritable,
+  makeCallableStreamConstructor,
+} from './callable-constructor.ts';
 import { acquireWritableFromWeb } from './from-web-validation.ts';
 import { chunkSize } from './readable.ts';
 
@@ -160,8 +164,8 @@ function admitWrite(
   return { chunk, encoding };
 }
 
-export class Writable extends EventEmitter {
-  readonly _writableState: WritableState;
+class WritableImplementation extends EventEmitter {
+  readonly _writableState!: WritableState;
   private writeImpl?: (
     this: Writable,
     chunk: unknown,
@@ -174,32 +178,11 @@ export class Writable extends EventEmitter {
     cb: (err?: Error | null) => void,
   ) => void;
   private finalImpl?: (this: Writable, cb: (err?: Error | null) => void) => void;
-  private readonly endCallbacks: EndCallback[] = [];
+  private readonly endCallbacks!: EndCallback[];
 
   constructor(opts: WritableOptions = {}) {
     super();
-    const objectMode = opts.objectMode ?? false;
-    this._writableState = {
-      buffered: [],
-      length: 0,
-      highWaterMark: opts.highWaterMark ?? getDefaultHighWaterMark(objectMode),
-      objectMode,
-      decodeStrings: opts.decodeStrings !== false,
-      writing: false,
-      finalizing: false,
-      ending: false,
-      finished: false,
-      destroyed: false,
-      closed: false,
-      errored: null,
-      needDrain: false,
-      corked: 0,
-      drainScheduled: false,
-      writevBatch: false,
-    };
-    this.writeImpl = opts.write;
-    this.writevImpl = opts.writev;
-    this.finalImpl = opts.final;
+    initializeWritable(this as unknown as Writable, opts);
   }
 
   _write(_chunk: unknown, _encoding: string, cb: (err?: Error | null) => void): void {
@@ -792,6 +775,23 @@ export class Writable extends EventEmitter {
     });
   }
 }
+
+export interface Writable extends WritableImplementation {}
+
+export type WritableConstructor = CallableStreamConstructor<
+  typeof WritableImplementation,
+  Writable,
+  WritableOptions
+>;
+
+export const Writable: WritableConstructor = makeCallableStreamConstructor(
+  'Writable',
+  WritableImplementation,
+  (receiver, options) => {
+    EventEmitter.call(receiver);
+    initializeWritable(receiver, options);
+  },
+);
 
 function abortError(): Error {
   const err = new Error('The operation was aborted') as Error & { code?: string };

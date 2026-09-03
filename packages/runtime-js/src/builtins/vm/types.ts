@@ -12,7 +12,27 @@
  */
 export const VM_CONTEXT = Symbol.for('rifty.vm.context');
 
+export interface ContextCodeGeneration {
+  readonly strings: boolean;
+  readonly wasm: boolean;
+}
+
 export type ContextObject = Record<string, unknown> & { [VM_CONTEXT]?: true };
+
+const contextCodeGeneration = new WeakMap<ContextObject, ContextCodeGeneration>();
+
+export function setContextCodeGeneration(
+  context: ContextObject,
+  policy: ContextCodeGeneration,
+): void {
+  contextCodeGeneration.set(context, policy);
+}
+
+export function getContextCodeGeneration(
+  context: ContextObject,
+): ContextCodeGeneration | undefined {
+  return contextCodeGeneration.get(context);
+}
 
 /** Shared `vm.isContext` predicate (used by the public surface and the engines). */
 export function isVmContext(value: unknown): boolean {

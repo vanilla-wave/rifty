@@ -47,7 +47,7 @@ export type {
 
 // ADR-0039 — pre-entry hook (runtime-js installs the Node `process` global
 // via this hook). The hook itself is registered by higher layers; the kernel
-// just exposes the setter and calls it after publishing `KernelProcessSpec`.
+// just exposes the setter and awaits it after publishing `KernelProcessSpec`.
 export {
   type KernelPreEntryHook,
   type KernelDrainHook,

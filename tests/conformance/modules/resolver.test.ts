@@ -1227,24 +1227,45 @@ describe('ESM — import / export', () => {
     });
   });
 
-  it('throws a directed ceiling when runtime-built Function import() hides behind eval in ESM', async () => {
+  it('routes a direct eval literal import inside a runtime-built Function in ESM', async () => {
     const loader = setup({
-      '/a.mjs': "export const v = 'wrong-target';",
+      '/a.mjs': "export const v = 'routed-function-eval-import';",
       '/main.mjs': `
         const dyn = new Function('specifier', 'return eval("import(specifier)")');
         export const value = (await dyn('./a.mjs')).v;
       `,
     });
-    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
-      name: 'NotImplementedError',
-      feature: 'module-loader.function-constructor-dynamic-scope',
+    await expect(loader.import('./main.mjs', '/entry.mjs')).resolves.toMatchObject({
+      value: 'routed-function-eval-import',
     });
   });
 
-  it('throws a directed ceiling when ESM eval text contains import()', async () => {
+  it('routes a direct ESM eval literal import through the module loader', async () => {
     const loader = setup({
-      '/a.mjs': "export const v = 'wrong-target';",
-      '/main.mjs': 'export const value = (await eval("import(\'./a.mjs\')")).v;',
+      '/a.mjs': "export const v = 'routed-eval-import';",
+      '/main.mjs': `
+        const __import = () => Promise.resolve({ v: 'shadowed-helper' });
+        export const value = (await eval("import('./a.mjs')")).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).resolves.toMatchObject({
+      value: 'routed-eval-import',
+    });
+  });
+
+  it.each([
+    ['indirect', 'export default (0, eval)("(specifier) => import(specifier)");'],
+    ['global', 'export default globalThis.eval("(specifier) => import(specifier)");'],
+    [
+      'aliased',
+      'const evaluate = eval; export default evaluate("(specifier) => import(specifier)");',
+    ],
+    ['nested', 'export default eval("eval(\\"import(\'./a.mjs\')\\")");'],
+    ['with scope', 'export default eval("with ({}) { import(\'./a.mjs\') }");'],
+  ])('keeps the ESM %s eval-import path behind a directed ceiling', async (_name, source) => {
+    const loader = setup({
+      '/main.mjs': source,
+      '/a.mjs': "export const value = 'must-not-load';",
     });
     await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
       name: 'NotImplementedError',
@@ -1256,8 +1277,8 @@ describe('ESM — import / export', () => {
     const loader = setup({
       '/a.mjs': "export const v = 'wrong-target';",
       '/main.mjs': `
-        const dyn = new Function('specifier', 'return eval("im" + "port(specifier)")');
-        export const value = (await dyn('./a.mjs')).v;
+        const dyn = new Function('specifier', 'token', 'return eval(token + "(specifier)")');
+        export const value = (await dyn('./a.mjs', 'import')).v;
       `,
     });
     await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
@@ -2519,26 +2540,79 @@ describe('ESM — import / export', () => {
     );
   });
 
-  it('throws a directed ceiling when runtime-built Function import() hides behind eval in CJS', () => {
+  it('routes a direct eval literal import inside a runtime-built Function in CJS', async () => {
     const loader = setup({
       '/main.cjs': `
         const dyn = new Function('specifier', 'return eval("import(specifier)")');
         exports.promise = dyn('./esm.mjs').then((m) => m.value);
       `,
-      '/esm.mjs': "export const value = 'wrong-target';",
+      '/esm.mjs': "export const value = 'routed-function-eval-import';",
     });
-    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
-      expect.objectContaining({
-        name: 'NotImplementedError',
-        feature: 'module-loader.function-constructor-dynamic-scope',
-      }) as unknown as Error,
-    );
+    const exports = loader.require('./main.cjs', '/entry.js') as { promise: Promise<string> };
+    await expect(exports.promise).resolves.toBe('routed-function-eval-import');
   });
 
-  it('throws a directed ceiling when CJS eval text contains import()', () => {
+  it('routes a direct CJS eval literal import through the module loader', async () => {
     const loader = setup({
       '/main.cjs': 'exports.promise = eval("import(\'./esm.mjs\')").then((m) => m.value);',
-      '/esm.mjs': "export const value = 'wrong-target';",
+      '/esm.mjs': "export const value = 'routed-eval-import';",
+    });
+    const exports = loader.require('./main.cjs', '/entry.js') as { promise: Promise<string> };
+    await expect(exports.promise).resolves.toBe('routed-eval-import');
+  });
+
+  it('loads both branches of a Webpack-shaped lazy eval importer', async () => {
+    const loader = setup({
+      '/load-loader.cjs': `
+        let importModule;
+        module.exports = function loadLoader(loader) {
+          if (loader.type === 'module') {
+            if (importModule === undefined) {
+              importModule = eval('(specifier) => import(specifier)');
+            }
+            return importModule(loader.path);
+          }
+          return require(loader.path);
+        };
+      `,
+      '/common-loader.cjs': "module.exports = 'common-loader';",
+      '/module-loader.mjs': "export const value = 'module-loader';",
+    });
+    const loadLoader = loader.require('./load-loader.cjs', '/entry.js') as (input: {
+      type: string;
+      path: string;
+    }) => unknown;
+
+    expect(loadLoader({ type: 'commonjs', path: './common-loader.cjs' })).toBe('common-loader');
+    await expect(
+      loadLoader({ type: 'module', path: './module-loader.mjs' }),
+    ).resolves.toMatchObject({ value: 'module-loader' });
+  });
+
+  it('does not treat a shadowed CJS eval binding as the global evaluator', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const eval = (source) => source;
+        module.exports = eval('(specifier) => import(specifier)');
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toBe('(specifier) => import(specifier)');
+  });
+
+  it.each([
+    ['indirect', 'module.exports = (0, eval)("(specifier) => import(specifier)");'],
+    ['optional', 'module.exports = eval?.("(specifier) => import(specifier)");'],
+    ['global', 'module.exports = globalThis.eval("(specifier) => import(specifier)");'],
+    [
+      'aliased',
+      'const evaluate = eval; module.exports = evaluate("(specifier) => import(specifier)");',
+    ],
+    ['nested', 'module.exports = eval("eval(\\"import(\'./esm.mjs\')\\")");'],
+    ['with scope', 'module.exports = eval("with ({}) { import(\'./esm.mjs\') }");'],
+  ])('keeps the CJS %s eval-import path behind a directed ceiling', (_name, source) => {
+    const loader = setup({
+      '/main.cjs': source,
+      '/esm.mjs': "export const value = 'must-not-load';",
     });
     expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
       expect.objectContaining({
@@ -2551,8 +2625,8 @@ describe('ESM — import / export', () => {
   it('throws a directed ceiling when runtime-built Function eval synthesizes import in CJS', () => {
     const loader = setup({
       '/main.cjs': `
-        const dyn = new Function('specifier', 'return eval("im" + "port(specifier)")');
-        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+        const dyn = new Function('specifier', 'token', 'return eval(token + "(specifier)")');
+        exports.promise = dyn('./esm.mjs', 'import').then((m) => m.value);
       `,
       '/esm.mjs': "export const value = 'wrong-target';",
     });

@@ -50,6 +50,9 @@ importers:
 
   apps/playground:
     dependencies:
+      '@jitl/quickjs-wasmfile-release-sync':
+        specifier: ^0.32.0
+        version: 0.32.0
       '@rifty-examples/vite-like-dev':
         specifier: workspace:*
         version: link:../../examples/vite-like-dev

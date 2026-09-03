@@ -91,8 +91,8 @@ function expectRuntimeContract(plan: PlaygroundProjectPlan, spec: ProjectSpec): 
   expect(plan.kind).toBe(spec.runtime);
   expect(Reflect.ownKeys(plan).map(String).sort()).toEqual(expectedPlanKeys(spec));
 
-  if (plan.kind === 'vite') {
-    expect(spec.runtime).toBe('vite');
+  if (spec.runtime === 'vite') {
+    if (plan.kind !== 'vite') throw new Error('Vite spec mapped to the wrong plan kind');
     expect(plan.port).toBe(spec.defaultPort);
     expect(`vite --port ${String(plan.port)}`).toBe(terminalDevLine(spec, SENTINEL_ROOT));
     expect('entryPath' in plan).toBe(false);
@@ -101,16 +101,27 @@ function expectRuntimeContract(plan: PlaygroundProjectPlan, spec: ProjectSpec): 
     return;
   }
 
-  expect(plan.entryPath).toBe(spec.entry.relativePath);
   expect(terminalDevLine(spec, SENTINEL_ROOT)).toBe(`cd ${SENTINEL_ROOT} && npm run dev`);
-  if (plan.kind === 'node-server') {
-    expect(spec.runtime).toBe('node-server');
+  if (spec.runtime === 'npm-dev-server') {
+    if (plan.kind !== 'npm-dev-server') {
+      throw new Error('npm dev-server spec mapped to the wrong plan kind');
+    }
+    for (const field of ['port', 'entryPath', 'command', 'bin']) {
+      expect(plan, field).not.toHaveProperty(field);
+    }
+    return;
+  }
+
+  if (spec.runtime === 'node-server') {
+    if (plan.kind !== 'node-server') throw new Error('Node server mapped to the wrong plan kind');
+    expect(plan.entryPath).toBe(spec.entry.relativePath);
     expect(plan.port).toBe(spec.defaultPort);
     expect('args' in plan).toBe(false);
     return;
   }
 
-  expect(spec.runtime).toBe('node-cli');
+  if (plan.kind !== 'node-cli') throw new Error('Node CLI mapped to the wrong plan kind');
+  expect(plan.entryPath).toBe(spec.entry.relativePath);
   expect(plan.args).toEqual([]);
   expect('port' in plan).toBe(false);
 }
@@ -273,6 +284,89 @@ describe('toPlaygroundProjectPlan registry differential contract', () => {
       '<main>preset html overlay</main>\n',
     );
     expect(text(plan.files['/package.json'], '/package.json')).toContain('"vite"');
+  });
+
+  it('maps the webpack preset to the exact minimal npm-dev-server companion plan', () => {
+    const preset = PRESETS.find((candidate) => candidate.id === 'webpack-dev-server');
+    if (preset === undefined) throw new Error('missing webpack-dev-server preset');
+    const plan = mapPlan({
+      projectId: 'webpack-project',
+      starter: starterFromPreset(preset),
+      setup: 'from-scratch',
+    });
+    if (plan.kind !== 'npm-dev-server') {
+      throw new Error('webpack preset mapped to the wrong plan kind');
+    }
+
+    expect(Reflect.ownKeys(plan).map(String).sort()).toEqual([
+      'dependencies',
+      'devDependencies',
+      'files',
+      'firstMaterialization',
+      'id',
+      'kind',
+      'starterId',
+      'templateId',
+    ]);
+    expect(plan.kind).toBe('npm-dev-server');
+    expect(plan.dependencies).toEqual({});
+    expect(plan.devDependencies).toEqual({
+      webpack: '^5.0.0',
+      'webpack-cli': '^5.0.0',
+      'webpack-dev-server': '^5.0.0',
+      'css-loader': '^7.0.0',
+      'style-loader': '^4.0.0',
+    });
+    for (const field of ['port', 'entryPath', 'command', 'bin']) {
+      expect(plan, field).not.toHaveProperty(field);
+    }
+
+    const manifest = JSON.parse(text(plan.files['/package.json'], '/package.json')) as {
+      readonly scripts?: Readonly<Record<string, string>>;
+      readonly type?: string;
+    };
+    expect(manifest.scripts).toEqual({ dev: 'webpack serve' });
+    expect(Object.hasOwn(manifest, 'type')).toBe(false);
+    expect(text(plan.files['/webpack.config.js'], '/webpack.config.js')).toMatch(
+      /allowedHosts:\s*\[['"]localhost['"]\]/,
+    );
+  });
+
+  it('maps the hidden node-ws class-proof to a zero-field npm-dev-server plan', () => {
+    const preset = PRESETS.find((candidate) => candidate.id === 'npm-dev-server-node-ws');
+    if (preset === undefined) throw new Error('missing npm-dev-server-node-ws preset');
+    const plan = mapPlan({
+      projectId: 'node-ws-project',
+      starter: starterFromPreset(preset),
+      setup: 'from-scratch',
+    });
+    if (plan.kind !== 'npm-dev-server') {
+      throw new Error('node-ws preset mapped to the wrong plan kind');
+    }
+
+    expect(Reflect.ownKeys(plan).map(String).sort()).toEqual([
+      'dependencies',
+      'files',
+      'firstMaterialization',
+      'id',
+      'kind',
+      'starterId',
+      'templateId',
+    ]);
+    expect(plan.kind).toBe('npm-dev-server');
+    expect(plan.dependencies).toEqual({});
+    expect('devDependencies' in plan).toBe(false);
+    for (const field of ['port', 'entryPath', 'command', 'bin']) {
+      expect(plan, field).not.toHaveProperty(field);
+    }
+
+    const manifest = JSON.parse(text(plan.files['/package.json'], '/package.json')) as {
+      readonly scripts?: Readonly<Record<string, string>>;
+      readonly type?: string;
+    };
+    expect(manifest.scripts).toEqual({ dev: 'node server.mjs' });
+    expect(manifest.type).toBe('module');
+    expect(text(plan.files['/server.mjs'], '/server.mjs')).not.toMatch(/webpack/i);
   });
 
   it('rejects a Starter whose durable self-id disagrees with its registry id', () => {

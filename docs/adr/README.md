@@ -34,6 +34,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0333 | Descendant settlement barrier preserves recursive teardown ordering |
 | 0340 | Sequenced worker stdio reconstructs cross-port write order |
 | 0347 | Idempotent process-manager kill during settlement |
+| 0351 | Async pre-entry readiness gates worker entry |
 | 0366 | Binary request frames for hot fs sync-RPC |
 
 ### runtime-js
@@ -80,6 +81,9 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0342 | Release pending eval drain ownership when server branch wins |
 | 0345 | Expose exact Node 24.0.0 process.release identity |
 | 0348 | Synchronous require(ESM) on Node 24 |
+| 0350 | Buffer.from ArrayBufferLike aliases backing storage |
+| 0352 | Realm-wide QuickJS preload uses host-published WASM |
+| 0353 | Callable Node stream constructors preserve legacy initialization |
 | 0365 | Single-hop small-file sync-RPC reads |
 
 ### runtime-wasi
@@ -108,6 +112,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0186 | Cross-realm EADDRINUSE via per-port bind-claim broadcast |
 | 0189 | Preview loopback WebSocket bridge |
 | 0315 | Report the effective virtual server address |
+| 0354 | Preview WebSocket browser Origin propagation |
 
 ### service-worker
 
@@ -198,6 +203,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0329 | Authority-owned project Save rebinds exact installed-tree trust |
 | 0336 | Exact Vite 8 projects pin the proven Rolldown WASI runtime |
 | 0346 | Baked dependency snapshots carry replay tarball cache |
+| 0349 | npm-owned dev-server project plan |
+| 0355 | Webpack starter trusts the exact deployed hostname |
 | 0359 | Durability-drain progress as a health-event kind on the workbench owner port |
 | 0360 | Owner operation deadline is a host-configurable budget of durability-progress silence |
 
@@ -352,8 +359,14 @@ superseded.
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
+| 0349 webpack default-host clause | 0355 / note 2026-08-11 | deployed starter visibly allow-lists only the exact browser page hostname; generic plan/runtime stays zero-field |
+| 0354 no-allow-list consequence | 0355 / note 2026-08-11 | truthful Origin plus an exact singleton project allow-list preserves hosted WDS security; rewrites and unbounded allow-lists remain forbidden |
+| 0158 public-Body-only consumption proof | 0158 / note 2026-08-11 | WebAssembly streaming is an unconditional whole-realm loud gap; public Body consumers remain counted |
+| 0352 dynamic host bootstrap / publish-before-import proof | 0352 / note 2026-08-11 | static sealed entry admits one-shot init only after listener install and host URL publication |
+| 0351 no-other-pre-entry-consumer proof clause | 0351 / note 2026-08-11 | physical node-eval parity wrapper awaits runtime readiness; product registrations remain direct |
 | 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
 | 0009 unconditional async-wrapper assumption | 0348 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |
+| 0030 raw ArrayBuffer copy/deferred clauses | 0350 / note 2026-08-11 | ArrayBuffer and SharedArrayBuffer inputs alias backing storage; typed arrays still copy |
 | 0053 shared JS/TS extension-fallback clause | 0348 / note 2026-08-10 | TS-aware fallback stays on import; require uses Node's legacy suffix set |
 | 0032 request-state release / current-version clauses | 0331 / note 2026-07-27 | SyncRpc v3 retains a claimed request through versioned reply consumption |
 | 0084 #17 `inFlight` guard / #18 early release clauses | 0331 / note 2026-07-27 | shared `HANDLING` is sole exchange authority through caller consumption |
@@ -511,6 +524,9 @@ Removed, no successor (resolve to git history):
 - `docs/opencode/`, `docs/opencode-rifty-feasibility-2026-05-30.md`, `docs/opencode/HANDOFF.md` — retired server-facade exploration, not retained
 - `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)
 - `docs/backlog/playground/terminal-node-command.md` — completed backlog item, removed on close; the record is ADR-0155 + the code (ADR-0130/0155 still cite it)
+- `docs/backlog/runtime-js/in-process-harness-vitest-ipc-noise.md` — completed backlog item, removed on close; physical-child runtime smokes and their lifecycle tests are the record (ADR-0130 still cites it)
+- `docs/backlog/npm-client/shadow-cache-ledger-independent-completion-order.md` — completed backlog item, removed on close; forced alternate completion plus exact-multiset shadow cache ledgers are the record
+- `docs/backlog/kernel/sab-ring-protocol-violation-flake.md` — completed backlog item, removed on close; explicit contender/reply phase proofs and owner-bounded Worker cleanup are the record
 - `docs/backlog/runtime-js/execsync-node-entry-loader.md` — completed backlog item, removed on close; `execSync`'s child now routes through the node-entry module loader (shebang + relative imports), the record is ADR-0137/0143/0150 + the code (ADR-0137/0143/0146 + `docs/backlog/shell/d-owner-worker-milestone.md` still cite it)
 - `docs/backlog/kernel/worker-per-process-residuals.md` — completed backlog item, removed on close; ADR-0230 + runtime stdin parity are the record (ADR-0155/0157 still cite it)
 - `docs/backlog/shell/pty-live-resize.md` — completed backlog item, removed on close; ADR-0225 + terminal/worker resize tests are the record

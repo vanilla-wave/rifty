@@ -65,6 +65,20 @@
 
 ### Fixed
 
+- **Preview WebSocket upgrades preserve browser/Node Origin provenance
+  (ADR-0354).** Browser bridge opens now carry the actual
+  `window.location.origin` independently from target-derived `Host`; local
+  `http.request` upgrades forward an explicit raw `Origin` unchanged, while
+  origin-less programmatic clients stay origin-less. Stock dev-server security
+  checks no longer reject an otherwise-valid bridge handshake.
+
+- **`IncomingMessage.socket` accepts EventEmitter listeners.** Ordinary server
+  requests and fetch-backed client responses now expose the listener and
+  active-state surface required by `on-finished`/`ee-first`; the old plain
+  object crashed during attachment. Per-request transport destruction remains
+  a loud gap because the shared fetch/preview transport cannot be torn down by
+  this synthetic socket view.
+
 - **`http.Server.address()` and `net.Server.address()` return complete
   `AddressInfo`.** Bound servers expose the effective virtual
   `{ address: '127.0.0.1', family: 'IPv4', port }`, restoring Vite 7/8 URL

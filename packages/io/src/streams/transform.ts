@@ -11,6 +11,10 @@
  */
 
 import {
+  type CallableStreamConstructor,
+  makeCallableStreamConstructor,
+} from './callable-constructor.ts';
+import {
   Duplex,
   type DuplexInternalOptions,
   INTERNAL_WRITABLE_SIDE,
@@ -30,77 +34,110 @@ export interface TransformOptions extends ReadableOptions, WritableOptions {
   flush?(this: Transform, cb: (err?: Error | null) => void): void;
 }
 
-export class Transform extends Duplex {
-  constructor(opts: TransformOptions = {}) {
-    const transformImpl = opts.transform;
-    const flushImpl = opts.flush;
-    // `this` isn't available until super() returns, but the writable-side
-    // factory only needs the ref at write-time — back-fill a ref-cell after super.
-    const transformRef: { instance: Transform | null } = { instance: null };
-    // The `Duplex` ctor type advertises only `ReadableOptions & WritableOptions`
-    // but reads the `INTERNAL_WRITABLE_SIDE` symbol key internally; assemble both
-    // into one bag. The symbol key is invisible to callers outside this package.
-    const superOpts: ReadableOptions & WritableOptions & DuplexInternalOptions = {
+const TRANSFORM_HOOK = Symbol('rifty/io:transform-hook');
+const FLUSH_HOOK = Symbol('rifty/io:transform-flush-hook');
+
+interface TransformHookTarget {
+  [TRANSFORM_HOOK]?: NonNullable<TransformOptions['transform']>;
+  [FLUSH_HOOK]?: NonNullable<TransformOptions['flush']>;
+}
+
+interface TransformConstruction {
+  readonly options: ReadableOptions & WritableOptions & DuplexInternalOptions;
+  bind(instance: Transform): void;
+}
+
+function prepareTransform(
+  opts: TransformOptions = {},
+  receiver?: Transform,
+): TransformConstruction {
+  const target = receiver as (Transform & TransformHookTarget) | undefined;
+  const configuredTransform = opts.transform;
+  const configuredFlush = opts.flush;
+  const transformImpl =
+    typeof configuredTransform === 'function' ? configuredTransform : target?.[TRANSFORM_HOOK];
+  const flushImpl = typeof configuredFlush === 'function' ? configuredFlush : target?.[FLUSH_HOOK];
+  const transformRef: { instance: Transform | null } = { instance: null };
+  return {
+    options: {
       ...opts,
       [INTERNAL_WRITABLE_SIDE]: (innerOpts, owner) =>
         new Writable({
           ...innerOpts,
           write(chunk, encoding, cb): void {
-            const t = transformRef.instance ?? (owner as Transform);
-            if (!t) {
-              cb(new Error('Transform stream not yet bound — internal invariant violated'));
-              return;
-            }
-            const override = ownWriteOverride(t);
+            const target = transformRef.instance ?? (owner as Transform);
+            const override = ownWriteOverride(target);
             if (override) {
-              override.call(t, chunk, encoding, cb);
+              override.call(target, chunk, encoding, cb);
               return;
             }
             if (transformImpl) {
-              transformImpl.call(t, chunk, encoding, (err, value) => {
-                if (err) {
-                  cb(err);
-                  return;
+              transformImpl.call(target, chunk, encoding, (err, value) => {
+                if (err) cb(err);
+                else {
+                  if (value !== undefined && value !== null) target.push(value);
+                  cb();
                 }
-                if (value !== undefined && value !== null) t.push(value);
-                cb();
               });
               return;
             }
-            // Identity-default: echo to readable side.
-            t.push(chunk);
+            target.push(chunk);
             cb();
           },
           final(cb): void {
-            const t = transformRef.instance ?? (owner as Transform);
-            if (!t) {
-              cb(new Error('Transform stream not yet bound — internal invariant violated'));
-              return;
-            }
-            const override = ownFinalOverride(t);
+            const target = transformRef.instance ?? (owner as Transform);
+            const override = ownFinalOverride(target);
             if (override) {
-              override.call(t, cb);
+              override.call(target, cb);
               return;
             }
             const finalize = (): void => {
-              t.push(null);
+              target.push(null);
               cb();
             };
             if (flushImpl) {
-              flushImpl.call(t, (err) => {
+              flushImpl.call(target, (err) => {
                 if (err) cb(err);
                 else finalize();
               });
-              return;
-            }
-            finalize();
+            } else finalize();
           },
         }),
-    };
-    super(superOpts);
-    transformRef.instance = this;
+    },
+    bind(instance): void {
+      transformRef.instance = instance;
+      const bound = instance as Transform & TransformHookTarget;
+      if (typeof configuredTransform === 'function') bound[TRANSFORM_HOOK] = configuredTransform;
+      if (typeof configuredFlush === 'function') bound[FLUSH_HOOK] = configuredFlush;
+    },
+  };
+}
+
+class TransformImplementation extends Duplex {
+  constructor(opts: TransformOptions = {}) {
+    const construction = prepareTransform(opts);
+    super(construction.options);
+    construction.bind(this as unknown as Transform);
   }
 
   /** Transform callbacks push the readable side; Node owns the same no-op hook. */
   override _read(): void {}
 }
+
+export interface Transform extends TransformImplementation {}
+
+export type TransformConstructor = CallableStreamConstructor<
+  typeof TransformImplementation,
+  Transform,
+  TransformOptions
+>;
+
+export const Transform: TransformConstructor = makeCallableStreamConstructor(
+  'Transform',
+  TransformImplementation,
+  (receiver, options) => {
+    const construction = prepareTransform(options, receiver);
+    Duplex.call(receiver, construction.options);
+    construction.bind(receiver);
+  },
+);

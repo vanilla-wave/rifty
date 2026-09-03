@@ -283,6 +283,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       // .url reports the browser-resolved URL (native parity); the OPEN frame
       // carries the guest-visible one (page /preview/<port>/ prefix stripped).
       this.__frameUrl = guestFrameUrl(target);
+      this.__frameOrigin = window.location.origin;
       this.protocol = '';
       this.extensions = '';
       this.binaryType = 'blob';
@@ -324,6 +325,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
           type: 'open',
           cid: this.__cid,
           url: this.__frameUrl,
+          origin: this.__frameOrigin,
           protocols: this.__protocols
         });
       }

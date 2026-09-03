@@ -180,12 +180,12 @@ export class Buffer extends Uint8Array {
   // Explicit overloads keep the static side assignable to the base
   // `typeof Uint8Array` while preserving Node's calling conventions.
   static override from(value: string, encoding?: Encoding): Buffer;
-  static override from(value: ArrayBuffer, offset?: number, length?: number): Buffer;
+  static override from(value: ArrayBufferLike, offset?: number, length?: number): Buffer;
   static override from(value: Uint8Array): Buffer;
   static override from(value: ArrayLike<number>): Buffer;
   static override from(value: Iterable<number>): Buffer;
   static override from(
-    value: string | ArrayBuffer | ArrayLike<number> | Uint8Array | Iterable<number>,
+    value: string | ArrayBufferLike | ArrayLike<number> | Uint8Array | Iterable<number>,
     encodingOrOffset?: Encoding | number,
     length?: number,
   ): Buffer {
@@ -195,18 +195,14 @@ export class Buffer extends Uint8Array {
       buf.set(bytes);
       return buf;
     }
+    if (isAnyArrayBuffer(value)) {
+      return fromArrayBuffer(value, encodingOrOffset, length);
+    }
     if (value instanceof Uint8Array) {
       // Copy, matching Node's `Buffer.from(uint8)` semantics.
       const copy = new Buffer(value.length);
       copy.set(value);
       return copy;
-    }
-    if (value instanceof ArrayBuffer) {
-      const offset = typeof encodingOrOffset === 'number' ? encodingOrOffset : 0;
-      const src = new Uint8Array(value, offset, length);
-      const out = new Buffer(src.length);
-      out.set(src);
-      return out;
     }
     const arr =
       typeof (value as ArrayLike<number>).length === 'number'
@@ -339,6 +335,69 @@ export class Buffer extends Uint8Array {
   }
 }
 
+const arrayBufferByteLength = Object.getOwnPropertyDescriptor(
+  ArrayBuffer.prototype,
+  'byteLength',
+)?.get;
+const sharedArrayBufferByteLength =
+  typeof SharedArrayBuffer === 'undefined'
+    ? undefined
+    : Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength')?.get;
+
+/** Raw backing-store predicate; intrinsic getters also recognize foreign realms. */
+function isAnyArrayBuffer(value: unknown): value is ArrayBuffer | SharedArrayBuffer {
+  if (typeof value !== 'object' || value === null) return false;
+  if (arrayBufferByteLength !== undefined) {
+    try {
+      arrayBufferByteLength.call(value);
+      return true;
+    } catch {
+      // Try the shared backing-store intrinsic.
+    }
+  }
+  if (sharedArrayBufferByteLength === undefined) return false;
+  try {
+    sharedArrayBufferByteLength.call(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Node's raw-store overload: coerce bounds once, then return an aliasing view. */
+function fromArrayBuffer(
+  backingStore: ArrayBuffer | SharedArrayBuffer,
+  byteOffsetValue: unknown,
+  lengthValue: unknown,
+): Buffer {
+  let byteOffset = 0;
+  if (byteOffsetValue !== undefined) {
+    byteOffset = +(byteOffsetValue as number);
+    if (Number.isNaN(byteOffset)) byteOffset = 0;
+  }
+
+  const maxLength = backingStore.byteLength - byteOffset;
+  if (maxLength < 0) throw bufferOutOfBounds('offset');
+
+  let length: number | undefined;
+  if (lengthValue !== undefined) {
+    length = +(lengthValue as number);
+    if (length > 0) {
+      if (length > maxLength) throw bufferOutOfBounds('length');
+    } else {
+      length = 0;
+    }
+  }
+
+  return new Buffer(backingStore as ArrayBuffer, byteOffset, length);
+}
+
+function bufferOutOfBounds(name: 'offset' | 'length'): RangeError {
+  const error = new RangeError(`"${name}" is outside of buffer bounds`);
+  (error as RangeError & { code?: string }).code = 'ERR_BUFFER_OUT_OF_BOUNDS';
+  return error;
+}
+
 // Installers take the class as an opaque constructor (no type-back imports)
 // so check:arch sees no circular reference between this file and the helpers.
 installCoreMethods(Buffer);
@@ -389,7 +448,7 @@ export function setInspectMaxBytes(n: number): void {
  */
 function asByteView(input: unknown): Uint8Array {
   if (input instanceof Uint8Array) return input;
-  if (input instanceof ArrayBuffer) return new Uint8Array(input);
+  if (isAnyArrayBuffer(input)) return new Uint8Array(input as ArrayBuffer);
   if (
     ArrayBuffer.isView(input) &&
     (input as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT !== undefined

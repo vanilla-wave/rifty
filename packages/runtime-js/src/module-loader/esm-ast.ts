@@ -31,6 +31,7 @@ import type {
   VariableDeclaration,
 } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { rewriteDirectEvalImportArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import {
   type EsmAstEdit as Edit,
@@ -275,6 +276,33 @@ function walk(node: unknown, ctx: Ctx): void {
       emitEdit(ctx, ie.start, ie.start + 'import'.length, ctx.helpers.dynamicImport);
       walk(ie.source, ctx);
       if (ie.options) walk(ie.options, ctx);
+      return;
+    }
+
+    case 'CallExpression': {
+      const call = n as unknown as {
+        callee: AnyNodeShape;
+        arguments: AnyNodeShape[];
+        optional?: boolean;
+      };
+      const isDirectEval =
+        call.optional !== true &&
+        call.callee.type === 'Identifier' &&
+        (call.callee as unknown as Identifier).name === 'eval' &&
+        !isShadowed(ctx, 'eval');
+      const replacement = isDirectEval
+        ? rewriteDirectEvalImportArgument(call.arguments[0], ctx.helpers.dynamicImport)
+        : null;
+      walk(call.callee, ctx);
+      for (let index = 0; index < call.arguments.length; index++) {
+        const argument = call.arguments[index];
+        if (!argument) continue;
+        if (index === 0 && replacement !== null) {
+          emitEdit(ctx, argument.start, argument.end, replacement);
+        } else {
+          walk(argument, ctx);
+        }
+      }
       return;
     }
 

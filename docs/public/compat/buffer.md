@@ -11,7 +11,8 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | Feature | Status | Notes |
 |---|---|---|
 | `Buffer.from(string, encoding?)` | ✅ | utf8 default; honors hex/base64/base64url/ascii/latin1/utf16le |
-| `Buffer.from(Uint8Array | ArrayBuffer | array)` | ✅ | |
+| `Buffer.from(Uint8Array | array)` | ✅ | Copies input bytes, matching Node |
+| `Buffer.from(ArrayBuffer | SharedArrayBuffer, byteOffset?, length?)` | ✅ | Aliases the supplied store (ADR-0350); omitted `length` tracks resizable/growable stores, explicit `length` is fixed; coercion/bounds, detach, WASM growth, and cross-realm stores are tested |
 | `Buffer.alloc(size, fill?, encoding?)` | ✅ | Tiles encoded fill bytes; honors `encoding` for string fill |
 | `Buffer.allocUnsafe(size)` | ✅ | Alias of `Buffer.alloc` semantics (no init guarantee deferred) |
 | `Buffer.concat(list, totalLength?)` | ✅ | |
@@ -64,7 +65,7 @@ implemented (throws `NotImplementedError` or `TypeError`).
 
 ## Tests
 
-- Unit tests live in `packages/io/src/buffer.test.ts` (33 cases).
+- Unit tests live in `packages/io/src/buffer.test.ts`.
 - Parity tests:
   - `tools/node-parity-runner/cases/buffer/write-encodings.case.ts`
   - `tools/node-parity-runner/cases/buffer/alloc-fill-encoding.case.ts`
@@ -72,6 +73,7 @@ implemented (throws `NotImplementedError` or `TypeError`).
   - `tools/node-parity-runner/cases/buffer/readwrite.case.ts`
   - `tools/node-parity-runner/cases/buffer/concat-equals.case.ts`
   - `tools/node-parity-runner/cases/buffer/extends-uint8array.case.ts`
+  - `tools/node-parity-runner/cases/buffer/from-backing-store-alias.case.ts`
 
 ## Known limitations
 

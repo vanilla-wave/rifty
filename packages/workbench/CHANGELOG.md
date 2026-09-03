@@ -128,12 +128,24 @@
   guarantee lives in the `@riftydev/git` facade (ADR-0357), so the local
   Starter read-latch and preflight object reads are gone.
 
+- Preview readiness starts its bounded service-worker and routed-HTTP proof
+  only after the exact project run advertises a candidate, so cold dependency
+  acquisition cannot falsely fail while its live dev server is still starting.
+- Kernel Worker hosts install the sealed entry in their initial static module
+  graph, so its listener admits the one-shot `init` before QuickJS preload; the
+  workspace source entry is explicitly retained through tree-shaking (ADR-0352).
+- Kernel workers register runtime-js's pre-entry hook directly, preserving its
+  selected readiness while installing the init listener synchronously (ADR-0351).
 - Dependency snapshot v3 now carries the exact integrity-pinned cache closure
   required by registry-backed shadow replay, verifies it before mutation, and
   merges it before publishing the restored lockfile. The first explicit install
   after instant Vite 8 restore no longer fails `EBROKENLOCK` (ADR-0346).
 
 ### Added
+
+- Playground definitions now admit exact `npm-dev-server` projects whose
+  manifest-owned `dev` script runs through the generic installed-bin and
+  PTY-correlated preview path, without a declared entry path or port (ADR-0349).
 
 - The terminal `node` command now admits Node 24-compatible CommonJS
   `-e`/`--eval`, `-p`/`--print`, and explicit `--input-type=commonjs`

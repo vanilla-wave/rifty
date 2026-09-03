@@ -66,6 +66,7 @@ export type PageToPlaygroundOwnerMessage =
 
 export type PlaygroundProjectRuntimeDecision =
   | { readonly kind: 'vite'; readonly port: number }
+  | { readonly kind: 'npm-dev-server' }
   | { readonly kind: 'node-server' }
   | { readonly kind: 'node-cli' };
 
@@ -491,8 +492,8 @@ function runtime(value: unknown): PlaygroundProjectRuntimeDecision {
     const record = exactRecord(value, ['kind', 'port'], 'Vite runtime decision');
     return Object.freeze({ kind, port: port(record.port) });
   }
-  if (kind === 'node-server' || kind === 'node-cli') {
-    exactRecord(value, ['kind'], 'Node runtime decision');
+  if (kind === 'npm-dev-server' || kind === 'node-server' || kind === 'node-cli') {
+    exactRecord(value, ['kind'], 'Project runtime decision');
     return Object.freeze({ kind });
   }
   throw new TypeError('Playground runtime decision kind is invalid');

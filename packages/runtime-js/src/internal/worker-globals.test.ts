@@ -58,6 +58,8 @@ describe('RUNTIME_JS_GLOBAL_KEYS', () => {
     expect(RUNTIME_JS_GLOBAL_KEYS.esmLastFile).toBe('esmLastFile');
     expect(RUNTIME_JS_GLOBAL_KEYS.createRequireImpl).toBe('createRequireImpl');
     expect(RUNTIME_JS_GLOBAL_KEYS.esbuild).toBe('esbuild');
+    expect(RUNTIME_JS_GLOBAL_KEYS.quickjsModulePromise).toBe('quickjsModulePromise');
+    expect(RUNTIME_JS_GLOBAL_KEYS.quickjsModuleSync).toBe('quickjsModuleSync');
   });
 
   it('lives under the single __rifty root', () => {
@@ -73,6 +75,8 @@ describe('RUNTIME_JS_GLOBAL_KEYS', () => {
     expect(keys).toContain('esmLastFile');
     expect(keys).toContain('createRequireImpl');
     expect(keys).toContain('esbuild');
+    expect(keys).toContain('quickjsModulePromise');
+    expect(keys).toContain('quickjsModuleSync');
   });
 });
 
@@ -141,6 +145,8 @@ describe('publish/read roundtrip', () => {
       expect(readRuntimeGlobal('esmLastFile')).toBeNull();
       expect(readRuntimeGlobal('createRequireImpl')).toBeNull();
       expect(readRuntimeGlobal('esbuild')).toBeNull();
+      expect(readRuntimeGlobal('quickjsModulePromise')).toBeNull();
+      expect(readRuntimeGlobal('quickjsModuleSync')).toBeNull();
     });
   });
 

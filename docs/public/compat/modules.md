@@ -17,7 +17,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `package.json` `imports` (`#name`) | ✅ | Exact, wildcard, and conditional `imports` map entries |
 | JSON modules via `require` | ✅ | |
 | JSON modules via `import` | ✅ | Synthetic default + named keys |
-| `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. Static named-import validation uses that delivered runtime object's enumerable keys, not a speculative full Node export table; an unimplemented Node method remains a link-time miss until its real implementation lands. `node:constants` is the faithful flattened union of `fs` + Linux-ABI `os` + `crypto.constants` (ADR-0153): real Node numeric values for known keys, `undefined` for absent keys — Node's shape. Reading a constant never throws; the unimplemented-behavior gap surfaces at the syscall (e.g. `fs.openSync` throws `NotImplementedError` for `O_SYNC`/`O_DSYNC` durability, `copyFileSync` for `COPYFILE_FICLONE_FORCE`). `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction`; default engine is a real QuickJS realm (cross-realm isolation), without timeout/`displayErrors`/`cachedData`/`contextExtensions` support (those throw loudly). See the node:vm section below. |
+| `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. Static named-import validation uses that delivered runtime object's enumerable keys, not a speculative full Node export table; an unimplemented Node method remains a link-time miss until its real implementation lands. `node:constants` is the faithful flattened union of `fs` + Linux-ABI `os` + `crypto.constants` (ADR-0153): real Node numeric values for known keys, `undefined` for absent keys — Node's shape. Reading a constant never throws; the unimplemented-behavior gap surfaces at the syscall (e.g. `fs.openSync` throws `NotImplementedError` for `O_SYNC`/`O_DSYNC` durability, `copyFileSync` for `COPYFILE_FICLONE_FORCE`). `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction`; default engine is a real QuickJS realm (cross-realm isolation), with `createContext` name metadata and `codeGeneration.strings` / `codeGeneration.wasm` controls. Timeout/`displayErrors`/`cachedData`/`contextExtensions` remain loud gaps. See the node:vm section below. |
 | `node:module` helpers | ⚠️ | `createRequire`, `builtinModules`, `isBuiltin`, `Module.*` mirrors, and compile-cache status constants are implemented. Compile-cache persistence is an explicit browser ceiling: `enableCompileCache()` returns `FAILED` with a message (never fake `ENABLED`), `getCompileCacheDir()` returns `undefined`, and `flushCompileCache()` is a quiet no-op. Parity case `modules/module-builtins-surface` pins the matching constants/function surface; conformance pins the unavailable-cache ceiling. |
 | `file:` URL imports | ✅ | ESM-only, as in Node: ASCII-case-insensitive `file:` specifiers resolve through the VFS loader with Node-shaped percent decoding, encoded-separator rejection, and one canonical module identity; `import.meta.url` / `import.meta.resolve` encode resolved POSIX paths through the same codec (parity `modules/file-url-module-identity`). CJS never URL-dispatches: URL-looking strings use ordinary alias/path/package resolution and ordinary misses report `MODULE_NOT_FOUND` (parity `modules/require-url-specifier-strings`, `modules/require-bare-file-package`). |
 | `data:` URL imports | ❌ | ESM `import` throws `UNSUPPORTED_PROTOCOL` for every ASCII casing. CJS treats the string as an ordinary path/package name; a usual miss is `MODULE_NOT_FOUND` |
@@ -89,9 +89,12 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   constructor, deleting it, or silently mixing routed and replaced constructors:
   `module-loader.cjs-global-function-assignment` / `module-loader.esm-global-function-assignment`.
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
-- CJS/ESM modules with literal unshadowed/global/computed `eval` text that
-  statically touches `Function` or `import`, or modules that combine `with`
-  dynamic scope with routed lexical `Function`, throw
+- A direct, unshadowed `eval` with a statically known string containing ordinary
+  `import()` syntax is routed through the constructing module's collision-free
+  lexical import helper; a returned importer keeps that VFS-relative base when
+  invoked later. Indirect, aliased, global/computed, nested-eval, `with`, and
+  other dynamic-scope eval forms whose known text touches `Function` or `import`,
+  or modules that combine `with` dynamic scope with routed lexical `Function`, throw
   `module-loader.cjs-dynamic-function-scope` /
   `module-loader.esm-dynamic-function-scope`; those dynamic scopes can replace
   the binding at runtime, which the static routing transform cannot preserve
@@ -127,6 +130,10 @@ compound/update/destructuring, `var`/function declarations incl. statement-posit
 statements keep Node's empty completion value; a declared `var` stays readable after the run and in
 later runs. A non-object context arg throws Node's exact `ERR_INVALID_ARG_TYPE`. Unsupported
 execution controls (`timeout`/`displayErrors`/`cachedData`/`contextExtensions`/…) throw loudly.
+`createContext` accepts Node's `name` metadata. The default QuickJS engine enforces
+`codeGeneration.strings: false` and `codeGeneration.wasm: false`; the rewrite opt-in throws loudly
+for either false policy instead of claiming isolation it cannot enforce. `origin` and
+`microtaskMode` remain loud gaps.
 
 The default engine shares the live `contextObject` via a reconcile-based membrane (reseed
 host→guest before each run, sweep guest→host after) — observationally equivalent to Node's live

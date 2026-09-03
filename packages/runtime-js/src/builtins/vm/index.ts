@@ -13,7 +13,14 @@
 import { NotImplementedError } from '@riftydev/io';
 import { recordDivergence } from '../../telemetry/divergence-sink.ts';
 import { selectEngine } from './engine-config.ts';
-import { type CompiledScript, type ContextObject, VM_CONTEXT, isVmContext } from './types.ts';
+import {
+  type CompiledScript,
+  type ContextCodeGeneration,
+  type ContextObject,
+  VM_CONTEXT,
+  isVmContext,
+  setContextCodeGeneration,
+} from './types.ts';
 
 /**
  * Select the engine for a SANDBOX RUN (`runInContext`/`runInNewContext`/
@@ -210,20 +217,79 @@ function assertSupportedCompileOptions(options: CompileFunctionOptions): void {
   }
 }
 
-function assertSupportedContextOptions(options?: CreateContextOptions): void {
-  if (!options) return;
-  if (options.name !== undefined) {
-    throw new NotImplementedError('vm.createContext.name');
+function normalizeContextCodeGeneration(
+  options?: CreateContextOptions,
+): ContextCodeGeneration | undefined {
+  if (options === undefined) return undefined;
+  if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+    throw invalidArgumentType(
+      `The "options" argument must be of type object. Received ${describeInvalidType(options)}`,
+    );
   }
-  if (options.origin !== undefined) {
-    throw new NotImplementedError('vm.createContext.origin');
+  const { name, origin, codeGeneration, microtaskMode } = options;
+  if (name !== undefined && typeof name !== 'string') {
+    throw invalidArgumentType(
+      `The "options.name" property must be of type string. Received ${describeInvalidType(name)}`,
+    );
   }
-  if (options.codeGeneration !== undefined) {
-    throw new NotImplementedError('vm.createContext.codeGeneration');
+  if (origin !== undefined && typeof origin !== 'string') {
+    throw invalidArgumentType(
+      `The "options.origin" property must be of type string. Received ${describeInvalidType(origin)}`,
+    );
   }
-  if (options.microtaskMode !== undefined) {
+  if (
+    codeGeneration !== undefined &&
+    (typeof codeGeneration !== 'object' || codeGeneration === null || Array.isArray(codeGeneration))
+  ) {
+    throw invalidArgumentType(
+      `The "options.codeGeneration" property must be of type object. Received ${describeInvalidType(codeGeneration)}`,
+    );
+  }
+  if (microtaskMode !== undefined && microtaskMode !== 'afterEvaluate') {
+    throw invalidArgumentValue(
+      `The property 'options.microtaskMode' must be one of: 'afterEvaluate', undefined. Received ${inspectPrimitive(microtaskMode)}`,
+    );
+  }
+  const { strings, wasm } = codeGeneration ?? {};
+  if (strings !== undefined && typeof strings !== 'boolean') {
+    throw invalidArgumentType(
+      `The "options.codeGeneration.strings" property must be of type boolean. Received ${describeInvalidType(strings)}`,
+    );
+  }
+  if (wasm !== undefined && typeof wasm !== 'boolean') {
+    throw invalidArgumentType(
+      `The "options.codeGeneration.wasm" property must be of type boolean. Received ${describeInvalidType(wasm)}`,
+    );
+  }
+  if (origin !== undefined) throw new NotImplementedError('vm.createContext.origin');
+  if (microtaskMode !== undefined) {
     throw new NotImplementedError('vm.createContext.microtaskMode');
   }
+  if (codeGeneration === undefined) return undefined;
+  return {
+    strings: strings !== false,
+    wasm: wasm !== false,
+  };
+}
+
+function invalidArgumentType(message: string): TypeError {
+  return Object.assign(new TypeError(message), { code: 'ERR_INVALID_ARG_TYPE' });
+}
+
+function invalidArgumentValue(message: string): TypeError {
+  return Object.assign(new TypeError(message), { code: 'ERR_INVALID_ARG_VALUE' });
+}
+
+function describeInvalidType(value: unknown): string {
+  if (Array.isArray(value)) return 'an instance of Array';
+  if (typeof value === 'function') {
+    return `function ${(value as { readonly name?: string }).name ?? ''}`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const ctor = (value as { readonly constructor?: { readonly name?: string } }).constructor;
+    return `an instance of ${ctor?.name ?? 'Object'}`;
+  }
+  return describeNonObject(value);
 }
 
 function withSourceURL(code: string, filename?: string): string {
@@ -235,7 +301,16 @@ export function createContext<T extends Record<string, unknown> = Record<string,
   contextObject?: T,
   options?: CreateContextOptions,
 ): T {
-  assertSupportedContextOptions(options);
+  if (isVmContext(contextObject)) return contextObject as T;
+  const codeGeneration = normalizeContextCodeGeneration(options);
+  const engine = selectEngine();
+  if (
+    engine.name === 'rewrite' &&
+    codeGeneration &&
+    (!codeGeneration.strings || !codeGeneration.wasm)
+  ) {
+    throw new NotImplementedError('vm.createContext.codeGeneration.rewrite-engine');
+  }
   if (contextObject === null) {
     throw new TypeError('The "object" argument must be of type object. Received null');
   }
@@ -245,7 +320,10 @@ export function createContext<T extends Record<string, unknown> = Record<string,
     enumerable: false,
     value: true,
   });
-  selectEngine().initContext(context);
+  if (codeGeneration) {
+    setContextCodeGeneration(context, codeGeneration);
+  }
+  engine.initContext(context);
   return context;
 }
 

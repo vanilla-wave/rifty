@@ -4,6 +4,7 @@ import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
+import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
@@ -130,6 +131,7 @@ interface FunctionRewriteCtx {
   readonly scopes: Scope[];
   readonly functionHelperName: string;
   readonly webAssemblyHelperName: string;
+  readonly dynamicImportHelperName: string;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
   hasWithDynamicFunctionScope: boolean;
@@ -205,6 +207,7 @@ function rewriteCjsFunctionConstructorReferences(
   id: string,
   functionHelperName: string,
   webAssemblyHelperName: string,
+  dynamicImportHelperName: string,
 ): string {
   if (!functionRoutingAnalysisToken.test(source)) return source;
   let program: Program;
@@ -235,6 +238,7 @@ function rewriteCjsFunctionConstructorReferences(
     scopes: [rootScope],
     functionHelperName,
     webAssemblyHelperName,
+    dynamicImportHelperName,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -697,21 +701,17 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       if (calleeMayBeDerivedHostFunction(callee, ctx) && constructorArgsMayImport(args)) {
         ctx.hasDerivedHostFunctionConstructor = true;
       }
-      if (calleeMayBeEval(callee, ctx)) {
+      const directEvalImportEdit = rewriteDirectEvalImportCallArgument(
+        n,
+        ctx.dynamicImportHelperName,
+        isShadowed(ctx, 'eval'),
+      );
+      if (directEvalImportEdit !== null) ctx.edits.push(directEvalImportEdit);
+      if (expressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
-      }
-      if (
-        callee?.type === 'Identifier' &&
-        (callee as unknown as { name?: string }).name === 'eval' &&
-        !isShadowed(ctx, 'eval')
-      ) {
-        ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
-      }
-      if (callee?.type === 'MemberExpression' && isGlobalEvalCallMember(callee, ctx)) {
-        ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
+        ctx.hasFunctionEvalText =
+          ctx.hasFunctionEvalText ||
+          (directEvalImportEdit === null && evalArgumentMayTouchFunction(args[0]));
       }
       walkFunctionReferences(callee, ctx);
       for (const arg of args) walkFunctionReferences(arg, ctx);
@@ -1595,13 +1595,12 @@ function expressionMayBeGlobalEval(node: unknown, ctx: FunctionRewriteCtx): bool
   const n = unwrapChain(node) as AnyNodeShape;
   if (n.type === 'Identifier') {
     const name = (n as unknown as { name?: string }).name;
-    return name === 'eval' || (typeof name === 'string' && isMaybeEvalAlias(ctx, name));
+    return (
+      (name === 'eval' && !isShadowed(ctx, name)) ||
+      (typeof name === 'string' && isMaybeEvalAlias(ctx, name))
+    );
   }
   return n.type === 'MemberExpression' && isGlobalEvalCallMember(n, ctx);
-}
-
-function calleeMayBeEval(node: unknown, ctx: FunctionRewriteCtx): boolean {
-  return expressionMayBeGlobalEval(node, ctx);
 }
 
 function isGlobalFunctionUnknownReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
@@ -1817,6 +1816,7 @@ function compileCjsSource(
     filename,
     functionHelperName,
     webAssemblyHelperName,
+    dynamicImportHelperName,
   );
   let fn: CjsFactory;
   try {

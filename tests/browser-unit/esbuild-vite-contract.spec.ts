@@ -615,13 +615,22 @@ function registryRequests(urls: readonly string[]): readonly string[] {
   });
 }
 
-const HOST_WASM_BOOT_LEDGER = ['platform:sql.js/dist/sql-wasm.wasm'] as const;
+const NON_QUICKJS_HOST_WASM_BOOT_LEDGER = ['platform:sql.js/dist/sql-wasm.wasm'] as const;
 
-function hostWasmLedger(urls: readonly string[]): readonly string[] {
+function nonQuickjsHostWasmLedger(urls: readonly string[]): readonly string[] {
   return urls.flatMap((url) => {
     try {
       const path = new URL(url).pathname;
       if (path.includes('/npm-registry') || !path.endsWith('.wasm')) return [];
+      // Every Node Worker realm loads the host-owned VM engine independently.
+      // ADR-0352 owns that asset; this ledger guards esbuild WASM activation.
+      if (
+        path.endsWith(
+          '/node_modules/@jitl/quickjs-wasmfile-release-sync/dist/emscripten-module.wasm',
+        )
+      ) {
+        return [];
+      }
       if (path.endsWith('/node_modules/sql.js/dist/sql-wasm.wasm')) {
         return ['platform:sql.js/dist/sql-wasm.wasm'];
       }
@@ -1191,7 +1200,9 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
       distExecutionError: '',
     });
     expect(aliasRequests(requests), 'retired @esbuild/wasi-preview1 alias request').toEqual([]);
-    expect(hostWasmLedger(requests), 'exact host wasm boot ledger').toEqual(HOST_WASM_BOOT_LEDGER);
+    expect(nonQuickjsHostWasmLedger(requests), 'exact non-QuickJS host wasm boot ledger').toEqual(
+      NON_QUICKJS_HOST_WASM_BOOT_LEDGER,
+    );
     expect(
       registryRequests(requests),
       'instant Vite 7 must make no registry request for its restored tree',
@@ -1237,7 +1248,7 @@ globalThis.process.stdout.write(pc.green('usable-prebundle-marker'));
       'restored registry twin must reopen after the retired CAS is absent',
     ).toEqual([]);
     expect(registryRequests(requests)).toEqual([]);
-    expect(hostWasmLedger(requests)).toEqual([]);
+    expect(nonQuickjsHostWasmLedger(requests)).toEqual([]);
     expect(aliasRequests(requests)).toEqual([]);
   } finally {
     if (ownerOpen) await closeOwner(page);
@@ -1315,7 +1326,9 @@ test('direct CJS require and ESM import share exact esbuild 0.28.0 without Vite'
     expect(parseResult<DirectEnvelope>(cjsFile, 'direct CJS')).toEqual(expected);
     expect(parseResult<DirectEnvelope>(esmFile, 'direct ESM')).toEqual(expected);
     expect(aliasRequests(requests), 'retired @esbuild/wasi-preview1 alias request').toEqual([]);
-    expect(hostWasmLedger(requests), 'exact host wasm boot ledger').toEqual(HOST_WASM_BOOT_LEDGER);
+    expect(nonQuickjsHostWasmLedger(requests), 'exact non-QuickJS host wasm boot ledger').toEqual(
+      NON_QUICKJS_HOST_WASM_BOOT_LEDGER,
+    );
     expect(
       registryRequests(requests).map((request) => new URL(request).pathname),
       'direct esbuild cold install must make only the exact ordinary twin requests once',
@@ -1616,7 +1629,7 @@ globalThis.process.stdout.write('RIFTY_VITE8_NO_ESBUILD\\n');
       'Vite 8 cold install must not fetch any esbuild package or asset',
     ).toEqual([]);
     expect(aliasRequests(requests)).toEqual([]);
-    expect(hostWasmLedger(requests)).toEqual(HOST_WASM_BOOT_LEDGER);
+    expect(nonQuickjsHostWasmLedger(requests)).toEqual(NON_QUICKJS_HOST_WASM_BOOT_LEDGER);
   } finally {
     await closeOwner(page);
   }

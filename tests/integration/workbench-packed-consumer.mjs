@@ -1022,16 +1022,50 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
 
     const page = await context.newPage();
     const pageErrors = [];
+    const pageConsole = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
+    page.on('console', (message) => pageConsole.push(`[${message.type()}] ${message.text()}`));
     await page.goto(previewOrigin, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-    await page.waitForFunction(
-      () => document.querySelector('#status')?.textContent !== 'opening packed Workbench',
-      undefined,
-      { timeout: 300_000 },
-    );
+    let bootWaitError = null;
+    try {
+      await page.waitForFunction(
+        () => document.querySelector('#status')?.textContent !== 'opening packed Workbench',
+        undefined,
+        { timeout: 300_000 },
+      );
+    } catch (error) {
+      bootWaitError = error;
+    }
     const status = await page.locator('#status').textContent();
-    if (status !== 'ready') {
-      throw new Error(`Packed Workbench Chromium boot failed: ${String(status)}`);
+    if (bootWaitError !== null || status !== 'ready') {
+      const failure = await page.evaluate(async (bootTimedOut) => {
+        const seen = new WeakSet();
+        const serialize = (value) => {
+          if (!(value instanceof Error)) return { thrown: String(value) };
+          if (seen.has(value)) return { name: value.name, message: '[cycle]' };
+          seen.add(value);
+          return {
+            name: value.name,
+            message: value.message,
+            stack: value.stack,
+            ...(value instanceof AggregateError
+              ? { errors: Array.from(value.errors, serialize) }
+              : {}),
+            ...(value.cause === undefined ? {} : { cause: serialize(value.cause) }),
+          };
+        };
+        if (bootTimedOut) return { pending: true };
+        try {
+          await window.__RIFTY_PACKED_WORKBENCH__;
+          return null;
+        } catch (error) {
+          return serialize(error);
+        }
+      }, bootWaitError !== null);
+      const diagnostics = await page.evaluate(() => window.__RIFTY_PACKED_WORKBENCH_DIAGNOSTICS__);
+      throw new Error(
+        `Packed Workbench Chromium boot failed: ${String(status)}\n${JSON.stringify(failure)}\nDiagnostics:\n${JSON.stringify(diagnostics)}\nPage errors:\n${pageErrors.join('\n')}\nPage console:\n${pageConsole.join('\n')}\nObserved URLs:\n${observedUrls.join('\n')}\nBlocked URLs:\n${blockedUrls.join('\n')}`,
+      );
     }
     const acceptance = await page.evaluate(async () => {
       const opened = await window.__RIFTY_PACKED_WORKBENCH__;
@@ -1062,7 +1096,10 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     if (!acceptance.sqliteProof.includes('packed-sqlite-42')) {
       throw new Error(`Packed Workbench sqlite proof was lost: ${acceptance.sqliteProof}`);
     }
-    const hostWasmUrls = [assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js')];
+    const hostWasmUrls = [
+      assertHostAsset(acceptance.hostWasm.quickjs, previewOrigin, 'QuickJS'),
+      assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js'),
+    ];
     if (new URL(acceptance.typescriptWorkerUrl, previewOrigin).origin !== previewOrigin) {
       throw new Error('Packed Workbench TypeScript worker did not resolve from the packed host');
     }

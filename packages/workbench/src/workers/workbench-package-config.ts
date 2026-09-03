@@ -174,25 +174,30 @@ export function workbenchPackageConfig(
     seedFiles: Object.freeze({}),
   };
   const cfg =
-    definition.kind === 'node-server'
+    definition.kind === 'npm-dev-server'
       ? Object.freeze({
           ...base,
-          runtime: 'node-server' as const,
-          port: definition.port,
-          entryPath: `${projectRoot}${definition.entryPath}`,
+          runtime: 'npm-dev-server' as const,
         })
-      : definition.kind === 'node-cli'
+      : definition.kind === 'node-server'
         ? Object.freeze({
             ...base,
-            runtime: 'node-cli' as const,
+            runtime: 'node-server' as const,
+            port: definition.port,
             entryPath: `${projectRoot}${definition.entryPath}`,
           })
-        : Object.freeze({
-            ...base,
-            runtime: 'vite' as const,
-            port: metadata?.port ?? DEFAULT_VITE_PORT,
-            entryPath: `${projectRoot}/index.html`,
-          });
+        : definition.kind === 'node-cli'
+          ? Object.freeze({
+              ...base,
+              runtime: 'node-cli' as const,
+              entryPath: `${projectRoot}${definition.entryPath}`,
+            })
+          : Object.freeze({
+              ...base,
+              runtime: 'vite' as const,
+              port: metadata?.port ?? DEFAULT_VITE_PORT,
+              entryPath: `${projectRoot}/index.html`,
+            });
 
   return Object.freeze({
     cfg,

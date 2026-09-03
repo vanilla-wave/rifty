@@ -619,7 +619,6 @@ export function App(props: AppProps) {
         (error: unknown) => {
           releaseTypeScriptBoot();
           if (bound() !== project) return;
-          setRunState('stopped');
           flashError(`Project start failed: ${errorMessage(error)}`);
         },
       );
@@ -1265,7 +1264,7 @@ export function App(props: AppProps) {
   }
 
   function paletteItems(): readonly PaletteItem[] {
-    const items: PaletteItem[] = PRESETS.map((preset) => ({
+    const items: PaletteItem[] = PRESETS.filter((preset) => !preset.hidden).map((preset) => ({
       id: `preset:${preset.id}`,
       section: 'Starters',
       label: preset.label,

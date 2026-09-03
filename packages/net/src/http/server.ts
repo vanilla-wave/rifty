@@ -240,10 +240,7 @@ export class HttpServer extends EventEmitter {
       } satisfies WebSocketBridgeFrame);
       return;
     }
-    // No URL-port check: frames arrive only on THIS server's port-keyed
-    // discovery channel — the channel IS the port intent. The remapped preview
-    // client (ADR-0189) keeps the stock URL (host page origin, foreign port);
-    // the consumer ('upgrade' listener / npm ws) validates path/protocols.
+    // Port channel owns remapped guest intent; consumer validates path/protocols (ADR-0189).
     if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
       return;
     }
@@ -264,6 +261,7 @@ export class HttpServer extends EventEmitter {
       url: `http://${url.host}${url.pathname}${url.search}`,
       headers: createWebSocketUpgradeHeaders({
         host: url.host,
+        ...(typeof frame.origin === 'string' ? { origin: frame.origin } : {}),
         key,
         protocols,
       }),
@@ -707,6 +705,7 @@ function openWebSocketClientUpgrade(opts: {
     throw new Error('WebSocket client upgrade missing a valid Sec-WebSocket-Key header');
   }
   const protocols = splitHeaderList(headerValue(opts.headers, 'sec-websocket-protocol'));
+  const origin = headerValue(opts.headers, 'origin');
   const channels = [...new Set([channelNameFor(wsUrl), portChannelNameFor(wsUrl)])].map(
     (name) => new BroadcastChannel(name),
   );
@@ -793,6 +792,7 @@ function openWebSocketClientUpgrade(opts: {
     type: 'open',
     cid,
     url: wsUrl,
+    ...(origin === undefined ? {} : { origin }),
     key,
     protocols,
   });

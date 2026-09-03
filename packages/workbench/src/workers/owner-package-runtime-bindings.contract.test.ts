@@ -367,7 +367,9 @@ it('carries the real bindingless LightningCSS plan through owner child admission
       },
     ],
   });
-  const reservation = await state.reserveChildAdmission(packageConfig.cfg.entryPath);
+  const { cfg } = packageConfig;
+  if (cfg.runtime !== 'node-cli') throw new Error('lightning fixture must be node-cli');
+  const reservation = await state.reserveChildAdmission(cfg.entryPath);
   expect(reservation.snapshot.runtimeBindings).toEqual([]);
   reservation.commit();
 });

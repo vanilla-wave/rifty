@@ -104,6 +104,9 @@ const TOMBSTONES = new Set([
   // completed backlog items removed on close (record = the ADR + code; ADR bodies still cite them)
   'docs/backlog/playground/terminal-node-command.md', // done → ADR-0154
   'docs/backlog/runtime-js/execsync-node-entry-loader.md', // done → ADR-0137/0143/0150 + code
+  'docs/backlog/runtime-js/in-process-harness-vitest-ipc-noise.md', // done → physical-child smoke harness
+  'docs/backlog/npm-client/shadow-cache-ledger-independent-completion-order.md', // done → exact-multiset cache ledgers
+  'docs/backlog/kernel/sab-ring-protocol-violation-flake.md', // done → explicit Worker phase proofs
   'docs/backlog/runtime-js/readline-createinterface-line-question.md', // done → runtime-js readline subset + conformance
   'docs/backlog/net/cross-realm-listen-eaddrinuse.md', // done → ADR-0186 + code (ADR-0180 D5 still cites it)
   'docs/backlog/kernel/worker-per-process-residuals.md', // done → ADR-0230 + runtime stdin parity

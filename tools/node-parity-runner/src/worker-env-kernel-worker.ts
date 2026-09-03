@@ -6,6 +6,7 @@ import { SyncRpcFsSync, awaitDrain, releaseNodeEvalDrainOwnership } from '@rifty
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
+import { QUICKJS_WASM_URL_ENV, installNodeRuntime } from '@riftydev/runtime-js/install-process';
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from '../../../packages/kernel/src/ipc/sab-ring.ts';
 import { SyncRpcClient } from '../../../packages/kernel/src/ipc/sync-client.ts';
@@ -30,7 +31,6 @@ import {
   recordRejection,
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
-import { installNodeRuntime } from '../../../packages/runtime-js/src/ipc/install-process.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
 import {
   NODE_CLI_EVAL_CHILD_LOCAL_VFS_AUDIT,
@@ -42,12 +42,17 @@ import {
   nodeCliEvalTransientSourceCarrierMutations,
 } from './node-cli-eval-vfs-observer.ts';
 import { installNodeHostRejectionEvents } from './node-host-rejection-events.ts';
-import type { NodeCliEvalVfsFault, PhysicalStdioDeliveryFault } from './run-in-rifty.ts';
+import type {
+  NodeCliEvalPreEntryFault,
+  NodeCliEvalVfsFault,
+  PhysicalStdioDeliveryFault,
+} from './run-in-rifty.ts';
 
 interface WorkerEnvHarnessData {
   readonly files: Readonly<Record<string, string>>;
   readonly nodeCliEvalVfsAudit: boolean;
   readonly nodeCliEvalVfsFault?: NodeCliEvalVfsFault;
+  readonly nodeCliEvalPreEntryFault?: NodeCliEvalPreEntryFault;
   readonly physicalStdioDeliveryFault?: PhysicalStdioDeliveryFault;
 }
 
@@ -89,6 +94,12 @@ if (
   request.physicalStdioDeliveryFault !== 'stderr-before-two-stdout'
 ) {
   throw new TypeError('worker-env parity received an unknown stdio delivery fault');
+}
+if (
+  request.nodeCliEvalPreEntryFault !== undefined &&
+  request.nodeCliEvalPreEntryFault !== 'quickjs-readiness-rejection'
+) {
+  throw new TypeError('worker-env parity received an unknown pre-entry fault');
 }
 if (request.nodeCliEvalVfsAudit) {
   // The disposable adapter is a real node:worker_threads Worker, while
@@ -173,7 +184,7 @@ function installChildLocalVfsExitAudit(spec: WorkerSpawnSpec): void {
   });
 }
 
-function installObservedNodeRuntime(spec: WorkerSpawnSpec): void {
+async function installObservedNodeRuntime(spec: WorkerSpawnSpec): Promise<void> {
   try {
     if (request.nodeCliEvalVfsFault === 'child-local-transient-decoder-file') {
       vfs.beginCarrierObservation('child-local');
@@ -207,7 +218,11 @@ function installObservedNodeRuntime(spec: WorkerSpawnSpec): void {
         }
       }
     }
-    installNodeRuntime(spec);
+    if (request.nodeCliEvalPreEntryFault !== undefined) {
+      (globalThis as unknown as Record<typeof QUICKJS_WASM_URL_ENV, string>)[QUICKJS_WASM_URL_ENV] =
+        '/rifty-parity-missing-quickjs-readiness.wasm';
+    }
+    await installNodeRuntime(spec);
   } catch (error) {
     if (request.nodeCliEvalVfsAudit) reportChildLocalVfsAudit(createSyncCall(spec));
     throw error;
