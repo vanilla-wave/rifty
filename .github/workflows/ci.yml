@@ -270,6 +270,36 @@ jobs:
           name: playwright-report-browser-unit
           path: playwright-report
 
+  no-coi-chromium:
+    needs: change-scope
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - id: pw-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:no-coi
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-no-coi
+          path: playwright-report/no-coi
+
   ci-gate:
     name: CI gate
     if: always()
@@ -279,6 +309,7 @@ jobs:
       - unit-and-conformance
       - e2e-chromium
       - browser-unit-chromium
+      - no-coi-chromium
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -290,4 +321,5 @@ jobs:
           UNIT_RESULT: ${{ needs.unit-and-conformance.result }}
           E2E_RESULT: ${{ needs.e2e-chromium.result }}
           BROWSER_UNIT_RESULT: ${{ needs.browser-unit-chromium.result }}
+          NO_COI_RESULT: ${{ needs.no-coi-chromium.result }}
         run: node tools/checks/ci-gate.mjs

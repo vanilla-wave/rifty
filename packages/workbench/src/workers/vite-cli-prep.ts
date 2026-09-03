@@ -151,6 +151,13 @@ export async function prepareViteCli(options: ViteCliPreparation): Promise<void>
   const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
   validateCliActionPatch(packageRoot);
   validateRootWatchPatch(packageRoot);
+  await completeViteCliPreparation(options, packageRoot);
+}
+
+async function completeViteCliPreparation(
+  options: ViteCliPreparation,
+  packageRoot: string,
+): Promise<void> {
   globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
   if (options.mode === 'info') return;
   const fs = syncMirror();

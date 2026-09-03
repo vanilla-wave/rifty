@@ -471,6 +471,13 @@ export function installWorkerPeerCloseAttestation(
  * Phase 2's `kernel.spawn` is responsible for invoking
  * {@link installWorkerEntry} from the actual worker module that Vite emits.
  */
+// Module-local declaration keeps the packed public graph self-contained. The
+// bootstrap needs only EventTarget, postMessage and close from the Worker realm.
+interface DedicatedWorkerGlobalScope extends EventTarget {
+  postMessage(message: unknown): void;
+  close(): void;
+}
+
 const installedTargets = new WeakSet<DedicatedWorkerGlobalScope>();
 
 export function installWorkerEntry(

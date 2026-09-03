@@ -241,6 +241,10 @@ function walk(node: unknown, ctx: Ctx): void {
 
     case 'Identifier': {
       const id = n as unknown as Identifier;
+      if (id.name === 'WebAssembly' && !isShadowed(ctx, id.name)) {
+        emitEdit(ctx, id.start, id.end, ctx.helpers.webAssembly);
+        return;
+      }
       const binding = ctx.imports.get(id.name);
       if (!binding) return;
       if (isShadowed(ctx, id.name)) return;
@@ -288,6 +292,9 @@ function walk(node: unknown, ctx: Ctx): void {
           end: number;
         };
         if (id.type === 'Identifier' && id.name) {
+          if (id.name === 'WebAssembly' && !isShadowed(ctx, id.name)) {
+            emitEdit(ctx, id.start, id.start, 'WebAssembly: ');
+          }
           const binding = ctx.imports.get(id.name);
           if (binding && !isShadowed(ctx, id.name)) {
             emitEdit(ctx, id.start, id.start, `${id.name}: `);
@@ -551,6 +558,7 @@ function createHelperNames(source: string): TransformHelperNames {
     assetPath: uniqueHelperName(source, used, '__assetPath'),
     metaResolve: uniqueHelperName(source, used, '__metaResolve'),
     runtimeObject: uniqueHelperName(source, used, RUNTIME_OBJECT_BINDING),
+    webAssembly: uniqueHelperName(source, used, '__riftyWebAssembly'),
   };
 }
 

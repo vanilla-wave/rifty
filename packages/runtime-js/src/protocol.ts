@@ -48,11 +48,37 @@ export interface SerializedRuntimeError {
   readonly stack?: string;
   readonly code?: string;
   readonly path?: string;
+  readonly feature?: string;
 }
 
 export type FsResult =
   | { readonly id: number; readonly ok: true; readonly value?: string | Uint8Array }
   | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
+
+export interface ToolchainInstallRequest {
+  readonly cwd: string;
+  readonly registryUrl: string;
+}
+
+export interface ToolchainRunBinRequest {
+  readonly cwd: string;
+  readonly binPath: string;
+  readonly args: readonly string[];
+}
+
+export type ToolchainRequest =
+  | { readonly id: number; readonly op: 'install'; readonly input: ToolchainInstallRequest }
+  | { readonly id: number; readonly op: 'run-bin'; readonly input: ToolchainRunBinRequest };
+
+export type ToolchainResult =
+  | {
+      readonly id: number;
+      readonly ok: true;
+      readonly value?: { readonly exitCode: number };
+    }
+  | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
+
+export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v1' as const;
 
 /** `node:vm` sandbox engine (ADR-0142): the real-realm QuickJS engine (default
  * after the T17 cutover) or the opt-in hardened-rewrite engine. */
@@ -78,3 +104,17 @@ export type WorkerMessage =
   /** Divergence / NotImplemented telemetry snapshot (T15). Posted by the worker
    * when the snapshot changes; surfaced host-side for the playground panel (T16). */
   | { readonly type: 'diagnostic'; readonly payload: TelemetrySnapshot };
+
+export type ToolchainHostMessage =
+  | HostMessage
+  | { readonly type: 'toolchain'; readonly request: ToolchainRequest };
+
+export type ToolchainWorkerMessage =
+  | WorkerMessage
+  | {
+      readonly type: 'toolchain-ready';
+      readonly protocol: typeof SANDBOX_TOOLCHAIN_PROTOCOL;
+      readonly vfsBackend: 'opfs' | 'memory';
+    }
+  | { readonly type: 'toolchain-terminal'; readonly reason: 'closed' }
+  | { readonly type: 'toolchain-result'; readonly result: ToolchainResult };

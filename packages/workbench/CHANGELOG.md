@@ -4,6 +4,10 @@
 
 ### Changed
 
+- The no-COI Worker installs exact manifests and runs admitted installed bins
+  without Vite identity/version/path/lifecycle policy. Generic installed-tree
+  finalization is isolated from the existing Vite project finalizer.
+
 - Owner child launchers call `reservation.commit` /
   `abortBeforeSpawn` / `abortAfterChildSettlement` directly. The three
   `owner-child-admission` wrappers degenerated into pass-throughs once ADR-0371
@@ -39,6 +43,11 @@
 
 ### Added
 
+- **No-COI SDK toolchain Worker (ADR-0375).** One Worker owns runtime/VFS, real
+  npm-client + installed registry-twin esbuild admission, installed `.bin`
+  execution, loud overlap/death/clean-close settlement, and the generic
+  shared-WASM boundary.
+
 - **Owner-authoritative command completion and direct VFS entries (ADR-0362).**
   `ProjectTerminal.complete()` uses a bounded, correlated PTY request against
   the owning Shell's live cwd/VFS. Owner errors, close, timeout, and death
@@ -54,6 +63,11 @@
   needed — the default handles the 42 s first open unconfigured.
 
 ### Fixed
+
+- No-COI installed-bin failure projection never reads a forbidden ninth
+  `cause` getter. A throwing getter within the eight-link walk is read once and
+  absorbed, preserving the honest outer error.
+
 - `@emnapi/core@1.10.0` installs receive the exact upstream child-thread
   orphaned-reference cleanup backport before stamp promotion. A Vite 8
   unresolved import now returns Vite's normal non-zero build error instead of

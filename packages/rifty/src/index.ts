@@ -29,8 +29,14 @@
 export { COI_REQUIRED_MESSAGE, createSandbox } from './sandbox.ts';
 export type {
   CreateSandboxOptions,
+  GenericCreateSandboxOptions,
   Sandbox,
+  SandboxCapabilityFeature,
+  SandboxCapabilityReport,
   SandboxDeps,
+  SandboxToolchain,
+  ToolchainCreateSandboxOptions,
+  ToolchainSandbox,
   VfsBackend,
   VfsBootInfo,
 } from './sandbox.ts';

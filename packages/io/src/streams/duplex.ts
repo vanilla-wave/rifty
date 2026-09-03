@@ -84,14 +84,16 @@ export interface DuplexFromWebOptions {
   decodeStrings?: boolean;
 }
 
-// @ts-expect-error TS2417 — `Duplex.toWeb` returns a `{ readable, writable }`
-// PAIR while the inherited `Readable.toWeb` returns a bare `ReadableStream`; this
-// divergence is Node's real API and is genuinely inexpressible under TS's
-// class-static-side assignability check (a return-type covariance violation, not
-// fixable by widening). Runtime + unit + parity tests are the real guard.
-// TODO(backlog: runtime-js/duplex-static-toweb-ts-clash) — replace with a
-// non-inherited carrier so this suppression can be removed.
-export class Duplex extends Readable {
+type DuplexReadableConstructor = Omit<typeof Readable, 'toWeb'> &
+  (new (
+    opts?: ReadableOptions,
+  ) => Readable);
+
+// Runtime inheritance stays exact; only the incompatible static `toWeb` is
+// removed from the base constructor's type before Duplex declares Node's pair.
+const DuplexReadableBase = Readable as DuplexReadableConstructor;
+
+export class Duplex extends DuplexReadableBase {
   /** Internal `Writable` side. Exposed for tests/debugging only — drive the duplex via `d.write`/`d.end`. */
   readonly writableSide: Writable;
   /** Node's `allowHalfOpen` — see {@link DuplexOptions}. */
@@ -255,7 +257,7 @@ export class Duplex extends Readable {
    * `Duplex.toWeb`, v17): the readable side becomes a `ReadableStream` and the
    * writable side a `WritableStream`, reusing `Readable.toWeb` / `Writable.toWeb`.
    */
-  static override toWeb(duplex: Duplex): DuplexWebPair {
+  static toWeb(duplex: Duplex): DuplexWebPair {
     return {
       readable: Readable.toWeb(duplex),
       writable: Writable.toWeb(duplex),

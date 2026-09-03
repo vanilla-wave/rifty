@@ -64,6 +64,7 @@ export const ALLOWED_COORDINATION_SOURCES = Object.freeze([
   'packages/workbench/src/glue/vfs-snapshot-port.ts',
   'packages/workbench/src/workbench/service-worker-control.ts',
   'packages/workbench/src/workers/generated/esbuild-runtime.js',
+  'packages/workbench/src/workers/no-coi-toolchain-worker.ts',
 ]);
 
 const SELF = new Set([

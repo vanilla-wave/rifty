@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Explicit shared-memory-free toolchain sandbox (ADR-0375).**
+  `createSandbox({requireCrossOriginIsolation:false, toolchain:{workerUrl}})`
+  handshakes one Workbench Worker and exposes frozen capability reporting,
+  manifest install, and run-to-completion installed-bin execution. The
+  toolchain option requires literal `false` plus only its nested Worker URL;
+  union-typed options remain callable while specific overloads narrow returns.
+
 - **`@riftydev/sdk/ts-language-service`** — subpath re-export for `@riftydev/ts-language-service`.
 
 - **ADR-0131 — `sandbox.fs` for AI-agent file IO.** `createSandbox()` now exposes
@@ -31,6 +38,9 @@
 
 ### Changed
 
+- `createSandbox` rejects a non-boolean `requireCrossOriginIsolation`, including
+  explicit `undefined`, before VFS, service-worker or Worker boot;
+  omitted/true/literal-false behavior stays unchanged.
 - Corrected Vite host-wiring examples to use a production-emitted
   `@riftydev/runtime-js/worker?worker&url` asset with an ESM Worker build instead
   of an indirect package URL that Vite could not bundle.

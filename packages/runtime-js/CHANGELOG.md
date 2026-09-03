@@ -4,6 +4,11 @@
 
 ### Added
 
+- Runtime Worker protocol carries the ADR-0375 toolchain handshake and
+  install/run-bin results through its existing correlation owner, including
+  exact protocol/backend decoding and Worker crash/disposal/clean-close
+  settlement.
+
 - **Measured child-FS sync-RPC hot path.** The completed one-hop/binary-request
   goal carries baseline, post-I1, and post-I2 two-lane Chromium artifacts while
   retaining strict owner freshness and no child cache.
@@ -61,12 +66,45 @@
 
 ### Changed
 
+- The repo-only `./internal` composition seam now ships in packed JS and
+  declarations for the SDK + Workbench no-COI Worker; the public root still
+  exposes no toolchain controller or protocol.
+
+- Sandbox toolchain controller/protocol stays on the repo-only internal seam;
+  the published runtime root exposes no admission-bypassing control plane.
+
 - **Entry-scoped runtime bindings (ADR-0371).** Node-entry v3 validates and
   freezes exact `{adapterId, packagePath}` rows in its existing clone metadata;
   recursive launches inherit them without a new channel or process-visible
   environment field.
 
 ### Fixed
+
+- Sandbox toolchain `WebAssembly.Memory` preserves native descriptor getter
+  order/cardinality and consumes stateful `shared` once before its named gap.
+
+- The toolchain realm applies WebIDL ToBoolean to `WebAssembly.Memory`'s
+  `shared` descriptor through its lexical guard, so truthy numbers/strings join
+  literal true without replacing the Worker-global constructor.
+
+- Toolchain peer clean-close, dispose and crash settle pending eval, fs and
+  toolchain calls through one owner. CJS, ESM, REPL and installed bins reject
+  own/inherited/accessor shared WebAssembly memory before native construction
+  while non-shared native identity remains unchanged.
+
+- Selected toolchain Worker realms warn once for same-realm
+  `child_process.spawn`; `os.cpus()` and `availableParallelism()` report one.
+  Generic explicit no-COI sandboxes retain their prior hardware report and no
+  new spawn warning. Multiline async REPL expressions settle before
+  `runtime.eval()` resolves; toolchain boot captures native timers before the
+  dynamic runtime entry installs tracked timer globals.
+
+- Same-realm spawned children now bind one private Node-compatible console to
+  their stdout/stderr pipes; global console and both module aliases share it.
+
+- Worker-realm TextDecoder compatibility now keeps its unconditional patch in
+  non-isolated browser realms while safely passing private inputs when the
+  `SharedArrayBuffer` global is absent.
 
 - Owner-backed `fs.*` calls now rehydrate the `VfsError` prototype erased by
   SyncRpc's JSON error frame before reaching `node:fs`, preserving exact Node

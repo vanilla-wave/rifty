@@ -18,6 +18,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
 | 0276 | Semantic VFS replacements use applied owner evidence |
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
+| 0372 | Dedicated-Worker sync capability selects OPFS without COI |
 
 ### kernel
 
@@ -297,6 +298,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0311 | Registry-owned esbuild runtime removes the host asset URL |
 | 0319 | Preserve admitted mutations across project close |
 | 0341 | Project terminal runs expose authoritative shell status |
+| 0375 | Generic no-COI toolchain authority |
 
 ## Superseded (removed)
 
@@ -337,6 +339,8 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0318 | 0371 | verified exact bytes retained; separate manager-lifetime CAS falls to the installed registry twin |
 | 0320 | 0371 | instant offline availability retained; the restored installed tree replaces the separate runtime CAS |
 | 0321 | 0371 | strict lifecycle motive retained; the ninth correlation engine is deleted with its only consumer |
+| 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
+| 0374 | 0375 | explicit Worker/API/registry authority retained; Vite identity, lifecycle and build-only finalizer removed from generic no-COI control |
 
 ## Corrections (active)
 
@@ -345,6 +349,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
+| 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
 | 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
 | 0009 unconditional async-wrapper assumption | 0348 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |

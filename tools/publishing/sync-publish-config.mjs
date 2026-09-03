@@ -81,16 +81,19 @@ const SPEC = {
     // harness). The playground page never require()s child_process, so the lazy
     // first-require install never fires on the dispatcher-owning realm.
     addExports: {
+      // Repo-only composition seam shared by SDK + Workbench. The packed
+      // consumer suite proves its JS and declaration graph; root stays closed.
+      './internal': './src/internal/index.ts',
       './ipc/exec-sync-handler': './src/ipc/exec-sync-handler.ts',
       // The real node:child_process surface (execSync/spawn/exec/fork). Exposed
       // so a kernel-spawned guest entry (kind:'url', no module loader) can call
       // the genuine execSync client without re-implementing the SAB gate.
       './builtins/child_process': './src/builtins/child_process.ts',
       './builtins/process-identity': './src/builtins/process-identity.ts',
-      // node:os / node:path faithful shims (ADR-0026) exposed so a Vite bundle
+      // node:os / node:path faithful shims (ADR-0026) exposed so a browser bundle
       // containing a heavy node-targeting dep (the `typescript` engine in the
       // ts-language-service worker, ADR-0166) can ALIAS the bare `os`/`path`
-      // specifiers to the REAL rifty shims instead of Vite's empty browser stub
+      // specifiers to the REAL rifty shims instead of an empty browser stub
       // (`os.platform is not a function` at the dep's module-eval). Not a new
       // mechanism — the same modules already back the `require('os')` registry.
       './builtins/os': './src/builtins/os.ts',
@@ -160,7 +163,11 @@ const SPEC = {
       './dist/node-worker.js',
       './dist/dev-server-worker.js',
       './dist/typescript-worker.js',
+      './dist/no-coi-toolchain-worker.js',
     ],
+    addExports: {
+      './no-coi-toolchain-worker': './src/workers/no-coi-toolchain-worker.ts',
+    },
     keywords: ['workbench', 'development-environment', 'browser-runtime'],
   },
   '@riftydev/shadow-registry': {

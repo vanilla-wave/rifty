@@ -28,3 +28,27 @@ proves HMR, not hidden reload). Chromium 148, no COOP/COEP,
 Verdict recorded at the time: happy path steady; single-realm gives no failure
 containment and no crash-atomic workspace recovery — `flush()` is the only
 durability boundary.
+
+## Current-source re-verification (2026-09-01)
+
+Only the facts load-bearing for the no-COI OPFS selector and goal I5 were
+re-run; the 100-cycle HMR, wedge and forced-kill rows remain spike history and
+are not reclaimed by this proof. Production source:
+`e924531ba2d46116406a68c9d4a86e59106ef24b`; Playwright 1.60.0; Chrome for
+Testing 148.0.7778.96.
+
+```sh
+RIFTY_PLAYGROUND_PORT=5314 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/opfs-no-coi-policy.spec.ts -g preservation
+# 4 passed
+# headerless page + Worker: crossOriginIsolated=false, SharedArrayBuffer absent
+# Worker: OpfsFsSync=true, OpfsVfs=true, current detector=memory
+# direct OPFS: write exact [0,1,2,127,128,254,255,13,10], flush total=0,
+# terminate/reload/fresh Worker → exact bytes
+
+RIFTY_PLAYGROUND_PORT=5314 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/opfs-no-coi-policy.spec.ts -g "no-COI capable"
+# 1 intended RED: detected/backend memory, flush null; fresh Worker read ENOENT
+# expected selected OPFS + clean flush + exact bytes
+```
+
+Thus current Chrome/source re-confirm the spike's capability and acknowledged-
+flush reload claims. The remaining defect is the recorded selector policy.

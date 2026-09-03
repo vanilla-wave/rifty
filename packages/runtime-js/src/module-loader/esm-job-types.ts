@@ -27,6 +27,7 @@ export interface EsmLoaderDeps {
   readonly sourceMaps?: SourceMapRegistry;
   readonly transformSource?: TransformSourceHook;
   readonly transformEsm?: (source: string, id: string) => TransformResult;
+  readonly WebAssembly: typeof WebAssembly;
 }
 
 export interface EsmEvaluationIterator {
@@ -45,6 +46,7 @@ export type EsmFactory = (
   assetPath: (s: string) => string,
   metaResolve: (s: string) => string,
   Function: FunctionConstructor,
+  webAssembly: typeof WebAssembly,
 ) => EsmEvaluationIterator;
 
 export type EsmDirectFactory = (...args: Parameters<EsmFactory>) => Promise<void>;

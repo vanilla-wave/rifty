@@ -25,7 +25,13 @@ import { installedPackagePackPlan } from './workbench-packed-consumer-package-ma
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const fixtureRoot = resolve(repoRoot, 'tests/integration/fixtures/workbench-vite-consumer');
+const surfaceOnly = process.argv.includes('--surface-only');
+const fixtureRoot = resolve(
+  repoRoot,
+  surfaceOnly
+    ? 'tests/integration/fixtures/no-coi-packed-toolchain-consumer'
+    : 'tests/integration/fixtures/workbench-vite-consumer',
+);
 const workbenchRoot = resolve(repoRoot, 'packages/workbench');
 const viteSnapshot = resolve(
   repoRoot,
@@ -36,7 +42,9 @@ const esbuildWasmManifest = resolve(
   'tools/shadow-registry/node_modules/esbuild-wasm/package.json',
 );
 const keepTemp = process.argv.includes('--keep');
-const unknownArguments = process.argv.slice(2).filter((argument) => argument !== '--keep');
+const unknownArguments = process.argv
+  .slice(2)
+  .filter((argument) => argument !== '--keep' && argument !== '--surface-only');
 if (unknownArguments.length > 0) {
   throw new Error(`Unknown packed-consumer arguments: ${unknownArguments.join(', ')}`);
 }
@@ -181,7 +189,7 @@ function workspaceDependencyNames(manifest) {
 
 async function packedDependencyClosure() {
   const packages = await workspacePackages();
-  const pending = ['@riftydev/workbench'];
+  const pending = ['@riftydev/sdk', '@riftydev/workbench'];
   const closure = new Map();
   while (pending.length > 0) {
     const name = pending.pop();
@@ -296,10 +304,11 @@ async function assertExtractedWorkbench() {
     './node-worker',
     './dev-server-worker',
     './typescript-worker',
+    './no-coi-toolchain-worker',
   ];
   const actualExports = Object.keys(manifest.exports ?? {}).sort();
   if (JSON.stringify(actualExports) !== JSON.stringify([...expectedExports].sort())) {
-    throw new Error(`Packed Workbench requires seven sealed exports: ${actualExports.join(', ')}`);
+    throw new Error(`Packed Workbench requires eight sealed exports: ${actualExports.join(', ')}`);
   }
   const missingPaths = [];
   for (const target of Object.values(manifest.exports)) {
@@ -889,6 +898,12 @@ async function assertTarballInstall(consumerRoot, tarballs) {
     if (workspaceSpecs.length > 0) {
       throw new Error(`Packed ${name} retained workspace dependencies`);
     }
+    if (
+      name.startsWith('@riftydev/') &&
+      (await stat(resolve(installedRoot, 'src')).catch(() => null)) !== null
+    ) {
+      throw new Error(`Packed ${name} unexpectedly shipped workspace sources`);
+    }
   }
 
   const installedWorkbenchRoot = resolve(nodeModulesRoot, '@riftydev/workbench');
@@ -899,9 +914,6 @@ async function assertTarballInstall(consumerRoot, tarballs) {
       throw new Error(`Packed Workbench export ${specifier} does not target dist`);
     }
     await stat(resolve(installedWorkbenchRoot, target));
-  }
-  if ((await stat(resolve(installedWorkbenchRoot, 'src')).catch(() => null)) !== null) {
-    throw new Error('Packed Workbench unexpectedly shipped workspace sources');
   }
   await assertFirstPartyImportsStayExternal(installedWorkbenchRoot, installedWorkbench);
 
@@ -1027,6 +1039,8 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         previewUrl: opened.previewUrl,
         sqliteProof: opened.sqliteProof,
         companionLoaded: opened.companionLoaded,
+        sdkLoaded: opened.sdkLoaded,
+        noCoiToolchainWorkerUrl: opened.noCoiToolchainWorkerUrl,
         typescriptWorkerUrl: opened.typescriptWorkerUrl,
         hostWasm: opened.hostWasm,
         crossOriginIsolated: globalThis.crossOriginIsolated,
@@ -1042,12 +1056,18 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     if (!acceptance.companionLoaded) {
       throw new Error('Packed Workbench playground export did not load');
     }
+    if (!acceptance.sdkLoaded) {
+      throw new Error('Packed SDK root export did not load');
+    }
     if (!acceptance.sqliteProof.includes('packed-sqlite-42')) {
       throw new Error(`Packed Workbench sqlite proof was lost: ${acceptance.sqliteProof}`);
     }
     const hostWasmUrls = [assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js')];
     if (new URL(acceptance.typescriptWorkerUrl, previewOrigin).origin !== previewOrigin) {
       throw new Error('Packed Workbench TypeScript worker did not resolve from the packed host');
+    }
+    if (new URL(acceptance.noCoiToolchainWorkerUrl, previewOrigin).origin !== previewOrigin) {
+      throw new Error('Packed no-COI toolchain Worker did not resolve from the packed host');
     }
     for (const assetUrl of hostWasmUrls) {
       if (!observedUrls.includes(assetUrl)) {
@@ -1192,9 +1212,13 @@ async function main() {
 
   let failure;
   try {
-    await run('pnpm', ['-r', '--filter', '@riftydev/workbench...', 'run', 'build'], {
-      timeoutMs: 600_000,
-    });
+    await run(
+      'pnpm',
+      ['-r', '--filter', '@riftydev/sdk...', '--filter', '@riftydev/workbench...', 'run', 'build'],
+      {
+        timeoutMs: 600_000,
+      },
+    );
     const workspaceTarballs = await packPackages(workspaceClosure, tarballRoot);
     const externalTarballs = await packInstalledPackages(
       externalClosure,
@@ -1209,18 +1233,40 @@ async function main() {
       env: { npm_config_cache: npmCacheRoot, npm_config_offline: 'true' },
     });
     await assertTarballInstall(consumerRoot, tarballs);
-    await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
-    await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
-    await stat(resolve(consumerRoot, 'dist/index.html'));
-    const registryPackages = await browserRegistryPackages({
-      packageRoot: browserPackageRoot,
-      tarballRoot: browserTarballRoot,
-      npmCacheRoot: browserPackCacheRoot,
-    });
-    await runChromiumJourney(consumerRoot, registryPackages);
-    console.log(
-      `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,
-    );
+    if (surfaceOnly) {
+      const failures = [];
+      for (const [script, timeoutMs] of [
+        ['typecheck', 180_000],
+        ['build', 300_000],
+      ]) {
+        try {
+          await run('npm', ['run', script], { cwd: consumerRoot, timeoutMs });
+        } catch (error) {
+          failures.push(error instanceof Error ? error.stack : String(error));
+        }
+      }
+      if (failures.length > 0) {
+        throw new Error(`Packed toolchain surface failures:\n\n${failures.join('\n\n')}`);
+      }
+      await stat(resolve(consumerRoot, 'dist/main.js'));
+      await stat(resolve(consumerRoot, 'dist/worker.js'));
+      console.log(
+        `Packed toolchain surface passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, strict TypeScript + generic SDK/Worker graphs`,
+      );
+    } else {
+      await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
+      await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
+      await stat(resolve(consumerRoot, 'dist/index.html'));
+      const registryPackages = await browserRegistryPackages({
+        packageRoot: browserPackageRoot,
+        tarballRoot: browserTarballRoot,
+        npmCacheRoot: browserPackCacheRoot,
+      });
+      await runChromiumJourney(consumerRoot, registryPackages);
+      console.log(
+        `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,
+      );
+    }
   } catch (error) {
     failure = error;
   }

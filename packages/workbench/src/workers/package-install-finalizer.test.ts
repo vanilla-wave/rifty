@@ -8,6 +8,7 @@ import {
   finalizePackageInstallFiles,
   finalizerPackagesFromLockfile,
 } from './package-install-finalizer.ts';
+import { finalizeGenericPackageInstallFiles } from './package-install-generic-finalizer.ts';
 import { viteCliActionPatchApplied, viteRootWatchPatchApplied } from './vite-cli-install-policy.ts';
 
 const enc = new TextEncoder();
@@ -86,6 +87,20 @@ describe('finalizePackageInstallFiles', () => {
     expect(viteCliActionPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.cli)))).toBe(true);
     expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
       true,
+    );
+  });
+
+  it('generic finalization leaves Vite bytes untouched', () => {
+    const { vfs, fsSync } = createMemoryFs();
+    setSyncMirror(fsSync, { async: vfs });
+    const paths = seedViteFiles(fsSync, '/build-only');
+
+    finalizeGenericPackageInstallFiles({ root: '/build-only' });
+
+    expect(dec.decode(fsSync.readFileBytesSync(paths.cli))).toBe(CLI_SOURCE);
+    expect(dec.decode(fsSync.readFileBytesSync(paths.watcher))).toBe(ROOT_WATCH_SOURCE);
+    expect(viteRootWatchPatchApplied(dec.decode(fsSync.readFileBytesSync(paths.watcher)))).toBe(
+      false,
     );
   });
 

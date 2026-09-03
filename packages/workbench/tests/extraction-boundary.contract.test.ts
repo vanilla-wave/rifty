@@ -19,6 +19,7 @@ const EXPORTED_SOURCE_ENTRIES = [
   'src/workers/node-entry-bootstrap.ts',
   'src/workers/dev-server-child-bootstrap.ts',
   'src/workers/ts-lsp-worker-entry.ts',
+  'src/workers/no-coi-toolchain-worker.ts',
 ] as const;
 
 const EXPECTED_EXTERNAL_PACKAGES = [
@@ -305,7 +306,7 @@ describe('@riftydev/workbench extraction boundary', () => {
     ).toEqual([]);
   });
 
-  it('resolves exactly the seven sealed package source entries', () => {
+  it('resolves exactly the eight sealed package source entries', () => {
     const entries = resolvedExportEntries();
     expect(entries.map((path) => relative(PACKAGE_ROOT, path))).toEqual(EXPORTED_SOURCE_ENTRIES);
     expect(
@@ -332,11 +333,13 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 141 → 143 (2026-08-24, ADR-0362): PTY pending-authority file-size split
     // and the owner-only `.bin` path classifier.
     // 143 → 142 (2026-08-31, ADR-0371): delete the N=1 owner asset authority.
-    expect(packageProductionFiles).toHaveLength(142);
+    // 142 → 143 (2026-09-01, ADR-0375): public no-COI toolchain Worker.
+    // 143 → 145 (2026-09-01, ADR-0375): generic finalizer + bounded gap provenance.
+    expect(packageProductionFiles).toHaveLength(145);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
-  it('does not retain runtime-bearing source outside the seven published build entries', async () => {
+  it('does not retain runtime-bearing source outside the eight published build entries', async () => {
     expect(await runtimeBearingSourcesOutsideBuild()).toEqual([]);
   });
 

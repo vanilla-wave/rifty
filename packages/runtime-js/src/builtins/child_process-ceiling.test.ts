@@ -22,12 +22,19 @@
  * opencode is NOT vendored; we test rifty's own spawn boundary, which is the
  * substrate the impossible tools would hit.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from './child_process.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
 
-afterEach(() => resetSyncMirror());
+const TOOLCHAIN_REALM = Symbol.for('rifty.runtime-js.sandbox-toolchain.v1');
+
+afterEach(() => {
+  resetSyncMirror();
+  Reflect.deleteProperty(globalThis, TOOLCHAIN_REALM);
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 /**
  * Drain a child's stderr and resolve with its exit code + the full stderr on
@@ -51,6 +58,19 @@ async function collect(
 }
 
 describe('spawn ceiling (F09 / Q-2026-05-30-063) — impossible tools are walled off', () => {
+  it('adds the no-COI same-realm warning only in a selected toolchain Worker', async () => {
+    vi.stubGlobal('crossOriginIsolated', false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await collect(spawn('git', ['status']));
+    expect(warn).not.toHaveBeenCalled();
+
+    Object.defineProperty(globalThis, TOOLCHAIN_REALM, { value: true, configurable: true });
+    await collect(spawn('git', ['status']));
+    await collect(spawn('git', ['status']));
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   it("spawn('git') surfaces ENOENT-127 and never fake-succeeds", async () => {
     const child = spawn('git', ['status']);
     const { code, stderr } = await collect(child);

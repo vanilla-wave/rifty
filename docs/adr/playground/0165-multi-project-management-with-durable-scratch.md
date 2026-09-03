@@ -58,3 +58,11 @@ Rejected:
 - Dirty tracking binds to REAL owner file-write signals (`onFileWritten`), not the prototype's UI counters — terminal/file-tree edits set scratch dirty, so the discard-confirm gate can't lie.
 - Memory-degraded mode persists nothing to OPFS; the `EPHEMERAL` marking on every save affordance is the honest signal (fidelity rule).
 - ADR-0135 §4 (slug = preset id) is corrected here to project-scoped; ADR-0079 (single gallery) and ADR-0146/0148 (single owner, co-resident dev server — now respawned per switch) hold. `template-edit-provenance-reset` is folded: whole-workspace reset lands here, per-file revert stays open.
+
+## Correction (2026-09-01)
+
+ADR-0372 corrects only the generic isolated-only `detectVfsBackend`
+description: a capable dedicated Worker may select OPFS without COI, while a
+main-window detector describes only that main realm. This ADR's
+Playground/Workbench COI hard gate and honest owner-backed storage/degradation
+contract remain unchanged.
