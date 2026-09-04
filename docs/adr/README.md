@@ -556,3 +556,21 @@ here.
 | Vite identity policy in no-COI SDK/runtime infrastructure | 2026-09-04 | destination is the shared-memory-free class; installed bytes select behavior and Vite 7 is only the oracle. Record: ADR-0375 |
 | Realm-wide async-source census for resident readiness | 2026-09-04 | browser promises/EventTargets have no complete handle census, while counting all sources rejects harmless Vite cleanup. Loader-generation port ownership proves cause instead. Record: ADR-0378 |
 | Fresh Worker before every initial resident start | 2026-09-04 | changes ADR-0377 existing-Worker start, emits an observable reset and duplicates the explicit restart lifecycle. Record: ADR-0378 |
+| COI-default plus an OPFS force/opt-in knob | 2026-09-04 | COI does not discriminate dedicated-Worker sync OPFS capability; the knob preserves silent memory fallback. Record: ADR-0372 |
+| Async-OPFS support as paired backend selector | 2026-09-04 | main windows expose async OPFS but cannot host the required sync mirror. Record: ADR-0372 |
+| Catch every OPFS init failure as memory | 2026-09-04 | collapses unsupported capability with permission/storage failure and hides durability loss. Record: ADR-0372 |
+| SDK-owned no-COI Worker with top-level and nested URLs | 2026-09-04 | admits sibling runtime mirrors and ambiguous ownership; Workbench owns the composed entry. Record: removed ADR-0374, retained by ADR-0375 |
+| Private eval globals or deep host imports for no-COI tooling | 2026-09-04 | hidden untyped API plus a second VFS authority. Record: removed ADR-0373/0374, retained by ADR-0375 |
+| Public Workbench project/terminal surface for the no-COI build tier | 2026-09-04 | imports the COI owner/kernel topology and unrelated dev lifecycle. Record: removed ADR-0373/0374, ADR-0377 |
+| Restore shadow-asset CAS/port delivery for no-COI tooling | 2026-09-04 | installed registry-twin bytes already own delivery; another cache/protocol authority has no forcing constraint. Record: removed ADR-0374, ADR-0371/0375 |
+| Broad `sandbox.exec()` inside the no-COI build tier | 2026-09-04 | shell parsing, streaming, stdin, cancellation and preview normalization are independent scope. Record: removed ADR-0373/0374 |
+| Queue overlapping no-COI toolchain calls | 2026-09-04 | one shared mutable realm makes overlap invalid; FIFO adds fairness/cancellation state instead of loud busy rejection. Record: removed ADR-0373/0374, ADR-0376 |
+| Host-side boolean as toolchain admission owner | 2026-09-04 | remote from delivered Worker frames; retaining Worker defence creates two owners. Record: ADR-0376 |
+| Package/project FIFO as toolchain admission | 2026-09-04 | queues and imports unrelated durability/lifecycle semantics. Record: ADR-0376 |
+| New Worker per finite toolchain operation | 2026-09-04 | loses one VFS/loader/binding authority and requires unproven cross-realm coherence. Record: ADR-0376 |
+| COI Workbench child-process fabric for no-COI resident tools | 2026-09-04 | SAB-backed topology is unavailable on the target page. Record: ADR-0377 |
+| New Worker per resident tool | 2026-09-04 | loses the authoritative VFS/runtime and introduces cross-Worker coherence. Record: ADR-0377 |
+| Caller-owned rebuild/reinstall/preview assembly after a wedge | 2026-09-04 | misses restart/death/dirty observability and hides network retry in application code. Record: ADR-0377 |
+| Independent patches at resident ownership escape sites | 2026-09-04 | repeated provenance-lie at one seam requires one deep admission module. Record: ADR-0379 |
+| Separate public `onLifecycle` subscription for no-COI sandbox | 2026-09-04 | duplicates existing `runtime.on` lifecycle authority. Record: no-COI dev-HMR Contract+RED correction |
+| From-scratch docs site as the no-COI existing-app persona | 2026-09-04 | it has no host posture to preserve and should use real isolation; third-party no-origin preview remains separate embed scope. Record: `docs/backlog/distribution/reference/sw-coi-shim-probe.md` |
