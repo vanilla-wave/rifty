@@ -81,3 +81,29 @@ no pre-restart exit event, one pending public write, explicit generation
 replacement without registry traffic, repair-before-start, cache-busted iframe
 assignment, recovered marker, and a second same-bootId HMR update. Dirty and
 clean restart reports are `true` and `false`; physical Worker counts are exact.
+
+## Final round 1 blocker batch
+
+Final review found nine candidates; independent adjudication ruled seven
+HOLDS and two STRETCH. The batch adds protocol-v2 mixed-peer rejection,
+memory/backend recovery bytes, prebound/wrong-port ownership, post-resident
+finite-op gaps, sticky failed-restart marker, getter reentry and post-dispose
+Promise semantics.
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 9 passed (36.3s)
+
+pnpm test:no-coi --reporter=line
+# 32 passed (2.4m)
+
+pnpm exec vitest run --project unit packages/runtime-js/src/host.test.ts packages/rifty/src/sandbox.test.ts --reporter=dot
+# 48 passed
+
+pnpm test:packed-toolchain-surface
+# PASS: named start/restart SDK types + 15 first-party / 72 external tarballs
+
+pnpm pr:check
+# first run: test:run 205.4s + parity 76.1s GREEN, formatter-only RED
+# after formatting: 24/24 PASS; test:run 195.8s; parity 77.1s
+```

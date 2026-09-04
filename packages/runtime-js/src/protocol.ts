@@ -75,9 +75,16 @@ export interface ToolchainRuntimeBinding {
   readonly packagePath: string;
 }
 
+export interface ToolchainRecoveryFile {
+  readonly path: string;
+  readonly data: Uint8Array;
+}
+
 export interface ToolchainActivationState {
   readonly cwd: string;
   readonly bindings: readonly ToolchainRuntimeBinding[];
+  readonly vfsBackend: 'opfs' | 'memory';
+  readonly files: readonly ToolchainRecoveryFile[];
 }
 
 export type ToolchainRequest =
@@ -99,7 +106,7 @@ export type ToolchainResult =
     }
   | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
 
-export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v1' as const;
+export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v2' as const;
 
 /** `node:vm` sandbox engine (ADR-0142): the real-realm QuickJS engine (default
  * after the T17 cutover) or the opt-in hardened-rewrite engine. */

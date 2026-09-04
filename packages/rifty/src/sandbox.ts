@@ -343,6 +343,8 @@ async function bootToolchainSandbox(options: {
   let restarting = false;
   let disposed = false;
   let generation = 0;
+  let activation = current.snapshotToolchainState();
+  let residentRequest = current.snapshotResidentRequest();
 
   const emit = (event: RuntimeEvent): void => {
     for (const handler of handlers) {
@@ -376,12 +378,14 @@ async function bootToolchainSandbox(options: {
     path: string,
     encoding: 'utf8' | { readonly encoding: 'utf8' },
   ): Promise<string>;
-  function readFile(
+  async function readFile(
     path: string,
     encoding?: 'utf8' | { readonly encoding: 'utf8' },
   ): Promise<Uint8Array | string> {
     assertLive();
-    return encoding === undefined ? current.fs.readFile(path) : current.fs.readFile(path, encoding);
+    return encoding === undefined
+      ? await current.fs.readFile(path)
+      : await current.fs.readFile(path, encoding);
   }
 
   const fs: RuntimeFs = {
@@ -399,18 +403,18 @@ async function bootToolchainSandbox(options: {
   };
 
   const runtime: RuntimeController = {
-    eval(code, evalOptions) {
+    async eval(code, evalOptions) {
       assertLive();
-      return current.eval(code, evalOptions);
+      return await current.eval(code, evalOptions);
     },
     fs,
     writeStdin(data) {
       assertLive();
       current.writeStdin(data);
     },
-    reset() {
+    async reset() {
       assertLive();
-      return current.reset();
+      return await current.reset();
     },
     dispose() {
       disposeSandbox();
@@ -433,17 +437,19 @@ async function bootToolchainSandbox(options: {
   };
 
   const toolchain: SandboxToolchain = {
-    install(input) {
+    async install(input) {
       assertLive();
-      return current.toolchain.install(input);
+      await current.toolchain.install(input);
+      activation = current.snapshotToolchainState();
     },
-    runBin(input) {
+    async runBin(input) {
       assertLive();
-      return current.toolchain.runBin(input);
+      return await current.toolchain.runBin(input);
     },
     async startBin(input) {
       assertLive();
       const resident = await current.toolchain.startBin(input);
+      residentRequest = current.snapshotResidentRequest();
       return mountResidentPreview(resident.port);
     },
   };
@@ -471,46 +477,48 @@ async function bootToolchainSandbox(options: {
       error.name = 'SandboxRestartBusyError';
       throw error;
     }
-    if (
-      restartOptions === null ||
-      typeof restartOptions !== 'object' ||
-      restartOptions.preview === null ||
-      typeof restartOptions.preview !== 'object' ||
-      typeof restartOptions.preview.src !== 'string'
-    ) {
-      throw new TypeError('sandbox restart preview must expose a string src');
-    }
-    if (
-      restartOptions.beforeStart !== undefined &&
-      typeof restartOptions.beforeStart !== 'function'
-    ) {
-      throw new TypeError('sandbox restart beforeStart must be a function');
-    }
-
     restarting = true;
-    const activation = current.snapshotToolchainState();
-    const residentRequest = current.snapshotResidentRequest();
-    const unflushedWrites = unflushedMarker || pendingWrites > 0;
     try {
+      if (restartOptions === null || typeof restartOptions !== 'object') {
+        throw new TypeError('sandbox restart options must be an object');
+      }
+      const preview = restartOptions.preview;
+      const beforeStart = restartOptions.beforeStart;
+      if (preview === null || typeof preview !== 'object' || typeof preview.src !== 'string') {
+        throw new TypeError('sandbox restart preview must expose a string src');
+      }
+      if (beforeStart !== undefined && typeof beforeStart !== 'function') {
+        throw new TypeError('sandbox restart beforeStart must be a function');
+      }
+
+      if (pendingWrites > 0) unflushedMarker = true;
       tearPreview?.();
       tearPreview = null;
       detachCurrent();
       emit({ type: 'exit', reason: 'reset' });
+      if (pendingWrites > 0) unflushedMarker = true;
+      if (disposed) throw new Error('Sandbox was disposed during restart');
       current.dispose();
 
       current = spawnToolchainRuntime({ workerUrl: options.workerUrl });
       attachCurrent();
       backend = await current.toolchainReady;
       if (activation !== null) await current.restoreToolchainState(activation);
-      await restartOptions.beforeStart?.(fs);
+      try {
+        await beforeStart?.(fs);
+      } finally {
+        activation = current.snapshotToolchainState();
+      }
 
       let resident: SandboxResidentBin | null = null;
       if (residentRequest !== null) {
         const started = await current.toolchain.startBin(residentRequest);
+        residentRequest = current.snapshotResidentRequest();
         resident = mountResidentPreview(started.port);
         generation += 1;
-        restartOptions.preview.src = `${resident.previewUrl}?riftyRestart=${generation}`;
+        preview.src = `${resident.previewUrl}?riftyRestart=${generation}`;
       }
+      const unflushedWrites = unflushedMarker;
       unflushedMarker = false;
       return { unflushedWrites, resident };
     } finally {

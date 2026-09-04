@@ -429,7 +429,7 @@ describe('createSandbox', () => {
         worker.emit({ type: 'ready' });
         worker.emit({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v1',
+          protocol: 'rifty.sandbox-toolchain/v2',
           vfsBackend: 'opfs',
         });
       }
@@ -503,7 +503,7 @@ describe('createSandbox', () => {
       worker.emit({ type: 'ready' });
       worker.emit({
         type: 'toolchain-ready',
-        protocol: 'rifty.sandbox-toolchain/v1',
+        protocol: 'rifty.sandbox-toolchain/v2',
         vfsBackend: workerBackend,
       });
       const sandbox = await creating;

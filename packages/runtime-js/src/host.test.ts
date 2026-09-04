@@ -283,7 +283,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
     worker.emit({ type: 'ready' });
     worker.emitUnknown({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v0',
+      protocol: 'rifty.sandbox-toolchain/v1',
       vfsBackend: 'memory',
     });
 
@@ -302,7 +302,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         'prior version',
         () => ({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v0',
+          protocol: 'rifty.sandbox-toolchain/v1',
           vfsBackend: 'memory',
         }),
       ],
@@ -310,7 +310,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         'later version',
         () => ({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v2',
+          protocol: 'rifty.sandbox-toolchain/v3',
           vfsBackend: 'memory',
         }),
       ],
@@ -594,7 +594,14 @@ describe('spawnToolchainRuntime trust boundary', () => {
       result: {
         id: 1,
         ok: true,
-        value: { activationState: { cwd: '/install', bindings: [] } },
+        value: {
+          activationState: {
+            cwd: '/install',
+            bindings: [],
+            vfsBackend: 'memory',
+            files: [{ path: '/install/package.json', data: new Uint8Array([1]) }],
+          },
+        },
       },
     });
     worker.emit({
@@ -603,7 +610,12 @@ describe('spawnToolchainRuntime trust boundary', () => {
     });
     await expect(install).resolves.toBeUndefined();
     await expect(run).resolves.toEqual({ exitCode: 0 });
-    expect(runtime.snapshotToolchainState()).toEqual({ cwd: '/install', bindings: [] });
+    expect(runtime.snapshotToolchainState()).toEqual({
+      cwd: '/install',
+      bindings: [],
+      vfsBackend: 'memory',
+      files: [{ path: '/install/package.json', data: new Uint8Array([1]) }],
+    });
   });
 
   it('validates, snapshots and restores activation state without an install request', async () => {
@@ -615,7 +627,12 @@ describe('spawnToolchainRuntime trust boundary', () => {
       adapterId: 'rifty.runtime-adapter.esbuild.v1',
       packagePath: '/dev/node_modules/esbuild-wasm',
     };
-    const state = { cwd: '/dev', bindings: [binding] };
+    const state = {
+      cwd: '/dev',
+      bindings: [binding],
+      vfsBackend: 'memory' as const,
+      files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
+    };
 
     const restoring = runtime.restoreToolchainState(state);
     state.cwd = '/changed';
@@ -636,6 +653,8 @@ describe('spawnToolchainRuntime trust boundary', () => {
                 packagePath: '/dev/node_modules/esbuild-wasm',
               },
             ],
+            vfsBackend: 'memory',
+            files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
           },
         },
       },
@@ -650,12 +669,16 @@ describe('spawnToolchainRuntime trust boundary', () => {
           packagePath: '/dev/node_modules/esbuild-wasm',
         },
       ],
+      vfsBackend: 'memory',
+      files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
     });
 
     await expect(
       runtime.restoreToolchainState({
         cwd: '/dev',
         bindings: [{ adapterId: '', packagePath: '/dev/node_modules/esbuild-wasm' }],
+        vfsBackend: 'memory',
+        files: [],
       }),
     ).rejects.toMatchObject({ name: 'TypeError' });
     expect(worker.sent).toHaveLength(1);

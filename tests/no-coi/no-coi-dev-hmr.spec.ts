@@ -4,6 +4,7 @@ import type { RuntimeEvent, ToolchainSandbox } from '../../packages/rifty/src/in
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
 const toolchainWorkerUrl = `/@fs${workspacePath}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`;
+const memoryToolchainWorkerUrl = `/@fs${workspacePath}/tests/no-coi/fixtures/no-coi-toolchain-memory-worker.ts`;
 const projectRoot = '/dev-hmr';
 const port = 5174;
 const startRequest = {
@@ -49,7 +50,7 @@ if (import.meta.hot) import.meta.hot.accept('./hmr-value.js', (next) => paint(ne
 `,
 };
 
-async function bootSandbox(page: Page): Promise<Page> {
+async function bootSandbox(page: Page, workerUrl = toolchainWorkerUrl): Promise<Page> {
   await page.goto('/no-coi-harness.html');
   await expect(page.locator('#no-coi-harness')).toHaveAttribute('data-status', 'ready');
   await page.evaluate(
@@ -75,7 +76,7 @@ async function bootSandbox(page: Page): Promise<Page> {
       })) as DevSandbox;
       Reflect.set(globalThis, '__riftyDevSandbox', sandbox);
     },
-    { sdkUrl: sdkModuleUrl, toolchainUrl: toolchainWorkerUrl },
+    { sdkUrl: sdkModuleUrl, toolchainUrl: workerUrl },
   );
   return page;
 }
@@ -137,6 +138,183 @@ test('overlapping restart rejects without a queue or second surviving generation
   }
 });
 
+test('restart claims before caller getters can reenter generation replacement', async ({
+  page,
+}) => {
+  await bootSandbox(page);
+  try {
+    const outcome = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const preview = { src: '' };
+      let inner: Promise<unknown> | undefined;
+      const options = Object.defineProperty({}, 'preview', {
+        enumerable: true,
+        get() {
+          inner ??= sandbox.restart({ preview });
+          inner.catch(() => {});
+          return preview;
+        },
+      });
+      const outer = await sandbox.restart(options as { readonly preview: { src: string } });
+      const innerOutcome = await inner?.then(
+        () => ({ status: 'fulfilled' }),
+        (error: Error) => ({ status: 'rejected', name: error.name }),
+      );
+      return {
+        outer,
+        inner: innerOutcome,
+        workerCount: Reflect.get(globalThis, '__riftyWorkerCount'),
+      };
+    });
+    expect(outcome).toEqual({
+      outer: { unflushedWrites: false, resident: null },
+      inner: { status: 'rejected', name: 'SandboxRestartBusyError' },
+      workerCount: 2,
+    });
+  } finally {
+    await disposeSandbox(page);
+  }
+});
+
+test('post-dispose Promise APIs reject asynchronously instead of throwing', async ({ page }) => {
+  await bootSandbox(page);
+  const outcomes = await page.evaluate(async () => {
+    const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+    sandbox.dispose();
+    const observe = async (call: () => Promise<unknown>) => {
+      let promise: Promise<unknown>;
+      try {
+        promise = call();
+      } catch (error) {
+        return { sync: true, name: (error as Error).name };
+      }
+      try {
+        await promise;
+        return { sync: false, status: 'fulfilled' };
+      } catch (error) {
+        return { sync: false, status: 'rejected', message: (error as Error).message };
+      }
+    };
+    return Promise.all([
+      observe(() => sandbox.runtime.eval('1')),
+      observe(() => sandbox.runtime.reset()),
+      observe(() => sandbox.fs.readFile('/x')),
+      observe(() => sandbox.fs.writeFile('/x', 'x')),
+      observe(() => sandbox.toolchain.install({ cwd: '/x', registryUrl: '/registry' })),
+      observe(() =>
+        sandbox.toolchain.runBin({
+          cwd: '/x',
+          binPath: '/x/node_modules/.bin/x',
+          args: [],
+        }),
+      ),
+      observe(() =>
+        sandbox.toolchain.startBin({
+          cwd: '/x',
+          binPath: '/x/node_modules/.bin/x',
+          args: [],
+          port: 5174,
+        }),
+      ),
+      observe(() => sandbox.restart({ preview: { src: '' } })),
+    ]);
+  });
+  expect(outcomes).toHaveLength(8);
+  for (const outcome of outcomes) {
+    expect(outcome).toEqual({
+      sync: false,
+      status: 'rejected',
+      message: 'Sandbox is disposed',
+    });
+  }
+});
+
+test('resident start rejects pre-bound and wrong-port ownership without false readiness', async ({
+  page,
+}) => {
+  await bootSandbox(page);
+  try {
+    await writeFiles(page, {
+      '/port-proof/node_modules/.bin/plain-dev':
+        "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+      '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
+        name: 'plain-dev',
+        type: 'commonjs',
+      }),
+      '/port-proof/node_modules/plain-dev/server.cjs': `require('node:http').createServer((_req, res) => res.end('selected')).listen(5191, '127.0.0.1');`,
+    });
+    const prebound = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const events: RuntimeExitEvent[] = [];
+      sandbox.runtime.on((event) => {
+        if (event.type === 'exit') events.push(event);
+      });
+      await sandbox.runtime.eval(`await new Promise((resolve, reject) => {
+        require('node:http').createServer((_req, res) => res.end('other')).once('error', reject).listen(5191, '127.0.0.1', resolve);
+      })`);
+      let failure: unknown;
+      try {
+        await sandbox.toolchain.startBin({
+          cwd: '/port-proof',
+          binPath: '/port-proof/node_modules/.bin/plain-dev',
+          args: [],
+          port: 5191,
+        });
+      } catch (error) {
+        const inspected = error as Error & { code?: string };
+        failure = { name: inspected.name, code: inspected.code, message: inspected.message };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { failure, events };
+    });
+    expect(prebound).toMatchObject({
+      failure: { code: 'EADDRINUSE', message: expect.stringContaining('already in use') },
+      events: [{ type: 'exit', reason: 'error' }],
+    });
+  } finally {
+    await disposeSandbox(page);
+  }
+
+  await bootSandbox(page);
+  try {
+    await writeFiles(page, {
+      '/port-proof/node_modules/.bin/plain-dev':
+        "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+      '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
+        name: 'plain-dev',
+        type: 'commonjs',
+      }),
+      '/port-proof/node_modules/plain-dev/server.cjs': `require('node:http').createServer((_req, res) => res.end('wrong')).listen(5192, '127.0.0.1');`,
+    });
+    const wrong = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const events: RuntimeExitEvent[] = [];
+      sandbox.runtime.on((event) => {
+        if (event.type === 'exit') events.push(event);
+      });
+      let failure: unknown;
+      try {
+        await sandbox.toolchain.startBin({
+          cwd: '/port-proof',
+          binPath: '/port-proof/node_modules/.bin/plain-dev',
+          args: [],
+          port: 5191,
+        });
+      } catch (error) {
+        failure = { name: (error as Error).name, message: (error as Error).message };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { failure, events };
+    });
+    expect(wrong).toMatchObject({
+      failure: { message: expect.stringContaining('unexpected port 5192') },
+      events: [{ type: 'exit', reason: 'error' }],
+    });
+  } finally {
+    await disposeSandbox(page);
+  }
+});
+
 async function writeFiles(page: Page, files: Readonly<Record<string, string>>): Promise<void> {
   await page.evaluate(async (entries) => {
     const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
@@ -182,18 +360,22 @@ test('generic resident start mounts its SW preview without package identity poli
   await bootSandbox(page);
   try {
     await writeFiles(page, {
-      [`${projectRoot}/node_modules/.bin/vite`]:
-        "#!/usr/bin/env node\nimport('../vite/server.cjs');\n",
-      [`${projectRoot}/node_modules/vite/package.json`]: JSON.stringify({
-        name: 'not-vite-bytes',
-        version: '7.3.6',
+      [`${projectRoot}/node_modules/.bin/plain-dev`]:
+        "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+      [`${projectRoot}/node_modules/plain-dev/package.json`]: JSON.stringify({
+        name: 'plain-dev',
+        version: '1.0.0',
         type: 'commonjs',
       }),
-      [`${projectRoot}/node_modules/vite/server.cjs`]: `const http = require('node:http');
+      [`${projectRoot}/node_modules/plain-dev/server.cjs`]: `const http = require('node:http');
 const port = Number(process.argv[process.argv.indexOf('--port') + 1]);
 http.createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<output id="hmr-marker" data-boot-id="decoy">decoy-server</output>'); }).listen(port, '127.0.0.1');
 `,
     });
+    const plainRequest = {
+      ...startRequest,
+      binPath: `${projectRoot}/node_modules/.bin/plain-dev`,
+    };
     const result = await page.evaluate(async (request) => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
       if (typeof sandbox.toolchain.startBin !== 'function') {
@@ -205,10 +387,135 @@ http.createServer((_req, res) => { res.setHeader('content-type', 'text/html'); r
       document.body.append(iframe);
       if (resident) iframe.src = resident.previewUrl;
       return resident;
-    }, startRequest);
+    }, plainRequest);
     expect(result).toEqual({ port, previewUrl: `/preview/${port}/` });
     await waitForMarker(page, 'decoy-server');
+
+    const rejected = await page.evaluate(async (request) => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const inspect = async (operation: Promise<unknown>) => {
+        try {
+          await operation;
+          return { status: 'fulfilled' };
+        } catch (error) {
+          const value = error as Error & { feature?: string };
+          return { status: 'rejected', name: value.name, feature: value.feature };
+        }
+      };
+      return {
+        install: await inspect(
+          sandbox.toolchain.install({ cwd: request.cwd, registryUrl: '/npm-registry' }),
+        ),
+        run: await inspect(
+          sandbox.toolchain.runBin({
+            cwd: request.cwd,
+            binPath: request.binPath,
+            args: [],
+          }),
+        ),
+        secondStart: await inspect(sandbox.toolchain.startBin(request)),
+      };
+    }, plainRequest);
+    expect(rejected).toEqual({
+      install: {
+        status: 'rejected',
+        name: 'NotImplementedError',
+        feature: 'sandbox.toolchain.resident-concurrency',
+      },
+      run: {
+        status: 'rejected',
+        name: 'NotImplementedError',
+        feature: 'sandbox.toolchain.resident-concurrency',
+      },
+      secondStart: {
+        status: 'rejected',
+        name: 'SandboxResidentToolBusyError',
+        feature: undefined,
+      },
+    });
+    await waitForMarker(page, 'decoy-server');
   } finally {
+    await disposeSandbox(page);
+  }
+});
+
+test('memory-backend restart restores the installed tree before resident relaunch', async ({
+  page,
+}) => {
+  await bootSandbox(page, memoryToolchainWorkerUrl);
+  const restartRegistryRequests: string[] = [];
+  const trackRestartRequest = (request: Request): void => {
+    if (request.url().includes('/npm-registry')) restartRegistryRequests.push(request.url());
+  };
+  try {
+    expect(
+      await page.evaluate(() => {
+        const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+        return sandbox.vfs.backend;
+      }),
+    ).toBe('memory');
+    await writeFiles(page, realProjectFiles);
+    await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      await sandbox.toolchain.install({ cwd: '/dev-hmr', registryUrl: '/npm-registry' });
+      const resident = await sandbox.toolchain.startBin({
+        cwd: '/dev-hmr',
+        binPath: '/dev-hmr/node_modules/.bin/vite',
+        args: ['--host', '127.0.0.1', '--port', '5174', '--strictPort', '--force'],
+        port: 5174,
+      });
+      const iframe = document.createElement('iframe');
+      iframe.id = 'dev-preview';
+      document.body.append(iframe);
+      iframe.src = resident.previewUrl;
+    });
+    const first = await waitForMarker(page, 'hmr-a');
+    page.on('request', trackRestartRequest);
+    const report = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const iframe = document.querySelector('#dev-preview') as HTMLIFrameElement;
+      const restarted = await sandbox.restart({ preview: iframe });
+      return {
+        restarted,
+        backend: sandbox.vfs.backend,
+        workerCount: Reflect.get(globalThis, '__riftyWorkerCount'),
+      };
+    });
+    expect(report).toEqual({
+      restarted: {
+        unflushedWrites: false,
+        resident: { port: 5174, previewUrl: '/preview/5174/' },
+      },
+      backend: 'memory',
+      workerCount: 2,
+    });
+    expect(restartRegistryRequests).toEqual([]);
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const iframe = document.querySelector('#dev-preview') as HTMLIFrameElement | null;
+            const node = iframe?.contentDocument?.querySelector(
+              '#hmr-marker',
+            ) as HTMLElement | null;
+            return node?.dataset.bootId ?? null;
+          }),
+        { timeout: 180_000 },
+      )
+      .not.toBe(first.bootId);
+    const recovered = await waitForMarker(page, 'hmr-a');
+    expect(recovered.bootId).not.toBe(first.bootId);
+    await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      await sandbox.fs.writeFile(
+        '/dev-hmr/src/hmr-value.js',
+        "export const marker = 'hmr-memory';\n",
+      );
+    });
+    const updated = await waitForMarker(page, 'hmr-memory');
+    expect(updated.bootId).toBe(recovered.bootId);
+  } finally {
+    page.off('request', trackRestartRequest);
     await disposeSandbox(page);
   }
 });
@@ -280,6 +587,18 @@ test('real Vite HMR survives explicit wedge restart and reports the dirty bounda
         throw new Error('ToolchainSandbox.restart is missing');
       }
       const iframe = document.querySelector('#dev-preview') as HTMLIFrameElement;
+      let failedRestart: unknown;
+      try {
+        await sandbox.restart({
+          preview: iframe,
+          beforeStart: async (fs) => {
+            await fs.writeFile('/dev-hmr/src/wedge.js', "export const wedge = 'safe';\n");
+            throw new Error('forced restart stage failure');
+          },
+        });
+      } catch (error) {
+        failedRestart = { name: (error as Error).name, message: (error as Error).message };
+      }
       const restarted = await sandbox.restart({
         preview: iframe,
         beforeStart: async (fs) => {
@@ -291,6 +610,7 @@ test('real Vite HMR survives explicit wedge restart and reports the dirty bounda
         },
       });
       return {
+        failedRestart,
         restarted,
         events: Reflect.get(globalThis, '__riftyLifecycleEvents'),
         iframeSrc: iframe.src,
@@ -298,13 +618,17 @@ test('real Vite HMR survives explicit wedge restart and reports the dirty bounda
       };
     });
     expect(report).toMatchObject({
+      failedRestart: { name: 'Error', message: 'forced restart stage failure' },
       restarted: {
         unflushedWrites: true,
         resident: { port: 5174, previewUrl: '/preview/5174/' },
       },
-      events: [{ type: 'exit', reason: 'reset' }],
+      events: [
+        { type: 'exit', reason: 'reset' },
+        { type: 'exit', reason: 'reset' },
+      ],
       iframeSrc: expect.stringMatching(/\/preview\/5174\/\?riftyRestart=\d+$/u),
-      workerCount: 2,
+      workerCount: 3,
     });
     expect(restartRegistryRequests).toEqual([]);
 
@@ -336,9 +660,10 @@ test('real Vite HMR survives explicit wedge restart and reports the dirty bounda
       events: [
         { type: 'exit', reason: 'reset' },
         { type: 'exit', reason: 'reset' },
+        { type: 'exit', reason: 'reset' },
       ],
       iframeSrc: expect.stringMatching(/\/preview\/5174\/\?riftyRestart=\d+$/u),
-      workerCount: 3,
+      workerCount: 4,
     });
     expect(restartRegistryRequests).toEqual([]);
   } finally {

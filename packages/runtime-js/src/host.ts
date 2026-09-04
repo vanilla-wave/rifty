@@ -303,8 +303,26 @@ function createRuntimeController(
   }
 
   async function writeFile(path: string, data: string | Uint8Array): Promise<void> {
+    const recoveryData =
+      typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
     const result = await requestFs({ id: nextId++, op: 'writeFile', path, data });
     if (!result.ok) throw deserializeError(result.error);
+    if (activationState !== null) {
+      const normalized = normalizePath(path);
+      const absolute = normalized.startsWith('/') ? normalized : `/${normalized}`;
+      const files = new Map(
+        activationState.files.map((file) => [file.path, new Uint8Array(file.data)] as const),
+      );
+      files.set(absolute, recoveryData);
+      activationState = Object.freeze({
+        ...activationState,
+        files: Object.freeze(
+          [...files]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([filePath, fileData]) => Object.freeze({ path: filePath, data: fileData })),
+        ),
+      });
+    }
   }
 
   function start(): void {
@@ -522,7 +540,9 @@ function createRuntimeController(
     toolchain,
     toolchainReady,
     snapshotToolchainState() {
-      return activationState;
+      return activationState === null
+        ? null
+        : validateActivationState(activationState, 'toolchain activation snapshot');
     },
     snapshotResidentRequest() {
       return residentRequest;
@@ -666,8 +686,11 @@ function validateStartBinRequest(input: ToolchainStartBinRequest): ToolchainStar
 }
 
 function validateActivationState(input: unknown, label: string): ToolchainActivationState {
-  const record = exactInput(input, ['bindings', 'cwd'], label);
+  const record = exactInput(input, ['bindings', 'cwd', 'files', 'vfsBackend'], label);
   const cwd = absolutePath(record.cwd, `${label} cwd`);
+  if (record.vfsBackend !== 'opfs' && record.vfsBackend !== 'memory') {
+    throw new TypeError(`${label} vfsBackend must be opfs or memory`);
+  }
   if (!Array.isArray(record.bindings) || Object.getOwnPropertySymbols(record.bindings).length > 0) {
     throw new TypeError(`${label} bindings must be a dense array`);
   }
@@ -696,5 +719,40 @@ function validateActivationState(input: unknown, label: string): ToolchainActiva
     const packagePath = absolutePath(binding.packagePath, `${label} binding ${index} packagePath`);
     return Object.freeze({ adapterId: binding.adapterId, packagePath });
   });
-  return Object.freeze({ cwd, bindings: Object.freeze(bindings) });
+  if (!Array.isArray(record.files) || Object.getOwnPropertySymbols(record.files).length > 0) {
+    throw new TypeError(`${label} files must be a dense array`);
+  }
+  const fileDescriptors = Object.getOwnPropertyDescriptors(record.files);
+  const fileKeys = Object.keys(fileDescriptors).filter((key) => key !== 'length');
+  if (
+    fileKeys.length !== record.files.length ||
+    fileKeys.some((key, index) => key !== String(index)) ||
+    fileKeys.some((key) => {
+      const descriptor = fileDescriptors[key];
+      return descriptor === undefined || !('value' in descriptor);
+    })
+  ) {
+    throw new TypeError(`${label} files must be a dense array`);
+  }
+  const seen = new Set<string>();
+  const files = fileKeys.map((key, index) => {
+    const descriptor = fileDescriptors[key];
+    if (descriptor === undefined || !('value' in descriptor)) {
+      throw new TypeError(`${label} files must be a dense array`);
+    }
+    const file = exactInput(descriptor.value, ['data', 'path'], `${label} file ${index}`);
+    const path = absolutePath(file.path, `${label} file ${index} path`);
+    if (seen.has(path)) throw new TypeError(`${label} has duplicate file ${path}`);
+    seen.add(path);
+    if (!(file.data instanceof Uint8Array)) {
+      throw new TypeError(`${label} file ${index} data must be Uint8Array`);
+    }
+    return Object.freeze({ path, data: new Uint8Array(file.data) });
+  });
+  return Object.freeze({
+    cwd,
+    bindings: Object.freeze(bindings),
+    vfsBackend: record.vfsBackend,
+    files: Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path))),
+  });
 }

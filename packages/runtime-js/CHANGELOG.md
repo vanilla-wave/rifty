@@ -4,8 +4,9 @@
 
 ### Added
 
-- Toolchain control supports exact resident-bin start plus a host-held runtime
-  activation snapshot restored into a replacement Worker (ADR-0377).
+- Toolchain protocol v2 supports exact resident-bin start plus a host-held
+  binding/file activation snapshot restored into a replacement Worker
+  (ADR-0377); v1 peers fail during handshake.
 
 - Runtime Worker protocol carries the ADR-0375 toolchain handshake and
   install/run-bin results through its existing correlation owner, including

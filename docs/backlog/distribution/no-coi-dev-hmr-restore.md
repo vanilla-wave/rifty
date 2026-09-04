@@ -7,7 +7,7 @@ epic: no-coi-sandbox-tier
 why: build-to-completion works, but the public sandbox cannot start a resident installed bin, mount its preview, restart a wedged realm or report an unacknowledged write
 user_story: As an agent platform, I want a resident installed dev tool with HMR preview and an explicit restart after my timeout detects a wedge
 sources: [ADR-0377, docs/backlog/distribution/reference/no-coi-hmr-spike-record.md, docs/backlog/distribution/reference/no-coi-dev-hmr-restore-evidence.md]
-code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/runtime-js/src/protocol.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, tests/no-coi/no-coi-dev-hmr.spec.ts]
+code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/runtime-js/src/protocol.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, tests/no-coi/no-coi-dev-hmr.spec.ts, tests/no-coi/fixtures/no-coi-toolchain-memory-worker.ts]
 ---
 
 ## Context
@@ -111,5 +111,6 @@ new Worker restores the resident tool, reloads the iframe and resumes HMR.
 
 ready-verdict: 2026-09-04 — Contract+RED @ c53c08ad2
 review: checkpoints rounds:2
+final-green: round 1/2 — blocker @ 17f7e74f1
 re-cut: 2026-09-04 — compiled the final I4/I6/I10/I8 product slice and removed obsolete prerequisite history — trace: none
 - 2026-09-04 — expected RED band 4–4: public start/preview, real HMR, wedge restart/dirty marker, actual-death/overlap siblings.

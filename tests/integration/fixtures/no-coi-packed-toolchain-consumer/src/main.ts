@@ -1,10 +1,23 @@
-import { type SandboxToolchain, type ToolchainSandbox, createSandbox } from '@riftydev/sdk';
+import {
+  type SandboxResidentBin,
+  type SandboxStartBinInput,
+  type SandboxToolchain,
+  type ToolchainSandbox,
+  createSandbox,
+} from '@riftydev/sdk';
 
 export async function bootToolchain(workerUrl: string | URL): Promise<ToolchainSandbox> {
   return await createSandbox({
     requireCrossOriginIsolation: false,
     toolchain: { workerUrl },
   });
+}
+
+export async function startInstalledTool(
+  toolchain: SandboxToolchain,
+  input: SandboxStartBinInput,
+): Promise<SandboxResidentBin> {
+  return await toolchain.startBin(input);
 }
 
 export async function runInstalledTool(

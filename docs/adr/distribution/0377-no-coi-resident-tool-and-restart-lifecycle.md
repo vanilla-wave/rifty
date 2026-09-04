@@ -52,9 +52,11 @@ Candidates:
    mounts the existing page→SW→Worker HTTP/WS bridge, then resolves
    `{port,previewUrl}`. Package identity/version never selects this path. One
    resident bin per Worker; a second start fails loudly.
-2. Successful install leaves an exact host-held activation snapshot. A new
-   Worker receives and validates that snapshot before resident restart; no npm
-   call, persistent manifest, retry, queue or replay is added.
+2. Successful install leaves an exact host-held activation snapshot: admitted
+   bindings, source backend and recovery file bytes. Acknowledged public writes
+   update it. A new memory Worker or backend flip restores those files before
+   bindings; same-OPFS restart reopens its durable tree. No npm call,
+   persistent manifest, retry or queue is added.
 3. `ToolchainSandbox.restart({preview,beforeStart?})` is the sole generation
    replacement owner: terminate, boot one Worker, restore activation, run the
    optional repair callback through the new `RuntimeFs`, restart the resident
@@ -67,9 +69,10 @@ Candidates:
    emits nothing. The next restart report carries `unflushedWrites`, set when
    a public `fs.writeFile` was pending at peer end; a settled write reports
    false. No second callback owner is added.
-5. Existing cross-realm preview/SW protocols, OPFS backend, install/run
-   admission and Worker terminal settlement remain unchanged. Resident late
-   errors surface through the existing Worker death path.
+5. The toolchain handshake bumps to `rifty.sandbox-toolchain/v2`; v1 peers fail
+   before any operation because start/restore and install-result shapes are
+   incompatible. Cross-realm preview/SW protocols, install/run settlement and
+   OPFS authority remain unchanged. Resident late errors use Worker death.
 
 ## Consequences
 
@@ -79,5 +82,7 @@ Candidates:
   preview; automatic detection/reconnect remains absent at tier `works`.
 - Runtime activation state survives only this page-owned restart object. Full
   page reload promises the flushed tree, not automatic resident restoration.
+- The host-held file snapshot adds install-time memory proportional to the
+  installed tree; it is copied back only for memory recovery/backend change.
 - The dirty marker covers unacknowledged public writes only; no journal,
   exactly-once, crash consistency or hidden retry is claimed.

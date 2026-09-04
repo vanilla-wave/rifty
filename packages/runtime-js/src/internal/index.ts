@@ -6,6 +6,7 @@ export type {
   ToolchainActivationState,
   ToolchainInstallRequest,
   ToolchainRequest,
+  ToolchainRecoveryFile,
   ToolchainResult,
   ToolchainRunBinRequest,
   ToolchainStartBinRequest,

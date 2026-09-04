@@ -1,4 +1,12 @@
-import type { SandboxToolchain } from '@riftydev/sdk';
+import type {
+  SandboxPreviewTarget,
+  SandboxResidentBin,
+  SandboxRestartOptions,
+  SandboxRestartReport,
+  SandboxStartBinInput,
+  SandboxToolchain,
+  ToolchainSandbox,
+} from '@riftydev/sdk';
 
 // @ts-expect-error raw toolchain type stays off the runtime root
 type RootRuntimeToolchain = import('@riftydev/runtime-js').RuntimeToolchain;
@@ -8,6 +16,7 @@ type RootToolchainProtocol = import('@riftydev/runtime-js').ToolchainRequest;
 type RootDeclaredGapCause = typeof import('@riftydev/runtime-js')['declaredGapCause'];
 
 declare const toolchain: SandboxToolchain;
+declare const sandbox: ToolchainSandbox;
 
 void toolchain.install({ cwd: '/project', registryUrl: 'https://registry.invalid' });
 void toolchain.runBin({
@@ -15,6 +24,28 @@ void toolchain.runBin({
   binPath: '/project/node_modules/.bin/arbitrary-tool',
   args: ['--version'],
 });
+const startInput: SandboxStartBinInput = {
+  cwd: '/project',
+  binPath: '/project/node_modules/.bin/arbitrary-tool',
+  args: ['--port', '5174'],
+  port: 5174,
+};
+const resident: Promise<SandboxResidentBin> = toolchain.startBin(startInput);
+void resident;
+// @ts-expect-error port is required
+void toolchain.startBin({ cwd: '/project', binPath: startInput.binPath, args: [] });
+void toolchain.startBin({
+  ...startInput,
+  // @ts-expect-error port is numeric
+  port: '5174',
+});
+
+const preview: SandboxPreviewTarget = { src: '' };
+const restartOptions: SandboxRestartOptions = { preview };
+const restart: Promise<SandboxRestartReport> = sandbox.restart(restartOptions);
+void restart;
+// @ts-expect-error preview is required
+void sandbox.restart({});
 
 // @ts-expect-error registryUrl is required
 void toolchain.install({ cwd: '/project' });
@@ -64,6 +95,7 @@ void missingInstall;
 const extraMethod: SandboxToolchain = {
   install: async () => {},
   runBin: async () => ({ exitCode: 0 }),
+  startBin: async () => ({ port: 5174, previewUrl: '/preview/5174/' }),
   // @ts-expect-error SandboxToolchain rejects the exact extra reconnect method
   reconnect: async () => {},
 };
