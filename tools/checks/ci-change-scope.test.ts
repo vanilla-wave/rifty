@@ -165,7 +165,6 @@ describe('CI change scope', () => {
       expect(gate, dependency).toContain(`- ${dependency}`);
     }
   });
-
 });
 
 describe('CI Node CLI eval oracle', () => {
