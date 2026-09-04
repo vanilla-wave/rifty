@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: ready
+status: draft
 title: no-COI test lane carries the exact full-reload durability proof
 created: 2026-09-04
 epic: no-coi-sandbox-tier
@@ -57,4 +57,5 @@ including acknowledged OPFS persistence across a full page reload.
 
 review: ordinary — proof-only
 re-cut: 2026-09-04 — move the certified I5 spec into the existing no-COI testDir instead of adding a workflow step; restores ordinary contract-drift and artifact ownership — trace: none
+- 2026-09-04 — ordinary unit remains draft until re-chart deletion because aggregate `check:contract-drift` requires forbidden Contract+RED lineage; process defect captured separately.
 - 2026-09-04 — one moved carrier, no duplicate implementation.
