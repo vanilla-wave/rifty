@@ -28,7 +28,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 
 ## Data sources
 - `docs/process/README.md` — the process map: one frozen layer (`goal.md`), agent-owned path, stages, roles, closed stop list, rule ids (`DEC`/`RDY`/`REV`/`STOP`/`PR`). Read it first; cite rules by id.
-- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: user-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery → `rifty-to-backlog`, never interview; draft → ready at pickup (`RDY-1..4`); epic missing tier/Invariants → fit it yourself (`rifty-goal` FIT) — a write-up is never a blocked ask; PR review → `rifty-review`. Never implement a draft. Planned/process work never invokes `rifty-fix`.
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: user-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery → `rifty-to-backlog`, never interview; draft → ready at pickup (`RDY-1..4`); epic missing tier/Invariants → fit it yourself (`rifty-goal` FIT) — a write-up is never a blocked ask; PR review → `rifty-review`, findings dispositioned FIX/REJECT/NOTE and never minted as items (`REV-12`). Never implement a draft. Planned/process work never invokes `rifty-fix`.
 - `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/traps.md` — hard-won gotchas (worktrees/git, CI, e2e, browser runtime, tooling); check before debugging a weird fail or re-proposing a rejected speedup
 - `docs/process/rules/fault-classes.md` — fault taxonomy; `docs/process/rules/testing.md` — test pyramid + why parity

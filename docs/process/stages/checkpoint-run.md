@@ -43,18 +43,21 @@ stdin).
    `PRIOR FINDINGS (settled, do not re-raise; report ONLY defects not on this
    list; nothing new → say so in merge_call):` + pass-1 findings as
    axis-prefixed one-liners. Union = the round's set.
-3. **Adjudication** — BEFORE fixing: a fresh read-only critic takes the union
-   blocker list (summary + authority + location only), reads each cited
+3. **Reception** — BEFORE fixing (`REV-12`): a fresh read-only critic takes
+   the union list (summary + authority + location only), reads each cited
    authority in full and the cited carriers, rules HOLDS / STRETCH / FALSE
-   (`../artifacts/verdict.md`), writes `$RUN/adjudication.json`; then
-   `node tools/review/blockers.mjs "$RUN/verdict.json" "$RUN/adjudication.json"`.
-   Only HOLDS + `missing` rows force the re-cut; STRETCH/FALSE join the
-   concern batch. The verdict file stays untouched (lineage).
+   per blocker (`../artifacts/verdict.md`), writes `$RUN/adjudication.json`;
+   then `node tools/review/blockers.mjs "$RUN/verdict.json" "$RUN/adjudication.json"`.
+   HOLDS + `missing` rows = FIX and force the re-cut; STRETCH / FALSE =
+   REJECT; concerns, nits and `weak` rows = NOTE. One ledger line per
+   disposition; the verdict file stays untouched (lineage).
 4. **Record** — overwrite the checkpoint's status line in the unit's
    `## Decisions`: `final-green: round <n>/<budget> — blocker @ <sha>`
    (`REV-8`). Leave it uncommitted; it commits with the fix batch.
-5. **Stop check** (`STOP-2`, `STOP-3`): `<n>` ≥ budget, or a blocker unchanged
-   since the previous verify → `STOP-4` re-cut, not another round. `<n>` and a
+5. **Tripwire check** (`STOP-2`, `STOP-3`): `<n>` ≥ budget — counting only
+   rounds that produced no `FIX` — or a blocker unchanged since the previous
+   verify → `STOP-4` re-cut, not another round; a re-cut already spent → park
+   the unit and take the next frontier child. Never a wait. `<n>` and a
    spent re-cut (`re-cut:` line) are read from the unit doc, never from
    session memory — a re-invoked run continues the count.
 6. **Batch fix** — one re-cut in place fixing ALL surviving blockers, committed
@@ -68,5 +71,5 @@ stdin).
 A PASS holds while `git diff --quiet <sha> HEAD -- . ':!docs/backlog'
 ':!CHANGELOG.md'` is empty (`REV-8`); check it before merge.
 
-Concerns never spend a round: batch them to backlog (`rifty-to-backlog`) or
-fix at the agent's choice after the verdict.
+NOTE and REJECT lines never spend a round and never seed a unit (`REV-12`);
+the agent may still fix a NOTE in place after the verdict.

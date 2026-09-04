@@ -13,12 +13,16 @@ Line forms (`<date>` = `YYYY-MM-DD`):
 - <date> — decided <one line>; full answer: <link>
 - <date> — <slice> re-cut: <what> — trace: none | fork: <what> — trace: I#
 - <date> — <slice> stop: STOP-1<letter> — <question asked>
+- <date> — <slice> rejected: <finding> — <clause as written>     review reception (REV-12)
+- <date> — <slice> note: <finding>                               review reception (REV-12)
 - <date> — re-chart after <slice> (final-green PASS @ <sha>): <n> graduated / <m> invalidated / no changes
 - <date> — re-chart after <slice> (ordinary PASS @ <sha>): …      review: ordinary units (RDY-8)
 - <date> — dropped: <reason>                              (CLOSE walk only)
 ```
 
 The band row is review-checked (`review.md` `REV-10` axis 5); the rounds
-budget is read by `stops.md` `STOP-2`. The rechart line is the only record of
-a landed slice's PASS and the `BASE` of the next slice (`REV-8`); verdict
-lineage is not journaled here — the unit's status line and its git log are.
+budget is read by `stops.md` `STOP-2`. A `rejected:` / `note:` line closes its
+finding: not a carrier, never graduating into a unit (`REV-12`). The rechart
+line is the only record of a landed slice's PASS and the `BASE` of the next
+slice (`REV-8`); verdict lineage is not journaled here — the unit's status
+line and its git log are.

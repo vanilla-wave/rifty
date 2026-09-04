@@ -28,6 +28,9 @@ Use `docs/process/rules/fault-classes.md` §§Boundary failure models/Class-kill
 
 1. Boundary model excludes the fault → void it; fix a wrong/missing model first.
 2. Own-product finding lacks a user-action path → keep the attempted repro in draft.
+   A review finding on the unit under review is NOT intake: it is dispositioned
+   FIX / REJECT / NOTE (`docs/process/rules/review.md` `REV-12`). Only a defect
+   the reviewer saw OUTSIDE that unit's boundary enters here.
 3. Finding exceeds epic tier → block on a tier-raise ADR.
 4. Proposed coordination mechanism → record the §Class-kill inventory.
 5. Claimed oracle/Node behavior without a reproducible artifact (command +

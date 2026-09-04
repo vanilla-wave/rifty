@@ -13,7 +13,7 @@ Runner: `checkpoint-run.md`.
 - Blocker → status line `contract-red: round <n> — blocker @ <sha>`; one batch
   fix; one verify pass (budget `RDY-9`). A 2nd consecutive blocker →
   `../rules/stops.md` `STOP-5`: the contract is wrong — re-cut (`STOP-4`),
-  never another round.
+  never another round; a 2nd escalation parks the unit (`STOP-2`).
 
 Outside a goal run (`BASE=origin/main`) the same stage certifies a standalone
 ready item at its pickup (`RDY-1`).

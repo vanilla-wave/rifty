@@ -47,7 +47,11 @@ Every `## Acceptance` / `## Parity cases` row and every `## Fault matrix` row
 ends with a trace: `→ I3`, `→ scenario`, `→ ADR-0375`, or several. The trace
 names WHY the row exists: an invariant, a `## User scenario` line, or an ADR.
 Trace targets are the only declared authorities a review may block on
-(`review.md` `REV-2`).
+(`review.md` `REV-2`). A trace holds only when the target clause states the
+property the row asserts — the `REV-3` exactness test, applied at compile:
+`→ I2` ("installs the real Vite 7 set") does not carry "rejected overlap has
+zero dispatch"; that row is a note until an invariant or scenario line names
+the property.
 
 An untraced row is a carrier note: it raises no coverage row and no blocker. A
 row traced only to a rule id (`→ REV-7`, `→ DEC-2`) is a carrier note too —
@@ -124,8 +128,9 @@ At pickup the ledger row declares band + rounds: `<date> — <slice> band
 <lo>–<hi> rounds <n>` (`../artifacts/ledger.md`). Band = the size of the
 expected-RED batch the compiled contract implies. `rounds` is the Final+GREEN
 budget (default 2); Contract+RED has exactly one verify round by construction
-— a 2nd blocker there is contract escalation (`stops.md` `STOP-5`). Raising a
-declared budget is the user's, never the agent's (`STOP-2`). A unit picked up
+— a 2nd blocker there is contract escalation (`stops.md` `STOP-5`). A tripped
+budget changes the approach and reports; it never asks and never waits
+(`STOP-2`). A unit picked up
 before 2026-09-03 carries no `rounds:` line: the default applies, the reviewer
 notes its absence as a concern, and the next re-cut adds the line — never a
 blocker (replay 2026-09-02: the legacy `build-loop` unit drew one).
