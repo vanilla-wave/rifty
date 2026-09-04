@@ -399,17 +399,42 @@ async function bootToolchainSandbox(options: {
       : await current.fs.readFile(path, encoding);
   }
 
+  async function trackedWrite(
+    target: ToolchainRuntimeController,
+    path: string,
+    data: string | Uint8Array,
+  ): Promise<void> {
+    pendingWrites += 1;
+    try {
+      await target.fs.writeFile(path, data);
+    } finally {
+      pendingWrites -= 1;
+    }
+  }
+
+  function callbackFs(target: ToolchainRuntimeController): RuntimeFs {
+    function readCallbackFile(path: string): Promise<Uint8Array>;
+    function readCallbackFile(
+      path: string,
+      encoding: 'utf8' | { readonly encoding: 'utf8' },
+    ): Promise<string>;
+    function readCallbackFile(
+      path: string,
+      encoding?: 'utf8' | { readonly encoding: 'utf8' },
+    ): Promise<Uint8Array | string> {
+      return encoding === undefined ? target.fs.readFile(path) : target.fs.readFile(path, encoding);
+    }
+    return {
+      readFile: readCallbackFile,
+      writeFile: (path, data) => trackedWrite(target, path, data),
+    };
+  }
+
   const fs: RuntimeFs = {
     readFile,
     async writeFile(path, data) {
       assertOperable();
-      const target = current;
-      pendingWrites += 1;
-      try {
-        await target.fs.writeFile(path, data);
-      } finally {
-        pendingWrites -= 1;
-      }
+      await trackedWrite(current, path, data);
     },
   };
 
@@ -516,7 +541,7 @@ async function bootToolchainSandbox(options: {
       backend = await current.toolchainReady;
       if (activation !== null) await current.restoreToolchainState(activation);
       try {
-        await beforeStart?.(current.fs);
+        await beforeStart?.(callbackFs(current));
       } finally {
         activation = current.snapshotToolchainState();
       }

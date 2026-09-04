@@ -230,3 +230,47 @@ pnpm pr:check
 # exact extraction rerun: 5/5 PASS after closure count 146→147
 # final run: 24/24 PASS; test:run 202.2s; parity 74.2s
 ```
+
+## Standing-authorization round 5
+
+Round-4 verify left three adjudicated HOLDS. New carriers fail exactly on the
+reviewed tree:
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts \
+  -g "retained beforeStart|bind-close before settlement" --reporter=line
+# 2 failed: killed callback write reported clean; callback-microtask close fulfilled start
+
+pnpm test:packed-toolchain-surface
+# failed: packed node:http factory/constructor identity drifted: createServer/HttpServer2
+```
+
+The fix yields through callback microtasks before the live-port recheck, routes
+callback RuntimeFs writes through the public pending ledger, and stamps class
+names after bundling. Synchronous/queueMicrotask/Promise/nextTick close is swept
+for HTTP and net.
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 15 passed (58.9s)
+
+pnpm test:no-coi --reporter=line
+# 38 passed (2.4m)
+
+pnpm exec vitest run --project unit \
+  packages/net/src/registry.test.ts packages/net/src/register-builtins.test.ts \
+  packages/net/src/http/server.test.ts packages/net/src/net.test.ts \
+  packages/runtime-js/src/module-loader/builtin-overrides.test.ts \
+  packages/runtime-js/src/builtins/node-entry.test.ts \
+  packages/runtime-js/src/module-loader/cjs-extensions.test.ts \
+  packages/runtime-js/src/internal/worker-globals.test.ts \
+  packages/runtime-js/src/host.test.ts packages/rifty/src/sandbox.test.ts \
+  packages/workbench/tests/extraction-boundary.contract.test.ts --reporter=dot
+# 166 passed
+
+pnpm test:packed-toolchain-surface
+# PASS: 15 first-party + 72 external tarballs, strict types + SDK/Worker build
+
+pnpm pr:check
+# 24/24 PASS; test:run 205.0s; parity 75.2s
+```

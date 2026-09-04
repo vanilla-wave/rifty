@@ -61,4 +61,6 @@
 
 - Public runtime, fs and toolchain operations fail fast with
   `SandboxRestartBusyError` while restart owns the replacement generation;
-  `beforeStart` still receives the restored generation's direct fs surface.
+  `beforeStart` still receives a restored-generation-bound fs surface.
+- Retained and fire-and-forget writes through `beforeStart` RuntimeFs share the
+  public pending-write ledger, so a replacement reports them dirty when killed.

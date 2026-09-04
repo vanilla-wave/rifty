@@ -40,6 +40,10 @@ function createOwnedHttpBuiltin(owner: PortRegistrationOwner): Record<string, un
       bindPortRegistrationOwner(this, owner);
     }
   }
+  Object.defineProperty(HttpServer, 'name', {
+    value: BaseHttpServer.name,
+    configurable: true,
+  });
   function createServer(
     optionsOrHandler?: ServerOptions | RequestListener,
     maybeHandler?: RequestListener,
@@ -58,6 +62,10 @@ function createOwnedNetBuiltin(owner: PortRegistrationOwner): Record<string, unk
       bindPortRegistrationOwner(this, owner);
     }
   }
+  Object.defineProperty(Server, 'name', {
+    value: BaseNetServer.name,
+    configurable: true,
+  });
   function createServer(handler?: (socket: HttpFramedSocket) => void): Server {
     return new Server(handler);
   }

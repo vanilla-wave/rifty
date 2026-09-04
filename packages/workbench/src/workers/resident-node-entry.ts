@@ -64,6 +64,7 @@ async function waitForLivePort(
       if (isPortRegisteredBy(port, owner)) resolve();
       else if (listPorts().includes(port)) reject(portOwnershipError(port));
     });
+    await Promise.resolve();
     if (!isPortRegisteredBy(port, owner)) throw portOwnershipError(port, true);
   } finally {
     unsubscribe();

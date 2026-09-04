@@ -33,9 +33,10 @@ stay hidden.
 
 A contextual loader supplies a loader-local `node:module.createRequire`; it
 never overwrites the realm-global fallback used by older ordinary loaders.
-Owned HTTP/net modules preserve their ordinary factory/class names and require
-`createServer().constructor === Server`. Readiness settles only if the exact
-owned registration remains live after the listen callback turn.
+Owned HTTP/net modules preserve their ordinary factory/class names in source
+and packed output and require `createServer().constructor === Server`.
+Readiness settles only if the exact owned registration remains live after
+callback-queued microtasks.
 
 ## Consequences
 

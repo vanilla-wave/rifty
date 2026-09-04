@@ -214,6 +214,60 @@ test('public operations reject while restart owns the replacement generation', a
   }
 });
 
+test('retained beforeStart fs writes remain in restart dirty accounting', async ({ page }) => {
+  await bootSandbox(page);
+  try {
+    const outcome = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const preview = { src: '' };
+      let retainedFs:
+        | Parameters<NonNullable<Parameters<typeof sandbox.restart>[0]['beforeStart']>>[0]
+        | undefined;
+      let escapedWrite: Promise<void> | undefined;
+      const first = await sandbox.restart({
+        preview,
+        beforeStart(fs) {
+          retainedFs = fs;
+          escapedWrite = fs.writeFile('/restart-escaped.txt', 'escaped');
+          escapedWrite.catch(() => {});
+        },
+      });
+      if (retainedFs === undefined || escapedWrite === undefined) {
+        throw new Error('beforeStart did not expose RuntimeFs');
+      }
+      const escapedRead = retainedFs.readFile('/restart-escaped.txt');
+      escapedRead.catch(() => {});
+      const second = await sandbox.restart({ preview });
+      const [write, read] = await Promise.all([
+        escapedWrite.then(
+          () => ({ status: 'fulfilled' }),
+          (error: Error) => ({ status: 'rejected', name: error.name }),
+        ),
+        escapedRead.then(
+          () => ({ status: 'fulfilled' }),
+          (error: Error) => ({ status: 'rejected', name: error.name }),
+        ),
+      ]);
+      return {
+        first,
+        second,
+        write,
+        read,
+        workerCount: Reflect.get(globalThis, '__riftyWorkerCount'),
+      };
+    });
+    expect(outcome).toEqual({
+      first: { unflushedWrites: false, resident: null },
+      second: { unflushedWrites: true, resident: null },
+      write: { status: 'rejected', name: 'WorkerTerminated' },
+      read: { status: 'rejected', name: 'WorkerTerminated' },
+      workerCount: 3,
+    });
+  } finally {
+    await disposeSandbox(page);
+  }
+});
+
 test('restart claims before caller getters can reenter generation replacement', async ({
   page,
 }) => {
@@ -666,54 +720,62 @@ setTimeout(() => lateRequire('/port-proof/late.cjs')('${builtin}')${createServer
 });
 
 test('resident readiness rejects HTTP and net bind-close before settlement', async ({ page }) => {
-  for (const [index, builtin] of ['node:http', 'node:net'].entries()) {
-    const targetPort = 5210 + index;
-    await bootSandbox(page);
-    try {
-      const serverSource =
-        builtin === 'node:http'
-          ? `const server = require('node:http').createServer((_req, res) => res.end('closed'));
-server.listen(${targetPort}, '127.0.0.1', () => server.close());`
-          : `const server = require('node:net').createServer((socket) => socket.end('closed'));
-server.listen(${targetPort}, '127.0.0.1', () => server.close());`;
-      await writeFiles(page, {
-        '/port-proof/node_modules/.bin/plain-dev':
-          "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
-        '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
-          name: 'plain-dev',
-          type: 'commonjs',
-        }),
-        '/port-proof/node_modules/plain-dev/server.cjs': serverSource,
-      });
-      const outcome = await page.evaluate(async (port) => {
-        const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
-        const events: RuntimeExitEvent[] = [];
-        sandbox.runtime.on((event) => {
-          if (event.type === 'exit') events.push(event);
+  const schedulers = [
+    'server.close()',
+    'queueMicrotask(() => server.close())',
+    'Promise.resolve().then(() => server.close())',
+    'process.nextTick(() => server.close())',
+  ] as const;
+  for (const [builtinIndex, builtin] of ['node:http', 'node:net'].entries()) {
+    for (const [schedulerIndex, scheduler] of schedulers.entries()) {
+      const targetPort = 5210 + builtinIndex * schedulers.length + schedulerIndex;
+      await bootSandbox(page);
+      try {
+        const serverSource =
+          builtin === 'node:http'
+            ? `const server = require('node:http').createServer((_req, res) => res.end('closed'));
+server.listen(${targetPort}, '127.0.0.1', () => ${scheduler});`
+            : `const server = require('node:net').createServer((socket) => socket.end('closed'));
+server.listen(${targetPort}, '127.0.0.1', () => ${scheduler});`;
+        await writeFiles(page, {
+          '/port-proof/node_modules/.bin/plain-dev':
+            "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+          '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
+            name: 'plain-dev',
+            type: 'commonjs',
+          }),
+          '/port-proof/node_modules/plain-dev/server.cjs': serverSource,
         });
-        let failure: unknown;
-        try {
-          await sandbox.toolchain.startBin({
-            cwd: '/port-proof',
-            binPath: '/port-proof/node_modules/.bin/plain-dev',
-            args: [],
-            port,
+        const outcome = await page.evaluate(async (port) => {
+          const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+          const events: RuntimeExitEvent[] = [];
+          sandbox.runtime.on((event) => {
+            if (event.type === 'exit') events.push(event);
           });
-        } catch (error) {
-          failure = { name: (error as Error).name, message: (error as Error).message };
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        return { failure, events };
-      }, targetPort);
-      expect(outcome).toMatchObject({
-        failure: {
-          name: 'SandboxResidentPortOwnershipError',
-          message: expect.stringContaining('live'),
-        },
-        events: [{ type: 'exit', reason: 'error' }],
-      });
-    } finally {
-      await disposeSandbox(page);
+          let failure: unknown;
+          try {
+            await sandbox.toolchain.startBin({
+              cwd: '/port-proof',
+              binPath: '/port-proof/node_modules/.bin/plain-dev',
+              args: [],
+              port,
+            });
+          } catch (error) {
+            failure = { name: (error as Error).name, message: (error as Error).message };
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return { failure, events };
+        }, targetPort);
+        expect(outcome).toMatchObject({
+          failure: {
+            name: 'SandboxResidentPortOwnershipError',
+            message: expect.stringContaining('live'),
+          },
+          events: [{ type: 'exit', reason: 'error' }],
+        });
+      } finally {
+        await disposeSandbox(page);
+      }
     }
   }
 });
