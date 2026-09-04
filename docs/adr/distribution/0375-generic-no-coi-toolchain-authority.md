@@ -66,8 +66,8 @@ that policy no longer enters the no-COI Worker graph.
   design.
 - Existing COI Workbench Vite preparation remains application-specific and is
   not generalized or duplicated.
-- Resident dev/HMR, restore/death lifecycle and unflushed boot marker remain
-  `distribution/no-coi-dev-hmr-restore` at goal tier `works`.
+- Resident dev/HMR, restore/death lifecycle and the unflushed boot marker are
+  owned by ADR-0377/0378/0379 at tier `works`.
 
 ## Supersedes
 
