@@ -296,8 +296,6 @@ jobs:
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:no-coi
-      - name: Prove no-COI full-page persistence
-        run: pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/opfs-no-coi-policy.spec.ts -g "no-COI capable dedicated Worker selects OPFS and survives exact-byte reload" --workers=1 --reporter=line
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

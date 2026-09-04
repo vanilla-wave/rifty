@@ -1,21 +1,21 @@
 ---
 area: distribution
 status: ready
-title: no-COI CI job carries the exact full-reload durability proof
+title: no-COI test lane carries the exact full-reload durability proof
 created: 2026-09-04
 epic: no-coi-sandbox-tier
 why: frozen I8 requires one no-COI CI lane to prove I1-I7/I9/I10, but its job omitted the already-landed I5 full-reload carrier
 sources: [ADR-0372, docs/backlog/distribution/reference/no-coi-hmr-spike-record.md]
-code: [.github/workflows/ci.yml, playwright.no-coi.config.ts, tests/browser-unit/opfs-no-coi-policy.spec.ts, tests/no-coi, tools/checks/ci-change-scope.test.ts]
+code: [playwright.no-coi.config.ts, tests/browser-unit/opfs-no-coi-policy.spec.ts, tests/no-coi/no-coi-opfs-reload.spec.ts]
 ---
 
 ## Context
 
 `no-coi-chromium` runs `pnpm test:no-coi`, whose config selects only
 `tests/no-coi`. I1-I4/I6-I7/I9-I10 run there, while certified I5 exact-byte
-flush → page reload → fresh Worker read runs only in `browser-unit-chromium`.
-The product and carrier are already green; only the frozen I8 CI composition
-is incomplete.
+flush → page reload → fresh Worker read lived in `tests/browser-unit`.
+Move that exact carrier into the selected directory; product behavior and its
+fixture stay unchanged.
 
 ## Challenge
 
@@ -30,30 +30,31 @@ including acknowledged OPFS persistence across a full page reload.
 
 - Goal I8: one no-COI CI lane proves I1-I7/I9/I10 in real Chromium.
 - ADR-0372: sync-handle-capable no-COI Workers select OPFS.
-- Landed I5 carrier: `opfs-no-coi-policy.spec.ts:332`.
+- Landed I5 carrier moves intact to `no-coi-opfs-reload.spec.ts`.
 
 ## Acceptance
 
-1. `no-coi-chromium` runs both the full `tests/no-coi` suite and the exact I5
-   full-page-reload carrier; the required remote job passes. → I8
+1. `pnpm test:no-coi` discovers the exact I5 full-page-reload carrier beside
+   I1-I4/I6-I7/I9-I10; the required remote job passes. → I8
 
 ## Parity cases
 
-1. Local proof and CI execute the same committed no-COI suites and Chromium
-   fixture, with no copied or alternate implementation. → I8
+1. The certified I5 assertions and Worker fixture move intact; local proof and
+   CI execute that same committed spec, with no alternate implementation. → I8
 
 ## Fault matrix
 
 | axis × operation | honest outcome | reproducible artifact / fault target |
 |---|---|---|
-| `false-fallback` × CI selection | omitting I5 leaves the no-COI job incomplete | remove the second workflow step; remote job no longer runs the named carrier → I8 |
+| `false-fallback` × test discovery | moving I5 outside `tests/no-coi` leaves the no-COI job incomplete | exact title is absent from `pnpm test:no-coi`; moved carrier makes it pass → I8 |
 
 ## Out of scope
 
-- No product, test behavior, new fixture, retry or browser matrix change.
+- No product, test behavior, new fixture, workflow, retry or browser matrix change.
 - No change to frozen goal wording or I5 semantics.
 
 ## Decisions
 
 review: ordinary — proof-only
-- 2026-09-04 — reuse the certified browser-unit test as a second no-COI job step; no duplicate carrier.
+re-cut: 2026-09-04 — move the certified I5 spec into the existing no-COI testDir instead of adding a workflow step; restores ordinary contract-drift and artifact ownership — trace: none
+- 2026-09-04 — one moved carrier, no duplicate implementation.

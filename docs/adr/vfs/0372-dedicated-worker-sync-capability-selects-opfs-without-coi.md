@@ -35,6 +35,12 @@ RIFTY_PLAYGROUND_PORT=5314 pnpm exec playwright test --config playwright.browser
 # 1 intended failure: capable Worker detected/installed memory; reload read ENOENT
 ```
 
+## Corrections (active)
+
+- 2026-09-04 — the landed exact no-COI reload carrier moved intact to
+  `tests/no-coi/no-coi-opfs-reload.spec.ts`, so the required no-COI CI lane
+  executes I5. The decision and Worker fixture are unchanged.
+
 ## Decision
 
 1. `detectVfsBackend()` returns `opfs` iff the current realm satisfies
@@ -74,7 +80,7 @@ RIFTY_PLAYGROUND_PORT=5314 pnpm exec playwright test --config playwright.browser
   Node and unsupported realms retain memory.
 - Main-window calls now describe their own inability to host sync OPFS, not a
   future Worker. Existing owner-backed UI must consume owner state.
-- The browser-unit headerless carrier proves selection, exact bytes and realm
-  recreation without weakening the Playground's COI assertion.
+- The no-COI lane carrier proves selection, exact bytes and realm recreation
+  without weakening the Playground's COI assertion.
 - ADR-0072 and ADR-0165 stay active; only the named historical descriptions
   are corrected. The superseded table and D-001→ADR-0002 map do not change.

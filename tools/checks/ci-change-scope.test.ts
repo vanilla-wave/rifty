@@ -166,20 +166,6 @@ describe('CI change scope', () => {
     }
   });
 
-  it('runs the complete no-COI goal proof in one required job', () => {
-    const workflow = readFileSync('.github/workflows/ci.yml', 'utf8');
-    const noCoi = jobBlock(workflow, 'no-coi-chromium');
-    expect(noCoi).toContain(
-      "if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}",
-    );
-    expect(noCoi).toContain('pnpm test:no-coi');
-    expect(noCoi).toContain(
-      'tests/browser-unit/opfs-no-coi-policy.spec.ts -g "no-COI capable dedicated Worker selects OPFS and survives exact-byte reload"',
-    );
-
-    const gate = jobBlock(workflow, 'ci-gate');
-    expect(gate).toContain('- no-coi-chromium');
-  });
 });
 
 describe('CI Node CLI eval oracle', () => {
