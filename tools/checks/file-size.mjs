@@ -80,7 +80,6 @@ export const BASELINE = [
   { file: 'packages/npm-client/src/internal/shadow/planner.ts', max: 1123 },
   { file: 'packages/git/src/git.ts', max: 1118 },
   { file: 'packages/workbench/src/workbench/internal/typescript-relay-client.ts', max: 1083 },
-  { file: 'apps/landing/src/explorer/explorer.ts', max: 1073 },
   { file: 'packages/net/src/cross-realm/preview-port.ts', max: 1067 },
   { file: 'apps/playground/src/components/FileExplorer.tsx', max: 1043 },
   { file: 'packages/workbench/src/glue/npm-shell-command.ts', max: 1043 },

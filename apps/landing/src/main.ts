@@ -4,8 +4,10 @@
 import { renderArch } from './sections/arch';
 import { renderCtaFooter } from './sections/cta-footer';
 import { renderDemos } from './sections/demos';
+import { renderDepthGauge } from './sections/gauge';
 import { renderHero } from './sections/hero';
 import { renderNav } from './sections/nav';
+import { renderPackages } from './sections/packages';
 import { renderQuickStart } from './sections/quickstart';
 import { renderWhat } from './sections/what';
 import './styles/tokens.css';
@@ -23,11 +25,24 @@ skipLink.textContent = 'Skip to main content';
 
 const main = document.createElement('main');
 main.id = 'main-content';
-main.append(renderHero(), renderDemos(), renderWhat(), renderArch(), renderQuickStart());
+main.append(
+  renderHero(),
+  renderWhat(),
+  renderDemos(),
+  renderArch(),
+  renderPackages(),
+  renderQuickStart(),
+);
 
-const page = document.createDocumentFragment();
-page.append(skipLink, renderNav(), main, renderCtaFooter());
-app.replaceChildren(page);
+const column = document.createElement('div');
+column.className = 'page-column';
+column.append(renderNav(), main, renderCtaFooter());
+
+const page = document.createElement('div');
+page.className = 'page';
+page.append(renderDepthGauge(), column);
+
+app.replaceChildren(skipLink, page);
 
 const explorerRootCandidate = document.getElementById('explorer-root');
 if (!explorerRootCandidate) {

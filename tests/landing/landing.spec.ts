@@ -50,6 +50,25 @@ async function minimumTextContrast(page: Page, selector: string): Promise<number
   });
 }
 
+const PACKAGE_NAMES = [
+  'sdk',
+  'io',
+  'vfs',
+  'kernel',
+  'net',
+  'runtime-js',
+  'runtime-wasi',
+  'npm-client',
+  'shell',
+  'terminal',
+  'service-worker',
+  'workbench',
+  'git',
+  'ts-language-service',
+  'shadow-registry',
+  'eddy',
+];
+
 test('serves configured search, sharing, crawl, and pre-JavaScript contracts', async ({
   browser,
   page,
@@ -58,9 +77,6 @@ test('serves configured search, sharing, crawl, and pre-JavaScript contracts', a
   await page.goto('/');
 
   await expect(page).toHaveTitle('Open Node-compatible runtime for the browser | rifty');
-  await expect(page.locator('.nav-version')).toHaveText('v0.3 · M11');
-  await expect(page.locator('.hero-host')).toHaveText('@riftydev/sdk · v0.3');
-  await expect(page.locator('.cta-footer-stamp')).toHaveText('v0.3 · M11 active');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
     'https://site.example.test/',
@@ -128,73 +144,65 @@ test('serves configured search, sharing, crawl, and pre-JavaScript contracts', a
     expect(image.readUInt32BE(20)).toBe(height);
   }
 
+  // Three self-hosted families (Archivo Black display, Inter, Roboto Mono); no font CDN.
   const fontRequests = await page.evaluate(() =>
     performance
       .getEntriesByType('resource')
       .map((entry) => entry.name)
       .filter((name) => name.includes('.woff2')),
   );
-  expect(fontRequests.length).toBeGreaterThan(0);
+  expect(fontRequests.some((name) => name.includes('archivo-black'))).toBe(true);
   const landingOrigin = new URL(page.url()).origin;
   expect(fontRequests.every((name) => new URL(name).origin === landingOrigin)).toBe(true);
 
   const noScriptContext = await browser.newContext({ javaScriptEnabled: false });
   const noScriptPage = await noScriptContext.newPage();
   await noScriptPage.goto('/');
+  await expect(noScriptPage.getByRole('heading', { name: /Node, npm &/ })).toBeVisible();
   await expect(
-    noScriptPage.getByRole('heading', { name: /Node, npm, and a dev server/ }),
+    noScriptPage.getByText(/Run tested Express 4, Vite 7, npm tooling and \.wasm workflows/),
   ).toBeVisible();
-  await expect(
-    noScriptPage.getByText(
-      /Install packages, run Node-compatible apps and CLIs, or execute WASI guests/,
-    ),
-  ).toBeVisible();
-  await expect(noScriptPage.getByRole('link', { name: 'View rifty on GitHub' })).toHaveAttribute(
+  await expect(noScriptPage.getByRole('link', { name: /view rifty on github/i })).toHaveAttribute(
     'href',
     'https://forge.example.test/org/rifty',
   );
   await noScriptContext.close();
 });
 
+test('stamps the latest release and derives every exit label from configuration', async ({
+  page,
+}) => {
+  await page.goto('/');
+
+  await expect(page.locator('.hero-eyebrow')).toHaveText(
+    'OPEN RUNTIME · SELF-HOSTABLE — v0.4 · M11 CONSUMER READY: ACTIVE',
+  );
+  await expect(page.locator('.cta-footer')).toHaveText(
+    'SITE.EXAMPLE.TEST — OPEN, SELF-HOSTABLE, BROWSER-LOCAL RUNTIME INFRASTRUCTURE · v0.4 · M11 ACTIVE · MIT',
+  );
+  // No hardcoded public domains: labels come from the configured URLs.
+  const play = page.locator('.nav-play');
+  await expect(play).toHaveText('PLAY.EXAMPLE.TEST');
+  await expect(play).toHaveAttribute('href', 'https://play.example.test/');
+  await expect(page.locator('.nav-github')).toHaveAttribute(
+    'href',
+    'https://forge.example.test/org/rifty',
+  );
+  const ctaPlay = page.locator('.cta-buttons .btn-primary');
+  await expect(ctaPlay).toContainText('PLAY.EXAMPLE.TEST');
+  await expect(ctaPlay).toHaveAttribute('href', 'https://play.example.test/');
+  expect(await page.locator('body').innerText()).not.toMatch(/rifty\.dev/i);
+});
+
 test('positions the open runtime honestly and shows only public Sandbox API', async ({ page }) => {
   await page.goto('/');
 
-  await expect(
-    page.getByText(
-      'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium.',
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await expect(page.locator('.hero-sub')).toContainText(
-    'Install packages, run Node-compatible apps and CLIs, or execute WASI guests. Execution and files stay in the tab.',
+  await expect(page.locator('.hero-lead')).toHaveText(
+    'rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium. Run tested Express 4, Vite 7, npm tooling and .wasm workflows — execution and files stay in the tab.',
   );
+  await expect(page.locator('.hero-h1')).toHaveText(/Node, npm &a dev server —in a tab\./);
 
-  const publicApi = page.locator('.hero-code');
-  await expect(publicApi.locator('.hero-code-line')).toHaveText([
-    "import { createSandbox } from '@riftydev/sdk'",
-    'export async function boot(workerUrl: string | URL) {',
-    '  const sandbox = await createSandbox({',
-    '    workerUrl,',
-    '    skipServiceWorker: true,',
-    '  })',
-    '  sandbox.runtime.on((event) => {',
-    "    if (event.type === 'stdout') console.log(event.chunk)",
-    '  })',
-    "  await sandbox.fs.writeFile('/hello.txt', 'hello')",
-    '  await sandbox.runtime.eval(\'console.log("hello")\')',
-    '  return sandbox',
-    '}',
-  ]);
-  expect(await publicApi.innerText()).not.toMatch(/\.spawn\s*\(/);
-  expect(await publicApi.evaluate((code) => code.scrollWidth <= code.clientWidth)).toBe(true);
-  await expect(
-    page.getByText(
-      'The host supplies a bundled module-Worker URL. This eval-only example uses the public Sandbox façade: runtime.eval/on + fs. Command execution and preview routing are separate APIs.',
-      { exact: true },
-    ),
-  ).toBeVisible();
-
-  const quickStart = page.locator('.qs-code-body');
+  const quickStart = page.locator('.qs-code');
   await expect(quickStart.locator('.qs-code-line')).toHaveText([
     "import runtimeWorkerUrl from '@riftydev/runtime-js/worker?worker&url'",
     "import { checkCapabilities, createSandbox } from '@riftydev/sdk'",
@@ -217,33 +225,26 @@ test('positions the open runtime honestly and shows only public Sandbox API', as
     '}',
     'void main()',
   ]);
-  await expect(page.getByRole('heading', { name: 'Vite host wiring' })).toBeVisible();
+  expect(await quickStart.innerText()).not.toMatch(/import\.meta\.url|\/sw\.js/);
+  await expect(page.locator('.qs-aside')).toContainText('requireCrossOriginIsolation: false');
+  await expect(page.locator('.qs-aside')).not.toContainText('IIFE');
+  await expect(page.locator('.qs-headers')).toHaveText(
+    'Cross-Origin-Opener-Policy: same-originCross-Origin-Embedder-Policy: credentialessCross-Origin-Resource-Policy: cross-origin'.replace(
+      'credentialess',
+      'credentialless',
+    ),
+  );
+  await expect(page.locator('.qs-install')).toHaveText(
+    '$ npm i @riftydev/sdk @riftydev/runtime-js',
+  );
 
-  const howItWorks = page.getByRole('link', { name: 'How it works', exact: true });
+  const howItWorks = page.getByRole('link', { name: 'HOW IT WORKS', exact: true });
   await expect(howItWorks).toBeVisible();
   await expect(howItWorks).toHaveAttribute('href', '#arch');
 
-  const runSomethingReal = page.getByRole('link', { name: 'Run something real', exact: true });
+  const runSomethingReal = page.getByRole('link', { name: 'RUN SOMETHING REAL', exact: true });
   await expect(runSomethingReal).toBeVisible();
   await expect(runSomethingReal).toHaveAttribute('href', 'https://play.example.test/');
-});
-
-test('keeps the animated hero terminal height stable while rows appear', async ({ page }) => {
-  await page.clock.install();
-  await page.goto('/');
-
-  const measured = page.locator('.hero-term, .hero-window');
-  const before = await measured.evaluateAll((elements) =>
-    elements.map((element) => element.getBoundingClientRect().height),
-  );
-
-  await page.clock.runFor(3_200);
-  await expect(page.locator('.hero-term-row')).toHaveCount(5);
-  expect(
-    await measured.evaluateAll((elements) =>
-      elements.map((element) => element.getBoundingClientRect().height),
-    ),
-  ).toEqual(before);
 });
 
 test('summarizes capability classes with three representative presets', async ({ page }) => {
@@ -263,76 +264,129 @@ test('summarizes capability classes with three representative presets', async ({
   await expect(page.getByRole('link', { name: /Dev server \+ HMR/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /HTTP server \+ database/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /CLI \+ project files/ })).toBeVisible();
-  await expect(page.locator('[data-preset-card="real-vite"]')).toHaveAttribute(
-    'href',
-    'https://play.example.test/?preset=real-vite&autorun=1',
-  );
-  await expect(page.locator('[data-preset-card="express-sqlite"]')).toHaveAttribute(
-    'href',
-    'https://play.example.test/?preset=express-sqlite&autorun=1',
-  );
-  await expect(page.locator('[data-preset-card="cli-report"]')).toHaveAttribute(
-    'href',
-    'https://play.example.test/?preset=cli-report&autorun=1',
-  );
+  for (const id of ['real-vite', 'express-sqlite', 'cli-report']) {
+    await expect(page.locator(`[data-preset-card="${id}"]`)).toHaveAttribute(
+      'href',
+      `https://play.example.test/?preset=${id}&autorun=1`,
+    );
+  }
 
-  const sectionOrder = await page
-    .locator('#demos, #arch')
-    .evaluateAll((sections) => sections.map((section) => section.id));
-  expect(sectionOrder).toEqual(['demos', 'arch']);
-  const positions = await page
-    .locator('#demos, #arch')
-    .evaluateAll((sections) => sections.map((section) => section.getBoundingClientRect().top));
-  expect(positions[0]).toBeLessThan(positions[1] ?? 0);
+  // Equal cells; the OPEN ↗ pointer sits on one shared baseline.
+  const layout = await cards.evaluateAll((items) =>
+    items.map((card) => {
+      const action = card.querySelector<HTMLElement>('.demo-action');
+      const box = card.getBoundingClientRect();
+      return {
+        top: box.top,
+        width: box.width,
+        height: box.height,
+        actionTop: action?.getBoundingClientRect().top ?? Number.NaN,
+      };
+    }),
+  );
+  for (const key of ['top', 'width', 'height', 'actionTop'] as const) {
+    const values = layout.map((item) => item[key]);
+    expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1);
+  }
 });
 
 test('keeps primary navigation labels aligned with document order', async ({ page }) => {
   await page.goto('/');
 
   const links = page.getByRole('navigation', { name: 'Primary' }).getByRole('link');
-  await expect(links).toHaveText(['Demos', 'Overview', 'Architecture', 'Quick start']);
+  await expect(links).toHaveText(['OVERVIEW', 'DEMOS', 'ARCH', 'PACKAGES', 'START']);
   expect(
     await links.evaluateAll((items) => items.map((item) => item.getAttribute('href'))),
-  ).toEqual(['#demos', '#what', '#arch', '#start']);
+  ).toEqual(['#what', '#demos', '#arch', '#packages', '#start']);
+  const tops = await page
+    .locator('#what, #demos, #arch, #packages, #start')
+    .evaluateAll((sections) => sections.map((section) => section.getBoundingClientRect().top));
+  expect([...tops].sort((a, b) => a - b)).toEqual(tops);
 });
 
-test('keeps the representative presets balanced without extra metadata', async ({ page }) => {
-  await page.goto('/');
-
-  await expect(page.locator('.demo-divider, .demo-meta, .demo-kicker')).toHaveCount(0);
-  const layout = await page.locator('[data-preset-card]').evaluateAll((cards) =>
-    cards.map((card) => {
-      const action = card.querySelector<HTMLElement>('.demo-action');
-      if (!action) return null;
-      const cardBox = card.getBoundingClientRect();
-      return {
-        top: cardBox.top,
-        width: cardBox.width,
-        height: cardBox.height,
-        actionTop: action.getBoundingClientRect().top,
-      };
-    }),
-  );
-
-  expect(layout.every((item) => item !== null)).toBe(true);
-  const measured = layout.filter((item) => item !== null);
-  for (const key of ['top', 'width', 'height', 'actionTop'] as const) {
-    const values = measured.map((item) => item[key]);
-    expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1);
-  }
-});
-
-test('renders semantic landmarks and subsection headings', async ({ page }) => {
+test('renders semantic landmarks, the capability grid, and the package graph', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('main')).toHaveCount(1);
   await expect(page.getByRole('contentinfo')).toHaveCount(1);
-  await expect(page.getByRole('heading', { name: 'A Node-compatible runtime' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Embeddable Workbench' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'TypeScript + Git over VFS' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  for (const name of ['NODE RUNTIME', 'EMBEDDABLE WORKBENCH', 'TYPESCRIPT + GIT OVER VFS']) {
+    await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+  }
+  await expect(page.locator('.term')).toContainText('GET /preview/3000/ 200');
+  await expect(page.locator('.term-cursor')).toHaveCount(1);
+
   await expect(
-    page.getByRole('heading', { name: 'Cross-origin isolation + ESM Workers' }),
+    page.getByRole('heading', { name: 'One umbrella, sixteen packages.', exact: true }),
   ).toBeVisible();
+  await expect(page.locator('.pkg-name')).toHaveText(PACKAGE_NAMES);
+  await expect(page.locator('.pkg-sdk .pkg-name')).toHaveText('sdk');
+  await expect(page.locator('.packages-docs')).toHaveAttribute(
+    'href',
+    'https://docs.example.test/rifty-sdk',
+  );
+
+  const marquee = page.locator('.marquee-item:not([aria-hidden="true"])');
+  await expect(marquee).toHaveText([
+    'MIT LICENSED*',
+    'SELF-HOSTABLE*',
+    'CHROMIUM-FIRST*',
+    'NODE 24 PARITY TARGET*',
+    'WASI PREVIEW1*',
+  ]);
+});
+
+test('keeps the honest ceiling loud and explains each gap on demand', async ({ page }) => {
+  await page.goto('/');
+
+  const chips = page.locator('.ceil-chip');
+  await expect(chips).toHaveText([
+    '⚠node:https — fetch-backed',
+    '✕raw TCP connect',
+    '✕native modules',
+    '⚠node:sqlite — in-memory',
+    '⚠node:vm — QuickJS realm',
+    '⚠30s force-kill drain',
+    '⚠preview — buffered (unbounded → 502)',
+  ]);
+  const note = page.locator('.ceil-note');
+  await expect(note).toHaveText('Pick a gap to read exactly what throws and why.');
+
+  const tcp = chips.nth(1);
+  await tcp.click();
+  await expect(tcp).toHaveAttribute('aria-pressed', 'true');
+  await expect(note).toHaveText(
+    'net.connect (raw TCP): Raw sockets throw. The HttpFramedSocket is HTTP-framed only.',
+  );
+  await tcp.click();
+  await expect(tcp).toHaveAttribute('aria-pressed', 'false');
+  await expect(note).toHaveText('Pick a gap to read exactly what throws and why.');
+});
+
+test('keeps muted copy at WCAG AA text contrast', async ({ page }) => {
+  await page.goto('/');
+
+  for (const selector of [
+    '.hero-eyebrow',
+    '.hero-lead',
+    '.marquee-track',
+    '.term-prompt',
+    '.term-dim',
+    '.feat-body',
+    '.sec-intro',
+    '.demo-body',
+    '.demo-meta',
+    '.demo-tag',
+    '.pkg-desc',
+    '.qs-code-comment',
+    '.qs-note',
+    '.qs-leaf',
+    '.ceil-chip',
+    '.cta-footer',
+    '.nav-link',
+  ]) {
+    expect(await minimumTextContrast(page, selector), selector).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 test('defers the below-fold architecture explorer until it approaches the viewport', async ({
@@ -352,7 +406,7 @@ test('defers the below-fold architecture explorer until it approaches the viewpo
   ).toBe(false);
 
   await explorer.scrollIntoViewIfNeeded();
-  await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Whole schema', exact: true })).toBeVisible();
   expect(await explorer.evaluate((root) => root.childElementCount)).toBeGreaterThan(0);
   await expect
     .poll(() =>
@@ -365,90 +419,6 @@ test('defers the below-fold architecture explorer until it approaches the viewpo
     .toBe(true);
 });
 
-test('renders raw WASI separately from the npm esbuild CLI gap', async ({ page }) => {
-  await page.goto('/#arch');
-  await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();
-
-  await page.getByRole('button', { name: 'Raw WASI', exact: true }).click();
-  const visibleBoard = page.locator('.exp-board:visible');
-  await expect(visibleBoard.locator('[data-ed-file]')).toHaveText('run-wasi.js');
-  await expect(visibleBoard.locator('[data-ed-code]')).toContainText('createWasiProcess');
-  await expect(visibleBoard.locator('[data-ed-code]')).not.toContainText('esbuild');
-  await expect(visibleBoard.locator('[data-pv-body]')).toContainText('raw WASI guest · exit 0');
-  await expect(page.locator('[data-step-caption]')).not.toContainText('SAB');
-
-  const esbuild = visibleBoard.locator('[data-node="esbuild"]');
-  await expect(esbuild).toHaveAttribute('aria-label', 'esbuild JS API');
-  await esbuild.click();
-  const inspector = visibleBoard.locator('.exp-inspector');
-  await expect(inspector.locator('.exp-ins-role')).toHaveText(
-    "npm esbuild@0.28.0 transform APIs use the registry-attested esbuild-wasm adapter. The esbuild CLI/bin throws NotImplementedError('esbuild.cli').",
-  );
-});
-
-test('shows the Workbench owner topology and keeps external registry egress separate', async ({
-  page,
-}) => {
-  await page.goto('/#arch');
-  await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();
-
-  const schema = page.locator('.exp-board:visible');
-  await expect(schema.locator('[data-node="workbench"]')).toHaveAttribute(
-    'aria-label',
-    '@riftydev/workbench',
-  );
-  await expect(schema.locator('[data-node="owner"]')).toHaveAttribute(
-    'aria-label',
-    'workspace owner',
-  );
-
-  await page.getByRole('button', { name: '02 Realms', exact: true }).click();
-  const external = page.locator('.exp-realms:visible [data-realm="ext"]');
-  await expect(external).toContainText('EXTERNAL');
-  await expect(external.locator('[data-lane-node="registry"]')).toBeVisible();
-});
-
-test('keeps secondary explorer labels at WCAG AA text contrast', async ({ page }) => {
-  await page.goto('/#arch');
-  await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();
-
-  for (const selector of ['.exp-view-num', '.exp-legend-grp', '.exp-node-kind']) {
-    expect(await minimumTextContrast(page, selector), selector).toBeGreaterThanOrEqual(4.5);
-  }
-});
-
-test('dims scenario controls without fading their interactive text', async ({ page }) => {
-  await page.goto('/#arch');
-  await page.getByRole('button', { name: 'npm install', exact: true }).click();
-
-  const graphControls = page.locator('.exp-board:visible .exp-node[role="button"]');
-  await expect(graphControls).not.toHaveCount(0);
-  expect(
-    await graphControls.evaluateAll((controls) =>
-      Math.min(...controls.map((control) => Number(getComputedStyle(control).opacity))),
-    ),
-  ).toBe(1);
-  await expect(page.locator('.exp-board:visible .exp-node-dim')).not.toHaveCount(0);
-  expect(
-    await minimumTextContrast(
-      page,
-      '.exp-board:visible .exp-node-dim .exp-node-label, .exp-board:visible .exp-node-dim .exp-node-kind',
-    ),
-  ).toBeGreaterThanOrEqual(4.5);
-
-  await page.getByRole('button', { name: '02 Realms', exact: true }).click();
-  const dimRealmControls = page.locator('.exp-realms:visible .exp-lc-dim');
-  await expect(dimRealmControls).not.toHaveCount(0);
-  expect(
-    await dimRealmControls.evaluateAll((controls) =>
-      Math.min(...controls.map((control) => Number(getComputedStyle(control).opacity))),
-    ),
-  ).toBe(1);
-  expect(
-    await minimumTextContrast(page, '.exp-realms:visible .exp-lc-dim .exp-lane-card-label'),
-  ).toBeGreaterThanOrEqual(4.5);
-});
-
 test('keeps the landing usable and fails loudly when the explorer chunk cannot load', async ({
   page,
 }) => {
@@ -457,14 +427,16 @@ test('keeps the landing usable and fails loudly when the explorer chunk cannot l
   await page.route('**/src/explorer/explorer.ts*', (route) => route.abort('failed'));
 
   await page.goto('/#arch');
-  await expect(page.getByRole('heading', { name: 'How it actually works' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'One tab, four realms.', exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole('contentinfo')).toBeVisible();
   await expect
     .poll(() => errors.map((error) => error.message))
     .toContain('landing: architecture explorer failed to load');
   expect(
     await page.locator('#explorer-root').evaluate((root) => root.clientHeight),
-  ).toBeGreaterThan(900);
+  ).toBeGreaterThan(700);
 });
 
 test('recovers the copy control after clipboard permission failure', async ({ page }) => {
@@ -482,48 +454,21 @@ test('recovers the copy control after clipboard permission failure', async ({ pa
   });
   await page.goto('/');
 
-  const copy = page.locator('.nav-right .nav-copy');
-  const feedback = page.locator('.nav-right .nav-copy-feedback');
+  const copy = page.locator('.cta-copy');
+  const feedback = page.locator('.cta [role="status"]');
   await copy.click();
-  await expect(copy).toHaveClass(/nav-copy-error/);
-  await expect(copy).toHaveAttribute('aria-label', 'Copy failed. Select: npm i @riftydev/sdk');
-  await expect(feedback).toHaveAttribute('role', 'status');
+  await expect(copy).toHaveClass(/cta-copy-error/);
+  await expect(copy).toHaveAttribute(
+    'aria-label',
+    'Copy failed. Select: npm i @riftydev/sdk @riftydev/runtime-js',
+  );
   await expect(feedback).toHaveText('Copy failed. Select the install command manually.');
 
   await copy.click();
-  await expect(copy).toHaveClass(/nav-copy-done/);
-  await expect(copy).not.toHaveClass(/nav-copy-error/);
+  await expect(copy).toHaveClass(/cta-copy-done/);
+  await expect(copy).not.toHaveClass(/cta-copy-error/);
   await expect(copy).toHaveAttribute('aria-label', 'Install command copied');
   await expect(feedback).toHaveText('Install command copied.');
-});
-
-test('keeps node drag distinct from click and exposes graph nodes to the keyboard', async ({
-  page,
-}) => {
-  await page.goto('/#arch');
-  await expect(page.getByRole('button', { name: '01 Schema', exact: true })).toBeVisible();
-
-  const kernel = page.locator('.exp-board:visible [data-node="kernel"]');
-  await expect(kernel).toHaveAttribute('role', 'button');
-  await expect(kernel).toHaveAttribute('tabindex', '0');
-  await kernel.focus();
-  await kernel.press('Enter');
-  await expect(kernel).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.exp-board:visible .exp-inspector')).toContainText('kernel');
-  await kernel.press('Space');
-  await expect(kernel).toHaveAttribute('aria-pressed', 'false');
-  await expect(page.locator('.exp-board:visible .exp-inspector')).not.toContainText('kernel');
-
-  const box = await kernel.boundingBox();
-  expect(box).not.toBeNull();
-  const x = (box?.x ?? 0) + (box?.width ?? 0) / 2;
-  const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x + 24, y + 12, { steps: 4 });
-  await page.mouse.up();
-  await page.mouse.move(1, 1);
-  await expect(page.locator('.exp-board:visible .exp-inspector')).not.toContainText('kernel');
 });
 
 test('closes the mobile drawer for every same-page navigation exit', async ({ page }) => {
@@ -532,7 +477,10 @@ test('closes the mobile drawer for every same-page navigation exit', async ({ pa
 
   await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
   await expect(page.locator('#nav-mobile-panel')).toBeVisible();
-  await page.getByRole('link', { name: 'Try demos', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Mobile navigation' })
+    .getByRole('link', { name: 'DEMOS', exact: true })
+    .click();
   await expect(page.locator('#nav-mobile-panel')).toBeHidden();
 
   await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
@@ -545,35 +493,11 @@ test('renders the favicon and respects reduced-motion preference', async ({ page
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 
-  await expect(page.locator('.hero-term-row')).toHaveCount(5);
   const animationNames = await page
-    .locator('.hero-eyebrow-dot, .hero-live-dot, .hero-term-cursor')
+    .locator('.sonar-ring, .sonar-dot, .term-cursor, .marquee-track')
     .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).animationName));
-  expect(animationNames).toEqual(['none', 'none', 'none']);
-
-  const contrastRatios = await page
-    .locator('.hero-term-prompt, .hero-term-dim')
-    .evaluateAll((elements) => {
-      const rgb = (value: string): number[] =>
-        (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
-      const luminance = ([r = 0, g = 0, b = 0]: number[]): number => {
-        const linear = [r, g, b].map((channel) => {
-          const value = channel / 255;
-          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-        });
-        return 0.2126 * (linear[0] ?? 0) + 0.7152 * (linear[1] ?? 0) + 0.0722 * (linear[2] ?? 0);
-      };
-      const terminal = document.querySelector('.hero-term');
-      if (!terminal) return [];
-      const background = luminance(rgb(getComputedStyle(terminal).backgroundColor));
-      return elements.map((element) => {
-        const foreground = luminance(rgb(getComputedStyle(element).color));
-        return (
-          (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
-        );
-      });
-    });
-  expect(Math.min(...contrastRatios)).toBeGreaterThanOrEqual(4.5);
+  expect(animationNames.every((name) => name === 'none')).toBe(true);
+  await expect(page.locator('.marquee-item:not([aria-hidden="true"])').first()).toBeVisible();
 
   const favicon = await page.evaluate(async () => {
     const image = new Image();
@@ -583,6 +507,16 @@ test('renders the favicon and respects reduced-motion preference', async ({ page
   });
   expect(favicon.width).toBeGreaterThan(0);
   expect(favicon.height).toBe(favicon.width);
+});
+
+test('hides the decorative depth gauge and sonar from assistive tech', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.locator('.gauge')).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('.sonar')).toHaveAttribute('aria-hidden', 'true');
+  await expect(page.locator('.gauge')).toBeVisible();
+  await page.setViewportSize({ width: 880, height: 844 });
+  await expect(page.locator('.gauge')).toBeHidden();
 });
 
 for (const viewport of [
@@ -595,9 +529,9 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto('/');
 
-    const tryDemos = page.getByRole('link', { name: 'Try demos', exact: true });
-    await expect(tryDemos).toBeVisible();
-    await expect(tryDemos).toHaveAttribute('href', '#demos');
+    const play = page.locator('.nav-mobile-play');
+    await expect(play).toBeVisible();
+    await expect(play).toHaveAttribute('href', 'https://play.example.test/');
     await expect(page.locator('[data-preset-card]')).toHaveCount(3);
 
     const layout = await page.evaluate(() => ({
@@ -609,14 +543,14 @@ for (const viewport of [
     }));
     expect(layout.page).toBeLessThanOrEqual(layout.viewport);
     expect(layout.cardWidths.every((width) => width <= layout.viewport)).toBe(true);
-    const tryDemosBox = await tryDemos.boundingBox();
-    expect(tryDemosBox).not.toBeNull();
-    expect(tryDemosBox?.x ?? -1).toBeGreaterThanOrEqual(0);
-    expect((tryDemosBox?.x ?? 0) + (tryDemosBox?.width ?? 0)).toBeLessThanOrEqual(layout.viewport);
-    expect(tryDemosBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+    const playBox = await play.boundingBox();
+    expect(playBox).not.toBeNull();
+    expect(playBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((playBox?.x ?? 0) + (playBox?.width ?? 0)).toBeLessThanOrEqual(layout.viewport);
+    expect(playBox?.height ?? 0).toBeGreaterThanOrEqual(44);
 
     const brandHeight = await page
-      .getByRole('link', { name: 'rifty', exact: true })
+      .locator('.nav-brand')
       .evaluate((brand) => brand.getBoundingClientRect().height);
     expect(brandHeight).toBeGreaterThanOrEqual(44);
 
@@ -624,7 +558,7 @@ for (const viewport of [
     await menu.click();
     await expect(page.getByRole('button', { name: 'Close navigation', exact: true })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Copy install command/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open the playground' }).nth(1)).toBeVisible();
     const panelBox = await page.locator('#nav-mobile-panel').boundingBox();
     expect(panelBox).not.toBeNull();
     expect(panelBox?.x ?? -1).toBeGreaterThanOrEqual(0);
@@ -632,31 +566,15 @@ for (const viewport of [
     await page.keyboard.press('Escape');
     await expect(page.locator('#nav-mobile-panel')).toBeHidden();
 
-    await page.goto('/#arch');
-    const realms = page.getByRole('button', { name: '02 Realms', exact: true });
-    await expect(realms).toHaveAttribute('aria-pressed', 'true');
-    expect(
-      await page
-        .locator('.exp-lanes')
-        .evaluate((lanes) => getComputedStyle(lanes).gridTemplateColumns.split(' ').length),
-    ).toBe(1);
-    expect(
-      await page
-        .locator('.exp-lane-card')
-        .evaluateAll((cards) => cards.every((card) => card.getBoundingClientRect().height >= 44)),
-    ).toBe(true);
+    // Long code and header lines scroll inside their panels, never the page.
+    await page.goto('/#start');
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
       ),
     ).toBe(true);
-
-    const schema = page.getByRole('button', { name: '01 Schema', exact: true });
-    await schema.click();
     expect(
-      await page
-        .locator('.exp-reset-btn')
-        .evaluate((reset) => reset.getBoundingClientRect().height),
-    ).toBeGreaterThanOrEqual(44);
+      await page.locator('.qs-code').evaluate((code) => code.scrollWidth > code.clientWidth),
+    ).toBe(true);
   });
 }

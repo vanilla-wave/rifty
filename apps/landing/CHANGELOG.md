@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+- Redesigned the page as the "Poster / Dark" handoff (`docs/landing/handoff/`): 2px rule grid,
+  Archivo Black display type (self-hosted latin subset, OFL), one lime accent, zero radii, and
+  three decorative Rifters nods (hero sonar, right-edge depth gauge, accent glow) — all
+  `aria-hidden`, all paused under `prefers-reduced-motion`. Sections now read hero → fact marquee
+  → terminal + capability grid → 01 demos → 02 architecture explorer + honest ceiling → 03 package
+  graph → 04 quick start → CTA. The explorer is cut to chips → status → five-realm board →
+  inspector (hover adjacency, click/Enter pins, BFS scenario playback, width-scaled board that
+  scrolls sideways on phones); the view switcher, drag/pan, legend, rich node cards and the realm
+  swim-lane view are gone (§Simplicity). Share card regenerated from `public/og-image.svg` via
+  `tools/landing/render-og-image.mjs`; the pre-JS static shell and favicon follow the poster.
+- Corrected the handoff against the repo while porting it (claims audited file-by-file, each
+  drift adversarially re-checked): release stamp `v0.4` (the latest published `@riftydev/*` minor
+  and git tag; the page said v0.3); the milestone reads `M11 ACTIVE` / `M11 CONSUMER READY: ACTIVE`
+  because `docs/ROADMAP.md` marks M11 active, not done; "One umbrella, **sixteen** packages" with
+  an intro that says which twelve the sdk fronts on subpaths and that `workbench`,
+  `shadow-registry` and `eddy` ship standalone (the handoff drew twelve); hero lead "Express 4,
+  Vite 7" (the tested majors); the quick-start code stays the Vite-buildable `?worker&url` form
+  guarded by `public-snippets.test.ts` (the handoff's `new URL('…/worker', import.meta.url)` +
+  `'/sw.js'` snippet emits no Worker bundle — README §Consuming); the isolation callout drops the
+  unbacked "IIFE Worker builds won't boot", names COEP `require-corp` as the alternative, and adds
+  the shipped no-COI tier (`requireCrossOriginIsolation: false`: eval + files, `execSync` throws;
+  the ADR-0375 install/build toolchain is on main, unreleased); the honest-ceiling preview chip
+  drops its stale "(M12)" tag and names the loud outcome (unbounded bodies → 502); the
+  architecture intro lists every configured egress (registry proxy, eddy, git CORS proxy, fetch
+  behind node:http/https) instead of "only npm"; the CTA copy pill matches the quick start
+  (`npm i @riftydev/sdk @riftydev/runtime-js`). Explorer data corrected the same way: generic
+  `createSandbox()` *selects* memory on the page (ADR-0372) rather than "falling back", the
+  toolchain tier skips page init, HMR crosses the BroadcastChannel bridge as decoded messages
+  (RFC6455 framing stays in-Worker), and the preview iframe is same-origin, not "sandboxed". The
+  root README package table gains the four missing names and the same no-COI qualification.
+- No public domain is hardcoded (D-004): the playground and site labels (`PLAY.RIFTY.DEV`,
+  `RIFTY.DEV` in the handoff) derive from `VITE_RIFTY_PLAYGROUND_URL` / `VITE_RIFTY_SITE_URL`
+  (a root-relative playground mount reads `PLAYGROUND`); the SDK docs exit moves to the package
+  section + CTA. The nav copy chip is gone; the CTA install pill copies with the same
+  status feedback and error recovery.
+- Accessibility kept over pixel fidelity where they conflicted: muted text that the handoff set at
+  0.4/0.35 alpha renders at 0.5 (WCAG AA 4.5:1 on `#15171D`), decorative 0.35 labels stay
+  `aria-hidden`; dimmed explorer nodes keep opacity 1 and readable labels; the honest-ceiling
+  chips are buttons that reveal each gap's exact throw text in an `aria-live` note; nav labels
+  follow document order (OVERVIEW · DEMOS · ARCH · PACKAGES · START); the mobile drawer, skip
+  link and keyboard-operable graph nodes are retained. `tests/landing/landing.spec.ts` (page)
+  and `tests/landing/explorer.spec.ts` (explorer) cover the above.
 - Updated the public release stamps from v0.2 to v0.3.
 - Simplified the landing copy around supported capability classes and reduced the preset gallery
   to three representative workflows: dev server, HTTP app + database, and CLI + project files.

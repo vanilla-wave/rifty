@@ -3,7 +3,6 @@
 
 export type Realm = 'page' | 'worker' | 'sw' | 'iframe' | 'ext';
 export type Compat = 'ok' | 'warn' | 'no';
-export type Kind = 'surface' | 'package' | 'tool' | 'runtime' | 'core' | 'io' | 'edge';
 export type EdgeKind = 'import' | 'data' | 'control' | 'ipc';
 
 export type NodeId =
@@ -64,7 +63,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'standalone VFS init',
     realm: 'page',
     compat: 'ok',
-    role: 'createSandbox() attempts caller-realm VFS init. PAGE callers fall back to memory because sync OPFS is Worker-only; the runtime Worker owns a separate backend.',
+    role: "Generic createSandbox() selects the caller-realm VFS backend: PAGE callers get memory because sync OPFS is Worker-only; vfs.reason appears only on a real OPFS init failure. The runtime Worker owns its own backend; the no-COI toolchain tier skips page init and reports that Worker's backend.",
   },
   terminal: {
     label: 'terminal',
@@ -148,7 +147,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'preview iframe',
     realm: 'iframe',
     compat: 'ok',
-    role: 'The sandboxed preview pane. Loads /preview/<port>/; renders the in-tab server response.',
+    role: "The same-origin preview pane. Loads /preview/<port>/ through the page's Service Worker and renders the in-tab server response.",
   },
   registry: {
     label: 'registry proxy',
@@ -157,82 +156,6 @@ export const NODES: Record<NodeId, NodeDef> = {
     role: 'npm egress through a configured CORS/CORP registry proxy; local development uses a same-origin path.',
   },
 };
-
-export interface CeilDef {
-  id: string;
-  label: string;
-  compat: Compat;
-  role: string;
-}
-
-// Honest ceiling — gaps that loud-throw rather than fake success. Keep visible.
-export const CEIL: CeilDef[] = [
-  {
-    id: 'c_https',
-    label: 'node:https',
-    compat: 'warn',
-    role: 'https.request/get use browser-validated fetch. TLS servers, custom Agents, and certificate controls throw loudly.',
-  },
-  {
-    id: 'c_tcp',
-    label: 'net.connect (raw TCP)',
-    compat: 'no',
-    role: 'Raw sockets throw. The HttpFramedSocket is HTTP-framed only.',
-  },
-  {
-    id: 'c_native',
-    label: 'native modules',
-    compat: 'no',
-    role: 'cpu-pinned non-WASM aborts with ENATIVEUNSUPPORTED. e.g. better-sqlite3 → use sql.js.',
-  },
-  {
-    id: 'c_sqlite',
-    label: 'node:sqlite',
-    compat: 'warn',
-    role: 'DatabaseSync subset over sql.js WASM — in-memory only.',
-  },
-  {
-    id: 'c_vm',
-    label: 'node:vm',
-    compat: 'warn',
-    role: 'Real realm via QuickJS-WASM — about ES2023, not V8 parity.',
-  },
-  {
-    id: 'c_drain',
-    label: 'event-loop drain',
-    compat: 'warn',
-    role: '30s wall-clock force-kill — a deliberate, disclosed divergence from Node.',
-  },
-  {
-    id: 'c_preview',
-    label: 'cross-realm preview',
-    compat: 'warn',
-    role: 'Page preview buffers finite bodies; unbounded SSE/NDJSON fails loudly. Service-to-service loopback streams live.',
-  },
-];
-
-export interface LayerDef {
-  id: string;
-  name: string;
-  nodes: NodeId[];
-}
-
-export const LAYERS: LayerDef[] = [
-  { id: 'playground', name: 'Playground', nodes: ['playground'] },
-  {
-    id: 'workbench',
-    name: 'Workbench · SDK',
-    nodes: ['workbench', 'owner', 'sdk', 'sandboxvfs'],
-  },
-  { id: 'tools', name: 'Tools', nodes: ['terminal', 'shell', 'npm'] },
-  { id: 'runtimes', name: 'Runtimes', nodes: ['runtimejs', 'runtimewasi', 'esbuild', 'vite'] },
-  { id: 'kernel', name: 'Kernel', nodes: ['kernel', 'sab'] },
-  {
-    id: 'primitives',
-    name: 'vfs / io / net',
-    nodes: ['sandboxvfs', 'vfs', 'net', 'httpserver'],
-  },
-];
 
 export interface RealmDef {
   id: Realm;
@@ -268,7 +191,7 @@ export const REALMS: RealmDef[] = [
     ],
   },
   { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', nodes: ['sw'] },
-  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'sandboxed', nodes: ['preview'] },
+  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'same-origin', nodes: ['preview'] },
   { id: 'ext', name: 'EXTERNAL', sub: 'configured egress', nodes: ['registry'] },
 ];
 
@@ -336,7 +259,7 @@ export const SCN: Record<ScenarioId, Scenario> = {
       },
       {
         node: 'sandboxvfs',
-        t: 'Attempt caller-realm VFS init; PAGE falls back to memory because sync OPFS is Worker-only',
+        t: 'Select the caller-realm VFS backend; PAGE gets memory because sync OPFS is Worker-only',
       },
       { node: 'sw', t: 'Register the service worker (skippable; a failure is non-fatal)' },
       {
@@ -395,7 +318,10 @@ export const SCN: Record<ScenarioId, Scenario> = {
         node: 'esbuild',
         t: 'Vite 7 uses the registry-attested esbuild JS adapter; there is no host WASM URL',
       },
-      { node: 'net', t: 'HMR payload rides RFC6455 frames over the BroadcastChannel WS bridge' },
+      {
+        node: 'net',
+        t: "HMR payload crosses the BroadcastChannel WS bridge as decoded messages; RFC6455 framing stays in-Worker between Vite's ws server and the virtual upgrade socket",
+      },
       {
         node: 'preview',
         t: '@vite/client applies the update — the module hot-swaps, state survives',
@@ -449,129 +375,12 @@ export const SCN: Record<ScenarioId, Scenario> = {
 
 export const SCN_NONE: Scenario = { label: 'Whole schema', cmd: '', steps: [] };
 
-// second axis: WHAT a node is (orthogonal to WHERE it runs)
-export const KIND_OF: Record<NodeId, Kind> = {
-  playground: 'surface',
-  workbench: 'package',
-  owner: 'core',
-  sdk: 'package',
-  sandboxvfs: 'io',
-  terminal: 'surface',
-  shell: 'tool',
-  npm: 'tool',
-  runtimejs: 'runtime',
-  runtimewasi: 'runtime',
-  esbuild: 'runtime',
-  vite: 'runtime',
-  kernel: 'core',
-  sab: 'core',
-  vfs: 'io',
-  net: 'io',
-  httpserver: 'io',
-  sw: 'edge',
-  preview: 'surface',
-  registry: 'edge',
-};
-
-export interface KindDef {
-  label: string;
-  // inner SVG markup for a 0 0 24 24 viewBox, stroke=currentColor
-  icon: string;
-}
-
-export const KINDS: Record<Kind, KindDef> = {
-  surface: {
-    label: 'UI surface',
-    icon: '<rect x="3" y="5" width="18" height="11" rx="1.5"/><path d="M9 20h6M12 16v4"/>',
-  },
-  package: {
-    label: 'package · API',
-    icon: '<path d="M12 3l8 4v8l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v8"/>',
-  },
-  tool: {
-    label: 'dev tool',
-    icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/>',
-  },
-  runtime: {
-    label: 'runtime engine',
-    icon: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/>',
-  },
-  core: {
-    label: 'coordination core',
-    icon: '<rect x="3.5" y="3.5" width="11" height="11" rx="1.5"/><rect x="9.5" y="9.5" width="11" height="11" rx="1.5"/>',
-  },
-  io: {
-    label: 'fs / net I/O',
-    icon: '<ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v13c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-13M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/>',
-  },
-  edge: {
-    label: 'bridge · external',
-    icon: '<path d="M9 15l6-6"/><path d="M11 6l1-1a4 4 0 1 1 6 6l-1 1"/><path d="M13 18l-1 1a4 4 0 1 1-6-6l1-1"/>',
-  },
-};
-
 export const REALM_COL: Record<Realm, string> = {
   page: '#7AA2FF',
   worker: '#3BD6C6',
   sw: '#B58BFF',
   iframe: '#F2B95C',
   ext: '#8A93A6',
-};
-
-export const COMPAT_COL: Record<Compat, string> = {
-  ok: 'var(--ac)',
-  warn: 'var(--warn)',
-  no: 'var(--no)',
-};
-
-export type Pos = readonly [number, number];
-
-// free-form layout (view 1 — Schema) — world 1180 x 680
-export const DEFPOS: Record<NodeId, Pos> = {
-  playground: [140, 100],
-  workbench: [390, 85],
-  sdk: [610, 85],
-  sandboxvfs: [830, 85],
-  terminal: [140, 225],
-  registry: [1080, 210],
-  owner: [390, 210],
-  shell: [610, 210],
-  npm: [830, 210],
-  runtimejs: [150, 350],
-  runtimewasi: [370, 350],
-  esbuild: [590, 350],
-  vite: [810, 350],
-  sw: [1070, 310],
-  kernel: [250, 480],
-  sab: [470, 480],
-  net: [700, 480],
-  httpserver: [900, 480],
-  vfs: [470, 620],
-  preview: [1060, 600],
-};
-
-// realm-grouped layout (view 3 — Hybrid) — world 1180 x 720
-export const HPOS: Record<NodeId, Pos> = {
-  playground: [135, 110],
-  workbench: [90, 225],
-  terminal: [180, 300],
-  sdk: [90, 390],
-  sandboxvfs: [180, 480],
-  owner: [395, 105],
-  kernel: [635, 105],
-  vfs: [395, 200],
-  sab: [635, 200],
-  shell: [395, 295],
-  npm: [635, 295],
-  runtimejs: [395, 390],
-  runtimewasi: [635, 390],
-  esbuild: [395, 485],
-  vite: [635, 485],
-  net: [395, 580],
-  httpserver: [635, 580],
-  sw: [810, 335],
-  preview: [955, 430],
-  registry: [1110, 230],
 };
 
 export interface ZoneDef {
@@ -594,6 +403,6 @@ export const ZONES: ZoneDef[] = [
     col: '#3BD6C6',
   },
   { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', x: 750, w: 120, col: '#B58BFF' },
-  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'sandboxed', x: 870, w: 170, col: '#F2B95C' },
+  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'same-origin', x: 870, w: 170, col: '#F2B95C' },
   { id: 'ext', name: 'EXTERNAL', sub: 'configured egress', x: 1040, w: 140, col: '#8A93A6' },
 ];

@@ -1,87 +1,104 @@
-import type { IconName } from '../icons';
-import { icon } from '../icons';
 import './what.css';
 
 interface Feature {
   readonly title: string;
   readonly body: string;
-  readonly icon: IconName;
 }
 
 const FEATURES: readonly Feature[] = [
   {
-    title: 'A Node-compatible runtime',
-    body: 'Run CommonJS and ESM projects against the supported Node API surface. Missing behavior fails loudly.',
-    icon: 'feature-runtime',
+    title: 'NODE RUNTIME',
+    body: 'CJS + ESM loader and tested node: builtin subsets. Real require, real import. Missing behavior fails loudly.',
   },
   {
-    title: 'npm install, in-browser',
-    body: 'Install packages and run project scripts and JavaScript tooling in the browser.',
-    icon: 'feature-npm',
+    title: 'NPM IN-BROWSER',
+    body: 'Resolve, fetch, verify, unpack, link — execution stays browser-local.',
   },
   {
-    title: 'WASI preview1 runner',
-    body: 'Run compatible WebAssembly programs against project files with standard input and output.',
-    icon: 'feature-wasi',
+    title: 'WASI RUNNER',
+    body: '.wasm guests next to your JS, same virtual FS.',
   },
   {
-    title: 'Virtual FS + OPFS',
-    body: 'Keep project files in memory or persist them in browser storage.',
-    icon: 'feature-vfs',
+    title: 'VFS + OPFS',
+    body: 'In-memory and persistent backends, sync mirror.',
   },
   {
-    title: 'Embeddable Workbench',
-    body: 'Embed project, terminal, run and preview workflows through public APIs.',
-    icon: 'feature-runtime',
+    title: 'EMBEDDABLE WORKBENCH',
+    body: 'Project, terminal, run and preview workflows through public APIs.',
   },
   {
-    title: 'TypeScript + Git over VFS',
-    body: 'Use TypeScript language features and Git workflows against the same workspace.',
-    icon: 'feature-vfs',
+    title: 'TYPESCRIPT + GIT OVER VFS',
+    body: 'Language service diagnostics and Git workflows against the same workspace.',
   },
 ];
 
-function makeHeader(): HTMLElement {
-  const head = document.createElement('div');
-  head.className = 'what-head';
-  const index = document.createElement('span');
-  index.className = 'what-index';
-  index.textContent = '02';
-  const label = document.createElement('h2');
-  label.className = 'what-label';
-  label.textContent = 'What you get';
-  head.append(index, label);
-  return head;
+interface TermLine {
+  readonly kind: 'comment' | 'cmd' | 'dim' | 'ok' | 'lime' | 'plain';
+  readonly text: string;
 }
 
-function makeCell(feature: Feature): HTMLElement {
-  const cell = document.createElement('div');
-  cell.className = 'what-cell';
-  const tile = document.createElement('div');
-  tile.className = 'what-tile';
-  tile.innerHTML = icon(feature.icon, 17);
-  const title = document.createElement('h3');
-  title.className = 'what-title';
-  title.textContent = feature.title;
-  const body = document.createElement('div');
-  body.className = 'what-body';
-  body.textContent = feature.body;
-  cell.append(tile, title, body);
-  return cell;
+const TERMINAL: readonly TermLine[] = [
+  { kind: 'comment', text: '// LIVE — /preview/3000/' },
+  { kind: 'cmd', text: 'npm install express' },
+  { kind: 'dim', text: 'resolve · fetch · verify · unpack · link' },
+  { kind: 'ok', text: '+ express@4 — runs end-to-end' },
+  { kind: 'cmd', text: 'node server.js' },
+  { kind: 'lime', text: 'express listening on :3000' },
+  { kind: 'plain', text: 'GET /preview/3000/ 200' },
+];
+
+function buildTerminal(): HTMLElement {
+  const term = document.createElement('div');
+  term.className = 'term';
+  term.setAttribute('role', 'img');
+  term.setAttribute(
+    'aria-label',
+    'Terminal: npm install express, then node server.js; Express listens on port 3000 and the live preview answers GET /preview/3000/ with 200.',
+  );
+  for (const line of TERMINAL) {
+    const row = document.createElement('div');
+    row.className = `term-line term-${line.kind}`;
+    if (line.kind === 'cmd') {
+      const prompt = document.createElement('span');
+      prompt.className = 'term-prompt';
+      prompt.textContent = '$ ';
+      row.append(prompt);
+    }
+    row.append(document.createTextNode(line.text));
+    term.append(row);
+  }
+  const cursor = document.createElement('span');
+  cursor.className = 'term-cursor';
+  term.lastElementChild?.append(cursor);
+  return term;
 }
 
-/** "What you get" — compact hairline-gap feature grid. */
+function buildFeatures(): HTMLElement {
+  const grid = document.createElement('div');
+  grid.className = 'feat-grid';
+  for (const feature of FEATURES) {
+    const cell = document.createElement('div');
+    cell.className = 'feat';
+    const title = document.createElement('h3');
+    title.className = 'feat-title';
+    title.textContent = feature.title;
+    const body = document.createElement('p');
+    body.className = 'feat-body';
+    body.textContent = feature.body;
+    cell.append(title, body);
+    grid.append(cell);
+  }
+  return grid;
+}
+
+/** Overview: the live terminal mock beside the capability grid. */
 export function renderWhat(): HTMLElement {
   const section = document.createElement('section');
   section.id = 'what';
   section.className = 'what';
-
-  const grid = document.createElement('div');
-  grid.className = 'what-grid';
-  for (const feature of FEATURES) {
-    grid.append(makeCell(feature));
-  }
-
-  section.append(makeHeader(), grid);
+  const heading = document.createElement('h2');
+  heading.className = 'visually-hidden';
+  heading.textContent = 'What you get';
+  section.append(heading, buildTerminal(), buildFeatures());
   return section;
 }

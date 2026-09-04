@@ -10,13 +10,13 @@ html {
 }
 
 section[id] {
-  scroll-margin-top: 76px;
+  scroll-margin-top: 64px;
 }
 
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--t1);
+  color: var(--t-primary);
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.5;
@@ -33,11 +33,17 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  border-radius: 0;
 }
 
 :where(a, button, [role="button"][tabindex]):focus-visible {
   outline: 2px solid var(--ac);
   outline-offset: 3px;
+}
+
+::selection {
+  background: rgb(from var(--ac) r g b / 0.3);
+  color: #fff;
 }
 
 .skip-link {
@@ -46,10 +52,11 @@ button {
   left: 8px;
   z-index: 100;
   padding: 10px 14px;
-  border-radius: var(--r-btn);
   background: var(--ac);
   color: var(--ac-ink);
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
   transform: translateY(calc(-100% - 12px));
 }
 
@@ -57,17 +64,63 @@ button {
   transform: translateY(0);
 }
 
-::selection {
-  background: rgb(from var(--ac) r g b / 0.25);
-  color: #fff;
+/* page frame: one relative root so the depth gauge spans the whole document */
+.page {
+  position: relative;
+  min-height: 100vh;
+  overflow-x: clip;
 }
 
-/* shared layout helper */
-.container {
+.page-column {
   max-width: var(--maxw);
   margin: 0 auto;
-  padding-left: var(--gutter);
-  padding-right: var(--gutter);
+}
+
+/* shared section-label pattern used by 01/02/03/04 */
+.sec {
+  padding: 44px var(--gutter);
+  border-bottom: var(--rule-w) solid var(--rule);
+}
+
+.sec-index {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ac);
+  margin: 0 0 6px;
+}
+
+.sec-title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.15;
+  text-transform: uppercase;
+  color: var(--t1);
+}
+
+.sec-intro {
+  margin: 0 0 24px;
+  max-width: 600px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--t-body);
+}
+
+.arrow {
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .sec {
+    padding-top: 36px;
+    padding-bottom: 36px;
+  }
+
+  .sec-title {
+    font-size: 24px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -85,4 +138,53 @@ button {
     transition-delay: 0ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* shared controls */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 13px 24px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.15s linear, border-color 0.15s linear, color 0.15s linear;
+}
+
+.btn-primary {
+  background: var(--ac);
+  color: var(--ac-ink);
+  border: var(--rule-w) solid var(--ac);
+}
+
+.btn-primary:hover {
+  background: #d6f57a;
+  border-color: #d6f57a;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--t1);
+  border: var(--rule-w) solid var(--outline);
+}
+
+.btn-outline:hover {
+  border-color: rgba(255, 255, 255, 0.55);
 }

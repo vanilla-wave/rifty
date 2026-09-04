@@ -30,7 +30,8 @@
       "tests/browser-unit/fixtures/real-tree-manifest.json",
       "packages/workbench/src/workers/generated/**",
       "tools/shadow-registry/generated/**",
-      "packages/ts-language-service/vendor/**"
+      "packages/ts-language-service/vendor/**",
+      "docs/landing/handoff/**"
     ]
   },
   "formatter": {
