@@ -570,6 +570,154 @@ ${schedule.replaceAll('PORT', String(port))}
   }
 });
 
+test('late createRequire cannot borrow resident ownership across prior loaders', async ({
+  page,
+}) => {
+  const cases = [
+    { origin: 'eval', format: 'cjs', builtin: 'node:http' },
+    { origin: 'eval', format: 'cjs', builtin: 'node:net' },
+    { origin: 'runBin', format: 'cjs', builtin: 'node:net' },
+    { origin: 'runBin', format: 'esm', builtin: 'node:http' },
+  ] as const;
+
+  for (const [index, testCase] of cases.entries()) {
+    const targetPort = 5220 + index;
+    await bootSandbox(page);
+    try {
+      const createServer =
+        testCase.builtin === 'node:http'
+          ? `.createServer((_req, res) => res.end('rival'))`
+          : `.createServer((socket) => socket.end('rival'))`;
+      const schedule = `const lateRequire = createRequire;
+setTimeout(() => lateRequire('/port-proof/late.cjs')('${testCase.builtin}')${createServer}.listen(${targetPort}, '127.0.0.1'), 20).unref();`;
+      const rivalSource =
+        testCase.format === 'cjs'
+          ? `const { createRequire } = require('node:module');\n${schedule}`
+          : `import { createRequire } from 'node:module';\n${schedule}`;
+      await writeFiles(page, {
+        '/port-proof/node_modules/.bin/plain-dev':
+          "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+        '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
+          name: 'plain-dev',
+          type: 'commonjs',
+        }),
+        '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
+const selected = http.createServer((_req, res) => res.end('selected'));
+setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
+        '/port-proof/node_modules/.bin/rival': `#!/usr/bin/env node
+import('../rival/index.${testCase.format === 'cjs' ? 'cjs' : 'mjs'}');
+`,
+        [`/port-proof/node_modules/rival/index.${testCase.format === 'cjs' ? 'cjs' : 'mjs'}`]:
+          rivalSource,
+      });
+      const outcome = await page.evaluate(
+        async ({ origin, builtin, port }) => {
+          const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+          const events: RuntimeExitEvent[] = [];
+          sandbox.runtime.on((event) => {
+            if (event.type === 'exit') events.push(event);
+          });
+          if (origin === 'eval') {
+            const createServer =
+              builtin === 'node:http'
+                ? `.createServer((_req, res) => res.end('rival'))`
+                : `.createServer((socket) => socket.end('rival'))`;
+            const source = `const { createRequire } = require('node:module');
+const lateRequire = createRequire;
+setTimeout(() => lateRequire('/port-proof/late.cjs')('${builtin}')${createServer}.listen(${port}, '127.0.0.1'), 20).unref();
+'scheduled';`;
+            const scheduled = await sandbox.runtime.eval(source);
+            if (!scheduled.ok) throw new Error(scheduled.error.message);
+          } else {
+            const result = await sandbox.toolchain.runBin({
+              cwd: '/port-proof',
+              binPath: '/port-proof/node_modules/.bin/rival',
+              args: [],
+            });
+            if (result.exitCode !== 0) throw new Error(`rival exited ${result.exitCode}`);
+          }
+          let failure: unknown;
+          try {
+            await sandbox.toolchain.startBin({
+              cwd: '/port-proof',
+              binPath: '/port-proof/node_modules/.bin/plain-dev',
+              args: [],
+              port,
+            });
+          } catch (error) {
+            failure = { name: (error as Error).name, message: (error as Error).message };
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return { failure, events };
+        },
+        { origin: testCase.origin, builtin: testCase.builtin, port: targetPort },
+      );
+      expect(outcome).toMatchObject({
+        failure: {
+          name: 'SandboxResidentPortOwnershipError',
+          message: expect.stringContaining('selected installed bin'),
+        },
+        events: [{ type: 'exit', reason: 'error' }],
+      });
+    } finally {
+      await disposeSandbox(page);
+    }
+  }
+});
+
+test('resident readiness rejects HTTP and net bind-close before settlement', async ({ page }) => {
+  for (const [index, builtin] of ['node:http', 'node:net'].entries()) {
+    const targetPort = 5210 + index;
+    await bootSandbox(page);
+    try {
+      const serverSource =
+        builtin === 'node:http'
+          ? `const server = require('node:http').createServer((_req, res) => res.end('closed'));
+server.listen(${targetPort}, '127.0.0.1', () => server.close());`
+          : `const server = require('node:net').createServer((socket) => socket.end('closed'));
+server.listen(${targetPort}, '127.0.0.1', () => server.close());`;
+      await writeFiles(page, {
+        '/port-proof/node_modules/.bin/plain-dev':
+          "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+        '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
+          name: 'plain-dev',
+          type: 'commonjs',
+        }),
+        '/port-proof/node_modules/plain-dev/server.cjs': serverSource,
+      });
+      const outcome = await page.evaluate(async (port) => {
+        const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+        const events: RuntimeExitEvent[] = [];
+        sandbox.runtime.on((event) => {
+          if (event.type === 'exit') events.push(event);
+        });
+        let failure: unknown;
+        try {
+          await sandbox.toolchain.startBin({
+            cwd: '/port-proof',
+            binPath: '/port-proof/node_modules/.bin/plain-dev',
+            args: [],
+            port,
+          });
+        } catch (error) {
+          failure = { name: (error as Error).name, message: (error as Error).message };
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { failure, events };
+      }, targetPort);
+      expect(outcome).toMatchObject({
+        failure: {
+          name: 'SandboxResidentPortOwnershipError',
+          message: expect.stringContaining('live'),
+        },
+        events: [{ type: 'exit', reason: 'error' }],
+      });
+    } finally {
+      await disposeSandbox(page);
+    }
+  }
+});
+
 async function writeFiles(page: Page, files: Readonly<Record<string, string>>): Promise<void> {
   await page.evaluate(async (entries) => {
     const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;

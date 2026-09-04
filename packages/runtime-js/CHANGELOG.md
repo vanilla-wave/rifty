@@ -76,6 +76,8 @@
 - The repo-only loader composition seam accepts exact builtin overrides for one
   installed-bin generation (ADR-0378); normal public loader behavior is
   unchanged.
+- Contextual loaders bind `node:module.createRequire` to their own generation
+  instead of replacing the realm-global ordinary-loader fallback (ADR-0379).
 
 - The repo-only `./internal` composition seam now ships in packed JS and
   declarations for the SDK + Workbench no-COI Worker; the public root still

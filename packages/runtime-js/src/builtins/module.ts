@@ -12,9 +12,7 @@
  * registered itself).
  */
 import { NotImplementedError, isBuiltinSpecifier, listBuiltins } from '@riftydev/io';
-import { isAbsolute } from '@riftydev/vfs';
-import { fileURLToPathPosix } from '../internal/posix-file-url.ts';
-import { hasURLScheme } from '../internal/url-scheme.ts';
+import { createRequirePath } from '../internal/create-require-path.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 
 interface RequireFn {
@@ -44,21 +42,6 @@ export function createRequire(from: string | URL): RequireFn {
   }
   const fromPath = createRequirePath(from);
   return impl(fromPath) as RequireFn;
-}
-
-function createRequirePath(value: string | URL): string {
-  try {
-    if (typeof value !== 'string') return fileURLToPathPosix(value);
-    if (hasURLScheme(value, 'file')) return fileURLToPathPosix(value);
-    if (isAbsolute(value)) return value;
-  } catch {
-    // Node presents every invalid createRequire base through one public code.
-  }
-  const error = new TypeError(
-    'The argument filename must be a file URL object, file URL string, or absolute path string',
-  ) as TypeError & { code: string };
-  error.code = 'ERR_INVALID_ARG_VALUE';
-  throw error;
 }
 
 export function builtinModules(): string[] {

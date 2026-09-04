@@ -78,6 +78,13 @@ Candidates:
    incompatible. Cross-realm preview/SW protocols, install/run settlement and
    OPFS authority remain unchanged. Resident late errors use Worker death.
 
+## Corrections (active)
+
+- 2026-09-04 — ADR-0378/0379 supersede only Decision 1's ref-drain and
+  zero-live-timer gate. Loader-generation ownership plus live registration
+  settlement excludes stale callbacks without rejecting harmless finite-bin
+  cleanup; the existing-Worker lifecycle and all other decisions stand.
+
 ## Consequences
 
 - Shared-memory-free installed dev tools get one generic resident lifecycle;

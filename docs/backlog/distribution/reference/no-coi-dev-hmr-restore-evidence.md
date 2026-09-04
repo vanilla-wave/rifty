@@ -165,7 +165,12 @@ pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts \
 ADR-0378 replaces timer census with loader-bound port ownership.
 
 ```sh
-pnpm exec vitest run --project unit <net/runtime/sdk ownership files> --reporter=dot
+pnpm exec vitest run --project unit \
+  packages/net/src/registry.test.ts packages/net/src/register-builtins.test.ts \
+  packages/net/src/http/server.test.ts packages/net/src/net.test.ts \
+  packages/runtime-js/src/module-loader/builtin-overrides.test.ts \
+  packages/runtime-js/src/host.test.ts packages/runtime-js/src/builtins/timers.test.ts \
+  packages/rifty/src/sandbox.test.ts --reporter=dot
 # 101 passed
 
 pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
@@ -189,3 +194,39 @@ adjudication ruled three HOLDS and one STRETCH. Remaining HOLDS: old
 can settle readiness without a live owned port, and owned HTTP/net facades
 break Node's `createServer().constructor === Server` identity. Unit residuals
 match those three; goal residual remains the final slice.
+
+## Standing-authorization round 4 RED
+
+The deep-seam batch begins with three exact failures on `f0ea22621`:
+
+```sh
+pnpm exec vitest run --project unit \
+  packages/runtime-js/src/module-loader/builtin-overrides.test.ts \
+  packages/net/src/register-builtins.test.ts --reporter=dot
+# 2 failed: old createRequire returned second owner; owned factory name/constructor identity drifted
+
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts \
+  -g "bind-close before settlement" --reporter=line
+# 1 failed: startBin fulfilled after both HTTP/net target servers closed synchronously
+```
+
+ADR-0379 concentrates loader generation, causal bind and live settlement behind
+`startResidentNodeEntry`. Focused loader/net unit 3/3, adjacent unit 161/161 and
+late-createRequire/bind-close Chromium 2/2 are GREEN.
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 14 passed (52.7s)
+
+pnpm test:no-coi --reporter=line
+# 37 passed (2.4m)
+
+pnpm test:packed-toolchain-surface
+# PASS: 15 first-party + 72 external tarballs, strict types + SDK/Worker build
+
+pnpm pr:check
+# first run: parity 74.4s GREEN; node-parity timeout passed manual isolation;
+# extraction closure alone stayed RED after the intentional new production file
+# exact extraction rerun: 5/5 PASS after closure count 146→147
+# final run: 24/24 PASS; test:run 202.2s; parity 74.2s
+```

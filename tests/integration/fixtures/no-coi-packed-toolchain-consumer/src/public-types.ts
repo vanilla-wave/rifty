@@ -44,6 +44,10 @@ const preview: SandboxPreviewTarget = { src: '' };
 const restartOptions: SandboxRestartOptions = { preview };
 const restart: Promise<SandboxRestartReport> = sandbox.restart(restartOptions);
 void restart;
+const restartFields: Promise<readonly [boolean, SandboxResidentBin | null]> = restart.then(
+  (report) => [report.unflushedWrites, report.resident] as const,
+);
+void restartFields;
 // @ts-expect-error preview is required
 void sandbox.restart({});
 

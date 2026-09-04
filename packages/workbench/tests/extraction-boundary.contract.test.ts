@@ -336,7 +336,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 142 → 143 (2026-09-01, ADR-0375): public no-COI toolchain Worker.
     // 143 → 145 (2026-09-01, ADR-0375): generic finalizer + bounded gap provenance.
     // 145 → 146 (PR #122): browser-project-runtime.ts owns kind dispatch.
-    expect(packageProductionFiles).toHaveLength(146);
+    // 146 → 147 (ADR-0379): deep resident-entry admission authority.
+    expect(packageProductionFiles).toHaveLength(147);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

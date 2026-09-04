@@ -7,6 +7,7 @@ import ts from 'typescript';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
+import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { sandboxToolchainWebAssembly } from '../internal/sandbox-toolchain-realm.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
@@ -134,6 +135,42 @@ function loadBuiltinOrThrow(
   const builtin = overrides?.get(id) ?? loadBuiltin(id);
   if (!builtin) throw new ModuleLoadError('MODULE_NOT_FOUND', id, `Built-in '${id}' not found`);
   return builtin;
+}
+
+function cloneBuiltinRecord(
+  source: Record<string, unknown>,
+  replacements: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const descriptors = Object.getOwnPropertyDescriptors(source);
+  for (const [key, value] of Object.entries(replacements)) {
+    const current = descriptors[key];
+    descriptors[key] = {
+      configurable: current?.configurable ?? true,
+      enumerable: current?.enumerable ?? true,
+      writable: true,
+      value,
+    };
+  }
+  return Object.create(Object.getPrototypeOf(source), descriptors) as Record<string, unknown>;
+}
+
+function createLoaderModuleBuiltin(
+  source: Record<string, unknown>,
+  makeRequire: (from: string) => CjsRequire,
+): Record<string, unknown> {
+  function createRequire(from: string | URL): CjsRequire {
+    return makeRequire(createRequirePath(from));
+  }
+  const sourceClass = source.Module;
+  if (sourceClass === null || typeof sourceClass !== 'object') {
+    throw new Error('node:module builtin has no Module object');
+  }
+  const moduleClass = cloneBuiltinRecord(sourceClass as Record<string, unknown>, { createRequire });
+  return cloneBuiltinRecord(source, {
+    createRequire,
+    Module: moduleClass,
+    ...(source.default === sourceClass ? { default: moduleClass } : {}),
+  });
 }
 
 function parsesAsJavaScriptScript(source: string): boolean {
@@ -482,8 +519,14 @@ function createModuleLoaderCore(
     paths: opts.paths,
     autoDiscoverTsconfigPaths: opts.autoDiscoverTsconfigPaths,
   });
-  const loadBuiltinForLoader = (id: string): Record<string, unknown> =>
-    loadBuiltinOrThrow(id, builtinOverrides);
+  let loaderModuleBuiltin: Record<string, unknown> | null = null;
+  const loadBuiltinForLoader = (id: string): Record<string, unknown> => {
+    if (builtinOverrides !== undefined && id === 'node:module') {
+      loaderModuleBuiltin ??= createLoaderModuleBuiltin(loadBuiltinOrThrow(id), makeRequire);
+      return loaderModuleBuiltin;
+    }
+    return loadBuiltinOrThrow(id, builtinOverrides);
+  };
   const cjsInterop = createCjsInteropAuthority({
     registry,
     resolver,
@@ -654,7 +697,7 @@ function createModuleLoaderCore(
     return req;
   }
 
-  __setCreateRequireImpl(makeRequire);
+  if (builtinOverrides === undefined) __setCreateRequireImpl(makeRequire);
 
   const loader: ModuleLoader = {
     require(specifier, from = cwd) {

@@ -66,7 +66,7 @@ export type RequestListener = (req: IncomingMessage, res: ServerResponse) => voi
 
 export type ServerOptions = Record<string, unknown>;
 
-function assertSupportedServerOptions(options: ServerOptions | undefined): void {
+export function assertSupportedServerOptions(options: ServerOptions | undefined): void {
   if (options === undefined) return;
   const unsupported = Object.keys(options);
   if (unsupported.length === 0) return;
