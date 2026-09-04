@@ -46,4 +46,5 @@ challenge: 2026-09-04 — 1 problems: польза полного перенос
 ## Decisions
 
 review: ordinary — proof-only
+re-cut: 2026-09-04 — ordinary concerns split every remaining pickup/robust alternative into one declined row; CLOSE scope unchanged — trace: none
 - 2026-09-04 — draft state avoids fabricated Contract+RED lineage under the captured aggregate gate conflict.

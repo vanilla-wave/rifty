@@ -46,9 +46,16 @@ Each row is added separately to `docs/adr/README.md` Declined concepts:
 Previously exported: SW-delivered COI, heartbeat/journal, Vite identity policy
 and docs-site audience exclusion.
 
+Ordinary review @ `05dabdf2c`: 17/17 ADR rows passed with no blocker; seven
+CLOSE-only concerns found the remaining union. Added separately: generic
+toolchain report, no-op TextDecoder guard, runtime-js declared-gap projection,
+workflow-substring I5 route, ref-drain/zero-live-timer gate, automatic preview
+reconnect, workspace transaction/journal, automatic retry, exactly-once,
+hidden recovery queue, crash-proof durability and Vite build-only finalizer.
+
 ## GREEN
 
 Accepted demand/M11 risk, `spawnSync` and no-own-origin facts have exact
 carriers. Declined concepts contains the full union above. Backlog/refs,
 committed contract-drift and `pnpm pr:check` PASS 24/24 (`test:run` 189.2s,
-parity 75.0s); product/test delta 0. Fresh ordinary audit pending.
+parity 75.0s); product/test delta 0. Post-concern gates and verify pending.
