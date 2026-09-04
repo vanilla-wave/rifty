@@ -31,6 +31,11 @@
 
 ### Fixed
 
+- Resident readiness now requires ADR-0378 loader-generation ownership of the
+  requested port. Harmless unref cleanup no longer blocks build→dev, while
+  stale timer, AbortSignal, MessageChannel, BroadcastChannel and Promise
+  continuations cannot supply false readiness.
+
 - npm shell `EBROKENLOCK` stderr line surfaces the installer's message (which
   entries, which reason) instead of a `(unknown package)` placeholder; the
   `delete package-lock.json and retry` recovery hint stays.

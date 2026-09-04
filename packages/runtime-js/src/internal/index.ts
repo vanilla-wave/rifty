@@ -1,5 +1,5 @@
 export { spawnToolchainRuntime } from '../host.ts';
-export { activeTimerHandles } from './event-loop-keepalive.ts';
+export { createModuleLoaderWithBuiltinOverrides } from '../module-loader/loader.ts';
 export {
   claimSandboxToolchainResidentTransition,
   releaseSandboxToolchainResidentTransition,

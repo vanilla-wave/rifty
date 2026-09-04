@@ -146,3 +146,37 @@ pnpm test:no-coi --reporter=line
 pnpm pr:check
 # 24/24 PASS; test:run 196.8s; parity 75.7s
 ```
+
+## User-authorized re-cut RED
+
+STOP-4 verify left five adjudicated HOLDS. The added batch fails on the
+existing product for the exact missing behaviors:
+
+```sh
+pnpm exec vitest run --project unit packages/runtime-js/src/host.test.ts \
+  -t "snapshots and exact-validates resident-bin input|records acknowledged root-relative aliases" --reporter=dot
+# 2 failed: inherited iterator changed 5174→9999; /../escape.txt invalidated recovery
+
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts \
+  -g "public operations reject|resident readiness ignores|resident readiness rejects native|real Vite HMR" --reporter=line
+# 4 failed: restart calls fulfilled/wrong TypeError; timer gate rejected; AbortSignal rival falsely won; build→dev hit resident-preflight
+```
+
+ADR-0378 replaces timer census with loader-bound port ownership.
+
+```sh
+pnpm exec vitest run --project unit <net/runtime/sdk ownership files> --reporter=dot
+# 101 passed
+
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 12 passed (51.1s)
+
+pnpm test:no-coi --reporter=line
+# 35 passed (2.7m)
+
+pnpm test:packed-toolchain-surface
+# PASS: 15 first-party + 72 external tarballs, strict types + SDK/Worker build
+
+pnpm pr:check
+# 24/24 PASS; test:run 204.4s; parity 76.3s
+```

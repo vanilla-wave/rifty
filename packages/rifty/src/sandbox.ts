@@ -373,6 +373,17 @@ async function bootToolchainSandbox(options: {
     if (disposed) throw new Error('Sandbox is disposed');
   }
 
+  function restartBusyError(): Error {
+    const error = new Error('sandbox restart is already active');
+    error.name = 'SandboxRestartBusyError';
+    return error;
+  }
+
+  function assertOperable(): void {
+    assertLive();
+    if (restarting) throw restartBusyError();
+  }
+
   function readFile(path: string): Promise<Uint8Array>;
   function readFile(
     path: string,
@@ -382,7 +393,7 @@ async function bootToolchainSandbox(options: {
     path: string,
     encoding?: 'utf8' | { readonly encoding: 'utf8' },
   ): Promise<Uint8Array | string> {
-    assertLive();
+    assertOperable();
     return encoding === undefined
       ? await current.fs.readFile(path)
       : await current.fs.readFile(path, encoding);
@@ -391,7 +402,7 @@ async function bootToolchainSandbox(options: {
   const fs: RuntimeFs = {
     readFile,
     async writeFile(path, data) {
-      assertLive();
+      assertOperable();
       const target = current;
       pendingWrites += 1;
       try {
@@ -404,16 +415,16 @@ async function bootToolchainSandbox(options: {
 
   const runtime: RuntimeController = {
     async eval(code, evalOptions) {
-      assertLive();
+      assertOperable();
       return await current.eval(code, evalOptions);
     },
     fs,
     writeStdin(data) {
-      assertLive();
+      assertOperable();
       current.writeStdin(data);
     },
     async reset() {
-      assertLive();
+      assertOperable();
       return await current.reset();
     },
     dispose() {
@@ -424,10 +435,10 @@ async function bootToolchainSandbox(options: {
       return () => handlers.delete(handler);
     },
     writeFile(path, content) {
-      assertLive();
+      assertOperable();
       current.writeFile(path, content);
     },
-    isReady: () => !disposed && current.isReady(),
+    isReady: () => !disposed && !restarting && current.isReady(),
   };
 
   const mountResidentPreview = (port: number): SandboxResidentBin => {
@@ -438,16 +449,16 @@ async function bootToolchainSandbox(options: {
 
   const toolchain: SandboxToolchain = {
     async install(input) {
-      assertLive();
+      assertOperable();
       await current.toolchain.install(input);
       activation = current.snapshotToolchainState();
     },
     async runBin(input) {
-      assertLive();
+      assertOperable();
       return await current.toolchain.runBin(input);
     },
     async startBin(input) {
-      assertLive();
+      assertOperable();
       const resident = await current.toolchain.startBin(input);
       residentRequest = current.snapshotResidentRequest();
       return mountResidentPreview(resident.port);
@@ -473,9 +484,7 @@ async function bootToolchainSandbox(options: {
   async function restart(restartOptions: SandboxRestartOptions): Promise<SandboxRestartReport> {
     assertLive();
     if (restarting) {
-      const error = new Error('sandbox restart is already active');
-      error.name = 'SandboxRestartBusyError';
-      throw error;
+      throw restartBusyError();
     }
     restarting = true;
     try {
@@ -507,7 +516,7 @@ async function bootToolchainSandbox(options: {
       backend = await current.toolchainReady;
       if (activation !== null) await current.restoreToolchainState(activation);
       try {
-        await beforeStart?.(fs);
+        await beforeStart?.(current.fs);
       } finally {
         activation = current.snapshotToolchainState();
       }

@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  activeRefs,
-  activeTimerHandles,
-  resetKeepalive,
-} from '../internal/event-loop-keepalive.ts';
+import { activeRefs, resetKeepalive } from '../internal/event-loop-keepalive.ts';
 import {
   timers,
   clearImmediate,
@@ -46,11 +42,9 @@ describe('timers keepalive refcount', () => {
       };
 
       expect(activeRefs()).toBe(1);
-      expect(activeTimerHandles()).toBe(1);
       expect(handle.hasRef()).toBe(true);
       expect(handle.unref()).toBe(handle);
       expect(activeRefs()).toBe(0);
-      expect(activeTimerHandles()).toBe(1);
       expect(handle.hasRef()).toBe(false);
       expect(handle.unref()).toBe(handle);
       expect(activeRefs()).toBe(0);
@@ -59,7 +53,6 @@ describe('timers keepalive refcount', () => {
       expect(handle.hasRef()).toBe(true);
       globalThis.clearTimeout(handle as never);
       expect(activeRefs()).toBe(0);
-      expect(activeTimerHandles()).toBe(0);
     } finally {
       globalThis.setTimeout = original.setTimeout;
       globalThis.clearTimeout = original.clearTimeout;
@@ -84,17 +77,14 @@ describe('timers keepalive refcount', () => {
       };
 
       expect(activeRefs()).toBe(1);
-      expect(activeTimerHandles()).toBe(1);
       expect(handle.unref()).toBe(handle);
       expect(activeRefs()).toBe(0);
-      expect(activeTimerHandles()).toBe(1);
       expect(handle.hasRef()).toBe(false);
       expect(handle.ref()).toBe(handle);
       expect(activeRefs()).toBe(1);
       expect(handle.hasRef()).toBe(true);
       globalThis.clearInterval(handle as never);
       expect(activeRefs()).toBe(0);
-      expect(activeTimerHandles()).toBe(0);
     } finally {
       globalThis.setTimeout = original.setTimeout;
       globalThis.clearTimeout = original.clearTimeout;

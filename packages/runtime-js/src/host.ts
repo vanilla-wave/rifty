@@ -309,7 +309,7 @@ function createRuntimeController(
     if (!result.ok) throw deserializeError(result.error);
     if (activationState !== null) {
       const normalized = normalizePath(path);
-      const absolute = normalized.startsWith('/') ? normalized : `/${normalized}`;
+      const absolute = normalized.startsWith('/') ? normalized : normalizePath(`/${normalized}`);
       const files = new Map(
         activationState.files.map((file) => [file.path, new Uint8Array(file.data)] as const),
       );
@@ -596,14 +596,13 @@ function exactInput(
   ) {
     throw new TypeError(`${label} must be a plain object`);
   }
-  if (Object.getOwnPropertySymbols(input).length > 0) {
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) {
     throw new TypeError(`${label} has symbol fields`);
   }
-  const descriptors = Object.getOwnPropertyDescriptors(input);
   for (const descriptor of Object.values(descriptors)) {
     if (!('value' in descriptor)) throw new TypeError(`${label} has accessor fields`);
   }
-  const record = input as Record<string, unknown>;
   const actual = Object.keys(descriptors).toSorted();
   const expected = [...fields].toSorted();
   if (
@@ -612,7 +611,17 @@ function exactInput(
   ) {
     throw new TypeError(`${label} has extra or missing fields`);
   }
-  return record;
+  return Object.freeze(
+    Object.fromEntries(
+      actual.map((field) => {
+        const descriptor = descriptors[field];
+        if (descriptor === undefined || !('value' in descriptor)) {
+          throw new TypeError(`${label} has accessor fields`);
+        }
+        return [field, descriptor.value] as const;
+      }),
+    ),
+  );
 }
 
 function absolutePath(value: unknown, label: string): string {
@@ -639,7 +648,10 @@ function validateBinInput(
   input: unknown,
   fields: readonly string[],
   label: string,
-): ToolchainRunBinRequest {
+): {
+  readonly request: ToolchainRunBinRequest;
+  readonly record: Readonly<Record<string, unknown>>;
+} {
   const record = exactInput(input, fields, `${label} input`);
   const cwd = absolutePath(record.cwd, `${label} cwd`);
   const binPath = absolutePath(record.binPath, `${label} binPath`);
@@ -647,14 +659,21 @@ function validateBinInput(
   if (!binPath.startsWith(binPrefix) || binPath.slice(binPrefix.length).includes('/')) {
     throw new TypeError(`${label} binPath must name an installed node_modules/.bin entry`);
   }
-  if (!Array.isArray(record.args) || Object.getOwnPropertySymbols(record.args).length > 0) {
+  if (!Array.isArray(record.args)) {
     throw new TypeError(`${label} args must be a dense string array`);
   }
   const args = record.args;
   const descriptors = Object.getOwnPropertyDescriptors(args);
+  if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) {
+    throw new TypeError(`${label} args must be a dense string array`);
+  }
+  const length = (descriptors as unknown as Record<PropertyKey, PropertyDescriptor>).length;
   const indexKeys = Object.keys(descriptors).filter((key) => key !== 'length');
   if (
-    indexKeys.length !== args.length ||
+    length === undefined ||
+    !('value' in length) ||
+    typeof length.value !== 'number' ||
+    indexKeys.length !== length.value ||
     indexKeys.some((key, index) => key !== String(index)) ||
     indexKeys.some((key) => {
       const descriptor = descriptors[key];
@@ -665,11 +684,25 @@ function validateBinInput(
   ) {
     throw new TypeError(`${label} args must be a dense string array`);
   }
-  return Object.freeze({ cwd, binPath, args: Object.freeze([...args] as string[]) });
+  const copiedArgs = indexKeys.map((key) => {
+    const descriptor = descriptors[key];
+    if (
+      descriptor === undefined ||
+      !('value' in descriptor) ||
+      typeof descriptor.value !== 'string'
+    ) {
+      throw new TypeError(`${label} args must be a dense string array`);
+    }
+    return descriptor.value;
+  });
+  return {
+    record,
+    request: Object.freeze({ cwd, binPath, args: Object.freeze(copiedArgs) }),
+  };
 }
 
 function validateRunBinRequest(input: ToolchainRunBinRequest): ToolchainRunBinRequest {
-  return validateBinInput(input, ['args', 'binPath', 'cwd'], 'toolchain.runBin');
+  return validateBinInput(input, ['args', 'binPath', 'cwd'], 'toolchain.runBin').request;
 }
 
 function validateStartBinRequest(input: ToolchainStartBinRequest): ToolchainStartBinRequest {
@@ -678,11 +711,11 @@ function validateStartBinRequest(input: ToolchainStartBinRequest): ToolchainStar
     ['args', 'binPath', 'cwd', 'port'],
     'toolchain.startBin',
   );
-  const port = (input as { readonly port?: unknown }).port;
+  const port = validated.record.port;
   if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new TypeError('toolchain.startBin port must be an integer from 1 through 65535');
   }
-  return Object.freeze({ ...validated, port });
+  return Object.freeze({ ...validated.request, port });
 }
 
 function validateActivationState(input: unknown, label: string): ToolchainActivationState {

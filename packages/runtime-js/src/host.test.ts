@@ -696,6 +696,17 @@ describe('spawnToolchainRuntime trust boundary', () => {
       }): Promise<{ readonly port: number }>;
     };
     const args = ['--port', '5174'];
+    Object.setPrototypeOf(
+      args,
+      Object.create(Array.prototype, {
+        [Symbol.iterator]: {
+          value: function* inheritedIterator() {
+            yield '--port';
+            yield '9999';
+          },
+        },
+      }),
+    );
     const input = {
       cwd: '/dev',
       binPath: '/dev/node_modules/.bin/tool',
@@ -736,6 +747,42 @@ describe('spawnToolchainRuntime trust boundary', () => {
     } as never);
     await expect(started).resolves.toEqual({ port: 5174 });
 
+    const proxyTarget = {
+      cwd: '/proxy',
+      binPath: '/proxy/node_modules/.bin/tool',
+      args: ['good'],
+      port: 5175,
+    };
+    const proxiedInput = new Proxy(proxyTarget, {
+      get(target, property, receiver) {
+        if (property === 'cwd') return '/evil';
+        if (property === 'binPath') return '/evil/node_modules/.bin/tool';
+        if (property === 'args') return ['evil'];
+        if (property === 'port') return 6000;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const proxied = toolchain.startBin(proxiedInput);
+    await Promise.resolve();
+    expect(worker.sent.at(-1)).toEqual({
+      type: 'toolchain',
+      request: {
+        id: 2,
+        op: 'start-bin',
+        input: {
+          cwd: '/proxy',
+          binPath: '/proxy/node_modules/.bin/tool',
+          args: ['good'],
+          port: 5175,
+        },
+      },
+    });
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 2, ok: true, value: { port: 5175 } },
+    } as never);
+    await expect(proxied).resolves.toEqual({ port: 5175 });
+
     const symbol = Symbol('extra');
     const invalid = [
       { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 0 },
@@ -758,7 +805,39 @@ describe('spawnToolchainRuntime trust boundary', () => {
         ),
       ).rejects.toMatchObject({ name: 'TypeError' });
     }
-    expect(worker.sent).toHaveLength(1);
+    expect(worker.sent).toHaveLength(2);
+  });
+
+  it('records acknowledged root-relative aliases at the exact worker path', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const restoring = runtime.restoreToolchainState({
+      cwd: '/dev',
+      bindings: [],
+      vfsBackend: 'memory',
+      files: [],
+    });
+    await Promise.resolve();
+    worker.emit({ type: 'toolchain-result', result: { id: 1, ok: true } } as never);
+    await restoring;
+
+    for (const [id, path, data] of [
+      [2, '../escape.txt', 'escape'],
+      [3, './dot.txt', 'dot'],
+      [4, 'nested/../alias.txt', 'alias'],
+    ] as const) {
+      const writing = runtime.fs.writeFile(path, data);
+      worker.emit({ type: 'fs-result', result: { id, ok: true } });
+      await writing;
+    }
+
+    expect(runtime.snapshotToolchainState()?.files).toEqual([
+      { path: '/alias.txt', data: new TextEncoder().encode('alias') },
+      { path: '/dot.txt', data: new TextEncoder().encode('dot') },
+      { path: '/escape.txt', data: new TextEncoder().encode('escape') },
+    ]);
   });
 
   it.each([

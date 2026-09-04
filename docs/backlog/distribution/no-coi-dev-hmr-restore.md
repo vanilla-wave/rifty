@@ -6,7 +6,7 @@ created: 2026-08-28
 epic: no-coi-sandbox-tier
 why: build-to-completion works, but the public sandbox cannot start a resident installed bin, mount its preview, restart a wedged realm or report an unacknowledged write
 user_story: As an agent platform, I want a resident installed dev tool with HMR preview and an explicit restart after my timeout detects a wedge
-sources: [ADR-0377, docs/backlog/distribution/reference/no-coi-hmr-spike-record.md, docs/backlog/distribution/reference/no-coi-dev-hmr-restore-evidence.md]
+sources: [ADR-0377, ADR-0378, docs/backlog/distribution/reference/no-coi-hmr-spike-record.md, docs/backlog/distribution/reference/no-coi-dev-hmr-restore-evidence.md]
 code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/runtime-js/src/protocol.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, tests/no-coi/no-coi-dev-hmr.spec.ts, tests/no-coi/fixtures/no-coi-toolchain-memory-worker.ts]
 ---
 
@@ -47,6 +47,7 @@ new Worker restores the resident tool, reloads the iframe and resumes HMR.
 - ADR-0376: one fail-fast finite operation slot and exact peer settlement.
 - ADR-0377: resident start, host activation snapshot, page preview bridge,
   explicit restart, death event and unflushed marker.
+- ADR-0378: loader-generation port owner is the sole readiness provenance.
 - Spike: Vite HMR stable bootId; wedge stays alive; terminate+reboot works;
   existing WS needs iframe reload; pending tree consistency is not promised.
 - Baseline probe: installed no-COI Vite CLI is unpatched
@@ -110,8 +111,9 @@ new Worker restores the resident tool, reloads the iframe and resumes HMR.
 ## Decisions
 
 ready-verdict: 2026-09-04 — Contract+RED @ c53c08ad2
-review: checkpoints rounds:2
-final-green: round 2/2 — blocker @ 956f006ed
+review: checkpoints rounds:3
+final-green: round 3/3 — blocker @ 817da8349
 re-cut: 2026-09-04 — compiled the final I4/I6/I10/I8 product slice and removed obsolete prerequisite history — trace: none
 re-cut: 2026-09-04 — STOP-4 replaces ref-only resident preflight with all-live-timer quiescence plus runtime-frame launch exclusion; traced obligations unchanged — trace: none
+re-cut: 2026-09-04 — user-authorized continuation replaces timer census with ADR-0378 causal port ownership and closes the five adjudicated HOLDS; scope unchanged — trace: none
 - 2026-09-04 — expected RED band 4–4: public start/preview, real HMR, wedge restart/dirty marker, actual-death/overlap siblings.

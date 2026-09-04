@@ -73,6 +73,10 @@
 
 ### Changed
 
+- The repo-only loader composition seam accepts exact builtin overrides for one
+  installed-bin generation (ADR-0378); normal public loader behavior is
+  unchanged.
+
 - The repo-only `./internal` composition seam now ships in packed JS and
   declarations for the SDK + Workbench no-COI Worker; the public root still
   exposes no toolchain controller or protocol.
@@ -86,6 +90,10 @@
   environment field.
 
 ### Fixed
+
+- Toolchain request snapshots copy own data descriptors instead of invoking
+  inherited iterators or Proxy getters; acknowledged root-relative writes use
+  the same root-normalized path as the Worker VFS.
 
 - Sandbox toolchain `WebAssembly.Memory` preserves native descriptor getter
   order/cardinality and consumes stateful `shared` once before its named gap.

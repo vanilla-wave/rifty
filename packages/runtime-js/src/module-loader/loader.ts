@@ -127,8 +127,11 @@ setSameRealmWorkerModuleImporter(async (vfs, script, cwd) => {
  * and async paths; deliberately returns raw CJS-shaped exports — the async path
  * materialises the record-owned namespace at the call site.
  */
-function loadBuiltinOrThrow(id: string): Record<string, unknown> {
-  const builtin = loadBuiltin(id);
+function loadBuiltinOrThrow(
+  id: string,
+  overrides?: ReadonlyMap<string, Record<string, unknown>>,
+): Record<string, unknown> {
+  const builtin = overrides?.get(id) ?? loadBuiltin(id);
   if (!builtin) throw new ModuleLoadError('MODULE_NOT_FOUND', id, `Built-in '${id}' not found`);
   return builtin;
 }
@@ -463,7 +466,11 @@ function installNodeEvalCjsBindings(moduleObject: CjsModule, require: CjsRequire
   }
 }
 
-function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoaderCore {
+function createModuleLoaderCore(
+  vfs: FsSync,
+  opts: ModuleLoaderOptions = {},
+  builtinOverrides?: ReadonlyMap<string, Record<string, unknown>>,
+): ModuleLoaderCore {
   const registry = new ModuleRegistry();
   // Node's replaceable `.js` translator publishes a CJS `require.cache`
   // projection even when the same file already has an independent ESM job.
@@ -475,10 +482,12 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
     paths: opts.paths,
     autoDiscoverTsconfigPaths: opts.autoDiscoverTsconfigPaths,
   });
+  const loadBuiltinForLoader = (id: string): Record<string, unknown> =>
+    loadBuiltinOrThrow(id, builtinOverrides);
   const cjsInterop = createCjsInteropAuthority({
     registry,
     resolver,
-    loadBuiltin: loadBuiltinOrThrow,
+    loadBuiltin: loadBuiltinForLoader,
   });
   const cjsExtensions = Object.create(null) as CjsExtensions;
   const loadDefaultEsm = (resolved: ResolvedModule): unknown => {
@@ -560,7 +569,7 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
     },
     loadSync(resolved: ResolvedModule, parent?: CjsModule): unknown {
       if (resolved.kind === 'builtin') {
-        return loadBuiltinOrThrow(resolved.id);
+        return loadBuiltinForLoader(resolved.id);
       }
       // Node's replaceable `.js` extension owns dispatch before package-type or
       // syntax detection. Only the loader's default `.js` hook enters ESM; a
@@ -651,14 +660,7 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
     require(specifier, from = cwd) {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
       if (resolved.kind === 'builtin') {
-        const builtin = loadBuiltin(resolved.id);
-        if (!builtin)
-          throw new ModuleLoadError(
-            'MODULE_NOT_FOUND',
-            specifier,
-            `Built-in '${specifier}' not found`,
-          );
-        return builtin;
+        return loadBuiltinForLoader(resolved.id);
       }
       return deps.loadSync(resolved);
     },
@@ -724,6 +726,15 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
 
 export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoader {
   return createModuleLoaderCore(vfs, opts).loader;
+}
+
+/** Internal toolchain seam: bind selected builtin facades to one loader generation. */
+export function createModuleLoaderWithBuiltinOverrides(
+  vfs: FsSync,
+  opts: ModuleLoaderOptions,
+  builtinOverrides: ReadonlyMap<string, Record<string, unknown>>,
+): ModuleLoader {
+  return createModuleLoaderCore(vfs, opts, builtinOverrides).loader;
 }
 
 /** Package-internal Node CLI eval seam; intentionally absent from `module-loader/index.ts`. */

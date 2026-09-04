@@ -13,9 +13,8 @@
  * through the host `fetch`. The returned emitter carries `'response'` with an
  * `IncomingMessageFromFetch`.
  *
- * Scope: the port registry is realm-local (per Worker process); cross-realm
- * loopback bridges realms over the per-port preview `BroadcastChannel`
- * (`cross-realm/preview-port.ts`, ADR-0180).
+ * Scope: registry realm-local per Worker; sibling loopback uses the per-port
+ * preview `BroadcastChannel` (`cross-realm/preview-port.ts`, ADR-0180).
  */
 
 import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
@@ -27,6 +26,7 @@ import {
   dispatchToPort,
   getHandler,
   isPortBound,
+  portRegistrationOwner,
   registerPort,
   unregisterPort,
 } from '../registry.ts';
@@ -125,11 +125,10 @@ export class HttpServer extends EventEmitter {
       queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', requested)));
       return this;
     }
-    // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
-    // the realm registry (no OS socket), exposed via `address().port` until close.
+    // `listen(0)` allocates a virtual ephemeral registry port exposed by `address()`.
     const register = (port: number): void => {
       this.boundAddress = createVirtualAddressInfo(port);
-      registerPort(port, (request) => {
+      const handler = (request: Request) => {
         if (isWebSocketUpgradeRequest(request)) {
           return new Response('WebSocket upgrade requires the rifty WebSocket bridge transport', {
             status: 400,
@@ -142,7 +141,8 @@ export class HttpServer extends EventEmitter {
         this.handler(req, res);
         this.emit('request', req, res);
         return res.toResponse();
-      });
+      };
+      registerPort(port, handler, portRegistrationOwner(this));
       this.listenForWebSocketUpgrades(port);
     };
     const port = requested === 0 ? allocateEphemeralPort() : requested;

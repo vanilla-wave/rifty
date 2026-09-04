@@ -138,6 +138,82 @@ test('overlapping restart rejects without a queue or second surviving generation
   }
 });
 
+test('public operations reject while restart owns the replacement generation', async ({ page }) => {
+  await bootSandbox(page);
+  try {
+    await writeFiles(page, { '/restart-race.txt': 'before' });
+    const outcome = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      let enter!: () => void;
+      let release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const restart = sandbox.restart({
+        preview: { src: '' },
+        beforeStart: async (repairFs) => {
+          enter();
+          await gate;
+          await repairFs.writeFile('/restart-repair.txt', 'repaired');
+        },
+      });
+      await entered;
+      const inspect = async (operation: Promise<unknown>) => {
+        try {
+          await operation;
+          return { status: 'fulfilled' };
+        } catch (error) {
+          return { status: 'rejected', name: (error as Error).name };
+        }
+      };
+      const operations = await Promise.all([
+        inspect(sandbox.runtime.eval('42')),
+        inspect(sandbox.fs.readFile('/restart-race.txt')),
+        inspect(sandbox.fs.writeFile('/restart-lost.txt', 'lost')),
+        inspect(sandbox.toolchain.install({ cwd: 'relative', registryUrl: '/registry' })),
+        inspect(sandbox.toolchain.runBin({ cwd: 'relative', binPath: '/bad', args: [] })),
+        inspect(
+          sandbox.toolchain.startBin({ cwd: 'relative', binPath: '/bad', args: [], port: 5179 }),
+        ),
+      ]);
+      const synchronous = [
+        () => sandbox.runtime.writeFile('/restart-sync.txt', 'lost'),
+        () => sandbox.runtime.writeStdin('lost'),
+      ].map((operation) => {
+        try {
+          operation();
+          return { status: 'fulfilled' };
+        } catch (error) {
+          return { status: 'rejected', name: (error as Error).name };
+        }
+      });
+      const readyDuringRestart = sandbox.runtime.isReady();
+      release();
+      const report = await restart;
+      const repair = await sandbox.fs.readFile('/restart-repair.txt', 'utf8');
+      return { operations, synchronous, readyDuringRestart, report, repair };
+    });
+    expect(outcome).toEqual({
+      operations: Array.from({ length: 6 }, () => ({
+        status: 'rejected',
+        name: 'SandboxRestartBusyError',
+      })),
+      synchronous: Array.from({ length: 2 }, () => ({
+        status: 'rejected',
+        name: 'SandboxRestartBusyError',
+      })),
+      readyDuringRestart: false,
+      report: { unflushedWrites: false, resident: null },
+      repair: 'repaired',
+    });
+  } finally {
+    await disposeSandbox(page);
+  }
+});
+
 test('restart claims before caller getters can reenter generation replacement', async ({
   page,
 }) => {
@@ -382,8 +458,9 @@ http.createServer((_req, res) => res.end('aux')).listen(5194, '127.0.0.1', () =>
         name: 'plain-dev',
         type: 'commonjs',
       }),
-      '/port-proof/node_modules/plain-dev/server.cjs':
-        "require('node:http').createServer((_req, res) => res.end('selected')).listen(5196, '127.0.0.1');",
+      '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
+const selected = http.createServer((_req, res) => res.end('selected'));
+setTimeout(() => selected.listen(5196, '127.0.0.1'), 100);`,
     });
     const rival = await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
@@ -410,14 +487,86 @@ http.createServer((_req, res) => res.end('aux')).listen(5194, '127.0.0.1', () =>
     });
     expect(rival).toMatchObject({
       failure: {
-        name: 'NotImplementedError',
-        message: expect.stringContaining('no prior live timer'),
+        name: 'SandboxResidentPortOwnershipError',
+        message: expect.stringContaining('selected installed bin'),
       },
       events: [{ type: 'exit', reason: 'error' }],
       workerCount: 1,
     });
   } finally {
     await disposeSandbox(page);
+  }
+});
+
+test('resident readiness rejects native deferred target-port rivals', async ({ page }) => {
+  const sources = [
+    `const signal = AbortSignal.timeout(20);
+signal.addEventListener('abort', () => rival.listen(PORT, '127.0.0.1'), { once: true });`,
+    `const channel = new MessageChannel();
+channel.port1.onmessage = () => rival.listen(PORT, '127.0.0.1');
+setTimeout(() => channel.port2.postMessage(null), 20).unref();`,
+    `const name = 'resident-rival-' + crypto.randomUUID();
+const receiver = new BroadcastChannel(name);
+const sender = new BroadcastChannel(name);
+receiver.onmessage = () => rival.listen(PORT, '127.0.0.1');
+setTimeout(() => sender.postMessage(null), 20).unref();`,
+    `new Promise((resolve) => setTimeout(resolve, 20).unref())
+  .then(() => rival.listen(PORT, '127.0.0.1'));`,
+  ] as const;
+
+  for (const [index, source] of sources.entries()) {
+    const targetPort = 5200 + index;
+    await bootSandbox(page);
+    try {
+      await writeFiles(page, {
+        '/port-proof/node_modules/.bin/plain-dev':
+          "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+        '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
+          name: 'plain-dev',
+          type: 'commonjs',
+        }),
+        '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
+const selected = http.createServer((_req, res) => res.end('selected'));
+setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
+      });
+      const outcome = await page.evaluate(
+        async ({ port, schedule }) => {
+          const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+          const events: RuntimeExitEvent[] = [];
+          sandbox.runtime.on((event) => {
+            if (event.type === 'exit') events.push(event);
+          });
+          const scheduled = await sandbox.runtime.eval(`const http = require('node:http');
+const rival = http.createServer((_req, res) => res.end('rival'));
+${schedule.replaceAll('PORT', String(port))}
+'scheduled';`);
+          if (!scheduled.ok) throw new Error(scheduled.error.message);
+          let failure: unknown;
+          try {
+            await sandbox.toolchain.startBin({
+              cwd: '/port-proof',
+              binPath: '/port-proof/node_modules/.bin/plain-dev',
+              args: [],
+              port,
+            });
+          } catch (error) {
+            failure = { name: (error as Error).name, message: (error as Error).message };
+          }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return { failure, events };
+        },
+        { port: targetPort, schedule: source },
+      );
+      expect(outcome).toMatchObject({
+        failure: {
+          name: 'SandboxResidentPortOwnershipError',
+          message: expect.stringContaining('selected installed bin'),
+        },
+        events: [{ type: 'exit', reason: 'error' }],
+      });
+    } finally {
+      await disposeSandbox(page);
+    }
   }
 });
 
@@ -684,6 +833,16 @@ test('real Vite HMR survives explicit wedge restart and reports the dirty bounda
     await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
       await sandbox.toolchain.install({ cwd: '/dev-hmr', registryUrl: '/npm-registry' });
+      const build = await sandbox.toolchain.runBin({
+        cwd: '/dev-hmr',
+        binPath: '/dev-hmr/node_modules/.bin/vite',
+        args: ['build'],
+      });
+      if (build.exitCode !== 0) throw new Error(`vite build exited ${build.exitCode}`);
+      const builtHtml = await sandbox.fs.readFile('/dev-hmr/dist/index.html', 'utf8');
+      if (!builtHtml.includes('<main id="app"></main>')) {
+        throw new Error('same-sandbox vite build did not produce dist/index.html');
+      }
       if (typeof sandbox.toolchain.startBin !== 'function') {
         throw new Error('SandboxToolchain.startBin is missing');
       }

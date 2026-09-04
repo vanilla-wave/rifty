@@ -308,6 +308,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0375 | Generic no-COI toolchain authority |
 | 0376 | No-COI toolchain operation lifecycle authority |
 | 0377 | No-COI resident tool and restart lifecycle |
+| 0378 | Causal resident port ownership |
 
 ## Superseded (removed)
 

@@ -1,8 +1,15 @@
 /// <reference lib="webworker" />
 
 import { NotImplementedError } from '@riftydev/io';
-import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
-import { registerNetBuiltins } from '@riftydev/net/register-builtins';
+import {
+  type PortRegistrationOwner,
+  dispatchToPort,
+  isPortRegisteredBy,
+  listPorts,
+  onRegistryChange,
+  serveCrossRealmPreview,
+} from '@riftydev/net';
+import { createNetBuiltinOverrides, registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
 import {
@@ -19,8 +26,8 @@ import {
   type ToolchainRecoveryFile,
   type ToolchainRequest,
   type ToolchainResult,
-  activeTimerHandles,
   claimSandboxToolchainResidentTransition,
+  createModuleLoaderWithBuiltinOverrides,
   releaseSandboxToolchainResidentTransition,
 } from '@riftydev/runtime-js/internal';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
@@ -132,11 +139,14 @@ async function runInstalledBin(
   setProcessCwd(input.cwd);
   let exitCode = 0;
   try {
+    const builtinOverrides = createNetBuiltinOverrides(Symbol('toolchain finite bin'));
     await runNodeEntry({
       vfs: syncMirror(),
       entryPath: input.binPath,
       cwd: input.cwd,
       bin: true,
+      createLoader: (vfs, options) =>
+        createModuleLoaderWithBuiltinOverrides(vfs, options, builtinOverrides),
     });
     await awaitDrain({ capMs: 600_000 });
     if (typeof process.exitCode === 'number') exitCode = process.exitCode;
@@ -151,14 +161,27 @@ async function runInstalledBin(
 
 let residentPort: number | null = null;
 
-async function waitForPort(port: number, entry: Promise<void>, timeoutMs = 10_000): Promise<void> {
+function residentPortOwnershipError(port: number): Error {
+  const error = new Error(`resident port ${port} was not registered by the selected installed bin`);
+  error.name = 'SandboxResidentPortOwnershipError';
+  return error;
+}
+
+async function waitForPort(
+  port: number,
+  owner: PortRegistrationOwner,
+  entry: Promise<void>,
+  timeoutMs = 10_000,
+): Promise<void> {
   let unsubscribe: () => void = () => {};
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await new Promise<void>((resolve, reject) => {
-      unsubscribe = onRegistryChange((changed, action) => {
+      unsubscribe = onRegistryChange((changed, action, registeredOwner) => {
         if (action !== 'register') return;
-        if (changed === port) resolve();
+        if (changed !== port) return;
+        if (registeredOwner === owner) resolve();
+        else reject(residentPortOwnershipError(port));
       });
       timer = setTimeout(
         () =>
@@ -166,7 +189,8 @@ async function waitForPort(port: number, entry: Promise<void>, timeoutMs = 10_00
         timeoutMs,
       );
       void entry.catch(reject);
-      if (listPorts().includes(port)) resolve();
+      if (isPortRegisteredBy(port, owner)) resolve();
+      else if (listPorts().includes(port)) reject(residentPortOwnershipError(port));
     });
   } finally {
     unsubscribe();
@@ -193,13 +217,6 @@ async function startInstalledBin(
       Object.assign(error, { code: 'EADDRINUSE' });
       throw error;
     }
-    await awaitDrain({ capMs: 1000 });
-    if (activeTimerHandles() > 0) {
-      throw new NotImplementedError(
-        'sandbox.toolchain.resident-preflight',
-        'resident launch requires no prior live timer, interval or watcher handles',
-      );
-    }
     if (listPorts().includes(input.port)) {
       const error = new Error(`resident port ${input.port} became occupied before launch`);
       Object.assign(error, { code: 'EADDRINUSE' });
@@ -209,13 +226,17 @@ async function startInstalledBin(
     process.argv = ['node', input.binPath, ...input.args];
     process.exitCode = undefined;
     setProcessCwd(input.cwd);
+    const portOwner = Symbol('toolchain resident bin');
+    const builtinOverrides = createNetBuiltinOverrides(portOwner);
     const entry = runNodeEntry({
       vfs: syncMirror(),
       entryPath: input.binPath,
       cwd: input.cwd,
       bin: true,
+      createLoader: (vfs, options) =>
+        createModuleLoaderWithBuiltinOverrides(vfs, options, builtinOverrides),
     });
-    await waitForPort(input.port, entry);
+    await waitForPort(input.port, portOwner, entry);
     residentPort = input.port;
     serveCrossRealmPreview(input.port, (request) => dispatchToPort(input.port, request));
     void entry.catch((error: unknown) => {
