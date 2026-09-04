@@ -554,3 +554,5 @@ here.
 | SW-delivered COI as the existing-app no-COI tier | 2026-08-31 | works only by applying isolation headers to the whole host and reloading it, violating preserved host posture. Record: `docs/backlog/distribution/reference/sw-coi-shim-probe.md` |
 | Heartbeat, automatic reconnect or workspace journal in no-COI tier `works` | 2026-09-04 | wedge detection stays caller-owned; restart plus a dirty marker is the smallest honest tier. Robust recovery is different scope. Record: ADR-0377 |
 | Vite identity policy in no-COI SDK/runtime infrastructure | 2026-09-04 | destination is the shared-memory-free class; installed bytes select behavior and Vite 7 is only the oracle. Record: ADR-0375 |
+| Realm-wide async-source census for resident readiness | 2026-09-04 | browser promises/EventTargets have no complete handle census, while counting all sources rejects harmless Vite cleanup. Loader-generation port ownership proves cause instead. Record: ADR-0378 |
+| Fresh Worker before every initial resident start | 2026-09-04 | changes ADR-0377 existing-Worker start, emits an observable reset and duplicates the explicit restart lifecycle. Record: ADR-0378 |
