@@ -4,9 +4,7 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-declined-concepts-export` — **CLOSE** — export the
-   complete ADR-0372…0379 rejected-route union and the remaining exact
-   ledger/map dispositions.
+- (none)
 
 ## Open questions
 

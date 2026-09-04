@@ -60,4 +60,5 @@ carriers. Declined concepts contains the full union above. Backlog/refs,
 committed contract-drift and `pnpm pr:check` PASS 24/24 (`test:run` 189.2s,
 parity 75.0s); product/test delta 0. After the concern batch, committed
 contract-drift and `pnpm pr:check` pass again 24/24 (`test:run` 186.8s,
-parity 75.0s). Fresh ordinary verify pending.
+parity 75.0s). Ordinary verify @ `bc03d1e10`: 28/28 coverage pass, 0 findings,
+product/test delta 0; complete historical ADR/pickup union checked.
