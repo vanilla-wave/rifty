@@ -180,3 +180,12 @@ pnpm test:packed-toolchain-surface
 pnpm pr:check
 # 24/24 PASS; test:run 204.4s; parity 76.3s
 ```
+
+## Final round 3 verify
+
+Fresh Final+GREEN @ `f0ea22621` found four candidates; independent
+adjudication ruled three HOLDS and one STRETCH. Remaining HOLDS: old
+`createRequire` can acquire the selected loader facade, bind→immediate-close
+can settle readiness without a live owned port, and owned HTTP/net facades
+break Node's `createServer().constructor === Server` identity. Unit residuals
+match those three; goal residual remains the final slice.

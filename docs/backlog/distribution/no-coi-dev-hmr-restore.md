@@ -112,7 +112,7 @@ new Worker restores the resident tool, reloads the iframe and resumes HMR.
 
 ready-verdict: 2026-09-04 — Contract+RED @ c53c08ad2
 review: checkpoints rounds:3
-final-green: round 3/3 — blocker @ 817da8349
+final-green: round 3/3 — blocker @ f0ea22621
 re-cut: 2026-09-04 — compiled the final I4/I6/I10/I8 product slice and removed obsolete prerequisite history — trace: none
 re-cut: 2026-09-04 — STOP-4 replaces ref-only resident preflight with all-live-timer quiescence plus runtime-frame launch exclusion; traced obligations unchanged — trace: none
 re-cut: 2026-09-04 — user-authorized continuation replaces timer census with ADR-0378 causal port ownership and closes the five adjudicated HOLDS; scope unchanged — trace: none
