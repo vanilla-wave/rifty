@@ -491,6 +491,8 @@ async function bootToolchainSandbox(options: {
         throw new TypeError('sandbox restart beforeStart must be a function');
       }
 
+      const currentActivation = current.snapshotToolchainState();
+      if (currentActivation !== null) activation = currentActivation;
       if (pendingWrites > 0) unflushedMarker = true;
       tearPreview?.();
       tearPreview = null;

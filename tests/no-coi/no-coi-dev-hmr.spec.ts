@@ -307,8 +307,90 @@ test('resident start rejects pre-bound and wrong-port ownership without false re
       return { failure, events };
     });
     expect(wrong).toMatchObject({
-      failure: { message: expect.stringContaining('unexpected port 5192') },
+      failure: { message: expect.stringContaining('did not listen on port 5191') },
       events: [{ type: 'exit', reason: 'error' }],
+    });
+  } finally {
+    await disposeSandbox(page);
+  }
+});
+
+test('resident readiness ignores selected auxiliary ports and refuses a delayed rival', async ({
+  page,
+}) => {
+  await bootSandbox(page);
+  try {
+    await writeFiles(page, {
+      '/port-proof/node_modules/.bin/plain-dev':
+        "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+      '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
+        name: 'plain-dev',
+        type: 'commonjs',
+      }),
+      '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
+http.createServer((_req, res) => res.end('aux')).listen(5194, '127.0.0.1', () => {
+  http.createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<output id="hmr-marker" data-boot-id="aux-target">aux-target</output>'); }).listen(5195, '127.0.0.1');
+});`,
+    });
+    const resident = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const started = await sandbox.toolchain.startBin({
+        cwd: '/port-proof',
+        binPath: '/port-proof/node_modules/.bin/plain-dev',
+        args: [],
+        port: 5195,
+      });
+      const iframe = document.createElement('iframe');
+      iframe.id = 'dev-preview';
+      document.body.append(iframe);
+      iframe.src = started.previewUrl;
+      return started;
+    });
+    expect(resident).toEqual({ port: 5195, previewUrl: '/preview/5195/' });
+    await waitForMarker(page, 'aux-target');
+  } finally {
+    await disposeSandbox(page);
+  }
+
+  await bootSandbox(page);
+  try {
+    await writeFiles(page, {
+      '/port-proof/node_modules/.bin/plain-dev':
+        "#!/usr/bin/env node\nimport('../plain-dev/server.cjs');\n",
+      '/port-proof/node_modules/plain-dev/package.json': JSON.stringify({
+        name: 'plain-dev',
+        type: 'commonjs',
+      }),
+      '/port-proof/node_modules/plain-dev/server.cjs':
+        "require('node:http').createServer((_req, res) => res.end('selected')).listen(5196, '127.0.0.1');",
+    });
+    const rival = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const events: RuntimeExitEvent[] = [];
+      sandbox.runtime.on((event) => {
+        if (event.type === 'exit') events.push(event);
+      });
+      await sandbox.runtime.eval(`setTimeout(() => {
+        require('node:http').createServer((_req, res) => res.end('rival')).listen(5196, '127.0.0.1');
+      }, 20); 'scheduled'`);
+      let failure: unknown;
+      try {
+        await sandbox.toolchain.startBin({
+          cwd: '/port-proof',
+          binPath: '/port-proof/node_modules/.bin/plain-dev',
+          args: [],
+          port: 5196,
+        });
+      } catch (error) {
+        failure = { name: (error as Error).name, message: (error as Error).message };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return { failure, events, workerCount: Reflect.get(globalThis, '__riftyWorkerCount') };
+    });
+    expect(rival).toMatchObject({
+      failure: { name: expect.any(String) },
+      events: [{ type: 'exit', reason: 'error' }],
+      workerCount: 1,
     });
   } finally {
     await disposeSandbox(page);
@@ -470,6 +552,16 @@ test('memory-backend restart restores the installed tree before resident relaunc
       iframe.src = resident.previewUrl;
     });
     const first = await waitForMarker(page, 'hmr-a');
+    await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      await sandbox.fs.writeFile(
+        '/dev-hmr/src/hmr-value.js',
+        "export const marker = 'hmr-memory-before-restart';\n",
+      );
+      await sandbox.fs.writeFile('/dev-hmr/public-bytes.bin', new Uint8Array([2]));
+    });
+    const beforeRestart = await waitForMarker(page, 'hmr-memory-before-restart');
+    expect(beforeRestart.bootId).toBe(first.bootId);
     page.on('request', trackRestartRequest);
     const report = await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
@@ -503,8 +595,14 @@ test('memory-backend restart restores the installed tree before resident relaunc
         { timeout: 180_000 },
       )
       .not.toBe(first.bootId);
-    const recovered = await waitForMarker(page, 'hmr-a');
+    const recovered = await waitForMarker(page, 'hmr-memory-before-restart');
     expect(recovered.bootId).not.toBe(first.bootId);
+    expect(
+      await page.evaluate(async () => {
+        const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+        return [...(await sandbox.fs.readFile('/dev-hmr/public-bytes.bin'))];
+      }),
+    ).toEqual([2]);
     await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
       await sandbox.fs.writeFile(
@@ -514,6 +612,35 @@ test('memory-backend restart restores the installed tree before resident relaunc
     });
     const updated = await waitForMarker(page, 'hmr-memory');
     expect(updated.bootId).toBe(recovered.bootId);
+    const secondRestart = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const iframe = document.querySelector('#dev-preview') as HTMLIFrameElement;
+      return {
+        report: await sandbox.restart({ preview: iframe }),
+        workerCount: Reflect.get(globalThis, '__riftyWorkerCount'),
+      };
+    });
+    expect(secondRestart).toEqual({
+      report: {
+        unflushedWrites: false,
+        resident: { port: 5174, previewUrl: '/preview/5174/' },
+      },
+      workerCount: 3,
+    });
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const iframe = document.querySelector('#dev-preview') as HTMLIFrameElement | null;
+            const node = iframe?.contentDocument?.querySelector(
+              '#hmr-marker',
+            ) as HTMLElement | null;
+            return node?.dataset.bootId ?? null;
+          }),
+        { timeout: 180_000 },
+      )
+      .not.toBe(recovered.bootId);
+    await waitForMarker(page, 'hmr-memory');
   } finally {
     page.off('request', trackRestartRequest);
     await disposeSandbox(page);

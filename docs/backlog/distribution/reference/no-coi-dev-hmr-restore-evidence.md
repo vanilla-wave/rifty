@@ -107,3 +107,23 @@ pnpm pr:check
 # first run: test:run 205.4s + parity 76.1s GREEN, formatter-only RED
 # after formatting: 24/24 PASS; test:run 195.8s; parity 77.1s
 ```
+
+## Final round 2 blocker batch
+
+Verify left two blockers; fresh adjudication ruled both HOLDS. The SDK now
+refreshes its host recovery snapshot immediately before termination, so
+acknowledged string and byte writes survive repeated memory generations.
+Resident start drains tracked prior tasks before launch, rejects a target that
+becomes occupied, allows selected auxiliary ports, and bounds missing-target
+failure at ten seconds.
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 10 passed (41.4s)
+
+pnpm test:no-coi --reporter=line
+# 33 passed (2.5m)
+
+pnpm pr:check
+# 24/24 PASS; test:run 190.2s; parity 75.5s
+```

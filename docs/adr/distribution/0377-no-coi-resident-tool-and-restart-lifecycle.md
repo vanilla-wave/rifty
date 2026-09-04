@@ -51,7 +51,10 @@ Candidates:
    caller fields, starts that installed launcher, waits for the requested port,
    mounts the existing page→SW→Worker HTTP/WS bridge, then resolves
    `{port,previewUrl}`. Package identity/version never selects this path. One
-   resident bin per Worker; a second start fails loudly.
+   resident bin per Worker; a second start fails loudly. Before launch, a
+   one-second event-loop drain excludes delayed prior owners and the requested
+   port must remain free. Auxiliary ports from the selected bin are allowed;
+   its target must appear within ten seconds or the failed launch realm closes.
 2. Successful install leaves an exact host-held activation snapshot: admitted
    bindings, source backend and recovery file bytes. Acknowledged public writes
    update it. A new memory Worker or backend flip restores those files before

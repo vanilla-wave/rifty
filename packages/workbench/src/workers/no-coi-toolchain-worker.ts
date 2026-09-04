@@ -148,7 +148,7 @@ async function runInstalledBin(
 
 let residentPort: number | null = null;
 
-async function waitForPort(port: number, entry: Promise<void>, timeoutMs = 180_000): Promise<void> {
+async function waitForPort(port: number, entry: Promise<void>, timeoutMs = 10_000): Promise<void> {
   let unsubscribe: () => void = () => {};
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -156,8 +156,6 @@ async function waitForPort(port: number, entry: Promise<void>, timeoutMs = 180_0
       unsubscribe = onRegistryChange((changed, action) => {
         if (action !== 'register') return;
         if (changed === port) resolve();
-        else
-          reject(new Error(`resident bin listened on unexpected port ${changed}; wanted ${port}`));
       });
       timer = setTimeout(
         () =>
@@ -183,6 +181,12 @@ async function startInstalledBin(
   }
   if (listPorts().includes(input.port)) {
     const error = new Error(`resident port ${input.port} is already in use`);
+    Object.assign(error, { code: 'EADDRINUSE' });
+    throw error;
+  }
+  await awaitDrain({ capMs: 1000 });
+  if (listPorts().includes(input.port)) {
+    const error = new Error(`resident port ${input.port} became occupied before launch`);
     Object.assign(error, { code: 'EADDRINUSE' });
     throw error;
   }
