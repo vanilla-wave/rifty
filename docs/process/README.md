@@ -36,7 +36,7 @@ decision leaves a session only through the journal (`DEC-5`).
 | PICKUP | `stages/pickup.md` | frontier child → ready unit + band + rounds | `RDY-2..4`, `RDY-8..9` |
 | Contract+RED | `stages/contract-red.md` | contract + RED → `ready-verdict:` | `REV-5`, `STOP-5` |
 | IMPLEMENT | `stages/implement.md` | RED → GREEN, `pr:check` | band |
-| Final+GREEN | `stages/final-green.md` | slice tree → PASS recorded by RECHART | `REV`, `STOP-2..4` |
+| Final+GREEN | `stages/final-green.md` | slice tree → PASS recorded by RECHART | `REV`, `STOP-2..4` (tripwire, never a wait) |
 | RECHART | `stages/rechart.md` | landed slice → map + ledger | `re-chart after` line |
 | CLOSE | `stages/close.md` | empty map → deleted goal dir | invariants proof |
 
@@ -53,9 +53,9 @@ intake), `rifty-fix` (unplanned defect).
 ## Stops
 
 Closed list (`rules/stops.md` `STOP-1`): observable-scope fork · premise
-concern · budget exhausted after the agent's own re-cut, or 2nd contract
-escalation · slice cap · destination conflict. Everything else never asks
-(`STOP-1` names it).
+concern · destination conflict — all three about WHAT gets built. Spend never
+stops: a tripped budget changes the approach and reports (`STOP-2`). A stop
+names what the user decides that the agent cannot; "continue?" is a status.
 
 ## Rules
 
@@ -64,7 +64,7 @@ escalation · slice cap · destination conflict. Everything else never asks
 | `DEC` | `rules/decisions.md` | reversibility, reconsidering, confirm-first, subagents, session hygiene |
 | `RDY` | `rules/readiness.md` | draft → ready, trace, size, re-cut ownership, membership, budget |
 | `REV` | `rules/review.md` | scope, authority, severity, coverage, evidence bar, lineage, rubric, reception |
-| `STOP` | `rules/stops.md` | closed stop list, budget, stall, re-cut, escalation, stop report |
+| `STOP` | `rules/stops.md` | closed stop list, budget tripwire, stall, re-cut, escalation, report |
 | `PR` | `rules/pr.md` | unit of delivery, goal-run PR, referees |
 | — | `rules/fault-classes.md` | fault taxonomy, boundary failure models, class-kill, seam |
 | — | `rules/testing.md` | test pyramid, why parity |

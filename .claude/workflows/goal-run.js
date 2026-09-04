@@ -13,8 +13,10 @@ export const meta = {
 
 // args: { goal: '<epics dir slug>', date: 'YYYY-MM-DD', maxSlices? }
 // Stop contract: every non-{closed} return is either a STOP-1 item (docs/process/rules/stops.md,
-// kind 'STOP-1a'..'STOP-1e', with the STOP-6 report fields and a ledger `stop:` line) or a
-// precondition failure (kind 'precondition' / 'invalid-verdict'). Budgets come from the unit
+// kind 'STOP-1a' | 'STOP-1b' | 'STOP-1e', with the STOP-6 report fields and a ledger `stop:`
+// line), a report that needs no answer (kind 'parked-out' / 'slice-cap'), or a precondition
+// failure (kind 'precondition' / 'invalid-verdict'). Spend never asks the user (STOP-2):
+// a tripped budget walks the ladder re-cut → park → report. Budgets come from the unit
 // (RDY-9), never from args.
 if (!args?.goal || !args?.date) return { stop: 'args', need: "{ goal: '<slug>', date: 'YYYY-MM-DD' }" }
 const { goal, date } = args
@@ -71,9 +73,9 @@ const RECUT = {
   },
 }
 
-const state = (label) =>
+const state = (label, parked = []) =>
   agent(
-    `Read-only. Inspect goal ${DIR} and git in this repo. Report facts per the schema: goal.md is status:ready (goalReady); working tree clean (treeClean); ledger tail shows a landed slice without its 're-chart after <slice>' line (rechartDebt); map.md '## Items' is empty (mapEmpty); first frontier child — open, unblocked by blocked_by, in seed order (frontierChild, null if none); that child already carries a 'ready-verdict:' line (pickedChildReady); that child's doc says 'review: ordinary' (childOrdinaryReview — false when absent or 'checkpoints'); the number after 'rounds:' in its 'review: checkpoints rounds:<n>' line (childRounds, null when absent).`,
+    `Read-only. Inspect goal ${DIR} and git in this repo.${parked.length ? ` These children are PARKED — never return one as frontierChild: ${parked.join(', ')}.` : ''} Report facts per the schema: goal.md is status:ready (goalReady); working tree clean (treeClean); ledger tail shows a landed slice without its 're-chart after <slice>' line (rechartDebt); map.md '## Items' is empty (mapEmpty); first frontier child — open, unblocked by blocked_by, in seed order (frontierChild, null if none); that child already carries a 'ready-verdict:' line (pickedChildReady); that child's doc says 'review: ordinary' (childOrdinaryReview — false when absent or 'checkpoints'); the number after 'rounds:' in its 'review: checkpoints rounds:<n>' line (childRounds, null when absent).`,
     { schema: STATE, label, phase: 'Preflight' },
   )
 
@@ -86,11 +88,21 @@ const stop = async (kind, child, question, extra = {}) => {
   return { pass: false, kind, child, stop: question, ...extra }
 }
 
+// STOP-2 rung 2: a unit that withstood its one re-cut is parked, not escalated to the user.
+const park = async (child, report) => {
+  await agent(
+    `Goal ${goal}, unit ${child}: PARK it per ${RULES}/stops.md STOP-2 rung 2 — set the unit doc back to 'status: draft', append the ledger line '- ${date} — ${child} parked: ${report}', mark the map row blocked with the same one-liner, commit (short one-line subject), push. Change nothing else: no contract weakening, no test edits, no fixes.`,
+    { label: `park:${child}`, phase: 'Slices' },
+  )
+  log(`parked ${child}: ${report}`)
+}
+
 // One checkpoint per ${STAGES}/checkpoint-run.md: find (+tail) → adjudicate → record → fix → verify.
 // Rounds are the unit's declared budget (STOP-2); a stalled blocker skips the remaining rounds
 // (STOP-3); a 2nd consecutive Contract+RED blocker is contract escalation (STOP-5); all three
-// route to ONE agent-owned re-cut against the destination (STOP-4); blockers surviving that
-// re-cut stop to the user (STOP-1c). A premise concern stops at once (STOP-1b, REV-6).
+// route to ONE agent-owned re-cut against the destination (STOP-4). Blockers surviving that
+// re-cut park the unit (kind 'parked') and the slice loop takes the next frontier child — spend
+// is never a question (STOP-2). A premise concern stops at once (STOP-1b, REV-6).
 // Budget state is read back from the unit's status line (REV-8) so a re-invoked run
 // continues the count instead of restarting it.
 async function checkpoint(name, child, rounds) {
@@ -119,12 +131,14 @@ async function checkpoint(name, child, rounds) {
     if (escalation || stalled || exhausted) {
       const trigger = escalation ? 'STOP-5 contract escalation' : stalled ? 'STOP-3 stall' : 'STOP-2 budget exhausted'
       if (recut) {
-        return stop(
-          'STOP-1c',
-          current,
-          `${name}: blockers survive the agent-owned re-cut (${trigger}; blocker counts ${history.join('→')}, rounds ${rounds}). STOP-6: surviving blockers with authority — ${blockers.join(' | ')}; ONE question with a default: re-scope the traced obligation via rifty-refine, raise the budget, or drop the unit?`,
-          { blockers },
-        )
+        // STOP-2 rung 2: the re-cut is spent — park, report, move on. No question to the user.
+        return {
+          pass: false,
+          kind: 'parked',
+          child: current,
+          blockers,
+          report: `${name}: blockers survive the agent-owned re-cut (${trigger}; blocker counts ${history.join('→')}, rounds ${rounds}) — ${blockers.join(' | ')}`,
+        }
       }
       recut = true
       const r = await agent(
@@ -160,21 +174,27 @@ if (!st.treeClean) return { stop: 'dirty tree — commit or drop local changes f
 phase('Slices')
 let landed = 0
 let unblocked = false
+const parked = new Set()
 while (!st.mapEmpty) {
-  if (landed >= MAX_SLICES) return stop('STOP-1d', null, `slice cap ${MAX_SLICES} reached — map still has items; continue the run?`, { landed })
+  // A cap the user set at hand-off is a mandate: reaching it ends the run with a report (STOP-2).
+  if (landed >= MAX_SLICES)
+    return { pass: false, kind: 'slice-cap', landed, stop: `slice cap ${MAX_SLICES} reached — map still has items; re-invoke to continue`, parked: [...parked] }
   if (st.rechartDebt) {
     await rechart(null)
-    st = await state(`state:post-debt`)
+    st = await state(`state:post-debt`, [...parked])
     if (!st) return { stop: 'state agent failed', kind: 'precondition' }
     continue
   }
   let child = st.frontierChild
   if (!child) {
     // Everything blocked_by-blocked: re-cutting the map is the agent's (RDY-5) — one RECHART, then re-state.
-    if (unblocked) return { stop: 'map non-empty but no frontier child after re-chart', kind: 'precondition', notes: st.notes }
+    if (unblocked)
+      return parked.size
+        ? { pass: false, kind: 'parked-out', stop: `every remaining unit is parked (STOP-2 rung 3): ${[...parked].join(', ')} — report, not a question`, parked: [...parked], notes: st.notes }
+        : { stop: 'map non-empty but no frontier child after re-chart', kind: 'precondition', notes: st.notes }
     unblocked = true
     await rechart(null)
-    st = await state('state:post-unblock')
+    st = await state('state:post-unblock', [...parked])
     if (!st) return { stop: 'state agent failed', kind: 'precondition' }
     continue
   }
@@ -193,6 +213,13 @@ while (!st.mapEmpty) {
     rounds = p.rounds ?? rounds
     if (!ordinary) {
       const cr = await checkpoint('Contract+RED', child, DEFAULT_ROUNDS['Contract+RED'])
+      if (cr.kind === 'parked') {
+        await park(cr.child, cr.report)
+        parked.add(cr.child)
+        st = await state(`state:parked:${cr.child}`, [...parked])
+        if (!st) return { stop: 'state agent failed', kind: 'precondition' }
+        continue
+      }
       if (!cr.pass) return cr
       child = cr.unit ?? child
     }
@@ -210,13 +237,20 @@ while (!st.mapEmpty) {
     if (!r?.pass) return { stop: `ordinary review left blockers on ${child}`, kind: 'precondition', child, blockers: r?.blockers }
   } else {
     const fg = await checkpoint('Final+GREEN', child, rounds)
+    if (fg.kind === 'parked') {
+      await park(fg.child, fg.report)
+      parked.add(fg.child)
+      st = await state(`state:parked:${fg.child}`, [...parked])
+      if (!st) return { stop: 'state agent failed', kind: 'precondition' }
+      continue
+    }
     if (!fg.pass) return fg
     child = fg.unit ?? child
   }
   await rechart(child)
   landed++
   log(`slice ${child} landed (${landed})`)
-  st = await state(`state:after:${child}`)
+  st = await state(`state:after:${child}`, [...parked])
   if (!st) return { stop: 'state agent failed', kind: 'precondition' }
 }
 

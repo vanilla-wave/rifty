@@ -54,8 +54,10 @@ stdin).
 4. **Record** — overwrite the checkpoint's status line in the unit's
    `## Decisions`: `final-green: round <n>/<budget> — blocker @ <sha>`
    (`REV-8`). Leave it uncommitted; it commits with the fix batch.
-5. **Stop check** (`STOP-2`, `STOP-3`): `<n>` ≥ budget, or a blocker unchanged
-   since the previous verify → `STOP-4` re-cut, not another round. `<n>` and a
+5. **Tripwire check** (`STOP-2`, `STOP-3`): `<n>` ≥ budget — counting only
+   rounds that produced no `FIX` — or a blocker unchanged since the previous
+   verify → `STOP-4` re-cut, not another round; a re-cut already spent → park
+   the unit and take the next frontier child. Never a wait. `<n>` and a
    spent re-cut (`re-cut:` line) are read from the unit doc, never from
    session memory — a re-invoked run continues the count.
 6. **Batch fix** — one re-cut in place fixing ALL surviving blockers, committed
