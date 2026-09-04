@@ -19,6 +19,9 @@ import {
   type ToolchainRecoveryFile,
   type ToolchainRequest,
   type ToolchainResult,
+  activeTimerHandles,
+  claimSandboxToolchainResidentTransition,
+  releaseSandboxToolchainResidentTransition,
 } from '@riftydev/runtime-js/internal';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
@@ -179,36 +182,51 @@ async function startInstalledBin(
     error.name = 'SandboxResidentToolBusyError';
     throw error;
   }
-  if (listPorts().includes(input.port)) {
-    const error = new Error(`resident port ${input.port} is already in use`);
-    Object.assign(error, { code: 'EADDRINUSE' });
+  if (!claimSandboxToolchainResidentTransition()) {
+    const error = new Error('resident launch transition is already active');
+    error.name = 'SandboxToolchainBusyError';
     throw error;
   }
-  await awaitDrain({ capMs: 1000 });
-  if (listPorts().includes(input.port)) {
-    const error = new Error(`resident port ${input.port} became occupied before launch`);
-    Object.assign(error, { code: 'EADDRINUSE' });
-    throw error;
-  }
-  const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
-  process.argv = ['node', input.binPath, ...input.args];
-  process.exitCode = undefined;
-  setProcessCwd(input.cwd);
-  const entry = runNodeEntry({
-    vfs: syncMirror(),
-    entryPath: input.binPath,
-    cwd: input.cwd,
-    bin: true,
-  });
-  await waitForPort(input.port, entry);
-  residentPort = input.port;
-  serveCrossRealmPreview(input.port, (request) => dispatchToPort(input.port, request));
-  void entry.catch((error: unknown) => {
-    queueMicrotask(() => {
+  try {
+    if (listPorts().includes(input.port)) {
+      const error = new Error(`resident port ${input.port} is already in use`);
+      Object.assign(error, { code: 'EADDRINUSE' });
       throw error;
+    }
+    await awaitDrain({ capMs: 1000 });
+    if (activeTimerHandles() > 0) {
+      throw new NotImplementedError(
+        'sandbox.toolchain.resident-preflight',
+        'resident launch requires no prior live timer, interval or watcher handles',
+      );
+    }
+    if (listPorts().includes(input.port)) {
+      const error = new Error(`resident port ${input.port} became occupied before launch`);
+      Object.assign(error, { code: 'EADDRINUSE' });
+      throw error;
+    }
+    const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
+    process.argv = ['node', input.binPath, ...input.args];
+    process.exitCode = undefined;
+    setProcessCwd(input.cwd);
+    const entry = runNodeEntry({
+      vfs: syncMirror(),
+      entryPath: input.binPath,
+      cwd: input.cwd,
+      bin: true,
     });
-  });
-  return { port: input.port };
+    await waitForPort(input.port, entry);
+    residentPort = input.port;
+    serveCrossRealmPreview(input.port, (request) => dispatchToPort(input.port, request));
+    void entry.catch((error: unknown) => {
+      queueMicrotask(() => {
+        throw error;
+      });
+    });
+    return { port: input.port };
+  } finally {
+    releaseSandboxToolchainResidentTransition();
+  }
 }
 
 async function restoreActivation(state: ToolchainActivationState): Promise<void> {

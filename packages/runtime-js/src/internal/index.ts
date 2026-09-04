@@ -1,4 +1,9 @@
 export { spawnToolchainRuntime } from '../host.ts';
+export { activeTimerHandles } from './event-loop-keepalive.ts';
+export {
+  claimSandboxToolchainResidentTransition,
+  releaseSandboxToolchainResidentTransition,
+} from './sandbox-toolchain-realm.ts';
 export type { RuntimeToolchain, ToolchainRuntimeController } from '../host.ts';
 export { SANDBOX_TOOLCHAIN_PROTOCOL } from '../protocol.ts';
 export type {

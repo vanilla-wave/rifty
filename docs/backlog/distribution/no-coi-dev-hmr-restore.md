@@ -113,4 +113,5 @@ ready-verdict: 2026-09-04 — Contract+RED @ c53c08ad2
 review: checkpoints rounds:2
 final-green: round 2/2 — blocker @ 956f006ed
 re-cut: 2026-09-04 — compiled the final I4/I6/I10/I8 product slice and removed obsolete prerequisite history — trace: none
+re-cut: 2026-09-04 — STOP-4 replaces ref-only resident preflight with all-live-timer quiescence plus runtime-frame launch exclusion; traced obligations unchanged — trace: none
 - 2026-09-04 — expected RED band 4–4: public start/preview, real HMR, wedge restart/dirty marker, actual-death/overlap siblings.

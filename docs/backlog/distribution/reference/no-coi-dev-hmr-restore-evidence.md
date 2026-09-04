@@ -127,3 +127,22 @@ pnpm test:no-coi --reporter=line
 pnpm pr:check
 # 24/24 PASS; test:run 190.2s; parity 75.5s
 ```
+
+## STOP-4 re-cut batch
+
+Round-2 verify exposed an unref timer outside the ref-only drain. The re-cut
+counts every live timeout/interval, refuses resident launch until the old
+realm is timer-quiescent, and excludes runtime eval/fs frames during launch.
+The Chromium carrier proves delayed unref rival rejection plus an allowed
+auxiliary→requested-port lifecycle without a false readiness owner.
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 10 passed (42.1s)
+
+pnpm test:no-coi --reporter=line
+# 33 passed (2.5m)
+
+pnpm pr:check
+# 24/24 PASS; test:run 196.8s; parity 75.7s
+```

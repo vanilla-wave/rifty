@@ -138,7 +138,7 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
   return createRuntimeController(opts, false);
 }
 
-/** Runtime controller with the sandbox toolchain v1 handshake/control plane. */
+/** Runtime controller with the sandbox toolchain v2 handshake/control plane. */
 export function spawnToolchainRuntime(opts: RuntimeOptions): ToolchainRuntimeController {
   return createRuntimeController(opts, true);
 }

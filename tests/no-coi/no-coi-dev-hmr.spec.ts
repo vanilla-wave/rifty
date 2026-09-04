@@ -329,24 +329,45 @@ test('resident readiness ignores selected auxiliary ports and refuses a delayed 
       }),
       '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
 http.createServer((_req, res) => res.end('aux')).listen(5194, '127.0.0.1', () => {
-  http.createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<output id="hmr-marker" data-boot-id="aux-target">aux-target</output>'); }).listen(5195, '127.0.0.1');
+  setTimeout(() => http.createServer((_req, res) => { res.setHeader('content-type', 'text/html'); res.end('<output id="hmr-marker" data-boot-id="aux-target">aux-target</output>'); }).listen(5195, '127.0.0.1'), 100);
 });`,
     });
     const resident = await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
-      const started = await sandbox.toolchain.startBin({
+      const starting = sandbox.toolchain.startBin({
         cwd: '/port-proof',
         binPath: '/port-proof/node_modules/.bin/plain-dev',
         args: [],
         port: 5195,
       });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const inspect = async (operation: Promise<unknown>) => {
+        try {
+          await operation;
+          return { status: 'fulfilled' };
+        } catch (error) {
+          return { status: 'rejected', name: (error as Error).name };
+        }
+      };
+      const [evalResult, fsDuringStart, started] = await Promise.all([
+        sandbox.runtime.eval('42'),
+        inspect(sandbox.fs.readFile('/port-proof/node_modules/plain-dev/package.json')),
+        starting,
+      ]);
+      const evalDuringStart = evalResult.ok
+        ? { ok: true }
+        : { ok: false, name: evalResult.error.name };
       const iframe = document.createElement('iframe');
       iframe.id = 'dev-preview';
       document.body.append(iframe);
       iframe.src = started.previewUrl;
-      return started;
+      return { started, evalDuringStart, fsDuringStart };
     });
-    expect(resident).toEqual({ port: 5195, previewUrl: '/preview/5195/' });
+    expect(resident).toEqual({
+      started: { port: 5195, previewUrl: '/preview/5195/' },
+      evalDuringStart: { ok: false, name: 'SandboxToolchainBusyError' },
+      fsDuringStart: { status: 'rejected', name: 'SandboxToolchainBusyError' },
+    });
     await waitForMarker(page, 'aux-target');
   } finally {
     await disposeSandbox(page);
@@ -372,7 +393,7 @@ http.createServer((_req, res) => res.end('aux')).listen(5194, '127.0.0.1', () =>
       });
       await sandbox.runtime.eval(`setTimeout(() => {
         require('node:http').createServer((_req, res) => res.end('rival')).listen(5196, '127.0.0.1');
-      }, 20); 'scheduled'`);
+      }, 20).unref(); 'scheduled'`);
       let failure: unknown;
       try {
         await sandbox.toolchain.startBin({
@@ -388,7 +409,10 @@ http.createServer((_req, res) => res.end('aux')).listen(5194, '127.0.0.1', () =>
       return { failure, events, workerCount: Reflect.get(globalThis, '__riftyWorkerCount') };
     });
     expect(rival).toMatchObject({
-      failure: { name: expect.any(String) },
+      failure: {
+        name: 'NotImplementedError',
+        message: expect.stringContaining('no prior live timer'),
+      },
       events: [{ type: 'exit', reason: 'error' }],
       workerCount: 1,
     });

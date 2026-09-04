@@ -5,7 +5,12 @@
  * Node tests use a `setTimeout(fn, 0)` fallback).
  */
 
-import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import {
+  ref as keepaliveRef,
+  unref as keepaliveUnref,
+  registerTimerHandle,
+  unregisterTimerHandle,
+} from '../internal/event-loop-keepalive.ts';
 
 type ImmediateHandle = { readonly id: number };
 type HostTimeout = ReturnType<typeof globalThis.setTimeout>;
@@ -43,6 +48,7 @@ class KeepaliveTimerHandle {
     private readonly clearRaw: HostTimerClear,
   ) {
     keepaliveRef();
+    registerTimerHandle();
     handlesById.set(this.primitiveId, this);
   }
 
@@ -50,6 +56,7 @@ class KeepaliveTimerHandle {
     if (!this.active) return false;
     this.active = false;
     handlesById.delete(this.primitiveId);
+    unregisterTimerHandle();
     if (this.refed) keepaliveUnref();
     return true;
   }
@@ -62,6 +69,7 @@ class KeepaliveTimerHandle {
     if (this.active) {
       this.active = false;
       if (this.refed) keepaliveUnref();
+      unregisterTimerHandle();
     }
     handlesById.delete(this.primitiveId);
     this.clearRaw(this.raw);

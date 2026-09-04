@@ -21,6 +21,7 @@ const reflectApplyPrimordial = Reflect.apply;
 
 interface KeepaliveState {
   refCount: number;
+  timerHandleCount: number;
   rejection: { reason: unknown; origin: NodeEvalTerminalOrigin } | null;
   nodeEvalLifecycle: NodeEvalLifecycleRecord | null;
   nodeEvalDrainOwner: object | null;
@@ -65,6 +66,7 @@ function keepaliveState(): KeepaliveState {
     Object.defineProperty(realm, KEEPALIVE_STATE, {
       value: {
         refCount: 0,
+        timerHandleCount: 0,
         rejection: null,
         nodeEvalLifecycle: null,
         nodeEvalDrainOwner: null,
@@ -96,6 +98,20 @@ export function unref(): void {
 /** Current active-handle count. */
 export function activeRefs(): number {
   return keepaliveState().refCount;
+}
+
+/** All live Node timer handles, including `.unref()` handles. */
+export function activeTimerHandles(): number {
+  return keepaliveState().timerHandleCount;
+}
+
+export function registerTimerHandle(): void {
+  keepaliveState().timerHandleCount += 1;
+}
+
+export function unregisterTimerHandle(): void {
+  const state = keepaliveState();
+  if (state.timerHandleCount > 0) state.timerHandleCount -= 1;
 }
 
 /** Record the first unhandled rejection so `awaitDrain` surfaces it loudly. */
@@ -286,6 +302,7 @@ export function beginNodeEvalUnhandled(reason: unknown, origin: NodeEvalUnhandle
 export function resetKeepalive(): void {
   const state = keepaliveState();
   state.refCount = 0;
+  state.timerHandleCount = 0;
   state.rejection = null;
   state.nodeEvalLifecycle = null;
   state.nodeEvalDrainOwner = null;
