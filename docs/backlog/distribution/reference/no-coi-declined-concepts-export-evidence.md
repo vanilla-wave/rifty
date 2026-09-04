@@ -48,4 +48,7 @@ and docs-site audience exclusion.
 
 ## GREEN
 
-Pending declined-index update, gates and fresh ordinary audit.
+Accepted demand/M11 risk, `spawnSync` and no-own-origin facts have exact
+carriers. Declined concepts contains the full union above. Backlog/refs,
+committed contract-drift and `pnpm pr:check` PASS 24/24 (`test:run` 189.2s,
+parity 75.0s); product/test delta 0. Fresh ordinary audit pending.
