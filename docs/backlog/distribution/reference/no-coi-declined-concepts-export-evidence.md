@@ -58,4 +58,6 @@ hidden recovery queue, crash-proof durability and Vite build-only finalizer.
 Accepted demand/M11 risk, `spawnSync` and no-own-origin facts have exact
 carriers. Declined concepts contains the full union above. Backlog/refs,
 committed contract-drift and `pnpm pr:check` PASS 24/24 (`test:run` 189.2s,
-parity 75.0s); product/test delta 0. Post-concern gates and verify pending.
+parity 75.0s); product/test delta 0. After the concern batch, committed
+contract-drift and `pnpm pr:check` pass again 24/24 (`test:run` 186.8s,
+parity 75.0s). Fresh ordinary verify pending.
