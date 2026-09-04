@@ -30,5 +30,6 @@ Fresh read-only audit of CLOSE @ `49142af19`:
 The four one-off facts now have exact carrier/drop entries above. Declined
 concepts contains both ADR-0378 alternatives. `pnpm backlog:check`,
 `pnpm refs:check`, committed `pnpm check:contract-drift` and `pnpm pr:check`
-PASS; final gate 24/24 (`test:run` 224.4s, parity 75.7s). Fresh ordinary audit
-pending.
+PASS; final gate 24/24 (`test:run` 224.4s, parity 75.7s). Ordinary review @
+`c6d8b480b` passed 2/2 coverage with 0 findings and product/test delta 0 after
+one infrastructure-invalid empty-coverage output was retried once.

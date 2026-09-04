@@ -4,8 +4,7 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-closure-export-proof` — **CLOSE** — export the four
-   orphaned one-off facts and both ADR-0378 rejections before final deletion.
+- (none)
 
 ## Open questions
 
