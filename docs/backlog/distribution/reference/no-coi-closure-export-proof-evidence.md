@@ -27,4 +27,8 @@ Fresh read-only audit of CLOSE @ `49142af19`:
 
 ## GREEN
 
-Pending declined-index update and fresh ordinary audit.
+The four one-off facts now have exact carrier/drop entries above. Declined
+concepts contains both ADR-0378 alternatives. `pnpm backlog:check`,
+`pnpm refs:check`, committed `pnpm check:contract-drift` and `pnpm pr:check`
+PASS; final gate 24/24 (`test:run` 224.4s, parity 75.7s). Fresh ordinary audit
+pending.
