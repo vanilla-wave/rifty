@@ -18,7 +18,7 @@ The goal PR already contained landed production slices. Aggregate
 the new item with:
 
 ```text
-docs/backlog/distribution/no-coi-ci-closure-proof.md: ready flip without pickup Contract+RED verdict
+distribution/no-coi-ci-closure-proof: ready flip without pickup Contract+RED verdict
 ```
 
 The pre-commit `pnpm pr:check` passed because the gate reads committed HEAD,

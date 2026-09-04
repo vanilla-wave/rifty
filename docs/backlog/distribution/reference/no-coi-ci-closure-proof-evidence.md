@@ -31,9 +31,13 @@ pnpm exec playwright test --config playwright.browser-unit.config.ts \
 ```
 
 Committed `check:contract-drift` PASS. Final `pnpm pr:check` PASS 24/24:
-`test:run` 219.4s, parity 76.7s. Ordinary review and remote job pending.
+`test:run` 219.4s, parity 76.7s. Remote `no-coi-chromium` PASS 39/39 at
+`b7fd5802f`.
 
 First post-re-cut `pnpm pr:check`: 23/24; `test:run` 213.0s and parity
 76.3s passed, only one formatter diff in the reverted CI contract test failed.
 `pnpm lint` passed after the mechanical blank-line fix; the final gate above
 supersedes this intermediate run.
+
+Ordinary proof-only review @ `b7fd5802f`: product delta 0; 3/3 coverage pass;
+0 blockers / concerns / nits; unit and goal residuals 0.

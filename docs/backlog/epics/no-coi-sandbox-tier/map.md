@@ -4,9 +4,7 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/no-coi-ci-closure-proof` — **I8** — run the landed I5
-   full-reload carrier inside the required no-COI Chromium job, then repeat
-   closure with binding and exhaustive export intact.
+- (none)
 
 ## Open questions
 
