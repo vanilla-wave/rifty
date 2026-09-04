@@ -589,13 +589,76 @@ describe('spawnToolchainRuntime trust boundary', () => {
         },
       },
     ]);
-    worker.emit({ type: 'toolchain-result', result: { id: 1, ok: true } });
+    worker.emit({
+      type: 'toolchain-result',
+      result: {
+        id: 1,
+        ok: true,
+        value: { activationState: { cwd: '/install', bindings: [] } },
+      },
+    });
     worker.emit({
       type: 'toolchain-result',
       result: { id: 2, ok: true, value: { exitCode: 0 } },
     });
     await expect(install).resolves.toBeUndefined();
     await expect(run).resolves.toEqual({ exitCode: 0 });
+    expect(runtime.snapshotToolchainState()).toEqual({ cwd: '/install', bindings: [] });
+  });
+
+  it('validates, snapshots and restores activation state without an install request', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const binding = {
+      adapterId: 'rifty.runtime-adapter.esbuild.v1',
+      packagePath: '/dev/node_modules/esbuild-wasm',
+    };
+    const state = { cwd: '/dev', bindings: [binding] };
+
+    const restoring = runtime.restoreToolchainState(state);
+    state.cwd = '/changed';
+    binding.packagePath = '/changed/node_modules/esbuild-wasm';
+    state.bindings.push({ adapterId: 'extra', packagePath: '/extra' });
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'restore',
+          input: {
+            cwd: '/dev',
+            bindings: [
+              {
+                adapterId: 'rifty.runtime-adapter.esbuild.v1',
+                packagePath: '/dev/node_modules/esbuild-wasm',
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    worker.emit({ type: 'toolchain-result', result: { id: 1, ok: true } } as never);
+    await expect(restoring).resolves.toBeUndefined();
+    expect(runtime.snapshotToolchainState()).toEqual({
+      cwd: '/dev',
+      bindings: [
+        {
+          adapterId: 'rifty.runtime-adapter.esbuild.v1',
+          packagePath: '/dev/node_modules/esbuild-wasm',
+        },
+      ],
+    });
+
+    await expect(
+      runtime.restoreToolchainState({
+        cwd: '/dev',
+        bindings: [{ adapterId: '', packagePath: '/dev/node_modules/esbuild-wasm' }],
+      }),
+    ).rejects.toMatchObject({ name: 'TypeError' });
+    expect(worker.sent).toHaveLength(1);
   });
 
   it('snapshots and exact-validates resident-bin input before readiness awaits — designed RED', async () => {

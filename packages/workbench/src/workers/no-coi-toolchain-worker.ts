@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
@@ -13,6 +14,7 @@ import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import {
   SANDBOX_TOOLCHAIN_PROTOCOL,
+  type ToolchainActivationState,
   type ToolchainRequest,
   type ToolchainResult,
 } from '@riftydev/runtime-js/internal';
@@ -50,7 +52,7 @@ async function flushMirror(): Promise<void> {
 async function activateInstallRuntime(
   cwd: string,
   result: Awaited<ReturnType<typeof install>>,
-): Promise<void> {
+): Promise<ToolchainActivationState> {
   const bindings: readonly WorkbenchRuntimeBinding[] = Object.freeze(
     shadowSubstitutionPlanForInstallResult(result).bindings.map((binding) =>
       Object.freeze({
@@ -60,6 +62,7 @@ async function activateInstallRuntime(
     ),
   );
   await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd });
+  return Object.freeze({ cwd, bindings });
 }
 
 async function installManifest(input: Extract<ToolchainRequest, { op: 'install' }>['input']) {
@@ -70,8 +73,9 @@ async function installManifest(input: Extract<ToolchainRequest, { op: 'install' 
     registry,
   });
   finalizeGenericPackageInstallFiles({ root: input.cwd });
-  await activateInstallRuntime(input.cwd, result);
+  const activationState = await activateInstallRuntime(input.cwd, result);
   await flushMirror();
+  return activationState;
 }
 
 interface ProcessExitSignal {
@@ -112,14 +116,83 @@ async function runInstalledBin(
   return { exitCode };
 }
 
+let residentPort: number | null = null;
+
+async function waitForPort(port: number, entry: Promise<void>, timeoutMs = 180_000): Promise<void> {
+  if (listPorts().includes(port)) return;
+  let unsubscribe: () => void = () => {};
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      unsubscribe = onRegistryChange((changed, action) => {
+        if (changed === port && action === 'register') resolve();
+      });
+      timer = setTimeout(
+        () =>
+          reject(new Error(`resident bin did not listen on port ${port} within ${timeoutMs}ms`)),
+        timeoutMs,
+      );
+      void entry.catch(reject);
+      if (listPorts().includes(port)) resolve();
+    });
+  } finally {
+    unsubscribe();
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function startInstalledBin(
+  input: Extract<ToolchainRequest, { op: 'start-bin' }>['input'],
+): Promise<{ readonly port: number }> {
+  if (residentPort !== null) {
+    const error = new Error(`resident bin already owns port ${residentPort}`);
+    error.name = 'SandboxResidentToolBusyError';
+    throw error;
+  }
+  const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
+  process.argv = ['node', input.binPath, ...input.args];
+  process.exitCode = undefined;
+  setProcessCwd(input.cwd);
+  const entry = runNodeEntry({
+    vfs: syncMirror(),
+    entryPath: input.binPath,
+    cwd: input.cwd,
+    bin: true,
+  });
+  await waitForPort(input.port, entry);
+  residentPort = input.port;
+  serveCrossRealmPreview(input.port, (request) => dispatchToPort(input.port, request));
+  void entry.catch((error: unknown) => {
+    queueMicrotask(() => {
+      throw error;
+    });
+  });
+  return { port: input.port };
+}
+
+async function restoreActivation(state: ToolchainActivationState): Promise<void> {
+  await activateWorkbenchRuntimeAdapters({
+    bindings: state.bindings,
+    fs: syncMirror(),
+    cwd: state.cwd,
+  });
+}
+
 async function dispatch(
   request: ToolchainRequest,
-): Promise<{ readonly exitCode: number } | undefined> {
+): Promise<
+  | { readonly exitCode: number }
+  | { readonly port: number }
+  | { readonly activationState: ToolchainActivationState }
+  | undefined
+> {
   if (request.op === 'install') {
-    await installManifest(request.input);
-    return undefined;
+    return { activationState: await installManifest(request.input) };
   }
-  return await runInstalledBin(request.input);
+  if (request.op === 'run-bin') return await runInstalledBin(request.input);
+  if (request.op === 'start-bin') return await startInstalledBin(request.input);
+  await restoreActivation(request.input);
+  return undefined;
 }
 
 function serializedError(error: unknown): SerializedRuntimeError {

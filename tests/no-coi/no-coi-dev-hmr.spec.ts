@@ -1,4 +1,5 @@
 import { type Page, type Request, expect, test } from '@playwright/test';
+import type { RuntimeEvent, ToolchainSandbox } from '../../packages/rifty/src/index.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const sdkModuleUrl = `/@fs${workspacePath}/packages/rifty/src/index.ts`;
@@ -12,45 +13,8 @@ const startRequest = {
   port,
 } as const;
 
-interface FsSurface {
-  writeFile(path: string, value: string): Promise<void>;
-  readFile(path: string, encoding: 'utf8'): Promise<string>;
-}
-
-interface ResidentResult {
-  readonly port: number;
-  readonly previewUrl: string;
-}
-
-interface RestartReport {
-  readonly unflushedWrites: boolean;
-  readonly resident: ResidentResult | null;
-}
-
-interface RuntimeExitEvent {
-  readonly type: string;
-  readonly reason?: string;
-}
-
-interface DevSandbox {
-  readonly fs: FsSurface;
-  readonly runtime: {
-    eval(source: string): Promise<unknown>;
-    on(handler: (event: RuntimeExitEvent) => void): () => void;
-  };
-  readonly toolchain: {
-    install(input: { cwd: string; registryUrl: string }): Promise<void>;
-    startBin?(input: typeof startRequest): Promise<ResidentResult>;
-  };
-  readonly capabilityReport: {
-    readonly features: readonly { readonly feature: string; readonly status: string }[];
-  };
-  restart?(options: {
-    readonly preview: { src: string };
-    readonly beforeStart?: (fs: FsSurface) => void | Promise<void>;
-  }): Promise<RestartReport>;
-  dispose(): void;
-}
+type DevSandbox = ToolchainSandbox;
+type RuntimeExitEvent = Extract<RuntimeEvent, { readonly type: 'exit' }>;
 
 const realProjectFiles: Readonly<Record<string, string>> = {
   [`${projectRoot}/package.json`]: JSON.stringify({
@@ -359,7 +323,7 @@ test('real Vite HMR survives explicit wedge restart and reports the dirty bounda
     const clean = await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
       const iframe = document.querySelector('#dev-preview') as HTMLIFrameElement;
-      const restarted = await sandbox.restart?.({ preview: iframe });
+      const restarted = await sandbox.restart({ preview: iframe });
       return {
         restarted,
         events: Reflect.get(globalThis, '__riftyLifecycleEvents'),

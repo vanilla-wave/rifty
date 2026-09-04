@@ -7,6 +7,9 @@ import {
   type CreateSandboxOptions,
   type Sandbox,
   type SandboxDeps,
+  type SandboxResidentBin,
+  type SandboxRestartReport,
+  type SandboxStartBinInput,
   type ToolchainCreateSandboxOptions,
   type ToolchainSandbox,
   createSandbox,
@@ -48,6 +51,19 @@ function publicCreateSandboxTypeCarrier(options: CreateSandboxOptions): void {
   ];
 }
 void publicCreateSandboxTypeCarrier;
+
+async function publicResidentLifecycleTypeCarrier(
+  sandbox: ToolchainSandbox,
+  input: SandboxStartBinInput,
+): Promise<void> {
+  const resident: SandboxResidentBin = await sandbox.toolchain.startBin(input);
+  const report: SandboxRestartReport = await sandbox.restart({
+    preview: { src: resident.previewUrl },
+    beforeStart: async (fs) => fs.writeFile('/project/repair.js', 'export const ok = true;'),
+  });
+  void report;
+}
+void publicResidentLifecycleTypeCarrier;
 
 /** A typed no-op controller — these tests assert wiring, never drive eval. */
 function fakeRuntime(onDispose: () => void = () => {}): RuntimeController {

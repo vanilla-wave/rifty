@@ -1,12 +1,24 @@
+import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
 import {
   type RuntimeController,
+  type RuntimeEvent,
   type RuntimeFs,
   type RuntimeOptions,
   spawnRuntime,
 } from '@riftydev/runtime-js';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
-import { type RuntimeToolchain, spawnToolchainRuntime } from '@riftydev/runtime-js/internal';
-import { registerServiceWorker } from '@riftydev/service-worker';
+import {
+  type ToolchainInstallRequest,
+  type ToolchainRunBinRequest,
+  type ToolchainRuntimeController,
+  spawnToolchainRuntime,
+} from '@riftydev/runtime-js/internal';
+import {
+  type SerializedRequest,
+  type SerializedResponse,
+  registerServiceWorker,
+  setupPreviewBridge,
+} from '@riftydev/service-worker';
 import { initBackend } from '@riftydev/vfs';
 import type { CapabilityCheck } from './capabilities.ts';
 
@@ -68,7 +80,37 @@ export interface SandboxCapabilityReport {
   readonly features: readonly SandboxCapabilityFeature[];
 }
 
-export type SandboxToolchain = RuntimeToolchain;
+export interface SandboxResidentBin {
+  readonly port: number;
+  readonly previewUrl: string;
+}
+
+export interface SandboxStartBinInput {
+  readonly cwd: string;
+  readonly binPath: string;
+  readonly args: readonly string[];
+  readonly port: number;
+}
+
+export interface SandboxToolchain {
+  install(input: ToolchainInstallRequest): Promise<void>;
+  runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
+  startBin(input: SandboxStartBinInput): Promise<SandboxResidentBin>;
+}
+
+export interface SandboxPreviewTarget {
+  src: string;
+}
+
+export interface SandboxRestartOptions {
+  readonly preview: SandboxPreviewTarget;
+  readonly beforeStart?: (fs: RuntimeFs) => void | Promise<void>;
+}
+
+export interface SandboxRestartReport {
+  readonly unflushedWrites: boolean;
+  readonly resident: SandboxResidentBin | null;
+}
 
 export interface Sandbox {
   /** Framework-agnostic JS runtime controller (`eval` / `reset` / `on` / …). */
@@ -98,6 +140,7 @@ export interface Sandbox {
 export interface ToolchainSandbox extends Sandbox {
   readonly toolchain: SandboxToolchain;
   readonly capabilityReport: SandboxCapabilityReport;
+  restart(options: SandboxRestartOptions): Promise<SandboxRestartReport>;
 }
 
 /**
@@ -147,11 +190,7 @@ const TOOLCHAIN_CAPABILITY_REPORT = freezeDeep({
       status: 'throwing',
       error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
     },
-    {
-      feature: 'toolchain.dev-hmr',
-      status: 'throwing',
-      error: { name: 'NotImplementedError', feature: 'toolchain.dev-hmr' },
-    },
+    { feature: 'toolchain.dev-hmr', status: 'working' },
   ],
 } satisfies SandboxCapabilityReport);
 
@@ -223,26 +262,11 @@ export async function createSandbox(
 
   if (options.toolchain !== undefined) {
     const { swError } = await bootServiceWorker(options, deps, logger);
-    const runtime = spawnToolchainRuntime({ workerUrl: String(options.toolchain.workerUrl) });
-    let backend: VfsBackend;
-    try {
-      backend = await runtime.toolchainReady;
-    } catch (error) {
-      runtime.dispose();
-      throw error;
-    }
-    return {
-      runtime,
-      fs: runtime.fs,
-      vfs: { backend },
+    return bootToolchainSandbox({
+      workerUrl: String(options.toolchain.workerUrl),
       capabilities,
-      toolchain: runtime.toolchain,
-      capabilityReport: TOOLCHAIN_CAPABILITY_REPORT,
       ...(swError === undefined ? {} : { swError }),
-      dispose() {
-        runtime.dispose();
-      },
-    };
+    });
   }
 
   const vfs = await bootVfs(deps.initVfs ?? initBackend, logger);
@@ -260,6 +284,252 @@ export async function createSandbox(
     dispose() {
       runtime.dispose();
     },
+  };
+}
+
+function previewUrl(port: number): string {
+  return `/preview/${port}/`;
+}
+
+function mountToolchainPreview(port: number, ownerToken: string): () => void {
+  const bridge = bridgeCrossRealmPreview(port);
+  registerPort(port, bridge);
+  const tearSw = setupPreviewBridge(
+    async (request: SerializedRequest): Promise<SerializedResponse> => {
+      const response = await bridge.dispatchStruct({
+        url: request.url,
+        method: request.method,
+        headers: request.headers,
+        body: request.body ?? null,
+      });
+      return {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers),
+        body: response.body,
+      };
+    },
+    { ownerToken, ports: [port] },
+  );
+  return (): void => {
+    tearSw();
+    unregisterPort(port);
+    bridge.dispose();
+  };
+}
+
+async function bootToolchainSandbox(options: {
+  readonly workerUrl: string;
+  readonly capabilities: CapabilityCheck;
+  readonly swError?: string;
+}): Promise<ToolchainSandbox> {
+  let current: ToolchainRuntimeController = spawnToolchainRuntime({
+    workerUrl: options.workerUrl,
+  });
+  let backend: VfsBackend;
+  try {
+    backend = await current.toolchainReady;
+  } catch (error) {
+    current.dispose();
+    throw error;
+  }
+
+  const ownerToken = `sdk-${crypto.randomUUID()}`;
+  const handlers = new Set<(event: RuntimeEvent) => void>();
+  let detachCurrent: () => void = () => {};
+  let tearPreview: (() => void) | null = null;
+  let pendingWrites = 0;
+  let unflushedMarker = false;
+  let restarting = false;
+  let disposed = false;
+  let generation = 0;
+
+  const emit = (event: RuntimeEvent): void => {
+    for (const handler of handlers) {
+      try {
+        handler(event);
+      } catch (error) {
+        console.error('runtime listener threw', error);
+      }
+    }
+  };
+
+  const attachCurrent = (): void => {
+    detachCurrent();
+    detachCurrent = current.on((event) => {
+      if (event.type === 'exit' && event.reason === 'error') {
+        if (pendingWrites > 0) unflushedMarker = true;
+        tearPreview?.();
+        tearPreview = null;
+      }
+      emit(event);
+    });
+  };
+  attachCurrent();
+
+  function assertLive(): void {
+    if (disposed) throw new Error('Sandbox is disposed');
+  }
+
+  function readFile(path: string): Promise<Uint8Array>;
+  function readFile(
+    path: string,
+    encoding: 'utf8' | { readonly encoding: 'utf8' },
+  ): Promise<string>;
+  function readFile(
+    path: string,
+    encoding?: 'utf8' | { readonly encoding: 'utf8' },
+  ): Promise<Uint8Array | string> {
+    assertLive();
+    return encoding === undefined ? current.fs.readFile(path) : current.fs.readFile(path, encoding);
+  }
+
+  const fs: RuntimeFs = {
+    readFile,
+    async writeFile(path, data) {
+      assertLive();
+      const target = current;
+      pendingWrites += 1;
+      try {
+        await target.fs.writeFile(path, data);
+      } finally {
+        pendingWrites -= 1;
+      }
+    },
+  };
+
+  const runtime: RuntimeController = {
+    eval(code, evalOptions) {
+      assertLive();
+      return current.eval(code, evalOptions);
+    },
+    fs,
+    writeStdin(data) {
+      assertLive();
+      current.writeStdin(data);
+    },
+    reset() {
+      assertLive();
+      return current.reset();
+    },
+    dispose() {
+      disposeSandbox();
+    },
+    on(handler) {
+      handlers.add(handler);
+      return () => handlers.delete(handler);
+    },
+    writeFile(path, content) {
+      assertLive();
+      current.writeFile(path, content);
+    },
+    isReady: () => !disposed && current.isReady(),
+  };
+
+  const mountResidentPreview = (port: number): SandboxResidentBin => {
+    tearPreview?.();
+    tearPreview = mountToolchainPreview(port, ownerToken);
+    return { port, previewUrl: previewUrl(port) };
+  };
+
+  const toolchain: SandboxToolchain = {
+    install(input) {
+      assertLive();
+      return current.toolchain.install(input);
+    },
+    runBin(input) {
+      assertLive();
+      return current.toolchain.runBin(input);
+    },
+    async startBin(input) {
+      assertLive();
+      const resident = await current.toolchain.startBin(input);
+      return mountResidentPreview(resident.port);
+    },
+  };
+  Object.defineProperty(runtime, 'toolchain', {
+    value: toolchain,
+    configurable: false,
+    enumerable: true,
+    writable: false,
+  });
+
+  function disposeSandbox(): void {
+    if (disposed) return;
+    disposed = true;
+    tearPreview?.();
+    tearPreview = null;
+    detachCurrent();
+    current.dispose();
+    handlers.clear();
+  }
+
+  async function restart(restartOptions: SandboxRestartOptions): Promise<SandboxRestartReport> {
+    assertLive();
+    if (restarting) {
+      const error = new Error('sandbox restart is already active');
+      error.name = 'SandboxRestartBusyError';
+      throw error;
+    }
+    if (
+      restartOptions === null ||
+      typeof restartOptions !== 'object' ||
+      restartOptions.preview === null ||
+      typeof restartOptions.preview !== 'object' ||
+      typeof restartOptions.preview.src !== 'string'
+    ) {
+      throw new TypeError('sandbox restart preview must expose a string src');
+    }
+    if (
+      restartOptions.beforeStart !== undefined &&
+      typeof restartOptions.beforeStart !== 'function'
+    ) {
+      throw new TypeError('sandbox restart beforeStart must be a function');
+    }
+
+    restarting = true;
+    const activation = current.snapshotToolchainState();
+    const residentRequest = current.snapshotResidentRequest();
+    const unflushedWrites = unflushedMarker || pendingWrites > 0;
+    try {
+      tearPreview?.();
+      tearPreview = null;
+      detachCurrent();
+      emit({ type: 'exit', reason: 'reset' });
+      current.dispose();
+
+      current = spawnToolchainRuntime({ workerUrl: options.workerUrl });
+      attachCurrent();
+      backend = await current.toolchainReady;
+      if (activation !== null) await current.restoreToolchainState(activation);
+      await restartOptions.beforeStart?.(fs);
+
+      let resident: SandboxResidentBin | null = null;
+      if (residentRequest !== null) {
+        const started = await current.toolchain.startBin(residentRequest);
+        resident = mountResidentPreview(started.port);
+        generation += 1;
+        restartOptions.preview.src = `${resident.previewUrl}?riftyRestart=${generation}`;
+      }
+      unflushedMarker = false;
+      return { unflushedWrites, resident };
+    } finally {
+      restarting = false;
+    }
+  }
+
+  return {
+    runtime,
+    fs,
+    get vfs() {
+      return { backend };
+    },
+    capabilities: options.capabilities,
+    toolchain,
+    capabilityReport: TOOLCHAIN_CAPABILITY_REPORT,
+    ...(options.swError === undefined ? {} : { swError: options.swError }),
+    restart,
+    dispose: disposeSandbox,
   };
 }
 

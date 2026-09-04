@@ -136,11 +136,7 @@ const expectedCapabilityReport = {
       status: 'throwing',
       error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
     },
-    {
-      feature: 'toolchain.dev-hmr',
-      status: 'throwing',
-      error: { name: 'NotImplementedError', feature: 'toolchain.dev-hmr' },
-    },
+    { feature: 'toolchain.dev-hmr', status: 'working' },
   ],
 } as const;
 

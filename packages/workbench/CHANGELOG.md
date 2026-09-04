@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- The generic no-COI Worker can start one caller-selected resident installed
+  bin and serve its existing cross-realm HTTP/WebSocket preview bridge
+  (ADR-0377).
+
 ### Changed
 
 - The no-COI Worker installs exact manifests and runs admitted installed bins

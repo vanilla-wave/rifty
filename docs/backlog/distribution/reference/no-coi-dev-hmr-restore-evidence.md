@@ -54,3 +54,30 @@ pnpm exec vitest run --project unit packages/runtime-js/src/host.test.ts -t "res
 The host RED now also pins immutable input, invalid exact shapes/ports and
 pending-before-result. The Chromium overlap RED counts physical Worker
 constructions and requires one fail-fast rejection.
+
+## GREEN
+
+Playwright 1.60.0 / Chromium 148.0.7778.96:
+
+```sh
+pnpm test:no-coi tests/no-coi/no-coi-dev-hmr.spec.ts --reporter=line
+# 5 passed (17.7s)
+
+pnpm test:no-coi --reporter=line
+# 28 passed (2.0m)
+
+pnpm exec vitest run --project unit packages/runtime-js/src/host.test.ts packages/rifty/src/sandbox.test.ts --reporter=dot
+# 48 passed
+
+pnpm test:packed-toolchain-surface
+# PASS: 15 first-party + 72 external tarballs, strict types + SDK/Worker build
+
+pnpm pr:check
+# 24/24 PASS; test:run 209.9s; parity 77.2s
+```
+
+The real Vite case observes marker A→B with one bootId, a live CPU wedge with
+no pre-restart exit event, one pending public write, explicit generation
+replacement without registry traffic, repair-before-start, cache-busted iframe
+assignment, recovered marker, and a second same-bootId HMR update. Dirty and
+clean restart reports are `true` and `false`; physical Worker counts are exact.

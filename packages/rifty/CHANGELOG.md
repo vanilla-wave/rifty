@@ -4,6 +4,11 @@
 
 ### Added
 
+- **No-COI resident tools and explicit restart (ADR-0377).** Toolchain
+  sandboxes expose package-generic `startBin`, SW preview wiring and
+  `restart({preview,beforeStart})`; restart restores the installed runtime
+  binding snapshot without network and reports an unacknowledged public write.
+
 - **Explicit shared-memory-free toolchain sandbox (ADR-0375).**
   `createSandbox({requireCrossOriginIsolation:false, toolchain:{workerUrl}})`
   handshakes one Workbench Worker and exposes frozen capability reporting,
