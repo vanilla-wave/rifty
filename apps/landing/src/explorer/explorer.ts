@@ -23,9 +23,9 @@ const W = 1180;
 const H = 660;
 const MIN_SCALE = 0.62;
 const STEP_MS = 1400;
-// Edge lines stop short of node centres so arrowheads sit outside the boxes.
-const TRIM_FROM = 60;
-const TRIM_TO = 66;
+// Edge lines end just outside each node's box (measured after mount), so short
+// edges between neighbours never collapse into a stub and arrowheads stay visible.
+const EDGE_GAP = 6;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const HINT =
@@ -202,23 +202,23 @@ function buildMarker(id: string, cls: string): SVGMarkerElement {
   return marker;
 }
 
-function buildLine(a: NodeId, b: NodeId, kind: EdgeKind): SVGLineElement {
-  const [x1, y1] = POS[a];
-  const [x2, y2] = POS[b];
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.hypot(dx, dy) || 1;
-  const t0 = Math.min(0.45, TRIM_FROM / len);
-  const t1 = 1 - Math.min(0.45, TRIM_TO / len);
+function buildLine(kind: EdgeKind): SVGLineElement {
   const line = document.createElementNS(SVG_NS, 'line');
-  line.setAttribute('x1', String(x1 + dx * t0));
-  line.setAttribute('y1', String(y1 + dy * t0));
-  line.setAttribute('x2', String(x1 + dx * t1));
-  line.setAttribute('y2', String(y1 + dy * t1));
   if (kind === 'control') line.setAttribute('stroke-dasharray', '5 4');
   if (kind === 'ipc') line.setAttribute('stroke-dasharray', '3 4');
   line.dataset.kind = kind;
   return line;
+}
+
+// Point where the centre-to-centre ray leaves node `from`'s box (plus EDGE_GAP).
+function borderPoint(from: NodeId, to: NodeId, half: [number, number]): [number, number] {
+  const [cx, cy] = POS[from];
+  const [tx, ty] = POS[to];
+  const dx = tx - cx;
+  const dy = ty - cy;
+  if (dx === 0 && dy === 0) return [cx, cy];
+  const k = 1 / Math.max(Math.abs(dx) / (half[0] + EDGE_GAP), Math.abs(dy) / (half[1] + EDGE_GAP));
+  return [cx + dx * Math.min(k, 0.5), cy + dy * Math.min(k, 0.5)];
 }
 
 function buildNode(id: NodeId): HTMLElement {
@@ -316,7 +316,7 @@ export function mountExplorer(root: HTMLElement): () => void {
   defs.append(buildMarker('exp-mk-grey', 'exp-mk-grey'), buildMarker('exp-mk-lime', 'exp-mk-lime'));
   svg.append(defs);
   const edges: EdgeRef[] = EDGES.map((e) => {
-    const line = buildLine(e.from, e.to, e.kind);
+    const line = buildLine(e.kind);
     svg.append(line);
     return { a: e.from, b: e.to, kind: e.kind, key: edgeKey(e.from, e.to), line };
   });
@@ -458,6 +458,29 @@ export function mountExplorer(root: HTMLElement): () => void {
     inspector.replaceChildren(...(shown === null ? [hint] : nodeCard(shown)));
   }
 
+  // ---- edge geometry (needs node boxes; re-run once web fonts settle) ----
+  function layoutEdges(): void {
+    const half = (id: NodeId): [number, number] => {
+      const node = nodes.get(id);
+      const w = node?.offsetWidth ?? 0;
+      const h = node?.offsetHeight ?? 0;
+      return w > 0 && h > 0 ? [w / 2, h / 2] : [56, 14];
+    };
+    for (const edge of edges) {
+      const [x1, y1] = borderPoint(edge.a, edge.b, half(edge.a));
+      const [x2, y2] = borderPoint(edge.b, edge.a, half(edge.b));
+      edge.line.setAttribute('x1', String(x1));
+      edge.line.setAttribute('y1', String(y1));
+      edge.line.setAttribute('x2', String(x2));
+      edge.line.setAttribute('y2', String(y2));
+    }
+  }
+  layoutEdges();
+  let fontsSettled = true;
+  void document.fonts.ready.then(() => {
+    if (fontsSettled) layoutEdges();
+  });
+
   // ---- responsive scale ----
   function fit(): void {
     const width = board.clientWidth;
@@ -476,6 +499,7 @@ export function mountExplorer(root: HTMLElement): () => void {
 
   return () => {
     stop();
+    fontsSettled = false;
     resize.disconnect();
     host.remove();
   };
