@@ -20,8 +20,6 @@ body {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 a {
@@ -74,6 +72,12 @@ button {
 .page-column {
   max-width: var(--maxw);
   margin: 0 auto;
+}
+
+/* Every content box sits on the 40px text line and insets its content by --box-pad,
+   so section labels, box rules and box text share one vertical rhythm. */
+:root {
+  --box-pad: 20px;
 }
 
 /* shared section-label pattern used by 01/02/03/04 */

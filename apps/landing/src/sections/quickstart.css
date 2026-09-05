@@ -1,13 +1,13 @@
-.qs {
+.qs-grid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
-  border-bottom: var(--rule-w) solid var(--rule);
+  border: var(--rule-w) solid var(--rule);
 }
 
 .qs-code {
   min-width: 0;
   background: var(--deep);
-  padding: 28px;
+  padding: var(--box-pad);
   border-right: var(--rule-w) solid var(--rule);
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -40,7 +40,7 @@
 
 .qs-aside {
   min-width: 0;
-  padding: 28px;
+  padding: var(--box-pad);
 }
 
 .qs-heading {
@@ -109,7 +109,7 @@
 }
 
 @media (max-width: 1024px) {
-  .qs {
+  .qs-grid {
     grid-template-columns: 1fr;
   }
 
@@ -120,11 +120,6 @@
 }
 
 @media (max-width: 600px) {
-  .qs-code,
-  .qs-aside {
-    padding: 20px var(--gutter);
-  }
-
   .qs-code {
     font-size: 12px;
   }

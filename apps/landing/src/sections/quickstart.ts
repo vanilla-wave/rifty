@@ -77,10 +77,13 @@ function buildAside(): HTMLElement {
 export function renderQuickStart(): HTMLElement {
   const section = document.createElement('section');
   section.id = 'start';
-  section.className = 'qs';
+  section.className = 'sec qs';
   const heading = document.createElement('h2');
   heading.className = 'visually-hidden';
   heading.textContent = 'Quick start';
-  section.append(heading, buildCode(), buildAside());
+  const grid = document.createElement('div');
+  grid.className = 'qs-grid';
+  grid.append(buildCode(), buildAside());
+  section.append(heading, grid);
   return section;
 }

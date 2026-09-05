@@ -1,13 +1,13 @@
-.what {
+.what-grid {
   display: grid;
   grid-template-columns: 1.05fr 1fr;
-  border-bottom: var(--rule-w) solid var(--rule);
+  border: var(--rule-w) solid var(--rule);
 }
 
 /* ---- terminal mock ---- */
 .term {
   background: var(--deep);
-  padding: 28px;
+  padding: var(--box-pad);
   border-right: var(--rule-w) solid var(--rule);
   font-family: var(--font-mono);
   font-size: 13px;
@@ -65,7 +65,7 @@
 }
 
 .feat {
-  padding: 22px;
+  padding: var(--box-pad);
   border-right: var(--rule-w) solid var(--rule);
   border-bottom: var(--rule-w) solid var(--rule);
 }
@@ -95,7 +95,7 @@
 }
 
 @media (max-width: 1024px) {
-  .what {
+  .what-grid {
     grid-template-columns: 1fr;
   }
 
@@ -107,12 +107,7 @@
 
 @media (max-width: 600px) {
   .term {
-    padding: 20px var(--gutter);
     font-size: 12px;
-  }
-
-  .feat {
-    padding: 18px var(--gutter);
   }
 }
 

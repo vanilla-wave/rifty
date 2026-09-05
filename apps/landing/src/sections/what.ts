@@ -95,10 +95,13 @@ function buildFeatures(): HTMLElement {
 export function renderWhat(): HTMLElement {
   const section = document.createElement('section');
   section.id = 'what';
-  section.className = 'what';
+  section.className = 'sec what';
   const heading = document.createElement('h2');
   heading.className = 'visually-hidden';
   heading.textContent = 'What you get';
-  section.append(heading, buildTerminal(), buildFeatures());
+  const grid = document.createElement('div');
+  grid.className = 'what-grid';
+  grid.append(buildTerminal(), buildFeatures());
+  section.append(heading, grid);
   return section;
 }

@@ -37,6 +37,16 @@
   (a root-relative playground mount reads `PLAYGROUND`); the SDK docs exit moves to the package
   section + CTA. The nav copy chip is gone; the CTA install pill copies with the same
   status feedback and error recovery.
+- Layout and type parity pass after review: the terminal + capability grid and the quick-start
+  block are framed boxes on the same 40px text line as the demo, explorer, ceiling and package
+  boxes (the handoff bled them to the column edge with a 28px inset, so their text and rules sat
+  on no shared vertical), every box insets its content by one `--box-pad`, and the nav wordmark
+  sits on that line too. Font rendering matches the handoff exactly: no
+  `-webkit-font-smoothing: antialiased` (it thinned every glyph on macOS next to the mock) and
+  the H1 keeps the UA `700` the mock renders — a synthetic bold over single-weight Archivo Black,
+  requested explicitly so the two rasterize alike; the section index drops a stray 0.04em
+  tracking. Self-hosted files are the same Google Fonts builds the mock loads (Archivo Black v23,
+  Inter v20, Roboto Mono v31).
 - Accessibility kept over pixel fidelity where they conflicted: muted text that the handoff set at
   0.4/0.35 alpha renders at 0.5 (WCAG AA 4.5:1 on `#15171D`), decorative 0.35 labels stay
   `aria-hidden`; dimmed explorer nodes keep opacity 1 and readable labels; the honest-ceiling
