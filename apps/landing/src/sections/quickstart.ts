@@ -1,144 +1,99 @@
-import { icon } from '../icons';
-import { QUICKSTART_SNIPPET, type SnippetToken } from '../public-snippets';
+import { QUICKSTART_SNIPPET } from '../public-snippets';
+import { renderSnippet } from '../snippet-dom';
 import './quickstart.css';
 
-function codeLine(toks: readonly SnippetToken[]): HTMLDivElement {
-  const div = document.createElement('div');
-  div.className = 'qs-code-line';
-  if (toks.length === 0) {
-    div.textContent = ' ';
-    return div;
-  }
-  for (const [text, cls] of toks) {
-    const span = document.createElement('span');
-    if (cls) {
-      span.className = cls;
-    }
-    span.textContent = text;
-    div.append(span);
-  }
-  return div;
+const HEADERS: ReadonlyArray<readonly [name: string, value: string]> = [
+  ['Cross-Origin-Opener-Policy', 'same-origin'],
+  ['Cross-Origin-Embedder-Policy', 'credentialless'],
+  ['Cross-Origin-Resource-Policy', 'cross-origin'],
+];
+
+function buildCode(): HTMLElement {
+  const code = document.createElement('div');
+  code.className = 'qs-code';
+  code.setAttribute('role', 'region');
+  code.setAttribute('aria-label', 'Quick start code');
+  const comment = document.createElement('div');
+  comment.className = 'qs-code-comment';
+  comment.textContent = '// 04 — quick start (boot.vite.ts)';
+  code.append(comment, renderSnippet(QUICKSTART_SNIPPET, 'qs-code-line'));
+  return code;
 }
 
-function buildCodeCard(): HTMLElement {
-  const card = document.createElement('div');
-  card.className = 'qs-code-card';
-
-  const tab = document.createElement('div');
-  tab.className = 'qs-code-tab';
-  const fileIcon = document.createElement('span');
-  fileIcon.className = 'qs-code-tab-icon';
-  fileIcon.innerHTML = icon('terminal-dot', 13);
-  tab.append(fileIcon, document.createTextNode('boot.vite.ts'));
-
-  const body = document.createElement('div');
-  body.className = 'qs-code-body';
-  for (const line of QUICKSTART_SNIPPET) body.append(codeLine(line));
-
-  card.append(tab, body);
-  return card;
-}
-
-function buildCallout(): HTMLElement {
-  const callout = document.createElement('div');
-  callout.className = 'qs-callout';
-
-  const titleRow = document.createElement('h3');
-  titleRow.className = 'qs-callout-title';
-  const warnIcon = document.createElement('span');
-  warnIcon.className = 'qs-callout-icon';
-  warnIcon.innerHTML = icon('warning-triangle', 15);
-  const title = document.createElement('span');
-  title.className = 'qs-callout-heading';
-  title.textContent = 'Cross-origin isolation + ESM Workers';
-  titleRow.append(warnIcon, title);
-
-  const body = document.createElement('p');
-  body.className = 'qs-callout-body';
-  body.append(document.createTextNode('The runtime needs '));
-  const sab = document.createElement('code');
-  sab.className = 'qs-code-inline';
-  sab.textContent = 'SharedArrayBuffer';
-  body.append(sab, document.createTextNode('. Serve with '));
-  const coop = document.createElement('code');
-  coop.className = 'qs-code-inline qs-code-warn';
-  coop.textContent = 'COOP';
-  body.append(coop, document.createTextNode(' + '));
-  const coep = document.createElement('code');
-  coep.className = 'qs-code-inline qs-code-warn';
-  coep.textContent = 'COEP';
-  body.append(coep, document.createTextNode(' headers so '));
-  const coi = document.createElement('code');
-  coi.className = 'qs-code-inline';
-  coi.textContent = 'crossOriginIsolated === true';
-  body.append(coi, document.createTextNode('. In Vite also set '));
-  const workerFormat = document.createElement('code');
-  workerFormat.className = 'qs-code-inline';
-  workerFormat.textContent = "worker: { format: 'es' }";
-  body.append(
-    workerFormat,
-    document.createTextNode('. Header-less static hosts and IIFE Worker builds won’t boot it.'),
-  );
-
-  callout.append(titleRow, body);
-  return callout;
-}
-
-function buildLeafCard(): HTMLElement {
-  const card = document.createElement('div');
-  card.className = 'qs-leaf-card';
+function buildAside(): HTMLElement {
+  const aside = document.createElement('div');
+  aside.className = 'qs-aside';
 
   const heading = document.createElement('h3');
-  heading.className = 'qs-leaf-heading';
-  heading.textContent = 'Vite host wiring';
+  heading.className = 'qs-heading';
+  heading.textContent = '! CROSS-ORIGIN ISOLATION + ESM WORKERS';
 
-  const list = document.createElement('div');
-  list.className = 'qs-leaf-list';
-  const installs = ['npm i @riftydev/sdk @riftydev/runtime-js'];
-  for (const cmd of installs) {
+  const headers = document.createElement('div');
+  headers.className = 'qs-headers';
+  headers.setAttribute('role', 'region');
+  headers.setAttribute('aria-label', 'Required response headers');
+  for (const [name, value] of HEADERS) {
     const row = document.createElement('div');
-    row.className = 'qs-leaf-row';
-    const dollar = document.createElement('span');
-    dollar.className = 'qs-leaf-dollar';
-    dollar.textContent = '$';
-    row.append(dollar, document.createTextNode(` ${cmd}`));
-    list.append(row);
+    row.append(document.createTextNode(`${name}: `));
+    const val = document.createElement('span');
+    val.className = 'qs-header-value';
+    val.textContent = value;
+    row.append(val);
+    headers.append(row);
   }
 
+  const body = document.createElement('p');
+  body.className = 'qs-body';
+  body.textContent =
+    "The default runtime needs SharedArrayBuffer + Atomics for sync IPC, so the page must be cross-origin isolated with these headers (COEP require-corp also works). Header-less hosts such as GitHub Pages can’t serve that tier; Netlify (config checked in), Cloudflare Pages and Vercel can once they set them. The Worker must be a module build — in Vite set worker: { format: 'es' }.";
+
+  const noCoi = document.createElement('p');
+  noCoi.className = 'qs-body';
+  noCoi.textContent =
+    'Without isolation, createSandbox({ requireCrossOriginIsolation: false }) boots an explicit shared-memory-free tier: eval and files work, execSync throws a named NotImplementedError, child processes run same-realm. The no-COI install/build toolchain (ADR‑0375) is on main, unreleased.';
+
+  const install = document.createElement('div');
+  install.className = 'qs-install';
+  const dollar = document.createElement('span');
+  dollar.className = 'qs-dollar';
+  dollar.textContent = '$';
+  install.append(dollar, document.createTextNode(' npm i @riftydev/sdk @riftydev/runtime-js'));
+
   const note = document.createElement('p');
-  note.className = 'qs-leaf-note';
+  note.className = 'qs-note';
   note.textContent =
     'Declare runtime-js because host code imports its Worker entry. This example is eval/files only; preview also needs a separately bundled same-origin Service Worker.';
 
-  card.append(heading, list, note);
-  return card;
+  const leaf = document.createElement('div');
+  leaf.className = 'qs-leaf';
+  leaf.append(document.createTextNode('leaf packages run anywhere, no headers:'));
+  leaf.append(document.createElement('br'));
+  const leafList = document.createElement('span');
+  leafList.className = 'qs-leaf-list';
+  ['io', 'vfs', 'npm-client', 'shell', 'shadow-registry'].forEach((name, i) => {
+    if (i > 0) leafList.append(document.createTextNode(' · '));
+    const pkg = document.createElement('span');
+    pkg.className = 'qs-leaf-name';
+    pkg.textContent = name;
+    leafList.append(pkg);
+  });
+  leaf.append(leafList);
+
+  aside.append(heading, headers, body, noCoi, install, note, leaf);
+  return aside;
 }
 
-/** Quick start — production-buildable Vite host code and its deployment requirements. */
+/** 04 — production-buildable Vite host code and its deployment requirements. */
 export function renderQuickStart(): HTMLElement {
   const section = document.createElement('section');
   section.id = 'start';
-  section.className = 'qs';
-
-  const head = document.createElement('div');
-  head.className = 'qs-head';
-  const index = document.createElement('span');
-  index.className = 'qs-index';
-  index.textContent = '04';
-  const label = document.createElement('h2');
-  label.className = 'qs-label';
-  label.textContent = 'Quick start';
-  head.append(index, label);
-
+  section.className = 'sec qs';
+  const heading = document.createElement('h2');
+  heading.className = 'visually-hidden';
+  heading.textContent = 'Quick start';
   const grid = document.createElement('div');
   grid.className = 'qs-grid';
-
-  const rightCol = document.createElement('div');
-  rightCol.className = 'qs-right';
-  rightCol.append(buildCallout(), buildLeafCard());
-
-  grid.append(buildCodeCard(), rightCol);
-
-  section.append(head, grid);
+  grid.append(buildCode(), buildAside());
+  section.append(heading, grid);
   return section;
 }
