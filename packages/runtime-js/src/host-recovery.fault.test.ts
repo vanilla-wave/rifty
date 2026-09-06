@@ -97,7 +97,11 @@ describe('no-COI recovery ownership', () => {
       }),
     );
     const nativeSlice = NativeBytes.prototype.slice;
-    vi.spyOn(NativeBytes.prototype, 'slice').mockImplementation(function (start, end) {
+    vi.spyOn(NativeBytes.prototype, 'slice').mockImplementation(function (
+      this: Uint8Array,
+      start,
+      end,
+    ) {
       const result = nativeSlice.call(this, start, end);
       copied += result.byteLength;
       return result;

@@ -650,8 +650,8 @@ describe('createSandbox', () => {
   it.each(['boot', 'restore', 'beforeStart'] as const)(
     'retains recovery across replacement %s failure and a later retry',
     async (fault) => {
-      type HostMessage = import('../../runtime-js/src/protocol.ts').ToolchainHostMessage;
-      type WorkerMessage = import('../../runtime-js/src/protocol.ts').ToolchainWorkerMessage;
+      type HostMessage = import('@riftydev/runtime-js/internal').ToolchainHostMessage;
+      type WorkerMessage = import('@riftydev/runtime-js/internal').ToolchainWorkerMessage;
       const restores: unknown[] = [];
       let generations = 0;
       class RecoveryWorker {

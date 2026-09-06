@@ -41,3 +41,21 @@ failure and two subsequent retries against the real SDK/host.
 Strengthened browser RED (same command): 5 assertion failures. Worker mirror
 identity false (expected true); install 59,056,136 vs 29,528,068; edit
 29,528,068 vs 0; restore 269 files vs 0; restart 88,584,213 vs 59,056,142.
+
+## GREEN and mutation proof
+
+61 host/SDK tests passed after implementation. Recovery fixtures reduced from
+1 MiB to 1 KiB to avoid expensive deep-array comparisons; allocation assertions
+still discriminate a single untouched byte. Typechecks for runtime-js and SDK
+pass after annotating spy `this` and importing protocol types via the package.
+
+Chromium recovery cost test passed: install page copy 29,528,068 bytes (one
+independently observed Worker tree), source edit 0 untouched bytes, same-OPFS
+restore 0 files, restart 59,056,142 bytes (two detached boundary copies).
+Worker outgoing file data has the same identity as actual OPFS mirror bytes.
+
+C1 mutation recheck: Vitest pre-transform adds `.map(file => ({...file,
+data: file.data.slice()}))` after the host's recovery file filter; command
+`pnpm exec vitest run --workspace /tmp/rifty-recovery-slice-mutant.workspace.mjs -t 'copies only the written bytes'`
+→ 1 failed / 7 skipped, expected 3, received 1027. No tracked code changed.
+The strengthened test kills the reviewer's demonstrated full-copy bypass.
