@@ -103,3 +103,10 @@ return {...file, data}; })`. `pnpm exec vitest run --workspace
 → 1 failed, 9 skipped, expected 3, received 1027. No tracked source mutation.
 Constructor+slice+sized-allocation counters keep the real copy-cost scenario
 GREEN while rejecting both demonstrated full-copy mutants.
+
+## Closure
+
+2026-09-06 — re-chart after runtime-js/no-coi-recovery-copy (final-green PASS @ 16b1e93de15a93490a0fc598e626e3e1ba8de4a4): 15/15 coverage pass; 0 blockers, concerns or residuals; round 1/2. Full committed pr:check 24/24, Chromium 41/41, host/SDK 63/63. Completed standalone contract deleted; history retains it at the reviewed SHA.
+
+The separate static OPFS preload-failure finding remains an independent draft;
+no preload correctness repair or latency guarantee is claimed by this unit.
