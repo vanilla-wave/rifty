@@ -128,7 +128,7 @@ describe('no-COI recovery ownership', () => {
       const { runtime, peer } = await boot(target);
       const sent = await restore(runtime, peer, state);
       expect(sent.files).toEqual(carriesFiles ? state.files : []);
-      expect(runtime.snapshotToolchainState()).toEqual(state);
+      expect(runtime.snapshotToolchainState()).toEqual({ ...state, vfsBackend: target });
       // An optimized OPFS wire must not poison the next memory recovery.
       const replacement = await boot('memory');
       const retained = runtime.snapshotToolchainState();

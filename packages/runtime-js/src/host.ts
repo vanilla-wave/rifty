@@ -548,14 +548,14 @@ function createRuntimeController(
     },
     async restoreToolchainState(state) {
       const validated = validateActivationState(state, 'toolchain restore activation state');
-      await toolchainReady;
+      const backend = await toolchainReady;
       const input =
-        toolchainBackend === 'opfs' && validated.vfsBackend === 'opfs'
+        backend === 'opfs' && validated.vfsBackend === 'opfs'
           ? { ...validated, files: [] }
           : validated;
       const result = await requestToolchain({ id: nextId++, op: 'restore', input });
       if (!result.ok) throw deserializeError(result.error);
-      activationState = validated;
+      activationState = Object.freeze({ ...validated, vfsBackend: backend });
     },
   };
 }

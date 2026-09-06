@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Successful no-COI restore labels recovery with its current backend, preserving acknowledged bytes through repeated OPFS/memory transitions.
+
 - No-COI writes reuse untouched recovery bytes; same-OPFS restore omits file payloads while preserving detached snapshots and backend-flip recovery.
 
 ### Added
