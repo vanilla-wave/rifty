@@ -63,7 +63,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'standalone VFS init',
     realm: 'page',
     compat: 'ok',
-    role: "Generic createSandbox() selects the caller-realm VFS backend: PAGE callers get memory because sync OPFS is Worker-only; vfs.reason appears only on a real OPFS init failure. The runtime Worker owns its own backend; the no-COI toolchain tier skips page init and reports that Worker's backend.",
+    role: 'Generic createSandbox() selects the caller-realm VFS backend: PAGE callers get memory because sync OPFS is Worker-only; vfs.reason appears only on a real OPFS init failure. The runtime Worker owns its own backend; the no-COI toolchain tier skips page init and reports that Worker’s backend.',
   },
   terminal: {
     label: 'terminal',
@@ -75,7 +75,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'shell',
     realm: 'worker',
     compat: 'ok',
-    role: 'Bash-flavoured shell. Pure-JS coreutils over the VFS; .bin PATH; PTY.',
+    role: 'Bash-flavored shell. Pure-JS coreutils over the VFS; .bin PATH; PTY.',
   },
   npm: {
     label: 'npm-client',
@@ -147,7 +147,7 @@ export const NODES: Record<NodeId, NodeDef> = {
     label: 'preview iframe',
     realm: 'iframe',
     compat: 'ok',
-    role: "The same-origin preview pane. Loads /preview/<port>/ through the page's Service Worker and renders the in-tab server response.",
+    role: 'The same-origin preview pane. Loads /preview/<port>/ through the page’s Service Worker and renders the in-tab server response.',
   },
   registry: {
     label: 'registry proxy',
@@ -156,44 +156,6 @@ export const NODES: Record<NodeId, NodeDef> = {
     role: 'npm egress through a configured CORS/CORP registry proxy; local development uses a same-origin path.',
   },
 };
-
-export interface RealmDef {
-  id: Realm;
-  name: string;
-  sub: string;
-  nodes: NodeId[];
-}
-
-export const REALMS: RealmDef[] = [
-  {
-    id: 'page',
-    name: 'PAGE',
-    sub: 'UI · public façades',
-    nodes: ['playground', 'workbench', 'sdk', 'sandboxvfs', 'terminal'],
-  },
-  {
-    id: 'worker',
-    name: 'WORKERS',
-    sub: 'owner · supervised children',
-    nodes: [
-      'owner',
-      'shell',
-      'npm',
-      'kernel',
-      'vfs',
-      'net',
-      'runtimejs',
-      'runtimewasi',
-      'esbuild',
-      'vite',
-      'httpserver',
-      'sab',
-    ],
-  },
-  { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', nodes: ['sw'] },
-  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'same-origin', nodes: ['preview'] },
-  { id: 'ext', name: 'EXTERNAL', sub: 'configured egress', nodes: ['registry'] },
-];
 
 export interface EdgeDef {
   from: NodeId;
@@ -261,7 +223,7 @@ export const SCN: Record<ScenarioId, Scenario> = {
         node: 'sandboxvfs',
         t: 'Select the caller-realm VFS backend; PAGE gets memory because sync OPFS is Worker-only',
       },
-      { node: 'sw', t: 'Register the service worker (skippable; a failure is non-fatal)' },
+      { node: 'sw', t: 'Register the Service Worker (skippable; a failure is non-fatal)' },
       {
         node: 'runtimejs',
         t: 'Spawn a dedicated runtime Worker; return Sandbox while Sandbox.runtime reports its lifecycle',
@@ -270,7 +232,7 @@ export const SCN: Record<ScenarioId, Scenario> = {
   },
   npm: {
     label: 'npm install express',
-    cmd: 'npm install express',
+    cmd: '$ npm install express',
     steps: [
       { node: 'terminal', t: 'Submit npm install express through the Workbench terminal' },
       { node: 'owner', t: 'The workspace owner executes the shell command' },
@@ -288,14 +250,14 @@ export const SCN: Record<ScenarioId, Scenario> = {
   },
   express: {
     label: 'Express server + live preview',
-    cmd: 'node server.js',
+    cmd: '$ node server.js',
     steps: [
       { node: 'runtimejs', t: 'node server.js runs in a supervised child — app.listen(3000)' },
       { node: 'net', t: 'http.createServer publishes port 3000 to the virtual port registry' },
       { node: 'preview', t: 'The preview iframe requests /preview/3000/' },
       {
         node: 'sw',
-        t: 'The service worker intercepts the fetch and resolves the current page registration',
+        t: 'The Service Worker intercepts the fetch and resolves the current page registration',
       },
       {
         node: 'workbench',
@@ -310,17 +272,17 @@ export const SCN: Record<ScenarioId, Scenario> = {
   },
   vite: {
     label: 'Vite dev server + HMR',
-    cmd: 'vite  (then edit src/main.js)',
+    cmd: '$ vite',
     steps: [
       { node: 'playground', t: 'Edit src/main.js in Monaco and save' },
-      { node: 'vite', t: 'The real Vite 7 worker re-transforms the changed module' },
+      { node: 'vite', t: 'The real Vite 7 Worker re-transforms the changed module' },
       {
         node: 'esbuild',
         t: 'Vite 7 uses the registry-attested esbuild JS adapter; there is no host WASM URL',
       },
       {
         node: 'net',
-        t: "HMR payload crosses the BroadcastChannel WS bridge as decoded messages; RFC6455 framing stays in-Worker between Vite's ws server and the virtual upgrade socket",
+        t: 'HMR payload crosses the BroadcastChannel WS bridge as decoded messages; RFC6455 framing stays in-Worker between Vite’s ws server and the virtual upgrade socket',
       },
       {
         node: 'preview',
@@ -346,7 +308,7 @@ export const SCN: Record<ScenarioId, Scenario> = {
       },
       {
         node: 'vfs',
-        t: "Guest syscalls use that Worker's realm-local synchronous mirror and supplied preopen mappings",
+        t: 'Guest syscalls use that Worker’s realm-local synchronous mirror and supplied preopen mappings',
       },
       {
         node: 'runtimewasi',
@@ -389,20 +351,18 @@ export interface ZoneDef {
   sub: string;
   x: number;
   w: number;
-  col: string;
 }
 
 export const ZONES: ZoneDef[] = [
-  { id: 'page', name: 'PAGE', sub: 'UI · public façades', x: 0, w: 270, col: '#7AA2FF' },
+  { id: 'page', name: 'PAGE', sub: 'UI · public façades', x: 0, w: 270 },
   {
     id: 'worker',
     name: 'WORKERS',
     sub: 'owner · supervised children',
     x: 270,
     w: 480,
-    col: '#3BD6C6',
   },
-  { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', x: 750, w: 120, col: '#B58BFF' },
-  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'same-origin', x: 870, w: 170, col: '#F2B95C' },
-  { id: 'ext', name: 'EXTERNAL', sub: 'configured egress', x: 1040, w: 140, col: '#8A93A6' },
+  { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', x: 750, w: 120 },
+  { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'same-origin', x: 870, w: 170 },
+  { id: 'ext', name: 'EXTERNAL', sub: 'configured egress', x: 1040, w: 140 },
 ];

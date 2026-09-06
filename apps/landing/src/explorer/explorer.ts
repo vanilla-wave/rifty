@@ -29,7 +29,7 @@ const EDGE_GAP = 6;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 const HINT =
-  '// selected runtime topology — solid = import · arrow = data · dashed = control · dotted = ipc';
+  '// selected runtime topology — solid = import · arrow = data · dashed = control · dotted = IPC';
 const IDLE_CAPTION =
   'Hover a module to see its links; click to pin its description. Pick a scenario to follow its narrated steps.';
 
@@ -67,7 +67,14 @@ const POS: Record<NodeId, readonly [number, number]> = {
 };
 
 const ADJ = buildAdjacency(EDGES);
-const NODE_IDS = Object.keys(NODES) as NodeId[];
+const ZONE_ORDER = new Map<Realm, number>(ZONES.map((zone, i) => [zone.id, i]));
+// Tab order walks each realm column top-down instead of data order.
+const NODE_IDS = (Object.keys(NODES) as NodeId[]).sort(
+  (a, b) =>
+    (ZONE_ORDER.get(NODES[a].realm) ?? 0) - (ZONE_ORDER.get(NODES[b].realm) ?? 0) ||
+    POS[a][1] - POS[b][1] ||
+    POS[a][0] - POS[b][0],
+);
 const ZONE_NAME = new Map<Realm, string>(ZONES.map((zone) => [zone.id, zone.name]));
 
 type NodeState = 'cur' | 'nb' | 'tc' | 'dim' | null;
@@ -228,7 +235,7 @@ function buildNode(id: NodeId): HTMLElement {
   node.dataset.node = id;
   node.setAttribute('role', 'button');
   node.tabIndex = 0;
-  node.setAttribute('aria-label', def.label);
+  node.setAttribute('aria-label', def.compat === 'warn' ? `${def.label} (partial)` : def.label);
   node.setAttribute('aria-pressed', 'false');
   node.style.left = `${x}px`;
   node.style.top = `${y}px`;
@@ -275,8 +282,6 @@ export function mountExplorer(root: HTMLElement): () => void {
 
   // ---- status ----
   const status = el('div', 'exp-status');
-  status.setAttribute('aria-live', 'polite');
-  status.setAttribute('aria-atomic', 'true');
   const statusRow = el('div', 'exp-st-row');
   const title = el('span', 'exp-st-title');
   title.dataset.scnTitle = '';
@@ -284,6 +289,8 @@ export function mountExplorer(root: HTMLElement): () => void {
   num.dataset.stepNum = '';
   statusRow.append(title, num);
   const caption = el('div', 'exp-st-cap');
+  // Only the caption is live: the title + command would be re-read on every tick.
+  caption.setAttribute('aria-live', 'polite');
   caption.dataset.stepCaption = '';
   const progress = el('div', 'exp-progress');
   progress.setAttribute('aria-hidden', 'true');
@@ -345,6 +352,12 @@ export function mountExplorer(root: HTMLElement): () => void {
     const id = nodeIdOf(e.target);
     if (id !== null) togglePin(id);
   });
+  // Sequential Tab focus does not scroll a partially visible node into the clamped board.
+  world.addEventListener('focusin', (e) => {
+    if (nodeIdOf(e.target) !== null && e.target instanceof HTMLElement) {
+      e.target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  });
   world.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const id = nodeIdOf(e.target);
@@ -403,7 +416,7 @@ export function mountExplorer(root: HTMLElement): () => void {
     }
     const s = SCN[scn];
     title.textContent = s.label;
-    num.textContent = `${state.step + 1} / ${s.steps.length} · $ ${s.cmd}`;
+    num.textContent = `${state.step + 1} / ${s.steps.length} · ${s.cmd}`;
     caption.textContent = s.steps[state.step]?.t ?? '';
     fill.style.width = `${((state.step + 1) / s.steps.length) * 100}%`;
   }
@@ -476,9 +489,9 @@ export function mountExplorer(root: HTMLElement): () => void {
     }
   }
   layoutEdges();
-  let fontsSettled = true;
+  let mounted = true;
   void document.fonts.ready.then(() => {
-    if (fontsSettled) layoutEdges();
+    if (mounted) layoutEdges();
   });
 
   // ---- responsive scale ----
@@ -499,7 +512,7 @@ export function mountExplorer(root: HTMLElement): () => void {
 
   return () => {
     stop();
-    fontsSettled = false;
+    mounted = false;
     resize.disconnect();
     host.remove();
   };

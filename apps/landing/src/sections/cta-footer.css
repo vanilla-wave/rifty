@@ -34,6 +34,7 @@
 }
 
 .cta-copy-dollar {
+  margin-right: 1ch; /* inline-flex swallows the text node's leading space */
   color: var(--t-meta);
 }
 
@@ -81,6 +82,7 @@
 
   .cta-copy {
     max-width: 100%;
-    font-size: 12.5px;
+    padding: 12px 14px;
+    font-size: 12px;
   }
 }

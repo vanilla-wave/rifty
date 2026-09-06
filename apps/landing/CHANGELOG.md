@@ -47,6 +47,23 @@
   requested explicitly so the two rasterize alike; the section index drops a stray 0.04em
   tracking. Self-hosted files are the same Google Fonts builds the mock loads (Archivo Black v23,
   Inter v20, Roboto Mono v31).
+- Polish sweep (copy, a11y, links, source hygiene; each fix reproduced and confirmed
+  independently): the explorer status shows `$` only before real shell commands, chips and
+  ceiling chips are 44px on phones, keyboard focus scrolls a clamped board to the focused node,
+  Tab walks nodes column by column, partial nodes and ceiling chips carry their status in the
+  accessible name, only the step caption is a live region, Escape closes the drawer from anywhere,
+  the marquee pauses on hover/focus, overflowing code panels get the lime focus ring and a name,
+  playground links keep their visible label in the accessible name. Copy: "Service Worker" /
+  "Worker" casing, curly apostrophes, `@riftydev/sdk fronts…`, US spelling, "leaf packages",
+  `IPC`, no orphaned separators (NBSP) or split identifiers (`ADR‑0375`, install commands never
+  wrap mid-name), the CTA pill keeps its `$ ` gap, the SDK-docs arrow is decorative. Loading: the
+  three fonts are preloaded, the display fallback stack matches the static shell (one swap, not
+  two), and the explorer reserves its mounted height per width band (±20px instead of −102px)
+  so anchors below it land where the page settles; the apple-touch-icon is square like the
+  favicon. Hygiene: dead `HERO_SNIPPET` and `REALMS` exports removed, duplicated realm/accent/
+  warn/white alphas resolved to tokens (`--ac-hover`, `--ac-dot-glow`, `--t-code`, `--box-pad`
+  in tokens.css), the unstyled `.cta-panel` wrapper dropped, a stale sticky-nav
+  `scroll-margin-top` removed, the shared contrast helper moved to `tests/landing/contrast.ts`.
 - Accessibility kept over pixel fidelity where they conflicted: muted text that the handoff set at
   0.4/0.35 alpha renders at 0.5 (WCAG AA 4.5:1 on `#15171D`), decorative 0.35 labels stay
   `aria-hidden`; dimmed explorer nodes keep opacity 1 and readable labels; the honest-ceiling

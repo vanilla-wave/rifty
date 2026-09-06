@@ -66,10 +66,7 @@ function makeButton(className: string, href: string, label: string): HTMLAnchorE
   return link;
 }
 
-function buildPanel(): HTMLElement {
-  const panel = document.createElement('div');
-  panel.className = 'cta-panel';
-
+function appendPanel(footer: HTMLElement): void {
   const h2 = document.createElement('h2');
   h2.className = 'cta-h2';
   h2.append(document.createTextNode('Run Node'), document.createElement('br'));
@@ -93,21 +90,20 @@ function buildPanel(): HTMLElement {
   const row = document.createElement('div');
   row.className = 'cta-buttons';
   const play = makeButton('btn btn-primary', playgroundHref, playgroundLabel);
-  play.setAttribute('aria-label', 'Open the playground');
+  play.setAttribute('aria-label', `Open the playground — ${playgroundLabel}`);
   const docs = makeButton('btn btn-outline', sdkDocsUrl, 'SDK DOCS');
   docs.setAttribute('aria-label', 'Read SDK docs');
   const github = makeButton('btn btn-outline', repositoryUrl, 'GITHUB');
   github.setAttribute('aria-label', 'GitHub repository');
   row.append(play, docs, github);
 
-  panel.append(h2, copy, feedback, row);
-  return panel;
+  footer.append(h2, copy, feedback, row);
 }
 
 function buildFooter(): HTMLElement {
   const footer = document.createElement('p');
   footer.className = 'cta-footer';
-  footer.textContent = `${siteLabel} — OPEN, SELF-HOSTABLE, BROWSER-LOCAL RUNTIME INFRASTRUCTURE · ${RELEASE_STAMP} · ${MILESTONE_STAMP} · MIT`;
+  footer.textContent = `${siteLabel} — OPEN, SELF-HOSTABLE, BROWSER-LOCAL RUNTIME INFRASTRUCTURE · ${RELEASE_STAMP} · ${MILESTONE_STAMP} · MIT`;
   return footer;
 }
 
@@ -115,6 +111,7 @@ function buildFooter(): HTMLElement {
 export function renderCtaFooter(): HTMLElement {
   const footer = document.createElement('footer');
   footer.className = 'cta';
-  footer.append(buildPanel(), buildFooter());
+  appendPanel(footer);
+  footer.append(buildFooter());
   return footer;
 }

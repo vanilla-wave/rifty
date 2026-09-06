@@ -46,7 +46,7 @@
 .gauge-vent {
   top: auto;
   bottom: 10px;
-  color: rgba(199, 240, 90, 0.75);
+  color: rgb(from var(--ac) r g b / 0.75);
 }
 
 .gauge-dot {
@@ -57,7 +57,7 @@
   height: 5px;
   border-radius: 50%;
   background: var(--ac);
-  box-shadow: 0 0 8px rgba(199, 240, 90, 0.8);
+  box-shadow: 0 0 8px var(--ac-dot-glow);
 }
 
 @media (max-width: 900px) {

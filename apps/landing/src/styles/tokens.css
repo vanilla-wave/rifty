@@ -39,9 +39,11 @@
 :root {
   /* accent */
   --ac: #c7f05a;
+  --ac-hover: #d6f57a;
   --ac-ink: #15170b;
-  --ac-glow: rgba(199, 240, 90, 0.35);
-  --ac-glow-strong: rgba(199, 240, 90, 0.9);
+  --ac-glow: rgb(from var(--ac) r g b / 0.35);
+  --ac-glow-strong: rgb(from var(--ac) r g b / 0.9);
+  --ac-dot-glow: rgb(from var(--ac) r g b / 0.8);
 
   /* surfaces */
   --bg: #15171d;
@@ -70,28 +72,23 @@
   --no: #ff6b6b;
   --ok: #8fd98f;
 
-  /* realm colors */
-  --realm-page: #7aa2ff;
-  --realm-worker: #3bd6c6;
-  --realm-sw: #b58bff;
-  --realm-iframe: #f2b95c;
-  --realm-ext: #8a93a6;
-
   /* code syntax */
   --syn-kw: #c79bf0;
   --syn-str: #9dd98f;
   --syn-fn: #f2f4f8;
   --syn-punc: rgba(255, 255, 255, 0.82);
-  --syn-com: rgba(255, 255, 255, 0.5);
+  --t-code: rgba(255, 255, 255, 0.82);
 
   /* type */
-  --font-display: "Archivo Black", "Inter", system-ui, sans-serif;
+  --font-display: "Archivo Black", "Arial Black", Impact, sans-serif;
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Roboto Mono", ui-monospace, "SF Mono", "Menlo", monospace;
 
   /* layout */
   --maxw: 1080px;
   --gutter: 40px;
+  /* every content box sits on the gutter line and insets its content by --box-pad */
+  --box-pad: 20px;
   --gauge-w: 60px;
 }
 

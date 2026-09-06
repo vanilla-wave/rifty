@@ -1,5 +1,4 @@
-import { MILESTONE_LONG, RELEASE_STAMP } from '../landing-config';
-import { buildPlaygroundHref } from '../playground-url';
+import { MILESTONE_LONG, RELEASE_STAMP, playgroundHref } from '../landing-config';
 import './hero.css';
 
 const MARQUEE = [
@@ -32,7 +31,8 @@ function buildBody(): HTMLElement {
 
   const eyebrow = document.createElement('p');
   eyebrow.className = 'hero-eyebrow';
-  eyebrow.textContent = `OPEN RUNTIME · SELF-HOSTABLE — ${RELEASE_STAMP} · ${MILESTONE_LONG}`;
+  // NBSP around separators: a line break never lands next to a lone dot.
+  eyebrow.textContent = `OPEN RUNTIME · SELF-HOSTABLE — ${RELEASE_STAMP} · ${MILESTONE_LONG}`;
 
   const h1 = document.createElement('h1');
   h1.className = 'hero-h1';
@@ -59,7 +59,7 @@ function buildBody(): HTMLElement {
   cta.className = 'hero-cta';
   const primary = document.createElement('a');
   primary.className = 'btn btn-primary';
-  primary.href = buildPlaygroundHref(import.meta.env.VITE_RIFTY_PLAYGROUND_URL);
+  primary.href = playgroundHref;
   primary.textContent = 'RUN SOMETHING REAL';
   const secondary = document.createElement('a');
   secondary.className = 'btn btn-outline';

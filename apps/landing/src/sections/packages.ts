@@ -42,13 +42,18 @@ export function renderPackages(): HTMLElement {
   intro.className = 'sec-intro';
   intro.append(
     document.createTextNode(
-      'npm i @riftydev/sdk fronts twelve runtime layers on subpaths (@riftydev/sdk/vfs … /ts-language-service); each is also its own package. Workbench, shadow-registry and eddy ship standalone. Sixteen @riftydev names, all ESM with .d.ts, released in lockstep. ',
+      '@riftydev/sdk fronts twelve runtime layers on subpaths (@riftydev/sdk/vfs … /ts-language-service); each is also its own package. Workbench, shadow-registry and eddy ship standalone. Sixteen @riftydev names, all ESM with .d.ts, released in lockstep. ',
     ),
   );
   const docs = document.createElement('a');
   docs.className = 'packages-docs';
   docs.href = sdkDocsUrl;
-  docs.textContent = 'SDK DOCS ↗';
+  docs.append(document.createTextNode('SDK DOCS '));
+  const arrow = document.createElement('span');
+  arrow.className = 'arrow';
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.textContent = '↗';
+  docs.append(arrow);
   intro.append(docs);
 
   const grid = document.createElement('ul');

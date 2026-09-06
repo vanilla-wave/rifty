@@ -1,19 +1,50 @@
-/* Reserve the mounted explorer's height only while the chunk is still loading:
-   no layout shift on mount, no dead space below the inspector afterwards. */
+/* Reserve the mounted explorer's height while the chunk loads, so anchors below
+   #arch land where the mounted page puts them and nothing shifts on mount.
+   Height = chrome (chip bar + status + inspector; grows as chips wrap on narrow
+   screens — measured bands) + board 660px × clamp(0.62, width/1180, 1). */
+.arch {
+  container-type: inline-size;
+  --exp-chrome: 173px;
+}
+
 #explorer-root:empty {
-  min-height: 740px;
+  min-height: calc(var(--exp-chrome) + clamp(409px, 55.93cqw, 660px));
+}
+
+@media (max-width: 899px) {
+  .arch {
+    --exp-chrome: 229px;
+  }
+}
+
+@media (max-width: 740px) {
+  .arch {
+    --exp-chrome: 250px;
+  }
+}
+
+@media (max-width: 500px) {
+  .arch {
+    --exp-chrome: 331px;
+  }
+}
+
+@media (max-width: 380px) {
+  .arch {
+    --exp-chrome: 390px;
+  }
 }
 
 /* ---- honest ceiling ---- */
 .ceil {
   margin-top: 20px;
-  border: var(--rule-w) solid rgba(224, 164, 92, 0.35);
+  border: var(--rule-w) solid rgb(from var(--warn) r g b / 0.35);
 }
 
 .ceil-head {
   margin: 0;
   padding: 10px var(--box-pad);
-  border-bottom: var(--rule-w) solid rgba(224, 164, 92, 0.35);
+  border-bottom: var(--rule-w) solid rgb(from var(--warn) r g b / 0.35);
   font-family: var(--font-mono);
   font-weight: 400;
   font-size: 11px;
@@ -34,7 +65,7 @@
   gap: 6px;
   min-height: 32px;
   padding: 5px 10px;
-  border: 1px solid rgba(224, 164, 92, 0.4);
+  border: 1px solid rgb(from var(--warn) r g b / 0.4);
   background: transparent;
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -43,20 +74,20 @@
 }
 
 .ceil-chip-no {
-  border-color: rgba(255, 107, 107, 0.4);
+  border-color: rgb(from var(--no) r g b / 0.4);
 }
 
 .ceil-chip:hover,
 .ceil-chip[aria-pressed="true"] {
   border-color: var(--warn);
-  background: rgba(224, 164, 92, 0.08);
+  background: rgb(from var(--warn) r g b / 0.08);
   color: var(--t1);
 }
 
 .ceil-chip-no:hover,
 .ceil-chip-no[aria-pressed="true"] {
   border-color: var(--no);
-  background: rgba(255, 107, 107, 0.08);
+  background: rgb(from var(--no) r g b / 0.08);
 }
 
 .ceil-glyph {
@@ -74,4 +105,10 @@
   font-size: 11.5px;
   line-height: 1.55;
   color: var(--t-lead);
+}
+
+@media (max-width: 600px) {
+  .ceil-chip {
+    min-height: 44px;
+  }
 }

@@ -9,10 +9,6 @@ html {
   scroll-behavior: smooth;
 }
 
-section[id] {
-  scroll-margin-top: 64px;
-}
-
 body {
   margin: 0;
   background: var(--bg);
@@ -37,6 +33,12 @@ button {
 :where(a, button, [role="button"][tabindex]):focus-visible {
   outline: 2px solid var(--ac);
   outline-offset: 3px;
+}
+
+/* overflowing code panels are keyboard scrollers: same ring, inset */
+:where(.qs-code, .qs-headers, .term):focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: -2px;
 }
 
 ::selection {
@@ -72,12 +74,6 @@ button {
 .page-column {
   max-width: var(--maxw);
   margin: 0 auto;
-}
-
-/* Every content box sits on the 40px text line and insets its content by --box-pad,
-   so section labels, box rules and box text share one vertical rhythm. */
-:root {
-  --box-pad: 20px;
 }
 
 /* shared section-label pattern used by 01/02/03/04 */
@@ -178,8 +174,8 @@ button {
 }
 
 .btn-primary:hover {
-  background: #d6f57a;
-  border-color: #d6f57a;
+  background: var(--ac-hover);
+  border-color: var(--ac-hover);
 }
 
 .btn-outline {

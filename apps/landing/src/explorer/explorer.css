@@ -166,7 +166,7 @@
 }
 
 .exp-mk-grey {
-  fill: rgba(255, 255, 255, 0.5);
+  fill: var(--t-meta);
 }
 
 .exp-mk-lime {
@@ -232,7 +232,7 @@
 
 .exp-node-dim {
   --bd: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--t-meta);
   border-left-color: rgb(from var(--realm) r g b / 0.35);
 }
 
@@ -329,4 +329,10 @@
 .exp-hint {
   font-size: 10.5px;
   color: var(--t-deco-faint);
+}
+
+@media (max-width: 600px) {
+  .exp-chip {
+    min-height: 44px;
+  }
 }

@@ -1,13 +1,13 @@
-// Honest ceiling — gaps that loud-throw rather than fake success. Rendered above
-// the fold by sections/arch.ts, so it lives outside the deferred explorer chunk.
+// Honest ceiling — gaps that loud-throw rather than fake success. Rendered by
+// sections/arch.ts in the main chunk (not the deferred explorer chunk).
 
-export type Compat = 'warn' | 'no';
+export type CeilCompat = 'warn' | 'no';
 
 export interface CeilDef {
   readonly id: string;
   readonly label: string;
   readonly chip: string;
-  readonly compat: Compat;
+  readonly compat: CeilCompat;
   readonly role: string;
 }
 
@@ -31,7 +31,7 @@ export const CEIL: readonly CeilDef[] = [
     label: 'native modules',
     chip: 'native modules',
     compat: 'no',
-    role: 'cpu-pinned non-WASM aborts with ENATIVEUNSUPPORTED. e.g. better-sqlite3 → use sql.js.',
+    role: 'Native (non-WASM) addons abort with ENATIVEUNSUPPORTED — e.g. better-sqlite3 → use sql.js.',
   },
   {
     id: 'c_sqlite',

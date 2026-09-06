@@ -29,7 +29,7 @@ function makePlaygroundLink(className: string): HTMLAnchorElement {
   link.className = className;
   link.href = playgroundHref;
   link.textContent = playgroundLabel;
-  link.setAttribute('aria-label', 'Open the playground');
+  link.setAttribute('aria-label', `Open the playground — ${playgroundLabel}`);
   return link;
 }
 
@@ -69,6 +69,7 @@ export function renderNav(): HTMLElement {
 
   const mobilePlay = makePlaygroundLink('nav-mobile-play');
   mobilePlay.textContent = 'PLAY ↗';
+  mobilePlay.setAttribute('aria-label', 'Open the playground — PLAY');
 
   const menuButton = document.createElement('button');
   menuButton.type = 'button';
@@ -105,12 +106,14 @@ export function renderNav(): HTMLElement {
     const link = event.target.closest<HTMLAnchorElement>('a');
     if (link?.getAttribute('href')?.startsWith('#')) setOpen(false);
   });
-  header.addEventListener('keydown', (event) => {
+  // Escape closes the drawer wherever focus sits (it may have tabbed past the drawer).
+  const onEscape = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && !panel.hidden) {
       setOpen(false);
       menuButton.focus();
     }
-  });
+  };
+  document.addEventListener('keydown', onEscape);
 
   const mobileViewport = window.matchMedia('(max-width: 880px)');
   mobileViewport.addEventListener('change', (event) => {

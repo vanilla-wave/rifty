@@ -109,7 +109,7 @@
 .sonar-ring {
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(199, 240, 90, 0.4);
+  border: 1px solid rgb(from var(--ac) r g b / 0.4);
   border-radius: 50%;
   animation: rfPing 7s linear infinite;
 }
@@ -131,7 +131,7 @@
   margin: -3px 0 0 -3px;
   border-radius: 50%;
   background: var(--ac);
-  box-shadow: 0 0 12px rgba(199, 240, 90, 0.8);
+  box-shadow: 0 0 12px var(--ac-dot-glow);
   animation: rfBlink 2.2s steps(1) infinite;
 }
 
@@ -147,12 +147,18 @@
   gap: 40px;
   width: max-content;
   margin: 0;
-  padding: 0 40px;
+  padding: 0 var(--gutter);
   list-style: none;
   font-family: var(--font-mono);
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--t-meta);
   animation: rfMarquee 34s linear infinite;
+}
+
+/* moving text must be pausable (WCAG 2.2.2) */
+.marquee:hover .marquee-track,
+.marquee:focus-within .marquee-track {
+  animation-play-state: paused;
 }
 
 .marquee-item {

@@ -11,6 +11,8 @@ const HEADERS: ReadonlyArray<readonly [name: string, value: string]> = [
 function buildCode(): HTMLElement {
   const code = document.createElement('div');
   code.className = 'qs-code';
+  code.setAttribute('role', 'region');
+  code.setAttribute('aria-label', 'Quick start code');
   const comment = document.createElement('div');
   comment.className = 'qs-code-comment';
   comment.textContent = '// 04 — quick start (boot.vite.ts)';
@@ -28,6 +30,8 @@ function buildAside(): HTMLElement {
 
   const headers = document.createElement('div');
   headers.className = 'qs-headers';
+  headers.setAttribute('role', 'region');
+  headers.setAttribute('aria-label', 'Required response headers');
   for (const [name, value] of HEADERS) {
     const row = document.createElement('div');
     row.append(document.createTextNode(`${name}: `));
@@ -46,7 +50,7 @@ function buildAside(): HTMLElement {
   const noCoi = document.createElement('p');
   noCoi.className = 'qs-body';
   noCoi.textContent =
-    'Without isolation, createSandbox({ requireCrossOriginIsolation: false }) boots an explicit shared-memory-free tier: eval and files work, execSync throws a named NotImplementedError, child processes run same-realm. The no-COI install/build toolchain (ADR-0375) is on main, unreleased.';
+    'Without isolation, createSandbox({ requireCrossOriginIsolation: false }) boots an explicit shared-memory-free tier: eval and files work, execSync throws a named NotImplementedError, child processes run same-realm. The no-COI install/build toolchain (ADR‑0375) is on main, unreleased.';
 
   const install = document.createElement('div');
   install.className = 'qs-install';
@@ -62,11 +66,17 @@ function buildAside(): HTMLElement {
 
   const leaf = document.createElement('div');
   leaf.className = 'qs-leaf';
-  leaf.append(document.createTextNode('leaf pkgs run anywhere, no headers:'));
+  leaf.append(document.createTextNode('leaf packages run anywhere, no headers:'));
   leaf.append(document.createElement('br'));
   const leafList = document.createElement('span');
   leafList.className = 'qs-leaf-list';
-  leafList.textContent = 'io · vfs · npm-client · shell · shadow-registry';
+  ['io', 'vfs', 'npm-client', 'shell', 'shadow-registry'].forEach((name, i) => {
+    if (i > 0) leafList.append(document.createTextNode(' · '));
+    const pkg = document.createElement('span');
+    pkg.className = 'qs-leaf-name';
+    pkg.textContent = name;
+    leafList.append(pkg);
+  });
   leaf.append(leafList);
 
   aside.append(heading, headers, body, noCoi, install, note, leaf);

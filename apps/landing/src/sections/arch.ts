@@ -26,7 +26,7 @@ function buildCeiling(): HTMLElement {
   const select = (gap: CeilDef | null): void => {
     active = gap;
     for (const [id, button] of buttons) button.setAttribute('aria-pressed', String(id === gap?.id));
-    note.textContent = gap ? `${gap.label}: ${gap.role}` : CEIL_HINT;
+    note.textContent = gap ? `${gap.chip}: ${gap.role}` : CEIL_HINT;
   };
 
   for (const gap of CEIL) {
@@ -34,6 +34,10 @@ function buildCeiling(): HTMLElement {
     chip.type = 'button';
     chip.className = `ceil-chip ceil-chip-${gap.compat}`;
     chip.setAttribute('aria-pressed', 'false');
+    chip.setAttribute(
+      'aria-label',
+      `${gap.compat === 'no' ? 'Not supported' : 'Partial'}: ${gap.chip}`,
+    );
     const glyph = document.createElement('span');
     glyph.className = 'ceil-glyph';
     glyph.setAttribute('aria-hidden', 'true');

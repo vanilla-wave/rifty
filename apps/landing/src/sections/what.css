@@ -12,7 +12,7 @@
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.8;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--t-code);
   overflow-x: auto;
 }
 
