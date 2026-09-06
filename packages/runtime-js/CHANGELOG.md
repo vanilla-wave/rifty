@@ -4,6 +4,10 @@
 
 ### Added
 
+- Toolchain protocol v2 supports exact resident-bin start plus a host-held
+  binding/file activation snapshot restored into a replacement Worker
+  (ADR-0377); v1 peers fail during handshake.
+
 - Runtime Worker protocol carries the ADR-0375 toolchain handshake and
   install/run-bin results through its existing correlation owner, including
   exact protocol/backend decoding and Worker crash/disposal/clean-close
@@ -69,6 +73,12 @@
 
 ### Changed
 
+- The repo-only loader composition seam accepts exact builtin overrides for one
+  installed-bin generation (ADR-0378); normal public loader behavior is
+  unchanged.
+- Contextual loaders bind `node:module.createRequire` to their own generation
+  instead of replacing the realm-global ordinary-loader fallback (ADR-0379).
+
 - The repo-only `./internal` composition seam now ships in packed JS and
   declarations for the SDK + Workbench no-COI Worker; the public root still
   exposes no toolchain controller or protocol.
@@ -82,6 +92,10 @@
   environment field.
 
 ### Fixed
+
+- Toolchain request snapshots copy own data descriptors instead of invoking
+  inherited iterators or Proxy getters; acknowledged root-relative writes use
+  the same root-normalized path as the Worker VFS.
 
 - Sandbox toolchain `WebAssembly.Memory` preserves native descriptor getter
   order/cardinality and consumes stateful `shared` once before its named gap.

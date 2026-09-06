@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 
+import { NotImplementedError } from '@riftydev/io';
+import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
@@ -13,13 +15,18 @@ import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import {
   SANDBOX_TOOLCHAIN_PROTOCOL,
+  type ToolchainActivationState,
+  type ToolchainRecoveryFile,
   type ToolchainRequest,
   type ToolchainResult,
+  claimSandboxToolchainResidentTransition,
+  releaseSandboxToolchainResidentTransition,
 } from '@riftydev/runtime-js/internal';
-import { normalizePath, syncMirror } from '@riftydev/vfs';
+import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { declaredGapCause } from './declared-gap-cause.ts';
 import { finalizeGenericPackageInstallFiles } from './package-install-generic-finalizer.ts';
+import { startResidentNodeEntry } from './resident-node-entry.ts';
 import {
   type WorkbenchRuntimeBinding,
   activateWorkbenchRuntimeAdapters,
@@ -38,6 +45,8 @@ installEventLoopKeepalive();
 registerNetBuiltins();
 installToolchainCloseSignal();
 
+let runtimeBackend: 'opfs' | 'memory' | null = null;
+
 function post(message: ToolchainResult): void {
   self.postMessage({ type: 'toolchain-result', result: message });
 }
@@ -50,7 +59,7 @@ async function flushMirror(): Promise<void> {
 async function activateInstallRuntime(
   cwd: string,
   result: Awaited<ReturnType<typeof install>>,
-): Promise<void> {
+): Promise<readonly WorkbenchRuntimeBinding[]> {
   const bindings: readonly WorkbenchRuntimeBinding[] = Object.freeze(
     shadowSubstitutionPlanForInstallResult(result).bindings.map((binding) =>
       Object.freeze({
@@ -60,6 +69,27 @@ async function activateInstallRuntime(
     ),
   );
   await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd });
+  return bindings;
+}
+
+function snapshotFiles(): readonly ToolchainRecoveryFile[] {
+  const fs = syncMirror();
+  const files: ToolchainRecoveryFile[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of fs.readdirSync(directory)) {
+      const path = directory === '/' ? `/${entry.name}` : `${directory}/${entry.name}`;
+      if (entry.isDirectory) {
+        walk(path);
+        continue;
+      }
+      const source = fs.readFileBytesSync(path);
+      const data = new Uint8Array(source.byteLength);
+      data.set(source);
+      files.push({ path, data });
+    }
+  };
+  walk('/');
+  return Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path)));
 }
 
 async function installManifest(input: Extract<ToolchainRequest, { op: 'install' }>['input']) {
@@ -70,8 +100,15 @@ async function installManifest(input: Extract<ToolchainRequest, { op: 'install' 
     registry,
   });
   finalizeGenericPackageInstallFiles({ root: input.cwd });
-  await activateInstallRuntime(input.cwd, result);
+  const bindings = await activateInstallRuntime(input.cwd, result);
   await flushMirror();
+  if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
+  return Object.freeze({
+    cwd: input.cwd,
+    bindings,
+    vfsBackend: runtimeBackend,
+    files: snapshotFiles(),
+  });
 }
 
 interface ProcessExitSignal {
@@ -112,14 +149,80 @@ async function runInstalledBin(
   return { exitCode };
 }
 
+let residentPort: number | null = null;
+
+async function startInstalledBin(
+  input: Extract<ToolchainRequest, { op: 'start-bin' }>['input'],
+): Promise<{ readonly port: number }> {
+  if (residentPort !== null) {
+    const error = new Error(`resident bin already owns port ${residentPort}`);
+    error.name = 'SandboxResidentToolBusyError';
+    throw error;
+  }
+  if (!claimSandboxToolchainResidentTransition()) {
+    const error = new Error('resident launch transition is already active');
+    error.name = 'SandboxToolchainBusyError';
+    throw error;
+  }
+  try {
+    const started = await startResidentNodeEntry({
+      vfs: syncMirror(),
+      entryPath: input.binPath,
+      cwd: input.cwd,
+      args: input.args,
+      requestedPort: input.port,
+    });
+    residentPort = started.port;
+    serveCrossRealmPreview(started.port, (request) => dispatchToPort(started.port, request));
+    void started.completion.catch((error: unknown) => {
+      queueMicrotask(() => {
+        throw error;
+      });
+    });
+    return { port: started.port };
+  } finally {
+    releaseSandboxToolchainResidentTransition();
+  }
+}
+
+async function restoreActivation(state: ToolchainActivationState): Promise<void> {
+  if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
+  if (runtimeBackend === 'memory' || runtimeBackend !== state.vfsBackend) {
+    const fs = syncMirror();
+    for (const file of state.files) {
+      fs.mkdirSync(dirname(file.path), { recursive: true });
+      fs.writeFileSync(file.path, file.data);
+    }
+    await flushMirror();
+  }
+  await activateWorkbenchRuntimeAdapters({
+    bindings: state.bindings,
+    fs: syncMirror(),
+    cwd: state.cwd,
+  });
+}
+
 async function dispatch(
   request: ToolchainRequest,
-): Promise<{ readonly exitCode: number } | undefined> {
-  if (request.op === 'install') {
-    await installManifest(request.input);
-    return undefined;
+): Promise<
+  | { readonly exitCode: number }
+  | { readonly port: number }
+  | { readonly activationState: ToolchainActivationState }
+  | undefined
+> {
+  if (residentPort !== null && (request.op === 'install' || request.op === 'run-bin')) {
+    throw new NotImplementedError(
+      'sandbox.toolchain.resident-concurrency',
+      'install/runBin while a resident bin is active is not supported',
+    );
   }
-  return await runInstalledBin(request.input);
+  if (request.op === 'install') {
+    return { activationState: await installManifest(request.input) };
+  }
+  if (request.op === 'run-bin') return await runInstalledBin(request.input);
+  if (request.op === 'start-bin') return await startInstalledBin(request.input);
+  await restoreActivation(request.input);
+  return undefined;
 }
 
 function serializedError(error: unknown): SerializedRuntimeError {
@@ -153,7 +256,12 @@ self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?
   void dispatch(request)
     .then(
       (value) => post({ id: request.id, ok: true, ...(value === undefined ? {} : { value }) }),
-      (error: unknown) => post({ id: request.id, ok: false, error: serializedError(error) }),
+      (error: unknown) => {
+        post({ id: request.id, ok: false, error: serializedError(error) });
+        if (request.op === 'start-bin' && residentPort === null) {
+          setTimeout(() => self.close(), 0);
+        }
+      },
     )
     .finally(() => {
       busy = false;
@@ -163,6 +271,7 @@ self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?
 void import('@riftydev/runtime-js/worker')
   .then(({ runtimeWorkerBackend }) => runtimeWorkerBackend)
   .then((vfsBackend) => {
+    runtimeBackend = vfsBackend;
     installFetchKeepalive();
     self.postMessage({ type: 'toolchain-ready', protocol: SANDBOX_TOOLCHAIN_PROTOCOL, vfsBackend });
   });

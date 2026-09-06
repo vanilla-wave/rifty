@@ -283,7 +283,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
     worker.emit({ type: 'ready' });
     worker.emitUnknown({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v0',
+      protocol: 'rifty.sandbox-toolchain/v1',
       vfsBackend: 'memory',
     });
 
@@ -302,7 +302,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         'prior version',
         () => ({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v0',
+          protocol: 'rifty.sandbox-toolchain/v1',
           vfsBackend: 'memory',
         }),
       ],
@@ -310,7 +310,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         'later version',
         () => ({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v2',
+          protocol: 'rifty.sandbox-toolchain/v3',
           vfsBackend: 'memory',
         }),
       ],
@@ -482,25 +482,46 @@ describe('spawnToolchainRuntime trust boundary', () => {
     },
   );
 
-  it.each(['dispose', 'crash', 'clean-close'] as const)(
-    'rejects an admitted request when its peer ends by %s',
-    async (ending) => {
+  it.each(
+    (['install', 'run-bin'] as const).flatMap((operation) =>
+      (['dispose', 'crash', 'clean-close'] as const).map((ending) => [operation, ending] as const),
+    ),
+  )(
+    'rejects one admitted %s request exactly once when its peer ends by %s',
+    async (operation, ending) => {
       installFakeWorker();
       const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
       const worker = admitToolchain(runtime);
       await runtime.toolchainReady;
-      const pending = runtime.toolchain.install({ cwd: '/project', registryUrl: '/registry' });
-      await Promise.resolve();
-      expect(worker.sent).toEqual([
-        {
-          type: 'toolchain',
-          request: {
-            id: 1,
-            op: 'install',
-            input: { cwd: '/project', registryUrl: '/registry' },
-          },
+      const pending =
+        operation === 'install'
+          ? runtime.toolchain.install({ cwd: '/project', registryUrl: '/registry' })
+          : runtime.toolchain.runBin({
+              cwd: '/project',
+              binPath: '/project/node_modules/.bin/tool',
+              args: [],
+            });
+      let settlements = 0;
+      const observed = pending.then(
+        () => {
+          settlements++;
+          return { status: 'resolved' } as const;
         },
-      ]);
+        (error: Error & { code?: string }) => {
+          settlements++;
+          return {
+            status: 'rejected',
+            name: error.name,
+            ...(error.code === undefined ? {} : { code: error.code }),
+          } as const;
+        },
+      );
+      await Promise.resolve();
+      expect(worker.sent).toHaveLength(1);
+      expect(worker.sent[0]).toMatchObject({
+        type: 'toolchain',
+        request: { id: 1, op: operation },
+      });
 
       if (ending === 'dispose') runtime.dispose();
       if (ending === 'crash') worker.crash('toolchain boom');
@@ -508,11 +529,316 @@ describe('spawnToolchainRuntime trust boundary', () => {
         worker.emitUnknown({ type: 'toolchain-terminal', reason: 'closed' });
       }
 
-      await expect(pending).rejects.toMatchObject(
-        ending === 'crash' ? { code: 'WORKER_CRASHED' } : { name: 'WorkerTerminated' },
+      expect(await observed).toMatchObject(
+        ending === 'crash'
+          ? { status: 'rejected', code: 'WORKER_CRASHED' }
+          : { status: 'rejected', name: 'WorkerTerminated' },
       );
+      if (ending === 'dispose') runtime.dispose();
+      if (ending === 'crash') worker.crash('duplicate terminal signal');
+      if (ending === 'clean-close') {
+        worker.emitUnknown({ type: 'toolchain-terminal', reason: 'closed' });
+      }
+      await Promise.resolve();
+      expect(settlements).toBe(1);
     },
   );
+
+  it('snapshots validated install and run-bin inputs before readiness awaits', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const installInput = { cwd: '/install', registryUrl: '/registry-before' };
+    const args = ['before'];
+    const runInput = {
+      cwd: '/run',
+      binPath: '/run/node_modules/.bin/tool-before',
+      args,
+    };
+
+    const install = runtime.toolchain.install(installInput);
+    const run = runtime.toolchain.runBin(runInput);
+    installInput.cwd = '/changed-install';
+    installInput.registryUrl = '/registry-after';
+    runInput.cwd = '/changed-run';
+    runInput.binPath = '/changed-run/node_modules/.bin/tool-after';
+    args[0] = 'after';
+    args.push('extra');
+
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'install',
+          input: { cwd: '/install', registryUrl: '/registry-before' },
+        },
+      },
+      {
+        type: 'toolchain',
+        request: {
+          id: 2,
+          op: 'run-bin',
+          input: {
+            cwd: '/run',
+            binPath: '/run/node_modules/.bin/tool-before',
+            args: ['before'],
+          },
+        },
+      },
+    ]);
+    worker.emit({
+      type: 'toolchain-result',
+      result: {
+        id: 1,
+        ok: true,
+        value: {
+          activationState: {
+            cwd: '/install',
+            bindings: [],
+            vfsBackend: 'memory',
+            files: [{ path: '/install/package.json', data: new Uint8Array([1]) }],
+          },
+        },
+      },
+    });
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 2, ok: true, value: { exitCode: 0 } },
+    });
+    await expect(install).resolves.toBeUndefined();
+    await expect(run).resolves.toEqual({ exitCode: 0 });
+    expect(runtime.snapshotToolchainState()).toEqual({
+      cwd: '/install',
+      bindings: [],
+      vfsBackend: 'memory',
+      files: [{ path: '/install/package.json', data: new Uint8Array([1]) }],
+    });
+  });
+
+  it('validates, snapshots and restores activation state without an install request', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const binding = {
+      adapterId: 'rifty.runtime-adapter.esbuild.v1',
+      packagePath: '/dev/node_modules/esbuild-wasm',
+    };
+    const state = {
+      cwd: '/dev',
+      bindings: [binding],
+      vfsBackend: 'memory' as const,
+      files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
+    };
+
+    const restoring = runtime.restoreToolchainState(state);
+    state.cwd = '/changed';
+    binding.packagePath = '/changed/node_modules/esbuild-wasm';
+    state.bindings.push({ adapterId: 'extra', packagePath: '/extra' });
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'restore',
+          input: {
+            cwd: '/dev',
+            bindings: [
+              {
+                adapterId: 'rifty.runtime-adapter.esbuild.v1',
+                packagePath: '/dev/node_modules/esbuild-wasm',
+              },
+            ],
+            vfsBackend: 'memory',
+            files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
+          },
+        },
+      },
+    ]);
+    worker.emit({ type: 'toolchain-result', result: { id: 1, ok: true } } as never);
+    await expect(restoring).resolves.toBeUndefined();
+    expect(runtime.snapshotToolchainState()).toEqual({
+      cwd: '/dev',
+      bindings: [
+        {
+          adapterId: 'rifty.runtime-adapter.esbuild.v1',
+          packagePath: '/dev/node_modules/esbuild-wasm',
+        },
+      ],
+      vfsBackend: 'memory',
+      files: [{ path: '/dev/package.json', data: new Uint8Array([1, 2]) }],
+    });
+
+    await expect(
+      runtime.restoreToolchainState({
+        cwd: '/dev',
+        bindings: [{ adapterId: '', packagePath: '/dev/node_modules/esbuild-wasm' }],
+        vfsBackend: 'memory',
+        files: [],
+      }),
+    ).rejects.toMatchObject({ name: 'TypeError' });
+    expect(worker.sent).toHaveLength(1);
+  });
+
+  it('snapshots and exact-validates resident-bin input before readiness awaits — designed RED', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const toolchain = runtime.toolchain as typeof runtime.toolchain & {
+      startBin(input: {
+        cwd: string;
+        binPath: string;
+        args: readonly string[];
+        port: number;
+      }): Promise<{ readonly port: number }>;
+    };
+    const args = ['--port', '5174'];
+    Object.setPrototypeOf(
+      args,
+      Object.create(Array.prototype, {
+        [Symbol.iterator]: {
+          value: function* inheritedIterator() {
+            yield '--port';
+            yield '9999';
+          },
+        },
+      }),
+    );
+    const input = {
+      cwd: '/dev',
+      binPath: '/dev/node_modules/.bin/tool',
+      args,
+      port: 5174,
+    };
+
+    let settled = false;
+    const started = toolchain.startBin(input).finally(() => {
+      settled = true;
+    });
+    input.cwd = '/changed';
+    input.binPath = '/changed/node_modules/.bin/other';
+    input.port = 6000;
+    args[1] = '6000';
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'start-bin',
+          input: {
+            cwd: '/dev',
+            binPath: '/dev/node_modules/.bin/tool',
+            args: ['--port', '5174'],
+            port: 5174,
+          },
+        },
+      },
+    ]);
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 1, ok: true, value: { port: 5174 } },
+    } as never);
+    await expect(started).resolves.toEqual({ port: 5174 });
+
+    const proxyTarget = {
+      cwd: '/proxy',
+      binPath: '/proxy/node_modules/.bin/tool',
+      args: ['good'],
+      port: 5175,
+    };
+    const proxiedInput = new Proxy(proxyTarget, {
+      get(target, property, receiver) {
+        if (property === 'cwd') return '/evil';
+        if (property === 'binPath') return '/evil/node_modules/.bin/tool';
+        if (property === 'args') return ['evil'];
+        if (property === 'port') return 6000;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const proxied = toolchain.startBin(proxiedInput);
+    await Promise.resolve();
+    expect(worker.sent.at(-1)).toEqual({
+      type: 'toolchain',
+      request: {
+        id: 2,
+        op: 'start-bin',
+        input: {
+          cwd: '/proxy',
+          binPath: '/proxy/node_modules/.bin/tool',
+          args: ['good'],
+          port: 5175,
+        },
+      },
+    });
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 2, ok: true, value: { port: 5175 } },
+    } as never);
+    await expect(proxied).resolves.toEqual({ port: 5175 });
+
+    const symbol = Symbol('extra');
+    const invalid = [
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 0 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 65_536 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174.5 },
+      { cwd: '/dev', binPath: '/other/node_modules/.bin/tool', args: [], port: 5174 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: new Array(1), port: 5174 },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174, extra: true },
+      { cwd: '/dev', binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174, [symbol]: true },
+      Object.defineProperty(
+        { binPath: '/dev/node_modules/.bin/tool', args: [], port: 5174 },
+        'cwd',
+        { enumerable: true, get: () => '/dev' },
+      ),
+    ];
+    for (const value of invalid) {
+      await expect(
+        toolchain.startBin(
+          value as { cwd: string; binPath: string; args: readonly string[]; port: number },
+        ),
+      ).rejects.toMatchObject({ name: 'TypeError' });
+    }
+    expect(worker.sent).toHaveLength(2);
+  });
+
+  it('records acknowledged root-relative aliases at the exact worker path', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const restoring = runtime.restoreToolchainState({
+      cwd: '/dev',
+      bindings: [],
+      vfsBackend: 'memory',
+      files: [],
+    });
+    await Promise.resolve();
+    worker.emit({ type: 'toolchain-result', result: { id: 1, ok: true } } as never);
+    await restoring;
+
+    for (const [id, path, data] of [
+      [2, '../escape.txt', 'escape'],
+      [3, './dot.txt', 'dot'],
+      [4, 'nested/../alias.txt', 'alias'],
+    ] as const) {
+      const writing = runtime.fs.writeFile(path, data);
+      worker.emit({ type: 'fs-result', result: { id, ok: true } });
+      await writing;
+    }
+
+    expect(runtime.snapshotToolchainState()?.files).toEqual([
+      { path: '/alias.txt', data: new TextEncoder().encode('alias') },
+      { path: '/dot.txt', data: new TextEncoder().encode('dot') },
+      { path: '/escape.txt', data: new TextEncoder().encode('escape') },
+    ]);
+  });
 
   it.each([
     ['dispose', { status: 'rejected', name: 'WorkerTerminated', message: 'Worker was disposed' }],

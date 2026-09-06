@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Shared-memory-free no-COI sandbox tier.** Existing headerless Chromium apps can create a capability-reported SDK sandbox, install and build real Vite 7, mount HMR preview, persist acknowledged OPFS writes across reload and explicitly restart a wedged realm without changing host COOP/COEP posture. Proof: `docs/backlog/distribution/reference/no-coi-sandbox-tier-closure-evidence.md`.
+
 - `docs/process/traps.md` — hard-won gotcha cache (worktrees/git, CI/PR verification, e2e, browser runtime/bundling, testing discipline, tooling wiring) + `AGENTS.md` pointer; landed from the stranded `docs/agent-traps` branch (b83415482).
 
 ### Changed

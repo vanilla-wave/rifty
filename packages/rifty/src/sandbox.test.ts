@@ -7,6 +7,9 @@ import {
   type CreateSandboxOptions,
   type Sandbox,
   type SandboxDeps,
+  type SandboxResidentBin,
+  type SandboxRestartReport,
+  type SandboxStartBinInput,
   type ToolchainCreateSandboxOptions,
   type ToolchainSandbox,
   createSandbox,
@@ -48,6 +51,19 @@ function publicCreateSandboxTypeCarrier(options: CreateSandboxOptions): void {
   ];
 }
 void publicCreateSandboxTypeCarrier;
+
+async function publicResidentLifecycleTypeCarrier(
+  sandbox: ToolchainSandbox,
+  input: SandboxStartBinInput,
+): Promise<void> {
+  const resident: SandboxResidentBin = await sandbox.toolchain.startBin(input);
+  const report: SandboxRestartReport = await sandbox.restart({
+    preview: { src: resident.previewUrl },
+    beforeStart: async (fs) => fs.writeFile('/project/repair.js', 'export const ok = true;'),
+  });
+  void report;
+}
+void publicResidentLifecycleTypeCarrier;
 
 /** A typed no-op controller — these tests assert wiring, never drive eval. */
 function fakeRuntime(onDispose: () => void = () => {}): RuntimeController {
@@ -413,7 +429,7 @@ describe('createSandbox', () => {
         worker.emit({ type: 'ready' });
         worker.emit({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v1',
+          protocol: 'rifty.sandbox-toolchain/v2',
           vfsBackend: 'opfs',
         });
       }
@@ -487,7 +503,7 @@ describe('createSandbox', () => {
       worker.emit({ type: 'ready' });
       worker.emit({
         type: 'toolchain-ready',
-        protocol: 'rifty.sandbox-toolchain/v1',
+        protocol: 'rifty.sandbox-toolchain/v2',
         vfsBackend: workerBackend,
       });
       const sandbox = await creating;
@@ -504,6 +520,131 @@ describe('createSandbox', () => {
       );
       sandbox.dispose();
     }
+  });
+
+  it('keeps public operations outside the replacement Worker before activation restore', async () => {
+    class ControlledToolchainWorker {
+      static instances: ControlledToolchainWorker[] = [];
+      readonly messages = new Set<EventListener>();
+      readonly errors = new Set<EventListener>();
+      readonly sent: unknown[] = [];
+
+      constructor() {
+        ControlledToolchainWorker.instances.push(this);
+      }
+
+      addEventListener(type: string, listener: EventListener): void {
+        if (type === 'message') this.messages.add(listener);
+        if (type === 'error') this.errors.add(listener);
+      }
+
+      postMessage(message: unknown): void {
+        this.sent.push(message);
+      }
+
+      terminate(): void {}
+
+      emit(data: unknown): void {
+        const event = { data } as MessageEvent<unknown>;
+        for (const listener of this.messages) listener(event);
+      }
+    }
+    vi.stubGlobal('Worker', ControlledToolchainWorker);
+    const creating = createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: { workerUrl: '/toolchain-worker.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    );
+    await Promise.resolve();
+    const first = ControlledToolchainWorker.instances[0];
+    if (!first) throw new Error('first Worker missing');
+    first.emit({ type: 'ready' });
+    first.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v2',
+      vfsBackend: 'memory',
+    });
+    const sandbox = (await creating) as ToolchainSandbox;
+    const installing = sandbox.toolchain.install({ cwd: '/dev', registryUrl: '/registry' });
+    await Promise.resolve();
+    first.emit({
+      type: 'toolchain-result',
+      result: {
+        id: 1,
+        ok: true,
+        value: {
+          activationState: {
+            cwd: '/dev',
+            bindings: [],
+            vfsBackend: 'memory',
+            files: [{ path: '/dev/package.json', data: new Uint8Array([1]) }],
+          },
+        },
+      },
+    });
+    await installing;
+
+    const restarting = sandbox.restart({ preview: { src: '' } });
+    const second = ControlledToolchainWorker.instances[1];
+    if (!second) throw new Error('replacement Worker missing');
+    const calls = await Promise.allSettled([
+      sandbox.runtime.eval('42'),
+      sandbox.fs.readFile('/dev/package.json'),
+      sandbox.fs.writeFile('/dev/lost.txt', 'lost'),
+      sandbox.toolchain.install({ cwd: '/dev', registryUrl: '/registry' }),
+      sandbox.toolchain.runBin({
+        cwd: '/dev',
+        binPath: '/dev/node_modules/.bin/tool',
+        args: [],
+      }),
+      sandbox.toolchain.startBin({
+        cwd: '/dev',
+        binPath: '/dev/node_modules/.bin/tool',
+        args: [],
+        port: 5174,
+      }),
+    ]);
+    expect(
+      calls.map((entry) => (entry.status === 'rejected' ? entry.reason.name : 'fulfilled')),
+    ).toEqual(Array.from({ length: 6 }, () => 'SandboxRestartBusyError'));
+    expect(() => sandbox.runtime.writeFile('/dev/lost-sync.txt', 'lost')).toThrowError(
+      expect.objectContaining({ name: 'SandboxRestartBusyError' }),
+    );
+    expect(() => sandbox.runtime.writeStdin('lost')).toThrowError(
+      expect.objectContaining({ name: 'SandboxRestartBusyError' }),
+    );
+    expect(sandbox.runtime.isReady()).toBe(false);
+    expect(second.sent).toEqual([]);
+
+    second.emit({ type: 'ready' });
+    second.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v2',
+      vfsBackend: 'memory',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(second.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'restore',
+          input: {
+            cwd: '/dev',
+            bindings: [],
+            vfsBackend: 'memory',
+            files: [{ path: '/dev/package.json', data: new Uint8Array([1]) }],
+          },
+        },
+      },
+    ]);
+    second.emit({ type: 'toolchain-result', result: { id: 1, ok: true } });
+    await expect(restarting).resolves.toEqual({ unflushedWrites: false, resident: null });
+    sandbox.dispose();
   });
 
   it('public admission rejects and terminates a valid-backend mismatched-protocol Worker', async () => {

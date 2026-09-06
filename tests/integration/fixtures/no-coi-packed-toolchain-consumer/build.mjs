@@ -10,6 +10,15 @@ execFileSync(
 if ('declaredGapCause' in runtimeJs) {
   throw new Error('bounded gap projection leaked from the packed runtime-js root');
 }
+const { createNetBuiltinOverrides } = await import('@riftydev/net/register-builtins');
+const overrides = createNetBuiltinOverrides(Symbol('packed identity'));
+for (const [specifier, expectedServerName] of [['node:http', 'HttpServer'], ['node:net', 'Server']]) {
+  const module = overrides.get(specifier);
+  const server = module.createServer();
+  if (module.createServer.name !== 'createServer' || module.Server.name !== expectedServerName || server.constructor !== module.Server || Object.getPrototypeOf(server) !== module.Server.prototype) {
+    throw new Error('packed ' + specifier + ' factory/constructor identity drifted: ' + module.createServer.name + '/' + module.Server.name);
+  }
+}
 process.exit(0);`,
   ],
   { stdio: 'inherit' },

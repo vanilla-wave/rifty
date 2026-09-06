@@ -21,6 +21,19 @@ const resourcePort = Number(process.env.RIFTY_NO_COI_RESOURCE_PORT ?? 5413);
 const coiBaseUrl = `http://localhost:${coiPort}`;
 const marker = 'no-coi-build-parity-marker';
 
+function moduleTransformLines(output: string): readonly string[] {
+  const escape = String.fromCharCode(27);
+  const ansi = new RegExp(`${escape}\\[[0-?]*[ -/]*[@-~]`, 'gu');
+  const lineRestart = new RegExp(`${escape}\\[(?:1)?G`, 'gu');
+  return output
+    .replace(/\r\n/gu, '\n')
+    .replaceAll('\r', '\n')
+    .replace(lineRestart, '\n')
+    .replace(ansi, '')
+    .split('\n')
+    .filter((line) => line.includes('modules transformed.'));
+}
+
 const threadedWasmProbeExpression = `(() => {
   const NativeMemory = globalThis.WebAssembly.Memory;
   const inherited = Object.assign(Object.create({ shared: true }), { initial: 1 });
@@ -74,6 +87,14 @@ interface HostSnapshot {
   readonly imageWidth: number;
 }
 
+interface HostPostureObservation {
+  readonly method: string;
+  readonly url: string;
+  readonly secFetchMode: string | null;
+  readonly secFetchSite: string | null;
+  readonly cookie: string | null;
+}
+
 interface DistFile {
   readonly path: string;
   readonly size: number;
@@ -115,11 +136,7 @@ const expectedCapabilityReport = {
       status: 'throwing',
       error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
     },
-    {
-      feature: 'toolchain.dev-hmr',
-      status: 'throwing',
-      error: { name: 'NotImplementedError', feature: 'toolchain.dev-hmr' },
-    },
+    { feature: 'toolchain.dev-hmr', status: 'working' },
   ],
 } as const;
 
@@ -207,6 +224,77 @@ async function renewCrossOriginImage(page: Page): Promise<void> {
     return outcome;
   });
   expect(status).toBe('loaded');
+}
+
+async function assertCrossOriginSubresource(
+  page: Page,
+  baseline: HostSnapshot,
+  phase: string,
+): Promise<void> {
+  const expectedOrigin = `http://127.0.0.1:${resourcePort}`;
+  if (phase === 'before-boot') {
+    const seed = await page.request.get(
+      `${expectedOrigin}/__no-coi-host-resource-seed?probe=${encodeURIComponent(baseline.token)}`,
+    );
+    expect(seed.status()).toBe(204);
+  }
+  const responsePromise = page.waitForResponse(
+    (response) => {
+      const url = new URL(response.url());
+      return (
+        url.origin === expectedOrigin &&
+        url.pathname === '/__no-coi-host-resource.svg' &&
+        url.searchParams.get('probe') === baseline.token &&
+        url.searchParams.get('phase') === phase
+      );
+    },
+    { timeout: 5000 },
+  );
+  const status = await page.evaluate(
+    async ({ nextPhase, probe }) => {
+      const image = document.getElementById('cross-origin-probe') as HTMLImageElement | null;
+      if (image === null) throw new Error('cross-origin probe image is missing');
+      image.dataset.status = 'loading';
+      const loaded = new Promise<string>((resolve) => {
+        image.addEventListener('load', () => resolve('loaded'), { once: true });
+        image.addEventListener('error', () => resolve('error'), { once: true });
+      });
+      const next = new URL(image.src);
+      next.pathname = '/__no-coi-host-resource.svg';
+      next.search = '';
+      next.searchParams.set('probe', probe);
+      next.searchParams.set('phase', nextPhase);
+      next.searchParams.set('nonce', crypto.randomUUID());
+      image.src = next.href;
+      const outcome = await loaded;
+      image.dataset.status = outcome;
+      return outcome;
+    },
+    { nextPhase: phase, probe: baseline.token },
+  );
+  expect(status).toBe('loaded');
+  const response = await responsePromise;
+  expect(response.request().resourceType()).toBe('image');
+  const responseHeaders = await response.allHeaders();
+  expect(responseHeaders['access-control-allow-origin']).toBeUndefined();
+  expect(responseHeaders['cross-origin-resource-policy']).toBeUndefined();
+  expect(responseHeaders['cross-origin-opener-policy']).toBeUndefined();
+  expect(responseHeaders['cross-origin-embedder-policy']).toBeUndefined();
+
+  const receipt = await page.request.get(
+    `${expectedOrigin}/__no-coi-host-resource-receipt?probe=${encodeURIComponent(baseline.token)}&phase=${encodeURIComponent(phase)}`,
+  );
+  expect(receipt.ok()).toBe(true);
+  const observation = (await receipt.json()) as HostPostureObservation | null;
+  expect(observation).toEqual({
+    method: 'GET',
+    url: expect.stringContaining(
+      `/__no-coi-host-resource.svg?probe=${baseline.token}&phase=${phase}`,
+    ),
+    secFetchMode: 'no-cors',
+    secFetchSite: 'same-site',
+    cookie: expect.stringContaining(`rifty_no_coi_sentinel=${baseline.token}`),
+  });
 }
 
 function assertHostCore(actual: HostSnapshot, baseline: HostSnapshot): void {
@@ -566,7 +654,7 @@ async function runCoiProduct(
   await writeOwnerFile(page, '/scratch/src/Panel.jsx', panelWithMarker(panel));
   const build = await execLineOutcome(page, 'vite build');
   assertCommandSuccess(build, 'COI vite build');
-  expect((build.out.match(/2180 modules transformed\./gu) ?? []).length).toBe(1);
+  expect(moduleTransformLines(build.out)).toEqual(['✓ 2180 modules transformed.']);
   return { dist: await collectProjectDist(page), output: build.out };
 }
 
@@ -1243,7 +1331,7 @@ test('Chrome Worker clone materializes an accessor protocol as exact data', asyn
       const frame = { type: 'toolchain-ready', vfsBackend: 'memory' };
       Object.defineProperty(frame, 'protocol', {
         enumerable: true,
-        get: () => 'rifty.sandbox-toolchain/v1',
+        get: () => 'rifty.sandbox-toolchain/v2',
       });
       postMessage(frame);
     `;
@@ -1279,7 +1367,7 @@ test('Chrome Worker clone materializes an accessor protocol as exact data', asyn
     plain: true,
     keys: ['protocol', 'type', 'vfsBackend'],
     protocolKind: 'data',
-    protocolValue: 'rifty.sandbox-toolchain/v1',
+    protocolValue: 'rifty.sandbox-toolchain/v2',
   });
 });
 
@@ -1299,7 +1387,7 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
         });
         postMessage({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v1',
+          protocol: 'rifty.sandbox-toolchain/v2',
           vfsBackend: 'memory',
         });
         postMessage({ type: 'ready' });
@@ -1394,7 +1482,7 @@ test('public SDK backend mismatch throws the canonical NotImplementedError', asy
           postMessage({ type: 'ready' });
           postMessage({
             type: 'toolchain-ready',
-            protocol: 'rifty.sandbox-toolchain/v1',
+            protocol: 'rifty.sandbox-toolchain/v2',
             vfsBackend: 'indexeddb',
           });
         `;
@@ -1457,7 +1545,7 @@ test('public SDK waits for both readiness signals in either real Worker order', 
         const NativeWorker = globalThis.Worker;
         const run = async (kind: 'exact' | 'mismatch', backend: 'opfs' | 'memory') => {
           const protocol =
-            kind === 'exact' ? 'rifty.sandbox-toolchain/v1' : 'rifty.sandbox-toolchain/v10';
+            kind === 'exact' ? 'rifty.sandbox-toolchain/v2' : 'rifty.sandbox-toolchain/v10';
           const source = `
           addEventListener('message', (event) => {
             if (event.data === 'release-runtime-ready') postMessage({ type: 'ready' });
@@ -1650,56 +1738,88 @@ test('non-shared WebAssembly.Memory keeps native constructor/global identity', a
   });
 });
 
-test('installed-bin admission ignores Vite identity without a shared-memory request', async ({
+test('request-identical Vite 7/8 decoys follow installed bytes, never identity', async ({
   page,
 }) => {
   const { host } = await openHeaderlessHost(page);
   try {
     await createToolchainSandbox(host);
-    const outcome = await host.evaluate(async () => {
-      const sandbox = (
-        globalThis as typeof globalThis & {
-          __riftyNoCoiSandbox: {
-            fs: { writeFile(path: string, value: string): Promise<void> };
-            runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
-            toolchain: {
-              runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+    for (const fixture of [
+      { version: '7.3.6', root: '/project', marker: 'vite7-decoy' },
+      { version: '8.0.16', root: '/vite8', marker: 'vite8-decoy' },
+    ]) {
+      const outcome = await host.evaluate(
+        async ({ fixture }) => {
+          const sandbox = (
+            globalThis as typeof globalThis & {
+              __riftyNoCoiSandbox: {
+                fs: {
+                  writeFile(path: string, value: string): Promise<void>;
+                  readFile(path: string, encoding: 'utf8'): Promise<string>;
+                };
+                runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
+                toolchain: {
+                  runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+                };
+              };
+            }
+          ).__riftyNoCoiSandbox;
+          await sandbox.fs.writeFile(
+            `${fixture.root}/node_modules/vite/package.json`,
+            JSON.stringify({
+              name: 'vite',
+              version: fixture.version,
+              type: 'module',
+              bin: { vite: 'bin/vite.js' },
+            }),
+          );
+          await sandbox.fs.writeFile(
+            `${fixture.root}/node_modules/vite/bin/vite.js`,
+            `console.log(${JSON.stringify('__RIFTY_GENERIC_BIN__')} + ${JSON.stringify(fixture.marker)})\n`,
+          );
+          await sandbox.fs.writeFile(
+            `${fixture.root}/node_modules/.bin/vite`,
+            "#!/usr/bin/env node\nimport('../vite/bin/vite.js');\n",
+          );
+          const manifest = JSON.parse(
+            await sandbox.fs.readFile(`${fixture.root}/node_modules/vite/package.json`, 'utf8'),
+          );
+          const output: string[] = [];
+          const off = sandbox.runtime.on((event) => {
+            if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+              output.push(event.chunk);
+            }
+          });
+          try {
+            const request = {
+              cwd: fixture.root,
+              binPath: `${fixture.root}/node_modules/.bin/vite`,
+              args: ['build'],
             };
-          };
-        }
-      ).__riftyNoCoiSandbox;
-      const root = '/identity-decoy';
-      await sandbox.fs.writeFile(
-        `${root}/node_modules/vite/package.json`,
-        JSON.stringify({ name: 'vite', version: '8.0.16', type: 'module' }),
+            const result = await sandbox.toolchain.runBin(request);
+            return { request, result, manifest, output: output.join('') };
+          } finally {
+            off();
+          }
+        },
+        { fixture },
       );
-      await sandbox.fs.writeFile(
-        `${root}/node_modules/vite/bin/vite.js`,
-        "console.log('__RIFTY_GENERIC_BIN__identity-only')\n",
-      );
-      await sandbox.fs.writeFile(
-        `${root}/node_modules/.bin/vite`,
-        "#!/usr/bin/env node\nimport('../vite/bin/vite.js');\n",
-      );
-      const output: string[] = [];
-      const off = sandbox.runtime.on((event) => {
-        if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
-          output.push(event.chunk);
-        }
+      expect(outcome).toEqual({
+        request: {
+          cwd: fixture.root,
+          binPath: `${fixture.root}/node_modules/.bin/vite`,
+          args: ['build'],
+        },
+        result: { exitCode: 0 },
+        manifest: {
+          name: 'vite',
+          version: fixture.version,
+          type: 'module',
+          bin: { vite: 'bin/vite.js' },
+        },
+        output: `__RIFTY_GENERIC_BIN__${fixture.marker}\n`,
       });
-      try {
-        const result = await sandbox.toolchain.runBin({
-          cwd: root,
-          binPath: `${root}/node_modules/.bin/vite`,
-          args: ['--version'],
-        });
-        return { result, output: output.join('') };
-      } finally {
-        off();
-      }
-    });
-    expect(outcome.result).toEqual({ exitCode: 0 });
-    expect(outcome.output).toBe('__RIFTY_GENERIC_BIN__identity-only\n');
+    }
   } finally {
     await disposeSandbox(host);
     await host.close();
@@ -1714,7 +1834,10 @@ test('exact nanoid manifest runs its installed bin without Vite authority', asyn
       const sandbox = (
         globalThis as typeof globalThis & {
           __riftyNoCoiSandbox: {
-            fs: { writeFile(path: string, value: string): Promise<void> };
+            fs: {
+              writeFile(path: string, value: string): Promise<void>;
+              readFile(path: string, encoding: 'utf8'): Promise<string>;
+            };
             runtime: { on(fn: (event: { type: string; chunk?: string }) => void): () => void };
             toolchain: {
               install(input: Record<string, unknown>): Promise<void>;
@@ -1733,6 +1856,10 @@ test('exact nanoid manifest runs its installed bin without Vite authority', asyn
         }),
       );
       await sandbox.toolchain.install({ cwd: root, registryUrl: '/npm-registry' });
+      const manifest = JSON.parse(
+        await sandbox.fs.readFile(`${root}/node_modules/nanoid/package.json`, 'utf8'),
+      );
+      const launcher = await sandbox.fs.readFile(`${root}/node_modules/.bin/nanoid`, 'utf8');
       const output: string[] = [];
       const off = sandbox.runtime.on((event) => {
         if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
@@ -1745,13 +1872,19 @@ test('exact nanoid manifest runs its installed bin without Vite authority', asyn
           binPath: `${root}/node_modules/.bin/nanoid`,
           args: ['--size', '7'],
         });
-        return { result, output: output.join('') };
+        return { result, output: output.join(''), manifest, launcher };
       } finally {
         off();
       }
     });
     expect(outcome.result).toEqual({ exitCode: 0 });
     expect(outcome.output.trim()).toMatch(/^[A-Za-z0-9_-]{7}$/u);
+    expect(outcome.manifest).toMatchObject({
+      name: 'nanoid',
+      version: '3.3.18',
+      bin: './bin/nanoid.cjs',
+    });
+    expect(outcome.launcher).toContain('../nanoid/bin/nanoid.cjs');
   } finally {
     await disposeSandbox(host);
     await host.close();
@@ -2219,7 +2352,7 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
       });
       const noCoi = await runNoCoiProduct(host);
       expect(noCoi.exitCode).toBe(0);
-      expect((noCoi.output.match(/2180 modules transformed\./gu) ?? []).length).toBe(1);
+      expect(moduleTransformLines(noCoi.output)).toEqual(['✓ 2180 modules transformed.']);
       expect(noCoi.dist).toEqual(coi.dist);
       expect(noCoi.esbuildAdmission).toMatchObject({
         protocol: 'rifty.shadow-substitutions/v2',
@@ -2267,7 +2400,7 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
       assertHostSnapshot(await hostSnapshot(host), baseline);
       expect(await openerRoundTrip(host)).toBe(true);
       await renewCrossOriginImage(host);
-      expect(coi.output).toContain('2180 modules transformed.');
+      expect(moduleTransformLines(coi.output)).toEqual(['✓ 2180 modules transformed.']);
     } finally {
       await disposeSandbox(host);
       await host.close();
@@ -2327,6 +2460,11 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
       );
       await sandbox.fs.writeFile(`${root}/src.js`, "document.body.textContent='vite8';\n");
       await sandbox.toolchain.install({ cwd: root, registryUrl: '/npm-registry' });
+      const manifest = JSON.parse(
+        await sandbox.fs.readFile(`${root}/node_modules/vite/package.json`, 'utf8'),
+      );
+      const launcher = await sandbox.fs.readFile(`${root}/node_modules/.bin/vite`, 'utf8');
+      const provenance = { manifest, launcher };
       const replaceOnce = (source: string, needle: string, replacement: string): string => {
         if (source.split(needle).length !== 2) {
           throw new Error(`Vite 8 boundary fixture anchor drifted: ${needle}`);
@@ -2366,7 +2504,7 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
           binPath: `${root}/node_modules/.bin/vite`,
           args: ['build'],
         });
-        return { threw: false, result, output: output.join('') };
+        return { threw: false, result, output: output.join(''), provenance };
       } catch (error) {
         const inspected = error as Error & { cause?: unknown; feature?: string };
         let dist: string;
@@ -2391,6 +2529,7 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
               : inspected.cause,
           dist,
           output: output.join(''),
+          provenance,
         };
       } finally {
         off();
@@ -2410,6 +2549,12 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
     expect(failure.message).toMatch(/shared WebAssembly\.Memory/i);
     expect(failure.message).toMatch(/SharedArrayBuffer/i);
     expect(failure.message).toMatch(/cross-origin isolation/i);
+    expect(failure.provenance.manifest).toMatchObject({
+      name: 'vite',
+      version: '8.0.16',
+      bin: { vite: 'bin/vite.js' },
+    });
+    expect(failure.provenance.launcher).toContain('../vite/bin/vite.js');
   } finally {
     await disposeSandbox(host);
     await host.close();
@@ -2513,6 +2658,36 @@ async function beginStalledRun(page: Page, root: string): Promise<void> {
   }, root);
 }
 
+async function seedRejectedOperationSentinel(page: Page, root: string): Promise<void> {
+  await page.evaluate(async (projectRoot) => {
+    const sandbox = (
+      globalThis as typeof globalThis & {
+        __riftyNoCoiSandbox: { fs: { writeFile(path: string, value: string): Promise<void> } };
+      }
+    ).__riftyNoCoiSandbox;
+    await sandbox.fs.writeFile(
+      `${projectRoot}/package.json`,
+      JSON.stringify({
+        name: 'rejected-operation-sentinel',
+        private: true,
+        dependencies: { kleur: '4.1.5' },
+      }),
+    );
+    await sandbox.fs.writeFile(
+      `${projectRoot}/node_modules/.bin/rejected-operation-sentinel`,
+      "#!/usr/bin/env node\nimport('../rejected-operation-sentinel/cli.js');\n",
+    );
+    await sandbox.fs.writeFile(
+      `${projectRoot}/node_modules/rejected-operation-sentinel/package.json`,
+      JSON.stringify({ name: 'rejected-operation-sentinel', type: 'commonjs' }),
+    );
+    await sandbox.fs.writeFile(
+      `${projectRoot}/node_modules/rejected-operation-sentinel/cli.js`,
+      "require('node:fs').writeFileSync(process.cwd() + '/rejected-dispatch.txt', 'ran'); process.stdout.write('__RIFTY_REJECTED_DISPATCH__');\n",
+    );
+  }, root);
+}
+
 test('host stays interactive while admitted install and run wait at network boundaries', async ({
   page,
 }) => {
@@ -2531,6 +2706,7 @@ test('host stays interactive while admitted install and run wait at network boun
   const holdInstall = (route: Route) => resolveInstallRoute(route);
   const holdRun = (route: Route) => resolveRunRoute(route);
   try {
+    await assertCrossOriginSubresource(host, baseline, 'before-boot');
     await createToolchainSandbox(host);
     await seedStalledInstall(host, '/interactive-install');
     await context.route(installPattern, holdInstall, { times: 1 });
@@ -2567,7 +2743,7 @@ test('host stays interactive while admitted install and run wait at network boun
     await setHostPhase(host, 'during-admitted-install');
     assertHostSnapshot(await hostSnapshot(host), baseline);
     expect(await openerRoundTrip(host)).toBe(true);
-    await renewCrossOriginImage(host);
+    await assertCrossOriginSubresource(host, baseline, 'during-admitted-install');
     await heldInstall.continue();
     await host.evaluate(async () => {
       const pending = (
@@ -2643,7 +2819,7 @@ test('host stays interactive while admitted install and run wait at network boun
     await setHostPhase(host, 'during-admitted-build');
     assertHostSnapshot(await hostSnapshot(host), baseline);
     expect(await openerRoundTrip(host)).toBe(true);
-    await renewCrossOriginImage(host);
+    await assertCrossOriginSubresource(host, baseline, 'during-admitted-build');
     await heldRun.continue();
     const run = await host.evaluate(async () => {
       const pending = (
@@ -2660,7 +2836,7 @@ test('host stays interactive while admitted install and run wait at network boun
     await setHostPhase(host, 'after-admitted-operations');
     assertHostSnapshot(await hostSnapshot(host), baseline);
     expect(await openerRoundTrip(host)).toBe(true);
-    await renewCrossOriginImage(host);
+    await assertCrossOriginSubresource(host, baseline, 'after-admitted-operations');
   } finally {
     await context.unroute(installPattern, holdInstall);
     await context.unroute(runPattern, holdRun);
@@ -2784,6 +2960,8 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
     ] as const) {
       await createToolchainSandbox(host);
       const root = `/overlap-${first}-${second}`;
+      const rejectedRoot = `${root}-rejected`;
+      await seedRejectedOperationSentinel(host, rejectedRoot);
       if (first === 'install') {
         await seedStalledInstall(host, root);
         await beginStalledInstall(host, root);
@@ -2795,6 +2973,11 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
           const sandbox = (
             globalThis as typeof globalThis & {
               __riftyNoCoiSandbox: {
+                fs: { readFile(path: string, encoding: 'utf8'): Promise<string> };
+                runtime: {
+                  eval(source: string): Promise<{ ok: boolean }>;
+                  on(fn: (event: { type: string; chunk?: string }) => void): () => void;
+                };
                 toolchain: {
                   install(input: Record<string, unknown>): Promise<void>;
                   runBin(input: Record<string, unknown>): Promise<unknown>;
@@ -2802,29 +2985,135 @@ test('toolchain overlap rejects instead of racing or queuing — designed RED', 
               };
             }
           ).__riftyNoCoiSandbox;
-          try {
-            if (secondOperation === 'install') {
-              await sandbox.toolchain.install({ cwd: projectRoot, registryUrl: '/npm-registry' });
-            } else {
-              await sandbox.toolchain.runBin({
-                cwd: projectRoot,
-                binPath: `${projectRoot}/node_modules/.bin/second`,
-                args: [],
-              });
+          const output: string[] = [];
+          const off = sandbox.runtime.on((event) => {
+            if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+              output.push(event.chunk);
             }
-            return { name: 'resolved', message: '' };
+          });
+          const before = await sandbox.runtime.eval(
+            'globalThis.__riftyRejectedState = JSON.stringify({ cwd: process.cwd(), argv: process.argv })',
+          );
+          if (!before.ok) throw new Error('rejected-operation pre-state failed');
+          let rejection: { name: string; message: string };
+          try {
+            const call =
+              secondOperation === 'install'
+                ? sandbox.toolchain.install({ cwd: projectRoot, registryUrl: '/npm-registry' })
+                : sandbox.toolchain.runBin({
+                    cwd: projectRoot,
+                    binPath: `${projectRoot}/node_modules/.bin/rejected-operation-sentinel`,
+                    args: [],
+                  });
+            await Promise.race([
+              call,
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('busy rejection timeout')), 2000),
+              ),
+            ]);
+            rejection = { name: 'resolved', message: '' };
           } catch (error) {
             const inspected = error instanceof Error ? error : new Error(String(error));
-            return { name: inspected.name, message: inspected.message };
+            rejection = { name: inspected.name, message: inspected.message };
           }
+          const after = await sandbox.runtime.eval(
+            'globalThis.__riftyRejectedStateAfter = JSON.stringify({ cwd: process.cwd(), argv: process.argv })',
+          );
+          if (!after.ok) throw new Error('rejected-operation post-state failed');
+          const processState = await sandbox.runtime.eval(
+            `console.log('__RIFTY_REJECTED_STATE__' + JSON.stringify([globalThis.__riftyRejectedState, globalThis.__riftyRejectedStateAfter]))`,
+          );
+          if (!processState.ok) throw new Error('rejected-operation state read failed');
+          const stateLine = output
+            .join('')
+            .split('\n')
+            .find((line) => line.startsWith('__RIFTY_REJECTED_STATE__'));
+          const exists = async (path: string) => {
+            try {
+              await sandbox.fs.readFile(path, 'utf8');
+              return true;
+            } catch {
+              return false;
+            }
+          };
+          off();
+          return {
+            rejection,
+            dispatchMarker: await exists(`${projectRoot}/rejected-dispatch.txt`),
+            installMarker: await exists(`${projectRoot}/package-lock.json`),
+            sentinelOutput: output.some((chunk) => chunk.includes('__RIFTY_REJECTED_DISPATCH__')),
+            processState:
+              stateLine && JSON.parse(stateLine.slice('__RIFTY_REJECTED_STATE__'.length)),
+          };
         },
-        { projectRoot: root, secondOperation: second },
+        { projectRoot: rejectedRoot, secondOperation: second },
       );
-      expect(outcome, `${first} -> ${second}`).toMatchObject({
+      expect(outcome.rejection, `${first} -> ${second}`).toMatchObject({
         name: 'SandboxToolchainBusyError',
       });
+      expect(outcome.dispatchMarker, `${first} -> ${second} dispatch`).toBe(false);
+      expect(outcome.installMarker, `${first} -> ${second} install`).toBe(false);
+      expect(outcome.sentinelOutput, `${first} -> ${second} output`).toBe(false);
+      expect(outcome.processState, `${first} -> ${second} process`).toHaveLength(2);
+      expect(outcome.processState?.[1], `${first} -> ${second} process`).toBe(
+        outcome.processState?.[0],
+      );
       await disposeSandbox(host);
     }
+  } finally {
+    await disposeSandbox(host);
+    await host.close();
+  }
+});
+
+test('runBin preserves cross-stream output before one terminal result', async ({ page }) => {
+  const { host } = await openHeaderlessHost(page);
+  try {
+    await createToolchainSandbox(host);
+    const timeline = await host.evaluate(async () => {
+      const sandbox = (
+        globalThis as typeof globalThis & {
+          __riftyNoCoiSandbox: {
+            fs: { writeFile(path: string, value: string): Promise<void> };
+            runtime: {
+              on(fn: (event: { type: string; chunk?: string }) => void): () => void;
+            };
+            toolchain: {
+              runBin(input: Record<string, unknown>): Promise<{ exitCode: number }>;
+            };
+          };
+        }
+      ).__riftyNoCoiSandbox;
+      const root = '/ordered-output';
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/.bin/ordered-output`,
+        "#!/usr/bin/env node\nimport('../ordered-output/cli.js');\n",
+      );
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/ordered-output/package.json`,
+        JSON.stringify({ name: 'ordered-output', type: 'commonjs' }),
+      );
+      await sandbox.fs.writeFile(
+        `${root}/node_modules/ordered-output/cli.js`,
+        "console.log('A'); setTimeout(() => { console.error('B'); queueMicrotask(() => console.log('C')); }, 25);\n",
+      );
+      const entries: string[] = [];
+      const off = sandbox.runtime.on((event) => {
+        if ((event.type === 'stdout' || event.type === 'stderr') && event.chunk) {
+          entries.push(`${event.type}:${event.chunk}`);
+        }
+      });
+      const result = await sandbox.toolchain.runBin({
+        cwd: root,
+        binPath: `${root}/node_modules/.bin/ordered-output`,
+        args: [],
+      });
+      entries.push(`result:${result.exitCode}`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      off();
+      return entries;
+    });
+    expect(timeline).toEqual(['stdout:A\n', 'stderr:B\n', 'stdout:C\n', 'result:0']);
   } finally {
     await disposeSandbox(host);
     await host.close();

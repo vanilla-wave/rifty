@@ -306,6 +306,10 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0319 | Preserve admitted mutations across project close |
 | 0341 | Project terminal runs expose authoritative shell status |
 | 0375 | Generic no-COI toolchain authority |
+| 0376 | No-COI toolchain operation lifecycle authority |
+| 0377 | No-COI resident tool and restart lifecycle |
+| 0378 | Causal resident port ownership |
+| 0379 | Resident entry admission authority |
 
 ## Superseded (removed)
 
@@ -547,3 +551,38 @@ here.
 | Marker/merge-base goal gates (`goal_baseline`, `check:goal-contract`, `check:budget`) | 2026-08 | goal/map/ledger split makes frozen-ness = file immutability; bands live in the ledger, review-owned — the gate code priced more than it caught |
 | Shadow-registry debug-disable flag (`disableShadowRegistry` / env switch) | 2026-08-23 | all substituted packages are native and cannot run in-browser regardless; behavioral comparison lives in Node parity oracles; SCSS comparison exists via unsubstituted pure-JS `sass`; install-artifact audit does not justify a public surface. Record: git history of the `npm-client/shadow-registry-disable-flag` draft + ADR-0006 correction |
 | Child-side project-FS cache or owner sync-RPC bypass | 2026-08-26 | violates ADR-0150 owner-SSoT freshness; the completed hot-path goal removed one hop and JSON framing without a second state owner. Record: `docs/backlog/perf/reference/child-fs-rpc-hot-path.md` + ADR-0365/0366 |
+| SW-delivered COI as the existing-app no-COI tier | 2026-08-31 | works only by applying isolation headers to the whole host and reloading it, violating preserved host posture. Record: `docs/backlog/distribution/reference/sw-coi-shim-probe.md` |
+| Runtime heartbeat for no-COI wedge detection | 2026-09-04 | the wedged realm cannot service it; caller timeout owns detection at tier `works`. Record: ADR-0377 |
+| Vite identity policy in no-COI SDK/runtime infrastructure | 2026-09-04 | destination is the shared-memory-free class; installed bytes select behavior and Vite 7 is only the oracle. Record: ADR-0375 |
+| Realm-wide async-source census for resident readiness | 2026-09-04 | browser promises/EventTargets have no complete handle census, while counting all sources rejects harmless Vite cleanup. Loader-generation port ownership proves cause instead. Record: ADR-0378 |
+| Fresh Worker before every initial resident start | 2026-09-04 | changes ADR-0377 existing-Worker start, emits an observable reset and duplicates the explicit restart lifecycle. Record: ADR-0378 |
+| COI-default plus an OPFS force/opt-in knob | 2026-09-04 | COI does not discriminate dedicated-Worker sync OPFS capability; the knob preserves silent memory fallback. Record: ADR-0372 |
+| Async-OPFS support as paired backend selector | 2026-09-04 | main windows expose async OPFS but cannot host the required sync mirror. Record: ADR-0372 |
+| Catch every OPFS init failure as memory | 2026-09-04 | collapses unsupported capability with permission/storage failure and hides durability loss. Record: ADR-0372 |
+| SDK-owned no-COI Worker with top-level and nested URLs | 2026-09-04 | admits sibling runtime mirrors and ambiguous ownership; Workbench owns the composed entry. Record: removed ADR-0374, retained by ADR-0375 |
+| Private eval globals or deep host imports for no-COI tooling | 2026-09-04 | hidden untyped API plus a second VFS authority. Record: removed ADR-0373/0374, retained by ADR-0375 |
+| Public Workbench project/terminal surface for the no-COI build tier | 2026-09-04 | imports the COI owner/kernel topology and unrelated dev lifecycle. Record: removed ADR-0373/0374, ADR-0377 |
+| Restore shadow-asset CAS/port delivery for no-COI tooling | 2026-09-04 | installed registry-twin bytes already own delivery; another cache/protocol authority has no forcing constraint. Record: removed ADR-0374, ADR-0371/0375 |
+| Broad `sandbox.exec()` inside the no-COI build tier | 2026-09-04 | shell parsing, streaming, stdin, cancellation and preview normalization are independent scope. Record: removed ADR-0373/0374 |
+| Queue overlapping no-COI toolchain calls | 2026-09-04 | one shared mutable realm makes overlap invalid; FIFO adds fairness/cancellation state instead of loud busy rejection. Record: removed ADR-0373/0374, ADR-0376 |
+| Host-side boolean as toolchain admission owner | 2026-09-04 | remote from delivered Worker frames; retaining Worker defence creates two owners. Record: ADR-0376 |
+| Package/project FIFO as toolchain admission | 2026-09-04 | queues and imports unrelated durability/lifecycle semantics. Record: ADR-0376 |
+| New Worker per finite toolchain operation | 2026-09-04 | loses one VFS/loader/binding authority and requires unproven cross-realm coherence. Record: ADR-0376 |
+| COI Workbench child-process fabric for no-COI resident tools | 2026-09-04 | SAB-backed topology is unavailable on the target page. Record: ADR-0377 |
+| New Worker per resident tool | 2026-09-04 | loses the authoritative VFS/runtime and introduces cross-Worker coherence. Record: ADR-0377 |
+| Caller-owned rebuild/reinstall/preview assembly after a wedge | 2026-09-04 | misses restart/death/dirty observability and hides network retry in application code. Record: ADR-0377 |
+| Independent patches at resident ownership escape sites | 2026-09-04 | repeated provenance-lie at one seam requires one deep admission module. Record: ADR-0379 |
+| Separate public `onLifecycle` subscription for no-COI sandbox | 2026-09-04 | duplicates existing `runtime.on` lifecycle authority. Record: no-COI dev-HMR Contract+RED correction |
+| From-scratch docs site as the no-COI existing-app persona | 2026-09-04 | it has no host posture to preserve and should use real isolation; third-party no-origin preview remains separate embed scope. Record: `docs/backlog/distribution/reference/sw-coi-shim-probe.md` |
+| Toolchain feature report on generic sandboxes | 2026-09-04 | generic sandboxes retain their hardware capability report; toolchain-only rows require explicit toolchain admission. Record: removed ADR-0373/0374, ADR-0375 |
+| No-op TextDecoder install as the SAB-less realm guard | 2026-09-04 | it does not exercise the private decode path that held the bare-SAB failure. Record: worker-realm-compat-bare-sab-referenceerror pickup, ADR-0162 |
+| Move N=1 declared-gap cause projection into runtime-js | 2026-09-04 | the policy is Workbench-local and runtime-js public/internal surfaces stay closed. Record: bounded-not-implemented-cause-projection Final correction |
+| Workflow-substring step for no-COI I5 inclusion | 2026-09-04 | raw text permits conditional skip and sends failures to a different report; moving the exact spec into `tests/no-coi` makes discovery authoritative. Record: `docs/backlog/distribution/reference/no-coi-ci-closure-proof-evidence.md` |
+| Ref-drain plus zero-live-timer resident readiness gate | 2026-09-04 | rejects harmless Vite cleanup yet misses native deferred sources; causal port ownership replaced it. Record: ADR-0377 correction, ADR-0378 |
+| Automatic preview reconnect after no-COI restart | 2026-09-04 | existing WebSocket does not reconnect; explicit iframe reload is the honest `works` policy. Record: ADR-0377 |
+| Workspace transaction or journal in no-COI tier `works` | 2026-09-04 | crash-atomic trees require robust-class machinery; the tier promises acknowledged flush plus a dirty marker only. Record: ADR-0377 |
+| Automatic retry during no-COI recovery | 2026-09-04 | peer loss cannot prove non-application; hidden retry risks duplicate effects. Record: ADR-0376/0377 |
+| Exactly-once no-COI recovery | 2026-09-04 | no durable operation journal exists at tier `works`; the contract makes no exactly-once claim. Record: ADR-0377 |
+| Hidden restart/recovery queue | 2026-09-04 | concurrent restart rejects; queueing adds order/cancellation state outside the tier. Record: ADR-0377 |
+| Crash-proof no-COI workspace durability | 2026-09-04 | termination before flush may cross generations; only the dirty marker is promised. Record: ADR-0377 |
+| Vite-specific build-only installed-tree finalizer | 2026-09-04 | generic installed-tree finalization must follow package bytes, not Vite identity. Record: ADR-0375 |

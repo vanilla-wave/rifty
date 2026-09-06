@@ -52,3 +52,10 @@ RIFTY_PLAYGROUND_PORT=5314 pnpm exec playwright test --config playwright.browser
 
 Thus current Chrome/source re-confirm the spike's capability and acknowledged-
 flush reload claims. The remaining defect is the recorded selector policy.
+
+## Goal-closure carrier (2026-09-04)
+
+The selector defect is landed. Its exact no-COI selection/flush/page-reload/
+fresh-Worker byte proof moved intact to `tests/no-coi/no-coi-opfs-reload.spec.ts`.
+`pnpm test:no-coi -g "no-COI capable dedicated Worker"` passes 1/1 on Chrome
+148.0.7778.96; the full no-COI lane now owns I5 with the other goal invariants.

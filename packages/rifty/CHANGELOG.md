@@ -4,6 +4,11 @@
 
 ### Added
 
+- **No-COI resident tools and explicit restart (ADR-0377).** Toolchain
+  sandboxes expose package-generic `startBin`, SW preview wiring and
+  `restart({preview,beforeStart})`; restart restores the installed runtime
+  binding snapshot without network and reports an unacknowledged public write.
+
 - **Explicit shared-memory-free toolchain sandbox (ADR-0375).**
   `createSandbox({requireCrossOriginIsolation:false, toolchain:{workerUrl}})`
   handshakes one Workbench Worker and exposes frozen capability reporting,
@@ -41,6 +46,7 @@
 - `createSandbox` rejects a non-boolean `requireCrossOriginIsolation`, including
   explicit `undefined`, before VFS, service-worker or Worker boot;
   omitted/true/literal-false behavior stays unchanged.
+
 - Corrected Vite host-wiring examples to use a production-emitted
   `@riftydev/runtime-js/worker?worker&url` asset with an ESM Worker build instead
   of an indirect package URL that Vite could not bundle.
@@ -50,3 +56,11 @@
   sqlite/WASI use.
 - Documented the SDK trust model and current resource-control limits; no runtime
   behavior changed.
+
+### Fixed
+
+- Public runtime, fs and toolchain operations fail fast with
+  `SandboxRestartBusyError` while restart owns the replacement generation;
+  `beforeStart` still receives a restored-generation-bound fs surface.
+- Retained and fire-and-forget writes through `beforeStart` RuntimeFs share the
+  public pending-write ledger, so a replacement reports them dirty when killed.

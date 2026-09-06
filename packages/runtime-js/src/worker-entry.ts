@@ -22,7 +22,10 @@ import { installTimerGlobals } from './builtins/timers.ts';
 import { setVmEngineOverride } from './builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from './builtins/web-globals.ts';
-import { sandboxToolchainWebAssembly } from './internal/sandbox-toolchain-realm.ts';
+import {
+  isSandboxToolchainResidentTransitionActive,
+  sandboxToolchainWebAssembly,
+} from './internal/sandbox-toolchain-realm.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
@@ -196,6 +199,20 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
       break;
     }
     case 'eval': {
+      if (isSandboxToolchainResidentTransitionActive()) {
+        post({
+          type: 'result',
+          result: {
+            id: msg.request.id,
+            ok: false,
+            error: {
+              name: 'SandboxToolchainBusyError',
+              message: 'runtime eval cannot enter during resident launch transition',
+            },
+          },
+        });
+        break;
+      }
       const result = await handleEval(msg.request);
       post({ type: 'result', result });
       // After an eval that may have recorded a divergence (rewrite engine) or a
@@ -204,6 +221,20 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
       break;
     }
     case 'fs': {
+      if (isSandboxToolchainResidentTransitionActive()) {
+        post({
+          type: 'fs-result',
+          result: {
+            id: msg.request.id,
+            ok: false,
+            error: {
+              name: 'SandboxToolchainBusyError',
+              message: 'runtime fs cannot enter during resident launch transition',
+            },
+          },
+        });
+        break;
+      }
       const result = await handleWorkerFsRequest(msg.request, {
         fs: syncMirror(),
         invalidate: () => loader.invalidate(),

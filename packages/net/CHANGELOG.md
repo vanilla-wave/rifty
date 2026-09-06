@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Causal resident port ownership (ADR-0378).** Loader-local `node:http` and
+  `node:net` facades bind an opaque owner to constructed servers; registry
+  registration exposes that owner so resident readiness cannot accept a stale
+  async callback's target port. ADR-0379 preserves ordinary factory/class names
+  and `createServer().constructor === Server` inside the owned loader.
+
 - **Node-compatible `net.isIP`, `net.isIPv4`, and `net.isIPv6`.** Includes IPv6
   zones and runtime `ToString` coercion, with live-Node parity coverage.
 

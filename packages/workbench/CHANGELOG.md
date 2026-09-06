@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- The generic no-COI Worker can start one caller-selected resident installed
+  bin and serve its existing cross-realm HTTP/WebSocket preview bridge
+  (ADR-0377).
+
 ### Changed
 
 - The no-COI Worker installs exact manifests and runs admitted installed bins
@@ -24,6 +30,13 @@
   JSON + binary kernel sync API with no legacy fallback.
 
 ### Fixed
+
+- Resident readiness now requires ADR-0378 loader-generation ownership of the
+  requested port. Harmless unref cleanup no longer blocks build→dev, while
+  stale timer, AbortSignal, MessageChannel, BroadcastChannel and Promise
+  continuations cannot supply false readiness. ADR-0379 concentrates entry,
+  ownership and live bind settlement behind one internal module; bind→close
+  before settlement rejects.
 
 - npm shell `EBROKENLOCK` stderr line surfaces the installer's message (which
   entries, which reason) instead of a `(unknown package)` placeholder; the

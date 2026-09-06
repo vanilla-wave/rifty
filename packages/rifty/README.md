@@ -94,7 +94,7 @@ async function main(): Promise<void> {
 void main();
 ```
 
-### Headerless build toolchain
+### Headerless toolchain
 
 Install `@riftydev/workbench`, bundle its
 `@riftydev/workbench/no-coi-toolchain-worker` entry as a module Worker, then:
@@ -111,12 +111,32 @@ await sandbox.toolchain.runBin({
   binPath: '/project/node_modules/.bin/vite',
   args: ['build'],
 });
+const resident = await sandbox.toolchain.startBin({
+  cwd: '/project',
+  binPath: '/project/node_modules/.bin/vite',
+  args: ['--host', '127.0.0.1', '--port', '5174', '--strictPort'],
+  port: 5174,
+});
+const previewIframe = document.querySelector('iframe[data-rifty-preview]');
+if (!(previewIframe instanceof HTMLIFrameElement)) throw new Error('preview iframe missing');
+previewIframe.src = resident.previewUrl;
+
+// Your timeout detects a wedged single realm; restart performs the recovery.
+await sandbox.restart({
+  preview: previewIframe,
+  beforeStart: (fs) =>
+    fs.writeFile('/project/src/wedge.js', "export const pluginState = 'repaired';\n"),
+});
 console.log(sandbox.capabilityReport);
 ```
 
 This mode owns runtime, VFS, npm install, installed registry-twin admission, and bin
-execution in one Worker. It exposes build-only run-to-completion bins; Vite
-dev/HMR/preview and threaded WASM throw by named feature.
+execution in one Worker. `startBin` is package-generic; the requested port
+resolves only after listen and routes through the existing SW HTTP/WebSocket
+preview bridge. `restart` is explicit because an alive CPU-wedged Worker cannot
+self-report; it visibly reloads the supplied iframe and reports whether a
+public write lacked its flush acknowledgement. Threaded WASM still throws by
+named feature.
 
 `createSandbox` degrades gracefully: OPFS init failure falls back to in-memory
 storage (`sandbox.vfs.reason`), and service-worker registration failure only

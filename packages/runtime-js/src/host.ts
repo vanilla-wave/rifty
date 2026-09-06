@@ -7,11 +7,13 @@ import type {
   FsResult,
   SerializedRuntimeError,
   TelemetrySnapshot,
+  ToolchainActivationState,
   ToolchainHostMessage,
   ToolchainInstallRequest,
   ToolchainRequest,
   ToolchainResult,
   ToolchainRunBinRequest,
+  ToolchainStartBinRequest,
   ToolchainWorkerMessage,
   VmEngineName,
 } from './protocol.ts';
@@ -75,11 +77,15 @@ export interface RuntimeController {
 export interface RuntimeToolchain {
   install(input: ToolchainInstallRequest): Promise<void>;
   runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
+  startBin(input: ToolchainStartBinRequest): Promise<{ readonly port: number }>;
 }
 
 export interface ToolchainRuntimeController extends RuntimeController {
   readonly toolchain: RuntimeToolchain;
   readonly toolchainReady: Promise<'opfs' | 'memory'>;
+  snapshotToolchainState(): ToolchainActivationState | null;
+  snapshotResidentRequest(): ToolchainStartBinRequest | null;
+  restoreToolchainState(state: ToolchainActivationState): Promise<void>;
 }
 
 /**
@@ -132,7 +138,7 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
   return createRuntimeController(opts, false);
 }
 
-/** Runtime controller with the sandbox toolchain v1 handshake/control plane. */
+/** Runtime controller with the sandbox toolchain v2 handshake/control plane. */
 export function spawnToolchainRuntime(opts: RuntimeOptions): ToolchainRuntimeController {
   return createRuntimeController(opts, true);
 }
@@ -163,6 +169,8 @@ function createRuntimeController(
       })
     : null;
   let toolchainHandshakeTimer: ReturnType<typeof setTimeout> | undefined;
+  let activationState: ToolchainActivationState | null = null;
+  let residentRequest: ToolchainStartBinRequest | null = null;
 
   function toolchainHandshakeError(message: string): NotImplementedError {
     return new NotImplementedError('sandbox.toolchain.worker', message);
@@ -295,8 +303,26 @@ function createRuntimeController(
   }
 
   async function writeFile(path: string, data: string | Uint8Array): Promise<void> {
+    const recoveryData =
+      typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
     const result = await requestFs({ id: nextId++, op: 'writeFile', path, data });
     if (!result.ok) throw deserializeError(result.error);
+    if (activationState !== null) {
+      const normalized = normalizePath(path);
+      const absolute = normalized.startsWith('/') ? normalized : normalizePath(`/${normalized}`);
+      const files = new Map(
+        activationState.files.map((file) => [file.path, new Uint8Array(file.data)] as const),
+      );
+      files.set(absolute, recoveryData);
+      activationState = Object.freeze({
+        ...activationState,
+        files: Object.freeze(
+          [...files]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([filePath, fileData]) => Object.freeze({ path: filePath, data: fileData })),
+        ),
+      });
+    }
   }
 
   function start(): void {
@@ -473,16 +499,34 @@ function createRuntimeController(
       await toolchainReady;
       const result = await requestToolchain({ id: nextId++, op: 'install', input: validated });
       if (!result.ok) throw deserializeError(result.error);
+      const value = exactInput(result.value, ['activationState'], 'toolchain install response');
+      activationState = validateActivationState(
+        value.activationState,
+        'toolchain install activation state',
+      );
     },
     async runBin(input) {
       const validated = validateRunBinRequest(input);
       await toolchainReady;
       const result = await requestToolchain({ id: nextId++, op: 'run-bin', input: validated });
       if (!result.ok) throw deserializeError(result.error);
-      if (result.value === undefined) {
+      const value = exactInput(result.value, ['exitCode'], 'toolchain run-bin response');
+      if (typeof value.exitCode !== 'number') {
         throw new Error('Invalid toolchain run-bin response');
       }
-      return result.value;
+      return { exitCode: value.exitCode };
+    },
+    async startBin(input) {
+      const validated = validateStartBinRequest(input);
+      await toolchainReady;
+      const result = await requestToolchain({ id: nextId++, op: 'start-bin', input: validated });
+      if (!result.ok) throw deserializeError(result.error);
+      const value = exactInput(result.value, ['port'], 'toolchain start-bin response');
+      if (value.port !== validated.port) {
+        throw new Error('Invalid toolchain start-bin response');
+      }
+      residentRequest = validated;
+      return { port: validated.port };
     },
   };
   return {
@@ -495,6 +539,21 @@ function createRuntimeController(
     },
     toolchain,
     toolchainReady,
+    snapshotToolchainState() {
+      return activationState === null
+        ? null
+        : validateActivationState(activationState, 'toolchain activation snapshot');
+    },
+    snapshotResidentRequest() {
+      return residentRequest;
+    },
+    async restoreToolchainState(state) {
+      const validated = validateActivationState(state, 'toolchain restore activation state');
+      await toolchainReady;
+      const result = await requestToolchain({ id: nextId++, op: 'restore', input: validated });
+      if (!result.ok) throw deserializeError(result.error);
+      activationState = validated;
+    },
   };
 }
 
@@ -537,14 +596,13 @@ function exactInput(
   ) {
     throw new TypeError(`${label} must be a plain object`);
   }
-  if (Object.getOwnPropertySymbols(input).length > 0) {
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) {
     throw new TypeError(`${label} has symbol fields`);
   }
-  const descriptors = Object.getOwnPropertyDescriptors(input);
   for (const descriptor of Object.values(descriptors)) {
     if (!('value' in descriptor)) throw new TypeError(`${label} has accessor fields`);
   }
-  const record = input as Record<string, unknown>;
   const actual = Object.keys(descriptors).toSorted();
   const expected = [...fields].toSorted();
   if (
@@ -553,7 +611,17 @@ function exactInput(
   ) {
     throw new TypeError(`${label} has extra or missing fields`);
   }
-  return record;
+  return Object.freeze(
+    Object.fromEntries(
+      actual.map((field) => {
+        const descriptor = descriptors[field];
+        if (descriptor === undefined || !('value' in descriptor)) {
+          throw new TypeError(`${label} has accessor fields`);
+        }
+        return [field, descriptor.value] as const;
+      }),
+    ),
+  );
 }
 
 function absolutePath(value: unknown, label: string): string {
@@ -576,22 +644,36 @@ function validateInstallRequest(input: ToolchainInstallRequest): ToolchainInstal
   return Object.freeze({ cwd, registryUrl: record.registryUrl });
 }
 
-function validateRunBinRequest(input: ToolchainRunBinRequest): ToolchainRunBinRequest {
-  const record = exactInput(input, ['args', 'binPath', 'cwd'], 'toolchain.runBin input');
-  const cwd = absolutePath(record.cwd, 'toolchain.runBin cwd');
-  const binPath = absolutePath(record.binPath, 'toolchain.runBin binPath');
+function validateBinInput(
+  input: unknown,
+  fields: readonly string[],
+  label: string,
+): {
+  readonly request: ToolchainRunBinRequest;
+  readonly record: Readonly<Record<string, unknown>>;
+} {
+  const record = exactInput(input, fields, `${label} input`);
+  const cwd = absolutePath(record.cwd, `${label} cwd`);
+  const binPath = absolutePath(record.binPath, `${label} binPath`);
   const binPrefix = `${cwd}/node_modules/.bin/`;
   if (!binPath.startsWith(binPrefix) || binPath.slice(binPrefix.length).includes('/')) {
-    throw new TypeError('toolchain.runBin binPath must name an installed node_modules/.bin entry');
+    throw new TypeError(`${label} binPath must name an installed node_modules/.bin entry`);
   }
-  if (!Array.isArray(record.args) || Object.getOwnPropertySymbols(record.args).length > 0) {
-    throw new TypeError('toolchain.runBin args must be a dense string array');
+  if (!Array.isArray(record.args)) {
+    throw new TypeError(`${label} args must be a dense string array`);
   }
   const args = record.args;
   const descriptors = Object.getOwnPropertyDescriptors(args);
+  if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) {
+    throw new TypeError(`${label} args must be a dense string array`);
+  }
+  const length = (descriptors as unknown as Record<PropertyKey, PropertyDescriptor>).length;
   const indexKeys = Object.keys(descriptors).filter((key) => key !== 'length');
   if (
-    indexKeys.length !== args.length ||
+    length === undefined ||
+    !('value' in length) ||
+    typeof length.value !== 'number' ||
+    indexKeys.length !== length.value ||
     indexKeys.some((key, index) => key !== String(index)) ||
     indexKeys.some((key) => {
       const descriptor = descriptors[key];
@@ -600,7 +682,110 @@ function validateRunBinRequest(input: ToolchainRunBinRequest): ToolchainRunBinRe
       );
     })
   ) {
-    throw new TypeError('toolchain.runBin args must be a dense string array');
+    throw new TypeError(`${label} args must be a dense string array`);
   }
-  return Object.freeze({ cwd, binPath, args: Object.freeze([...args] as string[]) });
+  const copiedArgs = indexKeys.map((key) => {
+    const descriptor = descriptors[key];
+    if (
+      descriptor === undefined ||
+      !('value' in descriptor) ||
+      typeof descriptor.value !== 'string'
+    ) {
+      throw new TypeError(`${label} args must be a dense string array`);
+    }
+    return descriptor.value;
+  });
+  return {
+    record,
+    request: Object.freeze({ cwd, binPath, args: Object.freeze(copiedArgs) }),
+  };
+}
+
+function validateRunBinRequest(input: ToolchainRunBinRequest): ToolchainRunBinRequest {
+  return validateBinInput(input, ['args', 'binPath', 'cwd'], 'toolchain.runBin').request;
+}
+
+function validateStartBinRequest(input: ToolchainStartBinRequest): ToolchainStartBinRequest {
+  const validated = validateBinInput(
+    input,
+    ['args', 'binPath', 'cwd', 'port'],
+    'toolchain.startBin',
+  );
+  const port = validated.record.port;
+  if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new TypeError('toolchain.startBin port must be an integer from 1 through 65535');
+  }
+  return Object.freeze({ ...validated.request, port });
+}
+
+function validateActivationState(input: unknown, label: string): ToolchainActivationState {
+  const record = exactInput(input, ['bindings', 'cwd', 'files', 'vfsBackend'], label);
+  const cwd = absolutePath(record.cwd, `${label} cwd`);
+  if (record.vfsBackend !== 'opfs' && record.vfsBackend !== 'memory') {
+    throw new TypeError(`${label} vfsBackend must be opfs or memory`);
+  }
+  if (!Array.isArray(record.bindings) || Object.getOwnPropertySymbols(record.bindings).length > 0) {
+    throw new TypeError(`${label} bindings must be a dense array`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(record.bindings);
+  const indexKeys = Object.keys(descriptors).filter((key) => key !== 'length');
+  if (
+    indexKeys.length !== record.bindings.length ||
+    indexKeys.some((key, index) => key !== String(index)) ||
+    indexKeys.some((key) => {
+      const descriptor = descriptors[key];
+      return descriptor === undefined || !('value' in descriptor);
+    })
+  ) {
+    throw new TypeError(`${label} bindings must be a dense array`);
+  }
+  const bindings = indexKeys.map((key, index) => {
+    const descriptor = descriptors[key];
+    if (descriptor === undefined || !('value' in descriptor)) {
+      throw new TypeError(`${label} bindings must be a dense array`);
+    }
+    const value = descriptor.value;
+    const binding = exactInput(value, ['adapterId', 'packagePath'], `${label} binding ${index}`);
+    if (typeof binding.adapterId !== 'string' || binding.adapterId.length === 0) {
+      throw new TypeError(`${label} binding ${index} adapterId must be a non-empty string`);
+    }
+    const packagePath = absolutePath(binding.packagePath, `${label} binding ${index} packagePath`);
+    return Object.freeze({ adapterId: binding.adapterId, packagePath });
+  });
+  if (!Array.isArray(record.files) || Object.getOwnPropertySymbols(record.files).length > 0) {
+    throw new TypeError(`${label} files must be a dense array`);
+  }
+  const fileDescriptors = Object.getOwnPropertyDescriptors(record.files);
+  const fileKeys = Object.keys(fileDescriptors).filter((key) => key !== 'length');
+  if (
+    fileKeys.length !== record.files.length ||
+    fileKeys.some((key, index) => key !== String(index)) ||
+    fileKeys.some((key) => {
+      const descriptor = fileDescriptors[key];
+      return descriptor === undefined || !('value' in descriptor);
+    })
+  ) {
+    throw new TypeError(`${label} files must be a dense array`);
+  }
+  const seen = new Set<string>();
+  const files = fileKeys.map((key, index) => {
+    const descriptor = fileDescriptors[key];
+    if (descriptor === undefined || !('value' in descriptor)) {
+      throw new TypeError(`${label} files must be a dense array`);
+    }
+    const file = exactInput(descriptor.value, ['data', 'path'], `${label} file ${index}`);
+    const path = absolutePath(file.path, `${label} file ${index} path`);
+    if (seen.has(path)) throw new TypeError(`${label} has duplicate file ${path}`);
+    seen.add(path);
+    if (!(file.data instanceof Uint8Array)) {
+      throw new TypeError(`${label} file ${index} data must be Uint8Array`);
+    }
+    return Object.freeze({ path, data: new Uint8Array(file.data) });
+  });
+  return Object.freeze({
+    cwd,
+    bindings: Object.freeze(bindings),
+    vfsBackend: record.vfsBackend,
+    files: Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path))),
+  });
 }
