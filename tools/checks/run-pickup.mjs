@@ -13,6 +13,7 @@ const TEST_SUPPORT_SOURCE_BASENAME_RE = /(?:^|\/)(?:test-[^/]+|[^/]+-test-fixtur
  * @returns {'production'|'test-support'|'other'}
  */
 export function classifyAutonomousRunPath(path) {
+  if (path.startsWith('tools/node-parity-runner/cases/')) return 'test-support'; // the RED that cannot be faked
   if (TEST_SUPPORT_PATH_RE.test(path)) return 'test-support';
   const sourceExtension = SOURCE_EXTENSION_RE.test(path);
   if (sourceExtension && TEST_SUPPORT_SOURCE_BASENAME_RE.test(path)) return 'test-support';

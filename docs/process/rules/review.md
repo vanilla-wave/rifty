@@ -120,9 +120,14 @@ Two records, nothing else:
   then deletes its doc — the artifacts stay (`readiness.md` `RDY-8`). An
   `ordinary` review is committed as
   `docs/backlog/<area>/reference/<slug|pr-N>-ordinary.json` — the reviewer's
-  prose verdict, the reception lines, `reviewed_sha` — whenever the unit
-  changes a production or test path; a docs-only unit's verdict is posted to
-  the PR. No artifact, no review happened (`REV-11`).
+  prose verdict, the reception lines with who ruled each (`by: critic |
+  driver`), `reviewed_sha` (`../artifacts/verdict.md`) — whenever the unit
+  changes a production path, a test or a parity case; a docs-only unit's
+  verdict is posted to the PR. No artifact, no review happened (`REV-11`). A
+  compiled draft that is flipped, built and deleted inside one PR leaves both
+  its Contract+RED and its landing verdict; a `ready-verdict:` line added or
+  changed on an already-ready unit beside code binds the same way — a legacy
+  ready item gets its artifact at its next PICKUP (`../stages/pickup.md`).
 
 No status lines, no round counters: the pass history is `git log` — each fix
 batch commits with its FIX findings in the message (`REV-12`). An `ordinary`
@@ -138,9 +143,12 @@ lanes) and the unit's graded contract is unchanged (`contract-drift.mjs`
 ADRs and CHANGELOGs never break it, any product, test or contract change
 after it does. Merge requires it, by machine: `pnpm check:pass-binding`
 (`tools/checks/pass-binding.mjs`, also a CI step) reads the landing verdict's
-`reviewed_sha`, requires it to be an ancestor of HEAD with only documentation
-changed since, and fails a PR that changes product or test paths without one;
-a draft PR is skipped — the binding is asked of a PR marked ready to merge. `BASE` of the next slice = the `<sha>` of the last such rechart
+`reviewed_sha`, requires the artifact to be a shaped verdict (not a re-pointed
+sha on an old one), the commit to be an ancestor of HEAD with only
+documentation changed since, and fails a PR that changes product paths, tests
+or parity cases without one; a draft PR is skipped — the binding is asked of
+a PR marked ready to merge, which re-runs CI (`ready_for_review`) and is a
+lane of `pnpm pr:check`. `BASE` of the next slice = the `<sha>` of the last such rechart
 line reachable from HEAD, else the branch base. Slices landed before
 2026-09-03 recorded their PASS as a ledger `Final+GREEN PASS @ <sha>` line:
 read it as the same record — never fall back to the branch base while such a

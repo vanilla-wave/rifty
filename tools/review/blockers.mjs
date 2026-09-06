@@ -150,7 +150,15 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = nul
     // A §Fidelity blocker is rejected only as FALSE with the carrier cited (file:line in the clause)
     // — never STRETCH (REV-12).
     for (const finding of rawBlockers) {
-      if (!FIDELITY_AUTHORITY_RE.test(String(finding.authority ?? ''))) continue;
+      const authority = String(finding.authority ?? '');
+      if (!FIDELITY_AUTHORITY_RE.test(authority)) continue;
+      // A Fidelity authority is written `AGENTS.md §Fidelity: <rule>` so reception cannot mistake it.
+      if (!authority.startsWith('AGENTS.md §Fidelity')) {
+        errors.push(
+          `Fidelity authority must start with 'AGENTS.md §Fidelity': ${authority.slice(0, 60)}`,
+        );
+        continue;
+      }
       const ruling = rulings.get(finding.summary);
       if (ruling === 'STRETCH') {
         errors.push(

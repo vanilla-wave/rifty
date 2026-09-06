@@ -29,6 +29,14 @@ const VERDICT_JSON = verdictJson('docs/backlog/playground/x.md');
 const ARTIFACT = 'docs/backlog/playground/reference/x-contract-red.json';
 const LANDING = 'docs/backlog/playground/reference/x-final-green.json';
 const LANDING_JSON = verdictJson('docs/backlog/playground/x.md', 'abc', 'Final+GREEN');
+const ordinaryJson = (extra: Record<string, unknown> = {}) =>
+  JSON.stringify({
+    checkpoint: 'ordinary',
+    verdict: 'pass — no FIX left',
+    reception: [],
+    reviewed_sha: `abc${'d'.repeat(37)}`,
+    ...extra,
+  });
 
 const read =
   (base: string | null, head: string | null, extra: Record<string, string | null> = {}) =>
@@ -207,9 +215,12 @@ ${verdict}${decisions}`;
     expect(evaluate([src, contract], read(item('ready'), item('in-progress')))).toHaveLength(1);
   });
 
-  it('allows head equal to merge-base modulo lineage lines', () => {
+  it('allows head equal to merge-base modulo journal lines; a verdict line added beside code binds', () => {
     expect(evaluate([src, contract], read(item('ready'), item('ready')))).toHaveLength(0);
-    expect(evaluate([src, contract], read(item('ready'), item('ready') + verdict))).toHaveLength(0);
+    expect(evaluate([src, contract], read(item('ready'), item('ready') + verdict))).toHaveLength(1);
+    expect(
+      evaluate([src, contract], read(item('ready'), item('ready') + verdict, withArtifact)),
+    ).toHaveLength(0);
     expect(evaluate([src, contract], read(item('ready') + verdict, item('ready')))).toHaveLength(0);
   });
 
@@ -234,7 +245,7 @@ ${verdict}${decisions}`;
     expect(verdictArtifactPath('net/y')).toBe('docs/backlog/net/reference/y-contract-red.json');
     const absent = evaluate([src, contract], read(item('draft'), item('ready') + verdict));
     expect(absent).toHaveLength(1);
-    expect(absent[0]).toContain('absent or not a Contract+RED verdict');
+    expect(absent[0]).toContain('absent or not JSON');
     expect(
       evaluate(
         [src, contract],
@@ -292,7 +303,7 @@ ${verdict}${decisions}`;
       evaluate(
         [src, deleted],
         read(ordinaryBase, null, {
-          [ordinaryLanding]: verdictJson('docs/backlog/playground/x.md', 'abc', 'ordinary'),
+          [ordinaryLanding]: ordinaryJson(),
         }),
       ),
     ).toHaveLength(0);
@@ -310,6 +321,68 @@ ${verdict}${decisions}`;
       're-cut: 2026-09-06 — ADR-0358 row moved to the substrate unit — trace: none\n',
     );
     expect(evaluate([src, contract], read(base, named))).toHaveLength(0);
+  });
+
+  it('a compiled draft flipped, built and deleted inside one PR leaves both verdicts (REV-8, the merge head)', () => {
+    const compiled = traced('1. exact bytes → I1'); // status: ready in the helper — use a draft variant
+    const draftCompiled = compiled.replace('status: ready', 'status: draft');
+    const deleted = { ...contract, status: 'D' };
+    // A base draft with traced rows (compiled, built and deleted in-PR): the pair is required.
+    expect(evaluate([src, deleted], read(draftCompiled, null))).toHaveLength(2);
+    expect(
+      evaluate([src, deleted], read(draftCompiled, null, { [ARTIFACT]: VERDICT_JSON })),
+    ).toHaveLength(1);
+    expect(
+      evaluate(
+        [src, deleted],
+        read(draftCompiled, null, { [ARTIFACT]: VERDICT_JSON, [LANDING]: LANDING_JSON }),
+      ),
+    ).toHaveLength(0);
+    // A plain draft (a finding, no traced rows) needs any landing verdict added in the diff.
+    const plain = item('draft');
+    expect(evaluate([src, deleted], read(plain, null))).toHaveLength(1);
+    const landing = { status: 'A', path: 'docs/backlog/net/reference/pr-12-ordinary.json' };
+    expect(evaluate([src, deleted, landing], read(plain, null))).toHaveLength(0);
+  });
+
+  it('a ready-verdict: line added or changed on an already-ready unit binds like a flip (REV-8)', () => {
+    const added = traced('1. exact bytes → I1'); // the helper carries the verdict line
+    const base = added.replace(verdict, '');
+    expect(evaluate([src, contract], read(base, added))).toHaveLength(1);
+    expect(evaluate([src, contract], read(base, added, withArtifact))).toHaveLength(0);
+    const repointed = added.replace(verdict, 'ready-verdict: 2026-09-06 — Contract+RED @ fff\n');
+    expect(evaluate([src, contract], read(added, repointed, withArtifact))).toHaveLength(1);
+  });
+
+  it('a dropped ADR row names THAT ADR, not any (RDY-5)', () => {
+    const base = traced('1. exact bytes → I1\n2. torn write throws → ADR-0358');
+    const other = traced(
+      '1. exact bytes → I1',
+      're-cut: 2026-09-06 — ADR-9999 row moved — trace: none\n',
+    );
+    expect(evaluate([src, contract], read(base, other))).toHaveLength(1);
+  });
+
+  it('parity cases ride with the product; lane configs and referees never — even beside tests only (PR-4)', () => {
+    const testOnly = { status: 'M', path: 'packages/x/src/a.test.ts' };
+    for (const path of ['tools/node-parity-runner/cases/fs/x.case.ts', 'examples/x/main.ts']) {
+      expect(evaluate([src], read(null, null), [src, { status: 'M', path }])).toHaveLength(0);
+    }
+    for (const path of [
+      'apps/playground/vitest.config.ts',
+      'packages/vfs/package.json',
+      'tools/node-parity-runner/src/cli.ts',
+      'tools/checks/ci-change-scope.mjs',
+    ]) {
+      expect(evaluate([src], read(null, null), [src, { status: 'M', path }])).toHaveLength(1);
+      expect(
+        evaluate([testOnly], read(null, null), [testOnly, { status: 'M', path }]),
+      ).toHaveLength(1);
+    }
+    // A referee PR carries its own tests: tools/checks/*.test.ts is not product code.
+    const refereeTest = { status: 'M', path: 'tools/checks/contract-drift.test.ts' };
+    const referee = { status: 'M', path: 'tools/checks/contract-drift.mjs' };
+    expect(evaluate([refereeTest, referee], read(null, null))).toHaveLength(0);
   });
 
   it('beside production everything outside the product, its tests and its docs is a referee (PR-4)', () => {

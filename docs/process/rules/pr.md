@@ -30,13 +30,16 @@ driver (`decisions.md` `DEC-3`: pre-authorized once given).
 ## PR-4 Separate-PR demands name their gate
 
 A rule demanding a separate PR holds only if it names the gate forcing it.
-Today one: `check:contract-drift` refuses a production diff that edits
-anything outside the product, its tests, examples, deploy/perf, the backlog
+Today one: `check:contract-drift` refuses a diff that touches code (a
+production path or a test) and edits anything outside the product, its tests
+and parity cases (`tools/node-parity-runner/cases/**` — the RED that cannot
+be faked rides with the change it proves), examples, deploy/perf, the backlog
 and ADR docs, changelogs, lockfile and workspace/tsconfig structure — CI, the
-gates, the parity oracle harness, the process canon, agent instructions,
-lint/test/lane configs judge the PR and land separately, never as a "carrier"
-of the unit that needs them changed. An open rule: a new judge is a referee
-by default.
+gates, the parity oracle harness (`src/`), the process canon, agent
+instructions, every lint/test/lane config (root or package-local `vitest`/
+`playwright` configs and `package.json`s) judge the PR and land separately,
+never as a "carrier" of the unit that needs them changed. An open rule: a new
+judge is a referee by default.
 
 ## PR-5 User-asked PR
 

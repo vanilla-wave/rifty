@@ -6,7 +6,9 @@ implementation started. Driver session (`DEC-5`).
 
 1. **Choose.** The user-named unit, else the first frontier child. A legacy
    child already `ready` with no verdict line compiles here the same way; its
-   trace additions ride a `re-cut:` line (`RDY-5`).
+   trace additions ride a `re-cut:` line (`RDY-5`) and its Contract+RED
+   verdict is committed like any other — `check:contract-drift` binds a
+   `ready-verdict:` line added beside code to its artifact (`REV-8`).
 2. **Compile** draft → ready per `../rules/readiness.md` `RDY-2`: evidence per
    row about the oracle and baseline only — nothing about the deliverable is
    measured here, a budget on it becomes a traced Acceptance row with a RED

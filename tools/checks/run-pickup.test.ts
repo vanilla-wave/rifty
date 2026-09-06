@@ -70,6 +70,13 @@ describe('classifyAutonomousRunPath', () => {
     expect(classifyAutonomousRunPath(path)).toBe('test-support');
   });
 
+  it('classifies parity-runner cases as test support', () => {
+    expect(classifyAutonomousRunPath('tools/node-parity-runner/cases/fs/x.case.ts')).toBe(
+      'test-support',
+    );
+    expect(classifyAutonomousRunPath('tools/node-parity-runner/src/cli.ts')).toBe('other');
+  });
+
   it.each([
     'packages/x/src/w.wasm',
     'apps/playground/index.html',

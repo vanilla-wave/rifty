@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # ready_for_review re-runs the gates a draft PR skips (check:pass-binding, REV-8).
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
     types: [checks_requested]
   push:

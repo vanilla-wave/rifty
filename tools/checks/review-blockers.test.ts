@@ -115,6 +115,17 @@ it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until eve
     ruling('naming', 'FALSE'),
   ];
   expect(evaluateVerdict(verdict, falseCited).code).toBe(0);
+  // The token: a Fidelity authority not written as `AGENTS.md §Fidelity…` is invalid.
+  const loose = {
+    ...verdict,
+    axes: verdict.axes.map((a) => ({
+      ...a,
+      findings: a.findings.map((f) =>
+        f === fidelity ? { ...f, authority: 'no mocking (Fidelity)' } : f,
+      ),
+    })),
+  };
+  expect(evaluateVerdict(loose, falseCited).code).toBe(2);
 });
 
 it('an unreadable named contract is an invalid verdict (REV-4)', () => {

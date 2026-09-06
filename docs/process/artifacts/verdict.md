@@ -34,8 +34,18 @@ cited as `file:line` in the clause (`REV-12`). Residuals mirror the rulings
 only when at least one blocker exists and every blocker was ruled — a partial
 or empty adjudication leaves them blocking. `findings[].evidence` carries the
 executed artifact (command + output excerpt) a `REV-5` class or a mutant claim
-rests on — the critic reads it at reception; `reviewed_sha` is added by the
-runner before the file is committed under `reference/` (`REV-8`).
+rests on — the critic reads it at reception; `reviewed_sha` (and
+`reviewed_tree`, its `^{tree}` — squash-merge orphans the commit, never the
+tree) is added by the runner before the file is committed under `reference/`
+(`REV-8`).
+
+An ordinary review (`../stages/checkpoint-run.md` §Ordinary review) is
+committed as `reference/<slug|pr-N>-ordinary.json`: `checkpoint: "ordinary"`,
+`verdict` (the reviewer's prose), `reception[]` of `{summary, authority,
+ruling: FIX|REJECT|NOTE, by: "driver"|"critic"}`, `reviewed_sha`. A REJECT of
+a Fidelity blocker with `by: "driver"` is refused by `check:pass-binding`
+(`REV-12`). Both shapes are checked by `check:contract-drift` at a flip or a
+delete-on-done and by `check:pass-binding` at merge.
 
 Exit codes: `0` pass (`goal_complete:false` = continue the goal) · `1` FIX
 findings remain — surviving blockers + `missing` rows (`weak` rows and
