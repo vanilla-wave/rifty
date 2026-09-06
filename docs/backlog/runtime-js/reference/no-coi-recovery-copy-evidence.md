@@ -29,3 +29,15 @@ oracles. Byte copies at external caller boundaries remain deliberate.
 ## Journal
 
 2026-09-06 — runtime-js/no-coi-recovery-copy band 3–4 rounds 2; standalone pickup.
+
+2026-09-06 — Contract+RED PASS @ 3262ac8d6; 0 blockers, 4 advisory concerns.
+C1 constructor counter misses slice; C2 page counter misses Worker pre-copy;
+C3 install count needs independent byte size; C4 replacement boot/restore
+failure needs its own recovery test. All addressed before implementation:
+count slice too, observe real mirror byte identity at Worker postMessage,
+compare page copy bytes to Worker tree size, exercise boot/restore/beforeStart
+failure and two subsequent retries against the real SDK/host.
+
+Strengthened browser RED (same command): 5 assertion failures. Worker mirror
+identity false (expected true); install 59,056,136 vs 29,528,068; edit
+29,528,068 vs 0; restore 269 files vs 0; restart 88,584,213 vs 59,056,142.

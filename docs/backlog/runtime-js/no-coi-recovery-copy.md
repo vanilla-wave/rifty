@@ -79,6 +79,7 @@ capability, silent fallback, or compatibility claim.
 
 ## Decisions
 
+ready-verdict: 2026-09-06 — Contract+RED @ 3262ac8d6
 review: checkpoints rounds:2
 - 2026-09-06 — pickup band 3–4 rounds 2; standalone unit, BASE 59df0c0a3.
 - 2026-09-06 — DEC-1 reversible: preserve ADR-0377 scope/ownership; remove redundant work, retain detached boundary copies.

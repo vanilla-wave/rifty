@@ -64,7 +64,13 @@ async function bootSandbox(page: Page, workerUrl = toolchainWorkerUrl): Promise<
           construct(target, args) {
             const count = Reflect.get(globalThis, '__riftyWorkerCount') as number;
             Reflect.set(globalThis, '__riftyWorkerCount', count + 1);
-            return Reflect.construct(target, args);
+            const worker = Reflect.construct(target, args) as Worker;
+            worker.addEventListener('message', (event) => {
+              if (event.data?.type === 'recovery-probe') {
+                Reflect.set(globalThis, '__riftyRecoveryProbe', event.data);
+              }
+            });
+            return worker;
           },
         }),
       );
@@ -1226,13 +1232,22 @@ test('actual Worker close emits one runtime exit event and settles pending work'
 test('recovery copies scale with edits and same-OPFS restart omits tree bytes', async ({
   page,
 }) => {
-  await bootSandbox(page);
+  await bootSandbox(
+    page,
+    `/@fs${workspacePath}/tests/no-coi/fixtures/no-coi-recovery-probe-worker.ts`,
+  );
   try {
     await writeFiles(page, realProjectFiles);
     const installCost = await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
       const NativeBytes = Uint8Array;
       let copiedBytes = 0;
+      const nativeSlice = NativeBytes.prototype.slice;
+      NativeBytes.prototype.slice = function (start, end) {
+        const result = nativeSlice.call(this, start, end);
+        copiedBytes += result.byteLength;
+        return result;
+      };
       Reflect.set(
         globalThis,
         'Uint8Array',
@@ -1252,13 +1267,24 @@ test('recovery copies scale with edits and same-OPFS restart omits tree bytes', 
           '/dev-hmr/src/hmr-value.js',
           "export const marker = 'hmr-copy';\n",
         );
-        return { installedCopies, editCopies: copiedBytes, backend: sandbox.vfs.backend };
+        return {
+          installedCopies,
+          editCopies: copiedBytes,
+          backend: sandbox.vfs.backend,
+          probe: Reflect.get(globalThis, '__riftyRecoveryProbe') as {
+            bytes: number;
+            reusedMirrorBytes: boolean;
+          },
+        };
       } finally {
         Reflect.set(globalThis, 'Uint8Array', NativeBytes);
+        NativeBytes.prototype.slice = nativeSlice;
       }
     });
     expect(installCost.backend).toBe('opfs');
-    expect(installCost.installedCopies).toBeGreaterThan(1_000_000);
+    expect(installCost.probe.bytes).toBeGreaterThan(1_000_000);
+    expect.soft(installCost.probe.reusedMirrorBytes).toBe(true);
+    expect.soft(installCost.installedCopies).toBe(installCost.probe.bytes);
     expect.soft(installCost.editCopies).toBe(0);
     await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
@@ -1313,7 +1339,7 @@ test('recovery copies scale with edits and same-OPFS restart omits tree bytes', 
     const editDelta =
       new TextEncoder().encode("export const marker = 'hmr-copy';\n").byteLength -
       new TextEncoder().encode(realProjectFiles['/dev-hmr/src/hmr-value.js']).byteLength;
-    expect.soft(restartCost.copiedBytes).toBe(2 * (installCost.installedCopies + editDelta));
+    expect.soft(restartCost.copiedBytes).toBe(2 * (installCost.probe.bytes + editDelta));
     expect(restartCost.report.unflushedWrites).toBe(false);
     await expect
       .poll(async () => (await waitForMarker(page, 'hmr-copy')).bootId)

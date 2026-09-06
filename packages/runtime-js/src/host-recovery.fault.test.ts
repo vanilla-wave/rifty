@@ -76,7 +76,10 @@ function writeId(peer: Peer): number {
   return message.request.id;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('no-COI recovery ownership', () => {
   it('copies only the written bytes after acknowledgement', async () => {
@@ -93,6 +96,12 @@ describe('no-COI recovery ownership', () => {
         },
       }),
     );
+    const nativeSlice = NativeBytes.prototype.slice;
+    vi.spyOn(NativeBytes.prototype, 'slice').mockImplementation(function (start, end) {
+      const result = nativeSlice.call(this, start, end);
+      copied += result.byteLength;
+      return result;
+    });
     const data = NativeBytes.of(8, 9, 10);
     const writing = runtime.fs.writeFile('/dev/package.json', data);
     peer.emit({ type: 'fs-result', result: { id: writeId(peer), ok: true } });
