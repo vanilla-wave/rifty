@@ -310,18 +310,10 @@ function createRuntimeController(
     if (activationState !== null) {
       const normalized = normalizePath(path);
       const absolute = normalized.startsWith('/') ? normalized : normalizePath(`/${normalized}`);
-      const files = new Map(
-        activationState.files.map((file) => [file.path, new Uint8Array(file.data)] as const),
-      );
-      files.set(absolute, recoveryData);
-      activationState = Object.freeze({
-        ...activationState,
-        files: Object.freeze(
-          [...files]
-            .sort(([left], [right]) => left.localeCompare(right))
-            .map(([filePath, fileData]) => Object.freeze({ path: filePath, data: fileData })),
-        ),
-      });
+      const files = activationState.files.filter((file) => file.path !== absolute);
+      files.push(Object.freeze({ path: absolute, data: recoveryData }));
+      files.sort((left, right) => left.path.localeCompare(right.path));
+      activationState = Object.freeze({ ...activationState, files: Object.freeze(files) });
     }
   }
 
@@ -542,17 +534,28 @@ function createRuntimeController(
     snapshotToolchainState() {
       return activationState === null
         ? null
-        : validateActivationState(activationState, 'toolchain activation snapshot');
+        : Object.freeze({
+            ...activationState,
+            files: Object.freeze(
+              activationState.files.map((file) =>
+                Object.freeze({ path: file.path, data: new Uint8Array(file.data) }),
+              ),
+            ),
+          });
     },
     snapshotResidentRequest() {
       return residentRequest;
     },
     async restoreToolchainState(state) {
       const validated = validateActivationState(state, 'toolchain restore activation state');
-      await toolchainReady;
-      const result = await requestToolchain({ id: nextId++, op: 'restore', input: validated });
+      const backend = await toolchainReady;
+      const input =
+        backend === 'opfs' && validated.vfsBackend === 'opfs'
+          ? { ...validated, files: [] }
+          : validated;
+      const result = await requestToolchain({ id: nextId++, op: 'restore', input });
       if (!result.ok) throw deserializeError(result.error);
-      activationState = validated;
+      activationState = Object.freeze({ ...validated, vfsBackend: backend });
     },
   };
 }

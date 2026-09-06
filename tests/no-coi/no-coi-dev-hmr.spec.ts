@@ -64,7 +64,13 @@ async function bootSandbox(page: Page, workerUrl = toolchainWorkerUrl): Promise<
           construct(target, args) {
             const count = Reflect.get(globalThis, '__riftyWorkerCount') as number;
             Reflect.set(globalThis, '__riftyWorkerCount', count + 1);
-            return Reflect.construct(target, args);
+            const worker = Reflect.construct(target, args) as Worker;
+            worker.addEventListener('message', (event) => {
+              if (event.data?.type === 'recovery-probe') {
+                Reflect.set(globalThis, '__riftyRecoveryProbe', event.data);
+              }
+            });
+            return worker;
           },
         }),
       );
@@ -919,7 +925,11 @@ test('memory-backend restart restores the installed tree before resident relaunc
         return sandbox.vfs.backend;
       }),
     ).toBe('memory');
-    await writeFiles(page, realProjectFiles);
+    await writeFiles(page, {
+      ...realProjectFiles,
+      '/outside-cwd.bin': 'outside-before-install',
+      '/.rifty/recovery-probe.bin': 'cache-before-install',
+    });
     await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
       await sandbox.toolchain.install({ cwd: '/dev-hmr', registryUrl: '/npm-registry' });
@@ -979,6 +989,15 @@ test('memory-backend restart restores the installed tree before resident relaunc
       )
       .not.toBe(first.bootId);
     const recovered = await waitForMarker(page, 'hmr-memory-before-restart');
+    expect(
+      await page.evaluate(async () => {
+        const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+        return [
+          await sandbox.fs.readFile('/outside-cwd.bin', 'utf8'),
+          await sandbox.fs.readFile('/.rifty/recovery-probe.bin', 'utf8'),
+        ];
+      }),
+    ).toEqual(['outside-before-install', 'cache-before-install']);
     expect(recovered.bootId).not.toBe(first.bootId);
     expect(
       await page.evaluate(async () => {
@@ -1218,6 +1237,202 @@ test('actual Worker close emits one runtime exit event and settles pending work'
       events: [{ type: 'exit', reason: 'error' }],
       failure: { name: 'WorkerTerminated', message: 'Toolchain Worker closed' },
     });
+  } finally {
+    await disposeSandbox(page);
+  }
+});
+
+test('recovery copies scale with edits and same-OPFS restart omits tree bytes', async ({
+  page,
+}) => {
+  await bootSandbox(
+    page,
+    `/@fs${workspacePath}/tests/no-coi/fixtures/no-coi-recovery-probe-worker.ts`,
+  );
+  try {
+    await writeFiles(page, realProjectFiles);
+    const installCost = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const NativeBytes = Uint8Array;
+      let copiedBytes = 0;
+      const nativeSlice = NativeBytes.prototype.slice;
+      NativeBytes.prototype.slice = function (start, end) {
+        const result = nativeSlice.call(this, start, end);
+        copiedBytes += result.byteLength;
+        return result;
+      };
+      Reflect.set(
+        globalThis,
+        'Uint8Array',
+        new Proxy(NativeBytes, {
+          construct(target, args) {
+            if (args[0] instanceof NativeBytes) copiedBytes += args[0].byteLength;
+            else if (typeof args[0] === 'number') copiedBytes += args[0];
+            return Reflect.construct(target, args);
+          },
+        }),
+      );
+      try {
+        await sandbox.toolchain.install({ cwd: '/dev-hmr', registryUrl: '/npm-registry' });
+        // Reading via the real Worker does not construct page Uint8Arrays.
+        const installedCopies = copiedBytes;
+        copiedBytes = 0;
+        await sandbox.fs.writeFile(
+          '/dev-hmr/src/hmr-value.js',
+          "export const marker = 'hmr-copy';\n",
+        );
+        return {
+          installedCopies,
+          editCopies: copiedBytes,
+          backend: sandbox.vfs.backend,
+          probe: Reflect.get(globalThis, '__riftyRecoveryProbe') as {
+            bytes: number;
+            reusedMirrorBytes: boolean;
+          },
+        };
+      } finally {
+        Reflect.set(globalThis, 'Uint8Array', NativeBytes);
+        NativeBytes.prototype.slice = nativeSlice;
+      }
+    });
+    expect(installCost.backend).toBe('opfs');
+    expect(installCost.probe.bytes).toBeGreaterThan(1_000_000);
+    expect.soft(installCost.probe.reusedMirrorBytes).toBe(true);
+    expect.soft(installCost.installedCopies).toBe(installCost.probe.bytes);
+    expect.soft(installCost.editCopies).toBe(0);
+    await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const resident = await sandbox.toolchain.startBin({
+        cwd: '/dev-hmr',
+        binPath: '/dev-hmr/node_modules/.bin/vite',
+        args: ['--host', '127.0.0.1', '--port', '5174', '--strictPort', '--force'],
+        port: 5174,
+      });
+      const iframe = document.createElement('iframe');
+      iframe.id = 'dev-preview';
+      document.body.append(iframe);
+      iframe.src = resident.previewUrl;
+    });
+    const before = await waitForMarker(page, 'hmr-copy');
+    const restartCost = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const nativePost = Worker.prototype.postMessage;
+      const NativeBytes = Uint8Array;
+      let copiedBytes = 0;
+      let restoreFileCount: number | null = null;
+      const nativeSlice = NativeBytes.prototype.slice;
+      NativeBytes.prototype.slice = function (start, end) {
+        const result = nativeSlice.call(this, start, end);
+        copiedBytes += result.byteLength;
+        return result;
+      };
+      Reflect.set(
+        globalThis,
+        'Uint8Array',
+        new Proxy(NativeBytes, {
+          construct(target, args) {
+            if (args[0] instanceof NativeBytes) copiedBytes += args[0].byteLength;
+            else if (typeof args[0] === 'number') copiedBytes += args[0];
+            return Reflect.construct(target, args);
+          },
+        }),
+      );
+      Worker.prototype.postMessage = function (...args: Parameters<Worker['postMessage']>) {
+        const message = args[0];
+        if (message?.type === 'toolchain' && message.request?.op === 'restore') {
+          restoreFileCount = message.request.input.files.length;
+        }
+        return Reflect.apply(nativePost, this, args);
+      };
+      try {
+        const report = await sandbox.restart({
+          preview: document.querySelector('#dev-preview') as HTMLIFrameElement,
+        });
+        return { restoreFileCount, copiedBytes, report };
+      } finally {
+        Worker.prototype.postMessage = nativePost;
+        Reflect.set(globalThis, 'Uint8Array', NativeBytes);
+        NativeBytes.prototype.slice = nativeSlice;
+      }
+    });
+    expect.soft(restartCost.restoreFileCount).toBe(0);
+    // One detached snapshot + one restore-input copy; no SDK install/post-restore copy.
+    // The edit changes only this short source file; allow that exact byte delta.
+    const editDelta =
+      new TextEncoder().encode("export const marker = 'hmr-copy';\n").byteLength -
+      new TextEncoder().encode(realProjectFiles['/dev-hmr/src/hmr-value.js']).byteLength;
+    expect.soft(restartCost.copiedBytes).toBe(2 * (installCost.probe.bytes + editDelta));
+    expect(restartCost.report.unflushedWrites).toBe(false);
+    await expect
+      .poll(async () => (await waitForMarker(page, 'hmr-copy')).bootId)
+      .not.toBe(before.bootId);
+  } finally {
+    await disposeSandbox(page);
+  }
+});
+
+test('successive OPFS-memory-OPFS restarts restore the latest acknowledged bytes', async ({
+  page,
+}) => {
+  await bootSandbox(page);
+  try {
+    const result = await page.evaluate(async (memoryUrl) => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const NativeWorker = Worker;
+      const nativePost = Worker.prototype.postMessage;
+      let replacements = 0;
+      const restoreSizes: number[] = [];
+      Reflect.set(
+        globalThis,
+        'Worker',
+        new Proxy(NativeWorker, {
+          construct(target, args) {
+            replacements += 1;
+            return Reflect.construct(
+              target,
+              replacements === 1 ? [memoryUrl, ...args.slice(1)] : args,
+            );
+          },
+        }),
+      );
+      NativeWorker.prototype.postMessage = function (...args: Parameters<Worker['postMessage']>) {
+        const message = args[0];
+        if (message?.type === 'toolchain' && message.request?.op === 'restore') {
+          restoreSizes.push(message.request.input.files.length);
+        }
+        return Reflect.apply(nativePost, this, args);
+      };
+      try {
+        await sandbox.fs.writeFile(
+          '/cycle/package.json',
+          JSON.stringify({ name: 'backend-cycle', private: true }),
+        );
+        await sandbox.fs.writeFile('/outside-cycle.bin', new Uint8Array([1, 2]));
+        await sandbox.toolchain.install({ cwd: '/cycle', registryUrl: '/npm-registry' });
+        const backends = [sandbox.vfs.backend];
+        await sandbox.restart({ preview: { src: '' } });
+        backends.push(sandbox.vfs.backend);
+        const restored = [...(await sandbox.fs.readFile('/outside-cycle.bin'))];
+        await sandbox.fs.writeFile('/outside-cycle.bin', new Uint8Array([9, 8]));
+        await sandbox.restart({ preview: { src: '' } });
+        backends.push(sandbox.vfs.backend);
+        const flipped = [...(await sandbox.fs.readFile('/outside-cycle.bin'))];
+        await sandbox.restart({ preview: { src: '' } });
+        backends.push(sandbox.vfs.backend);
+        const reopened = [...(await sandbox.fs.readFile('/outside-cycle.bin'))];
+        return { backends, restored, flipped, reopened, restoreSizes };
+      } finally {
+        NativeWorker.prototype.postMessage = nativePost;
+        Reflect.set(globalThis, 'Worker', NativeWorker);
+      }
+    }, memoryToolchainWorkerUrl);
+    expect(result.backends).toEqual(['opfs', 'memory', 'opfs', 'opfs']);
+    expect(result.restored).toEqual([1, 2]);
+    expect(result.flipped).toEqual([9, 8]);
+    expect(result.reopened).toEqual([9, 8]);
+    expect(result.restoreSizes[0]).toBeGreaterThan(0);
+    expect(result.restoreSizes[1]).toBeGreaterThan(0);
+    expect(result.restoreSizes[2]).toBe(0);
   } finally {
     await disposeSandbox(page);
   }

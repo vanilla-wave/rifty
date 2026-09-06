@@ -647,6 +647,103 @@ describe('createSandbox', () => {
     sandbox.dispose();
   });
 
+  it.each(['boot', 'restore', 'beforeStart'] as const)(
+    'retains recovery across replacement %s failure and a later retry',
+    async (fault) => {
+      type HostMessage = import('@riftydev/runtime-js/internal').ToolchainHostMessage;
+      type WorkerMessage = import('@riftydev/runtime-js/internal').ToolchainWorkerMessage;
+      const restores: unknown[] = [];
+      let generations = 0;
+      class RecoveryWorker {
+        readonly generation = ++generations;
+        private receive?: (event: MessageEvent<WorkerMessage>) => void;
+        constructor() {
+          queueMicrotask(() => {
+            this.emit({ type: 'ready' });
+            this.emit({
+              type: 'toolchain-ready',
+              protocol:
+                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v2',
+              vfsBackend: 'memory',
+            } as WorkerMessage);
+          });
+        }
+        addEventListener(type: string, listener: (event: MessageEvent<WorkerMessage>) => void) {
+          if (type === 'message') this.receive = listener;
+        }
+        terminate() {}
+        emit(data: WorkerMessage) {
+          this.receive?.({ data } as MessageEvent<WorkerMessage>);
+        }
+        postMessage(message: HostMessage) {
+          if (message.type === 'fs' && message.request.op === 'writeFile') {
+            this.emit({ type: 'fs-result', result: { id: message.request.id, ok: true } });
+          }
+          if (message.type !== 'toolchain') return;
+          const request = message.request;
+          if (request.op === 'install') {
+            this.emit({
+              type: 'toolchain-result',
+              result: {
+                id: request.id,
+                ok: true,
+                value: {
+                  activationState: {
+                    cwd: '/dev',
+                    bindings: [],
+                    vfsBackend: 'memory',
+                    files: [{ path: '/dev/package.json', data: new Uint8Array([1]) }],
+                  },
+                },
+              },
+            });
+          } else if (request.op === 'restore') {
+            restores.push(structuredClone(request.input.files));
+            this.emit({
+              type: 'toolchain-result',
+              result:
+                this.generation === 2 && fault === 'restore'
+                  ? {
+                      id: request.id,
+                      ok: false,
+                      error: { name: 'Error', message: 'restore failed' },
+                    }
+                  : { id: request.id, ok: true },
+            });
+          }
+        }
+      }
+      vi.stubGlobal('Worker', RecoveryWorker);
+      const sandbox = await createSandbox(
+        {
+          requireCrossOriginIsolation: false,
+          skipServiceWorker: true,
+          toolchain: { workerUrl: '/toolchain.js' },
+        },
+        deps({ detect: () => capabilityCheck(false) }),
+      );
+      await sandbox.toolchain.install({ cwd: '/dev', registryUrl: '/registry' });
+      await sandbox.fs.writeFile('/dev/package.json', new Uint8Array([2]));
+      await expect(
+        sandbox.restart({
+          preview: { src: '' },
+          beforeStart: async (fs) => {
+            await fs.writeFile('/dev/package.json', new Uint8Array([3]));
+            throw new Error('repair failed');
+          },
+        }),
+      ).rejects.toBeInstanceOf(Error);
+      await sandbox.restart({ preview: { src: '' } });
+      const expected = [
+        { path: '/dev/package.json', data: new Uint8Array([fault === 'beforeStart' ? 3 : 2]) },
+      ];
+      expect(restores.at(-1)).toEqual(expected);
+      await sandbox.restart({ preview: { src: '' } });
+      expect(restores.at(-1)).toEqual(expected);
+      sandbox.dispose();
+    },
+  );
+
   it('public admission rejects and terminates a valid-backend mismatched-protocol Worker', async () => {
     const listeners = new Set<(event: MessageEvent<unknown>) => void>();
     const terminate = vi.fn();
