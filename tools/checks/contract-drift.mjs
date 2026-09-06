@@ -5,9 +5,11 @@
  * the sections a reviewer grades (artifacts/unit.md) — changes only with a
  * `re-cut:` line (docs/process/rules/readiness.md RDY-5); Context, Challenge,
  * Decisions and the rest of the frontmatter are journal/path, never compared;
- * a ready flip carries its pickup verdict or `review: ordinary` (RDY-8). The
- * fork discipline on user-traced rows is review-owned (review.md REV-10 axis
- * 3). Process referees land separately (rules/pr.md PR-4).
+ * a dropped `→ I#`/`→ scenario` row needs `fork:` in the re-cut line
+ * (rewording is review's, REV-10 axis 3); a ready flip beside production
+ * source carries its pickup Contract+RED verdict — an `ordinary` unit changes
+ * no production path (RDY-8). Referees — the gates, the parity oracle harness,
+ * CI wiring — land separately (rules/pr.md PR-4).
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -74,8 +76,10 @@ const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
 const GUARDED = new Set(['ready', 'in-progress']);
 const EPIC_PATH_RE = /^docs\/backlog\/epics\/[^/]+\.md$/;
 const GOAL_PATH_RE = /^docs\/backlog\/epics\/[^/]+\/goal\.md$/;
+// Referees — the gates, the CI classifier and lanes, the parity oracle harness, the review rubric —
+// land separately (PR-4): a product PR never rewrites what judges it.
 const REFEREE_RE =
-  /^(?:tools\/checks\/(?:(?:contract-drift|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs))$/;
+  /^(?:tools\/checks\/(?:(?:contract-drift|run-pickup|ci-change-scope|ci-gate|pr-check)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs)|tools\/backlog\/check\.mjs|tools\/node-parity-runner\/src\/.+|\.github\/workflows\/.+|docs\/process\/rules\/review\.md|\.agents\/skills\/rifty-review(?:-inline)?\/SKILL\.md|\.claude\/commands\/rifty-review-inline\.md)$/;
 // The contract a reviewer grades (artifacts/unit.md); everything else in the file is journal.
 const CONTRACT_SECTIONS = [
   'User scenario',
@@ -86,8 +90,36 @@ const CONTRACT_SECTIONS = [
   'Out of scope',
 ];
 const JOURNAL_PREFIX = '^(?:[-*]\\s+)?`?';
-const NO_CHECKPOINT_RE = new RegExp(`${JOURNAL_PREFIX}review:\\s*ordinary\\b`, 'm');
-const VERDICT_LINE_RE = new RegExp(`${JOURNAL_PREFIX}ready-verdict:`, 'm');
+const VERDICT_LINE_RE = new RegExp(
+  `${JOURNAL_PREFIX}ready-verdict:[^\\n]*?(?:Contract\\+RED @ (\\S+)|inherited from (\\S+) @ (\\S+))`,
+  'm',
+);
+const USER_TRACED_ROW_RE = /^(?:\d+\.|[-*]|\|).*→\s*(?:I\d+|scenario)\b/gmu;
+const ITEM_KEY_RE = /^docs\/backlog\/(?!epics\/)([^/]+)\/([^/]+)\.md$/u;
+
+/** `docs/backlog/<area>/reference/<slug>-contract-red.json` for an item path or `<area>/<slug>` key. */
+export function verdictArtifactPath(itemPathOrKey) {
+  const m = ITEM_KEY_RE.exec(itemPathOrKey) ?? /^([^/]+)\/([^/]+)$/u.exec(itemPathOrKey);
+  return m ? `docs/backlog/${m[1]}/reference/${m[2]}-contract-red.json` : null;
+}
+
+/** The committed Contract+RED verdict a `ready-verdict:` line names (REV-8), or the violation. */
+function verdictArtifactViolation(path, headText, read) {
+  const m = VERDICT_LINE_RE.exec(headText);
+  if (!m)
+    return `${path}: ready flip beside production source without a pickup Contract+RED verdict (RDY-8: a review: ordinary unit changes no production path)`;
+  const artifact = verdictArtifactPath(m[2] ?? path);
+  let parsed = null;
+  try {
+    parsed = JSON.parse(read(artifact, 'head') ?? 'null');
+  } catch {
+    parsed = null;
+  }
+  if (parsed?.checkpoint !== 'Contract+RED') {
+    return `${path}: ready-verdict: names a Contract+RED pass but ${artifact} is absent or not a Contract+RED verdict (REV-8)`;
+  }
+  return null;
+}
 const RECUT_LINE_RE = new RegExp(`${JOURNAL_PREFIX}re-cut: \\d{4}-\\d{2}-\\d{2} — .*$`, 'gm');
 const FROZEN_FIELDS = [
   ['value', 'value'],
@@ -111,6 +143,23 @@ export function itemContract(text) {
 
 function recutLines(text) {
   return (text ?? '').match(RECUT_LINE_RE) ?? [];
+}
+
+/** Number of rows traced to I# / scenario across the graded sections (RDY-5: dropping one is the user's). */
+export function userTracedRowCount(text) {
+  return CONTRACT_SECTIONS.reduce(
+    (n, name) => n + ((section(text, name) ?? '').match(USER_TRACED_ROW_RE) ?? []).length,
+    0,
+  );
+}
+
+const TRACED_ROW_RE = /^(?:\d+\.|[-*]|\|).*→\s*(?:I\d+|scenario|ADR-\d{4})\b/gmu;
+/** Number of obligations — rows traced to I# / scenario / ADR — across the graded sections (RDY-3, REV-4). */
+export function tracedRowCount(text) {
+  return CONTRACT_SECTIONS.reduce(
+    (n, name) => n + ((section(text, name) ?? '').match(TRACED_ROW_RE) ?? []).length,
+    0,
+  );
 }
 
 /**
@@ -161,17 +210,26 @@ export function evaluate(entries, read, refereeEntries = entries) {
         violations.push(
           `${entry.path}: ready contract changed beside source without a re-cut line (RDY-5)`,
         );
+        continue;
+      }
+      // Fewer user-traced rows = a dropped obligation: the user's, recorded as fork: in THIS re-cut
+      // line (RDY-5) — an older fork never licenses a later drop. Rewording stays review's
+      // (REV-10 axis 3): a count cannot tell strengthening from weakening.
+      if (
+        userTracedRowCount(headText) < userTracedRowCount(baseText) &&
+        !newRecuts.some((line) => /— fork:/u.test(line))
+      ) {
+        violations.push(
+          `${entry.path}: user-traced row dropped beside source without a recorded fork (RDY-5)`,
+        );
       }
       continue;
     }
-    if (
-      GUARDED.has(headStatus) &&
-      !VERDICT_LINE_RE.test(headText) &&
-      !NO_CHECKPOINT_RE.test(headText)
-    ) {
-      violations.push(
-        `${entry.path}: ready flip without pickup Contract+RED verdict or review: ordinary`,
-      );
+    // Beside a production path only a Contract+RED verdict flips a unit ready — an `ordinary` unit
+    // changes no production path (RDY-8) — and the verdict is the committed verdict.json (REV-8).
+    if (GUARDED.has(headStatus)) {
+      const violation = verdictArtifactViolation(entry.path, headText, read);
+      if (violation) violations.push(violation);
     }
   }
   return violations;

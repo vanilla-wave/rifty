@@ -126,7 +126,10 @@ ordinary`. A unit has a contract doc when it has obligations to trace
 to build — parity, cache, persistence, network, concurrency: Contract+RED
 before code, Final+GREEN after. It records `ordinary` when they are proof
 about landed behavior (test carriers, evidence, a mechanism record, an ADR)
-or its subject is docs, CI, process, tooling or harness. A unit with nothing
+or its subject is docs, CI, process, tooling or harness — such a unit changes
+no production path: `check:contract-drift` refuses a ready flip beside
+production source without a Contract+RED verdict, and a production change
+inside it is a `REV-2` blocker. A unit with nothing
 to trace has no doc at all and is `ordinary` by construction: a defect fix
 (its RED test is the proof — `rifty-fix`), a docs change, a CHANGELOG line,
 a CI rule; nothing is minted for it and nothing is journaled beyond its PR

@@ -11,15 +11,18 @@ else the branch base. Earlier landed slices are certified, not re-reviewed:
 their files raise no coverage row. In/out is decided by ROLE in this unit,
 never by directory: the unit's own contract and RED are the subject wherever
 they live (a `tools/checks/*.contract.test.ts` RED included); carriers the
-unit merely rides past (unrelated docs, CI wiring, sibling tooling, harness)
-get ordinary treatment — fixed in place, never a blocker.
+unit merely rides past (unrelated docs, sibling tooling that is not a
+referee — `pr.md` `PR-4`) get ordinary treatment — fixed in place, never a
+blocker; a referee never rides as a carrier.
 
 ## REV-2 Authority — a blocker cites what it violates
 
 Admissible authorities: an invariant `I#`; a `## User scenario` line; a traced
 unit row (`Acceptance 3 → I3`); an active `ADR-NNNN`; named baseline
 behavior; and only these rules, which name the blocker themselves:
-`AGENTS.md` §Fidelity (fake implementation, silent gap), `REV-7` (machinery
+`AGENTS.md` §Fidelity (every rule of it — a fake, a silent gap, a mocked
+sibling, a test edited to pass, a parity claim without an artifact),
+`RDY-8` (a `review: ordinary` unit that changes a production path), `REV-7` (machinery
 the contract is deliverable without), `REV-11` (a checkpoint without a fresh
 reviewer), `REV-10` axis 3 (a changed ready `goal.md`, an edited ledger line, a
 user-traced row dropped or weakened without `fork:`).
@@ -96,7 +99,10 @@ goal `rejected route: <route> — violates <I#>` line answers it by citation.
 Two records, nothing else:
 
 - **Contract+RED pass** — `ready-verdict: <date> — Contract+RED @ <sha>`, first
-  line of the unit's `## Decisions` (`readiness.md` `RDY-2`). A later
+  line of the unit's `## Decisions` (`readiness.md` `RDY-2`), with the
+  reviewer's `verdict.json` and the critic's `adjudication.json` committed as
+  `docs/backlog/<area>/reference/<slug>-contract-red.json` (the proof a fresh
+  reviewer ran; deleted with the unit on done). A later
   `re-cut:` does not void it: Final+GREEN grades the contract as it stands
   (`REV-1`); a demotion to `draft` does, by construction — PICKUP compiles
   again or records inheritance (`RDY-5`).
@@ -104,9 +110,14 @@ Two records, nothing else:
   ledger's `re-chart after <slice> (final-green PASS @ <sha>): …` line
   (`../artifacts/ledger.md`; `(ordinary PASS @ <sha>)` for `ordinary`
   units), written by RECHART, which deletes the landed unit in the same
-  commit; a unit without a goal records nothing — the runner checks the
-  binding in session, deletes the doc, and the merged PR is the record
-  (`readiness.md` `RDY-8`).
+  commit, the Final verdict + adjudication committed beside the Contract+RED
+  ones as `…-final-green.json`; a unit without a goal commits the same files,
+  the runner checks the binding in session, deletes the doc, and the merged PR
+  is the record (`readiness.md` `RDY-8`). An `ordinary` review's prose
+  verdict is posted to the PR naming the reviewed sha before merge, and when
+  the unit changes a production or test path it is also committed as
+  `docs/backlog/<area>/reference/<slug|pr-N>-ordinary.md` — no verdict, no
+  review happened (`REV-11`).
 
 No status lines, no round counters: the pass history is `git log` — each fix
 batch commits with its FIX findings in the message (`REV-12`). An `ordinary`
@@ -140,9 +151,9 @@ source grep, a warning, a backlog record, or one green slice.
    boundaries (`REV-6` for premise).
 3. Goal drift — delivery matches the named `goal.md`, else the ready contract;
    a ready `goal.md` never changed; `ledger.md` only grew; a `draft→ready`
-   flip carries its `ready-verdict:` or its `review: ordinary` line
-   (`RDY-8`), and a re-cut that dropped or weakened a user-traced row
-   carries `fork:` (`RDY-5`); every landed slice carries its
+   flip carries its `ready-verdict:` or, off any production path, its
+   `review: ordinary` line (`RDY-8`), and a re-cut that dropped or weakened a
+   user-traced row carries `fork:` (`RDY-5`); every landed slice carries its
    `re-chart after <slice> (… PASS @ <sha>)` line.
 4. Approach cost — `REV-7`.
 5. Scope — modified files inspected against the contract: a change no clause
@@ -167,12 +178,15 @@ checkpoint: no verdict, no merge authority.
 Every finding gets exactly one disposition BEFORE any fix. At a checkpoint a
 fresh read-only critic rules HOLDS / STRETCH / FALSE
 (`../stages/checkpoint-run.md`); on an `ordinary` unit the driver rules
-inline, quoting the clause as written.
+inline, quoting the clause as written — a concern or nit is NOTE, a blocker
+is FIX or goes to the fresh critic for a REJECT, as at a checkpoint: a
+blocker is never NOTEd, and the implementer never dismisses a Fidelity
+finding against itself.
 
 | disposition | when | record |
 |---|---|---|
 | `FIX` | HOLDS: the cited clause AS WRITTEN states the property, carrier absent; a `missing` row | the fix batch commit names it |
-| `REJECT` | STRETCH / FALSE: clause broader than the demand, carrier exists, citation misread, "prove more exactly" (`REV-3`) | one journal line per verdict (`rejected: …`); never re-raised, never backlog |
+| `REJECT` | STRETCH / FALSE: clause broader than the demand, carrier exists, citation misread, "prove more exactly" (`REV-3`). A blocker citing `AGENTS.md` §Fidelity is rejected only as FALSE with the existing carrier cited — never as STRETCH | one journal line per verdict (`rejected: …`); never re-raised on the same evidence — it returns only with an EXECUTED artifact the ruling did not have (a repro, a failing test; the `REV-5` bar), and then goes through reception again. A REJECT that only over-reads the clause is closed; one that names a product gap the contract never claimed is a discovery (`rifty-to-backlog`) |
 | `NOTE` | concern, nit, `weak` row | same line (`note: …`); report-only; the agent may fix it in place |
 
 Verify before dispositioning: restate the demand, read the cited clause and
@@ -181,8 +195,9 @@ first. Cannot verify → the finding stays a NOTE. A finding never becomes a
 unit, a fog line or a split seed on agent authority: a NOTE graduates only
 through `rifty-refine` (the user owns scope, `readiness.md` `RDY-6`). A
 product defect the reviewer saw outside the unit's boundary is a discovery,
-not a finding: captured now (`rifty-to-backlog`), repaired as its own unit
-(`rifty-fix`) — never widening this one (`pr.md` `PR-1`). A finding on a
+not a finding: repaired at once as its own unit (`rifty-fix`), or captured
+(`rifty-to-backlog`) when it waits — never widening this one (`pr.md`
+`PR-1`). A finding on a
 unit that already landed is the same: a defect → `rifty-fix`; anything else
 → `rifty-refine`. Why (2026-09-02/03
 `no-coi-sandbox-tier`):

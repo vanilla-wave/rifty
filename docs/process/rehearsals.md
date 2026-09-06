@@ -2,9 +2,14 @@
 
 Banked suite. Re-run: walk each cell through the process as written, cite every
 step's clause (`file:line`), record the tally, then report what NEWLY fails and
-what NEWLY passes. A step with no clause is **silence**, not a pass. Where a
-machine gate is claimed to accept or refuse something, run it on a scratch
-fixture and cite the observed exit.
+what NEWLY passes. A step with no clause is **silence**. Silence is a fail on a
+path a machine executes (driver, gate) and wherever two principles give
+different answers; on a path an agent executes it is a pass when the auditor
+names, by id, the one principle the step follows from (`AGENTS.md` §Fidelity,
+§Simplicity, `DEC-1`, `STOP-1`, `REV-2`, …) — a rule written for every case
+is the failure mode this suite must not reward. Where a machine gate is
+claimed to accept or refuse something, run it on a scratch fixture and cite
+the observed exit.
 
 Last run: 2026-09-06 (fourth pass), fresh-context auditor on the working
 tree of the process re-cut (rounds/park/size-gate/tail/`proof-only` removed,

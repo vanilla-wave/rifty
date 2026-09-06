@@ -1,12 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { evaluate, itemContract, statusOf } from './contract-drift.mjs';
+import {
+  evaluate,
+  itemContract,
+  statusOf,
+  userTracedRowCount,
+  verdictArtifactPath,
+} from './contract-drift.mjs';
 
 const item = (status: string) =>
   `---\narea: playground\nstatus: ${status}\ntitle: T\n---\n\nbody\n`;
 const verdict = 'ready-verdict: 2026-08-01 — Contract+RED @ abc\n';
+const VERDICT_JSON = JSON.stringify({ checkpoint: 'Contract+RED', unit_goal_source: 'x' });
+const ARTIFACT = 'docs/backlog/playground/reference/x-contract-red.json';
 
-const read = (base: string | null, head: string | null) => (_path: string, side: 'base' | 'head') =>
-  side === 'base' ? base : head;
+const read =
+  (base: string | null, head: string | null, extra: Record<string, string | null> = {}) =>
+  (path: string, side: 'base' | 'head') =>
+    path in extra ? (side === 'head' ? extra[path] : null) : side === 'base' ? base : head;
+const withArtifact = { [ARTIFACT]: VERDICT_JSON };
 
 const epic = (status: string, outcome = 'Ship it.', items = 'close me.') => `---
 kind: epic
@@ -84,13 +95,23 @@ ${verdict}${decisions}`;
     expect(evaluate([src, contract], read(base, traced('1. exact bytes → I1')))).toHaveLength(1);
   });
 
-  it('lets a user-traced row change land with a re-cut line — the fork discipline is review-owned (RDY-5, REV-10 axis 3)', () => {
+  it('a dropped user-traced row needs fork: in the re-cut line; a reworded one only the re-cut line (RDY-5)', () => {
     const base = traced('1. exact bytes → I1\n   wrapped continuation\n2. opener works → scenario');
-    expect(
-      evaluate([src, contract], read(base, traced('2. opener works → scenario', recut))),
-    ).toHaveLength(0);
+    expect(userTracedRowCount(base)).toBe(2);
+    const dropped = evaluate(
+      [src, contract],
+      read(base, traced('2. opener works → scenario', recut)),
+    );
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]).toContain('dropped beside source without a recorded fork');
     expect(
       evaluate([src, contract], read(base, traced('2. opener works → scenario', fork))),
+    ).toHaveLength(0);
+    expect(
+      evaluate(
+        [src, contract],
+        read(base, traced('1. roughly equal bytes → I1\n2. opener works → scenario', recut)),
+      ),
     ).toHaveLength(0);
     expect(
       evaluate([src, contract], read(base, traced('2. opener works → scenario'))),
@@ -129,16 +150,40 @@ ${verdict}${decisions}`;
     expect(evaluate([src, contract], read(base, bulleted))).toHaveLength(0);
   });
 
-  it('lets an ordinary unit flip ready beside source without a Contract+RED verdict (RDY-8)', () => {
+  it('refuses a ready flip beside production source on review: ordinary alone (RDY-8)', () => {
     expect(
       evaluate([src, contract], read(item('draft'), `${item('ready')}review: ordinary\n`)),
-    ).toHaveLength(0);
-    expect(
-      evaluate([src, contract], read(item('draft'), `${item('ready')}- review: ordinary\n`)),
-    ).toHaveLength(0);
-    expect(
-      evaluate([src, contract], read(item('draft'), `${item('ready')}review: checkpoints\n`)),
     ).toHaveLength(1);
+    expect(
+      evaluate(
+        [src, contract],
+        read(
+          item('draft'),
+          `${item('ready')}- ready-verdict: 2026-09-06 — Contract+RED @ abc\n`,
+          withArtifact,
+        ),
+      ),
+    ).toHaveLength(0);
+    // Not beside production source: the referee is silent, the flip is the reviewer's (REV-10 axis 3).
+    const toolsOnly = { status: 'M', path: 'tools/checks/x.mjs' };
+    expect(
+      evaluate([toolsOnly, contract], read(item('draft'), `${item('ready')}review: ordinary\n`)),
+    ).toHaveLength(0);
+  });
+
+  it('treats the parity oracle harness and CI wiring as referees (PR-4)', () => {
+    for (const path of [
+      'tools/node-parity-runner/src/diff.ts',
+      '.github/workflows/ci.yml',
+      'tools/checks/ci-change-scope.mjs',
+      'tools/backlog/check.mjs',
+      'docs/process/rules/review.md',
+      '.agents/skills/rifty-review/SKILL.md',
+    ]) {
+      const referee = { status: 'M', path };
+      expect(evaluate([src, referee], read(null, null), [src, referee])).toHaveLength(1);
+      expect(evaluate([referee], read(null, null), [referee])).toHaveLength(0);
+    }
   });
 
   it('flags an in-place ready→in-progress edit as a rewrite', () => {
@@ -154,11 +199,58 @@ ${verdict}${decisions}`;
   it('requires a recorded verdict for a ready flip beside source', () => {
     const flipped = evaluate([src, contract], read(item('draft'), item('ready')));
     expect(flipped).toHaveLength(1);
-    expect(flipped[0]).toContain('ready flip without pickup Contract+RED verdict');
-    expect(evaluate([src, contract], read(item('draft'), item('ready') + verdict))).toHaveLength(0);
+    expect(flipped[0]).toContain(
+      'ready flip beside production source without a pickup Contract+RED verdict',
+    );
+    expect(
+      evaluate([src, contract], read(item('draft'), item('ready') + verdict, withArtifact)),
+    ).toHaveLength(0);
     const added = { ...contract, status: 'A' };
     expect(evaluate([src, added], read(null, item('in-progress')))).toHaveLength(1);
-    expect(evaluate([src, added], read(null, item('ready') + verdict))).toHaveLength(0);
+    expect(evaluate([src, added], read(null, item('ready') + verdict, withArtifact))).toHaveLength(
+      0,
+    );
+  });
+
+  it('a ready-verdict: line binds to its committed verdict.json (REV-8)', () => {
+    expect(verdictArtifactPath('docs/backlog/playground/x.md')).toBe(ARTIFACT);
+    expect(verdictArtifactPath('net/y')).toBe('docs/backlog/net/reference/y-contract-red.json');
+    const absent = evaluate([src, contract], read(item('draft'), item('ready') + verdict));
+    expect(absent).toHaveLength(1);
+    expect(absent[0]).toContain('absent or not a Contract+RED verdict');
+    expect(
+      evaluate(
+        [src, contract],
+        read(item('draft'), item('ready') + verdict, {
+          [ARTIFACT]: JSON.stringify({ checkpoint: 'Final+GREEN' }),
+        }),
+      ),
+    ).toHaveLength(1);
+    expect(
+      evaluate(
+        [src, contract],
+        read(item('draft'), `${item('ready')}ready-verdict: yes\n`, withArtifact),
+      ),
+    ).toHaveLength(1);
+    const inherited = `${item('ready')}ready-verdict: 2026-09-06 — inherited from net/y @ deadbeef\n`;
+    expect(evaluate([src, contract], read(item('draft'), inherited))).toHaveLength(1);
+    expect(
+      evaluate(
+        [src, contract],
+        read(item('draft'), inherited, {
+          'docs/backlog/net/reference/y-contract-red.json': VERDICT_JSON,
+        }),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('an older fork: line never licenses a later drop (RDY-5)', () => {
+    const base = traced('1. exact bytes → I1\n2. opener works → scenario', fork);
+    const later = traced(
+      '2. opener works → scenario',
+      `${fork}re-cut: 2026-09-06 — trimmed row 1 — trace: none\n`,
+    );
+    expect(evaluate([src, contract], read(base, later))).toHaveLength(1);
   });
 
   it('passes draft edits, docs-only diffs, demotions, and deletes', () => {
@@ -276,8 +368,12 @@ describe('aggregate diff (git integration)', () => {
         env: { ...process.env, GITHUB_EVENT_PATH: undefined },
       });
       expect(blind.status).toBe(1);
-      expect(blind.stderr).toContain('ready flip without pickup Contract+RED verdict');
-      // Recording the verdict makes the same aggregate diff pass.
+      expect(blind.stderr).toContain(
+        'ready flip beside production source without a pickup Contract+RED verdict',
+      );
+      // Recording the verdict — the line plus its committed verdict.json — makes the diff pass.
+      mkdirSync(join(root, 'docs/backlog/net/reference'), { recursive: true });
+      writeFileSync(join(root, 'docs/backlog/net/reference/x-contract-red.json'), VERDICT_JSON);
       writeFileSync(join(root, 'docs/backlog/net/x.md'), item('ready') + verdict);
       g('add', '.');
       g('commit', '-m', 'record verdict');

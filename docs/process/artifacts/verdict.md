@@ -17,9 +17,19 @@ against `tools/review/review-schema.json`; evaluated by
 
 `adjudication.json` (fresh critic, before any fixing): `[{"summary", "ruling":
 "HOLDS|STRETCH|FALSE", "clause"}]` — HOLDS: the cited clause as written
-requires the demand and the carrier is absent; STRETCH: clause broader than the
-demand; FALSE: carrier exists / citation misread. Default STRETCH when the
-clause text does not clearly mandate the specific demand.
+requires the demand and the carrier is absent, or an executed artifact shows
+the carrier does not discriminate (a RED that passes with a stub, a test a
+named mutant survives — `review.md` `REV-5`); STRETCH: clause broader than the
+demand; FALSE: the carrier exists and discriminates / citation misread.
+Default STRETCH when the clause text does not clearly mandate the specific
+demand — never for a `AGENTS.md` §Fidelity blocker (`REV-12`).
+
+Validity (exit `2`): the eight axes in order, authority on every blocker, a
+trace on every coverage row, at least one coverage row per traced obligation
+of the contract named in `unit_goal_source` when the file is readable
+(`REV-4`), no STRETCH ruling on a blocker citing `AGENTS.md` §Fidelity
+(`REV-12`). Residuals mirror the rulings only when every blocker was ruled —
+a partial or empty adjudication leaves them blocking.
 
 Exit codes: `0` pass (`goal_complete:false` = continue the goal) · `1` FIX
 findings remain — surviving blockers + `missing` rows (`weak` rows and

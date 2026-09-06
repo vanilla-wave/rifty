@@ -49,8 +49,9 @@ because a round counter was spent; with reception (`review.md` `REV-12`) a
 pass with no FIX is a PASS, so a counter could only ever count stalls; the
 "2nd Contract+RED blocker = the contract is wrong" rule of 2026-09-02 fired
 on round two of settling designs that converged in eight). A blocker on a
-row the previous pass graded `pass` is reviewer error (`REV-4`) and goes to
-reception, never to a fix.
+row the previous pass graded `pass` is reviewer error (`REV-4`) and goes
+through reception like any finding — never straight to a fix, never ignored:
+ruled HOLDS, it is FIX.
 
 ## STOP-4 Re-cut against the destination, then leave the path
 
@@ -69,10 +70,14 @@ Once per checkpoint, by the runner:
    removes its `## Items` row, reverts the unit's product and test commits on
    the goal branch (the branch carries landed slices only — `review.md`
    `REV-1`; the doc and its demotion stay; the work stays in git history) and
-   writes the resisting obligation as a fog line owned like its trace:
-   `owner: user` for an `I#` / `scenario` row or a fork, `owner: agent` for
-   an ADR-, rule- or untraced row (`RDY-5`, `../artifacts/map.md`); the run
-   takes the next frontier child. An `owner: user` line is asked where fog is
+   writes the resisting obligation as a fog line owned by the `STOP-1` test:
+   `owner: user` only when there is a choice for the user — a named tradeoff
+   ("X holds only by dropping Y / raising the tier / accepting Z") or a fork
+   (`RDY-5`); `owner: agent` when only an approach failed, whatever the row's
+   trace — the line names what settles it (a spike, another design). The
+   source of a requirement never makes the user the owner of a technical
+   dead end (`../artifacts/map.md`); the run takes the next frontier child.
+   An `owner: user` line is asked where fog is
    always asked — a frontier empty because of it (a `blocked_by` chain behind
    the unit) or CLOSE (`STOP-1a`), never probed; an `owner: agent` line waits
    for facts (RECHART) or is dropped at CLOSE with its reason. Never a wait,

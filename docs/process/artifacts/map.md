@@ -13,5 +13,6 @@ A mechanism shared by two children needs an existing owner, a first substrate
 item, or an ADR explaining separation. Frontier = `## Items` rows whose unit
 is open, unblocked by `blocked_by`, in order. A row leaves `## Items` when its
 unit lands (RECHART deletes the unit) or leaves the path (`stops.md` `STOP-4`:
-the row becomes a fog line owned like its trace — `owner: user` for an `I#` /
-scenario row or a fork, `owner: agent` otherwise; the unit file stays `draft`).
+the row becomes a fog line owned by whether the user has a choice — a named
+tradeoff or a fork → `owner: user`, a failed approach → `owner: agent`
+(`stops.md` `STOP-4` 3); the unit file stays `draft`).

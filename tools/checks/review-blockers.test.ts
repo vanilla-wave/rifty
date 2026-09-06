@@ -31,6 +31,73 @@ it('drops coverage rows traced only to a rule id — a carrier note raises no ro
   };
   expect(evaluateVerdict(verdict).code).toBe(0);
   expect(evaluateVerdict({ ...verdict, coverage: [ruleOnly] }).code).toBe(0); // rule-id rows raise nothing
+  // An ADR trace is an obligation (RDY-3): its missing row blocks.
+  const adrMissing = { ...ruleOnly, trace: '→ ADR-0375' };
+  expect(evaluateVerdict({ ...verdict, coverage: [traced, adrMissing] }).code).toBe(1);
+});
+
+it('requires one coverage row per traced obligation of the contract when it can read it (REV-4)', () => {
+  const contract =
+    '---\nstatus: ready\n---\n\n## Acceptance\n\n1. a → I1\n2. b → scenario\n\n## Fault matrix\n\n| x | y | z | → ADR-0358 |\n\n## Decisions\n';
+  const row = {
+    row: 'Acceptance 1',
+    source: 'x',
+    trace: '→ I1',
+    status: 'pass',
+    citation: 'a:1',
+    note: '',
+  };
+  const verdict = {
+    checkpoint: 'Final+GREEN',
+    unit_goal_source: 'docs/backlog/x/y.md @ BASE abc',
+    overall_verdict: 'pass',
+    merge_call: 'merge',
+    axes: REQUIRED_AXES.map((axis) => ({ axis, verdict: 'pass', findings: [] })),
+    coverage: [row],
+    unit_residuals: [],
+    goal_residuals: [],
+    goal_complete: false,
+  };
+  const read = () => contract;
+  expect(evaluateVerdict(verdict, null, read).code).toBe(2);
+  expect(evaluateVerdict({ ...verdict, coverage: [row, row, row] }, null, read).code).toBe(0);
+  expect(evaluateVerdict(verdict, null, () => null).code).toBe(0); // no contract to read: not checked
+});
+
+it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until every blocker is ruled (REV-12)', () => {
+  const fidelity = {
+    severity: 'blocker',
+    summary: 'stub returns a constant',
+    authority: 'AGENTS.md §Fidelity',
+    location: 'a.ts:1',
+  };
+  const taste = { severity: 'blocker', summary: 'naming', authority: 'I1', location: 'a.ts:2' };
+  const axes = REQUIRED_AXES.map((axis, i) => ({
+    axis,
+    verdict: i === 5 ? 'blocker' : 'pass',
+    findings: i === 5 ? [fidelity, taste] : [],
+  }));
+  const verdict = {
+    checkpoint: 'Final+GREEN',
+    unit_goal_source: 'docs/backlog/x/y.md',
+    overall_verdict: 'blocker',
+    merge_call: 'hold',
+    axes,
+    coverage: [],
+    unit_residuals: [{ clause: 'Acceptance 1', location: 'a.ts:1' }],
+    goal_residuals: [],
+    goal_complete: false,
+  };
+  const ruling = (s: string, r: string) => ({ summary: s, ruling: r, clause: 'c' });
+  expect(evaluateVerdict(verdict, [ruling('stub returns a constant', 'STRETCH')]).code).toBe(2);
+  expect(evaluateVerdict(verdict, [ruling('stub returns a constant', 'FALSE')]).code).toBe(1); // 'naming' unruled → residual blocks
+  expect(
+    evaluateVerdict(verdict, [
+      ruling('stub returns a constant', 'FALSE'),
+      ruling('naming', 'FALSE'),
+    ]).code,
+  ).toBe(0);
+  expect(evaluateVerdict(verdict, []).code).toBe(1); // empty adjudication never neutralises residuals
 });
 
 it('pins the REV-10 axis names in rubric order', () => {

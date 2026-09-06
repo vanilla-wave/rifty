@@ -60,7 +60,7 @@ itself for a no-doc unit (`rules/pr.md` `PR-2`).
 Closed list (`rules/stops.md` `STOP-1`): observable-scope fork · premise
 concern · destination conflict — all three about WHAT gets built. Nothing
 else asks: a stall re-cuts once, then the unit leaves the path as a fog line
-owned like its trace (`STOP-4`) — inside a goal a fork leaves the path the same way
+owned by whether the user has a choice (`STOP-4`) — inside a goal a fork leaves the path the same way
 and the run continues, the question asked when it blocks; a premise or
 destination stop halts the run. A stop names what the user decides that the
 agent cannot; "continue?" is a status.
@@ -90,7 +90,7 @@ section, line forms. Store rules (areas, statuses, challenge, tier, gates):
 | Gate | Enforces |
 |---|---|
 | `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge; trace on ready items `created ≥ 2026-09-03` (`RDY-3`) |
-| `check:contract-drift` | frozen goal fields beside source (single-file and `epics/<slug>/goal.md`); a ready contract (status + graded sections) changed beside source carries `re-cut:` (`RDY-5`); a ready flip beside source carries `ready-verdict:` or `review: ordinary` (`RDY-8`); referees land separately (`PR-4`) |
+| `check:contract-drift` | frozen goal fields beside source (single-file and `epics/<slug>/goal.md`); a ready contract (status + graded sections) changed beside source carries `re-cut:` (`RDY-5`); a ready flip beside production source carries `ready-verdict:` (`RDY-8`: an `ordinary` unit changes no production path); a dropped user-traced row carries `fork:` (`RDY-5`); referees — gates, parity oracle harness, CI wiring — land separately (`PR-4`) |
 | `tools/review/blockers.mjs` | verdict shape, authority on blockers, trace on coverage rows, exit codes (`artifacts/verdict.md`) |
 | `refs:check` | dangling doc/ADR references cited from `docs/adr` and `docs/backlog` |
 

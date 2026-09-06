@@ -30,9 +30,11 @@ driver (`decisions.md` `DEC-3`: pre-authorized once given).
 ## PR-4 Separate-PR demands name their gate
 
 A rule demanding a separate PR holds only if it names the gate forcing it.
-Today one: `check:contract-drift` refuses an implementation diff that edits its
-own referee (`tools/checks/contract-drift.mjs`, `tools/review/*`) — process
-referees land separately.
+Today one: `check:contract-drift` refuses an implementation diff that edits a
+referee — the gates (`tools/checks/contract-drift.mjs`, `tools/review/*`),
+the parity oracle harness (`tools/node-parity-runner/src/**`) and CI lane
+wiring (`.github/workflows/**`) — referees land separately, never as a
+"carrier" of the unit that needs them changed.
 
 ## PR-5 User-asked PR
 
@@ -47,4 +49,6 @@ classifier): a docs-only tree never runs `typecheck`, `build:libs`,
 `check:arch`, `test:run`, `test:parity`; a red `test:run` reruns its failed
 files once in isolation, labelled with the time-out count — a failure that
 reproduces in isolation stays red and is an observed defect (`rifty-fix`), a
-pass on rerun is reported, never hidden.
+pass on rerun is reported and captured (`rifty-to-backlog`, fault class
+`concurrent-same-key` or host load — `fault-classes.md`), never hidden and
+never declared a flake without a record.

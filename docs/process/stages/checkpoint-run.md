@@ -29,7 +29,7 @@ codex exec -C "$(git rev-parse --show-toplevel)" --approve-for-me \
 Read docs/process/rules/review.md fully and apply it by rule id: REV-1 scope (BASE is the unit-of-work boundary; certified slices and carriers raise no row), \
 REV-2 authority (a blocker cites I#, a scenario line, a traced unit row, an ADR, baseline, or a REV-2-listed rule; any other rule id, untraced rows and strengthening beyond the clause are concerns), \
 REV-3 severity, REV-4 coverage (one row per obligation traced to I#/scenario/ADR in boundary, with its trace; rule-id-only rows raise none; weak = advisory unless the clause is the discrimination), REV-5 evidence bar for $CHECKPOINT, REV-10 axes in order. \
-Do not modify tracked files. Single exhaustive pass: partition the diff, spawn parallel read-only subagents, merge and dedupe. Return only schema JSON with file:line citations." \
+Do not modify tracked files; a REV-5 artifact that needs a stub or a mutant runs in a detached copy (git worktree add \$RUN/wt --detach) with its output attached. Single exhaustive pass: partition the diff, spawn parallel read-only subagents, merge and dedupe. Return only schema JSON with file:line citations." \
   </dev/null >"$RUN/log" 2>&1
 node tools/review/blockers.mjs "$RUN/verdict.json"   # missing verdict → tail -n 40 "$RUN/log"
 ```
@@ -66,7 +66,9 @@ stdin).
 5. **Verify pass** — same command, prior verdicts attached as settled
    (`PRIOR FINDINGS (settled, do not re-raise; report ONLY defects not on this
    list; nothing new → say so in merge_call):` + one-liners). Exit 0 → done:
-   Contract+RED writes `ready-verdict:`; Final+GREEN lands (`REV-8`). Exit 1
+   Contract+RED writes `ready-verdict:`; Final+GREEN lands (`REV-8`); either
+   PASS commits `$RUN/verdict.json` + `adjudication.json` as
+   `docs/backlog/<area>/reference/<slug>-<checkpoint>.json` (`REV-8`). Exit 1
    → back to 2. Exit 2 → the runner retries the reviewer once; a second
    invalid verdict is a harness failure — the run ends with the `STOP-6`
    report, no question.
@@ -79,9 +81,11 @@ rifty-review skill for an ordinary review of $UNIT (a contract path, or the
 PR number for a unit with no doc) against BASE $BASE: prose verdict, findings
 with severity, authority and file:line, no coverage table". No critic, no
 `blockers.mjs`: the driver dispositions each finding inline (`REV-12`) — a
-traced row without a discriminating carrier is a FIX citing the row — fixes
-the FIX set in one commit naming them, and runs the same reviewer once more
-with the settled list attached; no FIX left = PASS at that tree (`REV-8`). A
+traced row without a discriminating carrier is a FIX citing the row; a
+REJECT of a blocker citing a `REV-2` authority goes to a fresh critic first —
+fixes the FIX set in one commit naming them, and runs the same reviewer once
+more with the settled list attached; no FIX left = PASS at that tree, the
+reviewer's verdict posted to the PR naming that sha (`REV-8`). A
 FIX surviving the second pass is a stall like any other (`STOP-3`): one
 re-cut, one more pass (`STOP-4`); surviving that, inside a goal the unit
 leaves the path, alone it does not land — one `STOP-6` report.

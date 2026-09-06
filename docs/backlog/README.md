@@ -140,7 +140,7 @@ named substrate item owns one.
 | Owner | Enforces |
 |---|---|
 | `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence; trace on ready items `created ≥ 2026-09-03` |
-| `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract (status + graded sections) changed beside source carries `re-cut:`; a ready flip carries `ready-verdict:` or `review: ordinary`; referees land separately |
+| `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract (status + graded sections) changed beside source carries `re-cut:`, a dropped user-traced row `fork:`; a ready flip beside production source carries `ready-verdict:`; referees (gates, parity oracle harness, CI wiring) land separately |
 | Final review | frozen goal, append-only ledger, review membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
 
 Machine gates prove only the listed local facts; review owns everything else —

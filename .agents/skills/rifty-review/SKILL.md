@@ -21,4 +21,5 @@ reception, stall): `docs/process/stages/checkpoint-run.md`. Units marked
 `review: ordinary` (or with no contract doc at all) get ONE prose review on
 these axes (§Ordinary review there), FIX findings fixed in place and
 verified; "missing Contract+RED" and "no coverage table" are not findings
-there.
+there — but a production path changed under `review: ordinary` is a `RDY-8`
+blocker (`REV-2`).

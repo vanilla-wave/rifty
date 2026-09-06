@@ -4,6 +4,10 @@
 // exit codes: docs/process/artifacts/verdict.md.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { tracedRowCount } from '../checks/contract-drift.mjs';
+
+const CONTRACT_PATH_RE = /docs\/backlog\/[^\s`'"@]+\.md/u;
+const FIDELITY_AUTHORITY_RE = /AGENTS\.md|Fidelity/iu;
 
 export const REQUIRED_AXES = [
   'Completeness',
@@ -20,7 +24,12 @@ function residuals(value) {
   return Array.isArray(value) ? value : null;
 }
 
-export function evaluateVerdict(verdict, adjudication = null) {
+/**
+ * @param {unknown} verdict
+ * @param {unknown[]|null} adjudication
+ * @param {(path: string) => string|null} readContract  head text of the unit contract, null when absent
+ */
+export function evaluateVerdict(verdict, adjudication = null, readContract = () => null) {
   const errors = [];
   const axes = Array.isArray(verdict?.axes) ? verdict.axes : null;
   const rulings = new Map();
@@ -41,12 +50,25 @@ export function evaluateVerdict(verdict, adjudication = null) {
   const unitResiduals = residuals(verdict?.unit_residuals);
   const goalResiduals = residuals(verdict?.goal_residuals);
   // A row traced only to a rule id is a carrier note (RDY-3, REV-4): it raises no coverage row.
-  const RULE_ID_TRACE_RE = /^→?\s*[A-Z]{2,5}-\d+\s*$/u;
+  // An ADR trace is an obligation (RDY-3) and stays.
+  const RULE_ID_TRACE_RE = /^→?\s*(?!ADR-)[A-Z]{2,5}-\d+\s*$/u;
   const coverage = Array.isArray(verdict?.coverage)
     ? verdict.coverage.filter((row) => !RULE_ID_TRACE_RE.test(String(row?.trace ?? '')))
     : null;
   if (!axes) errors.push('axes missing');
   if (!coverage) errors.push('coverage missing');
+  // One coverage row per traced obligation of the contract (REV-4): fewer rows than the contract
+  // traces is an incomplete verdict, whatever the reviewer graded.
+  const contractPath = CONTRACT_PATH_RE.exec(String(verdict?.unit_goal_source ?? ''))?.[0] ?? null;
+  const contractText = contractPath ? readContract(contractPath) : null;
+  if (coverage && typeof contractText === 'string') {
+    const obligations = tracedRowCount(contractText);
+    if (coverage.length < obligations) {
+      errors.push(
+        `coverage has ${coverage.length} rows for ${obligations} traced obligations in ${contractPath} (REV-4)`,
+      );
+    }
+  }
   for (const row of coverage ?? []) {
     if (!['pass', 'weak', 'missing'].includes(row?.status)) {
       errors.push(`coverage row without valid status: ${row?.row ?? '?'}`);
@@ -118,10 +140,24 @@ export function evaluateVerdict(verdict, adjudication = null) {
         errors.push(`adjudication ruling matches no blocker: ${summary.slice(0, 80)}`);
       }
     }
+    // A §Fidelity blocker is rejected only as FALSE with the carrier cited — never STRETCH (REV-12).
+    for (const finding of rawBlockers) {
+      if (
+        rulings.get(finding.summary) === 'STRETCH' &&
+        FIDELITY_AUTHORITY_RE.test(String(finding.authority ?? ''))
+      ) {
+        errors.push(
+          `STRETCH on a Fidelity blocker is not a ruling (REV-12): ${finding.summary.slice(0, 80)}`,
+        );
+      }
+    }
     if (errors.length > 0) {
       return { code: 2, errors, blockers: [], concerns: [], nits: [], goalComplete: false, axes };
     }
   }
+  // Residuals mirror the blocker rulings only when every blocker was ruled; a partial or empty
+  // adjudication leaves them blocking as in raw mode (artifacts/verdict.md).
+  const fullyRuled = adjudicated && rawBlockers.every((finding) => rulings.has(finding.summary));
   const demoted = adjudicated
     ? rawBlockers
         .filter((finding) => ['STRETCH', 'FALSE'].includes(rulings.get(finding.summary)))
@@ -132,7 +168,7 @@ export function evaluateVerdict(verdict, adjudication = null) {
   // calibrated blocker set is the surviving findings; residuals stay report-only.
   const blockers = [
     ...rawBlockers.filter((finding) => !demotedSummaries.has(finding.summary)),
-    ...(adjudicated
+    ...(fullyRuled
       ? []
       : unitResiduals.map((residual) => ({ ...residual, axis: 'Unit residual' }))),
   ];
@@ -185,7 +221,14 @@ function main() {
       process.exit(2);
     }
   }
-  const result = evaluateVerdict(verdict, adjudication);
+  const readContract = (path) => {
+    try {
+      return readFileSync(path, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  const result = evaluateVerdict(verdict, adjudication, readContract);
   if (result.errors.length > 0) {
     for (const error of result.errors) console.error(`invalid verdict: ${error}`);
     process.exit(2);

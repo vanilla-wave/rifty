@@ -15,7 +15,8 @@ observed failures, never planned RED. Re-entered on an already GREEN tree
    choice (which CI lane) is the agent's, one `## Decisions` line.
 2. Classify every discovery against the frozen goal/tier/Fidelity: required
    → reverse-linked draft child (`rifty-to-backlog` shape, `## Challenge`);
-   outside → `rifty-to-backlog`. Never narrow the goal or detach required work.
+   outside → `rifty-to-backlog`, or a defect repaired at once as its own unit
+   (`rifty-fix`). Never narrow the goal or detach required work.
 3. Append ledger lines for decisions and observations; run-state stays out of
    the contract (`RDY-4`).
 4. `pnpm pr:check` green — under Codex escalated from the first attempt

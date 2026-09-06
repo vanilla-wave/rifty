@@ -11,8 +11,8 @@ gate: `backlog:check`.
 | `## Challenge` | critic | `challenge: <date> — clear \| N problems` (`docs/backlog/README.md` §Challenge) |
 | `## User scenario` | user scope, agent words | required without `epic:`; real software, exact call, result |
 | `## Reference contract` | agent | external oracle only: implementation + exact version, mechanism reused |
-| `## Acceptance` | agent, traced | numbered rows, each `… → I3` / `→ scenario` / `→ ADR-NNNN` (`RDY-3`; a rule-id-only trace is a note); an approximation must fail |
-| `## Parity cases` | agent, traced | enumerated oracle behaviors, each a RED target with its artifact (command + output + version) |
+| `## Acceptance` | agent, traced | numbered rows, each `… → I3` / `→ scenario` / `→ ADR-NNNN` (`RDY-3`; a rule-id-only trace is a note); an approximation must fail; a row whose oracle is real Node carries a runner case or a real-Node artifact, whatever the section — a hand-typed golden is a note |
+| `## Parity cases` | agent, traced | enumerated oracle behaviors, each a RED target; carrier = a `tools/node-parity-runner` case, or for browser-only behavior a test asserting real-Node output captured as the artifact (command + output + version); a hand-typed golden is a note (`fault-classes.md` frozen-assumption) |
 | `## Fault matrix` | agent, traced | infra only: `axis × operation \| honest outcome \| artifact / fault target → trace` (`fault-classes.md`) |
 | `## Out of scope` | agent (user for scope cuts) | named loud throws + compat ❌; never "…" |
 | `## Decisions` | agent + runner | one-line records only, forms below |
