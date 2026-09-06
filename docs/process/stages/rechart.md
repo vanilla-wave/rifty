@@ -28,7 +28,8 @@ only `goal.md` is frozen. Driver session (`DEC-5`).
    graduated / <m> invalidated / no changes` (`ordinary PASS @ <sha>` for an
    `ordinary` unit) — `<sha>` is the reviewed commit of the
    PASS; this line is the slice's PASS record and the next slice's `BASE`
-   (`REV-8`); the landed unit is deleted in the same commit. RECHART runs in
+   (`REV-8`); the landed unit is deleted in the same commit, its
+   `reference/<slug>-*.json` verdicts stay. RECHART runs in
    the same session, right after the PASS — a run re-entered between them
    re-runs the checkpoint; CLOSE refuses while the last landed slice lacks
    the line.

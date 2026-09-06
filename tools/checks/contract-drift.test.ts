@@ -10,8 +10,25 @@ import {
 const item = (status: string) =>
   `---\narea: playground\nstatus: ${status}\ntitle: T\n---\n\nbody\n`;
 const verdict = 'ready-verdict: 2026-08-01 — Contract+RED @ abc\n';
-const VERDICT_JSON = JSON.stringify({ checkpoint: 'Contract+RED', unit_goal_source: 'x' });
+/** A schema-shaped verdict as the runner commits it: eight axes, coverage, the unit, reviewed_sha. */
+const verdictJson = (
+  unit: string,
+  shaPrefix = 'abc',
+  checkpoint = 'Contract+RED',
+  extra: Record<string, unknown> = {},
+) =>
+  JSON.stringify({
+    checkpoint,
+    unit_goal_source: `${unit} @ BASE`,
+    axes: Array.from({ length: 8 }, (_, i) => ({ axis: `a${i}`, verdict: 'pass', findings: [] })),
+    coverage: [],
+    reviewed_sha: (shaPrefix + 'd'.repeat(40)).slice(0, 40),
+    ...extra,
+  });
+const VERDICT_JSON = verdictJson('docs/backlog/playground/x.md');
 const ARTIFACT = 'docs/backlog/playground/reference/x-contract-red.json';
+const LANDING = 'docs/backlog/playground/reference/x-final-green.json';
+const LANDING_JSON = verdictJson('docs/backlog/playground/x.md', 'abc', 'Final+GREEN');
 
 const read =
   (base: string | null, head: string | null, extra: Record<string, string | null> = {}) =>
@@ -238,7 +255,10 @@ ${verdict}${decisions}`;
       evaluate(
         [src, contract],
         read(item('draft'), inherited, {
-          'docs/backlog/net/reference/y-contract-red.json': VERDICT_JSON,
+          'docs/backlog/net/reference/y-contract-red.json': verdictJson(
+            'docs/backlog/net/y.md',
+            'deadbeef',
+          ),
         }),
       ),
     ).toHaveLength(0);
@@ -259,9 +279,58 @@ ${verdict}${decisions}`;
     );
     expect(evaluate([contract], read(item('ready'), `${item('ready')} rewritten`))).toHaveLength(0);
     expect(evaluate([src, contract], read(item('ready'), item('draft')))).toHaveLength(0);
-    expect(evaluate([src, { ...contract, status: 'D' }], read(item('ready'), null))).toHaveLength(
-      0,
+    // Delete on done beside production leaves the landing verdict behind (REV-8).
+    const deleted = { ...contract, status: 'D' };
+    expect(evaluate([src, deleted], read(item('ready'), null))).toHaveLength(1);
+    expect(
+      evaluate([src, deleted], read(item('ready'), null, { [LANDING]: LANDING_JSON })),
+    ).toHaveLength(0);
+    const ordinaryBase = `${item('ready')}review: ordinary\n`;
+    const ordinaryLanding = 'docs/backlog/playground/reference/x-ordinary.json';
+    expect(evaluate([src, deleted], read(ordinaryBase, null))).toHaveLength(1);
+    expect(
+      evaluate(
+        [src, deleted],
+        read(ordinaryBase, null, {
+          [ordinaryLanding]: verdictJson('docs/backlog/playground/x.md', 'abc', 'ordinary'),
+        }),
+      ),
+    ).toHaveLength(0);
+    // A ready flip is checked in any diff: off production it needs review: ordinary or the verdict.
+    const toolsOnly = { status: 'M', path: 'tools/checks/x.mjs' };
+    expect(evaluate([toolsOnly, contract], read(item('draft'), item('ready')))).toHaveLength(1);
+  });
+
+  it('an ADR-traced row leaves only with the ADR named in the re-cut line (RDY-5)', () => {
+    const base = traced('1. exact bytes → I1\n2. torn write throws → ADR-0358');
+    const silent = traced('1. exact bytes → I1', recut);
+    expect(evaluate([src, contract], read(base, silent))).toHaveLength(1);
+    const named = traced(
+      '1. exact bytes → I1',
+      're-cut: 2026-09-06 — ADR-0358 row moved to the substrate unit — trace: none\n',
     );
+    expect(evaluate([src, contract], read(base, named))).toHaveLength(0);
+  });
+
+  it('beside production everything outside the product, its tests and its docs is a referee (PR-4)', () => {
+    for (const path of [
+      'AGENTS.md',
+      'vitest.workspace.ts',
+      'biome.json',
+      'package.json',
+      'docs/process/rules/stops.md',
+    ]) {
+      expect(evaluate([src], read(null, null), [src, { status: 'M', path }])).toHaveLength(1);
+    }
+    for (const path of [
+      'examples/x/main.ts',
+      'docs/adr/net/0001-x.md',
+      'packages/x/CHANGELOG.md',
+      'tsconfig.base.json',
+      'pnpm-lock.yaml',
+    ]) {
+      expect(evaluate([src], read(null, null), [src, { status: 'M', path }])).toHaveLength(0);
+    }
   });
 
   it.each([
@@ -325,7 +394,9 @@ ${verdict}${decisions}`;
       'tools/review/review-schema.json',
     ]) {
       const referee = { status: 'M', path };
-      expect(evaluate([src], read(null, null), [src, referee])[0]).toContain('own process referee');
+      expect(evaluate([src], read(null, null), [src, referee])[0]).toContain(
+        'edits what judges it',
+      );
       expect(evaluate([referee], read(null, null))).toEqual([]);
     }
   });
@@ -373,7 +444,10 @@ describe('aggregate diff (git integration)', () => {
       );
       // Recording the verdict — the line plus its committed verdict.json — makes the diff pass.
       mkdirSync(join(root, 'docs/backlog/net/reference'), { recursive: true });
-      writeFileSync(join(root, 'docs/backlog/net/reference/x-contract-red.json'), VERDICT_JSON);
+      writeFileSync(
+        join(root, 'docs/backlog/net/reference/x-contract-red.json'),
+        verdictJson('docs/backlog/net/x.md'),
+      );
       writeFileSync(join(root, 'docs/backlog/net/x.md'), item('ready') + verdict);
       g('add', '.');
       g('commit', '-m', 'record verdict');

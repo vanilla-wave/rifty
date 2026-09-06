@@ -51,7 +51,7 @@ const STAGE = {
 
 const state = (label) =>
   agent(
-    `Read-only. Inspect goal ${DIR} and git. Report per the schema: goal.md status:ready (goalReady); working tree clean (treeClean); map.md '## Items' empty (mapEmpty); first '## Items' row whose unit is open and unblocked by blocked_by, in order (frontierChild; a unit not listed there is not on the path); that unit's stage — status draft → 'draft' whatever lines its journal holds; status ready → 'ready-unverified' (no 'ready-verdict:'/'review:' line), 'certified' (a 'ready-verdict:' line — it wins when a 'review: ordinary' line is also present), 'ordinary' (only a 'review: ordinary' line) (childStage); the first map.md '## Open questions' line tagged 'owner: user', verbatim (userFog).`,
+    `Read-only. Inspect goal ${DIR} and git. Report per the schema: goal.md status:ready (goalReady); working tree clean (treeClean); map.md '## Items' empty (mapEmpty); first '## Items' row whose unit is open and unblocked by blocked_by, in order (frontierChild; a unit not listed there is not on the path); that unit's stage — status draft → 'draft' whatever lines its journal holds; status ready → 'ready-unverified' (no 'ready-verdict:'/'review:' line), 'certified' (a 'ready-verdict:' line AND its committed docs/backlog/<area>/reference/<slug>-contract-red.json — it wins when a 'review: ordinary' line is also present; the line without the file is 'ready-unverified'), 'ordinary' (only a 'review: ordinary' line) (childStage); the first map.md '## Open questions' line tagged 'owner: user', verbatim (userFog).`,
     { schema: STATE, label, phase: 'Preflight' },
   )
 
@@ -131,6 +131,11 @@ while (!st.mapEmpty) {
     st = await state(`state:picked:${child}`)
     if (!st) return { stop: 'state agent failed', kind: 'precondition' }
     stage = st.childStage
+    // PICKUP ends certified (verdict + artifact) or ordinary — anything else never reaches IMPLEMENT.
+    if (stage !== 'certified' && stage !== 'ordinary') {
+      await note(`${child} run ended: PICKUP returned done but the unit is ${stage ?? 'unknown'} — no Contract+RED verdict artifact and no review: ordinary`)
+      return { pass: false, kind: 'harness', child, stop: `PICKUP left ${child} ${stage ?? 'unknown'}` }
+    }
   }
   const impl = await run('IMPLEMENT', `${STAGES}/implement.md`, child)
   const xi = await exit(impl, child)

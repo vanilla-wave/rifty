@@ -90,8 +90,9 @@ section, line forms. Store rules (areas, statuses, challenge, tier, gates):
 | Gate | Enforces |
 |---|---|
 | `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge; trace on ready items `created ≥ 2026-09-03` (`RDY-3`) |
-| `check:contract-drift` | frozen goal fields beside source (single-file and `epics/<slug>/goal.md`); a ready contract (status + graded sections) changed beside source carries `re-cut:` (`RDY-5`); a ready flip beside production source carries `ready-verdict:` (`RDY-8`: an `ordinary` unit changes no production path); a dropped user-traced row carries `fork:` (`RDY-5`); referees — gates, parity oracle harness, CI wiring — land separately (`PR-4`) |
+| `check:contract-drift` | frozen goal fields beside source (single-file and `epics/<slug>/goal.md`); a ready contract (status + graded sections) changed beside source carries `re-cut:` (`RDY-5`); a ready flip in any diff carries `ready-verdict:` bound to its committed verdict, or off production `review: ordinary` (`RDY-8`, `REV-8`); a dropped user-traced row carries `fork:`, a dropped ADR row the ADR named (`RDY-5`); a ready unit deleted beside production leaves its landing verdict; beside production nothing outside product, tests, backlog/ADR docs and changelogs changes (`PR-4`) |
 | `tools/review/blockers.mjs` | verdict shape, authority on blockers, trace on coverage rows, exit codes (`artifacts/verdict.md`) |
+| `check:pass-binding` | merge-time `REV-8` binding: a ready PR changing product or test paths carries a landing verdict (`reference/<slug>-{final-green,ordinary}.json`) whose `reviewed_sha` is an ancestor of HEAD with only documentation changed since; draft PRs skipped |
 | `refs:check` | dangling doc/ADR references cited from `docs/adr` and `docs/backlog` |
 
 Machine gates prove only the listed facts; review owns everything else.

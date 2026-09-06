@@ -61,7 +61,7 @@ it('requires one coverage row per traced obligation of the contract when it can 
   const read = () => contract;
   expect(evaluateVerdict(verdict, null, read).code).toBe(2);
   expect(evaluateVerdict({ ...verdict, coverage: [row, row, row] }, null, read).code).toBe(0);
-  expect(evaluateVerdict(verdict, null, () => null).code).toBe(0); // no contract to read: not checked
+  expect(evaluateVerdict(verdict, null, null).code).toBe(0); // no reader: shape check only
 });
 
 it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until every blocker is ruled (REV-12)', () => {
@@ -88,7 +88,7 @@ it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until eve
     goal_residuals: [],
     goal_complete: false,
   };
-  const ruling = (s: string, r: string) => ({ summary: s, ruling: r, clause: 'c' });
+  const ruling = (s: string, r: string) => ({ summary: s, ruling: r, clause: 'a.ts:1 carrier' });
   expect(evaluateVerdict(verdict, [ruling('stub returns a constant', 'STRETCH')]).code).toBe(2);
   expect(evaluateVerdict(verdict, [ruling('stub returns a constant', 'FALSE')]).code).toBe(1); // 'naming' unruled → residual blocks
   expect(
@@ -98,6 +98,41 @@ it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until eve
     ]).code,
   ).toBe(0);
   expect(evaluateVerdict(verdict, []).code).toBe(1); // empty adjudication never neutralises residuals
+  // Zero blockers + [] adjudication: residuals still block (nothing was ruled).
+  const noBlockers = {
+    ...verdict,
+    axes: REQUIRED_AXES.map((axis) => ({ axis, verdict: 'pass', findings: [] })),
+  };
+  expect(evaluateVerdict(noBlockers, []).code).toBe(1);
+  // FALSE on a Fidelity blocker must cite the carrier as file:line.
+  const falseNoCarrier = [
+    { summary: 'stub returns a constant', ruling: 'FALSE', clause: 'exists' },
+    ruling('naming', 'FALSE'),
+  ];
+  expect(evaluateVerdict(verdict, falseNoCarrier).code).toBe(2);
+  const falseCited = [
+    { summary: 'stub returns a constant', ruling: 'FALSE', clause: 'a.ts:12 real impl' },
+    ruling('naming', 'FALSE'),
+  ];
+  expect(evaluateVerdict(verdict, falseCited).code).toBe(0);
+});
+
+it('an unreadable named contract is an invalid verdict (REV-4)', () => {
+  const verdict = {
+    checkpoint: 'Final+GREEN',
+    unit_goal_source: 'docs/backlog/x/gone.md',
+    overall_verdict: 'pass',
+    merge_call: 'merge',
+    axes: REQUIRED_AXES.map((axis) => ({ axis, verdict: 'pass', findings: [] })),
+    coverage: [],
+    unit_residuals: [],
+    goal_residuals: [],
+    goal_complete: false,
+  };
+  expect(evaluateVerdict(verdict, null, () => null).code).toBe(2);
+  expect(evaluateVerdict({ ...verdict, unit_goal_source: 'PR #12' }, null, () => null).code).toBe(
+    0,
+  );
 });
 
 it('pins the REV-10 axis names in rubric order', () => {

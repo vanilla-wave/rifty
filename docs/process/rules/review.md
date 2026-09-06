@@ -22,7 +22,9 @@ unit row (`Acceptance 3 → I3`); an active `ADR-NNNN`; named baseline
 behavior; and only these rules, which name the blocker themselves:
 `AGENTS.md` §Fidelity (every rule of it — a fake, a silent gap, a mocked
 sibling, a test edited to pass, a parity claim without an artifact),
-`RDY-8` (a `review: ordinary` unit that changes a production path), `REV-7` (machinery
+`RDY-8` (a production path changed without a `ready-verdict:` — under
+`review: ordinary` or with no doc alike — unless its RED is a parity-runner
+case or a captured real-Node / baseline artifact), `REV-7` (machinery
 the contract is deliverable without), `REV-11` (a checkpoint without a fresh
 reviewer), `REV-10` axis 3 (a changed ready `goal.md`, an edited ledger line, a
 user-traced row dropped or weakened without `fork:`).
@@ -100,9 +102,12 @@ Two records, nothing else:
 
 - **Contract+RED pass** — `ready-verdict: <date> — Contract+RED @ <sha>`, first
   line of the unit's `## Decisions` (`readiness.md` `RDY-2`), with the
-  reviewer's `verdict.json` and the critic's `adjudication.json` committed as
-  `docs/backlog/<area>/reference/<slug>-contract-red.json` (the proof a fresh
-  reviewer ran; deleted with the unit on done). A later
+  reviewer's `verdict.json` — the runner adds `reviewed_sha`, the reviewed
+  commit — committed as `docs/backlog/<area>/reference/<slug>-contract-red.json`
+  and the critic's rulings beside it as `…-contract-red.adjudication.json`;
+  `check:contract-drift` binds the line to that file (schema-shaped, naming the
+  unit, `reviewed_sha` starting with the line's `<sha>`) in any diff. The
+  artifacts stay on `main` for good: they are the review record. A later
   `re-cut:` does not void it: Final+GREEN grades the contract as it stands
   (`REV-1`); a demotion to `draft` does, by construction — PICKUP compiles
   again or records inheritance (`RDY-5`).
@@ -110,14 +115,14 @@ Two records, nothing else:
   ledger's `re-chart after <slice> (final-green PASS @ <sha>): …` line
   (`../artifacts/ledger.md`; `(ordinary PASS @ <sha>)` for `ordinary`
   units), written by RECHART, which deletes the landed unit in the same
-  commit, the Final verdict + adjudication committed beside the Contract+RED
-  ones as `…-final-green.json`; a unit without a goal commits the same files,
-  the runner checks the binding in session, deletes the doc, and the merged PR
-  is the record (`readiness.md` `RDY-8`). An `ordinary` review's prose
-  verdict is posted to the PR naming the reviewed sha before merge, and when
-  the unit changes a production or test path it is also committed as
-  `docs/backlog/<area>/reference/<slug|pr-N>-ordinary.md` — no verdict, no
-  review happened (`REV-11`).
+  commit, the Final verdict (+ adjudication) committed beside the Contract+RED
+  one as `…-final-green.json`; a unit without a goal commits the same file,
+  then deletes its doc — the artifacts stay (`readiness.md` `RDY-8`). An
+  `ordinary` review is committed as
+  `docs/backlog/<area>/reference/<slug|pr-N>-ordinary.json` — the reviewer's
+  prose verdict, the reception lines, `reviewed_sha` — whenever the unit
+  changes a production or test path; a docs-only unit's verdict is posted to
+  the PR. No artifact, no review happened (`REV-11`).
 
 No status lines, no round counters: the pass history is `git log` — each fix
 batch commits with its FIX findings in the message (`REV-12`). An `ordinary`
@@ -131,7 +136,11 @@ documentation per the CI classifier (`tools/checks/ci-change-scope.mjs`
 lanes) and the unit's graded contract is unchanged (`contract-drift.mjs`
 `itemContract`) or the doc is deleted on done — bookkeeping, CLOSE exports,
 ADRs and CHANGELOGs never break it, any product, test or contract change
-after it does; merge requires it against the last PASS. `BASE` of the next slice = the `<sha>` of the last such rechart
+after it does. Merge requires it, by machine: `pnpm check:pass-binding`
+(`tools/checks/pass-binding.mjs`, also a CI step) reads the landing verdict's
+`reviewed_sha`, requires it to be an ancestor of HEAD with only documentation
+changed since, and fails a PR that changes product or test paths without one;
+a draft PR is skipped — the binding is asked of a PR marked ready to merge. `BASE` of the next slice = the `<sha>` of the last such rechart
 line reachable from HEAD, else the branch base. Slices landed before
 2026-09-03 recorded their PASS as a ledger `Final+GREEN PASS @ <sha>` line:
 read it as the same record — never fall back to the branch base while such a

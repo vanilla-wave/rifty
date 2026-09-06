@@ -11,8 +11,8 @@ gate: `backlog:check`.
 | `## Challenge` | critic | `challenge: <date> — clear \| N problems` (`docs/backlog/README.md` §Challenge) |
 | `## User scenario` | user scope, agent words | required without `epic:`; real software, exact call, result |
 | `## Reference contract` | agent | external oracle only: implementation + exact version, mechanism reused |
-| `## Acceptance` | agent, traced | numbered rows, each `… → I3` / `→ scenario` / `→ ADR-NNNN` (`RDY-3`; a rule-id-only trace is a note); an approximation must fail; a row whose oracle is real Node carries a runner case or a real-Node artifact, whatever the section — a hand-typed golden is a note |
-| `## Parity cases` | agent, traced | enumerated oracle behaviors, each a RED target; carrier = a `tools/node-parity-runner` case, or for browser-only behavior a test asserting real-Node output captured as the artifact (command + output + version); a hand-typed golden is a note (`fault-classes.md` frozen-assumption) |
+| `## Acceptance` | agent, traced | numbered rows, each `… → I3` / `→ scenario` / `→ ADR-NNNN` (`RDY-3`; a rule-id-only trace is a note); an approximation must fail; a row whose oracle is real Node carries a runner case or a real-Node artifact, whatever the section — a hand-typed golden is no carrier: the row grades `missing` (`REV-4`) |
+| `## Parity cases` | agent, traced | enumerated oracle behaviors, each a RED target; carrier = a `tools/node-parity-runner` case, or for browser-only behavior a test asserting real-Node output captured as the artifact (command + output + version); a hand-typed golden is no carrier — the row grades `missing` (`fault-classes.md` frozen-assumption) |
 | `## Fault matrix` | agent, traced | infra only: `axis × operation \| honest outcome \| artifact / fault target → trace` (`fault-classes.md`) |
 | `## Out of scope` | agent (user for scope cuts) | named loud throws + compat ❌; never "…" |
 | `## Decisions` | agent + runner | one-line records only, forms below |
@@ -32,10 +32,12 @@ override: <date> — <challenge problem> — <user words>   docs/backlog/README.
 
 Inside a goal the Final+GREEN PASS, reception and stop lines go to the goal
 ledger (`ledger.md`); the landed unit is deleted by RECHART. Outside a goal
-the Final+GREEN PASS is not written anywhere: the doc is deleted and the
-merged PR is the record (`REV-8`). A unit with no doc at all — nothing to
-trace: a defect fix, a docs change (`readiness.md` `RDY-8`) — records
-nothing. No status lines, no
+the doc is deleted on done. Either way the verdicts stay:
+`docs/backlog/<area>/reference/<slug>-{contract-red,final-green}.json`
+(`REV-8`) — delete on done deletes the contract, never the record. A unit
+with no doc at all — nothing to trace: a defect fix, a docs change
+(`readiness.md` `RDY-8`) — leaves only its `…-ordinary.json` when it touched
+product or tests. No status lines, no
 counters: the pass history is git log (`REV-8`). `check:contract-drift`
 compares only status + the graded sections (User scenario … Out of scope);
 everything else in the file is journal or path.

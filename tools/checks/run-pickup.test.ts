@@ -71,6 +71,16 @@ describe('classifyAutonomousRunPath', () => {
   });
 
   it.each([
+    'packages/x/src/w.wasm',
+    'apps/playground/index.html',
+    'tools/shadow-registry/src/index.ts',
+  ])('counts every shipped file under a product root as production: %s', (path) => {
+    expect(classifyAutonomousRunPath(path)).toBe('production');
+  });
+
+  it.each([
+    'packages/x/README.md',
+    'packages/x/CHANGELOG.md',
     'docs/backlog/process-meta/test-coverage-debt.md',
     'docs/process/a-test-fixture.md',
     'docs/backlog/playground/save.md',

@@ -5,11 +5,14 @@
  * the sections a reviewer grades (artifacts/unit.md) — changes only with a
  * `re-cut:` line (docs/process/rules/readiness.md RDY-5); Context, Challenge,
  * Decisions and the rest of the frontmatter are journal/path, never compared;
- * a dropped `→ I#`/`→ scenario` row needs `fork:` in the re-cut line
- * (rewording is review's, REV-10 axis 3); a ready flip beside production
- * source carries its pickup Contract+RED verdict — an `ordinary` unit changes
- * no production path (RDY-8). Referees — the gates, the parity oracle harness,
- * CI wiring — land separately (rules/pr.md PR-4).
+ * a dropped `→ I#`/`→ scenario` row needs `fork:` in the re-cut line, a dropped
+ * ADR row the ADR named there (rewording is review's, REV-10 axis 3). A ready
+ * flip in ANY diff carries its committed Contract+RED verdict (schema-shaped,
+ * naming the unit and the reviewed commit) or, off production paths, `review:
+ * ordinary` (RDY-8, REV-8); a ready unit deleted on done beside production
+ * leaves its landing verdict behind. Beside production only the product, its
+ * tests, backlog/ADR docs and changelogs change — anything else judges the PR
+ * and lands separately (rules/pr.md PR-4).
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -76,10 +79,15 @@ const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
 const GUARDED = new Set(['ready', 'in-progress']);
 const EPIC_PATH_RE = /^docs\/backlog\/epics\/[^/]+\.md$/;
 const GOAL_PATH_RE = /^docs\/backlog\/epics\/[^/]+\/goal\.md$/;
-// Referees — the gates, the CI classifier and lanes, the parity oracle harness, the review rubric —
-// land separately (PR-4): a product PR never rewrites what judges it.
-const REFEREE_RE =
-  /^(?:tools\/checks\/(?:(?:contract-drift|run-pickup|ci-change-scope|ci-gate|pr-check)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs)|tools\/backlog\/check\.mjs|tools\/node-parity-runner\/src\/.+|\.github\/workflows\/.+|docs\/process\/rules\/review\.md|\.agents\/skills\/rifty-review(?:-inline)?\/SKILL\.md|\.claude\/commands\/rifty-review-inline\.md)$/;
+// What rides with a production change: the product, its tests, examples, deploy/perf, the backlog
+// and ADR docs, changelogs, lockfile and workspace/tsconfig structure. Everything else — CI, the
+// gates, the parity oracle harness, the process canon, agent instructions, lint/test/lane configs
+// — judges the PR and lands separately (PR-4). An open rule: a new judge is a referee by default.
+const RIDES_WITH_PRODUCTION_RE =
+  /^(?:apps|packages|services|tests|examples|deploy|perf|tools\/shadow-registry)\/|^docs\/(?!process\/)|(?:^|\/)CHANGELOG\.md$|^pnpm-lock\.yaml$|^pnpm-workspace\.yaml$|^tsconfig[^/]*\.json$/u;
+export function isReferee(path) {
+  return !RIDES_WITH_PRODUCTION_RE.test(path);
+}
 // The contract a reviewer grades (artifacts/unit.md); everything else in the file is journal.
 const CONTRACT_SECTIONS = [
   'User scenario',
@@ -94,31 +102,62 @@ const VERDICT_LINE_RE = new RegExp(
   `${JOURNAL_PREFIX}ready-verdict:[^\\n]*?(?:Contract\\+RED @ (\\S+)|inherited from (\\S+) @ (\\S+))`,
   'm',
 );
+const NO_CHECKPOINT_RE = new RegExp(`${JOURNAL_PREFIX}review:\\s*ordinary\\b`, 'm');
 const USER_TRACED_ROW_RE = /^(?:\d+\.|[-*]|\|).*→\s*(?:I\d+|scenario)\b/gmu;
+const ADR_TRACED_ROW_RE = /^(?:\d+\.|[-*]|\|).*→\s*ADR-\d{4}\b/gmu;
 const ITEM_KEY_RE = /^docs\/backlog\/(?!epics\/)([^/]+)\/([^/]+)\.md$/u;
 
-/** `docs/backlog/<area>/reference/<slug>-contract-red.json` for an item path or `<area>/<slug>` key. */
-export function verdictArtifactPath(itemPathOrKey) {
+/** `docs/backlog/<area>/reference/<slug>-<kind>.json` for an item path or `<area>/<slug>` key. */
+export function verdictArtifactPath(itemPathOrKey, kind = 'contract-red') {
   const m = ITEM_KEY_RE.exec(itemPathOrKey) ?? /^([^/]+)\/([^/]+)$/u.exec(itemPathOrKey);
-  return m ? `docs/backlog/${m[1]}/reference/${m[2]}-contract-red.json` : null;
+  return m ? `docs/backlog/${m[1]}/reference/${m[2]}-${kind}.json` : null;
 }
 
-/** The committed Contract+RED verdict a `ready-verdict:` line names (REV-8), or the violation. */
-function verdictArtifactViolation(path, headText, read) {
-  const m = VERDICT_LINE_RE.exec(headText);
-  if (!m)
-    return `${path}: ready flip beside production source without a pickup Contract+RED verdict (RDY-8: a review: ordinary unit changes no production path)`;
-  const artifact = verdictArtifactPath(m[2] ?? path);
-  let parsed = null;
+/**
+ * A committed verdict is a schema-shaped review — eight axes, a coverage table, the unit it
+ * names, the reviewed commit — never a JSON with one field (REV-8).
+ */
+function verdictArtifactViolation(path, artifact, checkpoint, shaPrefix, unitPath, read) {
+  let v = null;
   try {
-    parsed = JSON.parse(read(artifact, 'head') ?? 'null');
+    v = JSON.parse(read(artifact, 'head') ?? 'null');
   } catch {
-    parsed = null;
+    v = null;
   }
-  if (parsed?.checkpoint !== 'Contract+RED') {
-    return `${path}: ready-verdict: names a Contract+RED pass but ${artifact} is absent or not a Contract+RED verdict (REV-8)`;
+  const ok =
+    v !== null &&
+    typeof v === 'object' &&
+    v.checkpoint === checkpoint &&
+    Array.isArray(v.axes) &&
+    v.axes.length === 8 &&
+    Array.isArray(v.coverage) &&
+    typeof v.unit_goal_source === 'string' &&
+    (unitPath === null || v.unit_goal_source.includes(unitPath)) &&
+    EXACT_SHA_RE.test(String(v.reviewed_sha ?? '')) &&
+    (shaPrefix === null || v.reviewed_sha.startsWith(shaPrefix));
+  return ok
+    ? null
+    : `${path}: ${artifact} is absent or not a ${checkpoint} verdict for this unit${shaPrefix ? ` at ${shaPrefix}` : ''} (REV-8)`;
+}
+
+/** A ready flip carries its Contract+RED verdict — or, off any production path, `review: ordinary` (RDY-8). */
+function readyFlipViolation(path, headText, read, besideProduction) {
+  const m = VERDICT_LINE_RE.exec(headText);
+  if (!m) {
+    if (!besideProduction && NO_CHECKPOINT_RE.test(headText)) return null;
+    return besideProduction
+      ? `${path}: ready flip beside production source without a pickup Contract+RED verdict (RDY-8: a review: ordinary unit changes no production path)`
+      : `${path}: ready flip without a pickup Contract+RED verdict or a review: ordinary line (RDY-8)`;
   }
-  return null;
+  const inherited = m[2] ?? null;
+  return verdictArtifactViolation(
+    path,
+    verdictArtifactPath(inherited ?? path),
+    'Contract+RED',
+    m[1] ?? m[3] ?? null,
+    inherited ? null : path,
+    read,
+  );
 }
 const RECUT_LINE_RE = new RegExp(`${JOURNAL_PREFIX}re-cut: \\d{4}-\\d{2}-\\d{2} — .*$`, 'gm');
 const FROZEN_FIELDS = [
@@ -145,21 +184,22 @@ function recutLines(text) {
   return (text ?? '').match(RECUT_LINE_RE) ?? [];
 }
 
-/** Number of rows traced to I# / scenario across the graded sections (RDY-5: dropping one is the user's). */
+/** Rows traced to I# / scenario across the graded sections (RDY-5: dropping one is the user's). */
 export function userTracedRowCount(text) {
+  return countRows(text, USER_TRACED_ROW_RE);
+}
+
+function countRows(text, re) {
   return CONTRACT_SECTIONS.reduce(
-    (n, name) => n + ((section(text, name) ?? '').match(USER_TRACED_ROW_RE) ?? []).length,
+    (n, name) => n + ((section(text, name) ?? '').match(re) ?? []).length,
     0,
   );
 }
 
 const TRACED_ROW_RE = /^(?:\d+\.|[-*]|\|).*→\s*(?:I\d+|scenario|ADR-\d{4})\b/gmu;
-/** Number of obligations — rows traced to I# / scenario / ADR — across the graded sections (RDY-3, REV-4). */
+/** Obligations — rows traced to I# / scenario / ADR — across the graded sections (RDY-3, REV-4). */
 export function tracedRowCount(text) {
-  return CONTRACT_SECTIONS.reduce(
-    (n, name) => n + ((section(text, name) ?? '').match(TRACED_ROW_RE) ?? []).length,
-    0,
-  );
+  return countRows(text, TRACED_ROW_RE);
 }
 
 /**
@@ -169,25 +209,45 @@ export function tracedRowCount(text) {
  * @returns {string[]} violations (empty = pass)
  */
 export function evaluate(entries, read, refereeEntries = entries) {
-  if (!entries.some((entry) => classifyAutonomousRunPath(entry.path) === 'production')) return [];
-  const refereeChanges = refereeEntries.filter((entry) => REFEREE_RE.test(entry.path));
-  if (refereeChanges.length > 0) {
-    return refereeChanges.map(
-      (entry) =>
-        `${entry.path}: implementation diff edits its own process referee — land gate semantics separately`,
-    );
+  const besideProduction = entries.some(
+    (entry) => classifyAutonomousRunPath(entry.path) === 'production',
+  );
+  if (besideProduction) {
+    const refereeChanges = refereeEntries.filter((entry) => isReferee(entry.path));
+    if (refereeChanges.length > 0) {
+      return refereeChanges.map(
+        (entry) =>
+          `${entry.path}: implementation diff edits what judges it (PR-4) — land it separately`,
+      );
+    }
   }
   const violations = [];
   for (const entry of entries) {
-    if (entry.status === 'D' || !CONTRACT_RE.test(entry.path) || SKIP_RE.test(entry.path)) {
+    if (!CONTRACT_RE.test(entry.path) || SKIP_RE.test(entry.path)) continue;
+    const isGoal = EPIC_PATH_RE.test(entry.path) || GOAL_PATH_RE.test(entry.path);
+    if (entry.status === 'D') {
+      // Delete on done beside production: the landed unit leaves its landing verdict behind (REV-8).
+      if (!besideProduction || isGoal || entry.path.startsWith('docs/backlog/epics/')) continue;
+      const baseText = read(entry.path, 'base');
+      if (!GUARDED.has(statusOf(baseText))) continue;
+      const ordinary = NO_CHECKPOINT_RE.test(baseText);
+      const violation = verdictArtifactViolation(
+        entry.path,
+        verdictArtifactPath(entry.path, ordinary ? 'ordinary' : 'final-green'),
+        ordinary ? 'ordinary' : 'Final+GREEN',
+        null,
+        entry.path,
+        read,
+      );
+      if (violation) violations.push(violation);
       continue;
     }
     const baseText = read(entry.path, 'base');
     const headText = read(entry.path, 'head');
     if (headText === null) continue;
     // Frozen destination: single-file epics and dir-format goal.md (artifacts/goal.md).
-    if (EPIC_PATH_RE.test(entry.path) || GOAL_PATH_RE.test(entry.path)) {
-      if (!GUARDED.has(statusOf(baseText))) continue;
+    if (isGoal) {
+      if (!besideProduction || !GUARDED.has(statusOf(baseText))) continue;
       const base = goalContract(baseText);
       const head = goalContract(headText);
       for (const [key, label] of FROZEN_FIELDS) {
@@ -202,6 +262,7 @@ export function evaluate(entries, read, refereeEntries = entries) {
     const baseStatus = statusOf(baseText);
     const headStatus = statusOf(headText);
     if (GUARDED.has(baseStatus)) {
+      if (!besideProduction) continue; // a contract edit with no product beside it is review's
       if (!GUARDED.has(headStatus)) continue; // demotion — review discipline owns the fork record
       if (itemContract(baseText) === itemContract(headText)) continue; // journal / path edits
       const baseRecuts = new Set(recutLines(baseText));
@@ -223,12 +284,21 @@ export function evaluate(entries, read, refereeEntries = entries) {
           `${entry.path}: user-traced row dropped beside source without a recorded fork (RDY-5)`,
         );
       }
+      // An ADR-traced obligation leaves only with the ADR named in the re-cut line (RDY-5).
+      if (
+        countRows(headText, ADR_TRACED_ROW_RE) < countRows(baseText, ADR_TRACED_ROW_RE) &&
+        !newRecuts.some((line) => /ADR-\d{4}/u.test(line))
+      ) {
+        violations.push(
+          `${entry.path}: ADR-traced row dropped beside source without the ADR named in the re-cut line (RDY-5)`,
+        );
+      }
       continue;
     }
-    // Beside a production path only a Contract+RED verdict flips a unit ready — an `ordinary` unit
-    // changes no production path (RDY-8) — and the verdict is the committed verdict.json (REV-8).
+    // A ready flip, in any diff, carries its committed Contract+RED verdict — or, off any
+    // production path, a `review: ordinary` line (RDY-8, REV-8).
     if (GUARDED.has(headStatus)) {
-      const violation = verdictArtifactViolation(entry.path, headText, read);
+      const violation = readyFlipViolation(entry.path, headText, read, besideProduction);
       if (violation) violations.push(violation);
     }
   }

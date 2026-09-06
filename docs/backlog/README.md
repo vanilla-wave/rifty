@@ -140,7 +140,8 @@ named substrate item owns one.
 | Owner | Enforces |
 |---|---|
 | `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence; trace on ready items `created ≥ 2026-09-03` |
-| `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract (status + graded sections) changed beside source carries `re-cut:`, a dropped user-traced row `fork:`; a ready flip beside production source carries `ready-verdict:`; referees (gates, parity oracle harness, CI wiring) land separately |
+| `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract (status + graded sections) changed beside source carries `re-cut:`, a dropped user-traced row `fork:`, a dropped ADR row the ADR named; a ready flip in any diff carries `ready-verdict:` bound to its committed `reference/<slug>-contract-red.json` (or, off production, `review: ordinary`); a ready unit deleted beside production leaves its landing verdict; beside production only product, tests, backlog/ADR docs and changelogs change |
+| `check:pass-binding` | a PR marked ready that changes product or test paths carries a landing verdict whose `reviewed_sha` is an ancestor of HEAD with only documentation changed since (`REV-8`) |
 | Final review | frozen goal, append-only ledger, review membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
 
 Machine gates prove only the listed local facts; review owns everything else —

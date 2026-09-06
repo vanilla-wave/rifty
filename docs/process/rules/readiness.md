@@ -98,10 +98,12 @@ scope: that is the user's (`STOP-1a`) — demote to `draft`, record the fork and
 the pre-demotion row verbatim as one dated `## Decisions` line (any
 wording), request manual `rifty-refine`; the resolution lands as `re-cut:
 <date> — fork: <what> — trace: I#` and the unit compiles again at PICKUP
-(inheritance where only certified rows carry). Never absorb silently. Rows traced only to ADRs/rules and untraced rows are agent-owned.
-`check:contract-drift` enforces one fact: a ready contract (status + graded
-sections) changed beside source carries a `re-cut:` line; whether a changed
-user-traced row needed a `fork:` is review's (`review.md` `REV-10` axis 3).
+(inheritance where only certified rows carry). Never absorb silently. Rows traced only to ADRs/rules and untraced rows are agent-owned;
+an ADR-traced row leaves only with the ADR named in the `re-cut:` line.
+`check:contract-drift` enforces: a ready contract (status + graded sections)
+changed beside source carries a `re-cut:` line; fewer user-traced rows need
+`fork:` on that line, fewer ADR-traced rows the ADR named; whether a reworded
+row was weakened is review's (`review.md` `REV-10` axis 3).
 The active `goal.md` is never re-cut — amend = CLOSE + FIT.
 
 ## RDY-6 Refine altitude

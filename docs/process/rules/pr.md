@@ -30,11 +30,13 @@ driver (`decisions.md` `DEC-3`: pre-authorized once given).
 ## PR-4 Separate-PR demands name their gate
 
 A rule demanding a separate PR holds only if it names the gate forcing it.
-Today one: `check:contract-drift` refuses an implementation diff that edits a
-referee — the gates (`tools/checks/contract-drift.mjs`, `tools/review/*`),
-the parity oracle harness (`tools/node-parity-runner/src/**`) and CI lane
-wiring (`.github/workflows/**`) — referees land separately, never as a
-"carrier" of the unit that needs them changed.
+Today one: `check:contract-drift` refuses a production diff that edits
+anything outside the product, its tests, examples, deploy/perf, the backlog
+and ADR docs, changelogs, lockfile and workspace/tsconfig structure — CI, the
+gates, the parity oracle harness, the process canon, agent instructions,
+lint/test/lane configs judge the PR and land separately, never as a "carrier"
+of the unit that needs them changed. An open rule: a new judge is a referee
+by default.
 
 ## PR-5 User-asked PR
 
@@ -51,4 +53,5 @@ files once in isolation, labelled with the time-out count — a failure that
 reproduces in isolation stays red and is an observed defect (`rifty-fix`), a
 pass on rerun is reported and captured (`rifty-to-backlog`, fault class
 `concurrent-same-key` or host load — `fault-classes.md`), never hidden and
-never declared a flake without a record.
+never declared a flake without a record. Merge has its own machine half:
+`pnpm check:pass-binding` (`review.md` `REV-8`) on a PR marked ready.

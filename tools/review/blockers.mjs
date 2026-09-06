@@ -27,12 +27,13 @@ function residuals(value) {
 /**
  * @param {unknown} verdict
  * @param {unknown[]|null} adjudication
- * @param {(path: string) => string|null} readContract  head text of the unit contract, null when absent
+ * @param {((path: string) => string|null)|null} readContract  head text of the unit contract (null = no reader)
  */
-export function evaluateVerdict(verdict, adjudication = null, readContract = () => null) {
+export function evaluateVerdict(verdict, adjudication = null, readContract = null) {
   const errors = [];
   const axes = Array.isArray(verdict?.axes) ? verdict.axes : null;
   const rulings = new Map();
+  const clauses = new Map();
   if (adjudication !== null) {
     if (!Array.isArray(adjudication)) errors.push('adjudication is not an array');
     for (const entry of Array.isArray(adjudication) ? adjudication : []) {
@@ -44,6 +45,7 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = () 
         errors.push('adjudication entry without summary');
       } else {
         rulings.set(entry.summary, entry.ruling);
+        clauses.set(entry.summary, entry.clause ?? '');
       }
     }
   }
@@ -60,7 +62,12 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = () 
   // One coverage row per traced obligation of the contract (REV-4): fewer rows than the contract
   // traces is an incomplete verdict, whatever the reviewer graded.
   const contractPath = CONTRACT_PATH_RE.exec(String(verdict?.unit_goal_source ?? ''))?.[0] ?? null;
-  const contractText = contractPath ? readContract(contractPath) : null;
+  // With a reader (the CLI passes the file system): a named contract must be readable and the
+  // coverage table at least as long as its traced obligations. Without one, the shape check only.
+  const contractText = contractPath && readContract ? readContract(contractPath) : null;
+  if (contractPath && readContract && contractText === null) {
+    errors.push(`unit_goal_source names an unreadable contract: ${contractPath}`);
+  }
   if (coverage && typeof contractText === 'string') {
     const obligations = tracedRowCount(contractText);
     if (coverage.length < obligations) {
@@ -140,14 +147,18 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = () 
         errors.push(`adjudication ruling matches no blocker: ${summary.slice(0, 80)}`);
       }
     }
-    // A §Fidelity blocker is rejected only as FALSE with the carrier cited — never STRETCH (REV-12).
+    // A §Fidelity blocker is rejected only as FALSE with the carrier cited (file:line in the clause)
+    // — never STRETCH (REV-12).
     for (const finding of rawBlockers) {
-      if (
-        rulings.get(finding.summary) === 'STRETCH' &&
-        FIDELITY_AUTHORITY_RE.test(String(finding.authority ?? ''))
-      ) {
+      if (!FIDELITY_AUTHORITY_RE.test(String(finding.authority ?? ''))) continue;
+      const ruling = rulings.get(finding.summary);
+      if (ruling === 'STRETCH') {
         errors.push(
           `STRETCH on a Fidelity blocker is not a ruling (REV-12): ${finding.summary.slice(0, 80)}`,
+        );
+      } else if (ruling === 'FALSE' && !/:\d+/u.test(String(clauses.get(finding.summary) ?? ''))) {
+        errors.push(
+          `FALSE on a Fidelity blocker without the carrier cited as file:line (REV-12): ${finding.summary.slice(0, 80)}`,
         );
       }
     }
@@ -157,7 +168,10 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = () 
   }
   // Residuals mirror the blocker rulings only when every blocker was ruled; a partial or empty
   // adjudication leaves them blocking as in raw mode (artifacts/verdict.md).
-  const fullyRuled = adjudicated && rawBlockers.every((finding) => rulings.has(finding.summary));
+  const fullyRuled =
+    adjudicated &&
+    rawBlockers.length > 0 &&
+    rawBlockers.every((finding) => rulings.has(finding.summary));
   const demoted = adjudicated
     ? rawBlockers
         .filter((finding) => ['STRETCH', 'FALSE'].includes(rulings.get(finding.summary)))
