@@ -13,7 +13,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - **No "implement later" / silent backlog.** Every gap is explicit (NotImplementedError, backlog item, compat ❌) — never hidden behind a passing path.
 - **No mocking what we build.** Real Memory VFS, real Workers/SW, real npm tarballs, real parity vs Node. Mock only unavoidable external boundaries (network egress, clock, absent browser APIs); never the unit under test or a sibling rifty package. Hard to instantiate = API smell — fix it.
 - **Parity = gold standard.** Never assume Node/Anthropic/StackBlitz behavior — verify via parity-runner. Found gap/bug → failing parity (or regression) test first, then fix; no fix merges without it; never edit a test to make code pass.
-- **Review checkpoints.** Parity/stateful changes pass Contract+RED before implementation, then Final+GREEN; blockers iterate in place within a declared budget. Rules: `docs/process/rules/review.md`, stops: `docs/process/rules/stops.md`.
+- **Review checkpoints.** A planned parity/stateful unit passes Contract+RED before implementation, then Final+GREEN; an observed-defect fix carries its RED and one fresh review (`RDY-8`); findings are dispositioned and FIX iterates in place until a stall (`REV-12`, `STOP-3`). Rules: `docs/process/rules/review.md`, stops: `docs/process/rules/stops.md`.
 
 ## Architecture — hard rules
 - Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → playground), no reverse imports, no cycles, no foreign `src/internal/*`, solid-js only in playground (D-002).
@@ -28,7 +28,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 
 ## Data sources
 - `docs/process/README.md` — the process map: one frozen layer (`goal.md`), agent-owned path, stages, roles, closed stop list, rule ids (`DEC`/`RDY`/`REV`/`STOP`/`PR`). Read it first; cite rules by id.
-- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: user-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery → `rifty-to-backlog`, never interview; draft → ready at pickup (`RDY-1..4`); epic missing tier/Invariants → fit it yourself (`rifty-goal` FIT) — a write-up is never a blocked ask; PR review → `rifty-review`. Never implement a draft. Planned/process work never invokes `rifty-fix`.
+- `docs/backlog/` — provisional contracts: items + user-value epics; delete on done. Route: user-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery → `rifty-to-backlog`, never interview; draft → ready at pickup (`RDY-1..4`); epic missing tier/Invariants → fit it yourself (`rifty-goal` FIT) — a write-up is never a blocked ask; PR review → `rifty-review`, findings dispositioned FIX/REJECT/NOTE and never minted as items (`REV-12`); observed defect → `rifty-fix`. Never implement a draft.
 - `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
 - `docs/process/traps.md` — hard-won gotchas (worktrees/git, CI, e2e, browser runtime, tooling); check before debugging a weird fail or re-proposing a rejected speedup
 - `docs/process/rules/fault-classes.md` — fault taxonomy; `docs/process/rules/testing.md` — test pyramid + why parity
@@ -44,10 +44,10 @@ Checklist + subagent budget: `docs/process/rules/decisions.md`. Core:
 
 ## Goal runs
 
-Explicit whole-ready-goal hand-off → run loop per `docs/process/README.md` §Stages (`rifty-goal` skill routes to the stage docs; Claude: `.claude/workflows/goal-run.js`).
+A unit runs PICKUP → Contract+RED → IMPLEMENT → Final+GREEN on its own (`docs/process/README.md` §Stages); an explicit whole-ready-goal hand-off loops it over the map (`rifty-goal` routes to the stage docs; Claude: `.claude/workflows/goal-run.js`).
 
 ## PR — unit of delivery
-One PR = one reviewable delivered behavior; rules `docs/process/rules/pr.md` (`PR-1..6`): discoveries ride the unit's branch, one draft PR per goal by default, a separate-PR demand names its gate, a user-asked PR is the user's call.
+One PR = one reviewable delivered behavior; rules `docs/process/rules/pr.md` (`PR-1..6`): discoveries ride the unit's branch, a draft PR opens at the first commit (one per goal by default), a separate-PR demand names its gate, a user-asked PR is the user's call.
 
 ## DoD (per PR)
 - [ ] no unrecorded/misclassified residuals; active-goal residuals stay linked; report slice/goal status separately

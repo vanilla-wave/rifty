@@ -1,16 +1,16 @@
 # Readiness — draft → ready, trace, size, re-cut (`RDY`)
 
 Shape of the artifacts: `../artifacts/unit.md`, `../artifacts/goal.md`. Never
-implement a draft.
+implement a draft. Removed id (2026-09-05): `RDY-9` band + rounds budget —
+nothing numeric is declared at pickup.
 
 ## RDY-1 When
 
-The hand-off boundary is the ready `goal.md`, NOT a ready item: a goal is
-handed off with its children still `draft`; each child compiles here at its own
-PICKUP, JIT, one at a time. FIT never compiles a child. Outside a goal run a
-settled draft may compile at intake. Either way the verdict is the unit's
-Contract+RED at pickup — item `ready` is a per-slice event inside the run,
-never a precondition for starting one.
+PICKUP compiles one unit, JIT: inside a goal the frontier child (the hand-off
+boundary is the ready `goal.md`; children stay `draft` until their own PICKUP;
+FIT never compiles a child), outside a goal the item itself. The verdict is
+the unit's Contract+RED at pickup — item `ready` is a per-unit event, never a
+precondition for starting.
 
 ## RDY-2 Compile
 
@@ -34,12 +34,16 @@ never a precondition for starting one.
    cheaper direct authority — `docs/backlog/README.md` §Challenge) is answered
    in the doc or overridden by the user on the record; never flip past it.
 5. All forks resolved + rows evidenced + `RDY-3`/`RDY-4` satisfied → set
-   `ready`, run `pnpm backlog:check`, continue. No «settled with caveats».
+   `ready`, run `pnpm backlog:check`, continue. No «settled with caveats». A
+   **question** draft ("is this mechanism still load-bearing?") whose probe of
+   the current product answers "keep it" is not compiled: it is declined here
+   — one `docs/adr/README.md` §Declined concepts row citing the probe, draft
+   deleted; "retire it" compiles like any unit (membership `RDY-8`; a
+   repo-wide removal is one CHANGELOG line, `DEC-1` 5).
    Verification is the unit's Contract+RED at pickup (fresh reviewer, raw
    contract, no framing — frame-then-validate voids the check); its verdict is
    copied VERBATIM as the first line of `## Decisions`:
-   `ready-verdict: <date> — Contract+RED @ <sha>`. One fresh context per
-   contract, never two.
+   `ready-verdict: <date> — Contract+RED @ <sha>`.
 
 ## RDY-3 Trace — obligations come from the destination
 
@@ -47,7 +51,11 @@ Every `## Acceptance` / `## Parity cases` row and every `## Fault matrix` row
 ends with a trace: `→ I3`, `→ scenario`, `→ ADR-0375`, or several. The trace
 names WHY the row exists: an invariant, a `## User scenario` line, or an ADR.
 Trace targets are the only declared authorities a review may block on
-(`review.md` `REV-2`).
+(`review.md` `REV-2`). A trace holds only when the target clause states the
+property the row asserts — the `REV-3` exactness test, applied at compile:
+`→ I2` ("installs the real Vite 7 set") does not carry "rejected overlap has
+zero dispatch"; that row is a note until an invariant or scenario line names
+the property.
 
 An untraced row is a carrier note: it raises no coverage row and no blocker. A
 row traced only to a rule id (`→ REV-7`, `→ DEC-2`) is a carrier note too —
@@ -60,31 +68,43 @@ Machine gate: `backlog:check` requires traces on ready items `created ≥
 
 ## RDY-4 Size — one intent, one session
 
-A ready unit is one intent its `title` states in one sentence. Limits, gated by
-`backlog:check` for items `created ≥ 2026-09-03`: ≤ 15 traced rows, body ≤ 200
-lines. Over either → split at PICKUP, before any review. Run state never lives
-in the contract: evidence blocks (command + output) go to
+A ready unit is one intent its `title` states in one sentence; two intents are
+two units (`RDY-5` split, the agent's). Run state never lives in the contract:
+evidence blocks (command + output) go to
 `docs/backlog/<area>/reference/<slug>-evidence.md`, fork narratives and
 diagnoses to the ledger or `reference/`; `## Decisions` holds one-line records
 only (`../artifacts/unit.md`). "Sufficient, not exhaustive": a clause the
-scenario does not need is a clause the reviewer will grade.
+scenario does not need is a clause the reviewer will grade — and `REV-2`
+already bounds what a reviewer may block on. No row or line count gates
+readiness: the 15-row / 200-line gate (2026-09-02…05) only manufactured
+splits, each a checkpoint lineage of its own, and cut the one chokepoint
+`fault-classes.md` §Class-kill says to keep whole. Size is a reviewer concern
+(`REV-3`).
 
 ## RDY-5 Re-cut — the path is the agent's
 
 A ready unit may be re-cut at any time by the agent: trim, split, merge,
 re-order, demote rows to notes. Record one line in `## Decisions`
-(`re-cut: <date> — <what changed> — trace: none`) and one ledger line; a split
+(`re-cut: <date> — <what changed> — trace: none`) and, inside a goal, one
+ledger line; a split
 successor names its predecessor in that line — history stays on the
-predecessor, nothing is copied (`review.md` `REV-8`).
+predecessor, nothing is copied (`review.md` `REV-8`). A successor that only
+carries rows and RED tests already certified in its predecessor's
+Contract+RED skips that checkpoint: first `## Decisions` line
+`ready-verdict: <date> — inherited from <predecessor> @ <sha>`.
 
 Dropping or weakening a row traced to `I#` or `scenario` changes observable
 scope: that is the user's (`STOP-1a`) — demote to `draft`, record the fork and
-the pre-demotion row verbatim, request manual `rifty-refine`; the resolution
-lands as `re-cut: <date> — fork: <what> — trace: I#`. Never absorb silently.
-Rows traced only to ADRs/rules and untraced rows are agent-owned.
-`check:contract-drift` enforces: a ready contract changed beside source carries
-a `re-cut:` line; a user-traced row (`→ I#`, `→ scenario`) changed carries
-`fork:` in it. The active `goal.md` is never re-cut — amend = CLOSE + FIT.
+the pre-demotion row verbatim as one dated `## Decisions` line (any
+wording), request manual `rifty-refine`; the resolution lands as `re-cut:
+<date> — fork: <what> — trace: I#` and the unit compiles again at PICKUP
+(inheritance where only certified rows carry). Never absorb silently. Rows traced only to ADRs/rules and untraced rows are agent-owned;
+an ADR-traced row leaves only with the ADR named in the `re-cut:` line.
+`check:contract-drift` enforces: a ready contract (status + graded sections)
+changed beside source carries a `re-cut:` line; fewer user-traced rows need
+`fork:` on that line, fewer ADR-traced rows the ADR named; whether a reworded
+row was weakened is review's (`review.md` `REV-10` axis 3).
+The active `goal.md` is never re-cut — amend = CLOSE + FIT.
 
 ## RDY-6 Refine altitude
 
@@ -102,37 +122,26 @@ tier. Raising tier requires an ADR.
 
 ## RDY-8 Review membership
 
-Decided ONCE at pickup per unit, recorded in the unit doc. By subject: parity,
-cache, persistence, network, or concurrency → `review: checkpoints rounds:<n>`;
-docs/CI/process/tooling/harness → `review: ordinary` (one review after
-implementation, blockers fixed in place, no lineage). By delivery, overriding
-subject: a unit whose expected product delta is zero — carriers for landed
-behavior, a mechanism record, evidence, an ADR — is `review: ordinary —
-proof-only` whatever its subject: no Contract+RED, no rounds; its RED is a
-mutant kill-list (apply → run → revert, output kept in `reference/`); the one
-review first verifies `git diff --quiet <BASE>..HEAD -- packages apps services
-':!*.test.*' ':!*.spec.*' ':!**/tests/**'` — a product change reclassifies the
-unit to `checkpoints` there. A loop that checkpoints every child regardless is
-the defect that put a CI unit through 12 rounds (2026-08-30,
-`no-coi-substrate-lane`) and a proof-only successor through four reviewer runs
-and a round for zero product lines (2026-09-03,
-`no-coi-toolchain-operation-lifecycle`).
+Two values, one line in `## Decisions` at pickup: `review: checkpoints |
+ordinary`. A unit has a contract doc when it has obligations to trace
+(`RDY-3`). It is `checkpoints` when those obligations are product behavior
+to build — parity, cache, persistence, network, concurrency: Contract+RED
+before code, Final+GREEN after. It records `ordinary` when they are proof
+about landed behavior (test carriers, evidence, a mechanism record, an ADR)
+or its subject is docs, CI, process, tooling or harness — such a unit changes
+no production path: `check:contract-drift` refuses a ready flip beside
+production source without a Contract+RED verdict, and a production change
+inside it is a `REV-2` blocker. A unit with nothing
+to trace has no doc at all and is `ordinary` by construction: a defect fix
+(its RED test is the proof — `rifty-fix`), a docs change, a CHANGELOG line,
+a CI rule; nothing is minted for it and nothing is journaled beyond its PR
+(`pr.md` `PR-2`).
 
-## RDY-9 Budget
-
-At pickup the ledger row declares band + rounds: `<date> — <slice> band
-<lo>–<hi> rounds <n>` (`../artifacts/ledger.md`). Band = the size of the
-expected-RED batch the compiled contract implies. `rounds` is the Final+GREEN
-budget (default 2); Contract+RED has exactly one verify round by construction
-— a 2nd blocker there is contract escalation (`stops.md` `STOP-5`). Raising a
-declared budget is the user's, never the agent's (`STOP-2`). A unit picked up
-before 2026-09-03 carries no `rounds:` line: the default applies, the reviewer
-notes its absence as a concern, and the next re-cut adds the line — never a
-blocker (replay 2026-09-02: the legacy `build-loop` unit drew one).
-
-A split successor that only carries rows and RED tests already certified in
-its predecessor's Contract+RED skips that checkpoint: first `## Decisions` line
-`ready-verdict: <date> — inherited from <predecessor> @ <sha>`. A successor
-minted by `STOP-4` starts with its `re-cut:` line, so the one re-cut of the
-lineage is already spent. Band ≤ 4 → each checkpoint is one find pass +
-adjudication, no tail pass.
+`ordinary` = one fresh review after implementation (`review.md` `REV-11`,
+`../stages/checkpoint-run.md` §Ordinary review), findings dispositioned
+inline (`REV-12`), the FIX set fixed once and verified by the same reviewer;
+no machine verdict, no lineage; a traced row the reviewer finds without a
+discriminating carrier is a FIX finding citing that row (`REV-4`), a product
+change inside a proof unit is `REV-1` scope. A loop that
+checkpoints every child regardless is the defect that put a CI unit through
+12 rounds (2026-08-30, `no-coi-substrate-lane`).

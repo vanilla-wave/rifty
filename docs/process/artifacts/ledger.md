@@ -2,23 +2,22 @@
 
 `docs/backlog/epics/<slug>/ledger.md`. Lines are never edited or removed; CLOSE
 exports every line to a durable carrier or drops it explicitly. One line =
-gist + link to the full carrier (item, ADR, `reference/`, PR). A diagnosis or
-observation with no carrier yet gets a `reference/` file now — a contract is
-never edited to hold it (`readiness.md` `RDY-4`).
+`- <date> — <gist>; <link>`: a decision, an observation, a reception verdict
+(what was rejected and why, what was noted — `review.md` `REV-12`), a stop
+(`stop: STOP-1a — <question>`), a unit leaving the path (`stops.md`
+`STOP-4`), a CLOSE drop (`dropped: <reason>`). No other grammar: a fact with
+no form yet is still one line. A diagnosis or observation with no carrier yet
+gets a `reference/` file now — a contract is never edited to hold it
+(`readiness.md` `RDY-4`).
 
-Line forms (`<date>` = `YYYY-MM-DD`):
+One line is machine-read — the landed slice's PASS record and the next
+slice's `BASE` (`review.md` `REV-8`), written by RECHART:
 
 ```md
-- <date> — <slice> band <lo>–<hi> rounds <n>            declared at pickup (RDY-9)
-- <date> — decided <one line>; full answer: <link>
-- <date> — <slice> re-cut: <what> — trace: none | fork: <what> — trace: I#
-- <date> — <slice> stop: STOP-1<letter> — <question asked>
 - <date> — re-chart after <slice> (final-green PASS @ <sha>): <n> graduated / <m> invalidated / no changes
-- <date> — re-chart after <slice> (ordinary PASS @ <sha>): …      review: ordinary units (RDY-8)
-- <date> — dropped: <reason>                              (CLOSE walk only)
+- <date> — re-chart after <slice> (ordinary PASS @ <sha>): …      review: ordinary units
 ```
 
-The band row is review-checked (`review.md` `REV-10` axis 5); the rounds
-budget is read by `stops.md` `STOP-2`. The rechart line is the only record of
-a landed slice's PASS and the `BASE` of the next slice (`REV-8`); verdict
-lineage is not journaled here — the unit's status line and its git log are.
+A reception line closes its findings: not a carrier, never graduating into
+a unit (`REV-12`). Verdict lineage is not journaled here —
+the unit's `ready-verdict:` line and git log are.

@@ -45,15 +45,17 @@ A ready item needs:
 - `## Acceptance`: testable done-definition that rejects approximations; an
   admission/policy surface names the organic request form it admits — a pinned
   fixture alone is not reach;
-- `## Parity cases`: enumerated oracle behaviors and RED targets;
+- `## Parity cases`: enumerated oracle behaviors and RED targets — where an
+  oracle exists; a process/tooling unit has none and omits the section;
 - every Acceptance/Parity/Fault row traced (`→ I#` / `→ scenario` /
-  `→ ADR-NNNN` / `→ <rule-id>`; `docs/process/rules/readiness.md` `RDY-3`);
-  ≤ 15 traced rows, ≤ 200 lines (`RDY-4`; gated by `backlog:check` for items
-  `created ≥ 2026-09-03`), one-sentence `title`;
+  `→ ADR-NNNN`; a `→ <rule-id>` trace is a note, never an obligation —
+  `docs/process/rules/readiness.md` `RDY-3`; gated by `backlog:check` for
+  items `created ≥ 2026-09-03`); one intent, one-sentence `title` (`RDY-4`);
 - `## Out of scope`: named loud throws + compat ❌;
 - `## Decisions`: every fork resolved or ADR-linked; one-line records only
   (`docs/process/artifacts/unit.md`);
-- once picked up: `ready-verdict: <date> — Contract+RED @ <sha>` from the
+- once picked up: `review: checkpoints | ordinary` (`RDY-8`) and, for
+  `checkpoints`, `ready-verdict: <date> — Contract+RED @ <sha>` from the
   unit's checkpoint, recorded before implementation (`RDY-2`).
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
@@ -114,14 +116,14 @@ probe-or-fog and the completion report: `docs/process/stages/fit.md`.
 
 ## Report
 
-Every backlog write-up (capture, FIT, re-fit) ends with a user-facing report
+Every user-facing backlog write-up (refine, FIT, re-fit) ends with a report
 delivered in the conversation — not an approval ask, not a PR comment, not a
 file. Form and producer procedure (fresh clean-context subagent, six
-sections): `rifty-to-backlog` §6 Report — the single canon for capture AND
-FIT. Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
-the destination is wrong — pushback re-opens FIT; nothing waits on a reply.
-Inside a goal run, RECHART-minted drafts ride the run's status relay and
-ledger — no separate report per graduation.
+sections): `rifty-to-backlog` §6 Report — the single canon. Replaces the
+former `signoff:` gate (removed 2026-08-28): the user reacts if the
+destination is wrong — pushback re-opens FIT; nothing waits on a reply. A
+mid-task capture (no user in session) and a RECHART-minted draft ride the
+unit's branch and its ledger / journal line — no report.
 
 ## Goal run
 
@@ -137,9 +139,10 @@ named substrate item owns one.
 
 | Owner | Enforces |
 |---|---|
-| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence; trace + size on ready items `created ≥ 2026-09-03` |
-| `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract change carries `re-cut:`, a user-traced row change carries `fork:`; referees land separately |
-| Final review | frozen goal, append-only ledger, run membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
+| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence; trace on ready items `created ≥ 2026-09-03` |
+| `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract (status + graded sections) changed beside source carries `re-cut:`, a dropped user-traced row `fork:`, a dropped ADR row the ADR named; a ready flip in any diff carries `ready-verdict:` bound to its committed `reference/<slug>-contract-red.json` (or, off production, `review: ordinary`); a ready unit deleted beside production leaves its landing verdict; beside production only product, tests, backlog/ADR docs and changelogs change |
+| `check:pass-binding` | a PR marked ready that changes product paths, tests or parity cases carries a shaped landing verdict (`…-final-green.json` / `…-ordinary.json`, never a re-pointed sha) whose `reviewed_sha` is an ancestor of HEAD with only documentation changed since (`REV-8`) |
+| Final review | frozen goal, append-only ledger, review membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
 
 Machine gates prove only the listed local facts; review owns everything else —
 including that a ready `goal.md` never changed and the ledger only grew.

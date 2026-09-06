@@ -152,6 +152,7 @@ export const TASKS = [
   'check:dir-owner',
   'check:file-size',
   'check:contract-drift',
+  'check:pass-binding', // merge-time REV-8 binding; skips draft PRs
   'check:install-stamp-writers',
   'check:runtime-adapter-boundary',
   'check:esbuild-legacy-retirement',

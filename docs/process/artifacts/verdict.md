@@ -17,12 +17,42 @@ against `tools/review/review-schema.json`; evaluated by
 
 `adjudication.json` (fresh critic, before any fixing): `[{"summary", "ruling":
 "HOLDS|STRETCH|FALSE", "clause"}]` — HOLDS: the cited clause as written
-requires the demand and the carrier is absent; STRETCH: clause broader than the
-demand; FALSE: carrier exists / citation misread. Default STRETCH when the
-clause text does not clearly mandate the specific demand.
+requires the demand and the carrier is absent, or an executed artifact shows
+the carrier does not discriminate (a RED that passes with a stub, a test a
+named mutant survives — `review.md` `REV-5`); STRETCH: clause broader than the
+demand; FALSE: the carrier exists and discriminates / citation misread.
+Default STRETCH when the clause text does not clearly mandate the specific
+demand — never for a `AGENTS.md` §Fidelity blocker (`REV-12`).
 
-Exit codes: `0` pass (`goal_complete:false` = continue the goal) · `1` re-cut in
-place (surviving blockers + `missing` rows; `weak` rows and concerns never
-block) · `2` invalid verdict (retry once, then stop). Raw mode (no
+Validity (exit `2`): the eight axes in order, authority on every blocker
+(a §Fidelity blocker's authority starts `AGENTS.md §Fidelity:`), a trace on
+every coverage row, at least one coverage row per traced obligation of the
+contract named in `unit_goal_source` (a named contract that cannot be read is
+invalid; a PR number names no contract and is not counted) (`REV-4`), no
+STRETCH ruling on a §Fidelity blocker and no FALSE on one without the carrier
+cited as `file:line` in the clause (`REV-12`). Residuals mirror the rulings
+only when at least one blocker exists and every blocker was ruled — a partial
+or empty adjudication leaves them blocking. `findings[].evidence` carries the
+executed artifact (command + output excerpt) a `REV-5` class or a mutant claim
+rests on — the critic reads it at reception; `reviewed_sha` (and
+`reviewed_tree`, its `^{tree}` — squash-merge orphans the commit, never the
+tree) is added by the runner before the file is committed under `reference/`
+(`REV-8`).
+
+An ordinary review (`../stages/checkpoint-run.md` §Ordinary review) is
+committed as `reference/<slug|pr-N>-ordinary.json`: `checkpoint: "ordinary"`,
+`verdict` (the reviewer's prose), `reception[]` of `{summary, authority,
+ruling: FIX|REJECT|NOTE, by: "driver"|"critic"}`, `reviewed_sha`. A REJECT of
+a Fidelity blocker with `by: "driver"` is refused by `check:pass-binding`
+(`REV-12`). Both shapes are checked by `check:contract-drift` at a flip or a
+delete-on-done and by `check:pass-binding` at merge.
+
+Exit codes: `0` pass (`goal_complete:false` = continue the goal) · `1` FIX
+findings remain — surviving blockers + `missing` rows (`weak` rows and
+concerns never block; a row whose clause is the discrimination itself is
+graded `missing` when the mutant survives, `REV-4`) — fix, verify
+(`../stages/checkpoint-run.md`) · `2`
+invalid verdict (retry once; twice = harness failure, the run ends with the
+`STOP-6` report). Raw mode (no
 adjudication): `unit_residuals` and an axis/overall `blocker` verdict also
 block; adjudicated: residuals mirror the blockers and follow their rulings. A PASS binds to the reviewed commit through the boundary diff (`REV-8`); the reviewer never edits or pushes.

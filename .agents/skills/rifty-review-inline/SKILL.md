@@ -11,7 +11,7 @@ do not run `codex exec`, do not write `verdict.json`, do not run
 isolated reviewer that never saw the implementer's reasoning
 (`docs/process/rules/review.md` `REV-11`,
 `docs/process/stages/checkpoint-run.md`). You share that context, so this run
-cannot satisfy either gate, cannot spend an attempt, and cannot authorize a
+cannot satisfy either gate, cannot issue a verdict, and cannot authorize a
 merge. If a checkpoint is what's needed, say so and stop. Use this for a
 user-driven look at work in progress.
 
@@ -35,12 +35,11 @@ evidence, never the implementer's summary of it.
 2. **Mission and architecture** — fits rifty's mission and boundaries
    (premise: `REV-6`).
 3. **Goal drift** — delivery matches the named `goal.md`, else the ready
-   contract; a `draft→ready` flip in the diff carries its `ready-verdict:` line.
+   contract; a `draft→ready` flip in the diff carries its `ready-verdict:` (or, off any production path, `review: ordinary`).
 4. **Approach cost** — identify removable machinery: contract deliverable
    without it → blocker, first instance included; pure code shrinkage → goal
    residual or capture, never a checkpoint condition. Apply `REV-7`.
-5. **Budget** — every carried slice declared with band + rounds in the ledger;
-   inspect modified files.
+5. **Scope** — modified files inspected against the contract; a change no clause requires is `REV-7`.
 6. **Bugs** — no correctness defect.
 7. **Regressions** — existing behavior holds.
 8. **Ecosystem UX** — observable behavior matches real Node software.
@@ -67,4 +66,4 @@ run:
 - `goal_complete` only after end-to-end proof with both residual sets empty.
 
 Close with one line naming what this run cannot do: no checkpoint spent, no
-attempt counted, no merge authorized.
+verdict issued, no merge authorized.

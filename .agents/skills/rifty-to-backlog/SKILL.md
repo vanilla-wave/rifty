@@ -1,6 +1,6 @@
 ---
 name: rifty-to-backlog
-description: Formalize a rifty finding or idea into a deduplicated, gated backlog draft. Direct invocation = mid-task/agent intake only (audit/review/post-merge discoveries, no user in session); user-brought input enters via rifty-refine, which runs this formalization as its final step. Excludes existing-contract edits and planned work.
+description: Formalize a rifty finding or idea into a deduplicated, gated backlog draft. Direct invocation = mid-task/agent intake (audit/review/post-merge discoveries, no user in session); user-brought input enters via rifty-refine, which runs this formalization as its final step.
 ---
 
 Capture = classify → dedup → gate → `draft` → challenge → report. Never an
@@ -12,13 +12,18 @@ formalize tail, forks arrive already settled and mint with their evidence.
 
 Capability/test/tooling/design debt → backlog. Doc drift → fix the doc. No user
 or project impact → stop. Inside an active goal run, required work
-reverse-links to the goal; only outside-goal work enters ordinary backlog.
+reverse-links to the goal; only outside-goal work enters ordinary backlog. A
+review finding is never intake (`docs/process/rules/review.md` `REV-12`):
+on the unit under review it is dispositioned there; on a landed unit a defect
+it reveals is an observed defect (`rifty-fix`), anything else is the user's
+(`rifty-refine`). A product defect a reviewer saw OUTSIDE the unit's boundary
+is a discovery and enters here.
 
 ## 2. Dedup
 
-Search titles, `code:`, goal `map.md` files, and child `epic:` links for the
-same defect/mechanism/boundary — and `docs/adr/README.md` §Declined concepts
-for the same idea already ruled out. Update a match; a declined match stops the
+Search titles, `code:`, goal `map.md` files, child `epic:` links and
+`docs/process/traps.md` for the same defect/mechanism/boundary/lesson — and
+`docs/adr/README.md` §Declined concepts for the same idea already ruled out. Update a match; a declined match stops the
 capture (cite the row); otherwise record the no-match source.
 
 ## 3. Gate
@@ -38,7 +43,8 @@ Use `docs/process/rules/fault-classes.md` §§Boundary failure models/Class-kill
 ## 4. Mint
 
 Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md` — committed
-to the discovering unit's branch, never its own PR (`AGENTS.md` §PR). A draft is
+to the discovering unit's branch; with no unit branch to ride (a post-merge
+audit) it is its own docs-only PR (`docs/process/rules/pr.md` `PR-2`). A draft is
 one of two shapes (README §Shape): **question** (`## Question`, no prescribed
 carrier) or **finding** (observed `## Context`, honest sources, compat ❌ /
 code-marker link) — never a solution without its decision. Optional real-path
@@ -55,8 +61,10 @@ capturing PR body.
 
 ## 6. Report
 
-Canon for EVERY backlog write-up report (capture here, FIT via
-`docs/process/stages/fit.md` step 8). A FRESH subagent with clean context writes it from
+Canon for every USER-FACING write-up report (refine, FIT via
+`docs/process/stages/fit.md` step 8). A mid-task capture has no reader in
+session: no report — the draft rides the unit's branch and one ledger /
+journal line names it. A FRESH subagent with clean context writes it from
 the recorded docs alone (no author framing — same independence as README
 §Challenge: a report the docs cannot support proves the write-up incomplete;
 fix the docs, never pad the report). Relay it in the conversation. User's

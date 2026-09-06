@@ -19,7 +19,7 @@ the loop to `.claude/workflows/goal-run.js`. A single-mode ask ("fit X",
 |---|---|
 | No goal dir — a hand-off naming an outcome, or a legacy single-file epic | FIT → `docs/process/stages/fit.md` |
 | Ready goal with an open frontier | PICKUP → `docs/process/stages/pickup.md` |
-| A slice of this goal just landed (Final+GREEN PASS on the goal branch), or new facts arrived | RECHART → `docs/process/stages/rechart.md` |
+| A slice of this goal just landed (Final+GREEN or ordinary PASS on the goal branch), a unit left the path (`STOP-4`), or new facts arrived | RECHART → `docs/process/stages/rechart.md` |
 | Map `## Items` empty and invariants provable | CLOSE → `docs/process/stages/close.md` |
 
 Standing rules: `goal.md` is frozen (amend = CLOSE + FIT); `ledger.md` only

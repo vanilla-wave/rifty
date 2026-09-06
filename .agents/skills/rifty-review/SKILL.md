@@ -16,7 +16,10 @@ ordered axes, `coverage` with traces, `unit_residuals`, `goal_residuals`, and
 `goal_complete` only after end-to-end proof with both residual sets empty
 (`docs/process/artifacts/verdict.md`). Cite `file:line`.
 
-Checkpoint runs (Contract+RED / Final+GREEN — fresh isolated reviewer, budget,
-stops): `docs/process/stages/checkpoint-run.md`. Units marked `review:
-ordinary` get ONE review on these axes, blockers fixed in place; "missing
-Contract+RED" is not a finding there.
+Checkpoint runs (Contract+RED / Final+GREEN — fresh isolated reviewer,
+reception, stall): `docs/process/stages/checkpoint-run.md`. Units marked
+`review: ordinary` (or with no contract doc at all) get ONE prose review on
+these axes (§Ordinary review there), FIX findings fixed in place and
+verified; "missing Contract+RED" and "no coverage table" are not findings
+there — but a production path changed under `review: ordinary` is a `RDY-8`
+blocker (`REV-2`).
