@@ -88,3 +88,18 @@ Both are assertion failures, not imports/timeouts. Same dedicated-port command.
 Advisories addressed in the batch: count sized Uint8Array allocation and
 restart slice; seed files outside cwd and inside /.rifty before memory install,
 then assert their exact bytes after real memory restart. No scope reduction.
+
+## Round 1 repair proof
+
+At 6c7f22d10: host/SDK 63/63; full no-COI Chromium 41/41. The real sequence
+OPFS→memory→ACK [9,8]→OPFS→OPFS now reads [9,8] on both OPFS generations;
+wire carries files for the two flips and none for the last same-OPFS restart.
+Memory Vite recovery also preserves pre-install files outside cwd and in /.rifty.
+
+Sized-allocation mutant: the host filter is followed by `.map(file => {
+const data = new Uint8Array(file.data.byteLength); data.set(file.data);
+return {...file, data}; })`. `pnpm exec vitest run --workspace
+/tmp/rifty-recovery-sized-mutant.workspace.mjs -t 'copies only the written bytes'`
+→ 1 failed, 9 skipped, expected 3, received 1027. No tracked source mutation.
+Constructor+slice+sized-allocation counters keep the real copy-cost scenario
+GREEN while rejecting both demonstrated full-copy mutants.
