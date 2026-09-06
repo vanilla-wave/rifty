@@ -59,3 +59,11 @@ data: file.data.slice()}))` after the host's recovery file filter; command
 `pnpm exec vitest run --workspace /tmp/rifty-recovery-slice-mutant.workspace.mjs -t 'copies only the written bytes'`
 → 1 failed / 7 skipped, expected 3, received 1027. No tracked code changed.
 The strengthened test kills the reviewer's demonstrated full-copy bypass.
+
+Full no-COI Chromium: 40/40 passed (3.9m). Decisive committed-tree rerun at
+c070fca4e: `pnpm test:no-coi -g 'recovery copies scale|memory-backend restart|real Vite HMR survives'`
+with the same dedicated port assignments → 3/3 passed (32s).
+
+First pr:check ran before the test type fixes: test:run passed; typecheck found
+spy-this and cross-package source-import errors, fixed at c070fca4e. A fresh
+full committed-tree pr:check follows; no behavioral test was weakened.
