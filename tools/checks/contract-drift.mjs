@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
  * Contract-authority tripwire on the aggregate PR diff (merge-base vs head).
- * Beside source: frozen epic fields never change; a ready contract change
- * carries a `re-cut:` line and a changed user-traced row (→ I# / → scenario)
- * carries `fork:` in it (docs/process/rules/readiness.md RDY-5); lineage lines
- * and closure of items deleted here are free; ready flips need a recorded
- * pickup verdict. Process referees land separately (rules/pr.md PR-4).
+ * Beside source: frozen epic fields never change; a ready CONTRACT — status +
+ * the sections a reviewer grades (artifacts/unit.md) — changes only with a
+ * `re-cut:` line (docs/process/rules/readiness.md RDY-5); Context, Challenge,
+ * Decisions and the rest of the frontmatter are journal/path, never compared;
+ * a ready flip carries its pickup verdict or `review: ordinary` (RDY-8). The
+ * fork discipline on user-traced rows is review-owned (review.md REV-10 axis
+ * 3). Process referees land separately (rules/pr.md PR-4).
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -70,17 +72,23 @@ export function goalContract(text) {
 const CONTRACT_RE = /^docs\/backlog\/.+\.md$/;
 const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
 const GUARDED = new Set(['ready', 'in-progress']);
-const ITEM_PATH_RE = /^docs\/backlog\/(?!epics\/)(.+)\.md$/;
 const EPIC_PATH_RE = /^docs\/backlog\/epics\/[^/]+\.md$/;
 const GOAL_PATH_RE = /^docs\/backlog\/epics\/[^/]+\/goal\.md$/;
 const REFEREE_RE =
   /^(?:tools\/checks\/(?:(?:contract-drift|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs))$/;
-// Journal lines a unit accrues during a run (artifacts/unit.md) — never a rewrite.
-const LINEAGE_LINE_RE =
-  /^(?:ready-verdict|contract-red|final-green|review|re-cut|override):[^\n]*\n?/gm;
-const RECUT_LINE_RE = /^re-cut: \d{4}-\d{2}-\d{2} — .*$/gm;
-const USER_TRACE_RE = /→\s*(?:I\d+|scenario)\b/u;
-const TRACED_SECTIONS = ['Acceptance', 'Parity cases', 'Fault matrix'];
+// The contract a reviewer grades (artifacts/unit.md); everything else in the file is journal.
+const CONTRACT_SECTIONS = [
+  'User scenario',
+  'Reference contract',
+  'Acceptance',
+  'Parity cases',
+  'Fault matrix',
+  'Out of scope',
+];
+const JOURNAL_PREFIX = '^(?:[-*]\\s+)?`?';
+const NO_CHECKPOINT_RE = new RegExp(`${JOURNAL_PREFIX}review:\\s*ordinary\\b`, 'm');
+const VERDICT_LINE_RE = new RegExp(`${JOURNAL_PREFIX}ready-verdict:`, 'm');
+const RECUT_LINE_RE = new RegExp(`${JOURNAL_PREFIX}re-cut: \\d{4}-\\d{2}-\\d{2} — .*$`, 'gm');
 const FROZEN_FIELDS = [
   ['value', 'value'],
   ['tier', 'tier'],
@@ -95,47 +103,14 @@ export function statusOf(text) {
   return match ? match[1] : null;
 }
 
-/** Remove only deleted ready-item keys from a dependent's blocked_by list. */
-export function closeItemDependencies(itemText, deletedItems) {
-  if (deletedItems.length === 0) return null;
-  const closed = new Set(deletedItems);
-  const line = /^blocked_by:\s*\[([^\]]*)\]\s*\r?\n?/m.exec(itemText);
-  if (!line) return null;
-  const dependencies = line[1]
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const remaining = dependencies.filter((dependency) => !closed.has(dependency));
-  if (remaining.length === dependencies.length) return null;
-  const replacement = remaining.length > 0 ? `blocked_by: [${remaining.join(', ')}]\n` : '';
-  return itemText.replace(line[0], replacement);
-}
-
-function stripLineage(text) {
-  return (text ?? '').replace(LINEAGE_LINE_RE, '');
+/** The graded contract of an item: status + CONTRACT_SECTIONS; null without text. */
+export function itemContract(text) {
+  if (text === null || text === undefined) return null;
+  return [statusOf(text), ...CONTRACT_SECTIONS.map((name) => section(text, name))].join('\u0000');
 }
 
 function recutLines(text) {
   return (text ?? '').match(RECUT_LINE_RE) ?? [];
-}
-
-/** Rows of a list/table section: a wrapped row joins its continuation lines. */
-export function sectionRows(body) {
-  const rows = [];
-  for (const raw of (body ?? '').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === '' || line.startsWith('<!--')) continue;
-    if (/^(?:\d+\.|[-*]|\|)\s/u.test(line) || line.startsWith('|')) rows.push(line);
-    else if (rows.length > 0) rows[rows.length - 1] += ` ${line}`;
-  }
-  return rows.map((row) => row.replace(/\s+/g, ' '));
-}
-
-/** Rows a re-cut may not change without a recorded fork (RDY-5): traced to I# or scenario. */
-export function userTracedRows(text) {
-  return TRACED_SECTIONS.flatMap((name) => sectionRows(section(text, name))).filter((row) =>
-    USER_TRACE_RE.test(row),
-  );
 }
 
 /**
@@ -152,14 +127,6 @@ export function evaluate(entries, read, refereeEntries = entries) {
       (entry) =>
         `${entry.path}: implementation diff edits its own process referee — land gate semantics separately`,
     );
-  }
-  const closedItems = [];
-  for (const entry of entries) {
-    if (entry.status !== 'D') continue;
-    const item = ITEM_PATH_RE.exec(entry.path)?.[1];
-    if (!item) continue;
-    if (statusOf(read(entry.path, 'base')) !== 'ready') continue;
-    closedItems.push(item);
   }
   const violations = [];
   for (const entry of entries) {
@@ -187,32 +154,24 @@ export function evaluate(entries, read, refereeEntries = entries) {
     const headStatus = statusOf(headText);
     if (GUARDED.has(baseStatus)) {
       if (!GUARDED.has(headStatus)) continue; // demotion — review discipline owns the fork record
-      const strippedBase = stripLineage(baseText);
-      const strippedHead = stripLineage(headText);
-      if (strippedHead === strippedBase) continue;
-      const closed = closeItemDependencies(strippedBase, closedItems);
-      if (closed !== null && closed === strippedHead) continue;
+      if (itemContract(baseText) === itemContract(headText)) continue; // journal / path edits
       const baseRecuts = new Set(recutLines(baseText));
       const newRecuts = recutLines(headText).filter((line) => !baseRecuts.has(line));
       if (newRecuts.length === 0) {
         violations.push(
           `${entry.path}: ready contract changed beside source without a re-cut line (RDY-5)`,
         );
-        continue;
-      }
-      const headRows = new Set(
-        sectionRows(TRACED_SECTIONS.map((n) => section(headText, n) ?? '').join('\n')),
-      );
-      const dropped = userTracedRows(baseText).filter((row) => !headRows.has(row));
-      if (dropped.length > 0 && !newRecuts.some((line) => /\bfork:/u.test(line))) {
-        violations.push(
-          `${entry.path}: user-traced row changed without a recorded fork (RDY-5): ${dropped[0].slice(0, 80)}`,
-        );
       }
       continue;
     }
-    if (GUARDED.has(headStatus) && !/^ready-verdict:/m.test(headText)) {
-      violations.push(`${entry.path}: ready flip without pickup Contract+RED verdict`);
+    if (
+      GUARDED.has(headStatus) &&
+      !VERDICT_LINE_RE.test(headText) &&
+      !NO_CHECKPOINT_RE.test(headText)
+    ) {
+      violations.push(
+        `${entry.path}: ready flip without pickup Contract+RED verdict or review: ordinary`,
+      );
     }
   }
   return violations;

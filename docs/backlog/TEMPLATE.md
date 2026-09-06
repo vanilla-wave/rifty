@@ -29,8 +29,8 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
 ## Acceptance
 
-<!-- Each row ends with its trace: → I3 | → scenario | → ADR-NNNN | → REV-7 (RDY-3).
-     Untraced rows are notes, never obligations. ≤ 15 traced rows per unit (RDY-4). -->
+<!-- Each row ends with its trace: → I3 | → scenario | → ADR-NNNN (RDY-3).
+     Untraced and rule-id-only (→ REV-7) rows are notes, never obligations. One intent per unit (RDY-4). -->
 
 1. <Testable done-definition + proof path; an approximation must fail> → I#
 
@@ -62,8 +62,7 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 <!-- One-line records only (docs/process/artifacts/unit.md). At pickup the first
      line is the Contract+RED verdict, copied verbatim:
      ready-verdict: <date> — Contract+RED @ <sha>
-     review: checkpoints rounds:<n> | ordinary          (RDY-8, RDY-9)
-     final-green: round <n>/<budget> — blocker @ <sha>   (status line, overwritten per round, REV-8)
+     review: checkpoints | ordinary                       (RDY-8)
      re-cut: <date> — <what> — trace: none               (RDY-5)
      Evidence blocks go to reference/<slug>-evidence.md, never here (RDY-4). -->
 

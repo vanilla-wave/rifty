@@ -21,8 +21,12 @@ requires the demand and the carrier is absent; STRETCH: clause broader than the
 demand; FALSE: carrier exists / citation misread. Default STRETCH when the
 clause text does not clearly mandate the specific demand.
 
-Exit codes: `0` pass (`goal_complete:false` = continue the goal) · `1` re-cut in
-place (surviving blockers + `missing` rows; `weak` rows and concerns never
-block) · `2` invalid verdict (retry once, then stop). Raw mode (no
+Exit codes: `0` pass (`goal_complete:false` = continue the goal) · `1` FIX
+findings remain — surviving blockers + `missing` rows (`weak` rows and
+concerns never block; a row whose clause is the discrimination itself is
+graded `missing` when the mutant survives, `REV-4`) — fix, verify
+(`../stages/checkpoint-run.md`) · `2`
+invalid verdict (retry once; twice = harness failure, the run ends with the
+`STOP-6` report). Raw mode (no
 adjudication): `unit_residuals` and an axis/overall `blocker` verdict also
 block; adjudicated: residuals mirror the blockers and follow their rulings. A PASS binds to the reviewed commit through the boundary diff (`REV-8`); the reviewer never edits or pushes.

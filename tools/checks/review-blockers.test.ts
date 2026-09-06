@@ -1,6 +1,51 @@
 import { describe, expect, it } from 'vitest';
 import { REQUIRED_AXES, evaluateVerdict } from '../review/blockers.mjs';
 
+it('drops coverage rows traced only to a rule id — a carrier note raises no row (RDY-3, REV-4)', () => {
+  const traced = {
+    row: 'Acceptance 1',
+    source: 'x',
+    trace: '→ I1',
+    status: 'pass',
+    citation: 'a:1',
+    note: '',
+  };
+  const ruleOnly = {
+    row: 'Acceptance 2',
+    source: 'x',
+    trace: '→ REV-7',
+    status: 'missing',
+    citation: 'a:2',
+    note: 'no carrier',
+  };
+  const verdict = {
+    checkpoint: 'Final+GREEN',
+    unit_goal_source: 'docs/backlog/x/y.md',
+    overall_verdict: 'pass',
+    merge_call: 'merge',
+    axes: REQUIRED_AXES.map((axis) => ({ axis, verdict: 'pass', findings: [] })),
+    coverage: [traced, ruleOnly],
+    unit_residuals: [],
+    goal_residuals: [],
+    goal_complete: false,
+  };
+  expect(evaluateVerdict(verdict).code).toBe(0);
+  expect(evaluateVerdict({ ...verdict, coverage: [ruleOnly] }).code).toBe(0); // rule-id rows raise nothing
+});
+
+it('pins the REV-10 axis names in rubric order', () => {
+  expect(REQUIRED_AXES).toEqual([
+    'Completeness',
+    'Mission and architecture',
+    'Goal drift',
+    'Approach cost',
+    'Scope',
+    'Bugs',
+    'Regressions',
+    'Ecosystem UX',
+  ]);
+});
+
 const verdict = (overrides: Record<string, unknown> = {}) => ({
   overall_verdict: 'pass',
   merge_call: 'Proceed.',
@@ -119,7 +164,7 @@ describe('evaluateVerdict', () => {
   });
 
   it('rejects missing coverage, non-pass rows without notes, rows without trace, and blockers without authority', () => {
-    expect(evaluateVerdict(verdict({ coverage: [] })).code).toBe(2);
+    expect(evaluateVerdict(verdict({ coverage: [] })).code).toBe(0); // no traced obligation: valid, nothing to cover
     expect(
       evaluateVerdict(
         verdict({

@@ -109,7 +109,7 @@ Install and run the package.
     }
   });
 
-  it('enforces trace and size on ready items created at/after 2026-09-03 (RDY-3, RDY-4)', () => {
+  it('enforces trace, never size, on ready items created at/after 2026-09-03 (RDY-3, RDY-4)', () => {
     const run = (body: string) => {
       const root = mkdtempSync(join(tmpdir(), 'rifty-backlog-check-'));
       try {
@@ -163,16 +163,17 @@ ${extra}`;
     const untraced = run(ready('1. exact bytes → I1\n2. hardening demand'));
     expect(untraced.status).toBe(1);
     expect(untraced.stderr).toContain("'## Acceptance' row without trace");
+    // Size is a reviewer concern, not a gate (RDY-4): many traced rows and a long body pass.
     const many = run(
       ready(Array.from({ length: 15 }, (_, i) => `${i + 1}. row ${i} → I1`).join('\n')),
     );
-    expect(many.status).toBe(1);
-    expect(many.stderr).toContain('traced rows > 15');
+    expect(many.stderr).toBe('');
+    expect(many.status).toBe(0);
     const long = run(
       ready('1. exact bytes → I1', Array.from({ length: 200 }, () => '- note').join('\n')),
     );
-    expect(long.status).toBe(1);
-    expect(long.stderr).toContain('lines > 200');
+    expect(long.stderr).toBe('');
+    expect(long.status).toBe(0);
     const older = ready('1. hardening demand').replace(
       'created: 2026-09-03',
       'created: 2026-09-02',

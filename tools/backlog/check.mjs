@@ -42,14 +42,14 @@ const EPIC_TIER_SET = new Set(EPIC_TIERS);
 
 const ITEM_REQUIRED_KEYS = ['area', 'status', 'title', 'created', 'why'];
 const EPIC_REQUIRED_KEYS = ['kind', 'status', 'title', 'created', 'value'];
-const READY_ITEM_SECTIONS = ['Acceptance', 'Parity cases', 'Out of scope', 'Decisions'];
-// Trace + size gates on ready items (docs/process/rules/readiness.md RDY-3, RDY-4);
-// ratchet by creation date — older ready items get traces at their next re-cut.
+// Parity cases only where an oracle exists (docs/backlog/README.md); the reviewer grades absence (REV-4).
+const READY_ITEM_SECTIONS = ['Acceptance', 'Out of scope', 'Decisions'];
+// Trace gate on ready items (docs/process/rules/readiness.md RDY-3); ratchet by
+// creation date — older ready items get traces at their next re-cut. No size
+// gate: one intent is a reviewer concern (RDY-4), not a count.
 const TRACE_SINCE = '2026-09-03';
 const TRACED_SECTIONS = ['Acceptance', 'Parity cases', 'Fault matrix'];
 const TRACE_RE = /→\s*(?:I\d+|scenario|ADR-\d{4}|[A-Z]{2,5}-\d+)\b/u;
-const MAX_TRACED_ROWS = 15;
-const MAX_READY_LINES = 200;
 const READY_EPIC_SECTIONS = ['Outcome', 'User scenario', 'Items'];
 
 const SCAN_ROOTS = ['packages', 'apps', 'tools', 'services'];
@@ -143,32 +143,18 @@ function obligationRows(body) {
   return rows;
 }
 
-// RDY-3 trace + RDY-4 size on ready items created at/after the cutoff.
-function checkTraceAndSize(rel, fm, text) {
+// RDY-3 trace on ready items created at/after the cutoff.
+function checkTrace(rel, fm, text) {
   if (fm?.status !== 'ready' || typeof fm.created !== 'string' || fm.created < TRACE_SINCE) return;
-  let traced = 0;
   for (const name of TRACED_SECTIONS) {
     const body = sectionBody(text, name);
     if (body === null) continue;
     for (const row of obligationRows(body)) {
-      if (TRACE_RE.test(row)) traced += 1;
-      else {
-        errors.push(
-          `${rel}: '## ${name}' row without trace (→ I# | → scenario | → ADR-NNNN | → <rule-id>; RDY-3): ${row.slice(0, 60)}`,
-        );
-      }
+      if (TRACE_RE.test(row)) continue;
+      errors.push(
+        `${rel}: '## ${name}' row without trace (→ I# | → scenario | → ADR-NNNN | → <rule-id>; RDY-3): ${row.slice(0, 60)}`,
+      );
     }
-  }
-  if (traced > MAX_TRACED_ROWS) {
-    errors.push(
-      `${rel}: ${traced} traced rows > ${MAX_TRACED_ROWS} — one intent per unit, split at PICKUP (RDY-4)`,
-    );
-  }
-  const lineCount = text.split(/\r?\n/).length;
-  if (lineCount > MAX_READY_LINES) {
-    errors.push(
-      `${rel}: ${lineCount} lines > ${MAX_READY_LINES} — run state (evidence, narratives) leaves the contract (RDY-4)`,
-    );
   }
 }
 
@@ -292,7 +278,7 @@ for (const { rel, area, fm, text } of itemRecords) {
     }
   }
   checkChallenge(rel, fm, text);
-  checkTraceAndSize(rel, fm, text);
+  checkTrace(rel, fm, text);
 
   const a = KNOWN_AREAS.has(area) ? area : area || '(none)';
   const bucket = ITEM_STATUS_SET.has(fm?.status) ? fm.status : 'invalid';

@@ -15,26 +15,31 @@ gate: `backlog:check`.
 | `## Parity cases` | agent, traced | enumerated oracle behaviors, each a RED target with its artifact (command + output + version) |
 | `## Fault matrix` | agent, traced | infra only: `axis × operation \| honest outcome \| artifact / fault target → trace` (`fault-classes.md`) |
 | `## Out of scope` | agent (user for scope cuts) | named loud throws + compat ❌; never "…" |
-| `## Decisions` | agent + runner status line | one-line records only, forms below |
+| `## Decisions` | agent + runner | one-line records only, forms below |
 
 `## Decisions` line forms (each one line, dated):
 
 ```md
 ready-verdict: <date> — Contract+RED @ <sha>          first line at pickup, verbatim
 ready-verdict: <date> — inherited from <area>/<slug> @ <sha>
-review: checkpoints rounds:<n> | ordinary [— proof-only]  RDY-8 / RDY-9
-contract-red: round <n> — blocker @ <sha>               status line, overwritten each round (REV-8)
-final-green: round <n>/<budget> — blocker @ <sha>       status line, overwritten each round
+review: checkpoints | ordinary                         RDY-8
 re-cut: <date> — <what changed> — trace: none           RDY-5; a split names its predecessor here
 re-cut: <date> — fork: <what> — trace: I#               resolved via rifty-refine
 override: <date> — <challenge problem> — <user words>   docs/backlog/README.md §Challenge
+- <date> — <gist>                                       any other record: a reception verdict (REV-12), a stop (STOP-6), a fork with its pre-demotion row verbatim (RDY-5)
 - <fork resolved or ADR-linked; no open "Decide X">
 ```
 
-A Final+GREEN PASS is not written here: it lands in the ledger's `re-chart
-after` line (`ledger.md`).
+Inside a goal the Final+GREEN PASS, reception and stop lines go to the goal
+ledger (`ledger.md`); the landed unit is deleted by RECHART. Outside a goal
+the Final+GREEN PASS is not written anywhere: the doc is deleted and the
+merged PR is the record (`REV-8`). A unit with no doc at all — nothing to
+trace: a defect fix, a docs change (`readiness.md` `RDY-8`) — records
+nothing. No status lines, no
+counters: the pass history is git log (`REV-8`). `check:contract-drift`
+compares only status + the graded sections (User scenario … Out of scope);
+everything else in the file is journal or path.
 
 Not in a unit: evidence blocks (→ `docs/backlog/<area>/reference/<slug>-evidence.md`),
 fork narratives and diagnoses (→ ledger / `reference/`), review reasoning (→
-verdict files). Limits for `created ≥ 2026-09-03`: ≤ 15 traced rows, ≤ 200
-lines (`RDY-4`, `backlog:check`).
+verdict files).

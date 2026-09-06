@@ -10,7 +10,7 @@ export const REQUIRED_AXES = [
   'Mission and architecture',
   'Goal drift',
   'Approach cost',
-  'Budget',
+  'Scope',
   'Bugs',
   'Regressions',
   'Ecosystem UX',
@@ -40,9 +40,13 @@ export function evaluateVerdict(verdict, adjudication = null) {
   }
   const unitResiduals = residuals(verdict?.unit_residuals);
   const goalResiduals = residuals(verdict?.goal_residuals);
-  const coverage = Array.isArray(verdict?.coverage) ? verdict.coverage : null;
+  // A row traced only to a rule id is a carrier note (RDY-3, REV-4): it raises no coverage row.
+  const RULE_ID_TRACE_RE = /^→?\s*[A-Z]{2,5}-\d+\s*$/u;
+  const coverage = Array.isArray(verdict?.coverage)
+    ? verdict.coverage.filter((row) => !RULE_ID_TRACE_RE.test(String(row?.trace ?? '')))
+    : null;
   if (!axes) errors.push('axes missing');
-  if (!coverage || coverage.length === 0) errors.push('coverage missing or empty');
+  if (!coverage) errors.push('coverage missing');
   for (const row of coverage ?? []) {
     if (!['pass', 'weak', 'missing'].includes(row?.status)) {
       errors.push(`coverage row without valid status: ${row?.row ?? '?'}`);

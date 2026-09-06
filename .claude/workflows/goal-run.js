@@ -1,219 +1,160 @@
 export const meta = {
   name: 'goal-run',
   description:
-    'Drive one ready rifty goal to close: slice loop (PICKUP → Contract+RED → implement → Final+GREEN → RECHART) until the map is empty, then CLOSE; structured stop only on the closed STOP-1 list.',
+    'Drive one ready rifty goal to close: unit loop (PICKUP incl. Contract+RED → IMPLEMENT → Final+GREEN or ordinary review → RECHART) until the map is empty, then CLOSE; a stop only on the closed STOP-1 list.',
   whenToUse:
-    'Explicit whole-ready-goal hand-off in a Claude session. Canon: docs/process/README.md (stages, rules by id); this script owns only order, budget accounting, bookkeeping. Re-entrant: re-invoke after a stop — done stages skip off disk state. The invoking session is an observer while the run is live: relay statuses/stops in brief, never edit tracked files (a hand edit voids tree-bound verdicts); sole exception — resolving a STOP-1a fork with the user via rifty-refine, then re-invoke.',
+    'Explicit whole-ready-goal hand-off in a Claude session. Canon: docs/process/README.md (stages, rules by id); every rule is read from its stage doc by the agent that runs the stage — this script only orders stages and relays their exits. Re-entrant: re-invoke after a stop or a harness report; state is read from disk. The invoking session relays statuses and may resolve a STOP-1a with the user via rifty-refine, then re-invoke.',
   phases: [
-    { title: 'Preflight', detail: 'goal ready, tree clean, re-chart debt' },
-    { title: 'Slices', detail: 'pickup → Contract+RED → implement → Final+GREEN → re-chart, looped' },
+    { title: 'Preflight', detail: 'goal ready, tree clean' },
+    { title: 'Slices', detail: 'pickup (+Contract+RED) → implement → Final+GREEN / ordinary review → re-chart, looped' },
     { title: 'Close', detail: 'invariants proof, ledger+fog walk, delete goal dir' },
   ],
 }
 
-// args: { goal: '<epics dir slug>', date: 'YYYY-MM-DD', maxSlices? }
-// Stop contract: every non-{closed} return is either a STOP-1 item (docs/process/rules/stops.md,
-// kind 'STOP-1a'..'STOP-1e', with the STOP-6 report fields and a ledger `stop:` line) or a
-// precondition failure (kind 'precondition' / 'invalid-verdict'). Budgets come from the unit
-// (RDY-9), never from args.
+// args: { goal: '<epics dir slug>', date: 'YYYY-MM-DD' }
+// Every stage agent returns the same exit shape (STAGE). Returns of this script: {closed} · a STOP-1
+// item (kind, question, report — docs/process/rules/stops.md STOP-6; the ledger got its stop: line)
+// · a report needing no answer (kind 'frontier-empty' | 'harness') · a precondition failure.
 if (!args?.goal || !args?.date) return { stop: 'args', need: "{ goal: '<slug>', date: 'YYYY-MM-DD' }" }
 const { goal, date } = args
-const MAX_SLICES = args.maxSlices ?? 8
 const DIR = `docs/backlog/epics/${goal}`
 const STAGES = 'docs/process/stages'
-const RULES = 'docs/process/rules'
-const DEFAULT_ROUNDS = { 'Contract+RED': 1, 'Final+GREEN': 2 } // RDY-9 defaults
 
 const STATE = {
   type: 'object',
-  required: ['goalReady', 'treeClean', 'rechartDebt', 'mapEmpty', 'frontierChild', 'pickedChildReady'],
+  required: ['goalReady', 'treeClean', 'mapEmpty', 'frontierChild', 'childStage', 'userFog'],
   properties: {
     goalReady: { type: 'boolean' }, // goal.md status:ready
     treeClean: { type: 'boolean' },
-    rechartDebt: { type: 'boolean' }, // last landed slice missing its re-chart ledger line
     mapEmpty: { type: 'boolean' }, // map.md ## Items empty
-    frontierChild: { type: ['string', 'null'] }, // first open unblocked child in seed order
-    pickedChildReady: { type: 'boolean' }, // frontier child already carries ready-verdict:
-    childOrdinaryReview: { type: 'boolean' }, // child's `review: ordinary` line — no checkpoints
-    childRounds: { type: ['number', 'null'] }, // child's `review: checkpoints rounds:<n>` — Final+GREEN budget
+    frontierChild: { type: ['string', 'null'] }, // first ## Items row whose unit is open and unblocked (artifacts/map.md)
+    // by status first: draft → 'draft' (journal lines are history, review.md REV-8); ready → 'ready-unverified' (no line) | 'certified' (ready-verdict:) | 'ordinary' (review: ordinary)
+    childStage: { type: ['string', 'null'] },
+    userFog: { type: ['string', 'null'] }, // first '## Open questions' line tagged owner: user, verbatim
     notes: { type: 'string' },
   },
 }
-const PICKUP = {
+// One exit shape for every stage (the stage doc names which exits it has).
+const STAGE = {
   type: 'object',
-  required: ['done'],
+  required: ['outcome'],
   properties: {
-    done: { type: 'boolean' },
-    fork: { type: ['string', 'null'] }, // STOP-1a: user-observable fork → manual rifty-refine
-    band: { type: 'string' },
-    rounds: { type: ['number', 'null'] }, // declared Final+GREEN rounds (RDY-9)
-    ordinaryReview: { type: 'boolean' }, // unit outside REV scope → no checkpoints (RDY-8)
-  },
-}
-const VERDICT = {
-  type: 'object',
-  required: ['pass'],
-  properties: {
-    pass: { type: 'boolean' },
-    blockers: { type: 'array', items: { type: 'string' } },
-    premise: { type: ['string', 'null'] }, // REV-6 premise concern raised by the reviewer → STOP-1b
-    roundsSpent: { type: ['number', 'null'] }, // round number on the checkpoint's status line before this pass (REV-8)
-    recutRecorded: { type: 'boolean' }, // the unit carries a `re-cut:` line (STOP-4 already used)
-  },
-}
-const RECUT = {
-  type: 'object',
-  required: ['done'],
-  properties: {
-    done: { type: 'boolean' },
-    fork: { type: ['string', 'null'] }, // STOP-1a: the re-cut would drop/weaken an I#/scenario row
-    unit: { type: ['string', 'null'] }, // unit to verify next: the same child, or its split successor
+    outcome: { type: 'string', enum: ['done', 'pass', 'left-path', 'stop', 'harness'] },
+    kind: { type: ['string', 'null'] }, // stop: STOP-1a | STOP-1b | STOP-1e
+    question: { type: ['string', 'null'] }, // stop: the one question
+    report: { type: ['string', 'null'] }, // STOP-6 screen (stop, incl. the default if the user stays silent); what resisted (left-path); what broke (harness)
+    unit: { type: ['string', 'null'] }, // the unit after a split, else null
+    sha: { type: ['string', 'null'] }, // pass: the reviewed commit
+    goalResiduals: { type: 'array', items: { type: 'string' } }, // pass: goal residuals from the verdict (RECHART reads them)
   },
 }
 
 const state = (label) =>
   agent(
-    `Read-only. Inspect goal ${DIR} and git in this repo. Report facts per the schema: goal.md is status:ready (goalReady); working tree clean (treeClean); ledger tail shows a landed slice without its 're-chart after <slice>' line (rechartDebt); map.md '## Items' is empty (mapEmpty); first frontier child — open, unblocked by blocked_by, in seed order (frontierChild, null if none); that child already carries a 'ready-verdict:' line (pickedChildReady); that child's doc says 'review: ordinary' (childOrdinaryReview — false when absent or 'checkpoints'); the number after 'rounds:' in its 'review: checkpoints rounds:<n>' line (childRounds, null when absent).`,
+    `Read-only. Inspect goal ${DIR} and git. Report per the schema: goal.md status:ready (goalReady); working tree clean (treeClean); map.md '## Items' empty (mapEmpty); first '## Items' row whose unit is open and unblocked by blocked_by, in order (frontierChild; a unit not listed there is not on the path); that unit's stage — status draft → 'draft' whatever lines its journal holds; status ready → 'ready-unverified' (no 'ready-verdict:'/'review:' line), 'certified' (a 'ready-verdict:' line), 'ordinary' (a 'review: ordinary' line) (childStage); the first map.md '## Open questions' line tagged 'owner: user', verbatim (userFog).`,
     { schema: STATE, label, phase: 'Preflight' },
   )
 
-// Every STOP-1 return first writes the ledger `stop:` line (artifacts/ledger.md, STOP-6).
-const stop = async (kind, child, question, extra = {}) => {
-  await agent(
-    `Goal ${goal}: append the ledger line '- ${date} — ${child ?? goal} stop: ${kind} — ${question}' to ${DIR}/ledger.md, commit (short one-line subject), push. Nothing else.`,
-    { label: `stop:${kind}`, phase: 'Slices' },
-  )
-  return { pass: false, kind, child, stop: question, ...extra }
-}
-
-// One checkpoint per ${STAGES}/checkpoint-run.md: find (+tail) → adjudicate → record → fix → verify.
-// Rounds are the unit's declared budget (STOP-2); a stalled blocker skips the remaining rounds
-// (STOP-3); a 2nd consecutive Contract+RED blocker is contract escalation (STOP-5); all three
-// route to ONE agent-owned re-cut against the destination (STOP-4); blockers surviving that
-// re-cut stop to the user (STOP-1c). A premise concern stops at once (STOP-1b, REV-6).
-// Budget state is read back from the unit's status line (REV-8) so a re-invoked run
-// continues the count instead of restarting it.
-async function checkpoint(name, child, rounds) {
-  let current = child // the unit under verification — a STOP-4 split moves it to the successor
-  let previous = new Set()
-  let recut = false
-  const history = []
-  for (let attempt = 1; ; attempt++) {
-    const v = await agent(
-      attempt === 1
-        ? `Run the ${name} checkpoint for goal ${goal}, unit ${current}, per ${STAGES}/checkpoint-run.md (you are the runner, codex is the reviewer: find pass, tail pass only when band ≥ 5, adjudication, blockers.mjs). On blockers overwrite the checkpoint status line in the unit doc's ## Decisions ('${name === 'Contract+RED' ? 'contract-red: round <n>' : 'final-green: round <n>/<budget>'} — blocker @ <sha>', REV-8) and leave it uncommitted — it commits with the fix batch. Return pass=true only on exit 0; otherwise list surviving HOLDS blockers verbatim as '<authority> — <summary>'. A premise concern in the verdict (REV-6) goes verbatim into 'premise'. Also report roundsSpent = the round number the status line carried BEFORE this pass (0 when absent), and recutRecorded = whether the unit's ## Decisions holds a 're-cut:' line.`
-        : `Run the ${name} VERIFY pass for goal ${goal}, unit ${current}, per ${STAGES}/checkpoint-run.md step 7 (same reviewer command, prior verdicts attached as settled; adjudication; blockers.mjs). On blockers overwrite the status line (REV-8), uncommitted. Return pass=true only on exit 0; otherwise list surviving HOLDS blockers verbatim as '<authority> — <summary>'. A premise concern (REV-6) goes verbatim into 'premise'. Also report roundsSpent and recutRecorded as in the find pass.`,
-      { schema: VERDICT, label: `${current}:${name}#${attempt}`, phase: 'Slices' },
-    )
-    if (v?.premise) return stop('STOP-1b', current, `premise concern at ${name}: ${v.premise}`)
-    if (v?.pass) return { pass: true, unit: current }
-    const blockers = v?.blockers ?? []
-    if (!blockers.length) return { pass: false, kind: 'invalid-verdict', child: current, stop: `${name} returned no pass and no blockers` }
-    history.push(blockers.length)
-    // Rounds spent = fix batches so far, continued across re-invocations from the status line.
-    const spent = Math.max(attempt - 1, v.roundsSpent ?? 0)
-    if (v.recutRecorded === true) recut = true
-    const escalation = name === 'Contract+RED' && (attempt >= 2 || spent >= 1)
-    const stalled = blockers.some((b) => previous.has(b))
-    const exhausted = spent >= rounds
-    if (escalation || stalled || exhausted) {
-      const trigger = escalation ? 'STOP-5 contract escalation' : stalled ? 'STOP-3 stall' : 'STOP-2 budget exhausted'
-      if (recut) {
-        return stop(
-          'STOP-1c',
-          current,
-          `${name}: blockers survive the agent-owned re-cut (${trigger}; blocker counts ${history.join('→')}, rounds ${rounds}). STOP-6: surviving blockers with authority — ${blockers.join(' | ')}; ONE question with a default: re-scope the traced obligation via rifty-refine, raise the budget, or drop the unit?`,
-          { blockers },
-        )
-      }
-      recut = true
-      const r = await agent(
-        `Goal ${goal}, unit ${current}: ${trigger} at ${name} — perform the ONE agent-owned re-cut per ${RULES}/stops.md STOP-4: trim the unit to its traced obligations, demote untraced rows to notes or backlog (rifty-to-backlog), turn exactness the trace target does not state into concerns, split by trace if over RDY-4 limits (successor inherits verdict lines, RDY-9), record 're-cut: ${date} — <what> — trace: none' in ## Decisions and a ledger line, then fix the blockers that remain genuine in one batch and commit. Return unit = the path to verify next (this unit, or its split successor). A blocker that requires dropping or weakening a row traced to I# or scenario is NOT yours: return it in 'fork' (STOP-1a) and change nothing else. Do NOT answer blockers with more test surface. Blockers:\n${blockers.map((b) => `- ${b}`).join('\n')}`,
-        { schema: RECUT, label: `${current}:recut#${attempt}`, phase: 'Slices' },
-      )
-      if (r?.fork) return stop('STOP-1a', current, `re-cut needs an observable-scope decision — manual rifty-refine: ${r.fork}`, { blockers })
-      if (!r?.done) return { pass: false, kind: 'precondition', child: current, stop: 're-cut agent failed' }
-      current = r.unit ?? current
-      previous = new Set(blockers)
-      continue
-    }
-    await agent(
-      `Goal ${goal}, unit ${current}: batch re-cut IN PLACE (same branch, lineage carries — never a fresh start) fixing ALL surviving ${name} blockers in one batch, then commit together with the uncommitted status line (round ${spent + 1} of ${rounds}):\n${blockers.map((b) => `- ${b}`).join('\n')}\nNever weaken a ready contract silently (RDY-5: record 're-cut:'; a user-traced row change is a fork), never edit a test to pass. Concerns are advisory — do not spend this round on them.`,
-      { label: `${current}:fix#${attempt}`, phase: 'Slices' },
-    )
-    previous = new Set(blockers)
-  }
-}
-
-const rechart = (after) =>
+const run = (name, doc, unit, extra = '') =>
   agent(
-    `Run RECHART per ${STAGES}/rechart.md for goal ${goal}, date ${date}${after ? ` after slice ${after}` : ''}: ledger one-liners, graduate phrasable fog into draft children (rifty-to-backlog shape incl. '## Challenge' via a fresh critic subagent), invalidate/reorder, append the 're-chart after <slice> (final-green PASS @ <sha>)' line ('ordinary PASS @ <sha>' for a review: ordinary unit) with the reviewed commit of the PASS (REV-8). Commit.`,
-    { label: `rechart${after ? `:${after}` : ''}`, phase: 'Slices' },
+    `Run ${name} per ${doc} for goal ${goal}${unit ? `, unit ${unit}` : ''}, date ${date}.${extra ? ` ${extra}` : ''} Follow the doc; it names every exit. Report the exit per the schema: 'done' (PICKUP, IMPLEMENT, RECHART, CLOSE); 'pass' (a checkpoint or the ordinary review — sha = the reviewed commit, goalResiduals from the verdict); 'left-path' (the unit left the path — report = what resisted, ready for the RECHART fog line); 'stop' (kind STOP-1a|STOP-1b|STOP-1e, question, report = the STOP-6 screen including the default if the user stays silent); 'harness' (report). After a split, unit = the successor path.`,
+    { schema: STAGE, label: unit ? `${name}:${unit}` : name, phase: name === 'CLOSE' ? 'Close' : 'Slices' },
   )
+
+const note = (line) =>
+  agent(`Goal ${goal}: append '- ${date} — ${line}' to ${DIR}/ledger.md, commit (short one-line subject), push. Nothing else.`, {
+    label: 'ledger',
+    phase: 'Slices',
+  })
+
+// A stop writes its ledger line (STOP-6) and ends the run with the question.
+const stop = async (r, unit) => {
+  await note(`${unit ? `${unit} ` : ''}stop: ${r.kind} — ${r.question}`)
+  return { pass: false, kind: r.kind, child: unit, stop: r.question, report: r.report }
+}
+
+// RECHART after a landed slice (its PASS line) or a unit leaving the path (its fog line).
+const rechart = (unit, r) =>
+  run(
+    'RECHART',
+    `${STAGES}/rechart.md`,
+    unit,
+    r.outcome === 'left-path'
+      ? `The unit LEFT THE PATH (stops.md STOP-4 3): ${r.report}.`
+      : `The slice landed: PASS @ ${r.sha} (final-green or ordinary per the unit's review: line)${r.goalResiduals?.length ? `; goal residuals from the verdict: ${r.goalResiduals.join(' | ')}` : ''}.`,
+  )
+
+// Route one stage exit; returns null to continue the loop, or the script's return value.
+async function exit(r, unit) {
+  if (!r?.outcome) return { stop: `${unit ?? goal}: stage agent returned no exit`, kind: 'precondition' }
+  if (r.outcome === 'stop') return stop(r, unit)
+  if (r.outcome === 'harness') {
+    await note(`${unit ?? goal} run ended: ${r.report}`)
+    return { pass: false, kind: 'harness', child: unit, stop: r.report }
+  }
+  if (r.outcome === 'left-path') {
+    const rc = await rechart(unit, r)
+    if (rc?.outcome === 'stop') return stop(rc, unit)
+    if (rc?.outcome !== 'done') return { stop: `${unit}: RECHART did not complete — ${rc?.report ?? 'no exit'}`, kind: 'harness', child: unit }
+    return null
+  }
+  return null
+}
 
 phase('Preflight')
 let st = await state('state:initial')
-if (!st) return { stop: 'state agent failed' }
+if (!st) return { stop: 'state agent failed', kind: 'precondition' }
 if (!st.goalReady) return { stop: 'goal not ready — FIT first (outside this workflow)', kind: 'precondition' }
 if (!st.treeClean) return { stop: 'dirty tree — commit or drop local changes first', kind: 'precondition' }
 
 phase('Slices')
 let landed = 0
-let unblocked = false
 while (!st.mapEmpty) {
-  if (landed >= MAX_SLICES) return stop('STOP-1d', null, `slice cap ${MAX_SLICES} reached — map still has items; continue the run?`, { landed })
-  if (st.rechartDebt) {
-    await rechart(null)
-    st = await state(`state:post-debt`)
-    if (!st) return { stop: 'state agent failed', kind: 'precondition' }
-    continue
-  }
   let child = st.frontierChild
   if (!child) {
-    // Everything blocked_by-blocked: re-cutting the map is the agent's (RDY-5) — one RECHART, then re-state.
-    if (unblocked) return { stop: 'map non-empty but no frontier child after re-chart', kind: 'precondition', notes: st.notes }
-    unblocked = true
-    await rechart(null)
-    st = await state('state:post-unblock')
+    // A frontier empty behind an owner: user question is where that question is asked (STOP-4 3).
+    if (st.userFog) return stop({ kind: 'STOP-1a', question: `frontier empty behind an open question — manual rifty-refine: ${st.userFog}`, report: st.notes }, null)
+    await note(`run ended: map non-empty, no frontier child — every remaining row is blocked`)
+    return { pass: false, kind: 'frontier-empty', landed, stop: 'map non-empty, no frontier child; a report, not a question', notes: st.notes }
+  }
+  let stage = st.childStage
+  if (stage === 'draft' || stage === 'ready-unverified') {
+    const p = await run('PICKUP', `${STAGES}/pickup.md`, child) // compiles; runs Contract+RED for a checkpoints unit (pickup.md 5)
+    const x = await exit(p, child)
+    if (x) return x
+    if (p.outcome === 'left-path') {
+      st = await state(`state:left:${child}`)
+      if (!st) return { stop: 'state agent failed', kind: 'precondition' }
+      continue
+    }
+    child = p.unit ?? child
+    st = await state(`state:picked:${child}`)
+    if (!st) return { stop: 'state agent failed', kind: 'precondition' }
+    stage = st.childStage
+  }
+  const impl = await run('IMPLEMENT', `${STAGES}/implement.md`, child)
+  const xi = await exit(impl, child)
+  if (xi) return xi
+  if (impl.outcome === 'left-path') {
+    st = await state(`state:left:${child}`)
     if (!st) return { stop: 'state agent failed', kind: 'precondition' }
     continue
   }
-
-  // Membership + budget are per unit, decided at pickup (RDY-8, RDY-9).
-  let ordinary = st.childOrdinaryReview === true
-  let rounds = st.childRounds ?? DEFAULT_ROUNDS['Final+GREEN']
-  if (!st.pickedChildReady) {
-    const p = await agent(
-      `Run PICKUP per ${STAGES}/pickup.md for goal ${goal}, child ${child}, date ${date}: compile draft→ready (RDY-2), trace every Acceptance/Parity/Fault row and enforce size (RDY-3, RDY-4 — split now if over), decide membership and rounds (RDY-8, RDY-9: 'review: checkpoints rounds:<n>' or 'review: ordinary' in the unit doc), append the ledger band+rounds row, commit. Return ordinaryReview=true for docs/CI/process/tooling/harness units and for proof-only units (no product delta expected — RDY-8, 'review: ordinary — proof-only'), and rounds as declared. A remaining user-observable fork (STOP-1a): return it in 'fork' and change nothing further — never interview. Do NOT run the checkpoint, do NOT implement.`,
-      { schema: PICKUP, label: `pickup:${child}`, phase: 'Slices' },
-    )
-    if (p?.fork) return stop('STOP-1a', child, `pickup found an observable-scope fork — manual rifty-refine: ${p.fork}`)
-    if (!p?.done) return { stop: 'pickup failed', kind: 'precondition', child }
-    ordinary = p.ordinaryReview === true
-    rounds = p.rounds ?? rounds
-    if (!ordinary) {
-      const cr = await checkpoint('Contract+RED', child, DEFAULT_ROUNDS['Contract+RED'])
-      if (!cr.pass) return cr
-      child = cr.unit ?? child
-    }
+  const fin =
+    stage === 'ordinary'
+      ? await run('the ordinary review', `${STAGES}/checkpoint-run.md §Ordinary review`, child)
+      : await run('Final+GREEN', `${STAGES}/final-green.md`, child)
+  const xf = await exit(fin, child)
+  if (xf) return xf
+  if (fin.outcome === 'left-path') {
+    st = await state(`state:left:${child}`)
+    if (!st) return { stop: 'state agent failed', kind: 'precondition' }
+    continue
   }
-
-  await agent(
-    `Implement the ready unit ${child} of goal ${goal} per ${STAGES}/implement.md: expected RED first, then GREEN within the declared band; classify every discovery (required → reverse-linked draft child with '## Challenge'; outside → rifty-to-backlog); ledger lines for decisions; pnpm pr:check green; commit; tree clean; draft PR body updated.`,
-    { label: `implement:${child}`, phase: 'Slices' },
-  )
-  if (ordinary) {
-    const r = await agent(
-      `Goal ${goal}, unit ${child} is 'review: ordinary' (RDY-8): for a proof-only unit first verify the product diff from BASE is empty (RDY-8) — a product change reclassifies it to checkpoints: return pass=false naming that as the blocker; then run ONE rifty-review pass on this tree per ${RULES}/review.md, fix every blocker in place, then re-run pnpm pr:check. No checkpoint, no lineage. Return pass=true when the gate is green and no blocker is left.`,
-      { schema: VERDICT, label: `${child}:ordinary-review`, phase: 'Slices' },
-    )
-    if (!r?.pass) return { stop: `ordinary review left blockers on ${child}`, kind: 'precondition', child, blockers: r?.blockers }
-  } else {
-    const fg = await checkpoint('Final+GREEN', child, rounds)
-    if (!fg.pass) return fg
-    child = fg.unit ?? child
-  }
-  await rechart(child)
+  child = fin.unit ?? child
+  const rc = await rechart(child, fin)
+  if (rc?.outcome === 'stop') return stop(rc, child)
+  if (rc?.outcome !== 'done') return { stop: `${child}: RECHART did not complete — ${rc?.report ?? 'no exit'}`, kind: 'harness', child }
   landed++
   log(`slice ${child} landed (${landed})`)
   st = await state(`state:after:${child}`)
@@ -221,21 +162,8 @@ while (!st.mapEmpty) {
 }
 
 phase('Close')
-const close = await agent(
-  `Run CLOSE per ${STAGES}/close.md for goal ${goal}, date ${date}: verify preconditions; prove every '## Invariants' statement end-to-end citing artifacts (a grep or one green slice closes nothing); walk EVERY ledger line and EVERY map.md fog line to a verified carrier, a minted carrier, or an explicit 'dropped: <reason>'; direction verdicts for before/after numbers; declined-concepts rows; then delete the goal dir whole + CHANGELOG line; pnpm backlog:check must pass. Return closed=false with the unresolved lines if ANY line or invariant cannot be closed — never force it.`,
-  {
-    schema: {
-      type: 'object',
-      required: ['closed'],
-      properties: {
-        closed: { type: 'boolean' },
-        unresolved: { type: 'array', items: { type: 'string' } },
-        dispositions: { type: 'string' }, // counts: carriers / minted / dropped
-      },
-    },
-    label: 'close',
-    phase: 'Close',
-  },
-)
-if (!close?.closed) return { stop: 'close blocked', kind: 'precondition', unresolved: close?.unresolved ?? ['close agent failed'], landed }
-return { closed: true, landed, dispositions: close.dispositions, next: 'goal PR ready for user merge (default: the one goal PR; split allowed)' }
+const close = await run('CLOSE', `${STAGES}/close.md`, null, 'Never force a line or an invariant: an open owner: user fog line or an unreachable invariant is a stop (STOP-1a / STOP-1e).')
+const xc = await exit(close, null)
+if (xc) return xc
+if (close.outcome !== 'done') return { stop: 'close blocked', kind: 'precondition', report: close.report, landed }
+return { closed: true, landed, next: 'merge the goal PR (PR-3, DEC-3: pre-authorized once given; one goal PR by default, split allowed)' }

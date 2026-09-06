@@ -20,7 +20,7 @@
     },
     "unit_residuals": {
       "type": "array",
-      "description": "Current PR/slice contract clauses not covered at this checkpoint. Any entry blocks the slice.",
+      "description": "Current PR/slice contract clauses not covered at this checkpoint. Raw mode: any entry blocks; adjudicated: residuals mirror the blocker rulings (artifacts/verdict.md).",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -122,7 +122,7 @@
                 "severity": {
                   "type": "string",
                   "enum": ["blocker", "concern", "nit"],
-                  "description": "blocker: violates the cited authority or a traced obligation has no carrier; concern: advisory (weak evidence, deeper mutant, hardening, premise doubt, taste) — report-only, never spends a round (REV-3); nit: style."
+                  "description": "blocker: violates the cited authority or a traced obligation has no carrier; concern: advisory (weak evidence, deeper mutant, hardening, premise doubt, taste) — report-only, NOTE under reception (REV-3, REV-12); nit: style."
                 },
                 "location": {
                   "type": "string",
