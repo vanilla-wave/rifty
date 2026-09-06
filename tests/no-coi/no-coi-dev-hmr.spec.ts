@@ -925,7 +925,11 @@ test('memory-backend restart restores the installed tree before resident relaunc
         return sandbox.vfs.backend;
       }),
     ).toBe('memory');
-    await writeFiles(page, realProjectFiles);
+    await writeFiles(page, {
+      ...realProjectFiles,
+      '/outside-cwd.bin': 'outside-before-install',
+      '/.rifty/recovery-probe.bin': 'cache-before-install',
+    });
     await page.evaluate(async () => {
       const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
       await sandbox.toolchain.install({ cwd: '/dev-hmr', registryUrl: '/npm-registry' });
@@ -985,6 +989,15 @@ test('memory-backend restart restores the installed tree before resident relaunc
       )
       .not.toBe(first.bootId);
     const recovered = await waitForMarker(page, 'hmr-memory-before-restart');
+    expect(
+      await page.evaluate(async () => {
+        const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+        return [
+          await sandbox.fs.readFile('/outside-cwd.bin', 'utf8'),
+          await sandbox.fs.readFile('/.rifty/recovery-probe.bin', 'utf8'),
+        ];
+      }),
+    ).toEqual(['outside-before-install', 'cache-before-install']);
     expect(recovered.bootId).not.toBe(first.bootId);
     expect(
       await page.evaluate(async () => {
@@ -1254,6 +1267,7 @@ test('recovery copies scale with edits and same-OPFS restart omits tree bytes', 
         new Proxy(NativeBytes, {
           construct(target, args) {
             if (args[0] instanceof NativeBytes) copiedBytes += args[0].byteLength;
+            else if (typeof args[0] === 'number') copiedBytes += args[0];
             return Reflect.construct(target, args);
           },
         }),
@@ -1306,12 +1320,19 @@ test('recovery copies scale with edits and same-OPFS restart omits tree bytes', 
       const NativeBytes = Uint8Array;
       let copiedBytes = 0;
       let restoreFileCount: number | null = null;
+      const nativeSlice = NativeBytes.prototype.slice;
+      NativeBytes.prototype.slice = function (start, end) {
+        const result = nativeSlice.call(this, start, end);
+        copiedBytes += result.byteLength;
+        return result;
+      };
       Reflect.set(
         globalThis,
         'Uint8Array',
         new Proxy(NativeBytes, {
           construct(target, args) {
             if (args[0] instanceof NativeBytes) copiedBytes += args[0].byteLength;
+            else if (typeof args[0] === 'number') copiedBytes += args[0];
             return Reflect.construct(target, args);
           },
         }),
@@ -1331,6 +1352,7 @@ test('recovery copies scale with edits and same-OPFS restart omits tree bytes', 
       } finally {
         Worker.prototype.postMessage = nativePost;
         Reflect.set(globalThis, 'Uint8Array', NativeBytes);
+        NativeBytes.prototype.slice = nativeSlice;
       }
     });
     expect.soft(restartCost.restoreFileCount).toBe(0);
@@ -1344,6 +1366,73 @@ test('recovery copies scale with edits and same-OPFS restart omits tree bytes', 
     await expect
       .poll(async () => (await waitForMarker(page, 'hmr-copy')).bootId)
       .not.toBe(before.bootId);
+  } finally {
+    await disposeSandbox(page);
+  }
+});
+
+test('successive OPFS-memory-OPFS restarts restore the latest acknowledged bytes', async ({
+  page,
+}) => {
+  await bootSandbox(page);
+  try {
+    const result = await page.evaluate(async (memoryUrl) => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const NativeWorker = Worker;
+      const nativePost = Worker.prototype.postMessage;
+      let replacements = 0;
+      const restoreSizes: number[] = [];
+      Reflect.set(
+        globalThis,
+        'Worker',
+        new Proxy(NativeWorker, {
+          construct(target, args) {
+            replacements += 1;
+            return Reflect.construct(
+              target,
+              replacements === 1 ? [memoryUrl, ...args.slice(1)] : args,
+            );
+          },
+        }),
+      );
+      NativeWorker.prototype.postMessage = function (...args: Parameters<Worker['postMessage']>) {
+        const message = args[0];
+        if (message?.type === 'toolchain' && message.request?.op === 'restore') {
+          restoreSizes.push(message.request.input.files.length);
+        }
+        return Reflect.apply(nativePost, this, args);
+      };
+      try {
+        await sandbox.fs.writeFile(
+          '/cycle/package.json',
+          JSON.stringify({ name: 'backend-cycle', private: true }),
+        );
+        await sandbox.fs.writeFile('/outside-cycle.bin', new Uint8Array([1, 2]));
+        await sandbox.toolchain.install({ cwd: '/cycle', registryUrl: '/npm-registry' });
+        const backends = [sandbox.vfs.backend];
+        await sandbox.restart({ preview: { src: '' } });
+        backends.push(sandbox.vfs.backend);
+        const restored = [...(await sandbox.fs.readFile('/outside-cycle.bin'))];
+        await sandbox.fs.writeFile('/outside-cycle.bin', new Uint8Array([9, 8]));
+        await sandbox.restart({ preview: { src: '' } });
+        backends.push(sandbox.vfs.backend);
+        const flipped = [...(await sandbox.fs.readFile('/outside-cycle.bin'))];
+        await sandbox.restart({ preview: { src: '' } });
+        backends.push(sandbox.vfs.backend);
+        const reopened = [...(await sandbox.fs.readFile('/outside-cycle.bin'))];
+        return { backends, restored, flipped, reopened, restoreSizes };
+      } finally {
+        NativeWorker.prototype.postMessage = nativePost;
+        Reflect.set(globalThis, 'Worker', NativeWorker);
+      }
+    }, memoryToolchainWorkerUrl);
+    expect(result.backends).toEqual(['opfs', 'memory', 'opfs', 'opfs']);
+    expect(result.restored).toEqual([1, 2]);
+    expect(result.flipped).toEqual([9, 8]);
+    expect(result.reopened).toEqual([9, 8]);
+    expect(result.restoreSizes[0]).toBeGreaterThan(0);
+    expect(result.restoreSizes[1]).toBeGreaterThan(0);
+    expect(result.restoreSizes[2]).toBe(0);
   } finally {
     await disposeSandbox(page);
   }

@@ -67,3 +67,24 @@ with the same dedicated port assignments → 3/3 passed (32s).
 First pr:check ran before the test type fixes: test:run passed; typecheck found
 spy-this and cross-package source-import errors, fixed at c070fca4e. A fresh
 full committed-tree pr:check follows; no behavioral test was weakened.
+
+## Final review round 1
+
+2026-09-06 — Final+GREEN @ f773b91aa: B1 HOLDS after fresh adjudication.
+Host restore retained the previous source label; OPFS→memory→ACK write→OPFS
+then stripped required bytes, and memory→OPFS→OPFS resent the tree. Worker and
+SDK consume the host label; the host's successful-restore commit is the single
+provenance owner. No new coordination mechanism or wire/API shape.
+
+2026-09-06 — re-cut: clarify Acceptance 3's current-owner provenance; the newly
+added pair-matrix equality incorrectly froze the original label after a flip.
+Only that new assertion is corrected to target-backend equality; exact file
+assertions and all pre-existing tests remain. Trace: ADR-0377.
+
+Committed cycle targets: host `successive restores` → 2 RED; real Chromium
+`successive OPFS-memory` → stale [1,2] after memory ACK [9,8] (expected [9,8]).
+Both are assertion failures, not imports/timeouts. Same dedicated-port command.
+
+Advisories addressed in the batch: count sized Uint8Array allocation and
+restart slice; seed files outside cwd and inside /.rifty before memory install,
+then assert their exact bytes after real memory restart. No scope reduction.

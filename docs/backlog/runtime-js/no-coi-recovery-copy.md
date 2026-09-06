@@ -37,7 +37,9 @@ restart and backend changes still recover exact acknowledged bytes without npm.
 2. SDK install holds no redundant recovery snapshot; restart snapshots the old
    controller once, retaining recovery through failed replacement attempts. → scenario
 3. Same-OPFS restore sends no recovery files; the host keeps the full recovery
-   state, and both backend-flip directions and memory→memory send all files. → ADR-0377
+   state labelled with its current owning backend after successful restore, and both
+   backend-flip directions and memory→memory send all files, including repeated
+   backend changes. → ADR-0377
 4. Real Chromium Vite install/edit/OPFS restart proves reduced page allocations
    and empty restore payload; existing memory restart/HMR proof stays green. → scenario
 5. Worker install relies on message structured clone for byte ownership;
@@ -81,6 +83,8 @@ capability, silent fallback, or compatibility claim.
 
 ready-verdict: 2026-09-06 — Contract+RED @ 3262ac8d6
 review: checkpoints rounds:2
+final-green: round 1/2 — blocker @ f773b91aa
+re-cut: 2026-09-06 — clarify current-owner provenance under Acceptance 3; replace the new matrix source-label equality with current-backend equality, preserving exact files — trace: none
 - 2026-09-06 — pickup band 3–4 rounds 2; standalone unit, BASE 59df0c0a3.
 - 2026-09-06 — DEC-1 reversible: preserve ADR-0377 scope/ownership; remove redundant work, retain detached boundary copies.
 - 2026-09-06 — user authorized autonomous implementation and green PR; no unresolved observable forks.

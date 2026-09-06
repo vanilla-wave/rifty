@@ -92,6 +92,7 @@ describe('no-COI recovery ownership', () => {
       new Proxy(NativeBytes, {
         construct(target, args) {
           if (args[0] instanceof NativeBytes) copied += args[0].byteLength;
+          else if (typeof args[0] === 'number') copied += args[0];
           return Reflect.construct(target, args);
         },
       }),
@@ -136,6 +137,29 @@ describe('no-COI recovery ownership', () => {
       expect(recovered.files).toEqual(state.files);
       runtime.dispose();
       replacement.runtime.dispose();
+    },
+  );
+
+  it.each(['opfs', 'memory'] as const)(
+    'uses the current owner backend after successive restores from %s',
+    async (original) => {
+      const target = original === 'opfs' ? 'memory' : 'opfs';
+      const current = await boot(target);
+      await restore(current.runtime, current.peer, activation(original));
+      const bytes = new Uint8Array([9]);
+      const writing = current.runtime.fs.writeFile('/dev/package.json', bytes);
+      current.peer.emit({ type: 'fs-result', result: { id: writeId(current.peer), ok: true } });
+      await writing;
+      const state = current.runtime.snapshotToolchainState();
+      if (!state) throw new Error('Lost activation');
+      const next = await boot('opfs');
+      const sent = await restore(next.runtime, next.peer, state);
+      expect(sent.files).toEqual(target === 'opfs' ? [] : state.files);
+      expect(next.runtime.snapshotToolchainState()?.files[0]?.data).toEqual(bytes);
+      expect(state.vfsBackend).toBe(target);
+      expect(next.runtime.snapshotToolchainState()?.vfsBackend).toBe('opfs');
+      current.runtime.dispose();
+      next.runtime.dispose();
     },
   );
 
