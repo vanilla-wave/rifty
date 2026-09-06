@@ -1222,3 +1222,103 @@ test('actual Worker close emits one runtime exit event and settles pending work'
     await disposeSandbox(page);
   }
 });
+
+test('recovery copies scale with edits and same-OPFS restart omits tree bytes', async ({
+  page,
+}) => {
+  await bootSandbox(page);
+  try {
+    await writeFiles(page, realProjectFiles);
+    const installCost = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const NativeBytes = Uint8Array;
+      let copiedBytes = 0;
+      Reflect.set(
+        globalThis,
+        'Uint8Array',
+        new Proxy(NativeBytes, {
+          construct(target, args) {
+            if (args[0] instanceof NativeBytes) copiedBytes += args[0].byteLength;
+            return Reflect.construct(target, args);
+          },
+        }),
+      );
+      try {
+        await sandbox.toolchain.install({ cwd: '/dev-hmr', registryUrl: '/npm-registry' });
+        // Reading via the real Worker does not construct page Uint8Arrays.
+        const installedCopies = copiedBytes;
+        copiedBytes = 0;
+        await sandbox.fs.writeFile(
+          '/dev-hmr/src/hmr-value.js',
+          "export const marker = 'hmr-copy';\n",
+        );
+        return { installedCopies, editCopies: copiedBytes, backend: sandbox.vfs.backend };
+      } finally {
+        Reflect.set(globalThis, 'Uint8Array', NativeBytes);
+      }
+    });
+    expect(installCost.backend).toBe('opfs');
+    expect(installCost.installedCopies).toBeGreaterThan(1_000_000);
+    expect.soft(installCost.editCopies).toBe(0);
+    await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const resident = await sandbox.toolchain.startBin({
+        cwd: '/dev-hmr',
+        binPath: '/dev-hmr/node_modules/.bin/vite',
+        args: ['--host', '127.0.0.1', '--port', '5174', '--strictPort', '--force'],
+        port: 5174,
+      });
+      const iframe = document.createElement('iframe');
+      iframe.id = 'dev-preview';
+      document.body.append(iframe);
+      iframe.src = resident.previewUrl;
+    });
+    const before = await waitForMarker(page, 'hmr-copy');
+    const restartCost = await page.evaluate(async () => {
+      const sandbox = Reflect.get(globalThis, '__riftyDevSandbox') as DevSandbox;
+      const nativePost = Worker.prototype.postMessage;
+      const NativeBytes = Uint8Array;
+      let copiedBytes = 0;
+      let restoreFileCount: number | null = null;
+      Reflect.set(
+        globalThis,
+        'Uint8Array',
+        new Proxy(NativeBytes, {
+          construct(target, args) {
+            if (args[0] instanceof NativeBytes) copiedBytes += args[0].byteLength;
+            return Reflect.construct(target, args);
+          },
+        }),
+      );
+      Worker.prototype.postMessage = function (...args: Parameters<Worker['postMessage']>) {
+        const message = args[0];
+        if (message?.type === 'toolchain' && message.request?.op === 'restore') {
+          restoreFileCount = message.request.input.files.length;
+        }
+        return Reflect.apply(nativePost, this, args);
+      };
+      try {
+        const report = await sandbox.restart({
+          preview: document.querySelector('#dev-preview') as HTMLIFrameElement,
+        });
+        return { restoreFileCount, copiedBytes, report };
+      } finally {
+        Worker.prototype.postMessage = nativePost;
+        Reflect.set(globalThis, 'Uint8Array', NativeBytes);
+      }
+    });
+    expect.soft(restartCost.restoreFileCount).toBe(0);
+    // One detached snapshot + one restore-input copy; no SDK install/post-restore copy.
+    // The edit changes only this short source file; allow that exact byte delta.
+    const editDelta =
+      new TextEncoder().encode("export const marker = 'hmr-copy';\n").byteLength -
+      new TextEncoder().encode(realProjectFiles['/dev-hmr/src/hmr-value.js']).byteLength;
+    expect.soft(restartCost.copiedBytes).toBe(2 * (installCost.installedCopies + editDelta));
+    expect(restartCost.report.unflushedWrites).toBe(false);
+    await expect
+      .poll(async () => (await waitForMarker(page, 'hmr-copy')).bootId)
+      .not.toBe(before.bootId);
+  } finally {
+    await disposeSandbox(page);
+  }
+});
