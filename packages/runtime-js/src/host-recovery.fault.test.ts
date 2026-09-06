@@ -42,7 +42,7 @@ function activation(vfsBackend: 'opfs' | 'memory'): ToolchainActivationState {
     vfsBackend,
     files: [
       { path: '/dev/package.json', data: new Uint8Array([1, 2]) },
-      { path: '/outside.bin', data: new Uint8Array(1024 * 1024).fill(7) },
+      { path: '/outside.bin', data: new Uint8Array(1024).fill(7) },
     ],
   };
 }

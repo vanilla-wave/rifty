@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep no-COI recovery in its controller; retain a detached fallback only during Worker replacement, preserving recovery after failed restart attempts.
+
 ### Added
 
 - **No-COI resident tools and explicit restart (ADR-0377).** Toolchain

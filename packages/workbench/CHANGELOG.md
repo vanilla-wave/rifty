@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- No-COI install snapshots reuse mirror bytes until outgoing structured clone instead of pre-copying the full tree.
+
 ### Added
 
 - The generic no-COI Worker can start one caller-selected resident installed

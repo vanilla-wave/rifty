@@ -82,10 +82,8 @@ function snapshotFiles(): readonly ToolchainRecoveryFile[] {
         walk(path);
         continue;
       }
-      const source = fs.readFileBytesSync(path);
-      const data = new Uint8Array(source.byteLength);
-      data.set(source);
-      files.push({ path, data });
+      // postMessage takes byte ownership through structured clone before the next task.
+      files.push({ path, data: fs.readFileBytesSync(path) });
     }
   };
   walk('/');

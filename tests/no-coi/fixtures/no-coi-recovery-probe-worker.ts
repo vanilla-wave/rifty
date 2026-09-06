@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
-import { syncMirror } from '../../../packages/vfs/src/index.ts';
 import type { ToolchainWorkerMessage } from '../../../packages/runtime-js/src/protocol.ts';
+import { syncMirror } from '../../../packages/vfs/src/index.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 const nativePost = self.postMessage.bind(self);

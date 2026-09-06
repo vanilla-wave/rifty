@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- No-COI writes reuse untouched recovery bytes; same-OPFS restore omits file payloads while preserving detached snapshots and backend-flip recovery.
+
 ### Added
 
 - Toolchain protocol v2 supports exact resident-bin start plus a host-held

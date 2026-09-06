@@ -343,7 +343,7 @@ async function bootToolchainSandbox(options: {
   let restarting = false;
   let disposed = false;
   let generation = 0;
-  let activation = current.snapshotToolchainState();
+  let activation: ReturnType<ToolchainRuntimeController['snapshotToolchainState']> = null;
   let residentRequest = current.snapshotResidentRequest();
 
   const emit = (event: RuntimeEvent): void => {
@@ -476,7 +476,6 @@ async function bootToolchainSandbox(options: {
     async install(input) {
       assertOperable();
       await current.toolchain.install(input);
-      activation = current.snapshotToolchainState();
     },
     async runBin(input) {
       assertOperable();
@@ -540,11 +539,9 @@ async function bootToolchainSandbox(options: {
       attachCurrent();
       backend = await current.toolchainReady;
       if (activation !== null) await current.restoreToolchainState(activation);
-      try {
-        await beforeStart?.(callbackFs(current));
-      } finally {
-        activation = current.snapshotToolchainState();
-      }
+      // The restored controller owns recovery now, including writes from a failing callback.
+      activation = null;
+      await beforeStart?.(callbackFs(current));
 
       let resident: SandboxResidentBin | null = null;
       if (residentRequest !== null) {
