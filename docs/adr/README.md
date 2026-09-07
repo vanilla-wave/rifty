@@ -88,6 +88,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0380 | Lazy eval compiler and explicit loader paths |
 | 0381 | Browser scoped eval compiler distribution |
 | 0382 | Preserve tsconfig discovery through explicit compiler preload |
+| 0383 | No COI VM default and preboot worker selection |
 
 ### runtime-wasi
 

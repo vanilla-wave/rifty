@@ -21,6 +21,7 @@ import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 import ts from 'typescript';
 import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
+import { provePackedVmSelection } from './no-coi-vm-browser-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
@@ -1289,6 +1290,10 @@ async function main() {
       await stat(resolve(consumerRoot, 'dist/main.js'));
       await stat(resolve(consumerRoot, 'dist/worker.js'));
       await provePackedCompilerLoading(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await provePackedVmSelection(
         consumerRoot,
         await readJson(resolve(consumerRoot, 'measure/report.json')),
       );

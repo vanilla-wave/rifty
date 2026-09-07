@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 epic: no-coi-client-bundle
 title: no-COI toolchain tier defaults node:vm to the rewrite engine and fetches QuickJS WASM only when quickjs is selected
 created: 2026-09-06
@@ -51,6 +51,9 @@ challenge: 2026-09-06 — 5 problems
 
 ## Decisions
 
+- 2026-09-07 — pickup: ADR-0383, independent decision probe chooses native Worker.name; exact reserved labels, unchanged URLs, no handshake; raw evidence in distribution/reference/vm-worker-name-probe.*.
+- 2026-09-07 — source + packed acceptance uses real SDK/Worker, explicit quickjs and restart; legacy generic defaults remain.
+
 - 2026-09-06 — user (rifty-refine, option B): no-COI toolchain tier defaults
   `node:vm` to `rewrite`; QuickJS WASM is never fetched unless `quickjs` is
   selected.
@@ -83,3 +86,27 @@ challenge: 2026-09-06 — 5 problems
   requests for `emscripten-module.wasm`; `vmEngine: 'quickjs'` issues exactly
   1; `vm.runInNewContext` under the default passes the rewrite conformance
   subset.
+
+## User scenario
+
+Boot the no-COI SDK from real packed tarballs, call vm through runtime.eval,
+and restart. Default uses rewrite without any QuickJS WASM request; supplying
+quickjs restores the real-realm engine before the first eval.
+
+## Acceptance
+
+- Toolchain default and explicit rewrite have zero QuickJS WASM requests at boot/restart; explicit quickjs has one per fresh worker and is usable on first eval. → I2
+- ToolchainCreateSandboxOptions exposes vmEngine, restart retains selection; HTTP and Blob worker URLs work without mutation. → I2
+- Capability report names node:vm and describes rewrite degradation only when selected; compat matrix documents the tier-specific default. → I2
+- Generic runtime without override preserves quickjs; explicit rewrite skips preload. Reserved native Worker names deliver options before boot; arbitrary names retain normal selection. → ADR-0383
+
+## Parity cases
+
+- Existing vm engine conformance/parity remains intact. QuickJS first-eval realm identity/host-global separation matches a fresh native Node probe; rewrite matches its existing accepted divergent results. → I2
+
+## Fault matrix
+
+| Boundary / axis | Operation | Outcome |
+|---|---|---|
+| Worker / observable-order | first eval and restart | Engine selected before preload/readiness; no late-config race, repeated restart uses same option. → I2 |
+| Network / false-fallback | selected QuickJS WASM fetch failure | Existing loader error behavior stays loud; no success from an unready quickjs engine. → ADR-0383 |

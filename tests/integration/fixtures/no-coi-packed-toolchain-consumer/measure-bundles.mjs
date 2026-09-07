@@ -24,6 +24,7 @@ export async function measureClientBundles() {
     return compilerInputs.get(input);
   }
   for (const [name, contents] of Object.entries({
+    runtimeHost: "export { spawnRuntime } from '@riftydev/runtime-js'",
     main: "export { createSandbox } from '@riftydev/sdk'",
     sw: "import '@riftydev/service-worker/sw'",
     generic: "import '@riftydev/runtime-js/worker'",

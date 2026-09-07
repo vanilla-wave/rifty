@@ -6,7 +6,7 @@ import { resolve, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { chromium } from '@playwright/test';
 
-async function withClientServer(root, observe) {
+export async function withClientServer(root, observe) {
   const require = createRequire(resolve(root, 'package.json'));
   const wasm = require.resolve('@jitl/quickjs-wasmfile-release-sync/wasm');
   const server = createServer(async (request, response) => {
