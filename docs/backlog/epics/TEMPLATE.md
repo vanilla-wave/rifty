@@ -31,13 +31,13 @@ tier: <works|robust|production — required at ready>
      Each checked false on current main (evidence comment above the list).
      Reported to the user at FIT completion (README §Report).
      A run only proves them; every child row traces to one (RDY-3).
-     Amending a ready goal = close + re-fit. -->
+     Amend a ready goal with the user's recorded decision (RDY-6). -->
 
 - I1. <user-observable statement>
 
 ## Challenge
 
-<!-- Advisory: fresh critic attacks invariants⇒value at FIT — README §Challenge. -->
+<!-- Premise critique at refine/FIT; reuse unchanged evidence — README §Challenge. -->
 
 challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
