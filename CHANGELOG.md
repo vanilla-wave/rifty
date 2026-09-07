@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Refine restores research-informed scope choices and a user-facing report before
+  implementation. A new direction gets early independent premise critique when
+  it can change the user's choice; FIT/PICKUP reuse that evidence. Supersedes
+  the 2026-09-07 blanket capture/report wording and adoption-only critique timing;
+  factual capture stays light, with no report agent or repeated approval.
+
 - No-COI SDK boot defers compiler/install code and defaults to the documented
   rewrite VM; packed toolchain JS falls from 1,326,387 to 236,199 gzip bytes.
 

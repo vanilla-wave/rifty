@@ -48,12 +48,11 @@ code-marker link) — never a solution without its decision. Optional real-path
 
 ## 5. Adoption and report
 
-A captured draft needs no independent critic. Before adopting a new plan at
-FIT/PICKUP, run the premise check (`docs/backlog/README.md` §Challenge); the
-Contract+RED reviewer may do it in the same pass. Never postpone it past the
-commitment to build.
+A factual capture needs no independent critic. A proposed direction follows
+`docs/backlog/README.md` §Challenge: early when it informs the user's choice,
+otherwise at FIT/PICKUP. Preserve any early record for reuse; formalizing the
+same premise does not require another critic.
 
-The driver reports user-facing work from recorded facts: result, proof,
-remaining questions. No fresh report agent or fixed six-part template. A
-mid-task capture needs no separate report. Continue work already authorized;
-capture is not a manual relay station.
+The driver delivers user-facing work with `docs/backlog/README.md` §Report,
+before implementation. A mid-task capture needs only its durable record.
+Continue work already authorized; capture is not a manual relay station.

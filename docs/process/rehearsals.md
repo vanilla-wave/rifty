@@ -117,3 +117,45 @@ memory, enumerated ledger grammar) is gone.
   J 2·1·0·4·1·1 · K 0·0·0·1·0·1 · L 0·0·≥4·4·1·≥2 · M 1·0·2(+1)·5·+1·2 · P 1·0·1(+1)·3·1·2.
 - 2026-09-04 for comparison: 13/13 fail, ~36 silences, fresh contexts up to
   ≈60 per successor (F) and ≈50 (G).
+
+## Refine before implementation — regression suite, 2026-09-07
+
+Narrow paper rehearsal, not product execution. Replay to the request's exit:
+refine-only → reported preparation; authorized build → checks/Final/merge.
+Keep the older matrix above as history; its ready-item/ready-goal entrances
+did not test the reader deciding what to build. Entry conditions below are
+modelled on real seeds, not claimed transcripts of those PRs.
+
+Authorities: `.agents/skills/rifty-refine/SKILL.md` §§Research and challenge/Grill;
+`docs/backlog/README.md` §§Challenge/Report; `stages/pickup.md` step 5;
+`stages/fit.md` steps 7–8; `rules/readiness.md` `RDY-2`/`RDY-6`/`RDY-8`.
+Check report timing/content, evidence before dependent choices, premise reuse,
+unchanged authorization and the lightweight factual-capture path in each cell.
+
+| Cell / seed | Persona / want | Required trace and exit |
+|---|---|---|
+| D / PR #306 | maintainer: ship known CI rule | missing proof → brief report → authorized edit/review/merge; no invented research |
+| I / PR #253 | maintainer: repair observed defect | baseline/RED → report → repair/Final/merge; no new-plan critic merely for a repair |
+| E / PR #275 | owner: implement ready item, show preparation first | preparation → report before first IMPLEMENT → build/Final/merge; no approval turn |
+| F / PR #274 | maintainer: revise internal route after evidence | record re-cut → report material delta → authorized build/merge; no user mechanism choice |
+| G / `epics/fault-honest-sw-preview` | owner: delegate the ready goal | reuse FIT report/premise → child proof/build/rechart → CLOSE/merge; no critic per child |
+| H / `backlog/esbuild-wasm-twin-recut` (historical branch) | maintainer: check whether constraint remains | probe answers question → report conclusion → close unnecessary work; no invented plan |
+| J / PR #241 | owner: amend scope, retain valid proof | research → actual user choice → record/report delta → changed proof/build/merge; no second consent |
+| M / banked stdout-newline finding above | agent mid-slice: defer unrelated observation | honest capture rides host → host review/merge; no capture critic or separate user report |
+| N / `service-worker/generated-sw-js-still-tracked-in-vcs` | user: record settled finding | dedup/update → short sourced report → docs delivery; no research/critic |
+| O / `runtime-js/node-entry-runtime-binding-variant-coverage` | user: just file test gap | honest question/fact → brief report → docs delivery; no forced probe or build |
+| T / `epics/cold-npm-install-speedup` | owner: choose after measurement | probe → informed dependent fork → record/report → preparation delivered; no inferred build authorization |
+| V / `runtime-js/spawn-node-eval-arg` §Challenge | owner: choose new capability vs existing runner | evidence/early critic → informed choice → record/report; later authorized build reuses premise |
+
+Baseline E: `750c4786f` PICKUP immediately continued IMPLEMENT, report timing
+unspecified. N/O: backlog README exempted every captured draft from user report,
+while the capture skill required one for user-facing work. T already worked:
+research-before-forks was retained, not removed. V improves feedback timing,
+not a prohibition against reconsidering scope in the old process.
+
+Backfire cases: universal critic + report writer adds two contexts to N/O and
+one to mid-task M; a report approval adds a user turn to already-authorized
+D/I/E/F/G/J. Early V critique can avoid a second scope answer but costs one
+extra context if the later premise check could have shared Contract+RED.
+Move an already-separate critic earlier → no extra context. Reuse unchanged
+premise, never remove required Contract+RED to pay for earlier feedback.
