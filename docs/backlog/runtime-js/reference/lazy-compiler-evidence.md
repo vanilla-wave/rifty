@@ -43,3 +43,5 @@ packed tarballs from d52ef8128 with the same measurement helpers.
 ## Caller-sweep correction
 
 Full `pnpm pr:check` found examples/vite-like-dev (omitted from the original directory list): typecheck TS2353 and 7/10 integration assertions fail with obsolete-option errors, 0 timeouts. Gate reran that file once in isolation: same seven failures. 9713 other tests and full parity passed. Independent decision review confirms preserve baseline via preload (ADR-0382); removal decision superseded.
+
+- Preload delta Contract+RED initially BLOCKed for missing failed-preload carrier and removed discovery assertions. Restored baseline conformance files before implementation; added a real missing-compiler-output preload fault test. Current source still lacks preload; focused run re-executes these REDs for independent verification.

@@ -1,0 +1,174 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "Complete the two missing Contract+RED carriers, then verify preparation before IMPLEMENT; no merge verdict.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md @ cdbc979adfb0b4ee353392b8a7cd452bb4cef9ed; BASE 6fe1d373d; ADR-0382 preload delta; unchanged I1 preparation inherited from prior Contract+RED",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + ADR-0382",
+      "location": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:99",
+      "summary": "After completed preparation, implement preload and restored discovery/example baseline, run GREEN and independent Final+GREEN including packed browser/eager-graph proof after the restored dependency."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/no-coi-client-bundle/goal.md:47",
+      "summary": "No-COI rewrite default, explicit QuickJS and capability disclosure remain a mapped unit."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/no-coi-client-bundle/goal.md:50",
+      "summary": "Published io packaging and generic-only backend loading remain a mapped unit."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-client-bundle/goal.md:53",
+      "summary": "Lazy install/activation and install/build/HMR/restore/restart proof remain a mapped unit."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/no-coi-client-bundle/goal.md:56",
+      "summary": "Packed complete-eager graph CI budgets and calibrated historical leak guard remain a mapped unit."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: neither complete worker eager graph contains TypeScript, including packed ESM splitting",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/client-compiler-loading.test.ts:32",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: JavaScript CLI eval does not await/import compiler and preserves existing semantics",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/client-compiler-loading.test.ts:95; packages/runtime-js/src/module-loader/node-eval.test.ts:108",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: lazy non-JavaScript classification preserves named gaps, SyntaxErrors and explicit CommonJS const marker",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/node-eval.test.ts:373; packages/runtime-js/src/builtins/node-entry.test.ts:165; tests/integration/client-compiler-loading.test.ts:99",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: default and explicit paths need no compiler; prepared discovery and unprepared TSCONFIG_NOT_READY; existing example behavior",
+      "source": "acceptance",
+      "trace": "ADR-0382",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/tsconfig-preload.test.ts:7; tests/integration/vite-like-dev.test.ts:194",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: before/after packed bytes and cold-worker timing are final measurement targets without fabricated latency threshold",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:99; docs/backlog/distribution/reference/no-coi-client-bundle-evidence.md:100",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: existing node-eval-context reference comparisons and assertions remain intact",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/node-eval-context.case.ts:1; tools/node-parity-runner/cases/process/node-eval-context-errors.case.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: restore every existing alias/discovery conformance assertion with preparation only; preserve example integration assertions",
+      "source": "acceptance",
+      "trace": "ADR-0382",
+      "status": "missing",
+      "citation": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:110",
+      "note": "Original discovery conformance assertions remain removed; current 210-test conformance suite passes with discovery absent. See Completeness finding."
+    },
+    {
+      "row": "ESM chunk load / false-fallback: real missing compiler output yields named chunk error and original cause; browser fault at final acceptance",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/client-compiler-loading.test.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Failed preload rejects with chunk cause, publishes no ready parser; default/explicit resolution still works",
+      "source": "fault-matrix",
+      "trace": "ADR-0382",
+      "status": "missing",
+      "citation": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:118",
+      "note": "Only existing failed-chunk carrier calls eval and passes while preload is absent. No preload rejection assertion exists. See Completeness finding."
+    },
+    {
+      "row": "Public preloadTsconfigPaths(): Promise<void> prepares synchronous discovery",
+      "source": "public-api",
+      "trace": "ADR-0382",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/tsconfig-preload.test.ts:28",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:118",
+          "summary": "Failed preload has no discriminating RED: the existing missing-chunk carrier passes while the entire preload scenario is absent.",
+          "authority": "ADR-0382 Decision: failed import rejects with original chunk cause and publishes no ready parser; Fault matrix row 2 -> ADR-0382; RDY-8",
+          "evidence": "Executed pnpm exec vitest run --project integration tests/integration/client-compiler-loading.test.ts at cdbc979ad: 3/3 GREEN (Vitest 2.1.9). Its missing-output runner imports only runNodeEntry and never preloadTsconfigPaths. Executed pnpm exec vitest run packages/runtime-js/src/module-loader/tsconfig-preload.test.ts: 3/3 expected behavioral REDs; public export is undefined, and its sole async test only exercises successful preload. Search of packages/runtime-js/src and tests shows no rejected-preload carrier. REV-5 class: available chunk-fault proof passes with the new scenario unimplemented. Add and execute a real missing-output preload test verifying rejection/cause, no ready parser, and retained default/explicit resolution before implementation. Fault class: ESM chunk load / false-fallback; sibling sweep must cover loader and resolver readiness."
+        },
+        {
+          "severity": "blocker",
+          "location": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:110",
+          "summary": "The restored discovery conformance obligation still has no committed carrier: the prior discovery assertions remain deleted and current conformance passes with discovery absent.",
+          "authority": "ADR-0382 Consequences: Restore all prior discovery conformance assertions, adding only preparation; Parity row 2 -> ADR-0382; RDY-8",
+          "evidence": "Executed pnpm exec vitest run --project conformance tests/conformance/modules/resolver.test.ts: 210/210 GREEN at cdbc979ad (Vitest 2.1.9), while the new preload suite proves discovery remains rejected. git diff d52ef8128 HEAD -- tests/conformance/modules/resolver.test.ts shows removed autoTsconfigResolveId and JSONC, malformed-config, baseUrl, grammar, inheritance/cache discovery assertions. The existing integration alias/baseUrl baseline is a valid RED, but does not replace the explicitly required prior conformance assertions. REV-5 class: the named conformance carrier passes with the restored discovery scenario unimplemented. Restore existing assertions with only async preparation adaptation, execute their RED before restoring product discovery."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

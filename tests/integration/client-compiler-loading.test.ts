@@ -31,6 +31,73 @@ function compilerOutputs(meta: Metafile): string[] {
 }
 
 describe('client compiler loading', () => {
+  it('failed tsconfig preload keeps default and explicit paths usable without publishing readiness', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'rifty-preload-fault-'));
+    try {
+      const result = await build({
+        stdin: {
+          contents: `
+import * as api from './packages/runtime-js/src/module-loader/index.ts';
+import { runNodeEntry } from './packages/runtime-js/src/builtins/node-entry.ts';
+import { MemoryFsSync } from './packages/vfs/src/internal/index.ts';
+export { api, runNodeEntry, MemoryFsSync };
+`,
+          resolveDir: process.cwd(),
+          sourcefile: 'preload-entry.ts',
+          loader: 'ts',
+        },
+        bundle: true,
+        splitting: true,
+        format: 'esm',
+        platform: 'browser',
+        metafile: true,
+        outdir: root,
+        outExtension: { '.js': '.mjs' },
+      });
+      const chunks = compilerOutputs(result.metafile);
+      expect(chunks.length).toBeGreaterThan(0);
+      const entry = Object.entries(result.metafile.outputs).find(
+        ([, output]) => output.entryPoint === 'preload-entry.ts',
+      )?.[0];
+      if (entry === undefined) throw new Error('missing preload entry');
+      expect(chunks.filter((path) => staticClosure(result.metafile, [entry]).has(path))).toEqual(
+        [],
+      );
+      for (const chunk of chunks) await rm(resolve(chunk));
+      const runner = resolve(root, 'runner.mjs');
+      await writeFile(
+        runner,
+        `
+import {api,runNodeEntry,MemoryFsSync} from ${JSON.stringify(pathToFileURL(resolve(entry)).href)};
+const vfs = new MemoryFsSync();
+vfs.loadFixture({'/work/value.js':'module.exports=42;'});
+await runNodeEntry({kind:'eval',vfs,cwd:'/work',source:'globalThis.__preloadJs=42',print:false,explicitCommonJs:false});
+let error;
+if (typeof api.preloadTsconfigPaths !== 'function') error={message:'preloadTsconfigPaths export missing',cause:''};
+else try { await api.preloadTsconfigPaths(); } catch (failure) { error={message:failure.message,cause:String(failure.cause)}; }
+let code;
+try { api.createModuleLoader(vfs,{autoDiscoverTsconfigPaths:true}); } catch (failure) { code=failure.code; }
+const value=api.createModuleLoader(vfs).require('./value.js','/work/main.js');
+const explicit=api.createModuleLoader(vfs,{paths:{value:'/work/value.js'}}).require('value','/work/main.js');
+console.log(JSON.stringify({error,code,value,explicit,js:globalThis.__preloadJs}));
+process.exit(0);
+`,
+      );
+      const output = JSON.parse(
+        execFileSync(process.execPath, [runner], {
+          encoding: 'utf8',
+          timeout: 10_000,
+        }),
+      );
+      expect(output.error?.message).toMatch(/TypeScript compiler chunk failed to load/u);
+      expect(output.error?.cause).toMatch(/Cannot find module/u);
+      expect(output.code).toBe('TSCONFIG_NOT_READY');
+      expect([output.value, output.explicit, output.js]).toEqual([42, 42, 42]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     'packages/runtime-js/src/worker-entry.ts',
     'packages/workbench/src/workers/no-coi-toolchain-worker.ts',
