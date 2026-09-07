@@ -31,13 +31,13 @@ describe('ordinary project package-named files', () => {
     const fs = project();
     const json = exportPlaygroundArchiveV1(fs, root);
     const restored = preparePlaygroundArchiveV1Import(fs, '/restored', json).decodedFiles();
-    expect(restored.find((file) => file.path === '/.vite/notes.txt')?.bytes).toEqual(content);
+    expect(restored.find((file) => file.path === '.vite/notes.txt')?.bytes).toEqual(content);
   });
   it('accepts a foreign archive containing ordinary .vite files', () => {
     const json = JSON.stringify({
       version: 1,
       root: '/',
-      files: [{ path: '/.vite/notes.txt', encoding: 'base64', content: btoa('user-owned notes') }],
+      files: [{ path: '.vite/notes.txt', encoding: 'base64', content: btoa('user-owned notes') }],
     });
     expect(
       preparePlaygroundArchiveV1Import(project(), '/restored', json).decodedFiles()[0]?.bytes,

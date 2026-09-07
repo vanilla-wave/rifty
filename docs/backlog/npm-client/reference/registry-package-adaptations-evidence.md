@@ -28,3 +28,5 @@ Independent read-only DEC-2 agent inspected raw source and ADRs. Registry `./run
 ## RED
 
 `pnpm exec vitest run packages/workbench/src/workbench/ordinary-package-files.contract.test.ts tools/checks/package-adaptation-ownership.test.ts`: 2 files, 6 failures (2026-09-07). Real owner snapshot omits notes; archive roundtrip drops notes; foreign archive rejects `.vite`. Three ownership checks expose Workbench implementations, runtime package key and generic Vite provenance. No import/typecheck failures.
+
+Contract review corrected the archive fixture: portable archive paths are relative. After changing both archive assertions/fixture to `.vite/notes.txt`, `pnpm exec vitest run packages/workbench/src/workbench/ordinary-package-files.contract.test.ts` still has 3 failures; foreign import now specifically throws `Playground archive path uses reserved segment ".vite"`. Original foreign-import failure was path normalization, not package classification; that original claim is withdrawn.
