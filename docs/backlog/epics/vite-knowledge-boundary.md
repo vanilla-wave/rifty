@@ -36,6 +36,45 @@ Each target is false on the inspected main baseline `1e91c3df5`; source witnesse
 
 Not split yet. FIT inventories the existing scope, chooses the route and cuts children by the semantic owner. Preserve the current draft path for incoming links; convert this legacy epic to a goal directory at FIT.
 
+Candidate progression, not compiled child contracts:
+
+1. Inventory existing adaptations and acceptance owners. Probe whether a missing general Node capability can eliminate each workaround; otherwise retain its registry-owned implementation. Result: bounded migration and preservation criteria, no product change yet.
+2. Consolidate install-only adaptations first. Result: existing supported packages receive the same prepared bytes through ordinary installation without Workbench-owned package patch policy.
+3. Consolidate runtime adaptation and remove package-named platform identity contracts. Result: existing script/bin and build/dev/HMR/restore paths obtain their adaptations through general platform capabilities; optional helpers remain compatible. Carrier choice follows evidence.
+4. Remove unrelated-project file/diagnostic policy leaks and close the inventory with ownership checks plus real browser acceptance. Result: ordinary projects retain their own files/provenance, and all existing adaptation cases are accounted for.
+
+## Research evidence
+
+- 2026-09-07 — main `c64cb2ebb` changes processes only since the inspected source baseline `1e91c3df5`. The captured source witnesses remain current.
+- ADR-0371 and `tools/shadow-registry/tools/generate-esbuild-runtime.ts` already separate registry derivation from the Workbench output location. With SDK rebuilds accepted, registry-owned finite implementations bundled with the SDK are a candidate; this does not require moving executable source into the data-only catalog or introducing another byte-delivery path. Import/layer/packaging viability remains unproven until FIT.
+- `node-entry-runtime-preparation.ts` activates admitted bindings for ordinary script/eval/bin entries too. `vite-node-entry-edge.ts` adds concrete preparation and suppresses activation for info modes. The earlier esbuild map's “only before Vite” description was too narrow; preserve all existing entry paths.
+- Executed with Node `v24.16.0`, Vitest `2.1.9`: `pnpm exec vitest run packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts packages/workbench/src/workers/vite-node-entry-edge.test.ts packages/workbench/src/workers/package-install-finalizer.test.ts packages/runtime-js/src/internal/worker-globals.test.ts` → 4 files passed, 42 tests passed. Evidence covers current dispatch validation, preparation and realm-slot contracts. Patch tests use synthetic source fixtures; these tests neither prove full package parity nor the proposed migration.
+- ADR-0278's archive clauses and `packages/workbench/src/workbench/internal/playground-archive.ts` also classify `.vite` by name. Include this I3 sibling alongside Files/snapshot paths; inspect the ADR-0286 corrections before changing archive behavior.
+
+## Challenge
+
+Fresh read-only critic, updated refine process; verdict below verbatim:
+
+> challenge: 2026-09-07 — clear
+>
+> Ценность следует из исходного требования: существующая совместимость получает одного владельца; платформе перестают требоваться esbuild/Vite/@emnapi-specific контракты. Это архитектурный результат, не доказательство нового функционального исправления.
+>
+> Минимальный кандидат — конечные registry-owned реализации, собираемые вместе с SDK, с существующими installed-tree bytes и lifecycle. Независимая доставка и публичный plugin API пользователю не нужны. Carrier ещё предстоит проверить.
+>
+> Альтернативы:
+>
+> - Перенос констант или переименование edge-модулей недостаточны: `node-entry-runtime-preparation.ts` непосредственно выбирает Vite planner; `workbench-runtime-adapters.ts` самостоятельно проверяет esbuild bytes, запускает клиент и публикует объект.
+> - Полный перенос клиента в installed guest package возможен только после отдельного обоснования. ADR-0371:35–38 уже отвергает этот маршрут из-за дополнительного механизма доставки и нарушения data-only catalog. Для выбранного результата он не обязателен.
+> - Исправление общей Node-возможности предпочтительно там, где действительно устраняет адаптацию. Однако исходники сами этого не доказывают: `vite-cli-install-policy.ts` меняет guest promise tracking и Chokidar; `emnapi-core-install-policy.ts` содержит точечный upstream backport. Нужен конкретный oracle/probe, прежде чем объявлять общий runtime fix достаточным.
+>
+> Замечания для FIT:
+>
+> - Сохранить startup-before-import, exact CJS identity, отсутствие запуска для Vite info, installed-tree/offline authority. Это условия проверки carrier, не новые вопросы пользователю.
+> - ADR-0278:613–617 отдельно предписывает исключение `.vite` при экспорте архивов и запрет таких путей при импорте. Учесть при инвентаризации I3 и оформлении ADR-коррекций; сохранение публичных helpers не означает сохранение каждого исторического исключения.
+> - Source inventory подтверждает распределённую политику; браузерные симптомы и полная существующая совместимость в этой проверке не воспроизводились.
+>
+> Нового обязательного user-owned выбора нет. Инвентаризация, carrier, probes и необходимые ADR-коррекции принадлежат агенту.
+
 ## Captured inventory
 
 PR #167 findings retained; source sites rechecked on 2026-09-07. Their behavioral repros have not been rerun in this refinement:
@@ -65,6 +104,7 @@ Source-confirmed additions, 2026-09-07; not an exhaustive inventory:
 - 2026-09-07 — user: rebuilding the SDK for an adaptation update is acceptable; independent update delivery is not required.
 - 2026-09-07 — user: preserve optional public Vite helpers; ordinary package execution must not require them.
 - 2026-09-07 — dedup: expand this draft; `preset-deglue` retains its separate user-visible lifecycle/provenance work. No new duplicate epic. Declined concepts and traps checked; no matching rejection of this outcome.
+- 2026-09-07 — early premise check clear under PR #315 process; reuse for unchanged promises at FIT/PICKUP. No new user scope choice or implementation authorization inferred.
 
 ## Open questions
 
@@ -80,5 +120,5 @@ Source-confirmed additions, 2026-09-07; not an exhaustive inventory:
 - Add mechanical ownership/dependency checks; prove unchanged supported behavior with real packages, VFS and browser parity/e2e. Source scans alone cannot close acceptance.
 - Do not use consumer count or adapter count as a design proxy; this epic must not encourage dummy adapters or parallel workarounds to justify an interface.
 - Resolve ADR-0226/0371 clauses that currently place startup, typed realm slots and the generated client in platform modules. Preserve installed-tree byte authority; do not revive the declined CAS/port delivery path.
-- Preserve public Vite helper compatibility under ADR-0263/0278 and no-COI generality under ADR-0375; this draft records intent, not a superseding implementation decision.
+- Preserve public Vite helper calls under ADR-0263/0278 and no-COI generality under ADR-0375. Resolve ADR-0278/0286 archive policy clauses for I3; helper compatibility does not freeze package-specific exclusions. This draft records intent, not a superseding implementation decision.
 - Keep user-visible de-gluing in `preset-deglue`; absorb only work actually required by this outcome, without duplicating contracts.
