@@ -74,3 +74,15 @@ answer excluded it. F2 exposed a material missing policy. Later conflict questio
 depended on the new apply-mode choice and are legitimate refinement progress.
 No finite checklist guarantees all future forks are known. The preventable
 failure is unsupported closure of choices discoverable from current evidence.
+
+## Investigation validation
+
+2026-09-07: `pnpm pr:check` passed, docs-only 20/20. Source lanes skipped:
+typecheck, build:libs, check:arch, test:run, test:parity. No product repair claimed.
+Independent Final+GREEN at `bb10375d0`, reviewer `/root/review_investigation`:
+PASS, no findings. Completeness, mission/architecture, goal drift, approach
+cost, scope and bugs PASS; regressions/ecosystem UX N/A for this capture.
+Reviewer inspected both documents, historical/current rules, committed anchors
+and raw report; exact transcript times/later answers were checked by the driver.
+Only this validation record was appended after that review. Prevention remains
+a proposal; independent replay has not established its effectiveness.
