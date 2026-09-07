@@ -19,10 +19,11 @@ Do not implement an unsettled promise: prepare it by `RDY-2`/`RDY-8` first.
    authority. Oracle claims carry command + output + version. A value measurable
    only after implementation becomes an acceptance target, not a fabricated
    pickup measurement. A spike that is the deliverable is implementation.
-3. Before adopting a new plan, an independent premise check asks whether the
-   value follows and a cheaper direct route exists. The Contract+RED reviewer
-   may perform it in the same pass; a goal's accepted premise is reused by its
-   children. Record `challenge: <date> — clear | N problems` in the ready doc.
+3. Before adopting a new plan, resolve any missing premise check per
+   `docs/backlog/README.md` §Challenge. Reuse an early refine check or the goal's
+   accepted premise for unchanged promises; otherwise the Contract+RED reviewer
+   may perform it in the same pass. Preserve the verdict and its evidence;
+   record `challenge: <date> — clear | N problems` in the ready doc.
    Resolve value/cheaper-route objections with evidence or the user's recorded
    decision; never re-litigate settled scope without new evidence.
 4. Obtain the preparation required by `RDY-8`, set an existing draft ready,

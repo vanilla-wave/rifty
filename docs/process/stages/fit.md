@@ -33,10 +33,12 @@ epic). Output: a ready goal directory (`../artifacts/goal.md`, `map.md`,
    stay `draft` (compiling here is scope error — PICKUP owns it, `RDY-1`). Add
    `## Out of scope`.
 6. **Ledger.** One header line.
-7. **Challenge.** One fresh independent critic on raw `goal.md` + `map.md`
-   (`docs/backlog/README.md` §Challenge). Verdict verbatim into `## Challenge`.
+7. **Challenge.** Apply `docs/backlog/README.md` §Challenge to the outcome and
+   route, reusing an early checked premise for unchanged promises. A missing
+   check or new evidence/changed promises gets a fresh critic with raw
+   `goal.md`, `map.md` and the evidence; record its verdict in `## Challenge`.
 8. **Report.** Flip `status: ready`; the driver writes the
-   completion report from the recorded facts (`rifty-to-backlog` §5);
+   completion report from the recorded facts (`docs/backlog/README.md` §Report);
    relay it. No approval gate. Pushback before the first PICKUP re-fits in
    place; after a run started → explicit user amendment (`RDY-6`).
 

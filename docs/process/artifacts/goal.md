@@ -11,7 +11,7 @@ checks authorization and the affected obligations.
 | `## Outcome` — user value + faithful-runtime payoff | user | FIT or explicit user amendment |
 | `## User scenario` — end-to-end steps whose success closes the goal | user | FIT or explicit user amendment |
 | `## Invariants` — numbered `I#`, user-observable, each false on current main (evidence comment above the list) | user via FIT | FIT or explicit user amendment; the trace targets of every child row (`readiness.md` `RDY-3`) |
-| `## Challenge` — fresh critic verdict `challenge: <date> — clear | N problems` (`docs/backlog/README.md` §Challenge) | critic | append at FIT / re-fit |
+| `## Challenge` — fresh critic verdict `challenge: <date> — clear | N problems` (`docs/backlog/README.md` §Challenge) | critic | refine / FIT; reuse unchanged premise |
 | `## Decisions` — fit-time one-liners; `rejected route: <route> — violates <I#|Outcome clause>` | user + agent at FIT | FIT or explicit user amendment |
 
 Amend in place: `amend: <date> — user: <their words> — <what changed and why>`
