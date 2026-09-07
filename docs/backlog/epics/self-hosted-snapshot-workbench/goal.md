@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: ready
+status: draft
 title: Self-hosted Workbench from published assets and dependency snapshots
 created: 2026-09-07
 value: An existing app bakes its Node dependency snapshot in its own CI and runs edit/build/preview from self-hosted published assets without a browser registry or interference with the host's storage and routes.
@@ -85,6 +85,10 @@ Each statement below is false on that baseline; gzip decoding alone is already t
    deadline. Defaults and mutation-settlement semantics remain explicit.
 
 ## Decisions
+
+- 2026-09-07 — re-fit opened before first pickup: user challenged the no-open-forks claim; status demoted to draft, existing Outcome/scenario/I1–I7 retained verbatim pending F1/F2 in map.md.
+- 2026-09-07 — F1 unresolved: whether the producer must acquire authenticated private-registry packages without host-written auth/proxy code (I1, scenario 1); URL configuration alone is not that proof.
+- 2026-09-07 — F2 unresolved: behavior of an edited persisted project when the host deploys a new snapshot (I1/I3, scenarios 1/4); baseline creates a fresh Scratch on changed snapshot identity even with preserveDirtySameStarter.
 
 - 2026-09-07 — user selected feedback 3, 6, 7, 4, 8, 5, 10 and gzip; other feedback is not added.
 - 2026-09-07 — user: a new storage root starts empty; old projects stay accessible under the previous setting; no migration.

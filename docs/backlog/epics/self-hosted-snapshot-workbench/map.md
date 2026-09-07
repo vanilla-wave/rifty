@@ -19,9 +19,17 @@
 
 ## Open questions
 
-- None at observable-scope altitude; standard tar.gz from the producer and
-  collision-free separation are user-decided. Wire layout and exact fault rows
-  belong to pickup, without reopening that scope.
+- F1. Must the CI producer support authenticated private registries without a
+  host-written auth script/proxy? — owner: user — current refine frontier;
+  basic configured-URL support and public fixture proof do not answer it.
+- F2. On deploying a new dependency snapshot, should edited persisted projects
+  update dependencies while preserving source, or retain all bytes and require
+  an explicit update decision when compatibility changes? — owner: user —
+  current refine frontier; baseline change-of-snapshot reseed proven in evidence.
+
+Goal is draft; existing children are provisional, no pickup until F1/F2 close.
+Archive format, collision-free paths, namespace migration and orphan preservation
+choices remain settled and are not reopened.
 
 ## Existing authorities
 

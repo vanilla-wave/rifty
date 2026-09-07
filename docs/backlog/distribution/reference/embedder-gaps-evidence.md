@@ -144,3 +144,33 @@ Observed listing: all five names above; final assertion passed. This proves
 ordinary-tool interoperability of a candidate envelope and same-name separation,
 not the future rifty writer/reader, all tar entry types or its input validator.
 Names/PAX writer above are a disposable probe, not a mandated implementation.
+
+## Re-fit scope audit
+
+2026-09-07, at 1f5a932fe (product code unchanged from baseline):
+
+- `RegistryClientOptions` has baseUrl/custom fetch, no dedicated auth option;
+  current bake script supplies a plain fetch. The goal promises configured
+  registry but neither states nor proves authenticated private-registry access.
+- `playground-project-definition.ts` includes snapshotId in baseline identity.
+  `createScratch` preserves dirty bytes only for a matching baseline. Whether a
+  deployed replacement snapshot should refresh an existing edited project or
+  await explicit action is not defined in this goal.
+
+Disposable Vitest probe extended the existing real Memory VFS/catalog harness:
+create a snapshot-backed Scratch (snapshot id `sha256:` + 64 `a` characters),
+open, write user.txt, record a file mutation, close; call createScratch with
+otherwise identical definition and id `sha256:` + 64 `b` characters, passing
+preserveDirtySameStarter:true. The input asset URL stays unchanged. No package
+installation runs in this catalog harness; it isolates catalog selection.
+
+```text
+pnpm exec vitest run packages/workbench/src/workers/temporary-refine-scope-audit.test.ts -t 'scope audit:'
+Vitest 2.1.9: 1 passed, 50 skipped.
+Before: dirty=true, user.txt contains "user edit".
+REFINE_SCOPE_SNAPSHOT_UPDATE {"dirty":false,"userFileExists":false}
+```
+
+The probe asserts that observed current behavior; it is not a failing regression
+or a claimed repair. Temporary test removed. This qualifies the earlier same-
+definition reload proof: that proof never changed snapshotId and still stands.
