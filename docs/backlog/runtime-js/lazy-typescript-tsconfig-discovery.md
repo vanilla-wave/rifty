@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 epic: no-coi-client-bundle
 title: Load the TypeScript compiler only on the paths that need it — never in the boot graph of a JavaScript-only runtime worker
 created: 2026-06-26
@@ -60,6 +60,9 @@ challenge: 2026-09-06 — 4 problems
 
 ## Decisions
 
+- 2026-09-07 — pickup: ADR-0380; no production discovery caller; remove discovery, retain explicit paths and loud obsolete-option throw. Internal runner accepts prepared compiler; `projectNodeEvalError` receives it.
+- 2026-09-07 — RED/reference: `docs/backlog/runtime-js/reference/lazy-compiler-evidence.md`; independent Contract+RED pending, no implementation yet.
+
 - 2026-09-06 — fork resolved via rifty-refine (sync-eval classifier): acorn
   parses first; the compiler is reached only on the acorn-fail path.
 - 2026-09-06 — boundary (after challenge): the async owner is `runNodeEntry`;
@@ -80,3 +83,33 @@ challenge: 2026-09-06 — 4 problems
 - 2026-09-06 — compiler chunk fetch failure on the lazy path → loud error
   naming the chunk, never a silent JavaScript-only classification.
 - Reversibility: REVERSIBLE — internal loading strategy.
+
+## User scenario
+
+The accepted host scenario is `docs/backlog/epics/no-coi-client-bundle/goal.md`.
+Run a JavaScript-only worker and CLI eval without loading the compiler; run
+non-JavaScript eval through the existing reference classification/error path.
+
+## Acceptance
+
+- Neither worker's complete eager graph (entry, automatic bootstrap, static closure) contains TypeScript, including real packed tarballs under ESM splitting. → I1
+- JavaScript CLI eval runs without awaiting/importing the compiler; existing completion/identity/lifecycle/error assertions remain unchanged. → I1
+- Non-JavaScript eval lazily loads the real compiler and preserves current named gaps and SyntaxErrors, including explicit CommonJS const markers. → I1
+- Explicit `paths` and default resolution retain ADR-0066 behavior; removed discovery calls throw loudly, with no replacement config parser. → ADR-0380
+- Record before/after packed bytes and cold-worker boot timing; latency has no invented pass threshold. → scenario
+
+## Parity cases
+
+- Existing `process/node-eval-context*` cases retain Node-vs-rifty output/identity/error/lifecycle assertions; no reference golden changes. → I1
+- Existing explicit alias resolver conformance remains; only ADR-0170-exclusive discovery cases retire under ADR-0380. → ADR-0380
+
+## Fault matrix
+
+| Boundary / axis | Operation | Required outcome and carrier |
+|---|---|---|
+| ESM chunk load / false-fallback | first non-JS eval with compiler chunk unavailable | Loud compiler-chunk error with original URL/path cause; actual missing bundle output in `tests/integration/client-compiler-loading.test.ts`, browser request fault at final acceptance. → I1 |
+
+## Out of scope
+
+- TypeScript eval execution remains the loud `runtime-js.node-eval-typescript-context` gap (compat ❌); no new stripper.
+- Generic/no-COI VM policy, install splitting and io packaging belong to their linked goal items.

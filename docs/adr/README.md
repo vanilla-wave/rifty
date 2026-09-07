@@ -85,6 +85,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0352 | Realm-wide QuickJS preload uses host-published WASM |
 | 0353 | Callable Node stream constructors preserve legacy initialization |
 | 0365 | Single-hop small-file sync-RPC reads |
+| 0380 | Lazy eval compiler and explicit loader paths |
 
 ### runtime-wasi
 
