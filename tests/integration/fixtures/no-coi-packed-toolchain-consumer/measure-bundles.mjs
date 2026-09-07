@@ -24,6 +24,8 @@ export async function measureClientBundles() {
     return compilerInputs.get(input);
   }
   for (const [name, contents] of Object.entries({
+    ioProbe:
+      "export { Buffer, EventEmitter, Stream, Readable, Writable, Duplex, Transform, PassThrough } from '@riftydev/io'",
     runtimeHost: "export { spawnRuntime } from '@riftydev/runtime-js'",
     main: "export { createSandbox } from '@riftydev/sdk'",
     sw: "import '@riftydev/service-worker/sw'",
@@ -114,6 +116,9 @@ export async function measureClientBundles() {
       if (entry) compilerLoads[operation] = servedPath(entry[0]);
       else if (name === 'eval') throw new Error(`Missing ${operation} lazy compiler entry`);
     }
+    const backendEntry = Object.entries(result.metafile.outputs).find(
+      ([, output]) => output.entryPoint === 'node_modules/@riftydev/vfs/dist/index.js',
+    );
     rows.push({
       name,
       min,
@@ -123,6 +128,7 @@ export async function measureClientBundles() {
       eager: [...eager].map(servedPath),
       compiler,
       compilerLoads,
+      backendLoad: backendEntry ? servedPath(backendEntry[0]) : null,
     });
     for (const file of result.outputFiles) {
       await mkdir(dirname(file.path), { recursive: true });

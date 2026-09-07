@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 epic: no-coi-client-bundle
 title: Published sdk main and sw bundles carry only executed code — statement-level side-effect-free io root, generic-only vfs import, src worker entries marked side-effectful
 created: 2026-09-06
@@ -65,6 +65,10 @@ challenge: 2026-09-06 — 5 problems
 
 ## Decisions
 
+- 2026-09-07 — pickup: observed package defects + behavior-preserving graph cleanup, RDY-8/rifty-fix baseline → RED → fix → independent Final+GREEN; no new runtime API/state machine.
+- 2026-09-07 — real source wrapper emits an empty entry (0 bytes); minified packed Buffer/EventEmitter/Stream names differ from native Node. Constructor initialization/name ownership moves together; one packed differential gate covers all eight constructors.
+- 2026-09-07 — generic backend chunk failure follows existing bootVfs memory fallback with visible reason; toolchain never invokes the page backend.
+
 - 2026-09-06 — agent carrier (after challenge, closes the BLOCKING line):
   make the `@riftydev/io` root statement-level side-effect-free — the ~11
   impure top-level sites become `/* @__PURE__ */`-annotated or factory-wrapped
@@ -85,3 +89,38 @@ challenge: 2026-09-06 — 5 problems
   attributed to `io/dist/index.js` in sw and in sdk main ≤ 5 KB (today 48);
   packed-consumer test stays green.
 - Reversibility: REVERSIBLE — annotations and import placement.
+
+## User scenario
+
+A host bundles real packed SDK main/sw with ESM splitting, boots toolchain mode,
+then generic mode. Only generic creation loads the page backend. A source worker
+wrapper importing the documented no-COI entry boots and evaluates real Buffer
+code. A minified packed io consumer runs Buffer, EventEmitter and stream code
+with the same constructor identity/names and byte/event results as native Node.
+
+## Acceptance
+
+- Published main/sw each retain at most 5120 bytes attributed to io/dist/index.js; actual packed tarballs and complete eager graphs are the authority. → I3
+- Buffer/EventEmitter/Stream factories retain initialization and Node names under minification; all eight public constructor identities and the shared operation scenario match native Node. → scenario
+- Only generic SDK creation fetches the page backend entry; existing explicit deps and toolchain behavior remain. → I3
+- Workbench's source worker exports are marked side-effectful beside dist counterparts; actual bare-import no-COI wrapper boots and executes Buffer code. → I3
+
+## Parity cases
+
+- Same Buffer encoding/backing-store alias, callable EventEmitter/Stream, constructor/prototype identities and Readable→PassThrough flow against native Node and the actual minified packed io graph. → scenario
+- Existing io/buffer/events/stream conformance and parity remain unchanged. → scenario
+
+## Fault matrix
+
+| Boundary / axis | Operation | Outcome |
+|---|---|---|
+| Package bundler / sibling-drift | source vs dist worker wrapper | Real entry cannot disappear; source wrapper emits the actual worker and boots. → I3 |
+| Package bundler / sibling-drift | minified constructor initialization | Live constructor retains full prototype/statics and public Node name; packed differential proof covers all eight. → scenario |
+| Network / false-fallback | generic page-backend chunk unavailable | Existing visible memory fallback/reason; real Worker fs remains usable; no page backend request from toolchain. → scenario |
+
+## Reference contract
+
+Node v24.16.0; esbuild 0.28.0; unchanged io operations against native node:buffer,
+node:events and node:stream. `tests/integration/sdk-packaging-proof.mjs` runs the
+same scenario in fresh native processes. Baseline and RED:
+`docs/backlog/distribution/reference/sdk-packaging-evidence.md`.
