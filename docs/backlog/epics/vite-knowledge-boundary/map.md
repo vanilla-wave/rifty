@@ -2,8 +2,6 @@
 
 ## Items
 
-1. `npm-client/registry-package-adaptations` — transfer finite adaptation owners, remove unrelated-project policy, prove existing consumers; no dependencies.
-
 ## Open questions
 
 None; carrier: ADR-0384. Inventory and evidence: `docs/backlog/npm-client/reference/registry-package-adaptations-evidence.md`.

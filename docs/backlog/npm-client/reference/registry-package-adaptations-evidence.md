@@ -63,3 +63,9 @@ Final inventory sweep: shell/terminal `real-vite` modes are retained host/persis
 Production `playwright.prod.config.ts`, port 5550, workers=1: 2 passed (36.8s), fresh app build; owner/dev-server LIVE and child global/module Buffer identity preserved.
 
 Final browser probe rerun: 7/7 esbuild/Vite/Express scenarios passed (1.0m). Additional paired Vite8 acceptance: optional Vite helper and ordinary npm-dev-server with explicit compatible manifest/dev script both pass build/dev/preview, real browser rendering, no esbuild fetch/publication (2/2, 30.8s). The shared render helper requires a server project's ready handle; the preliminary node-cli carrier ran its noop and supplied no handle, so the ordinary carrier correctly uses npm-dev-server and its user dev script.
+
+## Final verification
+
+`pnpm pr:check` on `c31cd02ae759a3e6eea7515da33e3297d4f1ab3d`: 25/25 PASS; unit 223.2s, Node parity 60.5s; no failing-file rerun in this final gate. Independent Final+GREEN: 32/32 coverage, zero blockers, goal complete. Reviewer independently ran 111 focused tests and the real Node Express oracle.
+
+Reviewer advisory verified against original `df3cd222f`: standard `snapshots:bake` also resolves PostCSS 8.5.26 → 8.5.28 in all three snapshots (nine package files changed). No added adaptation or override; existing semver ranges selected the newer patch. Real browser/build/packed acceptance above covers the resulting trees. This dependency refresh is part of the delivered artifacts, not claimed as a move-only change.

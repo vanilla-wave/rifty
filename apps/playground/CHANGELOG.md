@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Refresh installed-package snapshots for registry-owned adaptation identity (ADR-0384).
+- Refresh installed-package snapshots for registry-owned adaptation identity; normal semver resolution also updates PostCSS 8.5.26 → 8.5.28 (ADR-0384).
 
 ### Added
 
