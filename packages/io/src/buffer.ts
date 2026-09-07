@@ -28,7 +28,7 @@ export type { Encoding };
  */
 const BUFFER_BRAND = Symbol.for('@riftydev/io.Buffer');
 
-export class Buffer extends Uint8Array {
+class BufferImplementation extends Uint8Array {
   /**
    * Ensure `subarray()` / `slice()` and similar typed-array operations that
    * use `Symbol.species` return a `Buffer`, not a plain `Uint8Array`.
@@ -335,14 +335,15 @@ export class Buffer extends Uint8Array {
   }
 }
 
-const arrayBufferByteLength = Object.getOwnPropertyDescriptor(
+const arrayBufferByteLength = /* @__PURE__ */ Object.getOwnPropertyDescriptor(
   ArrayBuffer.prototype,
   'byteLength',
 )?.get;
 const sharedArrayBufferByteLength =
   typeof SharedArrayBuffer === 'undefined'
     ? undefined
-    : Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength')?.get;
+    : /* @__PURE__ */ Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength')
+        ?.get;
 
 /** Raw backing-store predicate; intrinsic getters also recognize foreign realms. */
 function isAnyArrayBuffer(value: unknown): value is ArrayBuffer | SharedArrayBuffer {
@@ -398,16 +399,16 @@ function bufferOutOfBounds(name: 'offset' | 'length'): RangeError {
   return error;
 }
 
-// Installers take the class as an opaque constructor (no type-back imports)
-// so check:arch sees no circular reference between this file and the helpers.
-installCoreMethods(Buffer);
-installIntMethods(Buffer);
-installExtraMethods(Buffer);
-
-// Brand the prototype with the shared `Symbol.for` key so EVERY Buffer instance —
-// including ones created by a DUPLICATE class copy in the prod worker bundle — is
-// recognized by `isBuffer`/`instanceof Buffer` regardless of class identity.
-Object.defineProperty(Buffer.prototype, BUFFER_BRAND, { value: true });
+export type Buffer = BufferImplementation;
+// Keep initialization with the exported value so unused root imports can drop it.
+export const Buffer = /* @__PURE__ */ (() => {
+  installCoreMethods(BufferImplementation);
+  installIntMethods(BufferImplementation);
+  installExtraMethods(BufferImplementation);
+  Object.defineProperty(BufferImplementation.prototype, BUFFER_BRAND, { value: true });
+  Object.defineProperty(BufferImplementation, 'name', { configurable: true, value: 'Buffer' });
+  return BufferImplementation;
+})();
 
 export type BufferLike = Buffer;
 

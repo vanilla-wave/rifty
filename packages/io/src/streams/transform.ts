@@ -132,7 +132,7 @@ export type TransformConstructor = CallableStreamConstructor<
   TransformOptions
 >;
 
-export const Transform: TransformConstructor = makeCallableStreamConstructor(
+export const Transform: TransformConstructor = /* @__PURE__ */ makeCallableStreamConstructor(
   'Transform',
   TransformImplementation,
   (receiver, options) => {

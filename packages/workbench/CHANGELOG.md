@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve every source worker entry in bare-import consumer wrappers, beside published dist entries.
+
 ### Fixed
 
 - No-COI install snapshots reuse mirror bytes until outgoing structured clone instead of pre-copying the full tree.

@@ -19,9 +19,13 @@ export interface Stream extends EventEmitter {}
 // Empty body: EventEmitter state is lazily created on first use (see
 // event-emitter.ts), so `Stream.call(this)` needs to do nothing — it exists
 // only so `util.inherits(X, require('stream'))` has a callable constructor.
-export function Stream(this: object): void {}
+export const Stream = /* @__PURE__ */ (() => {
+  function Stream(this: object): void {}
 
-// Inherit EventEmitter on both the instance side (prototype chain) and the
-// static side (Stream.defaultMaxListeners, etc.) — mirrors Node's Stream.
-Object.setPrototypeOf(Stream.prototype, EventEmitter.prototype);
-Object.setPrototypeOf(Stream, EventEmitter);
+  // Inherit EventEmitter on both the instance side (prototype chain) and the
+  // static side (Stream.defaultMaxListeners, etc.) — mirrors Node's Stream.
+  Object.setPrototypeOf(Stream.prototype, EventEmitter.prototype);
+  Object.setPrototypeOf(Stream, EventEmitter);
+  Object.defineProperty(Stream, 'name', { configurable: true, value: 'Stream' });
+  return Stream;
+})();

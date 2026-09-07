@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Load the page VFS backend only for generic sandbox creation; import failure retains the visible memory fallback.
+
 - No-COI toolchain defaults `node:vm` to rewrite; `vmEngine: 'quickjs'` restores
   real-realm execution. Selection reaches boot and survives restart; capability
   report discloses rewrite divergences (ADR-0383).

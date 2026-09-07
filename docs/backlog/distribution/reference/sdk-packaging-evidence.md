@@ -26,3 +26,17 @@ Reproduce packed RED: `node tests/integration/workbench-packed-consumer.mjs
 --surface-only --keep`; focused runner imports `proveSdkPackaging` and reads
 that consumer's measure/report.json. The same helper's browser phase checks
 source wrapper boot and generic backend success/fault after byte/semantic GREEN.
+
+GREEN (2026-09-07): real packed consumer, 15 first-party + 72 external tarballs;
+strict TypeScript and all compiler/VM/SDK browser proofs pass. Main 56,861 B min /
+18,033 B gzip; sw 14,056 / 4,828. All eight constructor identities/names plus
+byte/event/stream results match native Node. Generic-only backend fetch and
+real aborted import preserve existing memory fallback/reason and worker fs.
+Actual source wrapper boots and executes Buffer. Focused io/SDK/source suite:
+701 tests pass.
+
+Revert checks executed against the real packed package: restore baseline io
+root → io byte/name guards fail; restore static SDK backend → deferred-entry
+guard fails; move import outside bootVfs fallback → browser fault case throws;
+remove source worker sideEffects flag → wrapper entry assertion fails (0 B).
+All files restored, same complete packed proof GREEN.

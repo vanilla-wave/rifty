@@ -19,7 +19,6 @@ import {
   registerServiceWorker,
   setupPreviewBridge,
 } from '@riftydev/service-worker';
-import { initBackend } from '@riftydev/vfs';
 import type { CapabilityCheck } from './capabilities.ts';
 
 /** Which VFS backend booted. */
@@ -272,7 +271,10 @@ export async function createSandbox(
     });
   }
 
-  const vfs = await bootVfs(deps.initVfs ?? initBackend, logger);
+  const vfs = await bootVfs(
+    deps.initVfs ?? (async () => (await import('@riftydev/vfs')).initBackend()),
+    logger,
+  );
   const { swError } = await bootServiceWorker(options, deps, logger);
 
   const spawn = deps.spawn ?? spawnRuntime;

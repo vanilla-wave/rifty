@@ -158,7 +158,12 @@ const SPEC = {
   '@riftydev/workbench': {
     dir: 'packages/workbench',
     sideEffects: [
+      './src/workers/workbench-owner-bootstrap.ts',
       './src/workers/kernel-worker-entry.ts',
+      './src/workers/node-entry-bootstrap.ts',
+      './src/workers/dev-server-child-bootstrap.ts',
+      './src/workers/ts-lsp-worker-entry.ts',
+      './src/workers/no-coi-toolchain-worker.ts',
       './dist/owner-worker.js',
       './dist/kernel-worker.js',
       './dist/node-worker.js',

@@ -20,7 +20,7 @@ const instances={
  Transform:new Transform({transform(chunk,encoding,done){done(null,chunk)}}),
  PassThrough:new PassThrough(),
 };
-const identity=Object.fromEntries(Object.entries(instances).map(([name,value])=>[name,value.constructor===constructors[name]]));
+const identity=Object.fromEntries(Object.entries({Buffer:buffer,EventEmitter:emitter,Stream:legacy,...instances}).map(([name,value])=>[name,value.constructor===constructors[name]]));
 for(const value of Object.values(instances))value.destroy();
 let streamed='';for await(const chunk of Readable.from([Buffer.from('a'),Buffer.from('b')]).pipe(new PassThrough()))streamed+=chunk.toString();
 console.log(JSON.stringify({names:Object.fromEntries(Object.entries(constructors).map(([name,value])=>[name,value.name])),identity,hex:buffer.toString('hex'),store:[...new Uint8Array(store)],events,streamed}));

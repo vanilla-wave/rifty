@@ -1341,7 +1341,7 @@ export type ReadableConstructor = CallableStreamConstructor<
   ReadableOptions
 >;
 
-export const Readable: ReadableConstructor = makeCallableStreamConstructor(
+export const Readable: ReadableConstructor = /* @__PURE__ */ makeCallableStreamConstructor(
   'Readable',
   ReadableImplementation,
   (receiver, options) => {
