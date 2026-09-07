@@ -1,0 +1,146 @@
+# Embedder intake evidence — 2026-09-07
+
+Baseline: main 333224fe46f22fe9c974429a81fbc4b7d0cc63f8 (2026-09-06).
+User source: in-session review of the 2026-08-21 Tracker embedder report against
+Workbench 0.4.0, followed by selection 3, 6, 7, 4, 8, 5, 10 + gzip.
+The report's 105 MB / 16 s figures are not reproduced measurements.
+
+## Main observations
+
+| Goal row | Repro/source | Observed result |
+|---|---|---|
+| I1 | packages/workbench/src/workbench/public.ts; packages/workbench/package.json; apps/playground/tools/bake-dep-snapshots.ts | producer imports private checkout modules; public producer/current identity absent |
+| I2 | packages/workbench/tsup.config.ts; packages/workbench/README.md; tests/integration/fixtures/workbench-vite-consumer/host-builtins.ts | external package imports remain; consumer needs aliases and QuickJS host wrapper |
+| I3 | packages/workbench/src/workbench/internal/workbench-options.ts; packages/workbench/src/workers/package-acquisition-authority.ts | registryUrl required; rejected first snapshot becomes deferred install |
+| I4 | packages/vfs/src/sync-mirror.ts; packages/vfs/src/opfs-sync.ts | installOpfsFs has no root; init gets origin root and preloads all files |
+| I5 | packages/io/src/preview-protocol.ts; packages/workbench/src/workbench/internal/workbench-options.ts | fixed /preview/<port>; no prefix option |
+| I6 | browser probe below; packages/workbench/src/workers/playground-project-authority.ts | unjournaled orphan blocks createScratch; recovery handles owned journals/stages, not this case |
+| I7 | packages/workbench/src/workbench/workbench-owner-port.ts; packages/workbench/src/workers/workbench-owner-storage.ts; packages/workbench/src/workbench/workbench-browser-owner.ts; packages/workbench/src/workbench/internal/playground-session-tools-transport.ts | hidden 30 s ready/proof and 60 s file/tool budgets |
+
+These are product observations, not real-Node oracle claims. Existing fidelity
+and trust gates stand; each child's Contract+RED supplies its deliverable proof.
+
+## Executed checks
+
+Vitest 2.1.9 on the baseline:
+
+```text
+pnpm exec vitest run packages/workbench/src/workers/owner-storage.test.ts \
+  packages/workbench/src/workers/playground-project-catalog.contract.test.ts \
+  packages/workbench/src/glue/git-initial-baseline.test.ts \
+  packages/workbench/src/glue/git-initial-baseline.fault.test.ts \
+  packages/shell/tests/command-resolver-discovery.test.ts \
+  packages/workbench/src/workbench/project-files.contract.test.ts \
+  packages/workbench/src/workbench/workbench-browser-owner.test.ts \
+  packages/workbench/src/glue/dep-snapshot.test.ts
+8 files passed; 162 tests passed.
+
+pnpm exec vitest run packages/workbench/src/glue/dep-snapshot.test.ts -t 'raw gzip bytes'
+1 file passed; 1 test passed, 23 skipped.
+```
+
+The gzip test passes raw gzip bytes and already-decoded JSON through the real
+fetchDepSnapshot decoder. Only fetch is substituted (external boundary).
+The producer already uses gzipSync; loader recognizes magic bytes, bounds both
+compressed and decompressed bodies at 128 MiB, and verifies snapshotId over
+uncompressed serialized bytes. That existing decoding is preserved; the user later clarified the missing
+capability is ordinary tar.gz file entries, not this compressed JSON format.
+
+Playwright 1.60.0 Chromium, disposable test on real COI Workbench/OPFS:
+
+```text
+RIFTY_PLAYGROUND_PORT=5397 pnpm exec playwright test \
+  --config playwright.browser-unit.config.ts temporary-embedder-audit.spec.ts
+2 passed (5.3s).
+ProjectFiles: beforeReload {dirty:true,persisted:false};
+             afterReload {dirty:true,text:"user edit"}.
+Orphan: {ok:false,messages:["Catalog mutation target already exists: scratch"]}.
+```
+
+Reproduce orphan: fresh isolated browser context → gotoHarness → use native
+navigator.storage.getDirectory()/getDirectoryHandle(create:true) to create
+/.rifty/workbench/v1/projects/scratch/tree/user.txt with bytes `orphan bytes`,
+without catalog.json or transaction.json → attemptBootOwner with
+{workspaceId:'embedder-audit',hiddenEmptyBoot:true,persistence:'required'}.
+Actual result is the quoted error. This proves recovery is missing for that
+state; it does not prove that a normal interrupted catalog transaction creates
+that state. The 50 existing catalog contract tests, including fault/restart
+rows, passed. Disposable probe code was removed after the run.
+
+## Dedup and boundary inventory
+
+Searched docs/backlog titles, code refs, epic maps/links and
+`docs/adr/README.md` Declined concepts for producer, snapshot-only, prebuilt
+workers, OPFS root, orphan Scratch, preview prefix and configurable timeouts.
+No exact matching item/declined concept for the original seven capabilities.
+After the archive clarification, the existing representation question in
+playground/snapshot-carries-substituted-bytes-twice matches that part: it is
+assigned to dep-snapshot-producer, leaving cache/tree deduplication separate.
+Related owners retained:
+
+- docs/backlog/distribution/embed-host-vite-example.md and
+  docs/backlog/epics/embeddable-dev-loop.md: ready React/registry-backed dev-loop;
+  new goal is the static-assets/snapshot-only headless path, no ready recut.
+- docs/backlog/distribution/create-rifty-template.md: new-app scaffolding,
+  not an asset distribution or existing-app requirement.
+- docs/backlog/playground/baked-snapshot-regeneration.md: first-party freshness,
+  cadence and git size; no public producer delivery.
+- docs/backlog/distribution/public-api-ai-agent-contract-snapshot-restore.md:
+  whole Sandbox state/fork, not baked dependency snapshots.
+- docs/backlog/playground/workspace-to-scratch-migration.md: ancient /workspace
+  adoption; this namespace choice explicitly does not migrate.
+- docs/backlog/playground/project-ingress-transaction.md: folder/Git/archive
+  ingress; existing catalog owner is reused, no second transaction authority.
+- docs/backlog/playground/reload-crash-consistency-fault-e2e.md: global existing
+  operation crash rows; this goal owns new namespace/orphan transition proof.
+- docs/backlog/epics/fault-honest-sw-preview/goal.md: termination semantics,
+  not configurable addressing; routing prefix preserves that boundary.
+
+Fault models: network (snapshot/assets), storage (OPFS/catalog), Worker/Port
+(owner operations), SW (preview). Use docs/process/rules/fault-classes.md.
+Existing mechanisms: catalog durable transaction/journal, owner origin lease,
+package acquisition FIFO, VFS commit coordinator, owner deadlines and canonical
+preview parser. No new coordinator is prescribed; any proposed addition needs
+its Class-kill inventory at pickup. Node/package behavior is not approximated.
+
+## Archive scope — user decisions
+
+2026-09-07: producer-generated standard tar.gz, not an arbitrary local
+node_modules import. User requires collision-free rifty-specific paths.
+Control/cache and user payload must occupy disjoint envelope branches; a user
+path with the same text as a control path remains nested in payload. Standard
+archive inspection must work without a rifty decoder. No performance number for
+tar.gz is claimed. Existing base64 research is context, not this format's proof.
+
+## Standard-archive namespace probe
+
+Python 3.9.6 + bsdtar 3.5.3 / libarchive 3.7.4. Run from any disposable directory:
+
+```python
+import io, pathlib, subprocess, tarfile, tempfile
+root = pathlib.Path(tempfile.mkdtemp(prefix="rifty-envelope-"))
+archive = root / "snapshot.tar.gz"
+files = {
+    "rifty/manifest.json": b'{"format":1}',
+    "rifty/replay-cache/source.tgz": b"cache bytes",
+    "payload/rifty/manifest.json": b"user manifest",
+    "payload/.rifty/manifest.json": b"user hidden file",
+    "payload/payload/user.txt": b"user nested payload",
+}
+with tarfile.open(archive, "w:gz", format=tarfile.PAX_FORMAT) as out:
+    for name, contents in files.items():
+        entry = tarfile.TarInfo(name)
+        entry.size, entry.mtime = len(contents), 0
+        out.addfile(entry, io.BytesIO(contents))
+target = root / "extracted"
+target.mkdir()
+subprocess.run(["tar", "-tzf", str(archive)], check=True)
+subprocess.run(["tar", "-xzf", str(archive), "-C", str(target)], check=True)
+assert all((target / name).read_bytes() == data for name, data in files.items())
+print("5/5 entries preserved by system tar; user and control paths disjoint")
+```
+
+Observed listing: all five names above; final assertion passed. This proves
+ordinary-tool interoperability of a candidate envelope and same-name separation,
+not the future rifty writer/reader, all tar entry types or its input validator.
+Names/PAX writer above are a disposable probe, not a mandated implementation.
