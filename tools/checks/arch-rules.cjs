@@ -65,7 +65,7 @@ const dependencyPolicyRules = [
     name: 'registry-data-does-not-load-runtime',
     severity: 'error',
     comment: 'ADR-0384: npm catalog consumers do not load executable package adaptations',
-    from: { path: '(?:^|/)shadow-registry/src/(?:index\\.ts|internal/)' },
+    from: { path: '(?:^|/)shadow-registry/src/', pathNot: '(?:^|/)shadow-registry/src/runtime/' },
     to: { path: '(?:^|/)shadow-registry/src/runtime/' },
   },
 

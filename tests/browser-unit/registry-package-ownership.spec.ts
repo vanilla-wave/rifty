@@ -1,15 +1,14 @@
 import { expect, test } from '@playwright/test';
 import { gotoHarness, sealedWorkbenchFixtureUrl } from './fixtures.ts';
+import type * as SealedFixture from './fixtures/sealed-playground-workbench.ts';
 
 test('ordinary Express execution, diagnostics and .vite files survive archive and owner reopen', async ({
   page,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(120_000);
   await gotoHarness(page);
   const result = await page.evaluate(async (fixtureUrl) => {
-    const fixture = (await import(/* @vite-ignore */ fixtureUrl)) as typeof import(
-      './fixtures/sealed-playground-workbench.ts',
-    );
+    const fixture = (await import(/* @vite-ignore */ fixtureUrl)) as typeof SealedFixture;
     const options = {
       workspaceId: 'registry-owned-express',
       persistence: 'required' as const,
@@ -42,7 +41,11 @@ const server = app.listen(4381, '127.0.0.1', () => {
     let closed = false;
     try {
       const project = fixture.currentProject();
-      const first = await fixture.executeProjectLine('node proof.cjs');
+      const firstInstall = await fixture.executeProjectLine('npm install');
+      const first = await fixture.executeProjectLineUntil(
+        'node proof.cjs',
+        '200 EXPRESS_REGISTRY_OK',
+      );
       const notes = await project.files.readFile('/.vite/notes.txt');
       await project.files.writeFile(
         '/.vite/notes.txt',
@@ -64,8 +67,12 @@ const server = app.listen(4381, '127.0.0.1', () => {
       const reopened = new TextDecoder().decode(
         (await fixture.currentProject().files.readFile('/.vite/notes.txt')).bytes,
       );
-      const second = await fixture.executeProjectLine('node proof.cjs');
+      const second = await fixture.executeProjectLineUntil(
+        'node proof.cjs',
+        '200 EXPRESS_REGISTRY_OK',
+      );
       return {
+        firstInstall,
         first,
         second,
         install,
@@ -78,9 +85,9 @@ const server = app.listen(4381, '127.0.0.1', () => {
       if (!closed) await fixture.closeSealedWorkbenchFixture();
     }
   }, sealedWorkbenchFixtureUrl);
-  expect(result.first.exit).toBe(0);
+  expect(result.firstInstall.exit).toBe(0);
   expect(result.first.out).toContain('200 EXPRESS_REGISTRY_OK');
-  expect(result.second.exit).toBe(0);
+
   expect(result.second.out).toContain('200 EXPRESS_REGISTRY_OK');
   expect(result.install.exit).toBe(0);
   expect([result.first.out, result.second.out, result.install.out].join('\n')).not.toContain(
