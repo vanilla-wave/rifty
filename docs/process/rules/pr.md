@@ -2,59 +2,50 @@
 
 ## PR-1 One PR = one reviewable delivered behavior
 
-Never a workspace, hypothesis probe, or vehicle for process state. A draft
-PR in flight may hold only process state while its unit waits on a stop; it
-merges only with a delivery.
+A PR may carry source, its tests, dependency/packaging changes, documentation,
+and the checking infrastructure needed to deliver that behavior. Scope follows
+the accepted result, not the directory or type of file (`REV-12`).
 
-## PR-2 Discoveries ride the branch
+## PR-2 Discoveries ride the work
 
-Everything the unit discovers commits into its branch: contract flips,
-demotions, re-cuts, splits, intake drafts, lineage. A finding never opens a
-second PR. A change with nothing to trace (`readiness.md` `RDY-3`) — four
-CHANGELOG lines, a docs fix, a defect fix, a CI rule — has no unit doc: it is
-its own `review: ordinary` unit and its own PR (`RDY-8`); nothing is minted
-for it, nothing is journaled beyond the PR, and nothing waits for "the next
-delivery". A capture with no unit branch to ride (a post-merge audit) is such
-a docs-only PR carrying the minted draft.
+Verified work required by the result is repaired in the current unit; update
+its contract when needed. Useful work outside that result is recorded only if
+it waits. Notes do not become tasks. The same rule applies before, during, and
+after review (`REV-12`); the discovering actor does not choose the route.
+A standalone request needs no invented backlog item or goal to carry it.
 
-## PR-3 Draft PR at the first commit
+## PR-3 Packaging is the driver's
 
-A unit opens its draft PR at its first commit. Inside a goal one draft PR
-carries every slice by default; never one per attempt; splitting into several
-PRs is allowed, never required. The body names the goal and each carried
-slice. Slices land serially — the next PICKUP waits for the prior slice's
-PASS, its `BASE` (`review.md` `REV-8`); with split PRs, never stack one on an
-unmerged other. Merge is the goal PR's, at the end by default, by the
-driver (`decisions.md` `DEC-3`: pre-authorized once given).
+One draft PR per goal by default; combine or split when that makes the delivered
+behavior easier to assess. No mandatory separate PR per stage, discovery,
+referee, or retry. Open a draft at the first commit; keep its body aligned with
+the delivered behavior. Merge permission persists (`DEC-3`). Goal slices are
+reviewed against the prior accepted slice; splitting PRs does not change proof.
 
-## PR-4 Separate-PR demands name their gate
+## PR-4 Independent criteria, not separate PRs
 
-A rule demanding a separate PR holds only if it names the gate forcing it.
-Today one: `check:contract-drift` refuses a diff that touches code (a
-production path or a test) and edits anything outside the product, its tests
-and parity cases (`tools/node-parity-runner/cases/**` — the RED that cannot
-be faked rides with the change it proves), examples, deploy/perf, the backlog
-and ADR docs, changelogs, lockfile and workspace/tsconfig structure — CI, the
-gates, the parity oracle harness (`src/`), the process canon, agent
-instructions, every lint/test/lane config (root or package-local `vitest`/
-`playwright` configs and `package.json`s) judge the PR and land separately,
-never as a "carrier" of the unit that needs them changed. An open rule: a new
-judge is a referee by default.
+A change cannot weaken its own correctness criteria to manufacture GREEN.
+When it changes a gate, oracle, test/lane configuration or process rule, the
+independent reviewer compares the old criterion, the proposed criterion and
+their evidence in the same PR. A legitimate criterion change is recorded with
+its reason; a weaker test hiding a product defect is a Fidelity blocker.
+The reviewer reads the baseline rule from git, not only the edited rule.
+This applies by what changed, never by declaring every `package.json` a judge.
+No path classifier dictates PR boundaries.
 
 ## PR-5 User-asked PR
 
-A PR the user explicitly asks for is their call: open it, name what it carries
-(zero source, docs-only, process state), never refuse or re-litigate.
+The user's requested packaging wins. State what it delivers and continue;
+never make the user argue with the process about its container.
 
 ## PR-6 DoD
 
-`AGENTS.md` §DoD is the checklist; `pnpm pr:check` is its machine half. Its
-lanes follow the diff class (`tools/checks/ci-change-scope.mjs`, the CI
-classifier): a docs-only tree never runs `typecheck`, `build:libs`,
-`check:arch`, `test:run`, `test:parity`; a red `test:run` reruns its failed
-files once in isolation, labelled with the time-out count — a failure that
-reproduces in isolation stays red and is an observed defect (`rifty-fix`), a
-pass on rerun is reported and captured (`rifty-to-backlog`, fault class
-`concurrent-same-key` or host load — `fault-classes.md`), never hidden and
-never declared a flake without a record. Merge has its own machine half:
-`pnpm check:pass-binding` (`review.md` `REV-8`) on a PR marked ready.
+`AGENTS.md` §DoD stays binding: `pnpm pr:check`, real acceptance proof,
+root-cause repairs, package CHANGELOGs. Lanes follow the CI diff classifier.
+A red `test:run` reruns failed files once in isolation, reporting timeout counts;
+a reproducing failure stays red. A passing rerun is reported and its diagnosis
+recorded if unresolved; no speculative repair or hidden retry loop.
+`check:pass-binding` runs after final review, immediately before merge and in
+ready-PR CI. It is not a pre-review `pr:check` lane: tests precede review;
+binding consumes that review. It checks the reviewed version on a product/test PR;
+it does not turn a correctly shaped BLOCK into PASS (`REV-8`).

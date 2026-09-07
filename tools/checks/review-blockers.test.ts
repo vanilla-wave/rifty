@@ -64,7 +64,7 @@ it('requires one coverage row per traced obligation of the contract when it can 
   expect(evaluateVerdict(verdict, null, null).code).toBe(0); // no reader: shape check only
 });
 
-it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until every blocker is ruled (REV-12)', () => {
+it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until independently resolved (REV-12)', () => {
   const fidelity = {
     severity: 'blocker',
     summary: 'stub returns a constant',
@@ -88,7 +88,12 @@ it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until eve
     goal_residuals: [],
     goal_complete: false,
   };
-  const ruling = (s: string, r: string) => ({ summary: s, ruling: r, clause: 'a.ts:1 carrier' });
+  const ruling = (s: string, r: string) => ({
+    summary: s,
+    ruling: r,
+    by: 'critic',
+    clause: 'a.ts:1 carrier',
+  });
   expect(evaluateVerdict(verdict, [ruling('stub returns a constant', 'STRETCH')]).code).toBe(2);
   expect(evaluateVerdict(verdict, [ruling('stub returns a constant', 'FALSE')]).code).toBe(1); // 'naming' unruled → residual blocks
   expect(
@@ -96,7 +101,7 @@ it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until eve
       ruling('stub returns a constant', 'FALSE'),
       ruling('naming', 'FALSE'),
     ]).code,
-  ).toBe(0);
+  ).toBe(1); // rejecting findings does not resolve the required residual
   expect(evaluateVerdict(verdict, []).code).toBe(1); // empty adjudication never neutralises residuals
   // Zero blockers + [] adjudication: residuals still block (nothing was ruled).
   const noBlockers = {
@@ -106,15 +111,20 @@ it('refuses STRETCH on a Fidelity blocker and keeps residuals blocking until eve
   expect(evaluateVerdict(noBlockers, []).code).toBe(1);
   // FALSE on a Fidelity blocker must cite the carrier as file:line.
   const falseNoCarrier = [
-    { summary: 'stub returns a constant', ruling: 'FALSE', clause: 'exists' },
+    { summary: 'stub returns a constant', ruling: 'FALSE', by: 'critic', clause: 'exists' },
     ruling('naming', 'FALSE'),
   ];
   expect(evaluateVerdict(verdict, falseNoCarrier).code).toBe(2);
   const falseCited = [
-    { summary: 'stub returns a constant', ruling: 'FALSE', clause: 'a.ts:12 real impl' },
+    {
+      summary: 'stub returns a constant',
+      ruling: 'FALSE',
+      by: 'critic',
+      clause: 'a.ts:12 real impl',
+    },
     ruling('naming', 'FALSE'),
   ];
-  expect(evaluateVerdict(verdict, falseCited).code).toBe(0);
+  expect(evaluateVerdict(verdict, falseCited).code).toBe(1);
   // The token: a Fidelity authority not written as `AGENTS.md §Fidelity…` is invalid.
   const loose = {
     ...verdict,
@@ -343,17 +353,19 @@ describe('evaluateVerdict', () => {
     }));
     const withBoth = verdict({ overall_verdict: 'blocker', goal_complete: false, axes });
     const survived = evaluateVerdict(withBoth, [
-      { summary: 'Real gap.', ruling: 'HOLDS' },
-      { summary: 'Taste demand.', ruling: 'STRETCH' },
+      { summary: 'Real gap.', ruling: 'HOLDS', by: 'critic' },
+      { summary: 'Taste demand.', ruling: 'STRETCH', by: 'critic' },
     ]);
     expect(survived.code).toBe(1);
     expect(survived.blockers.map((f: { summary: string }) => f.summary)).toEqual(['Real gap.']);
     expect(survived.demoted.map((f: { summary: string }) => f.summary)).toEqual(['Taste demand.']);
     const allDemoted = evaluateVerdict(withBoth, [
-      { summary: 'Real gap.', ruling: 'FALSE' },
-      { summary: 'Taste demand.', ruling: 'STRETCH' },
+      { summary: 'Real gap.', ruling: 'FALSE', by: 'critic' },
+      { summary: 'Taste demand.', ruling: 'STRETCH', by: 'critic' },
     ]);
     expect(allDemoted.code).toBe(0);
-    expect(evaluateVerdict(withBoth, [{ summary: 'No such.', ruling: 'STRETCH' }]).code).toBe(2);
+    expect(
+      evaluateVerdict(withBoth, [{ summary: 'No such.', ruling: 'STRETCH', by: 'critic' }]).code,
+    ).toBe(2);
   });
 });

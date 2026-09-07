@@ -3,21 +3,17 @@ name: rifty-to-backlog
 description: Formalize a rifty finding or idea into a deduplicated, gated backlog draft. Direct invocation = mid-task/agent intake (audit/review/post-merge discoveries, no user in session); user-brought input enters via rifty-refine, which runs this formalization as its final step.
 ---
 
-Capture = classify → dedup → gate → `draft` → challenge → report. Never an
-interview or contract compilation: mid-task an observable fork is recorded in
-the draft + manual `rifty-refine` requested; invoked as the `rifty-refine`
-formalize tail, forks arrive already settled and mint with their evidence.
+Capture = verify relevance → dedup → record a fact/question that must wait.
+Never invent work from a review suggestion. `REV-12` routes verified facts
+by the accepted result, regardless of the discovering actor or stage.
 
 ## 1. Classify
 
-Capability/test/tooling/design debt → backlog. Doc drift → fix the doc. No user
-or project impact → stop. Inside an active goal run, required work
-reverse-links to the goal; only outside-goal work enters ordinary backlog. A
-review finding is never intake (`docs/process/rules/review.md` `REV-12`):
-on the unit under review it is dispositioned there; on a landed unit a defect
-it reveals is an observed defect (`rifty-fix`), anything else is the user's
-(`rifty-refine`). A product defect a reviewer saw OUTSIDE the unit's boundary
-is a discovery and enters here.
+Required by authorized work → repair in that work; update obligations if needed.
+Useful outside its result → capture when deferred, naming owner/trigger.
+Advice without an obligation → note, no automatic item. A user scope choice
+is asked in-session; no second hand-off for work already authorized. Facts
+need evidence; uncertain claims remain questions.
 
 ## 2. Dedup
 
@@ -50,53 +46,14 @@ carrier) or **finding** (observed `## Context`, honest sources, compat ❌ /
 code-marker link) — never a solution without its decision. Optional real-path
 `user_story`. Done when `pnpm backlog:check` passes.
 
-## 5. Challenge
+## 5. Adoption and report
 
-One fresh read-only critic per minted doc (`docs/backlog/README.md`
-§Challenge): raw file only — no author framing; it attacks the premise, sizes
-the impact claim against the whole, and names problems — especially user
-experience and project direction. Verdict verbatim into `## Challenge`.
-Advisory — problems never block the capture; they ride verbatim in the
-capturing PR body.
+A captured draft needs no independent critic. Before adopting a new plan at
+FIT/PICKUP, run the premise check (`docs/backlog/README.md` §Challenge); the
+Contract+RED reviewer may do it in the same pass. Never postpone it past the
+commitment to build.
 
-## 6. Report
-
-Canon for every USER-FACING write-up report (refine, FIT via
-`docs/process/stages/fit.md` step 8). A mid-task capture has no reader in
-session: no report — the draft rides the unit's branch and one ledger /
-journal line names it. A FRESH subagent with clean context writes it from
-the recorded docs alone (no author framing — same independence as README
-§Challenge: a report the docs cannot support proves the write-up incomplete;
-fix the docs, never pad the report). Relay it in the conversation. User's
-language, ONE screen, no file paths beyond required item ids, no process
-internals; fixed form:
-
-1. Plan — 2-4 plain sentences: what the user gets and why now, tied to user
-   experience and project direction (mission/milestone). Never mechanics.
-2. What changes — experience-level: what starts working, what will loudly
-   degrade (warn) or throw. Never file lists.
-3. Steps — name the epic once (`epics/<slug>`), then ordered slices, ONE line
-   each: the item id (`area/slug`) + what it is in plain words, ending with
-   the observable result once that slice lands ("after this: X works").
-4. Risks — ONLY challenge problems that could change the user's decision to
-   proceed, translated into plain risk statements ("if this is acceptable,
-   nothing to do"); problems already fixed in the docs are omitted, verbatim
-   text stays in the doc's `## Challenge`. Each entry opens with its origin —
-   why it exists despite refinement ("critic finding — axis your interview
-   never covered", "probe result", …).
-5. Open questions for you — ONLY genuinely undecided points: origin (who found
-   it and why it is NOT re-opening something you decided — e.g. "critic found
-   a middle option between your two decided poles") + when it fires + the
-   exact question + the default if you stay silent. Already-decided
-   checks/probes are NOT questions — they ride their Step, with a conditional
-   spelled out there ("if the probe shows X, we return with question Y").
-   None → say so in one line.
-6. How to start — one line: the exact hand-off that begins the work (ready
-   goal: "goal-run epics/<slug>"; single item: the pickup ask). Nothing
-   starts without it.
-
-A report, not an approval ask.
-
-After capture: `docs/process/rules/readiness.md` owns draft→ready;
-verification = the unit's Contract+RED checkpoint at pickup (an unresolved
-observable fork = request manual `rifty-refine`, don't self-run the interview).
+The driver reports user-facing work from recorded facts: result, proof,
+remaining questions. No fresh report agent or fixed six-part template. A
+mid-task capture needs no separate report. Continue work already authorized;
+capture is not a manual relay station.

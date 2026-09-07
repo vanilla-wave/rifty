@@ -2,7 +2,7 @@
 /**
  * Merge-time PASS binding (docs/process/rules/review.md REV-8): a PR that changes a product
  * path or a product test carries a landing verdict — `docs/backlog/<area>/reference/<slug>-final-green.json`
- * or `…-ordinary.json`, written by the runner with `reviewed_sha` — whose reviewed commit is an
+ * written by the runner with `reviewed_sha` — whose reviewed commit is an
  * ancestor of HEAD and from which every later change is documentation
  * (tools/checks/ci-change-scope.mjs). A draft PR is skipped: the binding is asked of a PR
  * marked ready to merge, never of work in flight.
@@ -10,8 +10,9 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { evaluateVerdict } from '../review/blockers.mjs';
+import { reviewContract } from '../review/contract.mjs';
 import { isDocumentationOnlyPath } from './ci-change-scope.mjs';
-import { checkpointVerdictShape, ordinaryVerdictShape } from './contract-drift.mjs';
 import { classifyAutonomousRunPath } from './run-pickup.mjs';
 
 const SHA_RE = /^[0-9a-f]{40}$/u;
@@ -19,8 +20,7 @@ const SHA_RE = /^[0-9a-f]{40}$/u;
 // (tools/, CI, canon) are guarded by PR-4 and their own tests, never by a landing verdict.
 const PRODUCT_TEST_ROOT_RE =
   /^(?:apps|packages|services|tests|tools\/node-parity-runner\/cases)\//u;
-const LANDING_ARTIFACT_RE =
-  /^docs\/backlog\/[^/]+\/reference\/[^/]+-(final-green|ordinary)\.json$/u;
+const LANDING_ARTIFACT_RE = /^docs\/backlog\/[^/]+\/reference\/[^/]+-(final-green)\.json$/u;
 
 function parse(text) {
   try {
@@ -31,25 +31,13 @@ function parse(text) {
   }
 }
 
-/** The artifact minus its sha — a re-pointed sha on an unchanged verdict is no new review. */
-function withoutSha(text) {
-  return (text ?? '').replace(/"reviewed_sha"\s*:\s*"[0-9a-f]{40}"/u, '');
-}
-
 /**
  * @param {{ changed: string[], readHead: (path: string) => string|null,
- *   readBase?: (path: string) => string|null, isAncestor: (sha: string) => boolean,
+ *   readReviewed?: (path: string, sha: string) => string|null, isAncestor: (sha: string) => boolean,
  *   diffSince: (sha: string) => string[], draft: boolean }} input
  * @returns {{ status: 'ok'|'skipped'|'fail', reason: string, artifact?: string, sha?: string }}
  */
-export function evaluateBinding({
-  changed,
-  readHead,
-  readBase = () => null,
-  isAncestor,
-  diffSince,
-  draft,
-}) {
+export function evaluateBinding({ changed, readHead, readReviewed, isAncestor, diffSince, draft }) {
   if (draft) return { status: 'skipped', reason: 'draft PR — binding is asked at ready-for-merge' };
   const product = changed.filter((path) => {
     const kind = classifyAutonomousRunPath(path);
@@ -67,20 +55,21 @@ export function evaluateBinding({
   for (const artifact of artifacts) {
     const headText = readHead(artifact);
     const verdict = parse(headText);
-    // A landing verdict is a shaped review (REV-8), never a filename with a sha in it.
-    const kind = LANDING_ARTIFACT_RE.exec(artifact)?.[1];
-    const shape =
-      kind === 'ordinary'
-        ? ordinaryVerdictShape(verdict)
-        : checkpointVerdictShape(verdict, 'Final+GREEN');
-    if (shape !== null) {
-      failures.push(`${artifact}: ${shape}`);
-      continue;
-    }
-    // An artifact that existed at base and differs only in reviewed_sha was re-pointed, not reviewed.
-    const baseText = readBase(artifact);
-    if (baseText !== null && withoutSha(baseText) === withoutSha(headText)) {
-      failures.push(`${artifact}: reviewed_sha re-pointed on an unchanged verdict — not a review`);
+    const result = evaluateVerdict(
+      verdict,
+      undefined,
+      readReviewed && verdict?.reviewed_sha
+        ? (path) => readReviewed(path, verdict.reviewed_sha)
+        : null,
+    );
+    if (
+      result.code !== 0 ||
+      verdict?.checkpoint !== 'Final+GREEN' ||
+      !SHA_RE.test(verdict?.reviewed_sha ?? '')
+    ) {
+      failures.push(
+        `${artifact}: no valid Final+GREEN PASS (${result.errors.join('; ') || 'blockers or missing review identity'})`,
+      );
       continue;
     }
     const sha = verdict.reviewed_sha;
@@ -89,6 +78,16 @@ export function evaluateBinding({
       continue;
     }
     const broken = diffSince(sha).filter((path) => !isDocumentationOnlyPath(path));
+    const contract = /docs\/backlog\/[^\s`'"@]+\.md/u.exec(verdict.unit_goal_source)?.[0];
+    if (
+      contract &&
+      readReviewed &&
+      readHead(contract) !== null &&
+      reviewContract(readHead(contract)) !== reviewContract(readReviewed(contract, sha))
+    ) {
+      failures.push(`${artifact}: reviewed contract changed`);
+      continue;
+    }
     if (broken.length === 0) return { status: 'ok', reason: 'bound', artifact, sha };
     failures.push(
       `${artifact}: ${broken.length} non-documentation path(s) changed after reviewed_sha ${sha.slice(0, 12)}: ${broken.slice(0, 3).join(', ')}`,
@@ -135,9 +134,9 @@ function main() {
         return null;
       }
     },
-    readBase: (path) => {
+    readReviewed: (path, sha) => {
       try {
-        return git('show', `${base}:${path}`);
+        return git('show', `${sha}:${path}`);
       } catch {
         return null;
       }

@@ -6,44 +6,28 @@ nothing numeric is declared at pickup.
 
 ## RDY-1 When
 
-PICKUP compiles one unit, JIT: inside a goal the frontier child (the hand-off
-boundary is the ready `goal.md`; children stay `draft` until their own PICKUP;
-FIT never compiles a child), outside a goal the item itself. The verdict is
-the unit's Contract+RED at pickup — item `ready` is a per-unit event, never a
-precondition for starting.
+PICKUP identifies the accepted result and missing evidence for any authorized
+change. A goal's children compile just in time; FIT sets the destination,
+not every implementation contract. A draft can be captured without review.
+Do not implement an unsettled promise: prepare it by `RDY-2`/`RDY-8` first.
 
 ## RDY-2 Compile
 
-1. Exhaust code, ADR, real-Node, and disposable-spike evidence.
-2. Resolve internal forks yourself. A missing section is not a reason to
-   invoke a skill.
-3. Remaining user-observable fork → leave draft, surface the exact branch,
-   request manual `rifty-refine`; never interview mid-task.
-4. Every Parity/Fault row carries a reproducible artifact — command + output +
-   version; model memory is not evidence; a prescribed carrier with no
-   spike/ADR fact = frozen assumption. Evidence is about the ORACLE and the
-   baseline (real Node, the current product, a disposable spike), never about
-   the deliverable: a number that exists only once the unit is built (its own
-   cold start, its own lane time) is an Acceptance row traced to `I#` /
-   `scenario`, whose artifact is the RED that IMPLEMENT turns green. A spike
-   that is the deliverable is implementation. A "go/no-go at pickup" that
-   depends on measuring the deliverable is a premise question — FIT/refine
-   (`review.md` `REV-6`), not a pickup step (2026-09-02
-   `react-vite-starter`: the tile was built inside pickup to measure it). An
-   open blocking `## Challenge` premise problem (value does not follow /
-   cheaper direct authority — `docs/backlog/README.md` §Challenge) is answered
-   in the doc or overridden by the user on the record; never flip past it.
-5. All forks resolved + rows evidenced + `RDY-3`/`RDY-4` satisfied → set
-   `ready`, run `pnpm backlog:check`, continue. No «settled with caveats». A
-   **question** draft ("is this mechanism still load-bearing?") whose probe of
-   the current product answers "keep it" is not compiled: it is declined here
-   — one `docs/adr/README.md` §Declined concepts row citing the probe, draft
-   deleted; "retire it" compiles like any unit (membership `RDY-8`; a
-   repo-wide removal is one CHANGELOG line, `DEC-1` 5).
-   Verification is the unit's Contract+RED at pickup (fresh reviewer, raw
-   contract, no framing — frame-then-validate voids the check); its verdict is
-   copied VERBATIM as the first line of `## Decisions`:
-   `ready-verdict: <date> — Contract+RED @ <sha>`.
+1. Exhaust code, ADR, real-Node and disposable-spike evidence. Resolve internal
+   choices yourself; ask only for an unresolved user-observable choice.
+2. Record the scenario, acceptance, applicable parity/fault cases and their
+   authority. Oracle claims carry command + output + version. A value measurable
+   only after implementation becomes an acceptance target, not a fabricated
+   pickup measurement. A spike that is the deliverable is implementation.
+3. Before adopting a new plan, an independent premise check asks whether the
+   value follows and a cheaper direct route exists. The Contract+RED reviewer
+   may perform it in the same pass; a goal's accepted premise is reused by its
+   children. Record `challenge: <date> — clear | N problems` in the ready doc.
+   Resolve value/cheaper-route objections with evidence or the user's recorded
+   decision; never re-litigate settled scope without new evidence.
+4. Obtain the preparation required by `RDY-8`, set an existing draft ready,
+   run `backlog:check`, continue. A question answered by a probe may be closed
+   here; no need to compile a declined plan or invent a second delivery.
 
 ## RDY-3 Trace — obligations come from the destination
 
@@ -85,8 +69,7 @@ splits, each a checkpoint lineage of its own, and cut the one chokepoint
 
 A ready unit may be re-cut at any time by the agent: trim, split, merge,
 re-order, demote rows to notes. Record one line in `## Decisions`
-(`re-cut: <date> — <what changed> — trace: none`) and, inside a goal, one
-ledger line; a split
+(`re-cut: <date> — <what changed> — trace: none`) with a link from the goal ledger when it changes the route; a split
 successor names its predecessor in that line — history stays on the
 predecessor, nothing is copied (`review.md` `REV-8`). A successor that only
 carries rows and RED tests already certified in its predecessor's
@@ -96,7 +79,7 @@ Contract+RED skips that checkpoint: first `## Decisions` line
 Dropping or weakening a row traced to `I#` or `scenario` changes observable
 scope: that is the user's (`STOP-1a`) — demote to `draft`, record the fork and
 the pre-demotion row verbatim as one dated `## Decisions` line (any
-wording), request manual `rifty-refine`; the resolution lands as `re-cut:
+wording), ask the user using `rifty-refine` in this session; the resolution lands as `re-cut:
 <date> — fork: <what> — trace: I#` and the unit compiles again at PICKUP
 (inheritance where only certified rows carry). Never absorb silently. Rows traced only to ADRs/rules and untraced rows are agent-owned;
 an ADR-traced row leaves only with the ADR named in the `re-cut:` line.
@@ -104,14 +87,19 @@ an ADR-traced row leaves only with the ADR named in the `re-cut:` line.
 changed beside source carries a `re-cut:` line; fewer user-traced rows need
 `fork:` on that line, fewer ADR-traced rows the ADR named; whether a reworded
 row was weakened is review's (`review.md` `REV-10` axis 3).
-The active `goal.md` is never re-cut — amend = CLOSE + FIT.
+The goal changes only by a user amendment (`RDY-6`).
 
-## RDY-6 Refine altitude
+## RDY-6 Authority and amendments
 
-The user owns observable scope; the agent owns carriers (cache placement, wire
-shape, tokens, storage layout). A carrier enters a contract only as a
-constraint, an ADR choice, or a disposable-spike fact. Keep spike evidence;
-discard spike code.
+The user owns observable scope; the agent owns carriers and implementation.
+A user decision may amend a ready goal in place. Record in `## Decisions`:
+`amend: <date> — user: <their words> — <changed obligations and why>`.
+Keep prior evidence/history; rechart dependencies and independently recheck
+changed promises before implementing them (`RDY-8`). Unchanged obligations
+keep valid evidence. No CLOSE + FIT and no repeated approval of the same choice.
+An amendment record proves attribution; review verifies actual authorization.
+Silence, a technical failure, an ADR or a new reviewer demand is not user consent.
+Carrier constraints require an ADR choice or a discriminating spike artifact.
 
 ## RDY-7 Reachability
 
@@ -120,28 +108,20 @@ Without one, record the attempt and keep `draft`. Inject only faults physically
 allowed by `fault-classes.md` §Boundary failure models and within the epic
 tier. Raising tier requires an ADR.
 
-## RDY-8 Review membership
+## RDY-8 Preparation follows missing evidence
 
-Two values, one line in `## Decisions` at pickup: `review: checkpoints |
-ordinary`. A unit has a contract doc when it has obligations to trace
-(`RDY-3`). It is `checkpoints` when those obligations are product behavior
-to build — parity, cache, persistence, network, concurrency: Contract+RED
-before code, Final+GREEN after. It records `ordinary` when they are proof
-about landed behavior (test carriers, evidence, a mechanism record, an ADR)
-or its subject is docs, CI, process, tooling or harness — such a unit changes
-no production path: `check:contract-drift` refuses a ready flip beside
-production source without a Contract+RED verdict, and a production change
-inside it is a `REV-2` blocker. A unit with nothing
-to trace has no doc at all and is `ordinary` by construction: a defect fix
-(its RED test is the proof — `rifty-fix`), a docs change, a CHANGELOG line,
-a CI rule; nothing is minted for it and nothing is journaled beyond its PR
-(`pr.md` `PR-2`).
+There is one review route and one verdict model (`REV-8`). Before implementing:
 
-`ordinary` = one fresh review after implementation (`review.md` `REV-11`,
-`../stages/checkpoint-run.md` §Ordinary review), findings dispositioned
-inline (`REV-12`), the FIX set fixed once and verified by the same reviewer;
-no machine verdict, no lineage; a traced row the reviewer finds without a
-discriminating carrier is a FIX finding citing that row (`REV-4`), a product
-change inside a proof unit is `REV-1` scope. A loop that
-checkpoints every child regardless is the defect that put a CI unit through
-12 rounds (2026-08-30, `no-coi-substrate-lane`).
+- A new parity/stateful promise needs independent Contract+RED: the reference
+  behavior and discriminating REDs, then Final+GREEN after implementation.
+- An observed defect already has a contract in the real Node/existing baseline.
+  Capture that artifact, execute its RED, fix the root cause, then Final+GREEN.
+  A fix label never excuses a speculative oracle or an untested change.
+- Proof for landed behavior reuses its accepted authority. Verify the new
+  proof discriminates; no new-behavior checkpoint merely because it has a doc.
+- Docs/CI/process/tooling need relevant checks and Final+GREEN. Any product
+  behavior they introduce follows the first two rules, wherever the file lives.
+
+No `review: ordinary|checkpoints` membership declaration. Legacy labels and
+verdict lines are history; preparation is established by their actual evidence.
+A doc exists when useful for obligations; it never grants or removes a gate.

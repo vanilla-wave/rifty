@@ -22,7 +22,6 @@ gate: `backlog:check`.
 ```md
 ready-verdict: <date> — Contract+RED @ <sha>          first line at pickup, verbatim
 ready-verdict: <date> — inherited from <area>/<slug> @ <sha>
-review: checkpoints | ordinary                         RDY-8
 re-cut: <date> — <what changed> — trace: none           RDY-5; a split names its predecessor here
 re-cut: <date> — fork: <what> — trace: I#               resolved via rifty-refine
 override: <date> — <challenge problem> — <user words>   docs/backlog/README.md §Challenge
@@ -30,17 +29,11 @@ override: <date> — <challenge problem> — <user words>   docs/backlog/README.
 - <fork resolved or ADR-linked; no open "Decide X">
 ```
 
-Inside a goal the Final+GREEN PASS, reception and stop lines go to the goal
-ledger (`ledger.md`); the landed unit is deleted by RECHART. Outside a goal
-the doc is deleted on done. Either way the verdicts stay:
-`docs/backlog/<area>/reference/<slug>-{contract-red,final-green}.json`
-(`REV-8`) — delete on done deletes the contract, never the record. A unit
-with no doc at all — nothing to trace: a defect fix, a docs change
-(`readiness.md` `RDY-8`) — leaves only its `…-ordinary.json` when it touched
-product or tests. No status lines, no
-counters: the pass history is git log (`REV-8`). `check:contract-drift`
-compares only status + the graded sections (User scenario … Out of scope);
-everything else in the file is journal or path.
+Every unit uses the same review record (`verdict.md`). A unit with no useful
+contract doc names its PR and baseline in the verdict. Deleting the completed
+draft does not delete the review; no ordinary/prose record format exists.
+`check:contract-drift` compares the graded sections; decisions and context are
+history. `check:pass-binding` validates the review and its actual version.
 
 Not in a unit: evidence blocks (→ `docs/backlog/<area>/reference/<slug>-evidence.md`),
 fork narratives and diagnoses (→ ledger / `reference/`), review reasoning (→

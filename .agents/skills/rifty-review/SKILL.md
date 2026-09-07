@@ -16,10 +16,11 @@ ordered axes, `coverage` with traces, `unit_residuals`, `goal_residuals`, and
 `goal_complete` only after end-to-end proof with both residual sets empty
 (`docs/process/artifacts/verdict.md`). Cite `file:line`.
 
-Checkpoint runs (Contract+RED / Final+GREEN — fresh isolated reviewer,
-reception, stall): `docs/process/stages/checkpoint-run.md`. Units marked
-`review: ordinary` (or with no contract doc at all) get ONE prose review on
-these axes (§Ordinary review there), FIX findings fixed in place and
-verified; "missing Contract+RED" and "no coverage table" are not findings
-there — but a production path changed under `review: ordinary` is a `RDY-8`
-blocker (`REV-2`).
+One procedure and one JSON verdict for every change:
+`docs/process/stages/checkpoint-run.md`. `RDY-8` decides the required
+pre-implementation proof. Never infer it from a filename, membership label
+or deleted document. A no-doc repair still proves its real baseline and RED.
+For changed checking criteria inspect the old criteria at BASE too (`PR-4`).
+A fresh critic adjudicates disputed blockers; accepted justified repairs need
+no extra adjudication. Required reference/RED proof and independent final
+review remain mandatory.

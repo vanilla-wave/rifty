@@ -158,13 +158,14 @@ function checkTrace(rel, fm, text) {
   }
 }
 
-// Advisory premise challenge — README §Challenge. Presence-only gate on docs
-// created at/after the cutoff; earlier docs grandfathered.
+// Advisory premise challenge — README §Challenge. Presence-only gate at adoption
+// (ready), never for an observation captured as draft; older docs grandfathered.
 const CHALLENGE_SINCE = '2026-08-27';
 const CHALLENGE_LINE_RE = /^challenge: \d{4}-\d{2}-\d{2} — /m;
 
 function checkChallenge(rel, fm, text) {
-  if (typeof fm?.created !== 'string' || fm.created < CHALLENGE_SINCE) return;
+  if (fm?.status !== 'ready' || typeof fm?.created !== 'string' || fm.created < CHALLENGE_SINCE)
+    return;
   if (!hasSection(text, 'Challenge')) {
     errors.push(
       `${rel}: created ${fm.created} requires '## Challenge' (advisory premise challenge — README §Challenge)`,

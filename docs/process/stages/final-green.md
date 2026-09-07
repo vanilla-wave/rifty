@@ -1,21 +1,15 @@
-# Final+GREEN — certify the delivered slice
+# Final+GREEN — prove the delivered result
 
-Subject: the slice diff from `BASE` (prior landed slice's PASS, else branch
-base — `../rules/review.md` `REV-1`), on one clean committed tree. Requires
-the PR; the runner first runs `pnpm pr:check` on the committed SHA. Runner:
-`checkpoint-run.md`.
+Review the current unit diff from BASE (prior accepted slice, otherwise branch
+base), on a clean committed tree with `pnpm pr:check` green. Procedure:
+`checkpoint-run.md`; the same format and validator for every kind of change.
 
-- Evidence bar: `REV-5` Final+GREEN — `pass` judged adversarially, bounded by
-  the clause as declared; strengthening beyond it is a concern (`REV-2`,
-  `REV-3`).
-- Pass → the slice has landed. Inside a goal `rechart.md` records `re-chart
-  after <slice> (final-green PASS @ <sha>)` — the PASS record and the next
-  slice's `BASE`; either way the runner commits the verdict as
-  `reference/<slug>-final-green.json` with `reviewed_sha` (`REV-8`). A unit
-  without a goal then deletes its doc in a last bookkeeping commit (delete on
-  done — the artifact stays) and merges after `pnpm check:pass-binding` is
-  green (`DEC-3`); a unit with no doc merges on its `…-ordinary.json`.
-- Blocker → reception, batch fix, verify (`checkpoint-run.md`); a stall →
-  `../rules/stops.md` `STOP-3`/`STOP-4`. No pass count.
-- Unit residuals must be empty to land (`REV-9`); goal residuals continue the
-  run — RECHART reads them from the verdict. Exits: `checkpoint-run.md` 3.
+The reviewer checks the current contract/baseline, preparation required by
+`RDY-8`, real acceptance proof and any changes to the judging criteria (`PR-4`).
+A filename, a ready flag, or a passing test with a fake cannot close a claim.
+
+PASS → record the verdict at the reviewed SHA (`REV-8`). Inside a goal continue
+RECHART; standalone work may delete its completed draft, then run `pnpm check:pass-binding` and merge when the
+binding holds. A document deletion neither grants nor invalidates a verdict.
+Blockers → verify, fix or independently adjudicate, then re-review the changed
+result. Surviving technical problems follow `STOP-3..4`, never a fake GREEN.

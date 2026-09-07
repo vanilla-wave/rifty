@@ -5,7 +5,12 @@ description: Repair an observed rifty runtime/package/toolchain correctness fail
 
 # rifty-fix
 
-A fix has nothing to trace and no contract doc: a `review: ordinary` unit by construction (`docs/process/rules/readiness.md` `RDY-8`) — one branch, one draft PR at the first commit, its RED test the proof, one fresh review after the fix (`docs/process/stages/checkpoint-run.md` §Ordinary review), findings dispositioned inline (`REV-12`), nothing journaled beyond the PR. Expected RED inside a unit under implementation is not a defect. A defect discovered inside another unit is repaired here as its own unit, never widening that one — at once, or after a capture (`rifty-to-backlog`) when it waits; a capture is for deferring, not a toll, and the fix PR deletes the capturing draft (delete on done). A capture that needs a contract — traced obligations to build, not a repro to repair (`RDY-3`) — is planned work compiled at PICKUP, not a fix. A red gate that passes on its isolated rerun (`rules/pr.md` `PR-6`) is reported, not repaired.
+An observed defect uses its real Node/existing baseline as authority: reproduce,
+RED, fix, then independent Final+GREEN (`docs/process/rules/readiness.md`
+`RDY-8`). No invented contract doc or review mode. Required repairs stay in
+the authorized work; useful outside work is captured only if deferred
+(`REV-12`). A new promise disguised as a fix still needs Contract+RED.
+Expected RED is not a defect.
 
 ## Steps
 

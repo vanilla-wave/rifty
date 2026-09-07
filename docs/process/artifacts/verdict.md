@@ -1,58 +1,31 @@
-# verdict — checkpoint output
+# Verdict — one model, one validator
 
-Produced by a fresh reviewer (`review.md` `REV-11`) as `$RUN/verdict.json`
-against `tools/review/review-schema.json`; evaluated by
-`node tools/review/blockers.mjs verdict.json [adjudication.json]`.
+Every independent review uses `tools/review/review-schema.json`:
+`checkpoint` (`Contract+RED` or `Final+GREEN`), `unit_goal_source`, ordered
+`axes`, `coverage`, `unit_residuals`, `goal_residuals`, `goal_complete`,
+`overall_verdict`, `merge_call`. A unit with no contract names its PR and
+observed baseline. It still supplies proof of any product claim.
 
-| Field | Content |
-|---|---|
-| `checkpoint` | `Contract+RED` \| `Final+GREEN` |
-| `unit_goal_source` | exact contract path + `BASE` used |
-| `axes[]` | the 8 rubric axes in order (`REV-10`), each with `verdict` + `findings[]` |
-| `findings[].severity` | `blocker` \| `concern` \| `nit` (`REV-3`) |
-| `findings[].authority` | mandatory for blockers: `I#`, scenario line, traced row, `ADR-NNNN`, baseline, or a `REV-2`-listed rule |
-| `coverage[]` | one row per traced obligation in boundary: `row, source, trace, status pass\|weak\|missing, citation, note` (`REV-4`) |
-| `unit_residuals` / `goal_residuals` | slice blockers / goal continuation |
-| `goal_complete` | true only with both residual sets empty + end-to-end proof |
+One validator: `tools/review/blockers.mjs` `evaluateVerdict`. The CLI uses it
+at review; `check:pass-binding` uses it again at merge. Exit 0 = accepted unit,
+1 = blocking findings / missing coverage / required residuals, 2 = malformed
+or unreadable evidence. Weak coverage stays advisory under `REV-4`.
 
-`adjudication.json` (fresh critic, before any fixing): `[{"summary", "ruling":
-"HOLDS|STRETCH|FALSE", "clause"}]` — HOLDS: the cited clause as written
-requires the demand and the carrier is absent, or an executed artifact shows
-the carrier does not discriminate (a RED that passes with a stub, a test a
-named mutant survives — `review.md` `REV-5`); STRETCH: clause broader than the
-demand; FALSE: the carrier exists and discriminates / citation misread.
-Default STRETCH when the clause text does not clearly mandate the specific
-demand — never for a `AGENTS.md` §Fidelity blocker (`REV-12`).
+`findings[].evidence` carries executed artifacts. Disputed blockers alone go
+to a fresh critic; its rulings are embedded as `adjudication`:
+`[{summary, ruling: HOLDS|STRETCH|FALSE, clause, by: critic}]`.
+Fidelity rejects need FALSE with the discriminating carrier cited; an author
+cannot reject its own blocker. The original reviewer evidence stays intact.
+Required residuals remain blocking until independently proved or corrected;
+rejecting a finding never erases an obligation.
 
-Validity (exit `2`): the eight axes in order, authority on every blocker
-(a §Fidelity blocker's authority starts `AGENTS.md §Fidelity:`), a trace on
-every coverage row, at least one coverage row per traced obligation of the
-contract named in `unit_goal_source` (a named contract that cannot be read is
-invalid; a PR number names no contract and is not counted) (`REV-4`), no
-STRETCH ruling on a §Fidelity blocker and no FALSE on one without the carrier
-cited as `file:line` in the clause (`REV-12`). Residuals mirror the rulings
-only when at least one blocker exists and every blocker was ruled — a partial
-or empty adjudication leaves them blocking. `findings[].evidence` carries the
-executed artifact (command + output excerpt) a `REV-5` class or a mutant claim
-rests on — the critic reads it at reception; `reviewed_sha` (and
-`reviewed_tree`, its `^{tree}` — squash-merge orphans the commit, never the
-tree) is added by the runner before the file is committed under `reference/`
-(`REV-8`).
+After PASS the driver adds `reviewed_sha` (exact 40-hex commit) and saves the
+same record as `reference/<slug|pr-N>-contract-red.json` or `…-final-green.json`.
+The record's checkpoint, outcome, coverage and identity are validated together.
+It survives deletion of the temporary unit doc. The merge gate reads a named
+contract at the reviewed commit, never guesses its history from a deleted file.
+Docs-only review records may live on the PR; no product landing artifact needed.
 
-An ordinary review (`../stages/checkpoint-run.md` §Ordinary review) is
-committed as `reference/<slug|pr-N>-ordinary.json`: `checkpoint: "ordinary"`,
-`verdict` (the reviewer's prose), `reception[]` of `{summary, authority,
-ruling: FIX|REJECT|NOTE, by: "driver"|"critic"}`, `reviewed_sha`. A REJECT of
-a Fidelity blocker with `by: "driver"` is refused by `check:pass-binding`
-(`REV-12`). Both shapes are checked by `check:contract-drift` at a flip or a
-delete-on-done and by `check:pass-binding` at merge.
-
-Exit codes: `0` pass (`goal_complete:false` = continue the goal) · `1` FIX
-findings remain — surviving blockers + `missing` rows (`weak` rows and
-concerns never block; a row whose clause is the discrimination itself is
-graded `missing` when the mutant survives, `REV-4`) — fix, verify
-(`../stages/checkpoint-run.md`) · `2`
-invalid verdict (retry once; twice = harness failure, the run ends with the
-`STOP-6` report). Raw mode (no
-adjudication): `unit_residuals` and an axis/overall `blocker` verdict also
-block; adjudicated: residuals mirror the blockers and follow their rulings. A PASS binds to the reviewed commit through the boundary diff (`REV-8`); the reviewer never edits or pushes.
+Eight axes: Completeness, Mission and architecture, Goal drift, Approach cost,
+Scope, Bugs, Regressions, Ecosystem UX. Contract+RED grades the promise and RED;
+Final+GREEN grades the implemented result, including required preparation.

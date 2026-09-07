@@ -32,7 +32,7 @@ evidence, never the implementer's summary of it.
 1. **Completeness** — every unit clause covered; no required deferral.
 2. **Mission and architecture** — fits rifty's mission and boundaries (premise: `REV-6`).
 3. **Goal drift** — delivery matches the named `goal.md`, else the ready
-   contract; a `draft→ready` flip in the diff carries its `ready-verdict:` (or, off any production path, `review: ordinary`).
+   contract; required reference/RED preparation is evidenced (`RDY-8`); user scope changes carry their recorded decision (`RDY-6`).
 4. **Approach cost** — identify removable machinery: contract deliverable
    without it → blocker, first instance included; pure code shrinkage → goal
    residual or capture, never a checkpoint condition. Apply `REV-7`.

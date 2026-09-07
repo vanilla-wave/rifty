@@ -10,7 +10,7 @@ alternative entry.
 ## Preconditions
 
 - User in session. Mid-task or agent-only context → `rifty-to-backlog` + request manual refine; never self-run the interview.
-- Target: a raw idea (no doc yet) or one `draft` item/epic. A `ready` item with a live fork is demoted first (`docs/process/rules/readiness.md` `RDY-5`); a ready `goal.md` amends only via CLOSE + FIT.
+- Target: a raw idea (no doc yet) or one `draft` item/epic. A `ready` item with a live fork is demoted first (`docs/process/rules/readiness.md` `RDY-5`); a ready `goal.md` changes with the user's recorded amendment (`RDY-6`).
 - Exhaust code, ADR, real-Node, and disposable-spike evidence before asking.
 
 ## 1. Scan — no mint
@@ -35,6 +35,6 @@ completion, not a refusal.
 
 Hand the settled result to `rifty-to-backlog` (classify → gate → mint/update →
 challenge → report), same invocation: forks mint already resolved, with their
-evidence; existing draft → decisions recorded into the doc, same challenge +
-report tail. Document shape, `draft → ready`, and `pnpm backlog:check` stay
+evidence; existing draft → decisions recorded into the doc, the driver reports the outcome; premise verification happens before adopting
+the plan at FIT/PICKUP, not for each captured observation. Document shape, `draft → ready`, and `pnpm backlog:check` stay
 with the ordinary workflow.

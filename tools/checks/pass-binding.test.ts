@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { REQUIRED_AXES } from '../review/blockers.mjs';
 import { evaluateBinding } from './pass-binding.mjs';
 
 const SHA = 'a'.repeat(40);
@@ -6,21 +7,17 @@ const artifact = 'docs/backlog/net/reference/x-final-green.json';
 const verdict = (extra: Record<string, unknown> = {}) =>
   JSON.stringify({
     checkpoint: 'Final+GREEN',
-    unit_goal_source: 'docs/backlog/net/x.md @ BASE',
-    axes: Array.from({ length: 8 }, (_, i) => ({ axis: `a${i}`, verdict: 'pass', findings: [] })),
+    unit_goal_source: 'PR #312',
+    axes: REQUIRED_AXES.map((axis) => ({ axis, verdict: 'pass', findings: [] })),
+    overall_verdict: 'pass',
+    merge_call: 'Proceed.',
+    unit_residuals: [],
+    goal_residuals: [],
+    goal_complete: false,
     coverage: [],
     reviewed_sha: SHA,
     ...extra,
   });
-const ordinaryVerdict = (extra: Record<string, unknown> = {}) =>
-  JSON.stringify({
-    checkpoint: 'ordinary',
-    verdict: 'pass — no FIX left',
-    reception: [{ summary: 'naming', ruling: 'NOTE', by: 'driver', authority: '' }],
-    reviewed_sha: SHA,
-    ...extra,
-  });
-
 const input = (over: Partial<Parameters<typeof evaluateBinding>[0]> = {}) => ({
   changed: ['packages/x/src/a.ts', artifact],
   readHead: (path: string) => (path === artifact ? verdict() : null),
@@ -59,45 +56,36 @@ describe('evaluateBinding (REV-8 merge-time binding)', () => {
     expect(
       evaluateBinding(input({ readHead: () => JSON.stringify({ reviewed_sha: SHA }) })).status,
     ).toBe('fail');
-    // A re-pointed sha on an otherwise unchanged verdict is no review; a changed verdict is.
-    expect(
-      evaluateBinding(input({ readBase: () => verdict({ reviewed_sha: 'b'.repeat(40) }) })).status,
-    ).toBe('fail');
-    expect(
-      evaluateBinding(
-        input({
-          readBase: () => verdict({ reviewed_sha: 'b'.repeat(40), coverage: [{ row: 'old' }] }),
-        }),
-      ).status,
-    ).toBe('ok');
     expect(evaluateBinding(input({ isAncestor: () => false })).status).toBe('fail');
     expect(evaluateBinding(input({ diffSince: () => ['packages/x/src/b.ts'] })).status).toBe(
       'fail',
     );
   });
-  it('accepts a shaped ordinary landing artifact; refuses a driver-REJECTed Fidelity blocker (REV-12)', () => {
-    const ordinary = 'docs/backlog/net/reference/pr-12-ordinary.json';
-    const withOrdinary = (text: string) =>
-      input({
-        changed: ['packages/x/src/a.ts', ordinary],
-        readHead: (path) => (path === ordinary ? text : null),
-      });
-    expect(evaluateBinding(withOrdinary(ordinaryVerdict())).status).toBe('ok');
-    expect(
-      evaluateBinding(withOrdinary(JSON.stringify({ checkpoint: 'ordinary', reviewed_sha: SHA })))
-        .status,
-    ).toBe('fail');
-    const driverReject = ordinaryVerdict({
-      reception: [
-        { summary: 'stub', ruling: 'REJECT', by: 'driver', authority: 'AGENTS.md §Fidelity: fake' },
+  it('checks surviving contract content and reads deleted contracts at the reviewed revision', () => {
+    const contract = 'docs/backlog/net/x.md';
+    const before = '## Acceptance\n1. bytes → I1\n';
+    const report = verdict({
+      unit_goal_source: contract,
+      coverage: [
+        {
+          row: 'bytes',
+          source: 'acceptance',
+          trace: 'I1',
+          status: 'pass',
+          citation: 'x.test.ts:1',
+          note: '',
+        },
       ],
     });
-    expect(evaluateBinding(withOrdinary(driverReject)).status).toBe('fail');
-    const criticReject = ordinaryVerdict({
-      reception: [
-        { summary: 'stub', ruling: 'REJECT', by: 'critic', authority: 'AGENTS.md §Fidelity: fake' },
-      ],
-    });
-    expect(evaluateBinding(withOrdinary(criticReject)).status).toBe('ok');
+    const run = (head: string | null) =>
+      evaluateBinding(
+        input({
+          readHead: (path) => (path === artifact ? report : head),
+          readReviewed: (path) => (path === contract ? before : null),
+        }),
+      );
+    expect(run(before).status).toBe('ok');
+    expect(run('## Acceptance\n1. roughly bytes → I1\n').status).toBe('fail');
+    expect(run(null).status).toBe('ok');
   });
 });

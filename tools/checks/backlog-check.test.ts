@@ -181,7 +181,7 @@ ${extra}`;
     expect(run(older).status).toBe(0);
   });
 
-  it('requires ## Challenge with a verdict line on items created at/after the cutoff', () => {
+  it('requires a premise check at adoption, never for capturing a draft', () => {
     const root = mkdtempSync(join(tmpdir(), 'rifty-backlog-check-'));
     try {
       const areaDir = join(root, 'docs/backlog/perf');
@@ -200,23 +200,27 @@ why: something slow
 Slow.
 `;
       writeFileSync(item, frontmatter);
+      const draft = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
+      expect(draft.status).toBe(0);
+      const ready = `${frontmatter.replace('status: draft', 'status: ready')}\n## User scenario\nRun X.\n## Acceptance\n1. X works.\n## Out of scope\nNothing else.\n## Decisions\nSettled.\n`;
+      writeFileSync(item, ready);
 
       const missing = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
       expect(missing.status).toBe(1);
       expect(missing.stderr).toContain("requires '## Challenge'");
 
-      writeFileSync(item, `${frontmatter}\n## Challenge\n\nlooks fine\n`);
+      writeFileSync(item, `${ready}\n## Challenge\n\nlooks fine\n`);
       const noVerdict = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
       expect(noVerdict.status).toBe(1);
       expect(noVerdict.stderr).toContain("missing 'challenge: <YYYY-MM-DD> — <verdict>' line");
 
-      writeFileSync(item, `${frontmatter}\n## Challenge\n\nchallenge: 2026-08-27 — clear\n`);
+      writeFileSync(item, `${ready}\n## Challenge\n\nchallenge: 2026-08-27 — clear\n`);
       const green = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
       expect(green.stderr).toBe('');
       expect(green.status).toBe(0);
 
       // grandfathered: created before the cutoff needs no challenge
-      writeFileSync(item, frontmatter.replace('created: 2026-08-27', 'created: 2026-08-26'));
+      writeFileSync(item, ready.replace('created: 2026-08-27', 'created: 2026-08-26'));
       const old = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
       expect(old.stderr).toBe('');
       expect(old.status).toBe(0);

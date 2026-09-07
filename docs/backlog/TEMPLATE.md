@@ -62,7 +62,6 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 <!-- One-line records only (docs/process/artifacts/unit.md). At pickup the first
      line is the Contract+RED verdict, copied verbatim:
      ready-verdict: <date> — Contract+RED @ <sha>
-     review: checkpoints | ordinary                       (RDY-8)
      re-cut: <date> — <what> — trace: none               (RDY-5)
      Evidence blocks go to reference/<slug>-evidence.md, never here (RDY-4). -->
 

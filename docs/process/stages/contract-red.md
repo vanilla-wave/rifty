@@ -9,7 +9,7 @@ implementation in the diff. Runner: `checkpoint-run.md`.
   executed artifact; everything else is a concern.
 - Coverage rows: traced obligations only (`REV-4`).
 - Pass → `ready-verdict: <date> — Contract+RED @ <sha>` as the first
-  `## Decisions` line — the only record (`../artifacts/ledger.md`).
+  `## Decisions` line — a reference to the review JSON (`../artifacts/verdict.md`).
 - Blocker → reception, one batch fix, one verify pass (`checkpoint-run.md`);
   a FIX blocker surviving unchanged is a stall (`../rules/stops.md` `STOP-3`)
   → re-cut (`STOP-4`), never another fix.

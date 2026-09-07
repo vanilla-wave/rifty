@@ -1,35 +1,23 @@
-# PICKUP — compile and gate the next unit
+# PICKUP — identify the authority and missing proof
 
-Input: a draft unit — the goal's frontier child (`../artifacts/map.md`) or a
-standalone item. Output: one ready unit with review membership; no
-implementation started. Driver session (`DEC-5`).
+Input: authorized work — a draft, observed defect, direct docs/code request,
+or the goal's next unblocked unit. The driver stays in the same session.
 
-1. **Choose.** The user-named unit, else the first frontier child. A legacy
-   child already `ready` with no verdict line compiles here the same way; its
-   trace additions ride a `re-cut:` line (`RDY-5`) and its Contract+RED
-   verdict is committed like any other — `check:contract-drift` binds a
-   `ready-verdict:` line added beside code to its artifact (`REV-8`).
-2. **Compile** draft → ready per `../rules/readiness.md` `RDY-2`: evidence per
-   row about the oracle and baseline only — nothing about the deliverable is
-   measured here, a budget on it becomes a traced Acceptance row with a RED
-   carrier; internal forks resolved yourself; a user-observable fork, or an
-   `owner: user` fog line the unit depends on → `STOP-1a`: inside a goal the
-   child leaves the path (demoted `draft`, fork verbatim, fog line — `STOP-4`
-   3) and the run continues; a unit without a goal stops for manual
-   `rifty-refine`. Never interview. A question draft answered "keep it" is
-   declined, not compiled (`RDY-2` 5).
-3. **Trace + intent** (`RDY-3`, `RDY-4`): every Acceptance/Parity/Fault row
-   traced; one-sentence `title`; two intents → split (`RDY-5`), successors
-   reference each other. No count gates.
-4. **Membership** (`RDY-8`): `review: checkpoints | ordinary` in the unit.
-   Open the draft PR at the first commit (`../rules/pr.md` `PR-3`).
-5. **Contract+RED** — `checkpoints` units only — via `contract-red.md`
-   (`checkpoint-run.md`). A split successor carrying only certified rows
-   inherits (`RDY-5`). `ordinary` units skip it.
-6. **Hand off.** Implementation is `implement.md`; this stage ends here.
+1. Name the accepted result and its authority: scenario, invariant, ADR or
+   observed baseline. New scope needs the user's decision (`RDY-6`).
+2. For a draft, compile per `RDY-2`; resolve the premise check here, before
+   committing to the plan. A question answered by a probe is answered here;
+   keep a useful decision, otherwise delete the draft. No artificial second
+   task to decline it. Already-authorized work continues automatically.
+3. Identify the evidence still needed (`RDY-8`). New parity/stateful behavior
+   requires Contract+RED before implementation; an observed defect needs its
+   real baseline artifact and RED; existing certified proof is reused only
+   for the same obligations. Docs need no product RED or contract document.
+4. Run the missing preparation via `contract-red.md` / `rifty-fix`. If a doc
+   exists, set it ready with its evidence references. A legacy ready status
+   or old `review:` label supplies no missing evidence by itself.
+5. Continue IMPLEMENT. Record a user choice when blocked; pursue technical
+   questions in-session and independent units when available (`STOP-1..4`).
 
-Exits: done (a certified or `ordinary` unit); left-path (`STOP-4` 3);
-`STOP-1a` outside a goal; declined (a standalone question draft, `RDY-2` 5 —
-inside a goal a question is a fog line, never an `## Items` row). Done when verdict and membership are recorded and
-no implementation has started — no product, template, fixture, lane or
-harness code exists on the branch that the contract's REDs do not require.
+Done when the required pre-implementation proof exists. No membership flag,
+size budget, document lifecycle, or PR shape substitutes for it.

@@ -17,21 +17,19 @@ budget exhausted, `STOP-1d` slice cap. Surviving letters keep their places.
   → manual `rifty-refine`.
 - **b. Premise concern** — value does not follow / cheaper rival route not
   answered by a `rejected route:` line (`review.md` `REV-6`).
-- **e. Destination conflict** — the run needs `goal.md` to change (amend =
-  CLOSE + FIT).
+- **e. Destination conflict** — the accepted result must change (`RDY-6`: explicit user amendment).
 
 Inside a goal a `STOP-1a` fork does not halt the run: the child leaves the
-path with its question as a fog line `owner: user` (`STOP-4` 3) and the run
+path with its question as a fog line `owner: user` (`STOP-4`) and the run
 takes the next frontier child; the question is asked when it blocks — a
 frontier empty because of it, or CLOSE — and the user, being in the session,
 may answer earlier (`rifty-refine`). `STOP-1b` and `STOP-1e` question the
 destination itself and halt the run: the goal PR stays draft with the
-branch as it is — the user's answer (continue, or CLOSE + FIT) decides what
-happens to it. A unit without a goal has no other frontier: it stops at
+branch as it is — the user's answer (continue, amend, or cancel) decides what happens to it. A unit without a goal has no other frontier: it stops at
 once.
 
 Never a stop: the end of a stage, push, draft PR, split, re-cut, demotion of
-untraced rows, rechart, choosing carriers, ordinary review fixes, a review
+untraced rows, rechart, choosing carriers, review fixes, a review
 pass, a unit leaving the path (`STOP-4`), an invalid reviewer verdict twice
 (a harness failure: the run ends with the `STOP-6` report and the session
 that started it re-invokes once the harness is back — never the run itself).
@@ -53,38 +51,23 @@ row the previous pass graded `pass` is reviewer error (`REV-4`) and goes
 through reception like any finding — never straight to a fix, never ignored:
 ruled HOLDS, it is FIX.
 
-## STOP-4 Re-cut against the destination, then leave the path
+## STOP-4 Change the approach; keep the obligation
 
-Once per checkpoint, by the runner:
+On a stall, check the authority and diagnosis, trim unsupported demands and
+choose a materially different design or discriminating probe. Record what new
+fact can settle the problem. Do not repeat the same fix/review without new
+information; no numeric budget chooses when a real obligation disappears.
 
-1. Trim the unit to its traced obligations; demote untraced rows to notes or
-   backlog; exactness the trace target does not state becomes a concern
-   (`review.md` `REV-3`). Two intents → split by trace; the successor is
-   seeded in `## Items` next to its predecessor, and one carrying only
-   certified rows inherits the verdict (`readiness.md` `RDY-5`); rejected /
-   noted findings never seed one (`REV-12`).
-2. Record `re-cut: <date> — <what> — trace: none` (or `fork:` → `STOP-1a`).
-3. One verify pass on the new tree. Pass → continue. The stall survives → the
-   unit leaves the path, the same exit a mid-run `STOP-1a` fork takes: the
-   unit is demoted to `draft` with its rows verbatim (`RDY-5`); RECHART
-   removes its `## Items` row, reverts the unit's product and test commits on
-   the goal branch (the branch carries landed slices only — `review.md`
-   `REV-1`; the doc and its demotion stay; the work stays in git history) and
-   writes the resisting obligation as a fog line owned by the `STOP-1` test:
-   `owner: user` only when there is a choice for the user — a named tradeoff
-   ("X holds only by dropping Y / raising the tier / accepting Z") or a fork
-   (`RDY-5`); `owner: agent` when only an approach failed, whatever the row's
-   trace — the line names what settles it (a spike, another design). The
-   source of a requirement never makes the user the owner of a technical
-   dead end (`../artifacts/map.md`); the run takes the next frontier child.
-   An `owner: user` line is asked where fog is
-   always asked — a frontier empty because of it (a `blocked_by` chain behind
-   the unit) or CLOSE (`STOP-1a`), never probed; an `owner: agent` line waits
-   for facts (RECHART) or is dropped at CLOSE with its reason. Never a wait,
-   never a second re-cut at that checkpoint, no new state: the map already
-   knows how to hold a question. A unit without a goal has no next child: a fork stops
-   (`STOP-1a`); any other surviving stall means the unit does not land — one
-   `STOP-6` report, no question.
+If the next experiment needs facts not available yet, keep the obligation on
+the map with its owner, dependency and trigger; continue independent work.
+The source of the requirement never makes a technical problem user-owned.
+Revert unsafe partial changes before other units rely on them; keep evidence
+and history. RECHART owns dependency updates (`stages/rechart.md`).
+
+No executable approach left → report the technical limit and what would unblock
+it (`STOP-6`). A standalone unit does not land; a goal continues wherever it
+can. The user is asked only for an actual result/tier/tradeoff choice (`STOP-1`).
+Required work cannot be dropped or silently parked as an optional note.
 
 ## STOP-6 Stop report
 

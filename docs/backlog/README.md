@@ -2,7 +2,7 @@
 
 - Item: one implementable unit at `docs/backlog/<area>/<slug>.md`.
 - Epic: user outcome spanning items at `docs/backlog/epics/<slug>/` — `goal.md`
-  (frozen destination) + `map.md` (live plan) + `ledger.md` (append-only
+  (user-owned destination) + `map.md` (live plan) + `ledger.md` (append-only
   journal). Template: `epics/TEMPLATE.md`. Legacy single-file epics remain
   valid until re-typed or closed; no new ones.
 
@@ -54,9 +54,8 @@ A ready item needs:
 - `## Out of scope`: named loud throws + compat ❌;
 - `## Decisions`: every fork resolved or ADR-linked; one-line records only
   (`docs/process/artifacts/unit.md`);
-- once picked up: `review: checkpoints | ordinary` (`RDY-8`) and, for
-  `checkpoints`, `ready-verdict: <date> — Contract+RED @ <sha>` from the
-  unit's checkpoint, recorded before implementation (`RDY-2`).
+- at pickup: record the reference/RED evidence required by `RDY-8`; a prior
+  review is a reference to its artifact, never permission from a status flag.
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
 semantic copies require an ADR + differential suite.
@@ -67,25 +66,16 @@ Use `docs/process/rules/fault-classes.md`. Template: `TEMPLATE.md`.
 
 ## Challenge
 
-Every new item and epic (`created` ≥ 2026-08-27) carries `## Challenge` before
-merge: one fresh independent critic (never the author's context — raw doc only,
-no author framing; frame-then-validate voids it) attacks the premise: does the
-claimed value follow from the proposed work; is the causal/impact claim sized
-against the whole (share of the real user-visible cost/gap, evidenced in the
-doc); is there a cheaper route to the same value. It names problems explicitly,
-especially **user experience** (which real user scenario benefits, and does it
-materially) and **project direction** (mission/ROADMAP fit, opportunity cost).
-Verdict verbatim: `challenge: <date> — clear` or `challenge: <date> — N
-problems` + one grounded line each. Advisory at capture — never blocks a draft
-landing or a run start. Two premise classes BLOCK `draft→ready`: the claimed
-value does not follow from the proposed work, and a materially cheaper direct
-authority reaches the same value. Each closes by answering it in the doc or by
-a recorded user override (`## Decisions` line naming the override) — never by
-compiling past it; these are the findings a review cannot raise later, because
-by then the work is the premise. Every other problem stays advisory and
-surfaces verbatim in the completion report (§Report), in refine, and in the
-capturing PR body. Fabricated speculative doubt = failure symmetric to missing
-a rotten premise. `backlog:check` enforces presence + verdict line only.
+Capturing a draft records a fact or question; it needs no critic or user report.
+Before adopting a plan at FIT/PICKUP, one independent premise check asks whether
+its value follows and a cheaper direct authority reaches it. It may be the
+Contract+RED reviewer in the same pass. A child reuses its goal's settled
+premise. New evidence may reopen it; routine restatement does not.
+
+A ready document records `challenge: <date> — clear | N problems` in
+`## Challenge`. Resolve a value/cheaper-route objection with evidence or the
+user's explicit decision before adoption; other concerns are advisory. The
+machine checks this record at ready, not when an observation is captured.
 
 ## Epic fit
 
@@ -116,36 +106,27 @@ probe-or-fog and the completion report: `docs/process/stages/fit.md`.
 
 ## Report
 
-Every user-facing backlog write-up (refine, FIT, re-fit) ends with a report
-delivered in the conversation — not an approval ask, not a PR comment, not a
-file. Form and producer procedure (fresh clean-context subagent, six
-sections): `rifty-to-backlog` §6 Report — the single canon. Replaces the
-former `signoff:` gate (removed 2026-08-28): the user reacts if the
-destination is wrong — pushback re-opens FIT; nothing waits on a reply. A
-mid-task capture (no user in session) and a RECHART-minted draft ride the
-unit's branch and its ledger / journal line — no report.
+The driver reports the result from recorded facts: what it changes, proof,
+remaining questions. No fresh report-writing agent or fixed six-part ceremony.
+A capture during implementation needs only its durable record. The user's
+request determines whether work continues; completing preparation never asks
+for a second hand-off of work already authorized.
 
 ## Goal run
 
 An explicit whole-ready-goal hand-off starts a run; the goal directory is the
 run id. Stages, roles, stops, PR rules: `docs/process/README.md`. Store-level
-facts that hold inside a run: a ready `goal.md` never changes (amend = CLOSE +
-FIT); `ledger.md` only grows; `map.md` and unit contracts are re-cut by the
+facts that hold inside a run: a ready `goal.md` changes only with the user's recorded amendment (`RDY-6`); `ledger.md` only grows; `map.md` and unit contracts are re-cut by the
 agent (`RDY-5`); every landed slice gets a `re-chart after <slice>` ledger
 line; scope outside `ready` items: 0; new coordination mechanisms: 0 unless a
 named substrate item owns one.
 
 ## Gates
 
-| Owner | Enforces |
-|---|---|
-| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence; trace on ready items `created ≥ 2026-09-03` |
-| `check:contract-drift` | frozen goal fields beside source (single-file and dir-format goals); a ready contract (status + graded sections) changed beside source carries `re-cut:`, a dropped user-traced row `fork:`, a dropped ADR row the ADR named; a ready flip in any diff carries `ready-verdict:` bound to its committed `reference/<slug>-contract-red.json` (or, off production, `review: ordinary`); a ready unit deleted beside production leaves its landing verdict; beside production only product, tests, backlog/ADR docs and changelogs change |
-| `check:pass-binding` | a PR marked ready that changes product paths, tests or parity cases carries a shaped landing verdict (`…-final-green.json` / `…-ordinary.json`, never a re-pointed sha) whose `reviewed_sha` is an ancestor of HEAD with only documentation changed since (`REV-8`) |
-| Final review | frozen goal, append-only ledger, review membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
-
-Machine gates prove only the listed local facts; review owns everything else —
-including that a ready `goal.md` never changed and the ledger only grew.
+`docs/process/README.md` lists each gate and its authority. Record checks prove
+shape and attribution; independent review proves authorization, reference
+semantics and acceptance. Document creation/deletion is not another review
+state machine. No machine rule requires a separate PR.
 
 ## Tier
 

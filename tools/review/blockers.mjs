@@ -4,7 +4,7 @@
 // exit codes: docs/process/artifacts/verdict.md.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { tracedRowCount } from '../checks/contract-drift.mjs';
+import { tracedRowCount } from './contract.mjs';
 
 const CONTRACT_PATH_RE = /docs\/backlog\/[^\s`'"@]+\.md/u;
 const FIDELITY_AUTHORITY_RE = /AGENTS\.md|Fidelity/iu;
@@ -29,7 +29,11 @@ function residuals(value) {
  * @param {unknown[]|null} adjudication
  * @param {((path: string) => string|null)|null} readContract  head text of the unit contract (null = no reader)
  */
-export function evaluateVerdict(verdict, adjudication = null, readContract = null) {
+export function evaluateVerdict(
+  verdict,
+  adjudication = verdict?.adjudication ?? null,
+  readContract = null,
+) {
   const errors = [];
   const axes = Array.isArray(verdict?.axes) ? verdict.axes : null;
   const rulings = new Map();
@@ -96,6 +100,11 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = nul
       }
     }
   }
+  if (!['pass', 'concern', 'blocker'].includes(verdict?.overall_verdict))
+    errors.push('overall_verdict missing or invalid');
+  if (typeof verdict?.merge_call !== 'string') errors.push('merge_call missing');
+  if (verdict?.reviewed_sha !== undefined && !/^[0-9a-f]{40}$/u.test(verdict.reviewed_sha))
+    errors.push('reviewed_sha must be 40 hex characters');
   if (!['Contract+RED', 'Final+GREEN'].includes(verdict?.checkpoint)) {
     errors.push('checkpoint missing or invalid');
   }
@@ -150,6 +159,9 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = nul
     // A §Fidelity blocker is rejected only as FALSE with the carrier cited (file:line in the clause)
     // — never STRETCH (REV-12).
     for (const finding of rawBlockers) {
+      const rulingEntry = adjudication.find((entry) => entry.summary === finding.summary);
+      if (['STRETCH', 'FALSE'].includes(rulingEntry?.ruling) && rulingEntry?.by !== 'critic')
+        errors.push(`a blocker rejection requires an independent critic: ${finding.summary}`);
       const authority = String(finding.authority ?? '');
       if (!FIDELITY_AUTHORITY_RE.test(authority)) continue;
       // A Fidelity authority is written `AGENTS.md §Fidelity: <rule>` so reception cannot mistake it.
@@ -174,8 +186,7 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = nul
       return { code: 2, errors, blockers: [], concerns: [], nits: [], goalComplete: false, axes };
     }
   }
-  // Residuals mirror the blocker rulings only when every blocker was ruled; a partial or empty
-  // adjudication leaves them blocking as in raw mode (artifacts/verdict.md).
+  // Axis summaries mirror the original findings; only their explicit rulings can supersede them.
   const fullyRuled =
     adjudicated &&
     rawBlockers.length > 0 &&
@@ -186,13 +197,11 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = nul
         .map((finding) => ({ ...finding, ruling: rulings.get(finding.summary) }))
     : [];
   const demotedSummaries = new Set(demoted.map((finding) => finding.summary));
-  // Adjudicated: residuals mirror the blocker findings and follow their rulings — the
-  // calibrated blocker set is the surviving findings; residuals stay report-only.
+  // Residuals are outstanding obligations. A ruling on a finding cannot erase them;
+  // the independent verification corrects or proves the residual itself.
   const blockers = [
     ...rawBlockers.filter((finding) => !demotedSummaries.has(finding.summary)),
-    ...(fullyRuled
-      ? []
-      : unitResiduals.map((residual) => ({ ...residual, axis: 'Unit residual' }))),
+    ...unitResiduals.map((residual) => ({ ...residual, axis: 'Unit residual' })),
   ];
   const concerns = [...findings.filter((finding) => finding.severity === 'concern'), ...demoted];
   const nits = findings.filter((finding) => finding.severity === 'nit');
@@ -203,7 +212,7 @@ export function evaluateVerdict(verdict, adjudication = null, readContract = nul
   // Blocking power = surviving blockers + missing rows; weak rows are advisory in both
   // modes (REV-4). Adjudicated: stored axis/overall verdicts predate demotion and are
   // ignored. Raw: the reviewer's axis/overall blocker verdict binds as-is.
-  const hasBlocker = adjudicated
+  const hasBlocker = fullyRuled
     ? blockers.length > 0 || missing
     : blockers.length > 0 || axisBlocker || missing;
   return {
@@ -228,7 +237,7 @@ function main() {
     process.exit(2);
   }
   let verdict;
-  let adjudication = null;
+  let adjudication;
   try {
     verdict = JSON.parse(readFileSync(path, 'utf8'));
   } catch (error) {
