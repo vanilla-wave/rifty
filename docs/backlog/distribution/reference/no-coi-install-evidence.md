@@ -30,3 +30,10 @@ Initial browser setup incorrectly called RuntimeFs.mkdir; that host interface
 only reads/writes, and writeFile already creates parents. Removed the invalid
 setup call, retaining every assertion; focused real packed proof then passed.
 Strict packed typecheck/build and preceding compiler/VM/SDK proofs also passed.
+
+Source no-COI acceptance: 5/5 pass — real Vite build byte parity, HMR/wedge
+restart, memory installed-tree restore, OPFS→memory→OPFS acknowledged bytes,
+capability report. First full gate failed the prior 147-file extraction pin
+and reproduced in isolation. The package now has 148 production files; its
+closure audit follows literal dynamic imports too, preserving exact coverage
+and checking their package/escape boundaries. Focused closure suite 5/5 GREEN.
