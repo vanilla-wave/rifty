@@ -51,6 +51,8 @@ challenge: 2026-09-06 — 4 problems
 
 ## Decisions
 
+- ready-verdict: 2026-09-07 — Contract+RED @ 3dd957a8a7fe2741190ec51d98a1ef1713004b14
+
 - 2026-09-07 — pickup: goal's all-items override settles the earlier cheaper-worker challenge; current baseline includes PR #304 install/restore/startBin/restart.
 - 2026-09-07 — one private install module; native import cache owns first-use loading, existing worker busy guard and snapshots retain ownership. No extra loader state/API.
 

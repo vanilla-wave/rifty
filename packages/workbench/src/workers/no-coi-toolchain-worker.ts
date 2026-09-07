@@ -3,8 +3,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { RegistryClient, install } from '@riftydev/npm-client';
-import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
 import {
   type SerializedRuntimeError,
   awaitDrain,
@@ -22,15 +20,9 @@ import {
   claimSandboxToolchainResidentTransition,
   releaseSandboxToolchainResidentTransition,
 } from '@riftydev/runtime-js/internal';
-import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
-import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { dirname, syncMirror } from '@riftydev/vfs';
 import { declaredGapCause } from './declared-gap-cause.ts';
-import { finalizeGenericPackageInstallFiles } from './package-install-generic-finalizer.ts';
 import { startResidentNodeEntry } from './resident-node-entry.ts';
-import {
-  type WorkbenchRuntimeBinding,
-  activateWorkbenchRuntimeAdapters,
-} from './workbench-runtime-adapters.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -56,22 +48,6 @@ async function flushMirror(): Promise<void> {
   if (typeof mirror.flush === 'function') await mirror.flush();
 }
 
-async function activateInstallRuntime(
-  cwd: string,
-  result: Awaited<ReturnType<typeof install>>,
-): Promise<readonly WorkbenchRuntimeBinding[]> {
-  const bindings: readonly WorkbenchRuntimeBinding[] = Object.freeze(
-    shadowSubstitutionPlanForInstallResult(result).bindings.map((binding) =>
-      Object.freeze({
-        adapterId: binding.adapterId,
-        packagePath: normalizePath(`${cwd}/${binding.packagePath}`),
-      }),
-    ),
-  );
-  await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd });
-  return bindings;
-}
-
 function snapshotFiles(): readonly ToolchainRecoveryFile[] {
   const fs = syncMirror();
   const files: ToolchainRecoveryFile[] = [];
@@ -91,14 +67,8 @@ function snapshotFiles(): readonly ToolchainRecoveryFile[] {
 }
 
 async function installManifest(input: Extract<ToolchainRequest, { op: 'install' }>['input']) {
-  const registry = new RegistryClient({ baseUrl: input.registryUrl });
-  const result = await install({
-    vfs: new SyncMirrorVfs(),
-    cwd: input.cwd,
-    registry,
-  });
-  finalizeGenericPackageInstallFiles({ root: input.cwd });
-  const bindings = await activateInstallRuntime(input.cwd, result);
+  const { installToolchainPackages } = await import('./no-coi-toolchain-install.ts');
+  const bindings = await installToolchainPackages(input);
   await flushMirror();
   if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
   return Object.freeze({
@@ -185,6 +155,7 @@ async function startInstalledBin(
 
 async function restoreActivation(state: ToolchainActivationState): Promise<void> {
   if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
+  const { activateWorkbenchRuntimeAdapters } = await import('./no-coi-toolchain-install.ts');
   if (runtimeBackend === 'memory' || runtimeBackend !== state.vfsBackend) {
     const fs = syncMirror();
     for (const file of state.files) {

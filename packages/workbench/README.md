@@ -14,6 +14,7 @@ terminal, and preview operations.
   `typescript-worker` — host-resolved deployment entries.
 - `no-coi-toolchain-worker` — one-Worker SDK exact-manifest/install-bin entry
   for explicit shared-memory-free mode; package identity is not policy.
+  Install/activation code loads on first install or restore.
 
 Controllers, owner transports, worker protocols, and `src/internal/*` are not
 public. Browser hosts supply Worker, Service Worker, and WASM URLs; package code

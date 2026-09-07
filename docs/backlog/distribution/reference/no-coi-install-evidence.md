@@ -18,3 +18,15 @@ caching suffices, no added coordination mechanism. The existing Worker
 transport excludes duplicate/reordered delivery; held network response and
 second operation exercise actual busy admission. Fetch abort exercises both
 first-use operations and keeps the same Worker for postfailure eval/fs.
+
+GREEN packed first-use/fault proof: install and restore each load once, reuse
+the native module, both real fetch aborts reject with Chromium's native error;
+same Worker eval/fs remain usable. Held first import rejects overlap with
+existing SandboxToolchainBusyError, completes after release and remains reusable.
+Complete eager toolchain graph: 966,094 → 796,895 B min; 288,598 → 236,199 B gzip.
+No npm/catalog/generated adapter inputs in boot requests/eager graph.
+
+Initial browser setup incorrectly called RuntimeFs.mkdir; that host interface
+only reads/writes, and writeFile already creates parents. Removed the invalid
+setup call, retaining every assertion; focused real packed proof then passed.
+Strict packed typecheck/build and preceding compiler/VM/SDK proofs also passed.

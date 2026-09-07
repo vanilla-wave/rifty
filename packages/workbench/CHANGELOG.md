@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- No-COI worker loads install/activation code on first install or restore; failed chunk fetch rejects that request while eval/fs remain usable.
+
 - Preserve every source worker entry in bare-import consumer wrappers, beside published dist entries.
 
 ### Fixed

@@ -30,7 +30,6 @@ export async function provePackedInstallLoading(root, report) {
                 if (event.type === 'stdout') globalThis.installProof.output += event.chunk;
               });
               await runtime.toolchainReady;
-              await runtime.fs.mkdir('/workspace', { recursive: true });
               await runtime.fs.writeFile(
                 '/workspace/package.json',
                 '{"name":"lazy-install-probe","version":"1.0.0"}',
@@ -151,7 +150,6 @@ async function provePendingImport(browser, base, host, worker) {
         const runtime = spawnToolchainRuntime({ workerUrl: worker });
         globalThis.pendingProof = { runtime, registryUrl };
         await runtime.toolchainReady;
-        await runtime.fs.mkdir('/workspace', { recursive: true });
         await runtime.fs.writeFile(
           '/workspace/package.json',
           '{"name":"pending-import","version":"1.0.0"}',
