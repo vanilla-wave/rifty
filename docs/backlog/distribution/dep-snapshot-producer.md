@@ -22,6 +22,11 @@ snapshotId and compatible runtime identity without a checkout. A pinned lock
 must not silently resolve newer versions. Existing unsupported-package gates
 remain visible; this does not introduce lifecycle-script support.
 
+The user explicitly accepts a registry endpoint requiring no authentication
+from the builder. Private-registry access is the embedding environment's job;
+no npm credential manager, auth script generation or private-package proof is
+added to the producer contract.
+
 CLI/public API packaging and exact names are agent-owned ADR choices. Include a
 packed-consumer test that bakes caller inputs and restores the result, including
 raw tar.gz and HTTP-decoded tar delivery. No private Tracker package is needed
@@ -52,11 +57,17 @@ docs/backlog/distribution/reference/embedder-gaps-evidence.md.
 
 ## Decisions
 
+- 2026-09-07 — F1 user decision: builder-owned registry authentication excluded; host environment provides access.
+
 - 2026-09-07 — user: producer-generated tar.gz, ordinary inspection, disjoint user/control paths; arbitrary caller-created installed trees are not admitted.
 
 - 2026-09-07 — finding draft; observable scope is settled by goal I1; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.
 
 ## Challenge
+
+challenge: 2026-09-07 — clear
+
+### Re-fit — application and registry policies
 
 challenge: 2026-09-07 — clear

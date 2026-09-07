@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Self-hosted Workbench from published assets and dependency snapshots
 created: 2026-09-07
 value: An existing app bakes its Node dependency snapshot in its own CI and runs edit/build/preview from self-hosted published assets without a browser registry or interference with the host's storage and routes.
@@ -13,7 +13,9 @@ tier: production
 Deliver the selected embedder gaps 3, 6, 7, 4, 8, 5, 10 plus a standard browsable tar.gz snapshot format.
 A host supplies project files and a compatible dependency snapshot produced from
 its package.json and npm lockfile, edits the project, runs the installed Vite
-build/dev commands, and renders the real output. The host needs published
+build/dev commands, and renders the real output. Snapshot application has two
+explicit modes: apply the supplied snapshot, or initial deployment only
+(default), after which saved state takes priority. The host needs published
 packages and static serving, without a rifty checkout, custom worker bundling,
 or a browser-side npm registry. This is M11 consumer adoption of the existing
 Node runtime, not new package compatibility.
@@ -26,7 +28,8 @@ fresh Scratch becomes usable. Relevant operation budgets are host-configurable.
 ## User scenario
 
 1. The existing Tracker plugin project uses package.json + package-lock.json;
-   its CI uses the published producer and configured registry to bake a tar.gz
+   its CI uses the published producer and a registry endpoint requiring no
+   builder-owned authentication to bake a tar.gz
    dependency snapshot browsable by a standard archive tool and obtain snapshotId plus install-artifact identity.
 2. The host copies published Worker/SW/WASM assets and the snapshot to its own
    static paths, supplies documented headers and URLs, and selects snapshot-only.
@@ -34,9 +37,17 @@ fresh Scratch becomes usable. Relevant operation budgets are host-configurable.
    under that same SW scope. Unrelated host pages/files remain outside rifty's
    managed routes/storage. The user edits and builds the real Vite project;
    dev preview and its assets/HMR resolve under the configured prefix.
-4. Invalid or incompatible snapshot input fails with a reason before guest
-   startup, without registry fallback. Existing registry-enabled configurations
-   retain their current install behavior.
+4. First deployment uses the supplied snapshot. Later opens default to saved
+   state: a newly supplied snapshot never silently replaces an edited project.
+   If saved state is incompatible, startup fails with a reason while preserving
+   all files; the host can explicitly choose snapshot application. When a
+   snapshot is actually needed/applied, invalid input fails before startup,
+   without registry fallback. Existing registry-enabled acquisition remains.
+   The host can explicitly choose apply-snapshot mode, independent of prior
+   snapshotId, with conflict policy overwrite or error. Conflict is about file
+   paths/types/bytes, not package identity or dependency interpretation. Error
+   leaves the complete prior state intact; overwrite replaces conflicting
+   targets, adds absent entries and leaves unrelated saved paths intact.
 5. Selecting a new OPFS root starts empty. Returning to the former setting
    reopens the former projects; no automatic migration or deletion occurs.
 6. If Scratch bytes exist without a catalog reference or recovery journal, the
@@ -68,7 +79,8 @@ Each statement below is false on that baseline; gzip decoding alone is already t
    writes no builtin-alias or QuickJS bootstrap wrapper.
 3. I3. Public snapshot-only acquisition needs no registry URL and makes zero
    registry/Eddy requests; unavailable, corrupt, or incompatible snapshots fail
-   loudly before guest startup. Missing dependency bytes never trigger network
+   loudly before guest startup when the selected application policy requires
+   that snapshot. A valid saved project is not blocked by an unused new asset. Missing dependency bytes never trigger network
    installation through terminal/package APIs in this mode.
 4. I4. A selected OPFS namespace bounds rifty's normal preload and writes;
    unrelated origin files are untouched. A new namespace starts empty and
@@ -83,12 +95,28 @@ Each statement below is false on that baseline; gzip decoding alone is already t
    storage proof, project-file commit/durability, and catalog/SCM/archive
    requests; raising a budget is not defeated by a hidden shorter sibling
    deadline. Defaults and mutation-settlement semantics remain explicit.
+8. I8. Snapshot application exposes initial-deployment-only and apply-snapshot
+   modes. Initial-deployment-only is default: an existing project's saved files
+   take priority, including when the supplied snapshotId changes. Incompatible
+   saved state fails startup without changing bytes and permits an explicit
+   host update decision; it is never silently reseeded or reinstalled.
+   Apply mode evaluates the supplied payload even when snapshotId is unchanged.
+   It exposes overwrite/error conflict policies, default error: identical
+   files and compatible directory entries are not conflicts; different bytes
+   or incompatible entry types/ancestors are. Error reports conflicting paths
+   with zero payload changes. Overwrite replaces conflicting targets and adds
+   missing entries; saved paths outside those targets remain. No policy branch
+   depends on a file being package.json, a lockfile or a dependency file.
 
 ## Decisions
 
-- 2026-09-07 — re-fit opened before first pickup: user challenged the no-open-forks claim; status demoted to draft, existing Outcome/scenario/I1–I7 retained verbatim pending F1/F2 in map.md.
-- 2026-09-07 — F1 unresolved: whether the producer must acquire authenticated private-registry packages without host-written auth/proxy code (I1, scenario 1); URL configuration alone is not that proof.
-- 2026-09-07 — F2 unresolved: behavior of an edited persisted project when the host deploys a new snapshot (I1/I3, scenarios 1/4); baseline creates a fresh Scratch on changed snapshot identity even with preserveDirtySameStarter.
+- 2026-09-07 — pre-run re-fit after scope audit; rounds 2/3 decisions below supersede the earlier open-fork status, whose history stays in the ledger.
+- 2026-09-07 — F1 resolved by user: a registry without builder-owned authentication is sufficient; the embedding environment owns access to a private registry.
+- 2026-09-07 — F2 resolved by user: explicit apply-snapshot vs initial-deployment-only modes; default initial-deployment-only gives saved state priority, preserves bytes and stops on incompatibility pending an explicit choice (I8).
+- 2026-09-07 — user-origin I8 changes the baseline automatic Scratch reseed on snapshot identity drift; pre-run re-fit, not an implementation decision.
+- 2026-09-07 — F3/F4 resolved by user: file conflicts control application; expose overwrite/error, with no dependency/package-specific distinction.
+- 2026-09-07 — error is default under the user's round-2 preserve-before-explicit-update choice; conflict preflight leaves all prior bytes intact, overwrite is explicit.
+- 2026-09-07 — apply evaluates payload regardless of previous snapshotId; absence from the payload is not a deletion request, except descendants of an explicitly replaced incompatible target.
 
 - 2026-09-07 — user selected feedback 3, 6, 7, 4, 8, 5, 10 and gzip; other feedback is not added.
 - 2026-09-07 — user: a new storage root starts empty; old projects stay accessible under the previous setting; no migration.
@@ -99,6 +127,8 @@ Each statement below is false on that baseline; gzip decoding alone is already t
 - 2026-09-07 — production tier: new persistent namespace/recovery transitions require crash/reload proof; no claim of protection against browser eviction.
 - 2026-09-07 — COI Workbench scope follows the report; no-COI SDK, React bindings and a new IDE UI are separate.
 - 2026-09-07 — package names, API spellings, asset layout and recovery carrier remain implementation choices; public boundary decisions require ADRs at pickup.
+- rejected route: special package.json/dependency conflict policy or skipping apply merely because snapshotId is unchanged — violates I8.
+- rejected route: automatically replace saved state after changing the supplied snapshot in default mode — violates I8.
 - rejected route: require a rifty checkout for baking — violates I1.
 - rejected route: consumer builds Worker/SW entries from a recipe — violates I2.
 - rejected route: fake registry URL or automatic install on snapshot rejection — violates I3.
@@ -108,5 +138,9 @@ Each statement below is false on that baseline; gzip decoding alone is already t
 - rejected route: JSON compressed with gzip, or metadata inserted under a reserved user filename — violates I1.
 
 ## Challenge
+
+challenge: 2026-09-07 — clear
+
+### Re-fit — application and registry policies
 
 challenge: 2026-09-07 — clear

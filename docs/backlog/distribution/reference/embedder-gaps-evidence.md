@@ -15,6 +15,7 @@ The report's 105 MB / 16 s figures are not reproduced measurements.
 | I4 | packages/vfs/src/sync-mirror.ts; packages/vfs/src/opfs-sync.ts | installOpfsFs has no root; init gets origin root and preloads all files |
 | I5 | packages/io/src/preview-protocol.ts; packages/workbench/src/workbench/internal/workbench-options.ts | fixed /preview/<port>; no prefix option |
 | I6 | browser probe below; packages/workbench/src/workers/playground-project-authority.ts | unjournaled orphan blocks createScratch; recovery handles owned journals/stages, not this case |
+| I8 | snapshotId replacement probe in Re-fit scope audit below; packages/workbench/src/workers/playground-project-authority.ts | same-project new snapshotId reseeds dirty Scratch; no generic overwrite/error application policy |
 | I7 | packages/workbench/src/workbench/workbench-owner-port.ts; packages/workbench/src/workers/workbench-owner-storage.ts; packages/workbench/src/workbench/workbench-browser-owner.ts; packages/workbench/src/workbench/internal/playground-session-tools-transport.ts | hidden 30 s ready/proof and 60 s file/tool budgets |
 
 These are product observations, not real-Node oracle claims. Existing fidelity
@@ -174,3 +175,32 @@ REFINE_SCOPE_SNAPSHOT_UPDATE {"dirty":false,"userFileExists":false}
 The probe asserts that observed current behavior; it is not a failing regression
 or a claimed repair. Temporary test removed. This qualifies the earlier same-
 definition reload proof: that proof never changed snapshotId and still stands.
+
+## Round 2 decisions and dependent frontier
+
+User: builder-owned authentication is unnecessary; embedding environment owns
+private-registry access. User: explicit apply-snapshot and initial-deployment-
+only modes, with the latter default and saved state taking priority; chose
+preserve all old files and stop on incompatibility before explicit update.
+This adds I8, false on the same baseline as the snapshotId reseed probe above.
+
+Apply mode now exposes two user-owned branches not answerable before mode
+selection: reapply unchanged identity vs only changed id (F3); reject a changed
+dependency request vs replace its package.json/lockfile (F4). These are asked in
+round 3; no internal choice or implementation has settled them.
+
+## Round 3 resolution
+
+User rejected dependency/package-specific branches: generic file conflicts
+must select overwrite or error through explicit configuration. The same answer
+covers repeated snapshot identity and changed package manifest. Derivation:
+apply mode evaluates payload independently of previous id; identical entries
+are not conflicts; error defaults under the earlier preserve/stop choice.
+No implicit deletion of unrelated saved paths is requested. Archive validation,
+compatibility and integrity checks still apply to producer artifacts.
+
+The new distribution/workbench-snapshot-application-policy child owns I8 and
+composes before snapshot-only admission. No matching existing draft was found:
+namespace migration, orphan recovery, source ingress and cache representation
+items own other boundaries. This replaces the earlier catalog reseed behavior
+by an explicitly user-selected default, without a generic dependency merge.
