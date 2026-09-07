@@ -6,35 +6,34 @@
    identity output and standard tar.gz consumer proof (I1).
 2. `distribution/workbench-static-assets` — copyable Worker/SW/WASM closure,
    first proven with the existing install-enabled mode (I2).
-3. `distribution/workbench-snapshot-only` — registry-free admission and loud
-   snapshot failure; consumes the published producer/assets (I3).
-4. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
+3. `distribution/workbench-snapshot-application-policy` — explicit initial-only/
+   apply modes and generic file-conflict policy, preserving saved state (I8).
+4. `distribution/workbench-snapshot-only` — registry-free admission and loud
+   snapshot failure; composes published producer/assets and application policy (I3).
+5. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
    selection, with the old setting preserving access to old projects (I4).
-5. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
+6. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
    open fresh Scratch, using the selected storage namespace (I6).
-6. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
+7. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
    on the same static host (I5).
-7. `distribution/workbench-operation-budgets` — public effective boot/file/tool
+8. `distribution/workbench-operation-budgets` — public effective boot/file/tool
    budgets, then composed packed-host proof of the whole scenario (I7).
 
 ## Open questions
 
-- F1. Must the CI producer support authenticated private registries without a
-  host-written auth script/proxy? — owner: user — current refine frontier;
-  basic configured-URL support and public fixture proof do not answer it.
-- F2. On deploying a new dependency snapshot, should edited persisted projects
-  update dependencies while preserving source, or retain all bytes and require
-  an explicit update decision when compatibility changes? — owner: user —
-  current refine frontier; baseline change-of-snapshot reseed proven in evidence.
-
-Goal is draft; existing children are provisional, no pickup until F1/F2 close.
-Archive format, collision-free paths, namespace migration and orphan preservation
-choices remain settled and are not reopened.
+- No currently identified observable forks after rounds 2/3. The user owns any
+  newly discovered scope choice; it cannot be settled silently during pickup.
+- F1: environment-owned registry access. F2: default initial-only/saved-state
+  priority plus explicit apply. F3/F4: generic overwrite/error conflict policy,
+  independent of snapshotId or package/dependency meaning.
 
 ## Existing authorities
 
 - Snapshot compatibility/identity: Workbench dep-snapshot and package-acquisition authority
-  (ADR-0261/0346); no second installer or restore policy.
+  (ADR-0261/0346); application policy selects effects before acquisition and
+  catalog reseed. It owns conflict resolution; neither catalog nor installer
+  invents an independent update policy. Existing transaction/acquisition owners
+  execute selected effects, without a second installer or write coordinator.
 - Storage/recovery: paired OPFS backend + owner catalog transaction authority
   (ADR-0072/0279); both storage children share those existing owners.
 - Preview addressing: io preview-protocol and existing SW bridge; one prefix
@@ -44,6 +43,7 @@ choices remain settled and are not reopened.
 
 ## Out of scope
 
+- Builder-owned private-registry authentication; access belongs to the host environment.
 - Arbitrary externally installed node_modules archive admission, cache/tree
   deduplication, and a new all-project import API. Existing duplicate-byte
   research stays in playground/snapshot-carries-substituted-bytes-twice.
