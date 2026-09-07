@@ -10,12 +10,16 @@ type NoUnexpectedPublicKey = Exclude<keyof ModuleLoader, ExpectedPublicKey> exte
   : false;
 
 describe('ModuleLoader public surface', () => {
-  it('does not widen for package-internal execution mechanisms', () => {
+  it('exports declared preparation without exposing internal execution mechanisms', () => {
     const noUnexpectedTypeKey: NoUnexpectedPublicKey = true;
     const loader = createModuleLoader(new MemoryFsSync());
 
     expect(noUnexpectedTypeKey).toBe(true);
-    expect(Object.keys(publicLoader).sort()).toEqual(['ModuleLoadError', 'createModuleLoader']);
+    expect(Object.keys(publicLoader).sort()).toEqual([
+      'ModuleLoadError',
+      'createModuleLoader',
+      'preloadTsconfigPaths',
+    ]);
     expect(Object.keys(nodeEntryBuiltin).sort()).toEqual([
       'parseBinLauncherTarget',
       'runNodeEntry',
