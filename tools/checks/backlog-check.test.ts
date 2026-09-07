@@ -109,7 +109,7 @@ Install and run the package.
     }
   });
 
-  it('enforces trace and size on ready items created at/after 2026-09-03 (RDY-3, RDY-4)', () => {
+  it('enforces trace, never size, on ready items created at/after 2026-09-03 (RDY-3, RDY-4)', () => {
     const run = (body: string) => {
       const root = mkdtempSync(join(tmpdir(), 'rifty-backlog-check-'));
       try {
@@ -163,16 +163,17 @@ ${extra}`;
     const untraced = run(ready('1. exact bytes → I1\n2. hardening demand'));
     expect(untraced.status).toBe(1);
     expect(untraced.stderr).toContain("'## Acceptance' row without trace");
+    // Size is a reviewer concern, not a gate (RDY-4): many traced rows and a long body pass.
     const many = run(
       ready(Array.from({ length: 15 }, (_, i) => `${i + 1}. row ${i} → I1`).join('\n')),
     );
-    expect(many.status).toBe(1);
-    expect(many.stderr).toContain('traced rows > 15');
+    expect(many.stderr).toBe('');
+    expect(many.status).toBe(0);
     const long = run(
       ready('1. exact bytes → I1', Array.from({ length: 200 }, () => '- note').join('\n')),
     );
-    expect(long.status).toBe(1);
-    expect(long.stderr).toContain('lines > 200');
+    expect(long.stderr).toBe('');
+    expect(long.status).toBe(0);
     const older = ready('1. hardening demand').replace(
       'created: 2026-09-03',
       'created: 2026-09-02',
@@ -180,7 +181,7 @@ ${extra}`;
     expect(run(older).status).toBe(0);
   });
 
-  it('requires ## Challenge with a verdict line on items created at/after the cutoff', () => {
+  it('requires a premise check at adoption, never for capturing a draft', () => {
     const root = mkdtempSync(join(tmpdir(), 'rifty-backlog-check-'));
     try {
       const areaDir = join(root, 'docs/backlog/perf');
@@ -199,23 +200,27 @@ why: something slow
 Slow.
 `;
       writeFileSync(item, frontmatter);
+      const draft = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
+      expect(draft.status).toBe(0);
+      const ready = `${frontmatter.replace('status: draft', 'status: ready')}\n## User scenario\nRun X.\n## Acceptance\n1. X works.\n## Out of scope\nNothing else.\n## Decisions\nSettled.\n`;
+      writeFileSync(item, ready);
 
       const missing = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
       expect(missing.status).toBe(1);
       expect(missing.stderr).toContain("requires '## Challenge'");
 
-      writeFileSync(item, `${frontmatter}\n## Challenge\n\nlooks fine\n`);
+      writeFileSync(item, `${ready}\n## Challenge\n\nlooks fine\n`);
       const noVerdict = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
       expect(noVerdict.status).toBe(1);
       expect(noVerdict.stderr).toContain("missing 'challenge: <YYYY-MM-DD> — <verdict>' line");
 
-      writeFileSync(item, `${frontmatter}\n## Challenge\n\nchallenge: 2026-08-27 — clear\n`);
+      writeFileSync(item, `${ready}\n## Challenge\n\nchallenge: 2026-08-27 — clear\n`);
       const green = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
       expect(green.stderr).toBe('');
       expect(green.status).toBe(0);
 
       // grandfathered: created before the cutoff needs no challenge
-      writeFileSync(item, frontmatter.replace('created: 2026-08-27', 'created: 2026-08-26'));
+      writeFileSync(item, ready.replace('created: 2026-08-27', 'created: 2026-08-26'));
       const old = spawnSync(process.execPath, [checker], { cwd: root, encoding: 'utf8' });
       expect(old.stderr).toBe('');
       expect(old.status).toBe(0);

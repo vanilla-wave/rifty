@@ -35,10 +35,10 @@ epic). Output: a ready goal directory (`../artifacts/goal.md`, `map.md`,
 6. **Ledger.** One header line.
 7. **Challenge.** One fresh independent critic on raw `goal.md` + `map.md`
    (`docs/backlog/README.md` §Challenge). Verdict verbatim into `## Challenge`.
-8. **Report.** Flip `status: ready`; a FRESH report subagent writes the
-   completion report from the recorded docs alone (`rifty-to-backlog` §6);
+8. **Report.** Flip `status: ready`; the driver writes the
+   completion report from the recorded facts (`rifty-to-backlog` §5);
    relay it. No approval gate. Pushback before the first PICKUP re-fits in
-   place; after a run started → CLOSE + FIT.
+   place; after a run started → explicit user amendment (`RDY-6`).
 
 Done when `pnpm backlog:check` passes and every fit-time decision lives in
 `goal.md`, `map.md`, or a ledger line.

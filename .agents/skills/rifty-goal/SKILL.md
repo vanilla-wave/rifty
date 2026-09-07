@@ -6,7 +6,7 @@ description: Drive one rifty goal (epic) through its lifecycle — fit an outcom
 Owns transitions of ONE goal directory `docs/backlog/epics/<slug>/`. Canon:
 `docs/process/README.md` (layers, roles, stages, stops). Review, the user
 interview (`rifty-refine`), unplanned defects (`rifty-fix`), and intake
-(`rifty-to-backlog`) are other actors — hand off, never inline their work.
+(`rifty-to-backlog`) are entry helpers; the driver continues authorized work in this session.
 
 Detect the mode from state. A whole-goal hand-off runs the README §Stages loop
 — PICKUP → Contract+RED → IMPLEMENT → Final+GREEN → RECHART until the map is
@@ -19,9 +19,9 @@ the loop to `.claude/workflows/goal-run.js`. A single-mode ask ("fit X",
 |---|---|
 | No goal dir — a hand-off naming an outcome, or a legacy single-file epic | FIT → `docs/process/stages/fit.md` |
 | Ready goal with an open frontier | PICKUP → `docs/process/stages/pickup.md` |
-| A slice of this goal just landed (Final+GREEN PASS on the goal branch), or new facts arrived | RECHART → `docs/process/stages/rechart.md` |
+| A slice of this goal just landed (Final+GREEN PASS on the goal branch), a unit left the path (`STOP-4`), or new facts arrived | RECHART → `docs/process/stages/rechart.md` |
 | Map `## Items` empty and invariants provable | CLOSE → `docs/process/stages/close.md` |
 
-Standing rules: `goal.md` is frozen (amend = CLOSE + FIT); `ledger.md` only
+Standing rules: `goal.md` is user-owned (explicit amendments per `RDY-6`); `ledger.md` only
 grows; `map.md` and unit contracts are the agent's path (`RDY-5`). The only
 user stops are `docs/process/rules/stops.md` `STOP-1`.

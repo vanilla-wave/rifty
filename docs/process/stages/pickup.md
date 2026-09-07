@@ -1,31 +1,23 @@
-# PICKUP — compile and gate the next slice
+# PICKUP — identify the authority and missing proof
 
-Input: a ready goal with a frontier. Output: one ready unit with band, rounds,
-review membership; no implementation started. Driver session (`DEC-5`).
+Input: authorized work — a draft, observed defect, direct docs/code request,
+or the goal's next unblocked unit. The driver stays in the same session.
 
-0. **Re-chart debt.** Ledger tail shows a landed slice without its `re-chart
-   after <slice>` line → run `rechart.md` first.
-1. **Choose.** The user-named child, else the first frontier child
-   (`../artifacts/map.md`).
-2. **Compile** draft → ready per `../rules/readiness.md` `RDY-2`: evidence per
-   row about the oracle and baseline only — nothing about the deliverable is
-   measured here, a budget on it becomes a traced Acceptance row with a RED
-   carrier; internal forks resolved yourself; a user-observable fork or an
-   `owner: user` fog line the slice depends on → stop (`STOP-1a`), request
-   manual `rifty-refine`, never interview.
-3. **Trace + size** (`RDY-3`, `RDY-4`): every Acceptance/Parity/Fault row
-   traced; ≤ 15 traced rows, ≤ 200 lines, one-sentence `title`. Over → split
-   now, before any review; successors reference each other.
-4. **Membership + budget** (`RDY-8`, `RDY-9`): record `review: checkpoints
-   rounds:<n>` or `review: ordinary` (`— proof-only` when no product delta is
-   expected, whatever the subject) in the unit; append the ledger row
-   `<date> — <slice> band <lo>–<hi> rounds <n>`, band sized from the
-   expected-RED batch. Far above any prior estimate = too big: split.
-5. **Contract+RED** — `checkpoints` units only — via `contract-red.md`
-   (`checkpoint-run.md`). A split successor carrying only certified rows
-   inherits (`RDY-9`). `ordinary` units skip both checkpoints.
-6. **Hand off.** Implementation is `implement.md`; this stage ends here.
+1. Name the accepted result and its authority: scenario, invariant, ADR or
+   observed baseline. New scope needs the user's decision (`RDY-6`).
+2. For a draft, compile per `RDY-2`; resolve the premise check here, before
+   committing to the plan. A question answered by a probe is answered here;
+   keep a useful decision, otherwise delete the draft. No artificial second
+   task to decline it. Already-authorized work continues automatically.
+3. Identify the evidence still needed (`RDY-8`). New parity/stateful behavior
+   requires Contract+RED before implementation; an observed defect needs its
+   real baseline artifact and RED; existing certified proof is reused only
+   for the same obligations. Docs need no product RED or contract document.
+4. Run the missing preparation via `contract-red.md` / `rifty-fix`. If a doc
+   exists, set it ready with its evidence references. A legacy ready status
+   or old `review:` label supplies no missing evidence by itself.
+5. Continue IMPLEMENT. Record a user choice when blocked; pursue technical
+   questions in-session and independent units when available (`STOP-1..4`).
 
-Done when verdict, membership, band and rounds are recorded and no
-implementation has started — no product, template, fixture, lane or harness
-code exists on the branch that the contract's REDs do not require.
+Done when the required pre-implementation proof exists. No membership flag,
+size budget, document lifecycle, or PR shape substitutes for it.

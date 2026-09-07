@@ -4,7 +4,7 @@ An epic is a directory `docs/backlog/epics/<slug>/` with three files split by
 owner × mutability (`docs/process/artifacts/`). Procedure:
 `docs/process/stages/fit.md`. No new single-file epics.
 
-## `goal.md` — destination (frozen once `status: ready`)
+## `goal.md` — user-owned destination
 
 ```md
 ---
@@ -75,14 +75,13 @@ Index, not store: one line + link per entry; content lives on items/ledger.
 
 ## `ledger.md` — append-only journal
 
-Budget bands + rounds (declared JIT at pickup, review-owned — `REV-10` axis 5),
-one-line decisions (what + where the full answer lives), verdicts,
-observations/diagnoses (or links to `reference/`). Lines are never edited or
-removed; the closure walk (`docs/process/stages/close.md`) exports every line to a durable
-carrier or drops it explicitly.
+One-line decisions (what + where the full answer lives), reception verdicts,
+observations/diagnoses (or links to `reference/`), the landed slice's PASS
+(`docs/process/artifacts/ledger.md`). Lines are never edited or removed; the
+closure (`docs/process/stages/close.md`) resolves obligations and exports useful
+knowledge; routine observations remain git history.
 
 ```md
-- <YYYY-MM-DD> — <slice> band <lo>–<hi> rounds <n> declared at pickup
 - <YYYY-MM-DD> — decided <one line>; full answer: <link>
 - <YYYY-MM-DD> — re-chart after <slice> (final-green PASS @ <sha>): <n> graduated / <m> invalidated
 ```

@@ -1,24 +1,15 @@
-# ledger.md — append-only journal
+# Ledger — useful decisions and history
 
-`docs/backlog/epics/<slug>/ledger.md`. Lines are never edited or removed; CLOSE
-exports every line to a durable carrier or drops it explicitly. One line =
-gist + link to the full carrier (item, ADR, `reference/`, PR). A diagnosis or
-observation with no carrier yet gets a `reference/` file now — a contract is
-never edited to hold it (`readiness.md` `RDY-4`).
+`docs/backlog/epics/<slug>/ledger.md`; append dated one-liners with evidence
+links. Record a fact once. History is not a queue of obligations: CLOSE checks
+the accepted result, required residuals and external promises, not every line.
 
-Line forms (`<date>` = `YYYY-MM-DD`):
+A slice navigation record:
+`- <date> — re-chart after <slice> (final-green PASS @ <sha>): <what changed>`.
+The verdict JSON owns the review result; this line points to it for the next
+slice's BASE. Legacy `ordinary PASS` lines mean the same previously reviewed
+slice; no new ordinary review mode exists.
 
-```md
-- <date> — <slice> band <lo>–<hi> rounds <n>            declared at pickup (RDY-9)
-- <date> — decided <one line>; full answer: <link>
-- <date> — <slice> re-cut: <what> — trace: none | fork: <what> — trace: I#
-- <date> — <slice> stop: STOP-1<letter> — <question asked>
-- <date> — re-chart after <slice> (final-green PASS @ <sha>): <n> graduated / <m> invalidated / no changes
-- <date> — re-chart after <slice> (ordinary PASS @ <sha>): …      review: ordinary units (RDY-8)
-- <date> — dropped: <reason>                              (CLOSE walk only)
-```
-
-The band row is review-checked (`review.md` `REV-10` axis 5); the rounds
-budget is read by `stops.md` `STOP-2`. The rechart line is the only record of
-a landed slice's PASS and the `BASE` of the next slice (`REV-8`); verdict
-lineage is not journaled here — the unit's status line and its git log are.
+User amendments live in `goal.md` (`RDY-6`); link them here when they change the
+route. Diagnoses and failed attempts can remain history; export only durable
+knowledge and evidence needed by the delivered result (`stages/close.md`).

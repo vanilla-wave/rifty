@@ -1,18 +1,15 @@
-# Final+GREEN — certify the delivered slice
+# Final+GREEN — prove the delivered result
 
-Subject: the slice diff from `BASE` (prior landed slice's reviewed tree, else
-branch base — `../rules/review.md` `REV-1`), on one clean committed tree.
-Requires the PR; the runner first runs `pnpm pr:check` on the committed SHA.
-Runner: `checkpoint-run.md`.
+Review the current unit diff from BASE (prior accepted slice, otherwise branch
+base), on a clean committed tree with `pnpm pr:check` green. Procedure:
+`checkpoint-run.md`; the same format and validator for every kind of change.
 
-- Evidence bar: `REV-5` Final+GREEN — `pass` judged adversarially, bounded by
-  the clause as declared; strengthening beyond it is a concern (`REV-2`,
-  `REV-3`).
-- Pass → the slice has landed on the goal branch; `rechart.md` records
-  `re-chart after <slice> (final-green PASS @ <sha>)` — the only PASS record
-  and the next slice's `BASE` (`REV-8`).
-- Blocker → status line `final-green: round <n>/<budget> — blocker @ <sha>`;
-  batch fix; verify; rounds per `RDY-9`; stall or exhaustion →
-  `../rules/stops.md` `STOP-3`/`STOP-4`.
-- Unit residuals must be empty to land (`REV-9`); goal residuals continue the
-  run.
+The reviewer checks the current contract/baseline, preparation required by
+`RDY-8`, real acceptance proof and any changes to the judging criteria (`PR-4`).
+A filename, a ready flag, or a passing test with a fake cannot close a claim.
+
+PASS → record the verdict at the reviewed SHA (`REV-8`). Inside a goal continue
+RECHART; standalone work may delete its completed draft, then run `pnpm check:pass-binding` and merge when the
+binding holds. A document deletion neither grants nor invalidates a verdict.
+Blockers → verify, fix or independently adjudicate, then re-review the changed
+result. Surviving technical problems follow `STOP-3..4`, never a fake GREEN.

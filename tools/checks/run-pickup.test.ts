@@ -70,7 +70,24 @@ describe('classifyAutonomousRunPath', () => {
     expect(classifyAutonomousRunPath(path)).toBe('test-support');
   });
 
+  it('classifies parity-runner cases as test support', () => {
+    expect(classifyAutonomousRunPath('tools/node-parity-runner/cases/fs/x.case.ts')).toBe(
+      'test-support',
+    );
+    expect(classifyAutonomousRunPath('tools/node-parity-runner/src/cli.ts')).toBe('other');
+  });
+
   it.each([
+    'packages/x/src/w.wasm',
+    'apps/playground/index.html',
+    'tools/shadow-registry/src/index.ts',
+  ])('counts every shipped file under a product root as production: %s', (path) => {
+    expect(classifyAutonomousRunPath(path)).toBe('production');
+  });
+
+  it.each([
+    'packages/x/README.md',
+    'packages/x/CHANGELOG.md',
     'docs/backlog/process-meta/test-coverage-debt.md',
     'docs/process/a-test-fixture.md',
     'docs/backlog/playground/save.md',

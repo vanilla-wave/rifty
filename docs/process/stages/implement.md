@@ -1,25 +1,19 @@
-# IMPLEMENT — RED → GREEN inside the band
+# IMPLEMENT — the smallest honest mechanism to GREEN
 
-Input: a unit with `ready-verdict:`. Driver session (`DEC-5`); planned work never
-invokes `rifty-fix` (expected RED is not a defect).
+Input: PICKUP's authority and preparation (`RDY-8`). The driver stays in the
+same session. A re-entry on a GREEN implementation goes to verification.
 
-1. Expected RED first (the certified tests), then the smallest honest
-   mechanism to GREEN (`AGENTS.md` §Simplicity, §Fidelity). Stay within the
-   declared band; a band trip → re-cut in place (`../rules/readiness.md`
-   `RDY-5`), never a fresh start. Budget rows (cold start, lane time) are
-   proven here by their RED; a breach on a row traced to `I#`/`scenario` is
-   not the agent's to relax → `STOP-1a`; a carrier choice (which CI lane) is
-   the agent's, one `## Decisions` line.
-2. Classify every discovery against the frozen goal/tier/Fidelity: required
-   → reverse-linked draft child (`rifty-to-backlog` shape, `## Challenge`);
-   outside → `rifty-to-backlog`. Never narrow the goal or detach required work.
-3. Append ledger lines for decisions and observations; run-state stays out of
-   the contract (`RDY-4`).
-4. `pnpm pr:check` green — under Codex escalated from the first attempt
-   (`../traps.md` codex-sandbox-listen-eperm); commit (short one-line subject); push; tree
-   clean.
-   Open the goal's draft PR if absent (`../rules/pr.md` `PR-3`); update its
-   body (goal, carried slices with band + rounds rows).
+1. Run RED before product changes: the certified new-behavior tests or the
+   reproduced defect's own parity/regression test. Never retarget a test to
+   pass. Documentation has no product RED.
+2. Fix the root owner, with the fault-class sweep where applicable. Keep the
+   declared behavior; route every verified discovery by `REV-12`.
+3. Update obligations, decisions and useful observations where they belong.
+   A technical uncertainty is a next probe/design, not a user scope question.
+4. Run `pnpm pr:check` (Codex: escalated from the first attempt; `traps.md`).
+   Reproducing failures are diagnosed; expected RED is not a separate bug.
+   An unresolvable red never lands. Report evidence and the remaining limit.
+5. Commit, push, update the draft PR, then continue Final+GREEN.
 
-Done when the tree is clean, gates are green, and every discovery is
-classified.
+No stage hand-off to the user. No mandatory second branch for its tests,
+package manifest, checking infrastructure or discovered required repair.
