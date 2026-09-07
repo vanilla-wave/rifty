@@ -23,6 +23,7 @@ interface Snapshot {
 
 describe('CI client bundle budgets against real packed reports', () => {
   it('admits cleaned artifacts with at least 50% headroom', () => {
+    expect(Object.keys(CLIENT_BUNDLE_BUDGETS)).toEqual(['main', 'sw', 'generic', 'toolchain']);
     const { report, boot } = evidence.cleaned;
     expect(() => assertClientBundleBudgets(report, boot)).not.toThrow();
     for (const [name, limits] of Object.entries(CLIENT_BUNDLE_BUDGETS)) {
