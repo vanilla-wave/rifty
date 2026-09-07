@@ -6,7 +6,7 @@ title: CI-only client bundle budget gate with headroom over the cleaned SDK arti
 created: 2026-09-06
 why: nothing measures what a consumer downloads — TypeScript at 77% of the no-COI worker and io at 4.7× the service worker shipped unnoticed; check:file-size counts source lines only and the packed-consumer fixture builds unminified and outside CI.
 user_story: As the maintainer, I want CI to shout when a client artifact grows by a large step, but today no gate exists and I do not want the local pr:check to nag about small growth.
-blocked_by: [runtime-js/lazy-typescript-tsconfig-discovery, distribution/sdk-entry-packaging-hygiene]
+blocked_by: [distribution/sdk-entry-packaging-hygiene]
 sources: [docs/backlog/distribution/reference/no-coi-client-bundle-evidence.md, AGENTS.md §Architecture (check:file-size ratchet), docs/process/rules/pr.md PR-6, docs/backlog/distribution/no-coi-vm-engine-default-rewrite.md]
 code: [tools/checks/file-size.mjs, tools/checks/pr-check.mjs, tests/integration/fixtures/no-coi-packed-toolchain-consumer/build.mjs, tests/integration/workbench-packed-consumer.mjs]
 ---
