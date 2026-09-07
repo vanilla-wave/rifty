@@ -1,6 +1,7 @@
 ---
 area: distribution
 status: draft
+epic: no-coi-client-bundle
 title: no-COI toolchain tier defaults node:vm to the rewrite engine and fetches QuickJS WASM only when quickjs is selected
 created: 2026-09-06
 why: under ADR-0142's quickjs default every no-COI worker boot fetches the 503 KB QuickJS WASM although no step of the tier's scenario calls a vm sandbox API; the toolchain SDK surface has no engine selector, and worker-entry ignores a rewrite selection (ADR-0352 D5 gap), so a headerless host cannot avoid the download either way.

@@ -1,6 +1,7 @@
 ---
 area: toolchain-build
 status: draft
+epic: no-coi-client-bundle
 title: CI-only client bundle budget gate with headroom over the cleaned SDK artifacts
 created: 2026-09-06
 why: nothing measures what a consumer downloads — TypeScript at 77% of the no-COI worker and io at 4.7× the service worker shipped unnoticed; check:file-size counts source lines only and the packed-consumer fixture builds unminified and outside CI.

@@ -1,6 +1,7 @@
 ---
 area: distribution
 status: draft
+epic: no-coi-client-bundle
 title: Published sdk main and sw bundles carry only executed code — statement-level side-effect-free io root, generic-only vfs import, src worker entries marked side-effectful
 created: 2026-09-06
 why: published @riftydev/io is one dist file whose top-level Buffer/Stream installs keep all 48 KB alive for any single import, so sw.js weighs 62 KB instead of 13 and sdk main 101 instead of 57; sandbox.ts imports initBackend even in toolchain mode; workbench sideEffects omits the src no-COI worker entry.

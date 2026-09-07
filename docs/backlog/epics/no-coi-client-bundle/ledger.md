@@ -1,0 +1,2 @@
+- 2026-09-07 — FIT from all-five-items hand-off; PR #310 merged at d52ef8128, implementation branch starts there.
+- 2026-09-07 — FIT concern accepted: automatic runtime-worker import belongs to boot graph; static-only closure undercounts. Goal ready; five children remain draft.

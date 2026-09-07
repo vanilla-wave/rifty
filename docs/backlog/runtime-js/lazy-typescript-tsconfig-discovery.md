@@ -1,6 +1,7 @@
 ---
 area: runtime-js
 status: draft
+epic: no-coi-client-bundle
 title: Load the TypeScript compiler only on the paths that need it — never in the boot graph of a JavaScript-only runtime worker
 created: 2026-06-26
 why: three static TypeScript imports on the module-loader core path put the 3.5 MB compiler into every runtime worker bundle; the no-COI toolchain worker is 4.5 MB min / 1.3 MB gz, 77% of it TypeScript that plain-JavaScript hosts never execute.

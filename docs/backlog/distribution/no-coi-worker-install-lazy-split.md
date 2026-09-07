@@ -1,6 +1,7 @@
 ---
 area: distribution
 status: draft
+epic: no-coi-client-bundle
 title: no-COI toolchain worker loads install and activation machinery on first install or restore, not at boot
 created: 2026-09-06
 why: npm-client (80 KB min), the shadow-substitution catalog and codec (24 KB) and the generated esbuild runtime adapter (73 KB) sit in the worker's boot graph but execute only inside install or restore.
