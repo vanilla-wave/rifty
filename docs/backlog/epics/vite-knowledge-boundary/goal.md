@@ -1,10 +1,11 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Consolidate existing guest-package adaptations under shadow registry
 created: 2026-07-18
 value: Existing supported programs retain their behavior while guest-package adaptations have one registry owner instead of changing platform contracts.
 user_story: As a developer running Vite or another ordinary npm tool, I want package compatibility to follow installed dependencies, but today package-specific preparation also lives in Workbench and runtime-js.
+tier: works
 sources: [ADR-0263, ADR-0278, ADR-0226, ADR-0371, ADR-0375, PR-167-review]
 ---
 
@@ -32,25 +33,6 @@ Each target is false on the inspected main baseline `1e91c3df5`; source witnesse
 2. I2 — Generic runtime contracts and realm identity storage have no guest-package-specific API or key. Current witness: runtime-js `RuntimeEsbuildCjsOuter`, `publishRuntimeEsbuild`, `readRuntimeEsbuild` and the `esbuild` slot.
 3. I3 — Generic project-file visibility and package diagnostics do not infer Vite ownership from a name. Current witnesses: `.vite` exclusions and `[real-vite/worker]` logs in the captured inventory.
 
-## Items
-
-Not split yet. FIT inventories the existing scope, chooses the route and cuts children by the semantic owner. Preserve the current draft path for incoming links; convert this legacy epic to a goal directory at FIT.
-
-Candidate progression, not compiled child contracts:
-
-1. Inventory existing adaptations and acceptance owners. Probe whether a missing general Node capability can eliminate each workaround; otherwise retain its registry-owned implementation. Result: bounded migration and preservation criteria, no product change yet.
-2. Consolidate install-only adaptations first. Result: existing supported packages receive the same prepared bytes through ordinary installation without Workbench-owned package patch policy.
-3. Consolidate runtime adaptation and remove package-named platform identity contracts. Result: existing script/bin and build/dev/HMR/restore paths obtain their adaptations through general platform capabilities; optional helpers remain compatible. Carrier choice follows evidence.
-4. Remove unrelated-project file/diagnostic policy leaks and close the inventory with ownership checks plus real browser acceptance. Result: ordinary projects retain their own files/provenance, and all existing adaptation cases are accounted for.
-
-## Research evidence
-
-- 2026-09-07 — main `c64cb2ebb` changes processes only since the inspected source baseline `1e91c3df5`. The captured source witnesses remain current.
-- ADR-0371 and `tools/shadow-registry/tools/generate-esbuild-runtime.ts` already separate registry derivation from the Workbench output location. With SDK rebuilds accepted, registry-owned finite implementations bundled with the SDK are a candidate; this does not require moving executable source into the data-only catalog or introducing another byte-delivery path. Import/layer/packaging viability remains unproven until FIT.
-- `node-entry-runtime-preparation.ts` activates admitted bindings for ordinary script/eval/bin entries too. `vite-node-entry-edge.ts` adds concrete preparation and suppresses activation for info modes. The earlier esbuild map's “only before Vite” description was too narrow; preserve all existing entry paths.
-- Executed with Node `v24.16.0`, Vitest `2.1.9`: `pnpm exec vitest run packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts packages/workbench/src/workers/vite-node-entry-edge.test.ts packages/workbench/src/workers/package-install-finalizer.test.ts packages/runtime-js/src/internal/worker-globals.test.ts` → 4 files passed, 42 tests passed. Evidence covers current dispatch validation, preparation and realm-slot contracts. Patch tests use synthetic source fixtures; these tests neither prove full package parity nor the proposed migration.
-- ADR-0278's archive clauses and `packages/workbench/src/workbench/internal/playground-archive.ts` also classify `.vite` by name. Include this I3 sibling alongside Files/snapshot paths; inspect the ADR-0286 corrections before changing archive behavior.
-
 ## Challenge
 
 Fresh read-only critic, updated refine process; verdict below verbatim:
@@ -75,29 +57,6 @@ Fresh read-only critic, updated refine process; verdict below verbatim:
 >
 > Нового обязательного user-owned выбора нет. Инвентаризация, carrier, probes и необходимые ADR-коррекции принадлежат агенту.
 
-## Captured inventory
-
-PR #167 findings retained; source sites rechecked on 2026-09-07. Their behavioral repros have not been rerun in this refinement:
-
-- `packages/workbench/src/glue/vfs-snapshot-port.ts:27` and
-  `packages/workbench/src/workbench/project-files.ts:15` hard-code `.vite` into
-  generic project-tree exclusion policy. Repro: put user-owned
-  `.vite/notes.txt` in a non-Vite project and open its Workbench file snapshot;
-  the directory is omitted.
-- `packages/workbench/src/glue/project-deps.ts` prefixes reuse,
-  snapshot, and stamp-promotion diagnostics with `[real-vite/worker]`. Repro:
-  restore/install dependencies for a non-Vite Workbench project and observe
-  Vite provenance in its log.
-
-Source-confirmed additions, 2026-09-07; not an exhaustive inventory:
-
-- `packages/workbench/src/workers/workbench-runtime-adapters.ts`: esbuild adapter id, package suffix, WASM size/hash, startup and publication. Reached during installed-binding activation before guest execution, or no-COI install/restore.
-- `packages/workbench/src/workers/vite-esbuild-runtime.ts`: exact Vite version gate and esbuild slot check. `vite-node-entry-edge.ts` selects preparation from the executed bin/argv; `node-entry-runtime-preparation.ts` imports that concrete planner.
-- `packages/workbench/src/workers/package-install-finalizer.ts`: Vite acquisition preparation. `vite-cli-install-policy.ts` owns upstream CLI/watch patches outside registry.
-- `packages/workbench/src/workers/package-install-generic-finalizer.ts`: recognizes `@emnapi/core` in the lockfile, selects package files and applies `emnapi-core-install-policy.ts` patches during install finalization.
-- `packages/runtime-js/src/internal/worker-globals.ts`: package-named realm identity API used by activation and the installed esbuild facade.
-- `packages/npm-client/src/internal/shadow/schema-one-identity.ts`: legacy substitution ids; classify as persistence compatibility data, preserve existing rejection semantics. A package mention alone is not an executable adaptation.
-
 ## Decisions
 
 - 2026-09-07 — user: all existing cases, not only Vite → esbuild; no new-package support promise.
@@ -106,19 +65,5 @@ Source-confirmed additions, 2026-09-07; not an exhaustive inventory:
 - 2026-09-07 — dedup: expand this draft; `preset-deglue` retains its separate user-visible lifecycle/provenance work. No new duplicate epic. Declined concepts and traps checked; no matching rejection of this outcome.
 - 2026-09-07 — early premise check clear under PR #315 process; reuse for unchanged promises at FIT/PICKUP. No new user scope choice or implementation authorization inferred.
 
-## Open questions
-
-- Which existing package-specific production sites remain beyond the captured inventory? — owner: agent — bounded inventory of production code and its actual consumers at FIT.
-- How does registry-owned adaptation use general runtime capabilities while preserving startup order, object identity and existing installed-tree/offline behavior? — owner: agent — compare existing mechanisms and discriminating probes; record required ADR changes before implementation.
-- Which reachable fault rows are required for the chosen route? — owner: agent — retain existing obligations, choose tier at FIT without silently adding recovery/durability promises.
-
-## Draft gates
-
-- Map registry-owned adaptations, optional ADR-0263/0278 helpers and generic platform surfaces. Do not preserve package compatibility inside Workbench merely by calling it a concrete edge.
-- Classify package mentions by responsibility: compatibility evidence, historical persistence ids, templates and explicit helper intent may be valid; independently owned adaptation policy is a leak.
-- Derive each replacement from the actual Node, filesystem, process, module, network, or storage contract.
-- Add mechanical ownership/dependency checks; prove unchanged supported behavior with real packages, VFS and browser parity/e2e. Source scans alone cannot close acceptance.
-- Do not use consumer count or adapter count as a design proxy; this epic must not encourage dummy adapters or parallel workarounds to justify an interface.
-- Resolve ADR-0226/0371 clauses that currently place startup, typed realm slots and the generated client in platform modules. Preserve installed-tree byte authority; do not revive the declined CAS/port delivery path.
-- Preserve public Vite helper calls under ADR-0263/0278 and no-COI generality under ADR-0375. Resolve ADR-0278/0286 archive policy clauses for I3; helper compatibility does not freeze package-specific exclusions. This draft records intent, not a superseding implementation decision.
-- Keep user-visible de-gluing in `preset-deglue`; absorb only work actually required by this outcome, without duplicating contracts.
+- 2026-09-07 — FIT: tier works; preserve existing supported results, fault rejection and restore; no additional recovery contract.
+- 2026-09-07 — rejected route: constants-only or renamed Workbench edges violates I1; separate executable guest delivery unnecessary for Outcome.

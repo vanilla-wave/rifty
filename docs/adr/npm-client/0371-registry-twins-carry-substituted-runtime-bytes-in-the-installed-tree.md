@@ -93,3 +93,7 @@ Alternatives:
 - Project copies and archives grow by the upstream member/tarball size; shared
   acquisition caches still amortize network bytes, but storage is intentionally
   project-local like real Node `node_modules`.
+
+## Corrections (active)
+
+- 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.

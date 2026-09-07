@@ -74,3 +74,7 @@ that policy no longer enters the no-COI Worker graph.
 ADR-0374. Explicit Worker ownership, API shapes, registry-twin authority,
 report, overlap and terminal semantics are grafted above. Vite identity/lifecycle
 policy and the build-only finalizer are removed.
+
+## Corrections (active)
+
+- 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.
