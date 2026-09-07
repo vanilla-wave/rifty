@@ -1,7 +1,7 @@
 import { shadowSha256 } from './canonical.ts';
 import type { ShadowCatalogDefinition, ShadowMaterializationFile } from './model.ts';
 
-export const ESBUILD_ALIAS_MAIN = `const esbuild = globalThis.__rifty?.esbuild;
+export const ESBUILD_ALIAS_MAIN = `const esbuild = globalThis.__riftyShadowRegistry?.esbuild;
 if (esbuild == null) {
   throw new Error('rifty invariant: esbuild runtime slot is not initialized');
 }

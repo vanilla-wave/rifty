@@ -1,7 +1,19 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { runtimeAdapterBoundaryViolations } from './runtime-adapter-boundary.mjs';
 
 describe('registry ownership of existing package adaptations', () => {
+  it('guards package policy across platform workers, including renamed/new modules', () => {
+    const root = 'packages/workbench/src/workers';
+    const files = readdirSync(root).filter(
+      (name) =>
+        name.endsWith('.ts') && !name.includes('.test.') && name !== 'workbench-package-config.ts',
+    );
+    const violations = files.flatMap((name) =>
+      runtimeAdapterBoundaryViolations(`${root}/${name}`, readFileSync(`${root}/${name}`, 'utf8')),
+    );
+    expect(violations).toEqual([]);
+  });
   it('removes package implementations from the platform', () => {
     for (const file of [
       'vite-cli-prep.ts',

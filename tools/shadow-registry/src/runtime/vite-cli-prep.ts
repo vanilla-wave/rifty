@@ -1,7 +1,10 @@
-import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
-import type { BinSpawnRequest } from '../glue/bin-executor.ts';
-import { isBinShimPath } from './bin-entry-path.ts';
+import {
+  type PackageBinSpawnRequest,
+  binNameOf,
+  createPreviewScope,
+  isBinShimPath,
+} from './launch.ts';
 import {
   applyViteCliActionPatch,
   applyViteRootWatchPatch,
@@ -27,6 +30,7 @@ export interface ViteCliPreparation {
   readonly root: string;
   readonly mode: ViteCliMode;
   readonly executedBinPath: string;
+  readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
 }
 
 /** Derive one complete Vite preparation from the executed entry + real argv. */
@@ -48,9 +52,7 @@ export function viteCliPreparationFromArgs(options: {
       };
 }
 
-// NOT shadow-registry shims (those apply at install time, ADR-0188): this
-// patches Vite's own CLI before package promotion. Trusted child startup only
-// validates the exact bytes below; it never repairs node_modules.
+// Registry acquisition patches before promotion; trusted startup only validates.
 function installCliActionPatch(vitePackageRoot: string): boolean {
   const fs = syncMirror();
   const path = normalizePath(`${vitePackageRoot}/dist/node/cli.js`);
@@ -158,7 +160,8 @@ async function completeViteCliPreparation(
   options: ViteCliPreparation,
   packageRoot: string,
 ): Promise<void> {
-  globalThis.__riftyTrackCliPromise = (promise) => trackKeepalivePromise(promise);
+  if (options.trackKeepalivePromise !== undefined)
+    globalThis.__riftyTrackCliPromise = options.trackKeepalivePromise;
   if (options.mode === 'info') return;
   const fs = syncMirror();
   await prepareViteEsbuildRuntime({
@@ -170,10 +173,6 @@ async function completeViteCliPreparation(
 // ——— vite CLI mode/env preparation (relocated from real-vite-bootstrap so the
 // behavioral tests can import it in node vitest — the bootstrap module drags
 // worker-only deps). Args remain byte-for-byte user-owned.
-
-export function binNameOf(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
-}
 
 // vite CLI grammar, copied from vite 7.3.6 dist/node/cli.js declarations and
 // probed against the real binary (matrix: vite-cli-prep.test.ts, 2026-07-07).
@@ -287,11 +286,9 @@ export function viteCliMode(args: readonly string[]): ViteCliMode {
   return parseViteCliArgs(args).mode;
 }
 
-export function createPreviewScope(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `preview-${Date.now()}-${Math.random()}`;
-}
-
-export function prepareViteBinSpawnRequest(request: BinSpawnRequest): BinSpawnRequest {
+export function prepareViteBinSpawnRequest<T extends PackageBinSpawnRequest>(
+  request: T,
+): T & { readonly previewScope?: string } {
   if (!isBinShimPath(request.shimPath) || binNameOf(request.shimPath) !== 'vite') return request;
   const mode = viteCliMode(request.args);
   const previewMode = mode === 'dev' || mode === 'preview';
@@ -309,3 +306,5 @@ export function prepareViteBinSpawnRequest(request: BinSpawnRequest): BinSpawnRe
       : {}),
   };
 }
+
+export { binNameOf, createPreviewScope } from './launch.ts';

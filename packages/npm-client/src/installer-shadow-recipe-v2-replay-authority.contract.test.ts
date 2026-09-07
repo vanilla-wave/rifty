@@ -78,7 +78,7 @@ throw new NotImplementedError('esbuild.cli');
     },
     {
       path: 'lib/main.cjs',
-      content: `const esbuild = globalThis.__rifty?.esbuild;
+      content: `const esbuild = globalThis.__riftyShadowRegistry?.esbuild;
 if (esbuild == null) {
   throw new Error('rifty invariant: esbuild runtime slot is not initialized');
 }
@@ -98,8 +98,8 @@ module.exports = esbuild;
   version,
 });
 `,
-      sha256: 'bd38f603e494f0cf4554d5f73b727e8886b90224f5a043d54d6bf036313576c8',
-      bytes: 382,
+      sha256: '00d51782a27da7b6f6f13404c97a46ac898d88e7213a7cda89253fc639952b33',
+      bytes: 396,
     },
     {
       path: 'package.json',

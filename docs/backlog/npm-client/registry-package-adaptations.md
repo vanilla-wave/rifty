@@ -46,5 +46,7 @@ New package support, new delivery/cache/lock/extension mechanisms. Existing esbu
 
 ## Decisions
 
+ready-verdict: 2026-09-07 — Contract+RED @ 90b1a75335476e27f98cad56574acdef95f94cff
+
 - 2026-09-07 — ADR-0384 defines registry-owned carrier and corrections; accepted scope unchanged.
 - 2026-09-07 — existing semantic proof retained; six executed REDs discriminate package ownership and captured ordinary-file defects before any product edit.

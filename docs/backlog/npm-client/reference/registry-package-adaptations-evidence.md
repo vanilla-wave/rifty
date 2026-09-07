@@ -30,3 +30,11 @@ Independent read-only DEC-2 agent inspected raw source and ADRs. Registry `./run
 `pnpm exec vitest run packages/workbench/src/workbench/ordinary-package-files.contract.test.ts tools/checks/package-adaptation-ownership.test.ts`: 2 files, 6 failures (2026-09-07). Real owner snapshot omits notes; archive roundtrip drops notes; foreign archive rejects `.vite`. Three ownership checks expose Workbench implementations, runtime package key and generic Vite provenance. No import/typecheck failures.
 
 Contract review corrected the archive fixture: portable archive paths are relative. After changing both archive assertions/fixture to `.vite/notes.txt`, `pnpm exec vitest run packages/workbench/src/workbench/ordinary-package-files.contract.test.ts` still has 3 failures; foreign import now specifically throws `Playground archive path uses reserved segment ".vite"`. Original foreign-import failure was path normalization, not package classification; that original claim is withdrawn.
+
+## Implementation checks
+
+Targeted migration suites: 129 tests passed; scoped package typechecks and `check:arch` passed. Registry owns helper defaults too; Workbench only re-exports them.
+
+Judging criteria changes (ADR-0384 / PR-4): archive/snapshot tests now retain `.vite`; runtime identity tests follow the registry carrier; esbuild replay fixture keeps independently pinned exact bytes/hash with the renamed carrier; extraction provenance points to successor files without dropping original entries; boundary coverage grows to all production Workbench workers. No package semantic row removed.
+
+Express oracle: Node v24.16.0, actual npm express@4.21.2 installed in a disposable workspace; exact `/proof.cjs` guest from `tests/browser-unit/registry-package-ownership.spec.ts` executed with `node proof.cjs` → `200 EXPRESS_REGISTRY_OK`, exit 0. Same program is the browser carrier.

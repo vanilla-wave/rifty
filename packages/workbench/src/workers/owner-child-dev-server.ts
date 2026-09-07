@@ -11,6 +11,7 @@ import {
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import type { NodeEntryRuntimeBinding } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { preparePackageServerEnvironment } from '@riftydev/shadow-registry/runtime';
 import type { ProcessExit } from '@riftydev/shell';
 import {
   type ChildTerminalContext,
@@ -60,11 +61,7 @@ export function buildDevServerChildSpawnSpec(
     entry,
     argv: ['rifty', params.cfg.entryPath],
     env: {
-      ...params.env,
-      // rifty has no native bindings by construction. Force napi-rs consumers
-      // onto their WASI path so a failed WASI load stays loud instead of falling
-      // through to the generic "Cannot find native binding" diagnostic.
-      NAPI_RS_FORCE_WASI: '1',
+      ...preparePackageServerEnvironment(params.env),
       // node-server template entries bind `process.env.PORT`; set it to the dev
       // port so the child's entry listens where the owner expects (ADR-0150 P6b).
       // The in-realm `process.env.PORT` mutation in dev-server-boot doesn't reach

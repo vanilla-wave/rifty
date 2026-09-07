@@ -311,7 +311,7 @@ const viteCommandMatrix = {
     ],
   ],
   tests: [
-    '`packages/workbench/src/workers/vite-cli-prep.test.ts`',
+    '`tests/integration/vite-cli-prep.test.ts`',
     '`apps/playground/src/glue/vite-config-seed.test.ts`',
     '`apps/playground/src/glue/vite-config-seed.fault.test.ts`',
     '`tests/browser-unit/owner-publish-and-persistence.spec.ts`',

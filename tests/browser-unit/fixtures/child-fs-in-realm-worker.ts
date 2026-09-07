@@ -1,3 +1,4 @@
+import { trackKeepalivePromise } from '@riftydev/runtime-js';
 /// <reference lib="webworker" />
 
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
@@ -21,11 +22,11 @@ import { asyncVfs, syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { installWorkerRealmCompat } from '../../../packages/runtime-js/src/ipc/worker-realm-compat.ts';
 import { finalizePackageInstallFiles } from '../../../packages/workbench/src/workers/package-install-finalizer.ts';
+import { activateWorkbenchRuntimeAdapters } from '../../../packages/workbench/src/workers/workbench-runtime-adapters.ts';
 import {
   prepareViteCli,
   viteCliPreparationFromArgs,
-} from '../../../packages/workbench/src/workers/vite-cli-prep.ts';
-import { activateWorkbenchRuntimeAdapters } from '../../../packages/workbench/src/workers/workbench-runtime-adapters.ts';
+} from '../../../tools/shadow-registry/src/runtime/vite-cli-prep.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -298,7 +299,7 @@ async function dispatch(value: unknown): Promise<unknown> {
       executedBinPath: entryPath,
     });
     if (preparation === null) throw new Error('installed Vite command did not produce preparation');
-    await prepareViteCli(preparation);
+    await prepareViteCli({ ...preparation, trackKeepalivePromise });
     const outcome = await capturedNodeRun({ args, bin: true, entryPath, root });
     phase = 'vited';
     return { kind: 'vite', ...outcome };

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Own existing Vite/esbuild/emnapi runtime, patches, manifest and launch preparation through a closed runtime entry; data catalog stays separate (ADR-0384).
+
 ### Changed
 
 - **One registry-twin byte carrier (ADR-0371).** The esbuild recipe now

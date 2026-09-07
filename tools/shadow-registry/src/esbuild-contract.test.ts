@@ -58,7 +58,7 @@ describe('synthetic esbuild module surface', () => {
              const shimPath = process.argv[2];
              const require = createRequire(import.meta.url);
              const cjs = require(nativePath);
-             globalThis.__rifty = { esbuild: cjs };
+             globalThis.__riftyShadowRegistry = { esbuild: cjs };
              const native = await import(pathToFileURL(nativePath).href);
              const shim = await import(pathToFileURL(shimPath).href);
              const keys = Object.keys(native).sort();
@@ -110,10 +110,10 @@ async function loadCurrentSyntheticPackage(
     writeFileSync(esmConsumer, `import * as namespace from 'esbuild'; export default namespace;\n`);
 
     const riftyGlobal = globalThis as typeof globalThis & {
-      __rifty?: { esbuild?: EsbuildContractApi };
+      __riftyShadowRegistry?: { esbuild?: EsbuildContractApi };
     };
-    const previousRifty = riftyGlobal.__rifty;
-    riftyGlobal.__rifty = { ...previousRifty, esbuild: runtime };
+    const previousRifty = riftyGlobal.__riftyShadowRegistry;
+    riftyGlobal.__riftyShadowRegistry = { ...previousRifty, esbuild: runtime };
     try {
       const packageRequire = createRequire(cjsConsumer);
       const cjs = packageRequire('esbuild') as EsbuildContractApi;
@@ -132,8 +132,8 @@ async function loadCurrentSyntheticPackage(
         esmNamespaceStable: consumer.default === consumerAgain.default,
       };
     } finally {
-      if (previousRifty === undefined) Reflect.deleteProperty(riftyGlobal, '__rifty');
-      else riftyGlobal.__rifty = previousRifty;
+      if (previousRifty === undefined) Reflect.deleteProperty(riftyGlobal, '__riftyShadowRegistry');
+      else riftyGlobal.__riftyShadowRegistry = previousRifty;
     }
   } finally {
     rmSync(container, { recursive: true, force: true });
@@ -150,10 +150,7 @@ interface GeneratedEsbuildRuntimeModule {
 }
 
 async function startGeneratedRuntime(fs: FsSync, cwd: string): Promise<EsbuildContractApi> {
-  const generatedUrl = new URL(
-    '../../../packages/workbench/src/workers/generated/esbuild-runtime.js',
-    import.meta.url,
-  ).href;
+  const generatedUrl = new URL('./runtime/generated/esbuild-runtime.js', import.meta.url).href;
   const generated = (await import(generatedUrl)) as unknown as GeneratedEsbuildRuntimeModule;
   const wasmBytes = readFileSync(require.resolve('esbuild-wasm/esbuild.wasm'));
   const wasm = await WebAssembly.compile(wasmBytes);

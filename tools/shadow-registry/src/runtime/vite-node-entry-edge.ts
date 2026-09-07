@@ -30,6 +30,7 @@ export function planViteNodeEntryEdge(options: {
   readonly root: string;
   readonly args: readonly string[];
   readonly entryPath: string;
+  readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
 }): NodeEntryIntegrationPlan {
   if (!options.bin) return NO_CONCRETE_INTEGRATION;
   const preparation = viteCliPreparationFromArgs({
@@ -37,5 +38,12 @@ export function planViteNodeEntryEdge(options: {
     args: options.args,
     executedBinPath: options.entryPath,
   });
-  return preparation === null ? NO_CONCRETE_INTEGRATION : planned(preparation);
+  return preparation === null
+    ? NO_CONCRETE_INTEGRATION
+    : planned({
+        ...preparation,
+        ...(options.trackKeepalivePromise === undefined
+          ? {}
+          : { trackKeepalivePromise: options.trackKeepalivePromise }),
+      });
 }

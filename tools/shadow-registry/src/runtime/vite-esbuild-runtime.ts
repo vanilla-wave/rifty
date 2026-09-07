@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
-import { readRuntimeEsbuild } from '@riftydev/runtime-js';
 import type { FsSync } from '@riftydev/vfs';
+import { readRuntimeEsbuild } from './realm.ts';
 const EXACT_ESBUILD_VITE_VERSION = '7.3.6';
 
 export type ViteEsbuildRuntimeDecision = 'start' | 'skip-rolldown';

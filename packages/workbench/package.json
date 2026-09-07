@@ -104,6 +104,7 @@
     "@riftydev/service-worker": "workspace:*",
     "@riftydev/shell": "workspace:*",
     "@riftydev/ts-language-service": "workspace:*",
-    "@riftydev/vfs": "workspace:*"
+    "@riftydev/vfs": "workspace:*",
+    "@riftydev/shadow-registry": "workspace:*"
   }
 }
