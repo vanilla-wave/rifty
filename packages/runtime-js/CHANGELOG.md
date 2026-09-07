@@ -5,9 +5,11 @@
 - Load the real TypeScript eval classifier only after Acorn rejects the source;
   JavaScript-only workers no longer eagerly download it with ESM splitting.
   Compiler chunk load failures throw with their original cause (ADR-0380).
-- Remove unused `autoDiscoverTsconfigPaths` and its parser/caches; explicit
-  `paths` remains. JavaScript callers enabling the retired option throw loudly
-  (ADR-0380 supersedes ADR-0170).
+- Keep `autoDiscoverTsconfigPaths` behind explicit `await preloadTsconfigPaths()`;
+  unprepared opt-in throws `TSCONFIG_NOT_READY`, explicit maps remain immediate.
+  ADR-0382 overturns ADR-0380 D1 after finding the existing example consumer.
+- Generate a pinned, lexically browser-scoped real compiler so late loading
+  cannot mistake installed Node globals for a native host (ADR-0381).
 
 ### Fixed
 

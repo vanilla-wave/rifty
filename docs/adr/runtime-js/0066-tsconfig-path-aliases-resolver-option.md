@@ -104,8 +104,8 @@ no `paths` pattern matches.
 
 ## Corrections (active)
 
-2026-09-07: ADR-0380 supersedes the ADR-0170 discovery correction above;
-explicit-only config handling is restored. Hosts supply absolute `paths`.
+2026-09-07: ADR-0382 supersedes ADR-0380 D1; ADR-0170 discovery remains after
+explicit compiler preload. Explicit `paths` still wins and requires no preload.
 
 ## References
 

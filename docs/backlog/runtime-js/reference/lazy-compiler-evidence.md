@@ -27,11 +27,13 @@ Published acceptance: `node tests/integration/workbench-packed-consumer.mjs --su
 
 `docs/backlog/runtime-js/reference/lazy-compiler-packed-results.json` contains
 all values. Splitting/minified packed eager JS, including readiness-joined
-imports: generic 4,311,637 → 724,723 B (gzip 1,245,917 → 212,866);
-toolchain 4,568,192 → 980,768 B (gzip 1,326,387 → 292,953).
+imports: generic 4,311,637 → 725,335 B (gzip 1,245,917 → 213,462);
+toolchain 4,568,192 → 981,370 B (gzip 1,326,387 → 293,820).
 
-Cold Chromium contexts, local HTTP/no-store, three samples: generic median
-132.8 → 22.6ms; toolchain 132.7 → 33.9ms. Local observations, no latency gate;
+Cold Chromium contexts, local HTTP/no-store, three samples (raw timings in JSON).
+Initial compiler-only iteration medians: generic 132.8 → 22.6ms, toolchain
+132.7 → 33.9ms; final preload-preserving samples replace the JSON after row.
+Local observations, no latency gate;
 no network shaping, and baseline overlapped a package build. Bytes are exact;
 timings are not a controlled performance guarantee.
 
@@ -45,3 +47,7 @@ packed tarballs from d52ef8128 with the same measurement helpers.
 Full `pnpm pr:check` found examples/vite-like-dev (omitted from the original directory list): typecheck TS2353 and 7/10 integration assertions fail with obsolete-option errors, 0 timeouts. Gate reran that file once in isolation: same seven failures. 9713 other tests and full parity passed. Independent decision review confirms preserve baseline via preload (ADR-0382); removal decision superseded.
 
 - Preload delta Contract+RED initially BLOCKed for missing failed-preload carrier and removed discovery assertions. Restored baseline conformance files before implementation; added a real missing-compiler-output preload fault test. Current source still lacks preload; focused run re-executes these REDs for independent verification.
+
+- Preload delta GREEN: 267 focused tests (244 unchanged resolver, 10 unchanged example, 6 file-URL, 3 preload, 4 real-bundle/fault). Strict packed fixture build/typecheck plus Chromium eval/preload success and blocked shared-compiler requests pass; default and explicit loaders remain usable after failed preload.
+- Packed compiler attribution follows actual producer source maps to the generated upstream file, so shared chunks cannot hide compiler bytes behind renamed wrappers. Chromium's native dependency-fetch error names the initiating dynamic entry; the fault assertion binds that URL to its emitted entry while the request ledger names the aborted shared compiler output.
+- The browser harness does not run two CLI eval lifecycles in one process; post-preload-failure usability uses the synchronous default/explicit loaders. Existing CLI one-lifecycle baseline is preserved.

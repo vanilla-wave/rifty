@@ -108,82 +108,95 @@ export async function provePackedCompilerLoading(root, report) {
   await withClientServer(root, async (browser, base) => {
     const artifact = report.rows.find((row) => row.name === 'eval');
     assert(artifact.compiler.length > 0, 'compiler probe must have a real TypeScript chunk');
-    for (const fault of [false, true]) {
-      const context = await browser.newContext();
-      try {
-        const page = await context.newPage();
-        const requests = [];
-        page.on('request', (request) => requests.push(new URL(request.url()).pathname));
-        if (fault) {
-          for (const path of artifact.compiler)
-            await page.route(`${base}${path}`, (route) => route.abort());
-        }
-        await page.goto(base);
-        await page.evaluate((entry) => {
-          globalThis.compilerWorker = new Worker(entry, { type: 'module' });
-        }, artifact.entry);
-        const evaluate = (source, explicitCommonJs = false) =>
-          page.evaluate(
-            async ({ source, explicitCommonJs }) => {
-              const worker = globalThis.compilerWorker;
-              return await new Promise((resolveResult, reject) => {
-                const timeout = setTimeout(
-                  () => reject(new Error('compiler probe timed out')),
-                  60_000,
-                );
-                const receive = ({ data }) => {
-                  if (data.type !== 'compiler-result') return;
-                  clearTimeout(timeout);
-                  worker.removeEventListener('message', receive);
-                  resolveResult(data.result);
-                };
-                worker.addEventListener('message', receive);
-                worker.addEventListener(
-                  'error',
-                  (event) => {
+    for (const operation of ['eval', 'preload']) {
+      for (const fault of [false, true]) {
+        const context = await browser.newContext();
+        try {
+          const page = await context.newPage();
+          const requests = [];
+          page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+          if (fault) {
+            for (const path of artifact.compiler)
+              await page.route(`${base}${path}`, (route) => route.abort());
+          }
+          await page.goto(base);
+          await page.evaluate((entry) => {
+            globalThis.compilerWorker = new Worker(entry, { type: 'module' });
+          }, artifact.entry);
+          const evaluate = (source, explicitCommonJs = false, operation = 'eval') =>
+            page.evaluate(
+              async ({ source, explicitCommonJs, operation }) => {
+                const worker = globalThis.compilerWorker;
+                return await new Promise((resolveResult, reject) => {
+                  const timeout = setTimeout(
+                    () => reject(new Error('compiler probe timed out')),
+                    60_000,
+                  );
+                  const receive = ({ data }) => {
+                    if (data.type !== 'compiler-result') return;
                     clearTimeout(timeout);
-                    reject(new Error(event.message));
-                  },
-                  { once: true },
-                );
-                worker.postMessage({ type: 'compiler-probe', source, explicitCommonJs });
-              });
-            },
-            { source, explicitCommonJs },
-          );
-        assert.deepEqual(await evaluate('globalThis.__compilerProbe = 42'), {
-          ok: true,
-          value: 42,
-        });
-        assert(
-          !artifact.compiler.some((path) => requests.includes(path)),
-          'JS eval fetched compiler',
-        );
-        const result = await evaluate('const value: number = 1');
-        assert.equal(result.ok, false);
-        assert(
-          artifact.compiler.some((path) => requests.includes(path)),
-          'non-JS eval never requested compiler',
-        );
-        if (fault) {
-          assert.match(result.message, /TypeScript compiler chunk failed to load/u);
-          assert.match(result.cause, /Failed to fetch dynamically imported module/u);
+                    worker.removeEventListener('message', receive);
+                    resolveResult(data.result);
+                  };
+                  worker.addEventListener('message', receive);
+                  worker.addEventListener(
+                    'error',
+                    (event) => {
+                      clearTimeout(timeout);
+                      reject(new Error(event.message));
+                    },
+                    { once: true },
+                  );
+                  worker.postMessage({
+                    type: 'compiler-probe',
+                    source,
+                    explicitCommonJs,
+                    operation,
+                  });
+                });
+              },
+              { source, explicitCommonJs, operation },
+            );
+          assert.deepEqual(await evaluate('globalThis.__compilerProbe = 42'), {
+            ok: true,
+            value: 42,
+          });
           assert(
-            artifact.compiler.some((path) => result.cause.includes(path)),
-            result.cause,
+            !artifact.compiler.some((path) => requests.includes(path)),
+            'JS eval fetched compiler',
           );
-        } else {
-          assert.equal(
-            result.feature,
-            'runtime-js.node-eval-typescript-context',
-            JSON.stringify(result),
+          const result = await evaluate('const value: number = 1', false, operation);
+          assert.equal(result.ok, operation === 'preload' && !fault);
+          assert(
+            artifact.compiler.some((path) => requests.includes(path)),
+            'non-JS eval never requested compiler',
           );
-          const explicit = await evaluate('const value: number = 1', true);
-          assert.equal(explicit.name, 'SyntaxError');
-          assert.match(explicit.stack, /const value: number = 1\n {6}\^{5}/u);
+          if (fault) {
+            assert.match(result.message, /TypeScript compiler chunk failed to load/u);
+            assert.match(result.cause, /Failed to fetch dynamically imported module/u);
+            // Chromium names the requested import() entry when its shared dependency fails.
+            assert(result.cause.includes(artifact.compilerLoads[operation]), result.cause);
+            if (operation === 'preload') {
+              assert.equal((await evaluate('', false, 'check-ready')).code, 'TSCONFIG_NOT_READY');
+              for (const mode of ['default-paths', 'explicit-paths']) {
+                assert.deepEqual(await evaluate('', false, mode), { ok: true, value: 42 });
+              }
+            }
+          } else if (operation === 'preload') {
+            assert.deepEqual(result, { ok: true, value: 42 });
+          } else {
+            assert.equal(
+              result.feature,
+              'runtime-js.node-eval-typescript-context',
+              JSON.stringify(result),
+            );
+            const explicit = await evaluate('const value: number = 1', true);
+            assert.equal(explicit.name, 'SyntaxError');
+            assert.match(explicit.stack, /const value: number = 1\n {6}\^{5}/u);
+          }
+        } finally {
+          await context.close();
         }
-      } finally {
-        await context.close();
       }
     }
   });

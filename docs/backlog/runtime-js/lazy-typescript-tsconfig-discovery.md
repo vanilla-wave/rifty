@@ -17,7 +17,7 @@ through a host-injected `transformSource` hook. Three static `typescript`
 imports broke that:
 
 - `tsconfig-paths.ts` — opt-in `autoDiscoverTsconfigPaths` (ADR-0170), default
-  off; no production caller in the repo (only resolver conformance/unit tests).
+  off; `examples/vite-like-dev` opts in (the initial sweep missed examples/).
 - `loader.ts` `requiresTypeScriptEvalContext` (:462) inside sync-typed
   `runNodeEvalScript` (:754), reached only from async `runNodeEntry`
   (`node-entry.ts`) — decides whether a `[eval]` source acorn rejects is
@@ -59,6 +59,8 @@ challenge: 2026-09-06 — 4 problems
 - Preload-at-creation machinery for `autoDiscoverTsconfigPaths: true` serves an opt-in with no production caller (repo-wide only `tests/conformance/modules/resolver.test.ts` and one unit test; ADR-0170's "TypeScript sandbox preset" consumer is not wired) — REV-7: weigh overturning ADR-0170 to explicit `paths` (ADR-0066) and deleting the tsconfig TS edge outright instead of adding an async-boot readiness precondition to a sync public option nobody uses; not blocking because the eval-classifier site still needs the lazy boundary for the whole value.
 
 ## Decisions
+
+- ready-verdict: 2026-09-07 — preload delta Contract+RED @ a26862b005b63e0d525ee193e33ac3439d1f5ec9; failed-preload and restored discovery carriers accepted.
 
 - re-cut: 2026-09-07 — ADR-0382 supersedes ADR-0380 D1 after examples/ caller discovery; preserve discovery via async preload before sync opt-in, restore baseline assertions — trace: ADR-0382.
 

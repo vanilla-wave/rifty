@@ -75,5 +75,7 @@
 
 ## Tooling wiring
 
+- **caller-sweep-omits-examples**: "no callers" cleanup breaks workspace typecheck and HTTP/HMR tests → fixed packages/apps/tools/services sweep omitted `examples/vite-like-dev` → enumerate `pnpm-workspace.yaml` roots before retiring an API; private examples can carry a tested baseline.
+
 - **new-toplevel-dir-invisible**: a new top-level dir (e.g. `services/`) is silently ignored → workspace/arch/test/backlog tooling hardcodes `packages|apps|tools` → wire 6 spots: pnpm-workspace glob, vitest unit include, `check:arch` args, arch-boundaries sweep, arch-rules carve-out, backlog SCAN_ROOTS; not in `build:libs`; publish build = hand-written tsup config.
 - **pnpm-eats-double-dash**: `pnpm test:parity -- foo` drops the filter → pass args bare: `pnpm test:parity foo`.

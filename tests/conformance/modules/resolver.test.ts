@@ -1,7 +1,7 @@
-import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { createModuleLoader, preloadTsconfigPaths } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 function setup(files: Record<string, string>): ReturnType<typeof createModuleLoader> {
   const vfs = new MemoryFsSync();
@@ -3843,3 +3843,6 @@ describe('file-before-directory precedence (Node parity)', () => {
     expect(id).toBe('/app/lib.js');
   });
 });
+
+// ADR-0382: retain discovery semantics after explicit async preparation.
+beforeAll(() => preloadTsconfigPaths());

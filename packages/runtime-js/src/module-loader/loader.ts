@@ -48,6 +48,8 @@ export interface ModuleLoaderOptions {
    * Absent = Node-faithful resolution (bare `@/foo` is `MODULE_NOT_FOUND`).
    */
   readonly paths?: PathAliases;
+  /** Nearest tsconfig discovery; requires await preloadTsconfigPaths() first (ADR-0382). */
+  readonly autoDiscoverTsconfigPaths?: boolean;
 }
 
 export interface ModuleLoader {

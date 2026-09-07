@@ -1,14 +1,14 @@
 {
-  "overall_verdict": "blocker",
-  "merge_call": "Complete the two missing Contract+RED carriers, then verify preparation before IMPLEMENT; no merge verdict.",
+  "overall_verdict": "pass",
+  "merge_call": "Proceed to IMPLEMENT: both preparation blockers repaired; retain baseline assertions with preload preparation only. Final+GREEN and packed/browser regression proof remain required before merge.",
   "checkpoint": "Contract+RED",
-  "unit_goal_source": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md @ cdbc979adfb0b4ee353392b8a7cd452bb4cef9ed; BASE 6fe1d373d; ADR-0382 preload delta; unchanged I1 preparation inherited from prior Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md @ a26862b005b63e0d525ee193e33ac3439d1f5ec9; BASE 6fe1d373d; ADR-0382 preload delta verification; original BLOCK: docs/backlog/runtime-js/reference/tsconfig-preload-contract-red.json",
   "unit_residuals": [],
   "goal_residuals": [
     {
       "clause": "I1 + ADR-0382",
       "location": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:99",
-      "summary": "After completed preparation, implement preload and restored discovery/example baseline, run GREEN and independent Final+GREEN including packed browser/eager-graph proof after the restored dependency."
+      "summary": "Implement preload and restored discovery/example baseline, adding preparation only to restored assertions; then execute GREEN and independent Final+GREEN including packed browser/eager-graph proof after the restored dependency."
     },
     {
       "clause": "I2",
@@ -38,7 +38,7 @@
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/integration/client-compiler-loading.test.ts:32",
+      "citation": "tests/integration/client-compiler-loading.test.ts:101",
       "note": ""
     },
     {
@@ -46,7 +46,7 @@
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/integration/client-compiler-loading.test.ts:95; packages/runtime-js/src/module-loader/node-eval.test.ts:108",
+      "citation": "tests/integration/client-compiler-loading.test.ts:158; packages/runtime-js/src/module-loader/node-eval.test.ts:108",
       "note": ""
     },
     {
@@ -54,7 +54,7 @@
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "packages/runtime-js/src/module-loader/node-eval.test.ts:373; packages/runtime-js/src/builtins/node-entry.test.ts:165; tests/integration/client-compiler-loading.test.ts:99",
+      "citation": "packages/runtime-js/src/module-loader/node-eval.test.ts:373; packages/runtime-js/src/builtins/node-entry.test.ts:165; tests/integration/client-compiler-loading.test.ts:166",
       "note": ""
     },
     {
@@ -85,25 +85,25 @@
       "row": "Parity 2: restore every existing alias/discovery conformance assertion with preparation only; preserve example integration assertions",
       "source": "acceptance",
       "trace": "ADR-0382",
-      "status": "missing",
-      "citation": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:110",
-      "note": "Original discovery conformance assertions remain removed; current 210-test conformance suite passes with discovery absent. See Completeness finding."
+      "status": "pass",
+      "citation": "tests/conformance/modules/resolver.test.ts:3504; packages/runtime-js/src/module-loader/resolver-file-url.test.ts:84; tests/integration/vite-like-dev.test.ts:194",
+      "note": "Verified both restored conformance files are byte-identical to d52ef8128 (git diff returns empty). Executed pnpm exec vitest run packages/runtime-js/src/module-loader/tsconfig-preload.test.ts packages/runtime-js/src/module-loader/resolver-file-url.test.ts tests/conformance/modules/resolver.test.ts tests/integration/client-compiler-loading.test.ts: 39 expected behavioral REDs / 218 GREEN, Vitest 2.1.9; raw /tmp/rifty-preload-review-verify.log. Restored resolver conformance contributes 34 REDs and file-URL test 1 RED, all obsolete discovery rejection. Retain assertions; add only preload preparation during implementation. The unchanged example integration REDs remain in /tmp/rifty-compiler-pr-check.log."
     },
     {
       "row": "ESM chunk load / false-fallback: real missing compiler output yields named chunk error and original cause; browser fault at final acceptance",
       "source": "fault-matrix",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/integration/client-compiler-loading.test.ts:57",
+      "citation": "tests/integration/client-compiler-loading.test.ts:124",
       "note": ""
     },
     {
       "row": "Failed preload rejects with chunk cause, publishes no ready parser; default/explicit resolution still works",
       "source": "fault-matrix",
       "trace": "ADR-0382",
-      "status": "missing",
-      "citation": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:118",
-      "note": "Only existing failed-chunk carrier calls eval and passes while preload is absent. No preload rejection assertion exists. See Completeness finding."
+      "status": "pass",
+      "citation": "tests/integration/client-compiler-loading.test.ts:34",
+      "note": "New carrier bundles real loader/MemoryFsSync, removes actual compiler outputs, executes a fresh process, and asserts rejected preload cause, TSCONFIG_NOT_READY, plus default/explicit/JS success. Executed focused run in /tmp/rifty-preload-review-verify.log: new carrier RED at :92, received preloadTsconfigPaths export missing. Namespace import and runtime observation permit bundle/import/setup to complete; this is missing public behavior, not unrelated import/typecheck failure. The carrier now discriminates a silent successful preload and improperly published readiness once the API exists. The previous 3 compiler tests remain GREEN."
     },
     {
       "row": "Public preloadTsconfigPaths(): Promise<void> prepares synchronous discovery",
@@ -111,29 +111,14 @@
       "trace": "ADR-0382",
       "status": "pass",
       "citation": "packages/runtime-js/src/module-loader/tsconfig-preload.test.ts:28",
-      "note": ""
+      "note": "New public API and synchronous-preparation suite rerun: 3 expected behavioral REDs, no import/typecheck setup failure; raw /tmp/rifty-preload-review-verify.log."
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "blocker",
-      "findings": [
-        {
-          "severity": "blocker",
-          "location": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:118",
-          "summary": "Failed preload has no discriminating RED: the existing missing-chunk carrier passes while the entire preload scenario is absent.",
-          "authority": "ADR-0382 Decision: failed import rejects with original chunk cause and publishes no ready parser; Fault matrix row 2 -> ADR-0382; RDY-8",
-          "evidence": "Executed pnpm exec vitest run --project integration tests/integration/client-compiler-loading.test.ts at cdbc979ad: 3/3 GREEN (Vitest 2.1.9). Its missing-output runner imports only runNodeEntry and never preloadTsconfigPaths. Executed pnpm exec vitest run packages/runtime-js/src/module-loader/tsconfig-preload.test.ts: 3/3 expected behavioral REDs; public export is undefined, and its sole async test only exercises successful preload. Search of packages/runtime-js/src and tests shows no rejected-preload carrier. REV-5 class: available chunk-fault proof passes with the new scenario unimplemented. Add and execute a real missing-output preload test verifying rejection/cause, no ready parser, and retained default/explicit resolution before implementation. Fault class: ESM chunk load / false-fallback; sibling sweep must cover loader and resolver readiness."
-        },
-        {
-          "severity": "blocker",
-          "location": "docs/backlog/runtime-js/lazy-typescript-tsconfig-discovery.md:110",
-          "summary": "The restored discovery conformance obligation still has no committed carrier: the prior discovery assertions remain deleted and current conformance passes with discovery absent.",
-          "authority": "ADR-0382 Consequences: Restore all prior discovery conformance assertions, adding only preparation; Parity row 2 -> ADR-0382; RDY-8",
-          "evidence": "Executed pnpm exec vitest run --project conformance tests/conformance/modules/resolver.test.ts: 210/210 GREEN at cdbc979ad (Vitest 2.1.9), while the new preload suite proves discovery remains rejected. git diff d52ef8128 HEAD -- tests/conformance/modules/resolver.test.ts shows removed autoTsconfigResolveId and JSONC, malformed-config, baseUrl, grammar, inheritance/cache discovery assertions. The existing integration alias/baseUrl baseline is a valid RED, but does not replace the explicitly required prior conformance assertions. REV-5 class: the named conformance carrier passes with the restored discovery scenario unimplemented. Restore existing assertions with only async preparation adaptation, execute their RED before restoring product discovery."
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Mission and architecture",
@@ -170,5 +155,6 @@
       "verdict": "pass",
       "findings": []
     }
-  ]
+  ],
+  "reviewed_sha": "a26862b005b63e0d525ee193e33ac3439d1f5ec9"
 }

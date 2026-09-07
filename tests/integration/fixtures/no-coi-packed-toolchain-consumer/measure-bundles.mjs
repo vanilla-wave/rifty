@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -8,6 +8,21 @@ const root = dirname(fileURLToPath(import.meta.url));
 
 export async function measureClientBundles() {
   const rows = [];
+  const compilerInputs = new Map();
+  async function isCompilerInput(input) {
+    if (input.endsWith('/typescript/lib/typescript.js')) return true;
+    if (!input.includes('/@riftydev/runtime-js/dist/') || !input.endsWith('.js')) return false;
+    if (!compilerInputs.has(input)) {
+      const map = JSON.parse(await readFile(resolve(root, `${input}.map`), 'utf8'));
+      compilerInputs.set(
+        input,
+        map.sources.some((source) =>
+          source.endsWith('/module-loader/generated/typescript-browser.js'),
+        ),
+      );
+    }
+    return compilerInputs.get(input);
+  }
   for (const [name, contents] of Object.entries({
     main: "export { createSandbox } from '@riftydev/sdk'",
     sw: "import '@riftydev/service-worker/sw'",
@@ -73,13 +88,31 @@ export async function measureClientBundles() {
       }
     }
     const servedPath = (path) => `/${relative(root, resolve(root, path)).replaceAll('\\', '/')}`;
+    const compilerSourceInputs = new Set();
+    for (const input of Object.keys(result.metafile.inputs)) {
+      if (await isCompilerInput(input)) compilerSourceInputs.add(input);
+    }
     const compiler = Object.entries(result.metafile.outputs)
       .filter(([, output]) =>
-        Object.keys(output.inputs).some((input) =>
-          /(?:typescript\/lib\/typescript|node-eval-typescript(?:-[^/]+)?)\.js$/u.test(input),
+        Object.entries(output.inputs).some(
+          ([input, info]) => compilerSourceInputs.has(input) && info.bytesInOutput > 0,
         ),
       )
       .map(([path]) => servedPath(path));
+    if (['generic', 'toolchain', 'eval'].includes(name) && compiler.length === 0) {
+      throw new Error(`${name}: compiler provenance missing from packed source maps`);
+    }
+    const compilerLoads = {};
+    for (const [operation, stem] of [
+      ['eval', 'node-eval-typescript'],
+      ['preload', 'tsconfig-paths'],
+    ]) {
+      const entry = Object.entries(result.metafile.outputs).find(([, output]) =>
+        output.entryPoint?.includes(`/@riftydev/runtime-js/dist/${stem}-`),
+      );
+      if (entry) compilerLoads[operation] = servedPath(entry[0]);
+      else if (name === 'eval') throw new Error(`Missing ${operation} lazy compiler entry`);
+    }
     rows.push({
       name,
       min,
@@ -88,6 +121,7 @@ export async function measureClientBundles() {
       entry: servedPath(entry),
       eager: [...eager].map(servedPath),
       compiler,
+      compilerLoads,
     });
     for (const file of result.outputFiles) {
       await mkdir(dirname(file.path), { recursive: true });

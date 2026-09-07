@@ -87,9 +87,9 @@
     "artifacts": [
       {
         "name": "main",
-        "min": 103660,
-        "gzip": 30188,
-        "eager": ["/measure/main/stdin.js"]
+        "min": 104114,
+        "gzip": 30855,
+        "eager": ["/measure/main/stdin.js", "/measure/main/chunk-H6SAPU5T.js"]
       },
       {
         "name": "sw",
@@ -99,10 +99,11 @@
       },
       {
         "name": "generic",
-        "min": 724723,
-        "gzip": 212866,
+        "min": 725335,
+        "gzip": 213462,
         "eager": [
           "/measure/generic/stdin.js",
+          "/measure/generic/chunk-OCFBCI5O.js",
           "/measure/generic/chunk-YQNX3F3R.js",
           "/measure/generic/chunk-GID5H76B.js",
           "/measure/generic/emscripten-module.browser-NHFZ7RXK.js",
@@ -112,13 +113,14 @@
       },
       {
         "name": "toolchain",
-        "min": 980768,
-        "gzip": 292953,
+        "min": 981370,
+        "gzip": 293820,
         "eager": [
-          "/measure/toolchain/worker-F77OD5E5.js",
+          "/measure/toolchain/worker-SGEW5LHX.js",
+          "/measure/toolchain/chunk-OCFBCI5O.js",
           "/measure/toolchain/chunk-YQNX3F3R.js",
           "/measure/toolchain/chunk-GID5H76B.js",
-          "/measure/toolchain/chunk-KUHV3DVY.js",
+          "/measure/toolchain/chunk-FYDYGSBC.js",
           "/measure/toolchain/stdin.js",
           "/measure/toolchain/emscripten-module.browser-NHFZ7RXK.js",
           "/measure/toolchain/ffi-RQMBT53F.js",
@@ -129,17 +131,22 @@
     "boot": [
       {
         "name": "generic",
-        "milliseconds": 23,
+        "milliseconds": 22.90000009536743,
         "stderr": []
       },
       {
         "name": "generic",
-        "milliseconds": 22.600000143051147,
+        "milliseconds": 21.90000009536743,
         "stderr": []
       },
       {
         "name": "generic",
-        "milliseconds": 21.700000047683716,
+        "milliseconds": 22.399999856948853,
+        "stderr": []
+      },
+      {
+        "name": "toolchain",
+        "milliseconds": 33.5,
         "stderr": []
       },
       {
@@ -149,12 +156,7 @@
       },
       {
         "name": "toolchain",
-        "milliseconds": 34.09999990463257,
-        "stderr": []
-      },
-      {
-        "name": "toolchain",
-        "milliseconds": 33.89999985694885,
+        "milliseconds": 33.09999990463257,
         "stderr": []
       }
     ]
