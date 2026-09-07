@@ -21,6 +21,7 @@ import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 import ts from 'typescript';
 import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
+import { provePackedInstallLoading } from './no-coi-install-browser-proof.mjs';
 import { provePackedVmSelection } from './no-coi-vm-browser-proof.mjs';
 import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
@@ -1299,6 +1300,10 @@ async function main() {
         await readJson(resolve(consumerRoot, 'measure/report.json')),
       );
       await proveSdkPackaging(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await provePackedInstallLoading(
         consumerRoot,
         await readJson(resolve(consumerRoot, 'measure/report.json')),
       );

@@ -24,6 +24,7 @@ export async function measureClientBundles() {
     return compilerInputs.get(input);
   }
   for (const [name, contents] of Object.entries({
+    toolchainHost: "export { spawnToolchainRuntime } from '@riftydev/runtime-js/internal'",
     ioProbe:
       "export { Buffer, EventEmitter, Stream, Readable, Writable, Duplex, Transform, PassThrough } from '@riftydev/io'",
     runtimeHost: "export { spawnRuntime } from '@riftydev/runtime-js'",
@@ -119,7 +120,33 @@ export async function measureClientBundles() {
     const backendEntry = Object.entries(result.metafile.outputs).find(
       ([, output]) => output.entryPoint === 'node_modules/@riftydev/vfs/dist/index.js',
     );
+    const installSourceInputs = new Set();
+    for (const input of Object.keys(result.metafile.inputs)) {
+      let install =
+        input.includes('/@riftydev/npm-client/') ||
+        input.includes('/@riftydev/shadow-registry/') ||
+        input.endsWith('/shadow-substitution-catalog.json');
+      if (input.includes('/@riftydev/workbench/dist/') && input.endsWith('.js')) {
+        const map = JSON.parse(await readFile(resolve(root, `${input}.map`), 'utf8'));
+        install ||= map.sources.some((source) => source.endsWith('/generated/esbuild-runtime.js'));
+      }
+      if (install) installSourceInputs.add(input);
+    }
+    const install = Object.entries(result.metafile.outputs)
+      .filter(([, output]) =>
+        Object.entries(output.inputs).some(
+          ([input, info]) => installSourceInputs.has(input) && info.bytesInOutput > 0,
+        ),
+      )
+      .map(([path]) => servedPath(path));
+    const installEntry = Object.entries(result.metafile.outputs).find(([, output]) =>
+      output.entryPoint?.includes('/@riftydev/workbench/dist/no-coi-toolchain-install-'),
+    );
+    if (name === 'toolchain' && install.length === 0)
+      throw new Error('Missing install machinery provenance');
     rows.push({
+      install,
+      installLoad: installEntry ? servedPath(installEntry[0]) : null,
       name,
       min,
       gzip,

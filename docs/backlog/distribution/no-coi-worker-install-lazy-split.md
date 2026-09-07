@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 epic: no-coi-client-bundle
 title: no-COI toolchain worker loads install and activation machinery on first install or restore, not at boot
 created: 2026-09-06
@@ -51,9 +51,12 @@ challenge: 2026-09-06 — 4 problems
 
 ## Decisions
 
+- 2026-09-07 — pickup: goal's all-items override settles the earlier cheaper-worker challenge; current baseline includes PR #304 install/restore/startBin/restart.
+- 2026-09-07 — one private install module; native import cache owns first-use loading, existing worker busy guard and snapshots retain ownership. No extra loader state/API.
+
 - 2026-09-06 — user (rifty-refine): lazy split without knobs — a host that
   never calls `install`/`restore` never downloads the chunk.
-- OPEN (blocks draft→ready, README §Challenge): critic's cheaper direct
+- RESOLVED by goal all-items override (2026-09-07); historical hold: critic's cheaper direct
   authority — the eval/fs-only host is served by the generic worker, so the
   split has no named beneficiary. Verified: generic worker 702 / 205 KB.
   Resolution is the user's: override on the record, or delete this item
@@ -70,3 +73,38 @@ challenge: 2026-09-06 — 4 problems
   `shadow-substitution-catalog.json` or `generated/esbuild-runtime.js` input;
   the no-COI Chromium lane of PR #304 stays green.
 - Reversibility: REVERSIBLE — chunk boundary only.
+
+## User scenario
+
+Boot the published no-COI toolchain Worker; eval and fs work before install.
+First install or restore loads its machinery once. An unavailable chunk rejects
+that operation, and the same Worker still evaluates and reads/writes files.
+An overlapping toolchain operation during a pending first import retains the
+existing SandboxToolchainBusyError. Successful first use remains reusable.
+The existing real Vite 7 install/build/HMR/restore/restart scenario still passes.
+
+## Acceptance
+
+- Actual packed boot requests and complete eager graph omit npm-client, shadow substitution catalog and generated esbuild runtime; first install or restore requests the deferred module once. → I4
+- Real Vite install/build, dev/HMR and restore/restart retain their existing results on the public no-COI SDK surface. → I4
+- Chunk failure rejects install and restore with the native fetch error; eval/fs on the same Worker remain usable. → I4
+
+## Parity cases
+
+- Existing real Vite build byte parity and HMR/wedge-restart browser assertions remain unchanged. → scenario
+
+## Fault matrix
+
+| Boundary / axis | Operation | Outcome |
+|---|---|---|
+| Network / false-fallback | first install or first restore chunk fetch | Request rejects with fetch error; eval/fs remain usable. → I4 |
+| Worker first use / concurrent-same-key | overlapping operation while chunk response is held | Existing busy error; admitted operation completes after release; subsequent use reuses the module. → scenario |
+| Package split / sibling-drift | install vs restore | Both first-use paths load activation; neither boot nor eval/fs does. → I4 |
+
+## Reference contract
+
+Accepted PR #304 / I2 behavior; Node 24.16.0, esbuild 0.28.0, actual npm tarballs
+and Chromium. Existing no-COI Vite build parity and HMR/restart scenarios passed
+on accepted I2; new packed first-use/fetch-fault carrier is
+`tests/integration/no-coi-install-browser-proof.mjs`. RED: baseline eager
+install code lives in toolchain stdin.js and has no first-use entry.
