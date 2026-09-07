@@ -144,6 +144,7 @@ export const TASKS = [
   // Generated artifacts must match their inventories.
   'check:compat-drift',
   'check:esbuild-runtime-drift',
+  'check:eval-compiler-drift',
   'check:shadow-catalog-drift',
   'check:install-artifact-drift',
   'check:snapshot-artifact-drift',

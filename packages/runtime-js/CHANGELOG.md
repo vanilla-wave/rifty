@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+- Resolve VM overrides from native Worker construction metadata before boot;
+  rewrite skips QuickJS preload. No-COI toolchain realm defaults to rewrite,
+  generic remains quickjs; existing env/global precedence retained (ADR-0383).
+
+- Load the real TypeScript eval classifier only after Acorn rejects the source;
+  JavaScript-only workers no longer eagerly download it with ESM splitting.
+  Compiler chunk load failures throw with their original cause (ADR-0380).
+- Keep `autoDiscoverTsconfigPaths` behind explicit `await preloadTsconfigPaths()`;
+  unprepared opt-in throws `TSCONFIG_NOT_READY`, explicit maps remain immediate.
+  ADR-0382 overturns ADR-0380 D1 after finding the existing example consumer.
+- Generate a pinned, lexically browser-scoped real compiler so late loading
+  cannot mistake installed Node globals for a native host (ADR-0381).
+
 ### Fixed
 
 - Successful no-COI restore labels recovery with its current backend, preserving acknowledged bytes through repeated OPFS/memory transitions.

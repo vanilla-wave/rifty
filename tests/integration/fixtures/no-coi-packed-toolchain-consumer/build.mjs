@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
+import { measureClientBundles } from './measure-bundles.mjs';
 
 execFileSync(
   process.execPath,
@@ -34,3 +35,12 @@ await build({
   splitting: true,
   logLevel: 'info',
 });
+
+const report = await measureClientBundles();
+for (const row of report.rows) {
+  if (!['generic', 'toolchain'].includes(row.name)) continue;
+  if (row.compiler.some((path) => row.eager.includes(path))) {
+    throw new Error(`${row.name} boot graph contains the TypeScript compiler`);
+  }
+}
+console.log(JSON.stringify(report.rows.map(({ name, min, gzip }) => ({ name, min, gzip }))));

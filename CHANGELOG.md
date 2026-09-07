@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- No-COI SDK boot defers compiler/install code and defaults to the documented
+  rewrite VM; packed toolchain JS falls from 1,326,387 to 236,199 gzip bytes.
+
+- CI budgets four packed client JS graphs with ≥50% headroom; historical TS/io
+  leaks and unaccounted boot imports fail. Local `pr:check` keeps its lanes.
+
 - **Process: one evidence-driven route.** One verdict/validator at review and merge;
   no forced separate PRs or document-lifecycle proof gates. User amendments stay
   in the goal; required discoveries stay in the work; independent checks happen

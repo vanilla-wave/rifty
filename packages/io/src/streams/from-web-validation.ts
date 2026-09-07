@@ -29,11 +29,11 @@ interface HighWaterMarkResult {
   invalid: boolean;
 }
 
-const readableLockedGetter = Object.getOwnPropertyDescriptor(
+const readableLockedGetter = /* @__PURE__ */ Object.getOwnPropertyDescriptor(
   ReadableStream.prototype,
   'locked',
 )?.get;
-const writableLockedGetter = Object.getOwnPropertyDescriptor(
+const writableLockedGetter = /* @__PURE__ */ Object.getOwnPropertyDescriptor(
   WritableStream.prototype,
   'locked',
 )?.get;

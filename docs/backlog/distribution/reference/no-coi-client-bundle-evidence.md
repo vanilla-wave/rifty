@@ -41,8 +41,8 @@ external: 702 / 205 KB.
 
 Both scripts below run without `splitting`, so `import()` boundaries are
 inlined into one output; post-change measurements must use `splitting: true`
-and read the eager boot chunk's metafile inputs (see
-`toolchain-build/client-bundle-size-ci-gate`).
+and account for every readiness-joined JS request (see
+`tools/checks/client-bundle-budget.mjs` and its packed browser collector).
 
 ## Import chains (metafile BFS from the worker entry)
 

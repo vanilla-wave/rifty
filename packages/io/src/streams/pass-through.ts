@@ -33,7 +33,7 @@ export type PassThroughConstructor = CallableStreamConstructor<
   TransformOptions
 >;
 
-export const PassThrough: PassThroughConstructor = makeCallableStreamConstructor(
+export const PassThrough: PassThroughConstructor = /* @__PURE__ */ makeCallableStreamConstructor(
   'PassThrough',
   PassThroughImplementation,
   (receiver, options) => {

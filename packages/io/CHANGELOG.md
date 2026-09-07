@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Constructor initialization follows used exports; minified Buffer/EventEmitter/Stream retain Node names.
+
 ### Changed
 
 - `Buffer.from(ArrayBuffer | SharedArrayBuffer, byteOffset?, length?)` now aliases
