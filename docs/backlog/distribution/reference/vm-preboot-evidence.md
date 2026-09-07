@@ -25,3 +25,10 @@ The surface harness builds all graphs, runs compiler proof, then VM proof.
 A focused rerun reads that consumer's `measure/report.json` and calls
 `provePackedVmSelection(consumerRoot, report)`. No product I2 implementation
 exists at the RED checkpoint.
+
+## GREEN
+
+- Host/SDK/vm suites: 92 tests pass. Packed surface (15 first-party +72 external tarballs) passes strict types/build and actual HTTP/Blob default/override/restart semantics plus existing WASM-fetch failure behavior.
+- Contract+RED notes closed by actual probes: selected WASM response held while a same-Worker FIFO ping/pong completes (ready stays false until release); raw generic/toolchain Workers with arbitrary names preserve their respective defaults.
+- `RIFTY_NO_COI_PORT=5494 RIFTY_NO_COI_ORACLE_PORT=5495 RIFTY_NO_COI_RESOURCE_PORT=5496 pnpm test:no-coi tests/no-coi/no-coi-sandbox-build-loop.spec.ts tests/no-coi/no-coi-dev-hmr.spec.ts --grep 'capability and no-COI degradation|build parity:|real Vite HMR survives explicit wedge restart'`: 3/3 pass, including real Vite build-byte parity and HMR/wedge restart.
+- Existing host closed-list assertion moves vm selection from a late vm-config message to the ADR-0383 construction name; no engine semantic golden changes. Capability expected row updated to the declared new API.

@@ -19,7 +19,7 @@ import { installMemoryFs } from '@riftydev/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
 import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
-import { setVmEngineOverride } from './builtins/vm/engine-config.ts';
+import { resolveVmEngineName, setVmEngineOverride } from './builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from './builtins/web-globals.ts';
 import {
@@ -27,6 +27,7 @@ import {
   sandboxToolchainWebAssembly,
 } from './internal/sandbox-toolchain-realm.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
+import { vmEngineFromWorkerName } from './internal/worker-vm-engine.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
 import { installConsole } from './repl/console.ts';
@@ -36,6 +37,9 @@ import { captureNotImplemented, snapshotTelemetry } from './telemetry/divergence
 import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
+
+const selectedVmEngine = vmEngineFromWorkerName(self.name);
+if (selectedVmEngine !== undefined) setVmEngineOverride(selectedVmEngine);
 
 installProcessGlobals();
 installTimerGlobals();
@@ -136,7 +140,7 @@ const boot = (async () => {
   // `vm.runInNewContext` is safe. On preload failure, log + continue — the
   // opt-in rewrite engine still works without QuickJS.
   try {
-    await ensureVmEngineReady();
+    if (resolveVmEngineName() === 'quickjs') await ensureVmEngineReady();
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     post({ type: 'stderr', chunk: `[rifty] QuickJS vm engine preload failed: ${reason}\n` });

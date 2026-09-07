@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- No-COI toolchain defaults `node:vm` to rewrite; `vmEngine: 'quickjs'` restores
+  real-realm execution. Selection reaches boot and survives restart; capability
+  report discloses rewrite divergences (ADR-0383).
+
 ### Fixed
 
 - Keep no-COI recovery in its controller; retain a detached fallback only during Worker replacement, preserving recovery after failed restart attempts.

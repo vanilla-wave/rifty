@@ -408,6 +408,7 @@ superseded.
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
+| 0142 D1 no-COI toolchain default | 0383 | Tier defaults to rewrite with explicit quickjs opt-in; generic default and engine limits unchanged |
 | 0380 D1 discovery removal | 0382 | Missed example consumer retained; explicit compiler preload prepares synchronous discovery |
 | 0170 synchronous discovery prerequisite | 0382 | preloadTsconfigPaths before opt-in construction; explicit maps/default paths remain immediate |
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |

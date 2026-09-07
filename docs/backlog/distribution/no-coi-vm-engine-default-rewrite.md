@@ -51,6 +51,8 @@ challenge: 2026-09-06 — 5 problems
 
 ## Decisions
 
+- ready-verdict: 2026-09-07 — Contract+RED @ 5b5601d935ddbf0e5cd0192a9f8f2683d0e3d8d9; 7 expected RED, no blockers.
+
 - 2026-09-07 — pickup: ADR-0383, independent decision probe chooses native Worker.name; exact reserved labels, unchanged URLs, no handshake; raw evidence in distribution/reference/vm-worker-name-probe.*.
 - 2026-09-07 — source + packed acceptance uses real SDK/Worker, explicit quickjs and restart; legacy generic defaults remain.
 

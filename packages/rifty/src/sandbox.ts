@@ -52,6 +52,8 @@ export interface GenericCreateSandboxOptions extends CreateSandboxCommonOptions 
 }
 
 export interface ToolchainCreateSandboxOptions extends CreateSandboxCommonOptions {
+  /** no-COI vm defaults to rewrite; quickjs opts into the preloaded real realm (ADR-0383). */
+  readonly vmEngine?: RuntimeOptions['vmEngine'];
   /** Explicit admission for the shared-memory-free tier. */
   readonly requireCrossOriginIsolation: false;
   /** Bundler-resolved `@riftydev/workbench/no-coi-toolchain-worker` URL. */
@@ -264,6 +266,7 @@ export async function createSandbox(
     const { swError } = await bootServiceWorker(options, deps, logger);
     return bootToolchainSandbox({
       workerUrl: String(options.toolchain.workerUrl),
+      vmEngine: options.vmEngine ?? 'rewrite',
       capabilities,
       ...(swError === undefined ? {} : { swError }),
     });
@@ -320,11 +323,13 @@ function mountToolchainPreview(port: number, ownerToken: string): () => void {
 
 async function bootToolchainSandbox(options: {
   readonly workerUrl: string;
+  readonly vmEngine: NonNullable<RuntimeOptions['vmEngine']>;
   readonly capabilities: CapabilityCheck;
   readonly swError?: string;
 }): Promise<ToolchainSandbox> {
   let current: ToolchainRuntimeController = spawnToolchainRuntime({
     workerUrl: options.workerUrl,
+    vmEngine: options.vmEngine,
   });
   let backend: VfsBackend;
   try {
@@ -535,7 +540,7 @@ async function bootToolchainSandbox(options: {
       if (disposed) throw new Error('Sandbox was disposed during restart');
       current.dispose();
 
-      current = spawnToolchainRuntime({ workerUrl: options.workerUrl });
+      current = spawnToolchainRuntime({ workerUrl: options.workerUrl, vmEngine: options.vmEngine });
       attachCurrent();
       backend = await current.toolchainReady;
       if (activation !== null) await current.restoreToolchainState(activation);
@@ -567,7 +572,20 @@ async function bootToolchainSandbox(options: {
     },
     capabilities: options.capabilities,
     toolchain,
-    capabilityReport: TOOLCHAIN_CAPABILITY_REPORT,
+    capabilityReport: freezeDeep({
+      ...TOOLCHAIN_CAPABILITY_REPORT,
+      features: [
+        ...TOOLCHAIN_CAPABILITY_REPORT.features,
+        options.vmEngine === 'quickjs'
+          ? { feature: 'node:vm', status: 'working' as const }
+          : {
+              feature: 'node:vm',
+              status: 'degraded' as const,
+              warning:
+                "rewrite engine: direct eval can reach the host, host globals are visible, and cross-realm instanceof differs; select vmEngine: 'quickjs' for a real realm",
+            },
+      ],
+    }),
     ...(options.swError === undefined ? {} : { swError: options.swError }),
     restart,
     dispose: disposeSandbox,

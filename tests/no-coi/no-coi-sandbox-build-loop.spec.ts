@@ -137,6 +137,12 @@ const expectedCapabilityReport = {
       error: { name: 'NotImplementedError', feature: 'toolchain.threaded-wasm' },
     },
     { feature: 'toolchain.dev-hmr', status: 'working' },
+    {
+      feature: 'node:vm',
+      status: 'degraded',
+      warning:
+        "rewrite engine: direct eval can reach the host, host globals are visible, and cross-realm instanceof differs; select vmEngine: 'quickjs' for a real realm",
+    },
   ],
 } as const;
 

@@ -22,6 +22,8 @@ export async function provePackedVmSelection(root, report) {
   await withClientServer(root, async (browser, base) => {
     const main = report.rows.find((row) => row.name === 'main').entry;
     const toolchain = report.rows.find((row) => row.name === 'toolchain').entry;
+    await proveReadinessJoin(browser, base, toolchain);
+    await proveOrdinaryWorkerName(browser, base, report, oracle);
     const failures = [];
     for (const transport of ['http', 'blob']) {
       for (const engine of ['default', 'quickjs', 'rewrite']) {
@@ -185,4 +187,88 @@ export async function provePackedVmSelection(root, report) {
     }
     if (failures.length) throw new AggregateError(failures, 'Packed VM selection failures');
   });
+}
+
+async function proveReadinessJoin(browser, base, entry) {
+  const context = await browser.newContext();
+  let release;
+  const released = new Promise((resolveRelease) => {
+    release = resolveRelease;
+  });
+  try {
+    const page = await context.newPage();
+    await page.route(`${base}/quickjs.wasm`, async (route) => {
+      await released;
+      await route.continue();
+    });
+    await page.goto(base);
+    const requested = page.waitForRequest(`${base}/quickjs.wasm`);
+    await page.evaluate((entry) => {
+      const worker = new Worker(entry, { type: 'module', name: 'rifty-vm-engine=quickjs' });
+      globalThis.vmBarrier = { worker, ready: false, pong: false };
+      worker.onmessage = ({ data }) => {
+        if (data.type === 'ready') globalThis.vmBarrier.ready = true;
+        if (data.type === 'pong') globalThis.vmBarrier.pong = true;
+      };
+    }, entry);
+    await requested;
+    await page.evaluate(() => globalThis.vmBarrier.worker.postMessage({ type: 'ping' }));
+    // Actual same-peer FIFO pong is a causal barrier, not an elapsed-time guess.
+    await page.waitForFunction(() => globalThis.vmBarrier.pong);
+    assert.equal(
+      await page.evaluate(() => globalThis.vmBarrier.ready),
+      false,
+      'ready escaped while selected WASM was held',
+    );
+    release();
+    await page.waitForFunction(() => globalThis.vmBarrier.ready);
+    await page.evaluate(() => globalThis.vmBarrier.worker.terminate());
+  } finally {
+    release();
+    await context.close();
+  }
+}
+
+async function proveOrdinaryWorkerName(browser, base, report, oracle) {
+  for (const kind of ['generic', 'toolchain']) {
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      const wasm = [];
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/quickjs.wasm') wasm.push(request.url());
+      });
+      await page.goto(base);
+      await page.evaluate(
+        ({ entry, program }) => {
+          const worker = new Worker(entry, { type: 'module', name: 'custom-worker-label' });
+          globalThis.vmRaw = { worker, output: '', result: null };
+          worker.onmessage = ({ data }) => {
+            if (data.type === 'ready')
+              worker.postMessage({ type: 'eval', request: { id: 1, code: program } });
+            if (data.type === 'stdout') globalThis.vmRaw.output += data.chunk;
+            if (data.type === 'result') globalThis.vmRaw.result = data.result;
+          };
+        },
+        { entry: report.rows.find((row) => row.name === kind).entry, program },
+      );
+      await page.waitForFunction(() => globalThis.vmRaw.result !== null);
+      const observation = await page.evaluate(() => {
+        globalThis.vmRaw.worker.terminate();
+        return { result: globalThis.vmRaw.result, output: globalThis.vmRaw.output };
+      });
+      assert.equal(observation.result.ok, true);
+      assert.deepEqual(
+        JSON.parse(observation.output.trim()),
+        kind === 'generic' ? oracle : { realm: true, hostGlobal: 'number', evalLeak: true },
+      );
+      assert.equal(
+        wasm.length,
+        kind === 'generic' ? 1 : 0,
+        `${kind}: ordinary name must retain the tier default`,
+      );
+    } finally {
+      await context.close();
+    }
+  }
 }
