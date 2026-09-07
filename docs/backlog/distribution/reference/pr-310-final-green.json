@@ -1,0 +1,53 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Merge PR #310 as docs-only backlog capture; rebase preserves the original patch, five items remain draft, and implementation remains future work.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #310 docs-only backlog capture rebased onto BASE fbe784ceb; reviewed HEAD b237034e4c1d679799c329fdada6fa2174c50be0. Original patch dee0087b7 is identical by git range-diff. No ready goal or product contract is delivered.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "b237034e4c1d679799c329fdada6fa2174c50be0"
+}
