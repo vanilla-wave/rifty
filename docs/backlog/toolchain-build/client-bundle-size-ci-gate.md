@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: draft
+status: ready
 epic: no-coi-client-bundle
 title: CI-only client bundle budget gate with headroom over the cleaned SDK artifacts
 created: 2026-09-06
@@ -48,6 +48,10 @@ challenge: 2026-09-06 — 6 problems
 
 ## Decisions
 
+- 2026-09-07 — pickup: tooling proof over accepted I1–I4 behavior (RDY-8); relevant discrimination checks + independent Final+GREEN, no new runtime promise.
+- 2026-09-07 — reuse packed surface runner and compiler provenance; budget its post-readiness-accounted report, verify every observed boot JS request is included. Run only in CI's no-COI job.
+- 2026-09-07 — absolute min/gzip ceilings = cleaned bytes ×1.5 rounded up to 1000 B; all four recorded leaks cross both ceilings. A bump carries new measurement and cause in this same gate file/PR; aggregate small growth can eventually cross a ceiling.
+
 - 2026-09-06 — user (rifty-refine): absolute budgets with headroom, set after
   the cleanup items land; the gate fires only on a large leak, not on small
   growth.
@@ -71,3 +75,35 @@ challenge: 2026-09-06 — 6 problems
 - rejected route: shrink-only ratchet (agent recommendation) — user: small
   growth must not interrupt work.
 - Reversibility: REVERSIBLE — CI tooling.
+
+## User scenario
+
+CI packs the real SDK dependency closure, builds four minified splitting
+artifacts, cold-boots both Workers in Chromium, and accounts for every JS
+request before readiness. It applies absolute min and per-chunk gzip ceilings
+with at least 50% headroom over the cleaned measurements. Historical TS/io
+leaks fail; missing artifacts, missing compiler provenance or unaccounted boot
+JS cannot turn into a green budget. Local pr:check keeps its existing lanes.
+
+## Acceptance
+
+- CI budgets actual packed main, sw, generic and toolchain complete eager JS graphs, including readiness-joined dynamic imports; min and gzip each have absolute ceilings with headroom. → I5
+- Recorded TypeScript worker leaks and io main/sw leaks exceed at least one calibrated ceiling per artifact; clean graphs pass. → I5
+- The standing worker guard rejects compiler input in eager code, using published source-map provenance across shared chunks. → I5
+- Budget pin changes record measured cause; no shrink-only ratchet and no client size lane in local pr:check. → scenario
+
+## Fault matrix
+
+| Boundary / axis | Operation | Outcome |
+|---|---|---|
+| Measurement / lossy-aggregate | readiness-triggered JS missing from eager accounting | Gate rejects the missing observed output. → scenario |
+| Measurement / provenance-lie | missing artifact or compiler provenance | Gate fails explicitly; absence cannot count as zero. → scenario |
+| Budget / sibling-drift | historical worker TS and page/SW io leaks | Every named artifact exceeds its calibrated ceiling; no twin omitted. → I5 |
+
+## Reference contract
+
+Real packed baseline d52ef8128 (Node24.16/esbuild0.28/Chromium148) is recorded in
+`docs/backlog/runtime-js/reference/lazy-compiler-packed-results.json`; real I4 packed
+measurements calibrate the ceilings. `measure-bundles.mjs` plus Chromium's boot
+request ledger is the graph authority. There is no latency target, total-app
+budget, QuickJS WASM budget or install-time payload budget.

@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- CI budgets four packed client JS graphs with ≥50% headroom; historical TS/io
+  leaks and unaccounted boot imports fail. Local `pr:check` keeps its lanes.
+
 - **Process: one evidence-driven route.** One verdict/validator at review and merge;
   no forced separate PRs or document-lifecycle proof gates. User amendments stay
   in the goal; required discoveries stay in the work; independent checks happen

@@ -299,6 +299,8 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+      - name: Packed client bundle budgets
+        run: pnpm test:client-bundles
       - run: pnpm test:no-coi
       - if: failure()
         uses: actions/upload-artifact@v4
