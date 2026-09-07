@@ -1,6 +1,5 @@
 ## Items
 
-3. `distribution/sdk-entry-packaging-hygiene` — I3; io factories, generic-only backend loading, worker sideEffects.
 4. `distribution/no-coi-worker-install-lazy-split` — I4; first-use install/activation module, existing no-COI scenario proof.
 5. `toolchain-build/client-bundle-size-ci-gate` — I5; reuse packed graph proof, calibrate after cleanup; CI only.
 
