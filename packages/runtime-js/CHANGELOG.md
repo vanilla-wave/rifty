@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Load the real TypeScript eval classifier only after Acorn rejects the source;
+  JavaScript-only workers no longer eagerly download it with ESM splitting.
+  Compiler chunk load failures throw with their original cause (ADR-0380).
+- Remove unused `autoDiscoverTsconfigPaths` and its parser/caches; explicit
+  `paths` remains. JavaScript callers enabling the retired option throw loudly
+  (ADR-0380 supersedes ADR-0170).
+
 ### Fixed
 
 - Successful no-COI restore labels recovery with its current backend, preserving acknowledged bytes through repeated OPFS/memory transitions.

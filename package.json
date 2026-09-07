@@ -56,6 +56,8 @@
     "artifacts:generate": "pnpm shadow-catalog:generate && tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --write",
     "shadow-catalog:generate": "tsx tools/shadow-registry/tools/generate-shadow-substitution-catalog.ts --write",
     "esbuild-runtime:generate": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --write",
+    "eval-compiler:generate": "node tools/publishing/generate-eval-compiler.mjs --write",
+    "check:eval-compiler-drift": "node tools/publishing/generate-eval-compiler.mjs --check",
     "check:esbuild-runtime-drift": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --check",
     "check:shadow-catalog-drift": "tsx tools/shadow-registry/tools/generate-shadow-substitution-catalog.ts --check",
     "check:install-artifact-drift": "tsx tools/shadow-registry/tools/generate-shadow-substitution-catalog.ts --check && tsx tools/shadow-registry/tools/generate-install-artifact-identity.ts --check",

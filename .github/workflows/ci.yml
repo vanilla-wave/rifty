@@ -59,6 +59,7 @@ jobs:
       - run: pnpm check:e2e-coverage
       - run: pnpm check:compat-drift # docs-only PRs still prove generated compatibility claims
       - run: pnpm test:docs-contract # lightweight source↔compat/ADR honesty guards
+      - run: pnpm check:eval-compiler-drift
       - run: pnpm check:shadow-catalog-drift
       - run: pnpm check:install-artifact-drift
       - run: pnpm check:snapshot-artifact-drift

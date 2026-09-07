@@ -60,8 +60,14 @@ challenge: 2026-09-06 — 4 problems
 
 ## Decisions
 
-- 2026-09-07 — pickup: ADR-0380; no production discovery caller; remove discovery, retain explicit paths and loud obsolete-option throw. Internal runner accepts prepared compiler; `projectNodeEvalError` receives it.
-- 2026-09-07 — RED/reference: `docs/backlog/runtime-js/reference/lazy-compiler-evidence.md`; independent Contract+RED pending, no implementation yet.
+- re-cut: 2026-09-07 — ADR-0382 supersedes ADR-0380 D1 after examples/ caller discovery; preserve discovery via async preload before sync opt-in, restore baseline assertions — trace: ADR-0382.
+
+- re-cut: 2026-09-07 — ADR-0381 adds a generated browser-scoped real compiler after executed lazy-import host-detection failure; promises and semantic assertions unchanged — trace: none.
+
+- ready-verdict: 2026-09-07 — Contract+RED @ 366aa412a8f3582f7f464158ad730ce35b60fde8; packed/browser/timing acceptance remains required before Final+GREEN.
+
+- 2026-09-07 — pickup: ADR-0380; no production discovery caller; remove discovery, retain explicit paths and loud obsolete-option throw. Original pickup missed examples/; ADR-0382 corrects the removal. Internal runner accepts prepared compiler; `projectNodeEvalError` receives it.
+- 2026-09-07 — RED/reference and packed/browser GREEN: `docs/backlog/runtime-js/reference/lazy-compiler-evidence.md`.
 
 - 2026-09-06 — fork resolved via rifty-refine (sync-eval classifier): acorn
   parses first; the compiler is reached only on the acorn-fail path.
@@ -95,19 +101,21 @@ non-JavaScript eval through the existing reference classification/error path.
 - Neither worker's complete eager graph (entry, automatic bootstrap, static closure) contains TypeScript, including real packed tarballs under ESM splitting. → I1
 - JavaScript CLI eval runs without awaiting/importing the compiler; existing completion/identity/lifecycle/error assertions remain unchanged. → I1
 - Non-JavaScript eval lazily loads the real compiler and preserves current named gaps and SyntaxErrors, including explicit CommonJS const markers. → I1
-- Explicit `paths` and default resolution retain ADR-0066 behavior; removed discovery calls throw loudly, with no replacement config parser. → ADR-0380
+- Explicit `paths` and default resolution need no compiler; discovery preserves ADR-0170 after `preloadTsconfigPaths()`, and unprepared opt-in throws `TSCONFIG_NOT_READY`. Existing example HTTP/alias/baseUrl behavior remains. → ADR-0382
 - Record before/after packed bytes and cold-worker boot timing; latency has no invented pass threshold. → scenario
 
 ## Parity cases
 
 - Existing `process/node-eval-context*` cases retain Node-vs-rifty output/identity/error/lifecycle assertions; no reference golden changes. → I1
-- Existing explicit alias resolver conformance remains; only ADR-0170-exclusive discovery cases retire under ADR-0380. → ADR-0380
+- All existing alias/discovery resolver and vite-like-dev integration assertions remain; opt-in callers gain preload preparation only. → ADR-0382
 
 ## Fault matrix
 
 | Boundary / axis | Operation | Required outcome and carrier |
 |---|---|---|
 | ESM chunk load / false-fallback | first non-JS eval with compiler chunk unavailable | Loud compiler-chunk error with original URL/path cause; actual missing bundle output in `tests/integration/client-compiler-loading.test.ts`, browser request fault at final acceptance. → I1 |
+
+| ESM chunk load / false-fallback | failed `preloadTsconfigPaths` | Reject with chunk cause, publish no ready parser; default/explicit paths remain usable. → ADR-0382 |
 
 ## Out of scope
 

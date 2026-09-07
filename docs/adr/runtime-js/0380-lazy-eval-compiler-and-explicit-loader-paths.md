@@ -31,6 +31,12 @@ Independent DEC-2 review confirmed removal over a new async-loader precondition.
    replacement parser. Splitting bundlers remove transfer bytes; inlining
    bundlers defer evaluation only (ADR-0052 transform injection unchanged).
 
+## Corrections (active)
+
+2026-09-07: ADR-0382 supersedes D1 and its no-callers premise; the sweep omitted
+`examples/vite-like-dev`. Discovery stays after explicit async preload. D2–4
+remain active; ADR-0381 owns the browser-scoped compiler distribution.
+
 ## Alternatives
 
 - Keep discovery with async preload at loader creation: rejected; synchronous

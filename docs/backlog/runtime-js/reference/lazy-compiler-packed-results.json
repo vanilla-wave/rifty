@@ -1,0 +1,162 @@
+{
+  "baseline": {
+    "node": "v24.16.0",
+    "esbuild": "0.28.0",
+    "chromium": "148.0.7778.96",
+    "artifacts": [
+      {
+        "name": "main",
+        "min": 103660,
+        "gzip": 30188,
+        "eager": ["/measure/main/stdin.js"]
+      },
+      {
+        "name": "sw",
+        "min": 63105,
+        "gzip": 18467,
+        "eager": ["/measure/sw/stdin.js"]
+      },
+      {
+        "name": "generic",
+        "min": 4311637,
+        "gzip": 1245917,
+        "eager": [
+          "/measure/generic/stdin.js",
+          "/measure/generic/chunk-ZWRDP37E.js",
+          "/measure/generic/chunk-YQNX3F3R.js",
+          "/measure/generic/chunk-GID5H76B.js",
+          "/measure/generic/emscripten-module.browser-QVFB72VZ.js",
+          "/measure/generic/ffi-A74IUOQZ.js",
+          "/measure/generic/module-ES6BEMUI-7DQV35R3.js"
+        ]
+      },
+      {
+        "name": "toolchain",
+        "min": 4568192,
+        "gzip": 1326387,
+        "eager": [
+          "/measure/toolchain/worker-N5QWGUML.js",
+          "/measure/toolchain/chunk-ZWRDP37E.js",
+          "/measure/toolchain/chunk-YQNX3F3R.js",
+          "/measure/toolchain/chunk-GID5H76B.js",
+          "/measure/toolchain/chunk-DV2PYV7E.js",
+          "/measure/toolchain/stdin.js",
+          "/measure/toolchain/emscripten-module.browser-QVFB72VZ.js",
+          "/measure/toolchain/ffi-A74IUOQZ.js",
+          "/measure/toolchain/module-ES6BEMUI-7DQV35R3.js"
+        ]
+      }
+    ],
+    "boot": [
+      {
+        "name": "generic",
+        "milliseconds": 132.79999995231628,
+        "stderr": []
+      },
+      {
+        "name": "generic",
+        "milliseconds": 137.20000004768372,
+        "stderr": []
+      },
+      {
+        "name": "generic",
+        "milliseconds": 123.20000004768372,
+        "stderr": []
+      },
+      {
+        "name": "toolchain",
+        "milliseconds": 132.70000004768372,
+        "stderr": []
+      },
+      {
+        "name": "toolchain",
+        "milliseconds": 129.79999995231628,
+        "stderr": []
+      },
+      {
+        "name": "toolchain",
+        "milliseconds": 133,
+        "stderr": []
+      }
+    ]
+  },
+  "after": {
+    "node": "v24.16.0",
+    "esbuild": "0.28.0",
+    "chromium": "148.0.7778.96",
+    "artifacts": [
+      {
+        "name": "main",
+        "min": 103660,
+        "gzip": 30188,
+        "eager": ["/measure/main/stdin.js"]
+      },
+      {
+        "name": "sw",
+        "min": 63105,
+        "gzip": 18467,
+        "eager": ["/measure/sw/stdin.js"]
+      },
+      {
+        "name": "generic",
+        "min": 724723,
+        "gzip": 212866,
+        "eager": [
+          "/measure/generic/stdin.js",
+          "/measure/generic/chunk-YQNX3F3R.js",
+          "/measure/generic/chunk-GID5H76B.js",
+          "/measure/generic/emscripten-module.browser-NHFZ7RXK.js",
+          "/measure/generic/ffi-RQMBT53F.js",
+          "/measure/generic/module-ES6BEMUI-TCFOUELZ.js"
+        ]
+      },
+      {
+        "name": "toolchain",
+        "min": 980768,
+        "gzip": 292953,
+        "eager": [
+          "/measure/toolchain/worker-F77OD5E5.js",
+          "/measure/toolchain/chunk-YQNX3F3R.js",
+          "/measure/toolchain/chunk-GID5H76B.js",
+          "/measure/toolchain/chunk-KUHV3DVY.js",
+          "/measure/toolchain/stdin.js",
+          "/measure/toolchain/emscripten-module.browser-NHFZ7RXK.js",
+          "/measure/toolchain/ffi-RQMBT53F.js",
+          "/measure/toolchain/module-ES6BEMUI-TCFOUELZ.js"
+        ]
+      }
+    ],
+    "boot": [
+      {
+        "name": "generic",
+        "milliseconds": 23,
+        "stderr": []
+      },
+      {
+        "name": "generic",
+        "milliseconds": 22.600000143051147,
+        "stderr": []
+      },
+      {
+        "name": "generic",
+        "milliseconds": 21.700000047683716,
+        "stderr": []
+      },
+      {
+        "name": "toolchain",
+        "milliseconds": 32.60000014305115,
+        "stderr": []
+      },
+      {
+        "name": "toolchain",
+        "milliseconds": 34.09999990463257,
+        "stderr": []
+      },
+      {
+        "name": "toolchain",
+        "milliseconds": 33.89999985694885,
+        "stderr": []
+      }
+    ]
+  }
+}

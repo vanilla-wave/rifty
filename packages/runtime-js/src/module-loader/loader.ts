@@ -1,9 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, joinPath } from '@riftydev/vfs';
 import { type Node as AcornNode, parse as acornParse } from 'acorn';
-// TODO(backlog: runtime-js/lazy-typescript-tsconfig-discovery):
-// share the lazy compiler boundary with eval-context detection.
-import ts from 'typescript';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
@@ -47,17 +44,10 @@ export interface ModuleLoaderOptions {
   readonly transformSource?: TransformSourceHook;
   /**
    * tsconfig-style path aliases (ADR-0066), e.g. `{ "@/*": "/workspace/src/*" }`.
-   * Targets are absolute VFS path patterns; when supplied, this explicit map wins
-   * over auto-discovery.
+   * Targets are absolute VFS path patterns; the host owns config discovery.
    * Absent = Node-faithful resolution (bare `@/foo` is `MODULE_NOT_FOUND`).
    */
   readonly paths?: PathAliases;
-  /**
-   * Locate the nearest `tsconfig.json` and derive `compilerOptions.paths` via
-   * TypeScript's parser (`extends`, JSONC, `baseUrl` included). Off by default
-   * so vanilla Node-style resolution stays byte-stable.
-   */
-  readonly autoDiscoverTsconfigPaths?: boolean;
 }
 
 export interface ModuleLoader {
@@ -106,7 +96,11 @@ export interface NodeEvalScriptRunner {
 
 interface ModuleLoaderCore {
   readonly loader: ModuleLoader;
-  runNodeEvalScript(source: string, explicitCommonJs: boolean): unknown;
+  runNodeEvalScript(
+    source: string,
+    explicitCommonJs: boolean,
+    compiler?: NodeEvalCompiler,
+  ): unknown;
 }
 
 interface AcornSyntaxFailure extends Error {
@@ -188,57 +182,6 @@ function parsesAsJavaScriptScript(source: string): boolean {
   }
 }
 
-const TYPESCRIPT_ONLY_MODIFIERS = new Set<ts.SyntaxKind>([
-  ts.SyntaxKind.DeclareKeyword,
-  ts.SyntaxKind.AbstractKeyword,
-  ts.SyntaxKind.ReadonlyKeyword,
-  ts.SyntaxKind.PublicKeyword,
-  ts.SyntaxKind.PrivateKeyword,
-  ts.SyntaxKind.ProtectedKeyword,
-  ts.SyntaxKind.OverrideKeyword,
-]);
-
-function hasTypeScriptOnlySyntax(node: ts.Node): boolean {
-  if (
-    ts.isTypeNode(node) ||
-    ts.isTypeParameterDeclaration(node) ||
-    ts.isInterfaceDeclaration(node) ||
-    ts.isTypeAliasDeclaration(node) ||
-    ts.isEnumDeclaration(node) ||
-    ts.isModuleDeclaration(node) ||
-    ts.isImportEqualsDeclaration(node) ||
-    ts.isNamespaceExportDeclaration(node) ||
-    ts.isTypeAssertionExpression(node) ||
-    ts.isAsExpression(node) ||
-    ts.isSatisfiesExpression(node) ||
-    ts.isNonNullExpression(node) ||
-    ts.isTypeOnlyImportOrExportDeclaration(node) ||
-    (ts.isExportAssignment(node) && node.isExportEquals) ||
-    (ts.isHeritageClause(node) && node.token === ts.SyntaxKind.ImplementsKeyword) ||
-    (ts.isFunctionLike(node) && (!('body' in node) || node.body === undefined)) ||
-    (ts.isVariableDeclaration(node) && node.exclamationToken !== undefined) ||
-    (ts.isParameter(node) &&
-      (node.questionToken !== undefined ||
-        (ts.isIdentifier(node.name) && node.name.text === 'this'))) ||
-    (ts.isPropertyDeclaration(node) &&
-      (node.questionToken !== undefined || node.exclamationToken !== undefined)) ||
-    (ts.isMethodDeclaration(node) && node.questionToken !== undefined)
-  ) {
-    return true;
-  }
-  if (
-    ts.canHaveModifiers(node) &&
-    ts.getModifiers(node)?.some((modifier) => TYPESCRIPT_ONLY_MODIFIERS.has(modifier.kind))
-  ) {
-    return true;
-  }
-  let found = false;
-  ts.forEachChild(node, (child) => {
-    if (!found && hasTypeScriptOnlySyntax(child)) found = true;
-  });
-  return found;
-}
-
 function isAcornNode(value: unknown): value is AcornNode {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
@@ -306,48 +249,11 @@ function nodeEvalThrowLocation(
   return start === undefined || start === null ? null : { line: start.line, column: start.column };
 }
 
-function nodeEvalConstBindingMarker(
+function nodeEvalSyntaxPrelude(
   source: string,
-  position: number,
-): { readonly line: number; readonly column: number; readonly width: number } | null {
-  const syntax = ts.createSourceFile(
-    '[eval].ts',
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  const bindings: ts.Identifier[] = [];
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.type !== undefined &&
-      ts.isVariableDeclarationList(node.parent) &&
-      (node.parent.flags & ts.NodeFlags.Const) !== 0 &&
-      node.name.getEnd() <= position &&
-      position <= node.type.getEnd()
-    ) {
-      bindings.push(node.name);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(syntax);
-  let binding = bindings[0];
-  if (binding === undefined) return null;
-  for (const candidate of bindings.slice(1)) {
-    if (candidate.getStart(syntax) > binding.getStart(syntax)) binding = candidate;
-  }
-  const start = binding.getStart(syntax);
-  const location = syntax.getLineAndCharacterOfPosition(start);
-  return {
-    line: location.line + 1,
-    column: location.character,
-    width: Math.max(1, binding.getEnd() - start),
-  };
-}
-
-function nodeEvalSyntaxPrelude(source: string, error: SyntaxError): string | null {
+  error: SyntaxError,
+  compiler?: NodeEvalCompiler,
+): string | null {
   let parsed: AcornSyntaxFailure | null = null;
   try {
     acornParse(source, {
@@ -368,7 +274,7 @@ function nodeEvalSyntaxPrelude(source: string, error: SyntaxError): string | nul
     error.message === 'Missing initializer in const declaration' &&
     typeof parsed.pos === 'number'
   ) {
-    const marker = nodeEvalConstBindingMarker(source, parsed.pos);
+    const marker = compiler?.nodeEvalConstBindingMarker(source, parsed.pos) ?? null;
     if (marker !== null) {
       line = marker.line;
       column = marker.column;
@@ -421,12 +327,13 @@ export function projectNodeEvalError(
   error: unknown,
   source: string,
   origin: 'sync' | 'unhandled' | 'uncaught' = 'sync',
+  compiler?: NodeEvalCompiler,
 ): unknown {
   if (!(error instanceof Error)) return error;
   const firstLine =
     (error.stack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
   if (error instanceof SyntaxError) {
-    const prelude = nodeEvalSyntaxPrelude(source, error);
+    const prelude = nodeEvalSyntaxPrelude(source, error, compiler);
     if (prelude !== null) {
       error.stack = `${prelude}${firstLine}`;
       return error;
@@ -459,33 +366,6 @@ export function projectNodeEvalError(
   return error;
 }
 
-function requiresTypeScriptEvalContext(source: string): boolean {
-  if (parsesAsJavaScriptScript(source)) return false;
-  const transpiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.None,
-      target: ts.ScriptTarget.ESNext,
-    },
-    fileName: '[eval].ts',
-    reportDiagnostics: true,
-  });
-  if (
-    transpiled.diagnostics?.some(
-      (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
-    )
-  ) {
-    return false;
-  }
-  const syntax = ts.createSourceFile(
-    '[eval].ts',
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  return hasTypeScriptOnlySyntax(syntax) && parsesAsJavaScriptScript(transpiled.outputText);
-}
-
 function installNodeEvalCjsBindings(moduleObject: CjsModule, require: CjsRequire): void {
   for (const [key, value] of [
     ['require', require],
@@ -515,10 +395,7 @@ function createModuleLoaderCore(
   // bypassing a later custom hook while preserving normal CJS cache identity.
   const customJsRegistry = new ModuleRegistry();
   const defaultRequiredEsm = new Set<string>();
-  const resolver = createResolver(vfs, {
-    paths: opts.paths,
-    autoDiscoverTsconfigPaths: opts.autoDiscoverTsconfigPaths,
-  });
+  const resolver = createResolver(vfs, opts);
   let loaderModuleBuiltin: Record<string, unknown> | null = null;
   const loadBuiltinForLoader = (id: string): Record<string, unknown> => {
     if (builtinOverrides !== undefined && id === 'node:module') {
@@ -750,8 +627,11 @@ function createModuleLoaderCore(
 
   return {
     loader,
-    runNodeEvalScript(source, explicitCommonJs) {
-      if (!explicitCommonJs && requiresTypeScriptEvalContext(source)) {
+    runNodeEvalScript(source, explicitCommonJs, compiler) {
+      if (
+        !explicitCommonJs &&
+        compiler?.requiresTypeScriptEvalContext(source, parsesAsJavaScriptScript)
+      ) {
         // TODO(backlog: runtime-js/node-cli-typescript-eval-context)
         throw new NotImplementedError('runtime-js.node-eval-typescript-context');
       }
@@ -785,10 +665,21 @@ export function createNodeEvalScriptRunner(opts: {
   readonly vfs: FsSync;
   readonly cwd: string;
   readonly explicitCommonJs: boolean;
+  readonly compiler?: NodeEvalCompiler;
 }): NodeEvalScriptRunner {
   const core = createModuleLoaderCore(opts.vfs, { cwd: opts.cwd });
   return {
     registry: core.loader.registry,
-    run: (source) => core.runNodeEvalScript(source, opts.explicitCommonJs),
+    run: (source) => core.runNodeEvalScript(source, opts.explicitCommonJs, opts.compiler),
   };
+}
+
+type NodeEvalCompiler = typeof import('./node-eval-typescript.ts');
+
+/** Undefined keeps valid JavaScript on its original synchronous path. */
+export function prepareNodeEvalCompiler(source: string): Promise<NodeEvalCompiler> | undefined {
+  if (parsesAsJavaScriptScript(source)) return undefined;
+  return import('./node-eval-typescript.ts').catch((cause: unknown) => {
+    throw new Error('TypeScript compiler chunk failed to load', { cause });
+  });
 }

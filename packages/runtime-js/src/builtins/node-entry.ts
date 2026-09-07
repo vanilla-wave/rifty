@@ -25,6 +25,7 @@ import {
   type ModuleLoader,
   createModuleLoader,
   createNodeEvalScriptRunner,
+  prepareNodeEvalCompiler,
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
@@ -196,15 +197,18 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     // `process`, its streams, or their methods. Late eval terminals are runtime
     // work and must not trust guest-mutated globals.
     const terminalProcess = captureNodeEvalTerminalProcess();
+    const preparation = prepareNodeEvalCompiler(opts.source);
+    const compiler = preparation === undefined ? undefined : await preparation;
     let completion: unknown;
     try {
       completion = createNodeEvalScriptRunner({
         vfs: opts.vfs,
         cwd: opts.cwd,
         explicitCommonJs: opts.explicitCommonJs,
+        compiler,
       }).run(opts.source);
     } catch (error) {
-      throw projectNodeEvalError(error, opts.source);
+      throw projectNodeEvalError(error, opts.source, 'sync', compiler);
     }
     registerNodeEvalDrainLifecycle({
       beforeExit: async () => {
@@ -217,6 +221,7 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
           reason,
           opts.source,
           origin === 'uncaught-error' ? 'uncaught' : 'unhandled',
+          compiler,
         ),
       terminateUnhandled: (reason) => {
         const message =

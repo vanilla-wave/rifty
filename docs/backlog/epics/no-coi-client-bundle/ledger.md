@@ -1,2 +1,4 @@
 - 2026-09-07 — FIT from all-five-items hand-off; PR #310 merged at d52ef8128, implementation branch starts there.
 - 2026-09-07 — FIT concern accepted: automatic runtime-worker import belongs to boot graph; static-only closure undercounts. Goal ready; five children remain draft.
+- 2026-09-07 — I1 Contract+RED accepted @366aa412a; browser caught TypeScript host-detection after lazy import. ADR-0381 + pinned lexical carrier closes it; real packed compiler success/fetch-fault proof GREEN. Final gate/review pending.
+- 2026-09-07 — packed boot ledger adds readiness-joined QuickJS JS imports to byte accounting; source/metafile static closure alone is not complete. Incidental declaration-subpath gap captured in distribution/sdk-subpath-ambient-worker-types (outside goal).

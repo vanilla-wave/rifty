@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
 import { basename, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { ensureRuntimeJsBuiltinsRegistered, isBuiltinSpecifier } from '../builtins/index.ts';
@@ -17,12 +18,6 @@ import {
   detectJavaScriptKind,
   resolutionOrder,
 } from './resolver-profile.ts';
-import {
-  type TsconfigPathResolution,
-  findNearestTsconfig,
-  loadTsconfigPathResolution,
-  shouldPrependTsconfigBaseUrl,
-} from './tsconfig-paths.ts';
 
 const safeReflectApply = Reflect.apply.bind(Reflect);
 const stringEndsWithPrimordial = String.prototype.endsWith;
@@ -60,11 +55,7 @@ export interface ResolveOptions {
  * **absolute** VFS path pattern. Patterns carry at most one `*`; the specifier's
  * `*` capture is substituted into the target. Targets are an ordered candidate
  * list (a bare string = one element) — first to resolve to an existing file wins.
- * Explicit maps are still the fastest/most-controlled path. When
- * `autoDiscoverTsconfigPaths` is enabled, the resolver uses TypeScript's own
- * config parser to locate `tsconfig.json`, follow `extends`, interpret
- * `baseUrl`, and compute this same absolute map. Off by default =
- * Node-faithful resolution.
+ * Hosts discover configuration and pass absolute targets (ADR-0380).
  */
 export type PathAliases = Readonly<Record<string, string | readonly string[]>>;
 
@@ -72,12 +63,6 @@ export type PathAliases = Readonly<Record<string, string | readonly string[]>>;
 export interface ResolverOptions {
   /** tsconfig-style path aliases (ADR-0066). Absent = Node-faithful resolution. */
   readonly paths?: PathAliases;
-  /**
-   * If true, locate the nearest `tsconfig.json` for the importing file and derive
-   * path aliases from `compilerOptions.paths` with the real TypeScript parser.
-   * Explicit {@link paths} win when both are supplied.
-   */
-  readonly autoDiscoverTsconfigPaths?: boolean;
 }
 
 // Declaration files (`.d.ts`/`.d.cts`/`.d.mts`) are types-only — no runnable JS;
@@ -110,7 +95,12 @@ type PkgCache = Map<string, PackageJson>;
 
 export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}): Resolver {
   const explicitPaths = resolverOpts.paths;
-  const autoDiscoverTsconfigPaths = resolverOpts.autoDiscoverTsconfigPaths === true;
+  if (Reflect.get(resolverOpts, 'autoDiscoverTsconfigPaths') === true) {
+    throw new NotImplementedError(
+      'runtime-js.auto-discover-tsconfig-paths',
+      'Pass explicit paths instead (ADR-0380)',
+    );
+  }
   // package.json parse cache (perf #5). N sibling imports from one package
   // re-decoded+re-parsed its package.json N times; cache by absolute path.
   // Cleared whole in `loader.invalidate()` (both arms) — `load-fixture` reload
@@ -122,14 +112,10 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
   // without firing invalidate) nor the ERR_PACKAGE_PATH_NOT_EXPORTED throw.
   // Cleared whole on ANY invalidate (input-keyed; cannot prune by resolved id).
   const resolveCache = new Map<string, string>();
-  const nearestTsconfigCache = new Map<string, string | null>();
-  const tsconfigResolutionCache = new Map<string, TsconfigPathResolution | null>();
   return {
     clearCaches() {
       pkgCache.clear();
       resolveCache.clear();
-      nearestTsconfigCache.clear();
-      tsconfigResolutionCache.clear();
     },
     resolve(specifier, opts) {
       const fromFileStat = vfs.statSyncOrNull(opts.fromFile);
@@ -180,34 +166,15 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         return readResolved(vfs, pkgCache, filePath, opts.esm);
       }
 
-      // tsconfig-style path aliases (ADR-0066): only for bare specifiers and
-      // only when a pattern matches — so real `@scope/pkg` packages are untouched.
-      // A pattern match that resolves no file skips `baseUrl` (matching TypeScript),
-      // then falls through to the bare node_modules walk.
-      if (!isRelativeSpecifier(specifier) && !isAbsolute(specifier)) {
-        const tsconfigResolution = resolutionFor(fromDir);
-        if (tsconfigResolution !== undefined) {
-          const aliased: PathAliasResolution =
-            tsconfigResolution.paths !== undefined
-              ? resolvePathAlias(vfs, pkgCache, specifier, tsconfigResolution.paths)
-              : { status: 'no-match' };
-          if (aliased.status === 'resolved')
-            return readResolved(vfs, pkgCache, aliased.path, opts.esm);
-          if (
-            aliased.status === 'no-match' &&
-            tsconfigResolution.baseUrl !== undefined &&
-            shouldPrependTsconfigBaseUrl(specifier)
-          ) {
-            const baseUrlResolved = resolveAsFileOrDir(
-              vfs,
-              pkgCache,
-              joinPath(tsconfigResolution.baseUrl, specifier),
-              TSCONFIG_RESOLUTION,
-            );
-            if (baseUrlResolved !== null)
-              return readResolved(vfs, pkgCache, baseUrlResolved, opts.esm);
-          }
-        }
+      // Explicit aliases affect only bare specifiers; misses fall through to Node resolution.
+      if (
+        explicitPaths !== undefined &&
+        !isRelativeSpecifier(specifier) &&
+        !isAbsolute(specifier)
+      ) {
+        const aliased = resolvePathAlias(vfs, pkgCache, specifier, explicitPaths);
+        if (aliased.status === 'resolved')
+          return readResolved(vfs, pkgCache, aliased.path, opts.esm);
       }
 
       // Resolution memo (perf #15): key by (esm,fromDir,specifier). A HIT skips
@@ -227,23 +194,6 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       return readResolved(vfs, pkgCache, filePath, opts.esm);
     },
   };
-
-  function resolutionFor(fromDir: string): TsconfigPathResolution | undefined {
-    if (explicitPaths !== undefined) return { paths: explicitPaths };
-    if (!autoDiscoverTsconfigPaths) return undefined;
-    let configPath = nearestTsconfigCache.get(fromDir);
-    if (configPath === undefined) {
-      configPath = findNearestTsconfig(vfs, fromDir);
-      nearestTsconfigCache.set(fromDir, configPath);
-    }
-    if (configPath === null) return undefined;
-    let resolution = tsconfigResolutionCache.get(configPath);
-    if (resolution === undefined) {
-      resolution = loadTsconfigPathResolution(vfs, configPath);
-      tsconfigResolutionCache.set(configPath, resolution);
-    }
-    return resolution ?? undefined;
-  }
 }
 
 function fileUrlToVfsPath(specifier: string, fromFile: string): string {

@@ -23,7 +23,9 @@ function staticClosure(meta: Metafile, roots: readonly string[]): Set<string> {
 function compilerOutputs(meta: Metafile): string[] {
   return Object.entries(meta.outputs)
     .filter(([, output]) =>
-      Object.keys(output.inputs).some((input) => /typescript\/lib\/typescript\.js$/u.test(input)),
+      Object.keys(output.inputs).some((input) =>
+        /(?:typescript\/lib\/typescript|generated\/typescript-browser)\.js$/u.test(input),
+      ),
     )
     .map(([path]) => path);
 }
@@ -50,6 +52,7 @@ describe('client compiler loading', () => {
       )
       .map(([path]) => path);
     const eager = staticClosure(result.metafile, roots);
+    expect(compilerOutputs(result.metafile).length).toBeGreaterThan(0);
     expect(roots.length).toBeGreaterThan(0);
     expect(compilerOutputs(result.metafile).filter((path) => eager.has(path))).toEqual([]);
   });
@@ -98,6 +101,7 @@ if (globalThis.__lazyResult !== 42) throw new Error('JS execution was delayed');
 await pending;
 try { await evaluate('const value: number = 1'); throw new Error('TS unexpectedly executed'); }
 catch (error) { console.log(JSON.stringify({message:error.message, cause:String(error.cause)})); }
+process.exit(0);
 `,
       );
       // Missing output file is a real failed ESM chunk load, not a fake compiler.
@@ -105,7 +109,10 @@ catch (error) { console.log(JSON.stringify({message:error.message, cause:String(
         expect((await readFile(resolve(path))).length).toBeGreaterThan(0);
         await rm(resolve(path));
       }
-      const output = execFileSync(process.execPath, [runner], { encoding: 'utf8' });
+      const output = execFileSync(process.execPath, [runner], {
+        encoding: 'utf8',
+        timeout: 10_000,
+      });
       const error = JSON.parse(output.trim()) as { message: string; cause: string };
       expect(error.message).toMatch(/TypeScript compiler chunk/u);
       expect(error.cause).toMatch(/Cannot find module/u);

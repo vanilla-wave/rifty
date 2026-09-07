@@ -41,7 +41,7 @@ describe('resolver file: URL imports', () => {
     );
   });
 
-  // Oracle: TypeScript 5.9 `resolveModuleName` (the ADR-0066/0170 ceiling) and
+  // Oracle: TypeScript 5.9 `resolveModuleName` (the ADR-0066 ceiling) and
   // tsconfig-paths@4 both match URL-like CJS bare names through exact aliases
   // and `*` wildcards — the extension must not special-case them out of the
   // bare fall-through.
@@ -73,31 +73,6 @@ describe('resolver file: URL imports', () => {
       // `*` matched but '/app/star/data:text/javascript,1' is a miss — same
       // attempt-then-MODULE_NOT_FOUND as tsconfig-paths.
       data: 'MODULE_NOT_FOUND',
-    });
-  });
-
-  // Oracle: TypeScript treats a `scheme://` name as ROOTED (`getRootLength`),
-  // so `combinePaths` never prepends baseUrl and the literal lookup misses —
-  // NOT_RESOLVED in every moduleResolution mode. tsconfig-paths@4 joins it
-  // blindly and resolves; the ADRs pin tsc, not the runtime shim.
-  it('keeps baseUrl blind to URL-rooted names while resolving plain bare names', () => {
-    const vfs = new MemoryFsSync();
-    vfs.loadFixture({
-      '/app/tsconfig.json': JSON.stringify({ compilerOptions: { baseUrl: '.' } }),
-      '/app/file:/bu.js': 'module.exports = "bu";\n',
-      '/app/base-target.js': 'module.exports = "plainbase";\n',
-      '/app/main.js': `
-        const out = { plain: require('base-target') };
-        try { out.fileUrl = require('file:///bu.js'); }
-        catch (error) { out.fileUrl = error.code; }
-        module.exports = out;
-      `,
-    });
-    const loader = createModuleLoader(vfs, { cwd: '/app', autoDiscoverTsconfigPaths: true });
-
-    expect(loader.require('./main.js', '/app/entry.js')).toEqual({
-      plain: 'plainbase',
-      fileUrl: 'MODULE_NOT_FOUND',
     });
   });
 
