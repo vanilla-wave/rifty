@@ -66,11 +66,20 @@ Use `docs/process/rules/fault-classes.md`. Template: `TEMPLATE.md`.
 
 ## Challenge
 
-Capturing a draft records a fact or question; it needs no critic or user report.
-Before adopting a plan at FIT/PICKUP, one independent premise check asks whether
-its value follows and a cheaper direct authority reaches it. It may be the
-Contract+RED reviewer in the same pass. A child reuses its goal's settled
-premise. New evidence may reopen it; routine restatement does not.
+Recording a fact or question needs no independent critic. When refine recommends
+a new direction whose value or competing direct route could change what or
+whether the user chooses to build, check the premise before that choice is
+treated as settled. Otherwise check it at FIT/PICKUP before adopting the plan;
+the Contract+RED reviewer may do it in the same pass.
+
+One fresh read-only critic receives the user's outcome, evidence, alternatives
+and unresolved forks, not just the polished solution. It asks whether the value
+follows and a cheaper direct route reaches it. Verify factual objections;
+return new scope/value choices to the current research/interview frontier.
+Record the verdict verbatim in `## Challenge`, including an early draft check.
+FIT/PICKUP and goal children reuse a checked premise for unchanged promises;
+new evidence or materially changed promises need reconsideration, a new stage
+name does not. Existing-baseline repairs and just-file captures gain no critic.
 
 A ready document records `challenge: <date> — clear | N problems` in
 `## Challenge`. Resolve a value/cheaper-route objection with evidence or the
@@ -106,11 +115,24 @@ probe-or-fog and the completion report: `docs/process/stages/fit.md`.
 
 ## Report
 
-The driver reports the result from recorded facts: what it changes, proof,
-remaining questions. No fresh report-writing agent or fixed six-part ceremony.
-A capture during implementation needs only its durable record. The user's
-request determines whether work continues; completing preparation never asks
-for a second hand-off of work already authorized.
+Every user-facing refine ends with a report in the conversation, before any
+implementation. The driver writes it from recorded facts, in the user's
+language: proposed observable result; decisive findings and evidence; chosen
+direction and meaningful rejected alternative; major steps and what becomes
+usable after each for a composite task; remaining risks/questions; next action.
+Distinguish research evidence from outcomes still to be implemented/proven.
+Omit empty sections; a settled capture may take a few lines. No separate report
+document, report-writing agent or fixed six-part template.
+
+FIT/PICKUP reuse that report and communicate changes after preparation, before
+the first IMPLEMENT. A standalone pickup without an earlier report emits it
+at that boundary. Repeated stages need only material changes, not the whole
+report again. Mid-task capture needs only its durable record.
+
+A report is not an approval gate. Refine-only authorizes preparation, not a
+build; already-authorized implementation continues without another hand-off.
+An unresolved user scope/value choice still needs the user's answer (`RDY-6`);
+silence is not a decision.
 
 ## Goal run
 

@@ -73,9 +73,10 @@ this tree that surfaces only at a later pass, is reviewer error.
 
 ## REV-6 Premise
 
-The goal's accepted premise is settled at FIT with the user. A new unit plan
-is premise-checked at PICKUP, optionally by its Contract+RED reviewer in the
-same pass; settled goal scope is not reopened without new evidence.
+Premise timing and reuse follow `docs/backlog/README.md` §Challenge: early in
+refine when it informs the user's choice, otherwise at FIT/PICKUP, optionally
+with Contract+RED. Reuse a checked premise for unchanged promises; settled
+scope is not reopened without new evidence.
 A premise objection (value does not follow / cheaper rival route) is a concern
 that stops the run to the user (`stops.md` `STOP-1b`) — never a blocker. A
 goal `rejected route: <route> — violates <I#>` line answers it by citation.
