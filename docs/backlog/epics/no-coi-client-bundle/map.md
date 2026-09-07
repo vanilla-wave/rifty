@@ -1,10 +1,9 @@
 ## Items
 
-5. `toolchain-build/client-bundle-size-ci-gate` — I5; reuse packed graph proof, calibrate after cleanup; CI only.
 
 ## Open questions
 
-- Final byte ceilings and boot-time delta? — owner: agent — packed before/after measurements, historical-leak calibration; latency reported, no invented target.
+- Resolved: measured budgets and calibration in tools/checks/client-bundle-budget.mjs; complete proof in toolchain-build/reference/client-bundle-budget-evidence.md. Timing observations remain labelled local, with no target.
 
 ## Out of scope
 
