@@ -5,7 +5,7 @@ title: SDK subpath declarations compile without incompatible ambient realm libra
 created: 2026-09-07
 why: Published sdk/vfs and runtime-js/builtins/process declarations pull the kernel/service-worker barrel into a DOM-only consumer, where ServiceWorkerGlobalScope and Client are undefined.
 user_story: As a TypeScript SDK consumer, I want to import the VFS subpath with strict library checking, but today unrelated service-worker ambient names prevent compilation.
-sources: [ADR-0070, docs/backlog/distribution/sdk-entry-packaging-hygiene.md]
+sources: [ADR-0070, docs/backlog/distribution/reference/sdk-packaging-evidence.md]
 code: [packages/rifty/src/vfs.ts, packages/runtime-js/src/builtins/process.ts, packages/service-worker/src/index.ts, tools/publishing/sync-publish-config.mjs]
 ---
 
