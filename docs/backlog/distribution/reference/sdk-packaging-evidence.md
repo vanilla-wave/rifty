@@ -40,3 +40,9 @@ root → io byte/name guards fail; restore static SDK backend → deferred-entry
 guard fails; move import outside bootVfs fallback → browser fault case throws;
 remove source worker sideEffects flag → wrapper entry assertion fails (0 B).
 All files restored, same complete packed proof GREEN.
+
+Production e2e: 7/7 pass (Buffer realm, owner, Express/sqlite, Hono, Koa,
+TypeScript editor, Webpack cold/HMR/reload). First full gate: package-surface
+closed-list assertion failed and reproduced in isolation; expected metadata now
+lists the same six source entries as the generator. Focused contract 2/2 GREEN;
+no runtime expectation changed. io attribution: main 559 B, sw 628 B.
