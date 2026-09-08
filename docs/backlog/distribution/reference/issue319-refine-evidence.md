@@ -271,3 +271,10 @@ Resolution: final user answer requires preserving dependency edits. A cheaper
 always-install path cannot meet that result. A fresh critique with that answer
 and PR #316 sources is recorded verbatim in the goal; it does not prescribe a
 receipt or generic trust framework. Final written-result review is separate.
+
+## Write-up verification
+
+- `pnpm backlog:check`: passed, zero invalid records.
+- Initial `pnpm pr:check`: five environment/setup failures (four tsx IPC EPERM, one missing build outputs); no product-test failure.
+- `pnpm build:libs`: passed. Repeated `pnpm pr:check` with local IPC permitted: docs-only 20/20 passed; typecheck/build:libs/check:arch/test:run/test:parity skipped by diff classification.
+- Fresh reviewer `/root/warm_reopen_final` checked the complete final draft set against the raw request, definitive answer and PR #316 sources: [Final+GREEN PASS](issue319-refine-final-green.json), reviewed bb749252fe55528160fbf45bc0f5fea51b5b708d. No material scope fork found. Goal implementation remains unproven.
