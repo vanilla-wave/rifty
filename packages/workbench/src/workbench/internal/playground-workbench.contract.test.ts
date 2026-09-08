@@ -653,6 +653,7 @@ describe('Playground companion sealed contract', () => {
       'StdinClosedError',
       'WorkbenchOriginOccupiedError',
       'openWorkbench',
+      'produceDependencySnapshot',
       'projects',
     ]);
     expect(rootModule).not.toHaveProperty('openPlaygroundWorkbench');

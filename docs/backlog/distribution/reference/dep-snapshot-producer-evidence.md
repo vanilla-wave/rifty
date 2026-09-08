@@ -53,3 +53,5 @@ npm-generated ms lock, standard tar and native Node execution; Chromium restores
 raw gzip and HTTP Content-Encoding decoded tar, runs the same source, checks
 ms@2.0.0, and makes zero registry requests during either restore. Existing real
 Vite7.3.6 preview/HMR and SQLite journey remains in the same required runner.
+
+First full gate reproduced one sealed-root export-list failure in isolation (zero timeouts). ADR-0387 adds produceDependencySnapshot, so that exact allowlist now includes it; no other public-surface restriction changed.
