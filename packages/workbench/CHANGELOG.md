@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Snapshot application is host-selected: default initial-deployment-only keeps
+  saved files when only snapshotId changes; apply evaluates payload conflicts
+  with error/overwrite (ADR-0396).
+
 - Published `dist/runtime/` is a copyable Worker/SW/WASM closure with documented
   COI headers; hosts boot from those file URLs without compiling entries,
   aliasing Node builtins, or wrapping QuickJS (ADR-0395).

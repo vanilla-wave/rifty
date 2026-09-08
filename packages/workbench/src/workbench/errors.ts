@@ -31,6 +31,17 @@ export class ProjectDefinitionMismatchError extends Error {
   }
 }
 
+export class SnapshotApplicationConflictError extends Error {
+  readonly paths: readonly string[];
+
+  constructor(paths: readonly string[]) {
+    const unique = Object.freeze([...new Set(paths)].sort());
+    super(`SnapshotApplicationConflictError: ${unique.join(', ')}`);
+    this.name = 'SnapshotApplicationConflictError';
+    this.paths = unique;
+  }
+}
+
 export class ProjectRunExitedBeforeReadyError extends Error {
   readonly exit: ProcessExit;
 

@@ -60,9 +60,10 @@ keeps today's mismatch/reseed. Missing or stale install trust is not
 tree fails loudly with retained bytes.
 
 **Apply.** Every requested apply evaluates the snapshot *payload* (tar
-`payload/` or v3 `nodeModules` + `package-lock.json` + `packageJsonText` as
-`/package.json`) against the existing tree, including when snapshotId is
-unchanged. Control/`rifty/` and tarball cache are not project files. Conflict is structural: different bytes at a
+`payload/` or v3 `nodeModules` + `package-lock.json`) against the existing
+tree, including when snapshotId is unchanged. Control/`rifty/` and tarball
+cache are not project files. Root `package.json` is an ordinary conflict
+only when that path is in the payload. Conflict is structural: different bytes at a
 file path, or file-vs-directory / ancestor type clash. Identical bytes and
 directory/directory coexistence are not conflicts. Missing payload paths are
 additions. Extra saved paths are not deletions.

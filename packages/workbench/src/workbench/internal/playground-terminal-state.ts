@@ -1,3 +1,4 @@
+import { inspectSnapshotApplication } from '../../glue/snapshot-payload-apply.ts';
 import type {
   PlaygroundProjectOpenOptions,
   PlaygroundTerminalStateRestoreInput,
@@ -89,24 +90,50 @@ export function ownPlaygroundProjectOpenOptions(value: unknown): PlaygroundProje
     throw new TypeError('Playground project open options must be a plain object');
   }
   const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => key !== 'initialTerminalState') || keys.length > 1) {
+  const allowed = new Set(['initialTerminalState', 'snapshotApplication']);
+  if (keys.some((key) => typeof key !== 'string' || !allowed.has(key))) {
     throw new TypeError('Playground project open options have invalid keys');
   }
-  if (keys.length === 0) return Object.freeze({});
-  const descriptor = Object.getOwnPropertyDescriptor(value, 'initialTerminalState');
-  if (
-    descriptor === undefined ||
-    descriptor.enumerable !== true ||
-    descriptor.get !== undefined ||
-    descriptor.set !== undefined ||
-    !Object.hasOwn(descriptor, 'value')
-  ) {
-    throw new TypeError(
-      'Playground project open options.initialTerminalState must be an enumerable data property',
-    );
+  const record = value as Readonly<Record<string, unknown>>;
+  const owned: {
+    initialTerminalState?: ReturnType<typeof ownProjectTerminalSnapshot>;
+    snapshotApplication?: ReturnType<typeof inspectSnapshotApplication>;
+  } = {};
+  if (Object.hasOwn(record, 'initialTerminalState')) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, 'initialTerminalState');
+    if (
+      descriptor === undefined ||
+      descriptor.enumerable !== true ||
+      descriptor.get !== undefined ||
+      descriptor.set !== undefined ||
+      !Object.hasOwn(descriptor, 'value')
+    ) {
+      throw new TypeError(
+        'Playground project open options.initialTerminalState must be an enumerable data property',
+      );
+    }
+    if (descriptor.value !== undefined) {
+      owned.initialTerminalState = ownProjectTerminalSnapshot(descriptor.value);
+    }
   }
-  if (descriptor.value === undefined) return Object.freeze({});
-  return Object.freeze({ initialTerminalState: ownProjectTerminalSnapshot(descriptor.value) });
+  if (Object.hasOwn(record, 'snapshotApplication')) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, 'snapshotApplication');
+    if (
+      descriptor === undefined ||
+      descriptor.enumerable !== true ||
+      descriptor.get !== undefined ||
+      descriptor.set !== undefined ||
+      !Object.hasOwn(descriptor, 'value')
+    ) {
+      throw new TypeError(
+        'Playground project open options.snapshotApplication must be an enumerable data property',
+      );
+    }
+    if (descriptor.value !== undefined) {
+      owned.snapshotApplication = inspectSnapshotApplication(descriptor.value);
+    }
+  }
+  return Object.freeze(owned);
 }
 
 /** Public cwd → exact physical session root; stale directories reset to root, env unchanged. */

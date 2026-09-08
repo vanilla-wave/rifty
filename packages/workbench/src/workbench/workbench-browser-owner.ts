@@ -990,6 +990,9 @@ export function startBrowserWorkspaceOwner(
             ...(input.preserveDirtySameStarter === undefined
               ? {}
               : { preserveDirtySameStarter: input.preserveDirtySameStarter }),
+            ...(input.snapshotApplication === undefined
+              ? {}
+              : { snapshotApplication: input.snapshotApplication }),
           });
         },
         saveScratch(input: Parameters<PlaygroundProjectCatalog['saveScratch']>[0]) {
@@ -1045,6 +1048,9 @@ export function startBrowserWorkspaceOwner(
               ...(ownedOptions.initialTerminalState === undefined
                 ? {}
                 : { initialTerminalState: ownedOptions.initialTerminalState }),
+              ...(ownedOptions.snapshotApplication === undefined
+                ? {}
+                : { snapshotApplication: ownedOptions.snapshotApplication }),
             });
             return admitOpenedProject(opened, inspected, opened);
           },

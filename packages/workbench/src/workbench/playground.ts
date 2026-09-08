@@ -43,8 +43,15 @@ import type { ProjectTerminalSnapshot } from './project-terminal.ts';
 
 export type { ProjectTerminalSnapshot } from './project-terminal.ts';
 
+export type SnapshotConflictPolicy = 'error' | 'overwrite';
+
+export type SnapshotApplication =
+  | { readonly mode: 'initial-deployment-only' }
+  | { readonly mode: 'apply'; readonly conflict?: SnapshotConflictPolicy };
+
 export interface PlaygroundProjectOpenOptions {
   readonly initialTerminalState?: ProjectTerminalSnapshot;
+  readonly snapshotApplication?: SnapshotApplication;
 }
 
 export interface PlaygroundTerminalStateRestoreInput {
@@ -129,6 +136,7 @@ export interface PlaygroundProjectCatalog {
   createScratch(input: {
     readonly definition: ProjectDefinition<unknown>;
     readonly preserveDirtySameStarter?: boolean;
+    readonly snapshotApplication?: SnapshotApplication;
   }): Promise<PlaygroundCatalogSnapshot>;
   saveScratch(input: {
     readonly id: string;

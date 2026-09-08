@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { RegistryClient } from '@riftydev/npm-client';
-import { MemoryFsSync, createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
+import {
+  MemoryFsSync,
+  createMemoryFs,
+  resetSyncMirror,
+  setSyncMirror,
+} from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDepSnapshot, serializeDepSnapshot } from '../glue/dep-snapshot.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
@@ -56,7 +61,8 @@ function plan(
     templateId: 'vite-template-v1',
     files: {
       '/index.html': '<main>catalog contract</main>\n',
-      '/package.json': '{"name":"app","scripts":{"dev":"vite"},"devDependencies":{"vite":"8.0.0"}}\n',
+      '/package.json':
+        '{"name":"app","scripts":{"dev":"vite"},"devDependencies":{"vite":"8.0.0"}}\n',
       '/src/main.ts': 'document.body.dataset.ready = "yes";\n',
     },
     devDependencies: { vite: '8.0.0' },
@@ -79,10 +85,15 @@ function definition(
 }
 
 function withApplication(
-  input: { readonly definition: ProjectDefinition<unknown>; readonly preserveDirtySameStarter?: boolean },
+  input: {
+    readonly definition: ProjectDefinition<unknown>;
+    readonly preserveDirtySameStarter?: boolean;
+  },
   snapshotApplication: SnapshotApplication,
 ): Parameters<PlaygroundProjectCatalog['createScratch']>[0] {
-  return { ...input, snapshotApplication } as Parameters<PlaygroundProjectCatalog['createScratch']>[0];
+  return { ...input, snapshotApplication } as Parameters<
+    PlaygroundProjectCatalog['createScratch']
+  >[0];
 }
 
 function isConflictError(error: unknown): error is Error & { readonly paths: readonly string[] } {
@@ -94,7 +105,10 @@ function isConflictError(error: unknown): error is Error & { readonly paths: rea
   );
 }
 
-function snapshotFixture(lockfile: string, marker: string): {
+function snapshotFixture(
+  lockfile: string,
+  marker: string,
+): {
   readonly gzip: Uint8Array;
   readonly snapshotId: string;
 } {
@@ -181,7 +195,9 @@ async function catalogHarness(): Promise<CatalogHarness> {
   };
 }
 
-async function acquisitionHarness(assets: Readonly<Record<string, Uint8Array>>): Promise<CatalogHarness> {
+async function acquisitionHarness(
+  assets: Readonly<Record<string, Uint8Array>>,
+): Promise<CatalogHarness> {
   const pair = createMemoryFs();
   const composition = createOwnerVfsAuthorityComposition(pair.fsSync, {
     ownerEpoch: 'snapshot-application-acquisition-owner',
@@ -282,7 +298,10 @@ afterEach(() => {
 describe('snapshot application policy (I8)', () => {
   it('keeps dirty Scratch files when only snapshotId changes (default initial-only)', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
-    const next = snapshotFixture('{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n', 'pin-b\n');
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
     const h = await catalogHarness();
     const initial = definition('scratch', first.snapshotId, '/snapshots/a.json.gz');
     await seedDirtyScratch(h, initial, { '/user.txt': 'user edit' });
@@ -295,13 +314,18 @@ describe('snapshot application policy (I8)', () => {
 
     expect(after.scratch?.dirty).toBe(true);
     expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('user edit');
-    expect(readText(h, SCRATCH_ROOT, '/src/main.ts')).toBe('document.body.dataset.ready = "yes";\n');
+    expect(readText(h, SCRATCH_ROOT, '/src/main.ts')).toBe(
+      'document.body.dataset.ready = "yes";\n',
+    );
     await h.owner.close();
   });
 
   it('keeps dirty Scratch when initial-deployment-only is requested with preserveDirtySameStarter', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
-    const next = snapshotFixture('{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n', 'pin-b\n');
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
     const h = await catalogHarness();
     const initial = definition('scratch', first.snapshotId, '/snapshots/a.json.gz');
     await seedDirtyScratch(h, initial, { '/user.txt': 'user edit' });
@@ -323,7 +347,10 @@ describe('snapshot application policy (I8)', () => {
 
   it('opens a named saved project when only snapshotId changes', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
-    const next = snapshotFixture('{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n', 'pin-b\n');
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
     const h = await catalogHarness();
     const scratchDef = definition('scratch', first.snapshotId, '/snapshots/a.json.gz');
     await seedDirtyScratch(h, scratchDef, { '/notes/user.txt': 'keep me' });
@@ -344,8 +371,14 @@ describe('snapshot application policy (I8)', () => {
 
   it('does not treat apply as a whole-tree reseed', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
-    const next = snapshotFixture('{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n', 'pin-b\n');
-    const h = await catalogHarness();
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
+    const h = await acquisitionHarness({
+      '/snapshots/a.json.gz': first.gzip,
+      '/snapshots/b.json.gz': next.gzip,
+    });
     await seedDirtyScratch(h, definition('scratch', first.snapshotId, '/snapshots/a.json.gz'), {
       '/user.txt': 'extra',
       '/src/main.ts': 'dirty main\n',
@@ -378,7 +411,6 @@ describe('snapshot application policy (I8)', () => {
     await seedDirtyScratch(h, initial, {
       '/user.txt': 'extra',
       '/package-lock.json': 'saved-lock\n',
-      '/package.json': '{"name":"edited"}\n',
     });
     const beforeLock = readText(h, SCRATCH_ROOT, '/package-lock.json');
     const beforePkg = readText(h, SCRATCH_ROOT, '/package.json');
@@ -398,7 +430,7 @@ describe('snapshot application policy (I8)', () => {
 
     expect(isConflictError(caught)).toBe(true);
     if (isConflictError(caught)) {
-      expect(caught.paths).toEqual(expect.arrayContaining(['/package-lock.json', '/package.json']));
+      expect(caught.paths).toEqual(expect.arrayContaining(['/package-lock.json']));
     }
     expect(caught).not.toBeInstanceOf(ProjectDefinitionMismatchError);
     expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('extra');
@@ -410,7 +442,10 @@ describe('snapshot application policy (I8)', () => {
 
   it('apply overwrite replaces conflicts, adds missing payload files, and keeps extras', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
-    const next = snapshotFixture('{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n', 'pin-b\n');
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
     const h = await acquisitionHarness({
       '/snapshots/a.json.gz': first.gzip,
       '/snapshots/b.json.gz': next.gzip,
@@ -426,11 +461,14 @@ describe('snapshot application policy (I8)', () => {
         { mode: 'apply', conflict: 'overwrite' },
       ),
     );
-    await h.owner.openProject(definition('scratch', next.snapshotId, '/snapshots/b.json.gz'));
+    const opened = await h.owner.openProject(
+      definition('scratch', next.snapshotId, '/snapshots/b.json.gz'),
+    );
 
     expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('extra');
     expect(readText(h, SCRATCH_ROOT, '/src/main.ts')).toBe('dirty main\n');
     expect(readText(h, SCRATCH_ROOT, '/node_modules/pin/readme.txt')).toBe('pin-b\n');
+    await close(opened);
     await h.owner.close();
   });
 
@@ -468,20 +506,30 @@ describe('snapshot application policy (I8)', () => {
     await close(opened);
     await markDirty(h, def, { '/user.txt': 'extra' });
 
-    await h.catalog.createScratch(withApplication({ definition: def }, { mode: 'apply', conflict: 'error' }));
-    await h.owner.openProject(def);
+    await h.catalog.createScratch(
+      withApplication({ definition: def }, { mode: 'apply', conflict: 'error' }),
+    );
+    const reopened = await h.owner.openProject(def);
 
     expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('extra');
+    await close(reopened);
     await h.owner.close();
   });
 
   it('treats file-vs-directory clashes as conflicts', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
-    const next = snapshotFixture('{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n', 'pin-b\n');
-    const h = await catalogHarness();
-    await seedDirtyScratch(h, definition('scratch', first.snapshotId, '/snapshots/a.json.gz'), {
-      '/node_modules/pin': 'i-am-a-file\n',
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
+    const h = await acquisitionHarness({
+      '/snapshots/a.json.gz': first.gzip,
+      '/snapshots/b.json.gz': next.gzip,
     });
+    const initial = definition('scratch', first.snapshotId, '/snapshots/a.json.gz');
+    await h.catalog.createScratch({ definition: initial });
+    h.authority.mkdirSync(`${SCRATCH_ROOT}/node_modules`, { recursive: true });
+    h.authority.writeFileSync(`${SCRATCH_ROOT}/node_modules/pin`, encoder.encode('i-am-a-file\n'));
 
     let caught: unknown;
     try {
@@ -504,7 +552,10 @@ describe('snapshot application policy (I8)', () => {
 
   it('does not fetch an unused new snapshot under initial-only', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
-    const next = snapshotFixture('{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n', 'pin-b\n');
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
     const h = await acquisitionHarness({
       '/snapshots/a.json.gz': first.gzip,
       '/snapshots/b.json.gz': next.gzip,
@@ -525,7 +576,9 @@ describe('snapshot application policy (I8)', () => {
 
     expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('user edit');
     expect(
-      h.fetchSnapshot.mock.calls.map((call) => new URL(String(call[0]), 'https://playground.invalid/app/').pathname),
+      h.fetchSnapshot.mock.calls.map(
+        (call) => new URL(String(call[0]), 'https://playground.invalid/app/').pathname,
+      ),
     ).not.toContain('/snapshots/b.json.gz');
     expect(h.fetchSnapshot.mock.calls.length).toBe(fetchesAfterSeed);
     await close(reopened);
@@ -534,11 +587,17 @@ describe('snapshot application policy (I8)', () => {
 
   it('does not treat missing install trust as an absent project', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
-    const next = snapshotFixture('{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n', 'pin-b\n');
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
     const h = await catalogHarness();
     const initial = definition('scratch', first.snapshotId, '/snapshots/a.json.gz');
     await seedDirtyScratch(h, initial, { '/user.txt': 'user edit' });
-    h.authority.rmSync('/.rifty/workbench/v1/projects/scratch/.rifty', { recursive: true, force: true });
+    h.authority.rmSync('/.rifty/workbench/v1/projects/scratch/.rifty', {
+      recursive: true,
+      force: true,
+    });
 
     const after = await h.catalog.createScratch({
       definition: definition('scratch', next.snapshotId, '/snapshots/b.json.gz'),

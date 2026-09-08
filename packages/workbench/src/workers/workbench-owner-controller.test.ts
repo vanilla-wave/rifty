@@ -262,6 +262,7 @@ describe('Workbench owner controller', () => {
         cwd: '/stale',
         env: { PATH: '/bin', RIFTY_OWNER_TOKEN: 'opaque-guest-data' },
       }),
+      undefined,
     );
     expect(companionMessages).toEqual([
       {

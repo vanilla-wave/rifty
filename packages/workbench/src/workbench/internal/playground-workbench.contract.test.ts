@@ -128,6 +128,7 @@ type ExpectedProjectTerminalSnapshot = {
 
 type ExpectedPlaygroundProjectOpenOptions = {
   readonly initialTerminalState?: ProjectTerminalSnapshot;
+  readonly snapshotApplication?: import('../playground.ts').SnapshotApplication;
 };
 
 type ExpectedPlaygroundTerminalStateRestoreInput = {
@@ -649,6 +650,7 @@ describe('Playground companion sealed contract', () => {
       'ProjectDocumentSaveInProgressError',
       'ProjectFileOperationError',
       'ProjectRunExitedBeforeReadyError',
+      'SnapshotApplicationConflictError',
       'StaleProjectDocumentError',
       'StdinClosedError',
       'WorkbenchOriginOccupiedError',

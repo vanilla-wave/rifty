@@ -378,6 +378,7 @@ describe('PlaygroundProjectCatalog public contract', () => {
     expectTypeOf<Parameters<PlaygroundProjectCatalog['createScratch']>[0]>().toEqualTypeOf<{
       readonly definition: ProjectDefinition<unknown>;
       readonly preserveDirtySameStarter?: boolean;
+      readonly snapshotApplication?: import('../workbench/playground.ts').SnapshotApplication;
     }>();
 
     const h = await harness();

@@ -1,5 +1,9 @@
 import { dirname } from '@riftydev/vfs';
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
+import {
+  applySnapshotPayload,
+  inspectSnapshotApplication,
+} from '../glue/snapshot-payload-apply.ts';
 import { ProjectBusyError, ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import {
   type CapturedPlaygroundUrlContext,
@@ -16,6 +20,7 @@ import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectCatalog,
   PlaygroundProjectRef,
+  SnapshotApplication,
 } from '../workbench/playground.ts';
 import { projectStorageSegment } from '../workbench/project-definition.ts';
 import type {
@@ -26,6 +31,23 @@ import type { ProjectTerminalSnapshot } from '../workbench/project-terminal-stat
 import type { ProjectDefinition } from '../workbench/public.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import type { PackageAcquisitionAuthority } from './package-acquisition-authority.ts';
+import {
+  type CatalogAdoption,
+  adoptedProof,
+  applicationBaselineMatches,
+  baselineMatches,
+  parseAdoption,
+  proofMatches,
+} from './playground-catalog-adoption.ts';
+import {
+  booleanValue,
+  compareCodeUnits,
+  exactObject,
+  jsonBytes,
+  nonEmpty,
+  readJson,
+  writeJson,
+} from './playground-catalog-json.ts';
 
 const WORKBENCH_ROOT = '/.rifty/workbench/v1';
 const PROJECTS_ROOT = `${WORKBENCH_ROOT}/projects`;
@@ -39,16 +61,6 @@ const MIGRATION_INTENTS_ROOT = `${PLAYGROUND_ROOT}/migration-intents`;
 const PROMOTION_MARKER = 'migration-promotion.json';
 const LEGACY_INDEX_NAME = '.rifty-project-index.json';
 const INSTALL_CLAIM_NAME = '.rifty-install-stamp.json';
-const encoder = new TextEncoder();
-const decoder = new TextDecoder('utf-8', { fatal: true });
-
-type CatalogAdoption =
-  | { readonly kind: 'pending-adoption'; readonly sourceRoot: string }
-  | {
-      readonly kind: 'adopted';
-      readonly definitionIdentity: string;
-      readonly baselineFingerprint: string;
-    };
 
 interface StoredScratch {
   readonly starterId: string;
@@ -246,6 +258,7 @@ export interface PlaygroundProjectAuthority {
   openProject(
     definition: ProjectDefinition<unknown>,
     initialTerminalState?: ProjectTerminalSnapshot,
+    snapshotApplication?: SnapshotApplication,
   ): Promise<OpenedPlaygroundProject>;
   recordMutation(input: {
     readonly kind: PlaygroundProjectMutationKind;
@@ -256,72 +269,8 @@ export interface PlaygroundProjectAuthority {
   close(): Promise<void>;
 }
 
-function compareCodeUnits(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function pathDepth(path: string): number {
   return path === '' ? 0 : path.split('/').length;
-}
-
-function ownKeys(value: object): readonly string[] {
-  return Object.keys(value).sort(compareCodeUnits);
-}
-
-function exactObject(
-  value: unknown,
-  expected: readonly string[],
-  label: string,
-): Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  const record = value as Readonly<Record<string, unknown>>;
-  const actual = ownKeys(record);
-  const wanted = [...expected].sort(compareCodeUnits);
-  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
-    throw new TypeError(`${label} has invalid keys`);
-  }
-  return record;
-}
-
-function nonEmpty(value: unknown, label: string): string {
-  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
-    throw new TypeError(`${label} must be a non-empty NUL-free string`);
-  }
-  return value;
-}
-
-function booleanValue(value: unknown, label: string): boolean {
-  if (typeof value !== 'boolean') throw new TypeError(`${label} must be boolean`);
-  return value;
-}
-
-function jsonBytes(value: unknown): Uint8Array {
-  return encoder.encode(`${JSON.stringify(value, null, 2)}\n`);
-}
-
-function parseJsonBytes(bytes: Uint8Array, label: string): unknown {
-  try {
-    return JSON.parse(decoder.decode(bytes));
-  } catch (error) {
-    throw new TypeError(
-      `${label} is unreadable: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-function readJson(authority: OwnerVfsAuthority, path: string, label: string): unknown {
-  return parseJsonBytes(authority.readFileBytesSync(path), label);
-}
-
-function ensureParent(authority: OwnerVfsAuthority, path: string): void {
-  authority.mkdirSync(dirname(path), { recursive: true });
-}
-
-function writeJson(authority: OwnerVfsAuthority, path: string, value: unknown): void {
-  ensureParent(authority, path);
-  authority.writeFileSync(path, jsonBytes(value));
 }
 
 function isDirectory(authority: OwnerVfsAuthority, path: string): boolean {
@@ -593,29 +542,6 @@ function imageMatches(
     actual.directories.length === expected.directories.length &&
     actual.files.length === expected.files.length
   );
-}
-
-function parseAdoption(value: unknown, label: string): CatalogAdoption {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  const kind = (value as Readonly<Record<string, unknown>>).kind;
-  if (kind === 'pending-adoption') {
-    const record = exactObject(value, ['kind', 'sourceRoot'], label);
-    return Object.freeze({
-      kind,
-      sourceRoot: nonEmpty(record.sourceRoot, `${label}.sourceRoot`),
-    });
-  }
-  if (kind === 'adopted') {
-    const record = exactObject(value, ['kind', 'definitionIdentity', 'baselineFingerprint'], label);
-    return Object.freeze({
-      kind,
-      definitionIdentity: nonEmpty(record.definitionIdentity, `${label}.definitionIdentity`),
-      baselineFingerprint: nonEmpty(record.baselineFingerprint, `${label}.baselineFingerprint`),
-    });
-  }
-  throw new TypeError(`${label}.kind is invalid`);
 }
 
 function parseActive(value: unknown, label: string): PlaygroundProjectRef | null {
@@ -2028,36 +1954,6 @@ function activeId(ref: PlaygroundProjectRef | null): string | null {
   return ref.kind === 'scratch' ? 'scratch' : ref.id;
 }
 
-function adoptedProof(definition: InspectedPlaygroundProjectDefinition): CatalogAdoption {
-  return Object.freeze({
-    kind: 'adopted',
-    definitionIdentity: definition.identity,
-    baselineFingerprint: definition.baselineFingerprint,
-  });
-}
-
-function proofMatches(
-  adoption: CatalogAdoption,
-  definition: InspectedPlaygroundProjectDefinition,
-): boolean {
-  return (
-    adoption.kind === 'adopted' &&
-    adoption.definitionIdentity === definition.identity &&
-    adoption.baselineFingerprint === definition.baselineFingerprint
-  );
-}
-
-function baselineMatches(
-  entry: StoredScratch | StoredProject,
-  definition: InspectedPlaygroundProjectDefinition,
-): boolean {
-  return (
-    entry.starterId === definition.starterId &&
-    entry.adoption.kind === 'adopted' &&
-    entry.adoption.baselineFingerprint === definition.baselineFingerprint
-  );
-}
-
 function changedCatalog(
   catalog: StoredCatalog,
   changes: Partial<Omit<StoredCatalog, 'version'>>,
@@ -2417,6 +2313,37 @@ export async function createPlaygroundProjectAuthority(
         const definition = inspectDefinition(input.definition);
         if (definition.id !== 'scratch') throw projectDefinitionMismatch('scratch');
         const existing = stored.scratch;
+        const application = inspectSnapshotApplication(input.snapshotApplication);
+        const snapshotBacked = definition.firstMaterialization.kind === 'snapshot';
+        if (
+          existing !== null &&
+          snapshotBacked &&
+          applicationBaselineMatches(existing, definition)
+        ) {
+          if (application.mode === 'apply') {
+            await applySnapshotPayload(
+              authority,
+              `${projectContainer('scratch')}/tree`,
+              definition.firstMaterialization.snapshot.assetUrl,
+              {
+                mode: 'apply',
+                ...(application.conflict === undefined ? {} : { conflict: application.conflict }),
+              },
+            );
+            const editedAt = now();
+            const next = changedCatalog(stored, {
+              active: Object.freeze({ kind: 'scratch' }),
+              scratch: Object.freeze({
+                starterId: definition.starterId,
+                dirty: existing.dirty,
+                editedAt,
+                adoption: adoptedProof(definition),
+              }),
+            });
+            return runCatalogMutation(next, []);
+          }
+          return snapshot;
+        }
         if (
           input.preserveDirtySameStarter === true &&
           existing?.dirty === true &&
@@ -2573,11 +2500,13 @@ export async function createPlaygroundProjectAuthority(
     openProject(
       definitionValue: ProjectDefinition<unknown>,
       initialTerminalStateValue?: ProjectTerminalSnapshot,
+      snapshotApplication?: SnapshotApplication,
     ) {
       const initialTerminalState =
         initialTerminalStateValue === undefined
           ? undefined
           : ownProjectTerminalSnapshot(initialTerminalStateValue);
+      const application = inspectSnapshotApplication(snapshotApplication);
       return enqueue(async () => {
         assertNoLiveProject();
         const definition = inspectDefinition(definitionValue);
@@ -2598,24 +2527,63 @@ export async function createPlaygroundProjectAuthority(
           entry = catalogEntry(stored, selected);
           if (entry === null) throw new TypeError('Adopted catalog ref disappeared');
         }
-        if (!proofMatches(entry.adoption, definition)) {
+        const unusedSnapshot =
+          definition.firstMaterialization.kind === 'snapshot' &&
+          applicationBaselineMatches(entry, definition);
+        if (!proofMatches(entry.adoption, definition) && !unusedSnapshot) {
           throw projectDefinitionMismatch(definition.id);
         }
         const container = projectContainer(selected);
         if (!isDirectory(authority, `${container}/tree`)) {
           throw new TypeError(`Workbench project tree is missing: ${selected}`);
         }
-        if (definitionMetadata(authority, selected) !== definition.identity) {
+        if (definitionMetadata(authority, selected) !== definition.identity && !unusedSnapshot) {
           throw projectDefinitionMismatch(definition.id);
         }
         const projectKey = projectStorageSegment(selected);
         const root = `${container}/tree`;
+        if (application.mode === 'apply' && definition.firstMaterialization.kind === 'snapshot') {
+          await applySnapshotPayload(
+            authority,
+            root,
+            definition.firstMaterialization.snapshot.assetUrl,
+            {
+              mode: 'apply',
+              ...(application.conflict === undefined ? {} : { conflict: application.conflict }),
+            },
+          );
+          if (!proofMatches(entry.adoption, definition)) {
+            await runCatalogMutation(
+              selected === 'scratch' && stored.scratch !== null
+                ? changedCatalog(stored, {
+                    scratch: Object.freeze({
+                      ...stored.scratch,
+                      adoption: adoptedProof(definition),
+                    }),
+                  })
+                : changedCatalog(stored, {
+                    projects: Object.freeze(
+                      stored.projects.map((project) =>
+                        project.id === selected
+                          ? Object.freeze({ ...project, adoption: adoptedProof(definition) })
+                          : project,
+                      ),
+                    ),
+                  }),
+              [],
+            );
+          }
+        }
         await options.beforeOpenProject?.(root);
-        const acquisitionResult = await acquisition.ensure({
-          projectKey,
-          projectRoot: root,
-          definition,
-        });
+        const unusedNewSnapshot = unusedSnapshot && !proofMatches(entry.adoption, definition);
+        const acquisitionResult =
+          unusedNewSnapshot && application.mode !== 'apply'
+            ? Object.freeze({ kind: 'install' as const, snapshotFailures: [] })
+            : await acquisition.ensure({
+                projectKey,
+                projectRoot: root,
+                definition,
+              });
         const acknowledgedInitialTerminalState =
           initialTerminalState === undefined
             ? undefined

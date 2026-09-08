@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { MemoryFsSync, createMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
+import { type MemoryFsSync, createMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildDepSnapshot, serializeDepSnapshot } from '../glue/dep-snapshot.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
@@ -31,7 +31,10 @@ type SnapshotApplication = {
   readonly conflict?: 'error' | 'overwrite';
 };
 
-function snapshotFixture(lockfile: string, marker: string): {
+function snapshotFixture(
+  lockfile: string,
+  marker: string,
+): {
   readonly gzip: Uint8Array;
   readonly snapshotId: string;
 } {
@@ -71,7 +74,8 @@ function definition(snapshotId: string, assetUrl: string): ProjectDefinition<unk
     templateId: 'vite-template-v1',
     files: {
       '/index.html': '<main>fault</main>\n',
-      '/package.json': '{"name":"app","scripts":{"dev":"vite"},"devDependencies":{"vite":"8.0.0"}}\n',
+      '/package.json':
+        '{"name":"app","scripts":{"dev":"vite"},"devDependencies":{"vite":"8.0.0"}}\n',
       '/src/main.ts': 'document.body.dataset.ready = "yes";\n',
     },
     devDependencies: { vite: '8.0.0' },
@@ -140,7 +144,10 @@ describe('snapshot application fault (I8)', () => {
     await h.catalog.createScratch({ definition: initial });
     const opened = await h.owner.openProject(initial);
     h.authority.writeFileSync(`${opened.projectRoot}/user.txt`, encoder.encode('only copy'));
-    h.authority.writeFileSync(`${opened.projectRoot}/package-lock.json`, encoder.encode('saved-lock\n'));
+    h.authority.writeFileSync(
+      `${opened.projectRoot}/package-lock.json`,
+      encoder.encode('saved-lock\n'),
+    );
     await h.owner.recordMutation({
       kind: 'guest',
       project: opened,
@@ -163,9 +170,9 @@ describe('snapshot application fault (I8)', () => {
     await h.owner.close();
 
     const restarted = await harness(durable.restartFromDurableState());
-    expect(
-      decoder.decode(restarted.authority.readFileBytesSync(`${SCRATCH_ROOT}/user.txt`)),
-    ).toBe('only copy');
+    expect(decoder.decode(restarted.authority.readFileBytesSync(`${SCRATCH_ROOT}/user.txt`))).toBe(
+      'only copy',
+    );
     expect(
       decoder.decode(restarted.authority.readFileBytesSync(`${SCRATCH_ROOT}/package-lock.json`)),
     ).toBe('saved-lock\n');

@@ -9,6 +9,7 @@ export {
   ProjectDocumentSaveInProgressError,
   ProjectFileOperationError,
   ProjectRunExitedBeforeReadyError,
+  SnapshotApplicationConflictError,
   StaleProjectDocumentError,
   StdinClosedError,
   WorkbenchOriginOccupiedError,
@@ -37,6 +38,7 @@ export type {
 export type { PreviewHandle } from './preview-readiness.ts';
 export { projects } from './project-definition.ts';
 export type { ProjectDefinition } from './project-definition.ts';
+export type { SnapshotApplication, SnapshotConflictPolicy } from './playground.ts';
 export type {
   ProjectDocument,
   ProjectDocumentCloseOptions,

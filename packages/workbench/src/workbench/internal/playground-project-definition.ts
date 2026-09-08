@@ -30,6 +30,7 @@ type PlaygroundDefinitionMetadata = {
   readonly starterId: string;
   readonly templateId: string;
   readonly baselineFingerprint: string;
+  readonly applicationFingerprint: string;
   readonly identity: string;
   readonly firstMaterialization: PlaygroundFirstMaterialization;
   readonly plan: PlaygroundProjectPlan;
@@ -47,6 +48,7 @@ export type InspectedPlaygroundProjectDefinition<TReady = unknown> =
     readonly starterId: string;
     readonly templateId: string;
     readonly baselineFingerprint: string;
+    readonly applicationFingerprint: string;
     readonly firstMaterialization: PlaygroundFirstMaterialization;
     readonly port?: number;
   };
@@ -481,6 +483,16 @@ function identityFields(
   return fields;
 }
 
+function applicationFields(
+  plan: PlaygroundProjectPlan,
+  inspected: InspectedProjectDefinition,
+  includeId: boolean,
+): readonly string[] {
+  return identityFields(plan, inspected, includeId).filter(
+    (field) => !field.startsWith('snapshot-id:') && !field.startsWith('snapshot-template:'),
+  );
+}
+
 function exactIdentity(prefix: string, fields: readonly string[]): string {
   return `${prefix}:${fields.map(field).join('')}`;
 }
@@ -541,6 +553,10 @@ export function definePlaygroundProject(
       baselineFingerprint: exactIdentity(
         'playground-baseline:v1',
         identityFields(owned, inspected, false),
+      ),
+      applicationFingerprint: exactIdentity(
+        'playground-application:v1',
+        applicationFields(owned, inspected, false),
       ),
       identity: exactIdentity('playground-definition:v1', identityFields(owned, inspected, true)),
       firstMaterialization: owned.firstMaterialization,
@@ -608,6 +624,7 @@ export function inspectPlaygroundProjectDefinition<TReady>(
     starterId: metadata.starterId,
     templateId: metadata.templateId,
     baselineFingerprint: metadata.baselineFingerprint,
+    applicationFingerprint: metadata.applicationFingerprint,
     firstMaterialization: metadata.firstMaterialization,
     ...(metadata.port === undefined ? {} : { port: metadata.port }),
   }) as InspectedPlaygroundProjectDefinition<TReady>;

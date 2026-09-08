@@ -1,6 +1,11 @@
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
+import { inspectSnapshotApplication } from '../../glue/snapshot-payload-apply.ts';
 import type { OwnerProjectToken } from '../owner-protocol.ts';
-import type { PlaygroundCatalogSnapshot, PlaygroundProjectRef } from '../playground.ts';
+import type {
+  PlaygroundCatalogSnapshot,
+  PlaygroundProjectRef,
+  SnapshotApplication,
+} from '../playground.ts';
 import type {
   ProjectAcquisitionPlan,
   ProjectAcquisitionProvenance,
@@ -30,6 +35,7 @@ export type PlaygroundCatalogCommand =
       readonly kind: 'create-scratch';
       readonly definition: PlaygroundProjectDefinitionWire;
       readonly preserveDirtySameStarter?: boolean;
+      readonly snapshotApplication?: SnapshotApplication;
     }
   | {
       readonly kind: 'save-scratch';
@@ -52,6 +58,7 @@ export type PageToPlaygroundOwnerMessage =
       readonly opId: string;
       readonly definition: PlaygroundProjectDefinitionWire;
       readonly initialTerminalState?: ProjectTerminalSnapshot;
+      readonly snapshotApplication?: SnapshotApplication;
     }
   | {
       readonly type: 'workbench:playground-catalog';
@@ -249,7 +256,7 @@ function catalogCommand(
       const command = optionalRecord(
         value,
         ['kind', 'definition'],
-        ['preserveDirtySameStarter'],
+        ['preserveDirtySameStarter', 'snapshotApplication'],
         'create-scratch command',
       );
       const preserve = command.preserveDirtySameStarter;
@@ -260,6 +267,11 @@ function catalogCommand(
         kind,
         definition: definitionWire(command.definition, urlContext),
         ...(preserve === undefined ? {} : { preserveDirtySameStarter: preserve }),
+        ...(command.snapshotApplication === undefined
+          ? {}
+          : {
+              snapshotApplication: inspectSnapshotApplication(command.snapshotApplication),
+            }),
       });
     }
     case 'save-scratch': {
@@ -331,7 +343,7 @@ export function inspectPageToPlaygroundOwnerMessage(
     const message = optionalRecord(
       value,
       ['type', 'opId', 'definition'],
-      ['initialTerminalState'],
+      ['initialTerminalState', 'snapshotApplication'],
       'Playground open message',
     );
     const initialTerminalState =
@@ -343,6 +355,9 @@ export function inspectPageToPlaygroundOwnerMessage(
       opId: nonEmpty(message.opId, 'Playground open opId'),
       definition: definitionWire(message.definition, urlContext),
       ...(initialTerminalState === undefined ? {} : { initialTerminalState }),
+      ...(message.snapshotApplication === undefined
+        ? {}
+        : { snapshotApplication: inspectSnapshotApplication(message.snapshotApplication) }),
     });
   }
   const message = exactRecord(value, ['type', 'opId', 'command'], 'Playground catalog message');

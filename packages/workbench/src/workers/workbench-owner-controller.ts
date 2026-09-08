@@ -382,6 +382,7 @@ export function createWorkbenchOwnerController(
       opened = await playground.authority.openProject(
         localDefinition,
         message.initialTerminalState,
+        message.snapshotApplication,
       );
       if (shutdownRequested) throw closedOwnerError();
       const projectRoot = opened.projectRoot;
@@ -491,6 +492,9 @@ export function createWorkbenchOwnerController(
             ...(command.preserveDirtySameStarter === undefined
               ? {}
               : { preserveDirtySameStarter: command.preserveDirtySameStarter }),
+            ...(command.snapshotApplication === undefined
+              ? {}
+              : { snapshotApplication: command.snapshotApplication }),
           });
           break;
         case 'save-scratch':
