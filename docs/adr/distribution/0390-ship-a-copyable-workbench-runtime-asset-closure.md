@@ -19,7 +19,9 @@ No new package export is needed; existing custom entries remain supported.
 The generated Workbench build runs normal tsup, then a package-owned esbuild
 step: six current Worker entries, SW, all relative JS chunks, quickjs.wasm and
 sql-wasm.wasm. Stable entry filenames, opaque chunk filenames. Copy one complete
-build; host selects serving URLs and existing deployment options.
+build; host selects serving URLs and existing deployment options. Workers are
+ES modules with shared chunks; SW is a self-contained classic script, matching
+Workbench's existing native registration.
 
 Publishing owns os/path/perf_hooks/fs aliases to real runtime-js builtins and
 the TypeScript host constants. A package-owned kernel wrapper statically imports

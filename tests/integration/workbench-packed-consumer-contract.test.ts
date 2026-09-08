@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
-import { hostBuiltinAliases } from './fixtures/workbench-vite-consumer/host-builtins';
+import { hostBuiltinAliases } from '../../tools/publishing/workbench-asset-builtins.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
@@ -12,7 +12,7 @@ const fixtureRoot = resolve(integrationRoot, 'fixtures/workbench-vite-consumer')
 const fixtureTsconfig = resolve(fixtureRoot, 'tsconfig.json');
 const fixtureMain = resolve(fixtureRoot, 'src/main.ts');
 const quickjsHostWrappers = [
-  resolve(fixtureRoot, 'src/kernel-worker-entry.ts'),
+  resolve(integrationRoot, '../../tools/publishing/workbench-kernel-asset.ts'),
   resolve(integrationRoot, '../../apps/playground/src/workers/quickjs-kernel-worker-host.ts'),
 ];
 const parityKernelWorker = resolve(

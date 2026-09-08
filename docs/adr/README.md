@@ -318,6 +318,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0386 | Publish deterministic dependency snapshot archives |
 | 0387 | Expose caller-pinned dependency snapshot production |
 | 0390 | Ship a copyable Workbench runtime asset closure |
+| 0391 | Attest copyable runtime asset exceptions to the esbuild retirement gate |
 
 ## Superseded (removed)
 

@@ -20,7 +20,33 @@ Controllers, owner transports, worker protocols, and `src/internal/*` are not
 public. Browser hosts supply Worker, Service Worker, and WASM URLs; package code
 contains no bundler query imports or App policy.
 
-QuickJS-backed Node children require a host kernel wrapper: import the bundler's
+## Static runtime assets
+
+Copy the entire published `dist/assets/` directory, including opaque JS chunks:
+
+```js
+import { cp } from 'node:fs/promises';
+
+await cp(new URL('./assets/', import.meta.resolve('@riftydev/workbench')),
+  'public/rifty', { recursive: true });
+```
+
+Use ordinary served URLs in `deployment.workers`: `owner-worker.js`,
+`kernel-worker.js`, `node-worker.js`, `dev-server-worker.js`,
+`typescript-worker.js`. Set `deployment.serviceWorker.url` to `sw.js` and
+`deployment.wasm.sqlite` to `sql-wasm.wasm`. The optional SDK toolchain URL is
+`no-coi-toolchain-worker.js`. The kernel resolves its `quickjs.wasm` sibling;
+copy one complete package build. No host Worker/SW bundling or builtin aliases.
+
+Serve JS as JavaScript and WASM as `application/wasm`, from a secure context.
+Workbench requires cross-origin isolation: `Cross-Origin-Opener-Policy:
+same-origin` and `Cross-Origin-Embedder-Policy: credentialless` (or `require-corp`
+with compatible resource headers). If SW scope extends above its directory,
+set `Service-Worker-Allowed` to the intended scope. Existing deployment URL/scope
+options still apply. The packed consumer fixture is a complete copy/serve example.
+
+Custom bundler deployments remain supported. QuickJS-backed Node children then
+require a host kernel wrapper: import the bundler's
 `@jitl/quickjs-wasmfile-release-sync/wasm?url`, publish it under
 `QUICKJS_WASM_URL_ENV` from `@riftydev/runtime-js/install-process`, and
 statically import `@riftydev/workbench/kernel-worker`. Pass that wrapper's

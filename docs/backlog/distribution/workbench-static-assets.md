@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Boot Workbench from copyable published runtime assets
 created: 2026-09-07
 why: A host still compiles Worker/SW entries and supplies aliases and a QuickJS wrapper.
@@ -8,7 +8,7 @@ user_story: As the Tracker plugin-sandbox embedder, I want to boot workbench fro
 epic: self-hosted-snapshot-workbench
 blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md]
-code: [packages/workbench/tsup.config.ts, packages/workbench/README.md, tests/integration/fixtures/workbench-vite-consumer/host-builtins.ts]
+code: [tools/publishing/build-workbench-assets.mjs, packages/workbench/README.md, tools/publishing/workbench-asset-builtins.mjs]
 ---
 
 ## Context
@@ -48,7 +48,12 @@ shares the same asset closure without changing runtime policy.
 
 ## Decisions
 
+ready-verdict: 2026-09-08 — Contract+RED @ d25162b5afeeeafa8e77b6d3d212eaa3f5ab34cf
+
+- 2026-09-08 — review/evidence: docs/backlog/distribution/reference/workbench-static-assets-contract-red.json; docs/backlog/distribution/reference/workbench-static-assets-evidence.md.
+
 - 2026-09-08 — ADR-0390: dist/assets copied whole; publish build owns aliases and static kernel wrapper, normal sealed exports retained.
+- 2026-09-08 — ADR-0391: independent prior-criterion check retains esbuild provenance; exact compiler/WASM exceptions replace only the unrelated blanket-byte failures.
 
 - 2026-09-07 — finding draft; observable scope is settled by goal I2; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.

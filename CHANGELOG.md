@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Publish Workbench runtime assets with exact compiler/WASM exceptions in the esbuild-retirement inventory; substituted esbuild bytes remain package-owned (ADR-0390/0391).
+
 - Process: replace empty-frontier refinement closure with one `RDY-6` check
   against raw user input, material reachable transitions and decision authority;
   refine/FIT reuse its evidence, Challenge checks omissions, live user choices

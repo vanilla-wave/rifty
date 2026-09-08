@@ -7,9 +7,17 @@ export async function proveCopiedToolchain(workerUrl: string): Promise<void> {
     vmEngine: 'rewrite',
   });
   try {
-    const result = await sandbox.runtime.eval("require('node:vm').runInNewContext('40 + 2')");
-    if (!result.ok || result.value !== 42) {
-      throw new Error(`Copied worker/compiler closure failed: ${JSON.stringify(result)}`);
+    let stdout = '';
+    sandbox.runtime.on((event) => {
+      if (event.type === 'stdout') stdout += event.chunk;
+    });
+    const result = await sandbox.runtime.eval(
+      "console.log(require('node:vm').runInNewContext('40 + 2')); void 0",
+    );
+    if (!result.ok || stdout !== '42\n') {
+      throw new Error(
+        `Copied worker/compiler closure failed: ${JSON.stringify({ result, stdout })}`,
+      );
     }
   } finally {
     sandbox.dispose();

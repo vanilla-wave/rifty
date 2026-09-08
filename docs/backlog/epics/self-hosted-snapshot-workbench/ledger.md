@@ -12,3 +12,4 @@
 - 2026-09-08 — re-chart after dep-snapshot-tar (final-green PASS @ fd829ca42ba698c168e5442278a3e5d50ffbbc7f): codec complete; independent tar_final_review, full pr:check25/25 and system-tar/replay proof; producer remains next I1 obligation.
 - 2026-09-08 — dep-snapshot-producer Contract+RED PASS @ 514533e5bedfa58fa09becd73dbf3bd7de69781c; producer_red_review, nine behavioral REDs plus packed API-absence RED; Vite8 reference probe retained and reproduced.
 - 2026-09-08 — re-chart after dep-snapshot-producer (final-green PASS @ c798a8e84a6d1489c89aeefe3788ceda7d0570e5): I1 delivered; full pr:check25/25, packed Node/Chromium proof; retained-acquisition NOTE promoted into the next test-preparation batch without producer changes.
+- 2026-09-08 — workbench-static-assets Contract+RED PASS @ d25162b5afeeeafa8e77b6d3d212eaa3f5ab34cf; independent assets_red_review reproduced packed missing-assets RED and preserved prior criteria25/25.

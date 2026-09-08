@@ -18,7 +18,77 @@ const GENERATED_CLIENT = readFileSync(
   'utf8',
 );
 
+function assetViolations(name: string, bytes: Buffer): string[] {
+  return evaluateEsbuildBundleInventory(
+    ROOT,
+    [`packages/workbench/dist/assets/${name}`],
+    () => bytes,
+  ).filter((violation: string) => !violation.startsWith('emitted generated esbuild client count'));
+}
+
 describe('esbuild carrier retirement', () => {
+  it('admits only exact copied QuickJS and SQLite binaries', () => {
+    for (const [name, source] of [
+      [
+        'quickjs.wasm',
+        '../../packages/runtime-js/node_modules/@jitl/quickjs-wasmfile-release-sync/dist/emscripten-module.wasm',
+      ],
+      ['sql-wasm.wasm', '../../packages/net/node_modules/sql.js/dist/sql-wasm.wasm'],
+    ] as const) {
+      const bytes = readFileSync(new URL(source, import.meta.url));
+      expect(assetViolations(name, bytes)).toEqual([]);
+      const corrupt = Buffer.from(bytes);
+      corrupt[0] = 1;
+      expect(assetViolations(name, corrupt)).toContainEqual(
+        expect.stringContaining('runtime wasm shipped'),
+      );
+      expect(assetViolations(`renamed-${name}`, bytes)).toContainEqual(
+        expect.stringContaining('runtime wasm shipped'),
+      );
+    }
+  });
+
+  it('rejects real esbuild bytes under admitted asset names in raw, gzip and base64 forms', () => {
+    const wasm = readFileSync(
+      new URL(
+        '../../tools/shadow-registry/node_modules/esbuild-wasm/esbuild.wasm',
+        import.meta.url,
+      ),
+    );
+    expect(assetViolations('quickjs.wasm', wasm)).toContainEqual(
+      expect.stringContaining('runtime wasm shipped'),
+    );
+    for (const bytes of [
+      wasm,
+      gzipSync(wasm),
+      Buffer.from(`export default ${JSON.stringify(wasm.toString('base64'))};`),
+      Buffer.from(`export default ${JSON.stringify(gzipSync(wasm).toString('base64'))};`),
+    ]) {
+      expect(assetViolations('typescript-worker.js', bytes).length).toBeGreaterThan(0);
+    }
+    expect(assetViolations('typescript-worker.js', Buffer.alloc(2_000_001, 'x'))).toContainEqual(
+      expect.stringContaining('2 MB carrier ceiling'),
+    );
+  });
+
+  it('admits the exact lexer literal while rejecting unknown adjacent inline WASM', () => {
+    const source = readFileSync(
+      new URL(
+        '../../packages/runtime-js/node_modules/cjs-module-lexer/dist/lexer.mjs',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+    const literal = source.match(/AGFzbQ[A-Za-z0-9+/]*={0,2}/u)?.[0];
+    expect(literal).toHaveLength(29_556);
+    const allowed = `export const lexer = ${JSON.stringify(literal)};`;
+    expect(assetViolations('lexer.js', Buffer.from(allowed))).toEqual([]);
+    const unknown = 'export const unknown = "AGFzbQEAAAA=";';
+    expect(assetViolations('lexer.js', Buffer.from(allowed + unknown))).toContainEqual(
+      expect.stringContaining('inline WebAssembly base64 prefix'),
+    );
+  });
+
   it('keeps the deletion inventory finite', () => {
     expect(RETIRED_ESBUILD_PATHS).toEqual([
       'packages/npm-client/src/internal/shadow/manager.ts',
