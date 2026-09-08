@@ -54,10 +54,11 @@ isolation (already a fresh tree). Browser eviction guarantees.
 
 ## Decisions
 
+- ready-verdict: 2026-09-09 — Contract+RED @ a1543038aa6722902ca85899dd7a38c3bf7b2c7b
 - 2026-09-09 — ADR-0401: optional clone-safe `storage.namespace` string; omitted = origin; one parse+resolve; both surfaces share the handle; empty on first create; no migration.
 - 2026-09-07 — finding draft; observable scope is settled by goal I4; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.
 
 ## Challenge
 
-challenge: 2026-09-09 — pending Contract+RED
+challenge: 2026-09-09 — clear

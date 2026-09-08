@@ -1,0 +1,185 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concerns only) — proceed to implementation, not a merge approval. 17 vitest REDs fail for unimplemented namespace admission/isolation, not import or typecheck; Playwright invalidThrew=false stands. Challenge 2026-09-09 — clear.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "a1543038aa6722902ca85899dd7a38c3bf7b2c7b",
+  "unit_goal_source": "docs/backlog/vfs/workbench-storage-namespace.md @ a1543038aa6722902ca85899dd7a38c3bf7b2c7b (BASE 67496f8ca7cdbd881d286741be5bbd841bd21cb8); ADR-0401 docs/adr/vfs/0401-bound-paired-opfs-surfaces-to-a-host-selected-storage-namespace.md; goal I4 + scenario step 5 docs/backlog/epics/self-hosted-snapshot-workbench/goal.md",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Host-selected preview prefix under a non-root SW scope with iframe navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Byte-exact retained orphan Scratch enumeration/download plus fresh Scratch, surviving reopen, remains (waits on this storage namespace)."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Public effective boot/file/tool budgets without hidden shorter sibling deadlines remain."
+    },
+    {
+      "clause": "I1 (packed residual)",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Packed produce/restore from an installed tarball inside the composed whole-scenario packed-host proof remains after the sealed producer landed."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Omitted storage.namespace keeps today's origin-root admission and owner initialize { persistence } only.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0401",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:543",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: storage.namespace 'plugin-sandbox' (and nested tenant/plugin) is valid Workbench admission and is present on the clone-safe initialize frame and owner.start input.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0401",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Invalid namespace spelling ('', '..', '.', '/abs', 'a/../b', 'a//b') throws TypeError / storage.namespace before owner start and before any getDirectoryHandle.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0401",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:75",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: A selected namespace is the VFS /: origin host-file sentinel is not listed or readable; namespaced writes land under that directory at origin, not as origin-root siblings.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/vfs/src/opfs-storage-namespace.contract.test.ts:150",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: First selection of an unused namespace is empty; two sequential namespaces are isolated; reopening the first preserves its files.",
+      "source": "acceptance",
+      "trace": "I4+scenario",
+      "status": "pass",
+      "citation": "packages/vfs/src/opfs-storage-namespace.contract.test.ts:168",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: installWorkbenchOwnerStorageAuthority with a namespace opens OPFS through that namespace (proof path still /.rifty/workbench/v1/storage-proof on the bound root).",
+      "source": "acceptance",
+      "trace": "I4+ADR-0401",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-storage-namespace.contract.test.ts:21",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × invalid namespace: TypeError naming storage.namespace before getDirectoryHandle / owner start; origin children unchanged.",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0401",
+      "status": "pass",
+      "citation": "packages/vfs/src/opfs-storage-namespace.fault.test.ts:115",
+      "note": ""
+    },
+    {
+      "row": "torn-state × failed setup/reopen of a second namespace: first namespace bytes unchanged.",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0401",
+      "status": "pass",
+      "citation": "packages/vfs/src/opfs-storage-namespace.fault.test.ts:130",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × namespaced OPFS open: loud throw (required) or existing preferred fallback; the other namespace's bytes unchanged.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/vfs/src/opfs-storage-namespace.fault.test.ts:151",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × paired install: async and sync surfaces share one resolved handle (host sentinel absent on both).",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0401",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:56",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/vfs/workbench-storage-namespace.md:33",
+          "evidence": "pnpm exec vitest run packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts packages/workbench/src/workers/workbench-storage-namespace.contract.test.ts packages/vfs/src/opfs-storage-namespace.contract.test.ts packages/vfs/src/opfs-storage-namespace.fault.test.ts packages/workbench/src/workbench/open-workbench.contract.test.ts --testNamePattern 'storage.namespace|storage namespace|OPFS storage namespace'\n\nRUN  v2.1.9 /Users/vanilla-wave/.cursor/worktrees/rifty/main-a07\nTest Files  5 failed (5)\nTests  17 failed | 39 skipped (56)\n\nFAIL vfs/opfs-storage-namespace.contract.test.ts > hides the origin host sentinel…\nAssertionError: expected [ 'host.txt' ] to not include 'host.txt'  (:156)\nFAIL vfs/opfs-storage-namespace.contract.test.ts > starts a new namespace empty…\nAssertionError: expected [ 'host.txt' ] to deeply equal []  (:174)\nFAIL vfs/opfs-storage-namespace.fault.test.ts > corrupt-input × invalid namespace\nAssertionError: promise resolved \"undefined\" instead of rejecting  (init({ namespace: '..' }) :125)\nFAIL vfs/opfs-storage-namespace.fault.test.ts > torn-state × failed second namespace\nAssertionError: promise resolved \"undefined\" instead of rejecting  (init({ namespace: 'blocked' }) :140)\nFAIL vfs/opfs-storage-namespace.fault.test.ts > quota-perm-fail × namespaced open\nAssertionError: promise resolved \"undefined\" instead of rejecting  (init({ namespace: 'ns-b' }) :168)\nFAIL workbench/open-workbench.contract.test.ts > threads storage.namespace into the owner start input\nReceived storage: { persistence: 'required' }  (missing namespace)  (:563)\nFAIL workbench/workbench-storage-namespace.contract.test.ts > admits a clone-safe namespace\nAssertionError: expected 'required' to deeply equal { persistence: 'required', namespace: 'plugin-sandbox' }  (:57)\nFAIL workbench/workbench-storage-namespace.contract.test.ts > rejects invalid storage.namespace %j (9 cases)\nAssertionError: expected [Function] to throw an error  (validateWorkbenchOptions :83)\nFAIL workers/workbench-storage-namespace.contract.test.ts > opens OPFS with the selected namespace\nexpected spy to be called with [{ namespace: 'plugin-sandbox' }]; Received: 1st spy call Array []  (:34)\n\nNo import/typecheck failures. Diff 67496f8c...a1543038 is docs+ADR+REDs only (no product implementation). Playwright not re-run: installOpfsFs() still takes no options (packages/vfs/src/sync-mirror.ts:143); recorded invalidThrew=false stands.",
+          "summary": "All 10 traced rows have discriminating committed REDs that fail now for unimplemented namespace behavior. Acc 1 cites a workbench-storage-namespace.contract.test.ts omitted case that is not in that file; the existing open-workbench persistence-only start (storage: { persistence: 'required' } exactly) is the carrier. Advisory citation miss, not a missing obligation.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-storage-namespace.contract.test.ts:35",
+          "evidence": "Same vitest run: workers test reached expect(h.openOpfs).toHaveBeenCalledWith({ namespace: 'plugin-sandbox' }) after expect(snapshot).toEqual({ policy: 'required', backend: 'opfs', durability: 'durable' }) passed. Current proveOpfs writes then rmSync the proof (workbench-owner-storage.ts:97-123), so exists('/.rifty/workbench/v1/storage-proof/proof-ns')===false already holds on the memory mock without a namespace.",
+          "summary": "Acc 6's openOpfs({ namespace }) call is the discriminating RED. The trailing exists(...proof...).toBe(false) asserts today's cleanup, not that the proof path ran on the bound namespaced root. Named mutant: pass namespace into openOpfs while still proving on an unbound vfs. Advisory (REV-4 / REV-5 class 4 on that assertion only).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:69",
+          "evidence": "Same vitest run: Acc 2 valid case failed at admitted.storage === 'required' (:57) and never reached inspectPageToWorkbenchOwnerMessage not.toThrow() (:68-72). Invalid it.each cases failed at validateWorkbenchOptions.toThrow(/storage.namespace/) (:83) and never reached inspect. inspectBootConfig still exact(storage, ['persistence'], 'owner boot storage policy') (owner-protocol.ts:262-263); invalid() is TypeError('Invalid …') (owner-protocol-inspect.ts:5-6). Fault corrupt-input asserts toThrow(/storage.namespace/) not TypeError (:125) and did not reach getDirectoryHandle.not.toHaveBeenCalled.",
+          "summary": "Acc 2's initialize-frame half is not.toThrow only (does not assert namespace retained on the inspected config). Acc 3 / corrupt-input name TypeError but assert only /storage.namespace/. Named mutants: inspect admits then drops namespace; throw Error('storage.namespace') instead of TypeError. Advisory exactness (REV-3).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/vfs/workbench-storage-namespace.md:63",
+          "evidence": "",
+          "summary": "RDY-6 / Challenge 2026-09-09 — clear. Value follows goal I4 and user scenario step 5. Cheaper rivals (FileSystemDirectoryHandle in options, virtual prefix after origin preload, automatic migration) are killed by ADR-0401 and goal rejected route: automatically migrate old storage into a newly selected root — violates I4. No omitted material user choice: omitted=origin vs empty-string invalid, empty first selection, former-setting reopen, and no migration are settled by I4 / scenario / ADR-0401.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
