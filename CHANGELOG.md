@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Process: replace empty-frontier refinement closure with one `RDY-6` check
+  against raw user input, material reachable transitions and decision authority;
+  refine/FIT reuse its evidence, Challenge checks omissions, live user choices
+  return to the existing interview without another approval stage.
+
 - Refine restores research-informed scope choices and a user-facing report before
   implementation. A new direction gets early independent premise critique when
   it can change the user's choice; FIT/PICKUP reuse that evidence. Supersedes

@@ -93,6 +93,44 @@ The goal changes only by a user amendment (`RDY-6`).
 ## RDY-6 Authority and amendments
 
 The user owns observable scope; the agent owns carriers and implementation.
+
+### Establishing scope
+
+Before claiming refinement settled or setting a promise ready, check its
+material assumptions against the original user request and answers, not only
+the scenario the agent wrote. An empty known question frontier is not that check.
+
+1. Walk the requested actions and their reachable interactions/transitions:
+   what existing user state meets new input, repeated use or changed settings?
+   Inspect material defaults, exclusions and meanings hidden in technical terms.
+   No full state cross-product or implementation design is required.
+2. Try two outcomes allowed by the draft's words. A difference is a user fork
+   only when it is reachable, materially affects the requested value, and no
+   accepted decision or applicable ADR/reference/baseline already settles it.
+   Name the action, difference and source of that value. Otherwise resolve it
+   as an internal choice or an unrelated suggestion; never manufacture scope.
+   A probe establishes current behavior, not consent to a new policy. An
+   agent-written exclusion or narrower fixture cannot supply user authority.
+3. Keep a compact source → observable consequence → authority or open owner
+   record for material assumptions in existing Decisions/evidence/map locations.
+   Cite actual user answers or the clause/probe and why it applies. Reuse valid
+   records for unchanged scope; baseline-only work needs no invented interview.
+   A just-file capture may retain open questions without claiming scope settled.
+4. Ask the informed independent frontier together. After an answer or new fact,
+   revisit affected assumptions and dependent choices before closure. A live
+   unresolved user choice cannot be declared settled or compiled into a ready
+   promise; dependent work waits, independent work continues (`STOP-1`).
+   Route-only unknowns remain agent-owned fog; unknowable user questions follow
+   FIT's fog rule and cannot be used to invent a destination-changing answer.
+
+This is evidence within existing preparation, not another stage, review quota
+or approval. The existing Challenge independently checks this evidence against
+raw input when applicable (`docs/backlog/README.md` §Challenge). Later facts may
+open new forks; report the checked scope and remaining uncertainty, never a
+guarantee that no future choice exists. Machines validate records, not completeness.
+
+### Amendments
+
 A user decision may amend a ready goal in place. Record in `## Decisions`:
 `amend: <date> — user: <their words> — <changed obligations and why>`.
 Keep prior evidence/history; rechart dependencies and independently recheck

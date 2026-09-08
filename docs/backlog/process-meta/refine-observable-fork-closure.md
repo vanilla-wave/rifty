@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: draft
+status: ready
 title: Establish observable-scope closure before declaring refinement settled
 created: 2026-09-07
 why: The embedder goal became ready with an empty question frontier while registry admission and snapshot replacement policy remained unchosen; only user pushback exposed them.
@@ -12,19 +12,35 @@ sources: [docs/backlog/process-meta/reference/embedder-fork-loss-evidence.md]
 
 Observed failure and historical/current rule comparison:
 docs/backlog/process-meta/reference/embedder-fork-loss-evidence.md.
-This request investigates and proposes prevention; process changes remain
-unimplemented. The neighboring goal's product decisions stay in its session.
+The user authorized the root-cause process change on 2026-09-08 and an
+independent shakedown; newly found problems must be reported without repair.
+The neighboring goal's product decisions stay in its session.
 
 Dedup: searched process-meta titles/content, traps and declined concepts for
 refine, frontier, scope and fork. `draft-gate-enforcement` prevents implementing
 a draft; this failure occurred with a formally ready goal. No same-boundary item.
 
-## Question
+## User scenario
 
-How should refine establish that reachable user choices were examined, without
-turning internal design into user approval or claiming exhaustive discovery?
+A maintainer brings an integration outcome with coupled persistent state and
+new inputs. Refine must check material observable choices against the original
+request before declaring scope settled, preserve already accepted choices, and
+keep carriers agent-owned. Independent shakedown findings are reported without
+automatically extending this repair.
 
-Candidate direction: strengthen existing refine/FIT/Challenge, keeping one
+## Acceptance
+
+1. One canonical scope-closure rule is used by refine, FIT and Challenge; empty known frontier alone cannot establish closure. → scenario
+2. Material reachable choices need authority or an explicit user decision; dependent choices return after answers without a full design gate or repeated approval. → scenario
+3. Independent shakedown rehearses varied real-seeded scenarios and reports remaining failures without repairing them. → scenario
+
+## Out of scope
+
+Product implementation, new semantic machine gates, fixes to shakedown findings.
+
+## Approach
+
+Chosen direction: strengthen existing refine/FIT/Challenge, keeping one
 research/interview loop and reusing its evidence:
 
 - Before declaring scope settled, compare raw user input with the proposed
@@ -54,7 +70,7 @@ combination. Distinguish a newly requested capability from an omitted decision.
 Do not reopen unchanged choices with valid authority. A machine can check a
 record's presence and links, never prove semantic completeness or user consent.
 
-## Validation direction
+## Validation
 
 Replay the pre-closure embedder inputs independently, withholding later answers:
 detect the changed-snapshot/edited-project transition and classify registry
@@ -65,6 +81,8 @@ Include settled baseline-only and just-file controls: no manufactured interview.
 Evaluate detection and attribution, not keyword presence or document length.
 
 ## Decisions
+
+- 2026-09-08 — user authorized careful root-cause fix plus independent shakedown; report new problems before further repair; docs-only preparation per RDY-8, prior Challenge reused.
 
 - 2026-09-07 — user requested diagnosis and proposed prevention; formalized a draft, no process or product behavior changed.
 

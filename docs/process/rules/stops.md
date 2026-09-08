@@ -12,7 +12,8 @@ budget exhausted, `STOP-1d` slice cap. Surviving letters keep their places.
 
 ## STOP-1 Closed list — the only user stops
 
-- **a. Observable-scope fork** — a fog line `owner: user`; a traced (`I#` /
+- **a. Observable-scope fork** — a live user choice established by `RDY-6`,
+  including an omitted choice; a fog line `owner: user`; a traced (`I#` /
   `scenario`) row that a re-cut would drop or weaken (`readiness.md` `RDY-5`)
   → manual `rifty-refine`.
 - **b. Premise concern** — value does not follow / cheaper rival route not
