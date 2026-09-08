@@ -209,7 +209,8 @@ describe('public producer admits only actual declared companion acquisitions', (
       [companion, 'node_modules/esbuild-wasm', nestedCompanion].sort(),
     );
     for (const [path, entry] of Object.entries(lock.packages)) {
-      if (path === '' || entry.optional || path === 'node_modules/esbuild') continue;
+      const npmOptional = (entry as typeof entry & { readonly optional?: boolean }).optional;
+      if (path === '' || npmOptional || path === 'node_modules/esbuild') continue;
       expect(identity(output.lock, path)).toEqual(identity(lock, path));
     }
     expect(output.lock.packages[companion]?.version).toBe('4.42.0');
