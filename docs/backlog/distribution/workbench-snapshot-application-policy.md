@@ -107,6 +107,7 @@ outside the accepted goal. Existing unsupported capabilities stay loud errors.
 
 ready-verdict: 2026-09-08 — Contract+RED @ fe0c879ba1de72fd2b56ad5690ffbf8fa1b3a383
 
+- 2026-09-08 — Final+GREEN reception: B1 FIX; generic application must not require readable/valid saved package.json before payload preflight; Scratch/named/legacy and stamp-demotion siblings stay in this unit.
 - 2026-09-08 — ADR-0397 resolves observed completed-receipt lifetime defects while restoring all old corruption guards; independent DEC-2/PR-4 decision and added fault carriers preserve I8 scope.
 - 2026-09-08 — reception: Contract+RED PASS, 0 blockers; two advisory NOTES accepted as additional Save-before-open and cache-durability carriers, no scope change.
 - 2026-09-08 — ADR-0394 selects exact application API, durable admission receipt, staged overlay and claim rollback reconciliation; independent DEC-2 research recorded under reference/.
