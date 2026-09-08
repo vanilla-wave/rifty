@@ -1,12 +1,12 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN PASS: I1\u2013I5 proven; pr:check 25/25, no-COI 18/18, OPFS 7/7, production 7/7, packed surface PASS; independent PR-4 17/17 and real recovery 1/1. Goal awaits linked-child RECHART/CLOSE only; no merge requested.",
+  "merge_call": "Final+GREEN and goal closure PASS: I1\u2013I5 proven; pr:check 25/25, no-COI 18/18, OPFS 7/7, production 7/7, packed surface PASS; independent PR-4 17/17 and real recovery 1/1. Docs-only CLOSE 025bb0ca0 removes linked children; no merge requested.",
   "checkpoint": "Final+GREEN",
   "reviewed_sha": "a013f8ae7ee1861fa6f2d7b423402f94968a8c4c",
-  "unit_goal_source": "PR #321 against origin/main 9a6331194f4b67245c2ab118a72f93920da584c5; docs/backlog/epics/no-coi-persisted-warm-open/goal.md; distribution/no-coi-warm-open, no-coi-install-dedup, no-coi-toolchain-persist-failures; vfs/no-coi-opfs-preload-handles; raw issue319-refine-evidence.md; ADR-0307/0377/0392/0393",
+  "unit_goal_source": "PR #321 against origin/main 9a6331194f4b67245c2ab118a72f93920da584c5; docs/backlog/epics/no-coi-persisted-warm-open/goal.md; distribution/no-coi-warm-open, no-coi-install-dedup, no-coi-toolchain-persist-failures; vfs/no-coi-opfs-preload-handles; raw issue319-refine-evidence.md; ADR-0307/0377/0392/0393; docs-only RECHART/CLOSE verified at 025bb0ca0, accepted contract retained at reviewed_sha",
   "unit_residuals": [],
   "goal_residuals": [],
-  "goal_complete": false,
+  "goal_complete": true,
   "coverage": [
     {
       "row": "Warm-open Acceptance 1: real Vite install/build, full-page open/build; zero registry, installer and native mutations",
