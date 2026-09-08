@@ -48,11 +48,7 @@ function plan(
   };
 }
 
-function definition(
-  id: string,
-  snapshotId: string,
-  assetUrl: string,
-): ProjectDefinition<unknown> {
+function definition(id: string, snapshotId: string, assetUrl: string): ProjectDefinition<unknown> {
   return definePlaygroundProject(
     plan(id, {
       kind: 'snapshot',

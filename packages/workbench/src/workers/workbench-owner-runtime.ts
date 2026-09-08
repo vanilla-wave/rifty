@@ -295,7 +295,9 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   );
   const registryUrl = config.packageAcquisition.registryUrl;
   const registry =
-    registryUrl === undefined ? undefined : createProxiedRegistryClient({ proxyPrefix: registryUrl });
+    registryUrl === undefined
+      ? undefined
+      : createProxiedRegistryClient({ proxyPrefix: registryUrl });
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
