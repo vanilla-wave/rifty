@@ -42,3 +42,8 @@ write-probe projection: 44834.69ms > 15036.3ms. The unchanged isolated test pass
 3.209x, projected 6.70ms ≤4146.8ms. Preload occurs outside both timed drain windows;
 one macOS pass cannot establish the Linux cause. Preserve every threshold and
 await the new CI result; do not manufacture GREEN by editing the benchmark.
+
+## Final verification
+
+`VITEST_MAX_THREADS=4 VITEST_MIN_THREADS=1 VITEST_MAX_FORKS=4 VITEST_MIN_FORKS=1 pnpm pr:check`:25/25 PASS; test:run182.3s, parity61.1s. Assertions/timeouts unchanged.
+Independent `/root/concerns_final_review`: Final+GREEN PASS at ba59f8a0d3fd47765cde66a3b2643a44caa30233, no findings. Independently executed stream1/1 and unreadable-dedup1/1; PR-4 confirms the recovery observer retains the no-copy criterion. Record: pr321-concerns-final-green.json.
