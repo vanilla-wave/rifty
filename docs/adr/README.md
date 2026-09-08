@@ -319,6 +319,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0389 | Publish a sealed Workbench dependency-snapshot producer |
 | 0395 | Publish a copyable Workbench runtime-asset closure |
 | 0396 | Apply snapshots through host-selected initial-only and conflict policies |
+| 0400 | Admit snapshot-only Workbench acquisition without a registry URL |
 
 ## Superseded (removed)
 
@@ -407,6 +408,7 @@ superseded.
 | 0175 globally request-ordered placement clause | 0303 | direct reservation precedes descendant DFS; prefetch/network completion remains non-authoritative |
 | 0263 generic origin-contention rejection clause | 0293 / note 2026-07-18 | callback-null origin contention has public `WorkbenchOriginOccupiedError`; same-page/capability/request/init failures remain fatal |
 | 0263 four-worker/extraction clauses | 0282 / note 2026-07-16 | companion host supplies dedicated TypeScript worker; sealed semantic operations replace private App imports |
+| 0263 required `registryUrl` clause | 0400 / note 2026-09-08 | omitted registryUrl and Eddy is snapshot-only; registry-present acquisition stands |
 | 0278 exact session-tools / legacy-prefix conversion clauses | 0282 / note 2026-07-16 | TS recovery, durability wait, and root-free terminal restoration are public companion semantics |
 | 0278 depth-insensitive archive `.git`/`.rifty` exclusion clause | 0286 / note 2026-07-17 | Git and nested ordinary `.rifty` round-trip; root `.rifty` remains private |
 | 0278 snapshot v2 serialized identity / templateId / stale-version proof clauses | 0346 / note 2026-08-10 | snapshotId covers canonical v3 bytes; templateId names v3; stale v2 rejects before effects |

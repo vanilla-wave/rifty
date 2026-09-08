@@ -252,3 +252,9 @@ ADR-0282 replaces the four-worker/extraction detail: the companion host also
 supplies a dedicated TypeScript worker, and sealed semantic recovery/durability/
 terminal-restore operations replace App imports of package-private functions.
 The generic root and every other decision above stand.
+
+## Correction 2026-09-08
+
+ADR-0400 makes `packageAcquisition.registryUrl` optional: omitted registry
+and omitted Eddy is snapshot-only admission. Registry-present acquisition,
+Eddy-requires-registry, and the rest of this ADR stand.

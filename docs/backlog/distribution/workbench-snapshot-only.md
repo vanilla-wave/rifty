@@ -1,55 +1,69 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Run a snapshot-backed Workbench without a browser registry
 created: 2026-09-07
 why: The public options require a registry URL and first-snapshot rejection schedules a real install.
 user_story: As the Tracker plugin-sandbox embedder, I want to run a snapshot-backed workbench without a browser registry, but today the public options require a registry URL and first-snapshot rejection schedules a real install.
 epic: self-hosted-snapshot-workbench
 blocked_by: []
-sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md]
-code: [packages/workbench/src/workbench/internal/workbench-options.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workers/owner-package-state.ts]
+sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, docs/backlog/distribution/reference/workbench-snapshot-only-evidence.md, ADR-0400, ADR-0396, ADR-0263]
+code: [packages/workbench/src/workbench/internal/workbench-options.ts, packages/workbench/src/workbench/owner-protocol.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workers/owner-package-state.ts]
 ---
 
 ## Context
 
-An internal snapshot-only ensure exists, but public first-materialization catches
-its unavailable result and constructs deferred install. Public admission must
-allow no registry URL, restore the published producer's compatible snapshot,
-and start the real installed project with zero registry/Eddy requests. Missing,
-corrupt, incompatible or over-limit input fails before guest startup with its
-reason when the application policy actually needs that snapshot. An unused
-new asset cannot block a valid saved project's default reopen. A later npm/package call cannot escape this mode into a hidden network
-install; replay using available exact bytes may work, absent bytes fail loudly.
+Public `packageAcquisition.registryUrl` is required (ADR-0263). Internal
+snapshot-only ensure exists, but first-materialization catches
+`snapshot-unavailable` and returns deferred install. I8 now owns when a
+snapshot is required. Evidence:
+`reference/workbench-snapshot-only-evidence.md`.
 
-Registry policy is separate from application policy (goal I8): initial deployment
-only is the default, preserving saved state; explicit apply mode is available.
-Do not use an untrusted install-stamp miss as proof that no saved project exists.
-An incompatible saved tree fails without automatic replacement. The application
-policy child owns file conflicts uniformly: no package/dependency-specific
-conflict resolver. Compatibility/identity and replay integrity still validate
-incoming artifacts; they do not authorize overwriting saved project contents.
+## User scenario
 
-Registry-enabled acquisition keeps its current behavior. This is not general offline
-network isolation: snapshot/static assets are fetched, and guest application
-network behavior is unchanged. Reuse the existing acquisition authority; API
-shape is an ADR choice. Cross-boundary proof denies registry egress while
-restoring the producer tar.gz and running a real Vite build/dev command.
+The embedder opens Workbench with `packageAcquisition: {}` (no registry, no
+Eddy), seeds a snapshot-backed Scratch from a published tar.gz, and runs the
+real Vite command. No registry or Eddy request is made. A missing or
+id-mismatched snapshot required by I8 fails before guest start and does not
+schedule `npm install`. Reopening a valid saved Scratch with an unused new
+snapshotId under initial-only still does not fetch that asset.
 
-Scope and user decisions: goal I3. Baseline/dedup and executed evidence:
-docs/backlog/distribution/reference/embedder-gaps-evidence.md.
+## Acceptance
+
+1. `packageAcquisition: {}` (omitted `registryUrl` and `eddy`) is valid
+   Workbench admission; Eddy still requires `registryUrl`.
+   `workbench-snapshot-only.contract.test.ts` admission cases. → I3 → ADR-0400
+2. A required snapshot that is missing, corrupt, or identity-mismatched
+   rejects before guest start and does not return `kind: 'install'`.
+   Same file; registry-present deferred-install cases stay. → I3 → ADR-0400
+3. Snapshot-only restore and later package/terminal commands make zero
+   registry/Eddy requests; absent exact bytes fail loudly rather than
+   network-install. Same file plus existing I8 unused-snapshot no-fetch.
+   → I3
+
+## Fault matrix
+
+- Corrupt/incompatible required snapshot × first seed or apply: reject
+  before guest start; no deferred install. Same file identity/404 cases.
+  → I3 → ADR-0400
+- Unused new snapshot × initial-only reopen: unused asset is not fetched
+  and does not fail snapshot-only admission. Existing I8 no-fetch case.
+  → I3 → ADR-0396
+
+## Out of scope
+
+Storage namespace, orphan recovery, preview prefix, and operation budgets
+remain named siblings. Registry-enabled acquisition keeps deferred install.
+Guest application network is unchanged. Retired `snapshotUrl` stays retired.
 
 ## Decisions
 
+- 2026-09-08 — ADR-0400: omitted registryUrl+eddy is snapshot-only; required
+  snapshot failure does not become deferred install.
 - 2026-09-07 — round 3: compose the separate generic application-policy authority; registry admission never chooses which existing files to overwrite.
-
 - 2026-09-07 — finding draft; observable scope is settled by goal I3; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.
 
 ## Challenge
 
-challenge: 2026-09-07 — clear
-
-### Re-fit — application and registry policies
-
-challenge: 2026-09-07 — clear
+challenge: 2026-09-08 — clear
