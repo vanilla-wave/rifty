@@ -12,3 +12,4 @@
 - 2026-09-08 — user asked for a separate PR of the PR #316 goal; work continues on `self-hosted-snapshot-workbench` / PR #322. Codec files carried from #316; producer compiled (ADR-0389) with 6 expected RED.
 - 2026-09-08 — producer Contract+RED reception: FIX local tar fixtures and createMemoryFs `{ fsSync }`; foreign `_test-fixtures` import and `{ fs }` destructure were authoring defects, not destination changes.
 - 2026-09-08 — producer implementation: sealed `@riftydev/workbench/dep-snapshot` calls existing install() and emits ADR-0386 tar; six producer tests green.
+- 2026-09-08 — re-chart after distribution/dep-snapshot-producer (final-green PASS @ 067f1f9654b15742f7f4008f569a739aa8f17f66): sealed produce/restore landed; packed produce/restore from an installed tarball stays an I1 residual for the composed packed-host proof. Next unblocked: static-assets, application-policy, storage-namespace, operation-budgets.

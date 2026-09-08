@@ -6,7 +6,7 @@ created: 2026-09-07
 why: Changing snapshotId currently reseeds an edited Scratch, while hosts need saved state by default and an explicit uniform file-conflict policy for application.
 user_story: As the plugin-sandbox embedder, I want saved projects to win after initial deployment and choose overwrite or error when explicitly applying a snapshot, but current catalog identity changes can silently replace edited files.
 epic: self-hosted-snapshot-workbench
-blocked_by: [distribution/dep-snapshot-producer]
+blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, ADR-0279, ADR-0261]
 code: [packages/workbench/src/workbench/internal/playground-project-definition.ts, packages/workbench/src/workers/playground-project-authority.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/glue/dep-snapshot.ts]
 ---

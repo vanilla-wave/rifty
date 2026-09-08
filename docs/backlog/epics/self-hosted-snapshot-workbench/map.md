@@ -2,22 +2,21 @@
 
 ## Items
 
-1. `distribution/dep-snapshot-tar` — standard envelope codec and ordinary-tool proof (I1); then `distribution/dep-snapshot-producer` — published manifest/lock producer,
-   identity output and standard tar.gz consumer proof (I1).
-2. `distribution/workbench-static-assets` — copyable Worker/SW/WASM closure,
+1. `distribution/workbench-static-assets` — copyable Worker/SW/WASM closure,
    first proven with the existing install-enabled mode (I2).
-3. `distribution/workbench-snapshot-application-policy` — explicit initial-only/
+2. `distribution/workbench-snapshot-application-policy` — explicit initial-only/
    apply modes and generic file-conflict policy, preserving saved state (I8).
-4. `distribution/workbench-snapshot-only` — registry-free admission and loud
+3. `distribution/workbench-snapshot-only` — registry-free admission and loud
    snapshot failure; composes published producer/assets and application policy (I3).
-5. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
+4. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
    selection, with the old setting preserving access to old projects (I4).
-6. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
+5. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
    open fresh Scratch, using the selected storage namespace (I6).
-7. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
+6. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
    on the same static host (I5).
-8. `distribution/workbench-operation-budgets` — public effective boot/file/tool
-   budgets, then composed packed-host proof of the whole scenario (I7).
+7. `distribution/workbench-operation-budgets` — public effective boot/file/tool
+   budgets, then composed packed-host proof of the whole scenario including
+   installed-tarball produce/restore (I7, remaining I1 packed residual).
 
 ## Open questions
 

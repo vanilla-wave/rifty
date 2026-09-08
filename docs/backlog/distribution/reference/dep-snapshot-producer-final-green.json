@@ -1,0 +1,174 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS with advisory concerns at 067f1f9654b15742f7f4008f569a739aa8f17f66 — both prior REV-7 blockers are gone in the actual tree (sealed entry exports no bake internals; no-coi-toolchain-worker token removed from arch-rules). Independent verify plus pnpm pr:check green on this SHA. Packed-consumer produce/restore from an installed tarball remains a goal residual.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "067f1f9654b15742f7f4008f569a739aa8f17f66",
+  "unit_goal_source": "docs/backlog/distribution/dep-snapshot-producer.md @ 067f1f9654b15742f7f4008f569a739aa8f17f66 (status ready, ready-verdict Contract+RED @ b73743af58921a5d2ff161300599c4e6bee5bbc0); BASE fbe724f7c230b468fb3ed010cba3c71631a385e3; ADR-0389 docs/adr/distribution/0389-publish-a-sealed-workbench-dependency-snapshot-producer.md; goal docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I1.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:5",
+      "summary": "Packed-consumer restore continuation: the sealed ./dep-snapshot entry is proven from workspace source exports; the packed tarball lane only verifies the export map and dist paths, so produce/restore from an installed tarball is still open."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Copyable published runtime asset closure and real packed project boot remain."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Initial-only saved-state priority and explicit generic overwrite/error application remain."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Public registry-free acquisition and honest selected-snapshot failures remain."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Selected OPFS namespace isolation and former-project reopening remain."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:15",
+      "summary": "Byte-exact retained orphan download/reopen and fresh Scratch remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:17",
+      "summary": "Configured non-root preview prefix with navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:19",
+      "summary": "Effective host operation budgets and composed whole-scenario proof remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Published @riftydev/workbench/dep-snapshot produceDepSnapshot writes caller manifest+lock, runs existing install, emits ADR-0386 tar plus snapshotId and installArtifactIdentity; packed consumer imports only that entry and restores matching project bytes.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "weak",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:195",
+      "note": "Executed carrier bakes caller manifest+lock, asserts installArtifactIdentity and sha256 snapshotId, then restores through the sealed entry. Weak only for packed-consumer wording: the tarball lane checks the export map without executing produce/restore from an installed package. Advisory (REV-4); I1 goal residual."
+    },
+    {
+      "row": "Acceptance 2: A lock that pins older versions keeps those versions when the registry also advertises newer ones; produce does not live-resolve covered pins.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:243",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Raw gzip and HTTP-decoded tar of the produced archive restore the same bytes through public fetch/restore.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:292",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Corrupt/unsupported input × produce — unparseable lock, lifecycle scripts and native/unsupported specs throw the existing installer errors before a snapshot is emitted.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:327",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Snapshot identity/replay × restore — produced snapshotId mismatch and altered replay closure reject before destination mutation (existing tar/v3 identity carriers plus producer identity case).",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:214; packages/workbench/src/glue/dep-snapshot-tar.test.ts:263; packages/workbench/src/glue/dep-snapshot.test.ts:470",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Cancelled registry × produce — caller AbortSignal fails before destination snapshot bytes are returned.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:395",
+      "note": ""
+    },
+    {
+      "row": "Public API: sealed subpath @riftydev/workbench/dep-snapshot exposing produce/restore/fetch/parse, installArtifactIdentity and createDepSnapshotMemoryFs (ADR-0389).",
+      "source": "public-api",
+      "trace": "ADR-0389 + I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot.ts:1; packages/workbench/tests/package-surface.contract.test.ts:13; packages/workbench/tests/extraction-boundary.contract.test.ts:23",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/workbench-packed-consumer.mjs:318",
+          "evidence": "The packed lane appends ./dep-snapshot to expectedExports and stats each export target; no produceDepSnapshot/restoreDepSnapshot call exists in that file.",
+          "summary": "Acceptance 1 packed-consumer wording is proven by export-map plus dist-path existence, not by executing produce/restore from an installed tarball.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/dep-snapshot-producer.test.ts:215",
+          "evidence": "The bake case asserts snapshotId shape and restores via fetchDepSnapshot; fetchVerifiedDepSnapshot is never called with the produced snapshotId.",
+          "summary": "Produced snapshotId is shape-checked, not round-tripped through verified-fetch; identity mismatch stays on sibling codec/glue carriers.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/glue/dep-snapshot.test.ts:327",
+          "evidence": "Reviewer isolated run hit a 5s timeout on the LightningCSS tar-envelope case inherited from BASE. pnpm pr:check at 067f1f965 passed including test:run (339.5s) and test:parity.",
+          "summary": "Duration-bound timeout observed under isolated load is inherited from BASE; the producer-tree pr:check is green.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

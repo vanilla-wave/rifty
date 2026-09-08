@@ -48,6 +48,7 @@ named sibling units.
 ## Decisions
 
 ready-verdict: 2026-09-08 — Contract+RED @ b73743af58921a5d2ff161300599c4e6bee5bbc0
+- 2026-09-08 — Final+GREEN PASS @ 067f1f9654b15742f7f4008f569a739aa8f17f66; packed produce/restore from an installed tarball remains an I1 goal residual.
 
 - re-cut: 2026-09-08 — distribution/dep-snapshot-tar owns codec proof first; this unit retains public producer and packed-consumer I1 proof — trace: none
 - 2026-09-07 — F1 user decision: builder-owned registry authentication excluded; host environment provides access.
