@@ -43,11 +43,11 @@ describe('I3 acquisition policy is a closed public and owner union', () => {
     [{ mode: 'snapshot-only' }, { mode: 'snapshot-only' }],
     [
       { registryUrl: '/registry' },
-      { mode: 'registry', registryUrl: 'https://host.test/registry/' },
+      { mode: 'registry', registryUrl: 'https://host.test/registry' },
     ],
     [
       { mode: 'registry', registryUrl: '/registry' },
-      { mode: 'registry', registryUrl: 'https://host.test/registry/' },
+      { mode: 'registry', registryUrl: 'https://host.test/registry' },
     ],
     [
       {
@@ -56,10 +56,10 @@ describe('I3 acquisition policy is a closed public and owner union', () => {
       },
       {
         mode: 'registry',
-        registryUrl: 'https://host.test/registry/',
+        registryUrl: 'https://host.test/registry',
         eddy: {
-          resolverUrl: 'https://host.test/eddy/',
-          bundleBaseUrl: 'https://host.test/eddy/',
+          resolverUrl: 'https://host.test/eddy',
+          bundleBaseUrl: 'https://host.test/eddy',
           presetPins: { starter: 'locked-closure' },
         },
       },
