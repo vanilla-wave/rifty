@@ -295,6 +295,14 @@ export class OpfsDrainScheduler {
     }
   }
 
+  /** Existing registry is the authority; a reporting timeout is still pending. */
+  hasPendingAtOrAbove(path: string): boolean {
+    for (const prefix of pathPrefixes(path)) {
+      if (this.registry.has(prefix)) return true;
+    }
+    return false;
+  }
+
   /** Bounded reporting barrier over every op enqueued so far — the flush()
    * contract (never rejects; timed-out lanes release reporting only). */
   reportingBarrier(): Promise<void> {

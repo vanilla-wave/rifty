@@ -1,0 +1,79 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "FIT/doc-only PASS by /root/warm_open_fit_final: material user forks settled; driver may flip goal draft→ready per FIT 9, child stays draft. Implementation is neither authorized nor proven.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "d508f7c92b4e7c5a154b0a0e191efa5cd7f49837",
+  "unit_goal_source": "FIT/RDY-6 final written-result review of docs/backlog/epics/no-coi-persisted-warm-open/goal.md, map.md, ledger.md, docs/backlog/distribution/no-coi-toolchain-persist-failures.md and complete issue319-refine-evidence.md; BASE da485021fab3f9f881ebafe29106b604f347b2b3, prior refine 05874880c. Fresh reviewer /root/warm_open_fit_final read raw issue #319, supplied original user request and definitive repeated answer, pinned PR #316 source fd829ca42ba698c168e5442278a3e5d50ffbbc7f, ADR-0307/0375/0377 and actual baseline probe artifacts. Preserving edits/extra files/deletions, explicit install repair, missing/incompatible authority failure, request drift, full recreation, tier and native-handle constraints have source authority; three route questions are agent-owned and do not invalidate destination. First draft repairs the existing flush-result boundary independently; remaining preload/activation/equality/handle work stays mapped. Independently ran pnpm backlog:check and pnpm refs:check: PASS; read docs-only pr:check 20/20 log; verified embedded probe sources match local artifacts and pinned main comparison changes no cited missing boundary. No product acceptance or optimized Vite coverage asserted.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:70",
+      "summary": "Implement and prove compatible full-recreation warm activation, without installation/relinking/registry requests; preserve bytes and reject missing/incompatible authority."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:75",
+      "summary": "Prove retained dependency edits, extra files and deletions on reopen; prove unchanged Vite build and explicit cached repair/build."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:79",
+      "summary": "Implement and prove honest install/build write-failure rejection through the first draft; retain linked unreadable-preload obligation before activation/equality/recovery consumes bytes."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:82",
+      "summary": "Implement and prove installer-only dedup with durable equality/directory evidence, ordinary dirty/unknown healing, lock/integrity checks and changed/missing-file repair."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:87",
+      "summary": "Implement and measure reduced native handle/root lookup while proving fresh reads, deletion/recreation, old directory views and native receiver/argument behavior."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

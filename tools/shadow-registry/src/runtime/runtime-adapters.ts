@@ -3,7 +3,11 @@ import { type FsSync, isAbsolute, normalizePath } from '@riftydev/vfs';
 import { shadowSha256 as sha256Hex } from '../internal/sync-sha256.ts';
 // @ts-expect-error hash-pinned generated JS has no hand-maintained declaration.
 import * as generatedRuntime from './generated/esbuild-runtime.js';
-import { type RuntimeEsbuildCjsOuter, publishRuntimeEsbuild } from './realm.ts';
+import {
+  type RuntimeEsbuildCjsOuter,
+  publishRuntimeEsbuild,
+  runtimeEsbuildBindingMatches,
+} from './realm.ts';
 
 export const ESBUILD_RUNTIME_ADAPTER_ID = 'rifty.runtime-adapter.esbuild.v1';
 const ESBUILD_RUNTIME_PACKAGE_SUFFIX = '/node_modules/esbuild-wasm';
@@ -98,8 +102,9 @@ async function activateEsbuild(
       `runtime-adapter.esbuild wasm sha256 is ${digest}, expected ${ESBUILD_WASM_SHA256}`,
     );
   }
-  const outer = await startGeneratedEsbuildRuntime({ bytes, fs, cwd });
-  publishRuntimeEsbuild(outer);
+  if (runtimeEsbuildBindingMatches(fs, normalizedCwd)) return;
+  const outer = await startGeneratedEsbuildRuntime({ bytes, fs, cwd: normalizedCwd });
+  publishRuntimeEsbuild(outer, { fs, cwd: normalizedCwd });
 }
 
 export async function activatePackageRuntimeAdapters(options: {

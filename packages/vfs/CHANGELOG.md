@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- Expose scheduler/ledger-backed persistence eligibility for installer-only equality checks; pending and failed ancestors remain ineligible.
+
+- OPFS boot uses one native traversal and shared root; concurrent initialization
+  shares one retryable acquisition. Unreadable preload rejects; uncached sync
+  read/copy throws EIO instead of fabricating empty bytes (ADR-0393).
+
 - **Dedicated Workers select OPFS from sync-access-handle capability, not
   COI (ADR-0372).** `detectVfsBackend()` now uses
   `OpfsFsSync.isSupported()` as the paired-backend authority. Capable

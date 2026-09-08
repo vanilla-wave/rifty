@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Reuse an already-active esbuild adapter for the same filesystem and cwd after strict installed-byte validation; repeated install/open no longer restarts the service.
+
 - Vite action preparation rejects a missing/non-callable host keepalive tracker before adapter startup or CLI execution; informational and unrelated entries remain valid without it.
 
 - Own existing Vite/esbuild/emnapi runtime, patches, manifest and launch preparation through a closed runtime entry; data catalog stays separate (ADR-0384).

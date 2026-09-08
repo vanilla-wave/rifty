@@ -19,6 +19,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0276 | Semantic VFS replacements use applied owner evidence |
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
 | 0372 | Dedicated-Worker sync capability selects OPFS without COI |
+| 0393 | Single-pass honest OPFS preload |
 
 ### kernel
 
@@ -316,6 +317,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0377 | No-COI resident tool and restart lifecycle |
 | 0378 | Causal resident port ownership |
 | 0379 | Resident entry admission authority |
+| 0392 | Persisted no-COI warm activation and install-only durable equality |
 
 ## Superseded (removed)
 

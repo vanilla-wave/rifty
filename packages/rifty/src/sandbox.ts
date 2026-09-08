@@ -95,6 +95,8 @@ export interface SandboxStartBinInput {
 
 export interface SandboxToolchain {
   install(input: ToolchainInstallRequest): Promise<void>;
+  /** Activate a compatible saved installation; never reinstall or repair files. */
+  open(input: ToolchainInstallRequest): Promise<void>;
   runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
   startBin(input: SandboxStartBinInput): Promise<SandboxResidentBin>;
 }
@@ -480,6 +482,10 @@ async function bootToolchainSandbox(options: {
   };
 
   const toolchain: SandboxToolchain = {
+    async open(input) {
+      assertOperable();
+      await current.toolchain.open(input);
+    },
     async install(input) {
       assertOperable();
       await current.toolchain.install(input);

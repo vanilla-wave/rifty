@@ -31,8 +31,23 @@ function decodeBytes(bytes: Uint8Array, encoding: ReadFileEncoding): string {
   return new TextDecoder(label).decode(bytes);
 }
 
+/** Package-internal composition helper; failures acquiring root remain distinct from preload. */
+export async function acquireOpfsRoot(): Promise<FileSystemDirectoryHandle> {
+  if (!OpfsVfs.isSupported()) {
+    throw new VfsError('EPERM', '/', 'OPFS is not available in this environment');
+  }
+  const root = await navigator.storage?.getDirectory();
+  if (!root) throw new VfsError('EPERM', '/', 'OPFS getDirectory returned undefined');
+  return root;
+}
+
 export class OpfsVfs implements Vfs {
-  private root: FileSystemDirectoryHandle | null = null;
+  private root: FileSystemDirectoryHandle | null;
+  private initialization: Promise<void> | null = null;
+
+  constructor(acquiredRoot?: FileSystemDirectoryHandle) {
+    this.root = acquiredRoot ?? null;
+  }
   /**
    * Side-table for `utimes` — OPFS exposes no mtime mutation on
    * `FileSystemFileHandle` or `FileSystemSyncAccessHandle` (ADR-0029, ADR-0041).
@@ -51,12 +66,17 @@ export class OpfsVfs implements Vfs {
 
   async init(): Promise<void> {
     if (this.root) return;
-    if (!OpfsVfs.isSupported()) {
-      throw new VfsError('EPERM', '/', 'OPFS is not available in this environment');
+    if (!this.initialization) {
+      this.initialization = acquireOpfsRoot()
+        .then((root) => {
+          this.root = root;
+        })
+        .catch((error: unknown) => {
+          this.initialization = null;
+          throw error;
+        });
     }
-    const dir = await navigator.storage?.getDirectory();
-    if (!dir) throw new VfsError('EPERM', '/', 'OPFS getDirectory returned undefined');
-    this.root = dir;
+    await this.initialization;
   }
 
   private async getDirectory(
