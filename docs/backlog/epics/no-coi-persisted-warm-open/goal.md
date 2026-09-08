@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Reopen persisted no-COI projects without replacing installed files
 created: 2026-09-08
 value: Embedded IDEs reopen a persisted Node project with usable runtime adapters and retained local dependency edits, while explicit installs avoid redundant OPFS writes and never hide persistence failure.
