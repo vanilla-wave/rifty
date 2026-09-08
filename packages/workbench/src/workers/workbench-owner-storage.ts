@@ -27,13 +27,14 @@ export interface WorkbenchOwnerStorageAuthority {
 
 export interface WorkbenchOwnerStorageInstallers {
   openMemory(): void | Promise<void>;
-  openOpfs(): Promise<OpfsInstallation>;
+  openOpfs(options?: { readonly namespace?: string }): Promise<OpfsInstallation>;
 }
 
 export interface WorkbenchOwnerStorageOptions {
   readonly installers?: WorkbenchOwnerStorageInstallers;
   readonly proofTimeoutMs?: number;
   readonly createProofId?: () => string;
+  readonly namespace?: string;
 }
 
 function defaultProofId(): string {
@@ -156,7 +157,9 @@ export async function installWorkbenchOwnerStorageAuthority(
   const snapshot = await selectOwnerStorage(policy, {
     openMemory: () => installers.openMemory(),
     openOpfs: async () => {
-      const installation = await installers.openOpfs();
+      const installation = await installers.openOpfs(
+        options.namespace === undefined ? undefined : { namespace: options.namespace },
+      );
       openedOpfs = installation;
       return installation;
     },

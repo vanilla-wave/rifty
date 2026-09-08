@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Optional `storage.namespace` confines Workbench OPFS preload and writes
+  to a host-selected relative directory; omitted keeps the origin root
+  (ADR-0401).
+
 - Snapshot-only Workbench admission: omitted `packageAcquisition.registryUrl`
   (and Eddy) is valid; a required unrestorable snapshot rejects before guest
   start instead of becoming deferred install; later `npm install` fails

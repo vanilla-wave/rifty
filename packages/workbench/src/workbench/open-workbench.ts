@@ -198,7 +198,7 @@ async function initializeWorkbench(
     const started = await dependencies.owner.start(
       Object.freeze({
         ...options.owner,
-        storage: Object.freeze({ persistence: options.storage }),
+        storage: options.storage,
       }),
     );
     owner = started.owner;

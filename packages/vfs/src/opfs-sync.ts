@@ -284,7 +284,10 @@ export class OpfsFsSync implements FsSync {
    * content write-through and the boot preload (ADR-0072). Omitting it
    * keeps the no-persistence test path working.
    */
-  static async init(paired?: PairedAsyncSurface): Promise<OpfsFsSync> {
+  static async init(
+    paired?: PairedAsyncSurface,
+    root?: FileSystemDirectoryHandle,
+  ): Promise<OpfsFsSync> {
     if (!OpfsFsSync.isSupported()) {
       throw new NotImplementedError(
         'OpfsFsSync',
@@ -294,7 +297,7 @@ export class OpfsFsSync implements FsSync {
     if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
       throw new VfsError('EPERM', '/', 'OPFS navigator.storage.getDirectory unavailable');
     }
-    const dir = await navigator.storage.getDirectory();
+    const dir = root ?? (await navigator.storage.getDirectory());
     const instance = new OpfsFsSync(dir, paired);
     await instance.refreshIndex();
     await instance.preloadContent();

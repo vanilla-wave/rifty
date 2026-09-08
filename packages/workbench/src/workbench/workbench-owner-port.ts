@@ -87,7 +87,10 @@ export interface WorkbenchOwnerStartInput {
       readonly presetPins: Readonly<Record<string, string>>;
     };
   };
-  readonly storage: { readonly persistence: OwnerStoragePersistence };
+  readonly storage: {
+    readonly persistence: OwnerStoragePersistence;
+    readonly namespace?: string;
+  };
   /** First-party companion only; captured historical selection, never guest env. */
   readonly legacyWorkspacePrefix?: string;
   /** First-party companion only; one immutable page URL snapshot for definition ingress. */

@@ -5,6 +5,7 @@
  * keeps a second, drifting option parser from appearing beside it.
  */
 import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
+import { parseOpfsStorageNamespace } from '@riftydev/vfs/internal';
 import type { OwnerStoragePersistence } from '../../workers/owner-storage.ts';
 import type { WorkbenchOwnerStartInput } from '../workbench-owner-port.ts';
 
@@ -50,6 +51,7 @@ export interface WorkbenchOptions {
   };
   readonly storage: {
     readonly persistence: StoragePersistence;
+    readonly namespace?: string;
   };
 }
 
@@ -59,7 +61,10 @@ export interface ValidatedOptions {
     readonly scope: string;
   };
   readonly owner: Omit<NormalizedWorkbenchOwnerInput, 'storage'>;
-  readonly storage: StoragePersistence;
+  readonly storage: {
+    readonly persistence: StoragePersistence;
+    readonly namespace?: string;
+  };
 }
 
 export interface ValidatedUrlContext {
@@ -132,6 +137,8 @@ export function validateWorkbenchOptions(
   if (persistence !== 'required' && persistence !== 'preferred' && persistence !== 'ephemeral') {
     throw new TypeError('storage.persistence must be required, preferred, or ephemeral');
   }
+  const namespace = parseOpfsStorageNamespace(storage.namespace);
+  const admittedNamespace = namespace === undefined ? undefined : (storage.namespace as string);
 
   const serviceWorkerUrl = riftyServiceWorkerUrl(
     serviceWorker.url,
@@ -195,7 +202,10 @@ export function validateWorkbenchOptions(
         ...(eddy === undefined ? {} : { eddy }),
       }),
     }),
-    storage: persistence,
+    storage: Object.freeze({
+      persistence,
+      ...(admittedNamespace === undefined ? {} : { namespace: admittedNamespace }),
+    }),
   });
 }
 

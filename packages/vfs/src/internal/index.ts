@@ -26,3 +26,8 @@ export {
   MemoryFsSync,
 } from '../sync-mirror.ts';
 export { MemoryBackend } from '../memory-backend.ts';
+export {
+  parseOpfsStorageNamespace,
+  resolveOpfsStorageRoot,
+} from '../opfs-storage-namespace.ts';
+export type { InstallOpfsFsOptions } from '../sync-mirror.ts';

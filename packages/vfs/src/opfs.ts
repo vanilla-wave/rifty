@@ -18,6 +18,7 @@ import {
   isCrswapArtifactName,
   mapOpfsError,
 } from './opfs-errors.ts';
+import { resolveOpfsStorageRoot } from './opfs-storage-namespace.ts';
 import { basename, dirname, normalizeAbsolute, segments } from './path.ts';
 import type { Vfs, VfsDirent, VfsStat } from './types.ts';
 
@@ -49,14 +50,19 @@ export class OpfsVfs implements Vfs {
     return Boolean(s && typeof s.getDirectory === 'function');
   }
 
-  async init(): Promise<void> {
+  async init(options?: {
+    readonly namespace?: string;
+    readonly root?: FileSystemDirectoryHandle;
+  }): Promise<void> {
     if (this.root) return;
+    if (options?.root !== undefined) {
+      this.root = options.root;
+      return;
+    }
     if (!OpfsVfs.isSupported()) {
       throw new VfsError('EPERM', '/', 'OPFS is not available in this environment');
     }
-    const dir = await navigator.storage?.getDirectory();
-    if (!dir) throw new VfsError('EPERM', '/', 'OPFS getDirectory returned undefined');
-    this.root = dir;
+    this.root = await resolveOpfsStorageRoot(options?.namespace);
   }
 
   private async getDirectory(

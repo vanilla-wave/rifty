@@ -1,3 +1,4 @@
+import { parseOpfsStorageNamespace } from '@riftydev/vfs/internal';
 import type { PtyPreview, PtyPreviewReq } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import type { SerializedWorkbenchOwnerError } from './errors.ts';
@@ -59,7 +60,10 @@ export interface WorkbenchOwnerBootConfig {
       readonly presetPins: Readonly<Record<string, string>>;
     };
   };
-  readonly storage: { readonly persistence: 'required' | 'preferred' | 'ephemeral' };
+  readonly storage: {
+    readonly persistence: 'required' | 'preferred' | 'ephemeral';
+    readonly namespace?: string;
+  };
   readonly legacyWorkspacePrefix?: string;
   readonly playgroundUrlContext?: {
     readonly apiBaseUrl: string;
@@ -260,13 +264,22 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   }
 
   const storage = record(config.storage, 'owner boot storage policy');
-  exact(storage, ['persistence'], 'owner boot storage policy');
+  exact(
+    storage,
+    optionalKeys(storage, ['persistence'], ['namespace']),
+    'owner boot storage policy',
+  );
   if (
     storage.persistence !== 'required' &&
     storage.persistence !== 'preferred' &&
     storage.persistence !== 'ephemeral'
   ) {
     throw invalid('owner boot storage policy');
+  }
+  let namespace: string | undefined;
+  if (own(storage, 'namespace')) {
+    parseOpfsStorageNamespace(storage.namespace);
+    namespace = string(storage.namespace, 'storage.namespace');
   }
 
   const frozenDeployment = Object.freeze({
@@ -311,7 +324,10 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   return Object.freeze({
     deployment: frozenDeployment,
     packageAcquisition: frozenAcquisition,
-    storage: Object.freeze({ persistence: storage.persistence }),
+    storage: Object.freeze({
+      persistence: storage.persistence,
+      ...(namespace === undefined ? {} : { namespace }),
+    }),
     ...(legacyWorkspacePrefix === undefined ? {} : { legacyWorkspacePrefix }),
     ...(playgroundUrlContext === undefined ? {} : { playgroundUrlContext }),
   });

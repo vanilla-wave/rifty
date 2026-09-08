@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Optional `installOpfsFs({ namespace })` / `OpfsVfs.init({ namespace })`
+  binds both paired OPFS surfaces to a host-selected relative directory
+  (ADR-0401). Omitted namespace stays the origin root.
+
 ### Fixed
 
 - **Dedicated Workers select OPFS from sync-access-handle capability, not
