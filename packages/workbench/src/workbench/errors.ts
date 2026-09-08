@@ -184,10 +184,18 @@ export function isRetryableProjectClosePreflightError(
 export interface SerializedWorkbenchOwnerError {
   readonly name: string;
   readonly message: string;
+  readonly paths?: readonly string[];
 }
 
 /** Clone-safe owner failure payload; protocol inspection owns field validation. */
 export function serializeWorkbenchOwnerError(error: unknown): SerializedWorkbenchOwnerError {
+  if (error instanceof SnapshotApplicationConflictError) {
+    return Object.freeze({
+      name: error.name,
+      message: error.message,
+      paths: error.paths,
+    });
+  }
   if (error instanceof Error) {
     return Object.freeze({
       name: error.name.length > 0 ? error.name : 'Error',
@@ -199,6 +207,9 @@ export function serializeWorkbenchOwnerError(error: unknown): SerializedWorkbenc
 
 /** Restore owner-crossing public domain prototypes without guessing constructor data. */
 export function deserializeWorkbenchOwnerError(value: SerializedWorkbenchOwnerError): Error {
+  if (value.name === 'SnapshotApplicationConflictError' && value.paths !== undefined) {
+    return new SnapshotApplicationConflictError(value.paths);
+  }
   const error = new Error(value.message);
   const prototype =
     value.name === 'ProjectDefinitionMismatchError'

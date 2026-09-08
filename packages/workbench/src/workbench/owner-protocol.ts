@@ -493,11 +493,24 @@ function inspectStorage(value: unknown): OwnerStorageSnapshot {
 
 function inspectSerializedError(value: unknown): WorkbenchOwnerFailure['error'] {
   const error = record(value, 'serialized owner error');
-  exact(error, ['name', 'message'], 'serialized owner error');
+  exact(error, optionalKeys(error, ['name', 'message'], ['paths']), 'serialized owner error');
   return Object.freeze({
     name: nonEmptyString(error.name, 'serialized owner error name'),
     message: string(error.message, 'serialized owner error message'),
+    ...(error.paths === undefined ? {} : { paths: inspectConflictPaths(error.paths) }),
   });
+}
+
+function inspectConflictPaths(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) throw invalid('serialized owner error paths');
+  return Object.freeze(
+    value.map((path) => {
+      if (typeof path !== 'string' || path.length === 0) {
+        throw invalid('serialized owner error path');
+      }
+      return path;
+    }),
+  );
 }
 
 function ownerProjectToken(value: unknown): OwnerProjectToken {

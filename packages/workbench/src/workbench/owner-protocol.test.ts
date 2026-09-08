@@ -261,6 +261,25 @@ describe('Workbench owner protocol', () => {
       type: 'workbench:failure',
       error: { name: 'QuotaExceededError', message: 'owner storage open failed' },
     });
+    expect(
+      ownerMessage({
+        type: 'workbench:failure',
+        opId: 'scratch-1',
+        error: {
+          name: 'SnapshotApplicationConflictError',
+          message: 'SnapshotApplicationConflictError: /node_modules/pin',
+          paths: ['/node_modules/pin'],
+        },
+      }),
+    ).toEqual({
+      type: 'workbench:failure',
+      opId: 'scratch-1',
+      error: {
+        name: 'SnapshotApplicationConflictError',
+        message: 'SnapshotApplicationConflictError: /node_modules/pin',
+        paths: ['/node_modules/pin'],
+      },
+    });
   });
 
   it('admits clone-safe open, close, and delete commands without a page-selected project token', () => {

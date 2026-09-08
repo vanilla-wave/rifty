@@ -3,6 +3,7 @@ import {
   ClosedHandleError,
   ProjectBusyError,
   ProjectDefinitionMismatchError,
+  SnapshotApplicationConflictError,
   deserializeWorkbenchOwnerError,
   serializeWorkbenchOwnerError,
 } from './errors.ts';
@@ -18,10 +19,20 @@ describe('Workbench owner error codec', () => {
     const closed = deserializeWorkbenchOwnerError(
       serializeWorkbenchOwnerError(new ClosedHandleError('Workbench owner')),
     );
+    const conflict = deserializeWorkbenchOwnerError(
+      serializeWorkbenchOwnerError(
+        new SnapshotApplicationConflictError(['/package-lock.json', '/node_modules/pin']),
+      ),
+    );
 
     expect(mismatch).toBeInstanceOf(ProjectDefinitionMismatchError);
     expect(busy).toBeInstanceOf(ProjectBusyError);
     expect(closed).toBeInstanceOf(ClosedHandleError);
+    expect(conflict).toBeInstanceOf(SnapshotApplicationConflictError);
+    expect(conflict).toMatchObject({
+      name: 'SnapshotApplicationConflictError',
+      paths: ['/node_modules/pin', '/package-lock.json'],
+    });
   });
 
   it('keeps unknown owner failures plain while preserving their name and message', () => {
