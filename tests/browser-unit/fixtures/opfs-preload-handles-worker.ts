@@ -3,7 +3,7 @@ import { OpfsFsSync, OpfsVfs, initBackend, syncMirror } from '@riftydev/vfs';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-type Mode = 'preload' | 'unreadable' | 'unreadable-bytes' | 'concurrent' | 'native';
+type Mode = 'preload' | 'unreadable' | 'unreadable-bytes' | 'concurrent' | 'native' | 'empty';
 const enc = new TextEncoder();
 
 function errorName(error: unknown): string {
@@ -82,6 +82,20 @@ async function run(mode: Mode) {
       );
       fsSync.closeAll();
       return { calls, elapsedMs, actual };
+    }
+    if (mode === 'empty') {
+      await parent.getFileHandle('empty.txt', { create: true });
+      await initBackend();
+      const fs = syncMirror();
+      if (!(fs instanceof OpfsFsSync)) throw new Error('OPFS backend required');
+      const source = `/${prefix}/empty.txt`;
+      const target = `/${prefix}/copy.txt`;
+      const read = Array.from(fs.readFileBytesSync(source));
+      fs.copyFileSync(source, target);
+      const report = await fs.flush();
+      const copied = Array.from(await new OpfsVfs().readFile(target));
+      fs.closeAll();
+      return { read, copied, failures: report.total };
     }
     if (mode === 'unreadable' || mode === 'unreadable-bytes') {
       const boot = await outcome(async () => {

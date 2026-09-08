@@ -1,3 +1,4 @@
+export { setRuntimeWorkerFsComposition } from './worker-fs-composition.ts';
 export { spawnToolchainRuntime } from '../host.ts';
 export { createModuleLoaderWithBuiltinOverrides } from '../module-loader/loader.ts';
 export {

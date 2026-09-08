@@ -14,7 +14,7 @@
  * Boot also installs Node-compatible globals (`process`, `Buffer`, timers).
  */
 
-import { initBackend, syncMirror } from '@riftydev/vfs';
+import { OpfsPreloadError, initBackend, syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
 import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './builtins/process.ts';
@@ -26,6 +26,7 @@ import {
   isSandboxToolchainResidentTransitionActive,
   sandboxToolchainWebAssembly,
 } from './internal/sandbox-toolchain-realm.ts';
+import { composeRuntimeWorkerFs } from './internal/worker-fs-composition.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { vmEngineFromWorkerName } from './internal/worker-vm-engine.ts';
 import { createModuleLoader } from './module-loader/index.ts';
@@ -125,6 +126,7 @@ const boot = (async () => {
   try {
     backend = await initBackend();
   } catch (err) {
+    if (err instanceof OpfsPreloadError) throw err;
     // OPFS init failed for this realm — degrade to in-memory so the runtime still
     // boots (mirrors the playground bootstrap fallback). Persistence is lost but
     // eval keeps working.
@@ -149,6 +151,7 @@ const boot = (async () => {
   // Build the loader from the active sync mirror (ADR-0014 + ADR-0037 +
   // ADR-0072): `node:fs` reads `syncMirror()` live and the loader captures the
   // same instance, so both see the one OPFS (or memory) tree for this realm.
+  composeRuntimeWorkerFs();
   const active = syncMirror();
   const loader = createModuleLoader(active, { cwd: '/' });
 
@@ -253,4 +256,12 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   }
 });
 
-void boot.then(() => post({ type: 'ready' }));
+void boot.then(
+  () => post({ type: 'ready' }),
+  (error: unknown) => {
+    // The host's existing Worker error owner rejects handshake and pending calls.
+    setTimeout(() => {
+      throw error;
+    }, 0);
+  },
+);

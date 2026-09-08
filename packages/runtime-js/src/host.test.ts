@@ -311,7 +311,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         'later version',
         () => ({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v3',
+          protocol: 'rifty.sandbox-toolchain/v4',
           vfsBackend: 'memory',
         }),
       ],
@@ -619,6 +619,41 @@ describe('spawnToolchainRuntime trust boundary', () => {
     });
   });
 
+  it('opens through its own wire operation and retains the returned activation for restart', async () => {
+    installFakeWorker();
+    const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
+    const worker = admitToolchain(runtime);
+    await runtime.toolchainReady;
+    const request = { cwd: '/saved', registryUrl: '/registry' };
+    const opening = runtime.toolchain.open(request);
+    request.cwd = '/changed';
+    await Promise.resolve();
+    expect(worker.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'open',
+          input: { cwd: '/saved', registryUrl: '/registry' },
+        },
+      },
+    ]);
+    const state = {
+      cwd: '/saved',
+      bindings: [],
+      vfsBackend: 'opfs' as const,
+      files: [{ path: '/saved/package.json', data: new Uint8Array([1]) }],
+    };
+    worker.emit({
+      type: 'toolchain-result',
+      result: { id: 1, ok: true, value: { activationState: state } },
+    });
+    await opening;
+    expect(runtime.snapshotToolchainState()).toEqual(state);
+    state.files[0]?.data.fill(2);
+    expect(runtime.snapshotToolchainState()?.files[0]?.data).toEqual(new Uint8Array([1]));
+  });
+
   it('validates, snapshots and restores activation state without an install request', async () => {
     installFakeWorker();
     const runtime = spawnToolchainRuntime({ workerUrl: '/toolchain-worker.js' });
@@ -916,6 +951,11 @@ describe('spawnToolchainRuntime trust boundary', () => {
     };
 
     const calls = [
+      () => runtime.toolchain.open(missingInstallField as { cwd: string; registryUrl: string }),
+      () => runtime.toolchain.open(extraInstallField),
+      () => runtime.toolchain.open({ cwd: 'relative', registryUrl: '/registry' }),
+      () => runtime.toolchain.open(accessor as { cwd: string; registryUrl: string }),
+      () => runtime.toolchain.open(symbolInput),
       () => runtime.toolchain.install(missingInstallField as { cwd: string; registryUrl: string }),
       () => runtime.toolchain.install(extraInstallField),
       () => runtime.toolchain.install({ cwd: 'relative', registryUrl: '/registry' }),

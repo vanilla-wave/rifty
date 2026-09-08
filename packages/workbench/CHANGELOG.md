@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Explicit no-COI install skips only fresh, nonempty, durable-equal package bytes and verified recursive directories; dirty paths retain healing.
+
+- No-COI open activates saved adapters from stamp/lock authority; explicit install publishes durable claims through shared reserved-path guards.
+
 - Reject no-COI install/build when OPFS reports unhealed persistence failures.
 
 - Package preparation delegates to registry; ordinary `.vite` files survive snapshots/archives and generic diagnostics use Workbench provenance (ADR-0384).

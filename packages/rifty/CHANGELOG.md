@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add toolchain.open({cwd, registryUrl}) for compatible saved installations; preserve dependency edits and require explicit install for missing/incompatible proof.
+
 - Load the page VFS backend only for generic sandbox creation; import failure retains the visible memory fallback.
 
 - No-COI toolchain defaults `node:vm` to rewrite; `vmEngine: 'quickjs'` restores

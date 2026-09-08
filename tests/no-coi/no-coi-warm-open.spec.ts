@@ -103,13 +103,21 @@ async function rejectedOpen(
   page: Page,
   registryUrl = '/npm-registry',
 ): Promise<{ name: string; message: string }> {
-  try {
-    await invoke(page, 'open', [root, registryUrl]);
-    return { name: 'resolved', message: '' };
-  } catch (error) {
-    const inspected = error as Error;
-    return { name: inspected.name, message: inspected.message };
-  }
+  return page.evaluate(
+    async ({ url, root, registryUrl }) => {
+      const fixture = (await import(/* @vite-ignore */ url)) as {
+        open(cwd: string, registryUrl: string): Promise<void>;
+      };
+      try {
+        await fixture.open(root, registryUrl);
+        return { name: 'resolved', message: '' };
+      } catch (error) {
+        const inspected = error as Error;
+        return { name: inspected.name, message: inspected.message };
+      }
+    },
+    { url: pageFixtureUrl, root, registryUrl },
+  );
 }
 
 test('full page warm-open activates Vite and preserves dependency edits until explicit cached repair', async ({
@@ -293,6 +301,24 @@ test('public fs and guest copy cannot manufacture reserved installation authorit
   `,
     ]),
   ).toContain('claim-rejected:');
+  expect(await durableTree(page)).toEqual(before);
+  await invoke(page, 'dispose');
+});
+
+test('explicit nested install demotes the ancestor claim while ordinary dependency edits preserve it', async ({
+  page,
+}) => {
+  await boot(page);
+  await seed(page);
+  await invoke(page, 'install', [root]);
+  const nested = `${root}/node_modules/local-fixture`;
+  await invoke(page, 'write', [`${nested}/package.json`, '{"name":"nested","version":"1.0.0"}']);
+  await invoke(page, 'open', [root]);
+  await invoke(page, 'install', [nested]);
+  await reopen(page);
+  const before = await durableTree(page);
+  const failure = await rejectedOpen(page);
+  expect(failure.name).toBe('SandboxInstallRequiredError');
   expect(await durableTree(page)).toEqual(before);
   await invoke(page, 'dispose');
 });

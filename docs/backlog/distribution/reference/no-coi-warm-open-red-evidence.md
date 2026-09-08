@@ -89,3 +89,73 @@ policy.
   backend selection/fallback and before `createModuleLoader`). `initBackend`
   always replaces the mirror; pre-import initialization or late replacement
   does not establish a single captured authority.
+
+## Implementation and GREEN
+
+Implementation in the isolated PR #321 checkout based on `b8014372c`.
+One Worker composition callback installs the shared reserved-claim guard before
+module loading; it retains the raw/native surfaces only for installer equality.
+Existing InstallStampAuthority owns demotion/promotion. Open checks exact
+no-COI request identity and decodes bindings from the trusted lockfile.
+No additional receipt, tree ledger, owner revision, or journal was introduced.
+
+First full browser implementation run: 11/12 passed. The full-page case reached
+Vite warm build and preserved edits, then failed on explicit repair:
+
+```text
+Error: Cannot start the esbuild runtime more than once
+  at startGeneratedEsbuildRuntime
+  at activatePackageRuntimeAdapters
+  at installToolchainPackages
+```
+
+This is the required repeated activation case, not an unrelated new feature.
+The registry's existing realm owner now records the service's filesystem/cwd
+binding. After validating current installed WASM bytes, the identical binding
+reuses that service. The generated runtime and guest esbuild initialize behavior
+remain unchanged. After repair: full-page case passed (12.5 s), and existing
+successive OPFS-memory-OPFS recovery passed (2.1 s).
+
+ADR-0307 expressly requires ancestor demotion before a nested installer event.
+Added an executed regression before the narrow ancestor demotion change:
+
+```text
+explicit nested install demotes the ancestor claim
+Expected: SandboxInstallRequiredError
+Received: resolved
+```
+
+After the fix the page-level error capture preserves its real class through
+Playwright serialization; the strict expected error remains unchanged. Ordinary
+extra dependency files still preserve trust. Nested installation demotes only
+existing ancestor claims, through the existing authority.
+
+Final integrated command:
+
+```sh
+RIFTY_NO_COI_PORT=5521 RIFTY_NO_COI_ORACLE_PORT=5522 RIFTY_NO_COI_RESOURCE_PORT=5523 pnpm exec playwright test --config playwright.no-coi.config.ts tests/no-coi/no-coi-warm-open.spec.ts tests/no-coi/no-coi-install-dedup.spec.ts tests/no-coi/no-coi-persistence.fault.spec.ts --reporter=list
+```
+
+```text
+Chromium/148.0.7778.96
+16 passed (29.7s)
+full page Vite warm-open + cached repair: passed (10.1s)
+```
+
+The warm-open suite independently digests every persisted project file and
+counts native writable/mkdir/remove calls. It proves no opening mutation,
+registry request or install wire request; cold/warm/repaired Vite builds succeed.
+Eight authority refusal cases, native lock/claim quota failures, reserved
+write/copy/rename rejection and nested install demotion pass.
+
+Other executed checks:
+
+- Host/SDK/recovery and shared owner tests: 144 passed before supporting fixes;
+  updated focused host/guard/gate/registry set: 82 passed.
+- Existing real OPFS-memory-OPFS restart retains latest acknowledged bytes.
+- `typecheck`: runtime-js, workbench, sdk, shadow-registry passed.
+- `check:arch`, `check:install-stamp-writers`, `check:dir-owner`,
+  `check:file-size` passed. The stamp-writer gate admits only named privileged IO
+  contexts in the thin adapter; ordinary writes in that same file still fail.
+- New real-MemoryFs guard tests prove fixture loading/preflight, detached claim
+  read bytes, rejected transfer and ordinary recursive copy without claims.

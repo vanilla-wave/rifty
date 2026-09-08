@@ -2,7 +2,14 @@ import { expect, test } from '@playwright/test';
 
 const workerUrl = `/@fs${process.cwd()}/tests/browser-unit/fixtures/opfs-preload-handles-worker.ts`;
 
-for (const mode of ['preload', 'unreadable', 'unreadable-bytes', 'concurrent', 'native'] as const) {
+for (const mode of [
+  'preload',
+  'unreadable',
+  'unreadable-bytes',
+  'concurrent',
+  'native',
+  'empty',
+] as const) {
   test(`OPFS preload and handles: ${mode}`, async ({ page, browser }) => {
     await page.route(/\/unit-harness\.html\?preload=1$/, async (route) => {
       const response = await route.fetch();
@@ -49,6 +56,8 @@ for (const mode of ['preload', 'unreadable', 'unreadable-bytes', 'concurrent', '
       expect(actual.read).toMatchObject({ ok: false });
       expect(actual.copy).toMatchObject({ ok: false });
       expect(actual.copied).toBe(false);
+    } else if (mode === 'empty') {
+      expect(actual).toEqual({ read: [], copied: [], failures: 0 });
     } else if (mode === 'concurrent') {
       expect(actual.initialCalls).toBe(1);
       expect(actual.rejected).toMatchObject({ ok: false });

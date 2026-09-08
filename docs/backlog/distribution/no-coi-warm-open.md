@@ -34,6 +34,7 @@ challenge: 2026-09-08 — clear; inherited accepted I1/I2 direction, independent
 4. Missing/pending/legacy/root-mismatched/policy-mismatched authority, manifest/lock drift and registry request drift reject with explicit-install guidance; saved bytes and native mutation counts unchanged. Carrier: authority refusal cases. → I1
 5. Native lockfile/stamp persistence failure rejects install and cannot authorize successful warm-open after page recreation. Carrier: native-failure cases. → I3
 6. Public fs and guest copy/rename cannot manufacture or transfer reserved installation authority. Carrier: reserved-authority case. → ADR-0307
+7. Explicit installation inside an ancestor dependency tree demotes its existing claim before mutation; ordinary dependency edits retain trust. Carrier: nested-install case. → ADR-0307
 
 ## Reference contract
 
@@ -53,6 +54,7 @@ challenge: 2026-09-08 — clear; inherited accepted I1/I2 direction, independent
 | missing/pending/legacy/policy/root/manifest/lock/registry × open | Explicit install required; no mutation/replay | authority refusal cases → I1 |
 | quota-perm-fail × install lockfile/claim persistence | Reject; no trusted activation on recreation | native-failure cases → I3 |
 | claim ingress × fs.writeFile/copyFile/rename | Refuse reserved authority transfer without mutation | reserved-authority case → ADR-0307 |
+| nested installer × ancestor tree | Demote existing ancestor claim before mutation; future open requires explicit install | nested-install case → ADR-0307 |
 
 One existing Worker finite operation slot owns install/open admission. Existing
 stamp authority owns claim transitions; ordinary dependency writes do not
@@ -65,7 +67,11 @@ No automatic repair on open, tree-byte surveillance, cross-owner coherence or cr
 
 ## Decisions
 
+re-cut: 2026-09-08 — include existing ADR-0307 nested installer invalidation and same-binding adapter recovery, no user-scope change — trace: none
+
 ready-verdict: 2026-09-08 — Contract+RED @ f822d4e2281bd66c28aeafbf63056309e23452a9 — docs/backlog/distribution/reference/issue319-contract-red.json
 
 - 2026-09-08 — preparation only; RED executed on absent public method, downstream acceptance awaits GREEN; record: reference/no-coi-warm-open-red-evidence.md.
 - 2026-09-08 — 0.6 no-COI install did not mint compatible authority; preserve bytes and require explicit install, never adopt lock/tree presence as proof.
+
+- 2026-09-08 — supporting required repairs: same-binding esbuild activation reuse and explicit nested-install ancestor demotion each follow executed RED; integrated Chromium warm/dedup/persistence GREEN 16/16, evidence above.

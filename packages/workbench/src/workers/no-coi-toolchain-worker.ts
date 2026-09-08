@@ -19,9 +19,13 @@ import {
   type ToolchainResult,
   claimSandboxToolchainResidentTransition,
   releaseSandboxToolchainResidentTransition,
+  setRuntimeWorkerFsComposition,
 } from '@riftydev/runtime-js/internal';
 import { type PersistFailureReport, dirname, syncMirror } from '@riftydev/vfs';
+import { INSTALL_STAMP_BASENAME, readInstallStamp } from '../glue/install-stamp.ts';
+import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { declaredGapCause } from './declared-gap-cause.ts';
+import { createNoCoiInstallContext } from './no-coi-install-context.ts';
 import { startResidentNodeEntry } from './resident-node-entry.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -38,6 +42,20 @@ registerNetBuiltins();
 installToolchainCloseSignal();
 
 let runtimeBackend: 'opfs' | 'memory' | null = null;
+let installContext: ReturnType<typeof createNoCoiInstallContext>;
+setRuntimeWorkerFsComposition(() => {
+  installContext = createNoCoiInstallContext();
+});
+
+function installationSlug(registryUrl: string): string {
+  return JSON.stringify(['rifty.no-coi-install/v1', registryUrl]);
+}
+
+function installRequired(reason: string): Error {
+  const error = new Error(`Explicit toolchain.install required: ${reason}`);
+  error.name = 'SandboxInstallRequiredError';
+  return error;
+}
 
 function post(message: ToolchainResult): void {
   self.postMessage({ type: 'toolchain-result', result: message });
@@ -71,17 +89,82 @@ function snapshotFiles(): readonly ToolchainRecoveryFile[] {
   return Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path)));
 }
 
+function activationSnapshot(
+  cwd: string,
+  bindings: ToolchainActivationState['bindings'],
+): ToolchainActivationState {
+  if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
+  return Object.freeze({ cwd, bindings, vfsBackend: runtimeBackend, files: snapshotFiles() });
+}
+
 async function installManifest(input: Extract<ToolchainRequest, { op: 'install' }>['input']) {
   const { installToolchainPackages } = await import('./no-coi-toolchain-install.ts');
-  const bindings = await installToolchainPackages(input);
+  const identity = {
+    root: input.cwd,
+    slug: installationSlug(input.registryUrl),
+    packageJsonText: new TextDecoder().decode(
+      syncMirror().readFileBytesSync(`${input.cwd}/package.json`),
+    ),
+  };
+  const flush = () => installContext.fs.flush();
+  // ADR-0307: nested installation is an installer event in each ancestor tree.
+  const parts = input.cwd.split('/');
+  for (let index = 1; index < parts.length; index++) {
+    if (parts[index] !== 'node_modules') continue;
+    const root = parts.slice(0, index).join('/') || '/';
+    const prior = await readInstallStamp(new SyncMirrorVfs(), root);
+    if (prior === null) continue;
+    const ancestorClaim = await installContext.stamps.demote({ root, slug: prior.slug }, { flush });
+    await installContext.stamps.prepareTreeMutation(ancestorClaim);
+  }
+  const claim = await installContext.stamps.demote(identity, { flush });
+  await installContext.stamps.prepareTreeMutation(claim);
+  const result = await installToolchainPackages(input, installContext.installerVfs);
   await flushMirror();
-  if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
-  return Object.freeze({
-    cwd: input.cwd,
-    bindings,
-    vfsBackend: runtimeBackend,
-    files: snapshotFiles(),
+  const promotion = await installContext.stamps.promote(identity, {
+    epoch: claim.epoch,
+    packages: result.packages,
+    flush,
   });
+  if (promotion.status !== 'trusted') {
+    throw new Error(`installation persistence proof refused: ${JSON.stringify(promotion)}`);
+  }
+  await flushMirror();
+  return activationSnapshot(input.cwd, result.bindings);
+}
+
+async function openInstallation(input: Extract<ToolchainRequest, { op: 'open' }>['input']) {
+  await flushMirror();
+  const checked = await installContext.stamps.check({
+    root: input.cwd,
+    slug: installationSlug(input.registryUrl),
+  });
+  if (checked.status !== 'trusted')
+    throw installRequired('saved installation authority is missing or incompatible');
+  const { planShadowSubstitutionsFromLockfile } = await import('@riftydev/npm-client/internal');
+  let plan: ReturnType<typeof planShadowSubstitutionsFromLockfile>;
+  try {
+    plan = planShadowSubstitutionsFromLockfile(
+      JSON.parse(
+        new TextDecoder().decode(syncMirror().readFileBytesSync(`${input.cwd}/package-lock.json`)),
+      ),
+    );
+  } catch (error) {
+    throw installRequired(
+      `saved lockfile activation is incompatible: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const bindings = Object.freeze(
+    plan.bindings.map((binding) =>
+      Object.freeze({
+        adapterId: binding.adapterId,
+        packagePath: `${input.cwd}/${binding.packagePath}`,
+      }),
+    ),
+  );
+  const { activateWorkbenchRuntimeAdapters } = await import('./workbench-runtime-adapters.ts');
+  await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd: input.cwd });
+  return activationSnapshot(input.cwd, bindings);
 }
 
 interface ProcessExitSignal {
@@ -163,9 +246,24 @@ async function restoreActivation(state: ToolchainActivationState): Promise<void>
   const { activateWorkbenchRuntimeAdapters } = await import('./no-coi-toolchain-install.ts');
   if (runtimeBackend === 'memory' || runtimeBackend !== state.vfsBackend) {
     const fs = syncMirror();
+    const suffix = `/node_modules/${INSTALL_STAMP_BASENAME}`;
+    const claims = state.files.filter((file) => file.path.endsWith(suffix));
+    // A retained host snapshot owns these claims. Revoke old disk markers
+    // before replacement; publish them only after all ordinary bytes persist.
+    for (const file of claims)
+      installContext.claims.remove(file.path.slice(0, -suffix.length) || '/');
+    await flushMirror();
     for (const file of state.files) {
+      if (file.path.endsWith(suffix)) continue;
       fs.mkdirSync(dirname(file.path), { recursive: true });
       fs.writeFileSync(file.path, file.data);
+    }
+    await flushMirror();
+    await installContext.fs.fence();
+    for (const file of claims) {
+      installContext.claims.write(file.path.slice(0, -suffix.length) || '/', file.data, {
+        mkdirTree: true,
+      });
     }
     await flushMirror();
   }
@@ -184,12 +282,16 @@ async function dispatch(
   | { readonly activationState: ToolchainActivationState }
   | undefined
 > {
-  if (residentPort !== null && (request.op === 'install' || request.op === 'run-bin')) {
+  if (
+    residentPort !== null &&
+    (request.op === 'install' || request.op === 'open' || request.op === 'run-bin')
+  ) {
     throw new NotImplementedError(
       'sandbox.toolchain.resident-concurrency',
-      'install/runBin while a resident bin is active is not supported',
+      'install/open/runBin while a resident bin is active is not supported',
     );
   }
+  if (request.op === 'open') return { activationState: await openInstallation(request.input) };
   if (request.op === 'install') {
     return { activationState: await installManifest(request.input) };
   }

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Reject unreadable acquired OPFS preload through Worker-error settlement, including pending eval/fs calls; unavailable-root memory fallback stays intact.
+
+- Toolchain protocol v3 adds validated open activation and composes the guarded Worker filesystem before module loading.
+
 - Remove esbuild-specific realm API/key; exact CJS identity now belongs to registry (ADR-0384).
 
 - Resolve VM overrides from native Worker construction metadata before boot;

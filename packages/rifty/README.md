@@ -130,6 +130,15 @@ await sandbox.restart({
 console.log(sandbox.capabilityReport);
 ```
 
+On a later page load, recreate the sandbox and call
+`await sandbox.toolchain.open({ cwd: '/project', registryUrl: '/npm-registry' })`
+before `runBin` or `startBin`. Open validates the saved installation and activates
+adapters without registry requests, reinstalling, or replacing dependency edits,
+extra files, deletions, or source edits. Explicit `install` reconciles/repairs
+dependencies. Missing, old, or incompatible installation proof throws
+`SandboxInstallRequiredError`; saved bytes stay intact. Install once after an
+upgrade from SDK 0.6 installations, which did not record this proof.
+
 This mode owns runtime, VFS, npm install, installed registry-twin admission, and bin
 execution in one Worker. `startBin` is package-generic; the requested port
 resolves only after listen and routes through the existing SW HTTP/WebSocket
