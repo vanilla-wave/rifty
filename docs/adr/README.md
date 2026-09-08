@@ -318,6 +318,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0386 | Publish deterministic dependency snapshot archives |
 | 0389 | Publish a sealed Workbench dependency-snapshot producer |
 | 0395 | Publish a copyable Workbench runtime-asset closure |
+| 0396 | Apply snapshots through host-selected initial-only and conflict policies |
 
 ## Superseded (removed)
 

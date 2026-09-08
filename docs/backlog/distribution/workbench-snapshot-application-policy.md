@@ -1,68 +1,82 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Apply snapshots through explicit saved-state and file-conflict policies
 created: 2026-09-07
 why: Changing snapshotId currently reseeds an edited Scratch, while hosts need saved state by default and an explicit uniform file-conflict policy for application.
 user_story: As the plugin-sandbox embedder, I want saved projects to win after initial deployment and choose overwrite or error when explicitly applying a snapshot, but current catalog identity changes can silently replace edited files.
 epic: self-hosted-snapshot-workbench
 blocked_by: []
-sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, ADR-0279, ADR-0261]
+sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, docs/backlog/distribution/reference/workbench-snapshot-application-policy-evidence.md, ADR-0396, ADR-0279, ADR-0261]
 code: [packages/workbench/src/workbench/internal/playground-project-definition.ts, packages/workbench/src/workers/playground-project-authority.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/glue/dep-snapshot.ts]
 ---
 
 ## Context
 
-A disposable catalog probe changes only the supplied snapshotId after writing
-user.txt to Scratch, then calls createScratch with preserveDirtySameStarter.
-Current result is dirty=false and user.txt absent. Same-definition reload
-preservation does not cover that path. See the recorded evidence.
+Catalog identity includes snapshotId. `createScratch` reseeds an edited
+Scratch when that id changes; named `openProject` throws mismatch. User
+selected default initial-deployment-only and explicit apply with generic
+overwrite/error. ADR-0396 names the operation-level `snapshotApplication`
+carrier. Evidence: `reference/workbench-snapshot-application-policy-evidence.md`.
 
-User-selected application modes:
+## User scenario
 
-- Initial deployment only (default): seed an absent project; subsequently use
-  saved state, including when the host supplies a new snapshot. Do not fetch or
-  apply an unused asset merely because its id changed. Missing install trust
-  is not evidence that no saved project exists. Incompatible saved state fails
-  with all bytes retained, awaiting the host's explicit choice.
-- Apply: evaluate the supplied payload on every requested application,
-  regardless of prior snapshotId. User selects overwrite or error conflict
-  policy; error defaults from the preserve-before-explicit-update decision.
+The embedder opens a snapshot-backed Scratch, edits `user.txt`, and later
+reopens with a newly baked snapshotId. Default/`initial-deployment-only`
+keeps the edit and does not fetch the unused asset. An explicit apply with
+`conflict: 'error'` reports structural conflicts and writes nothing; with
+`overwrite` it replaces conflicting payload files, adds missing ones, and
+keeps extras. `package.json` / lock / `node_modules` are ordinary paths.
 
-Conflict is structural: different bytes at an existing file path, or an
-incompatible entry/ancestor type. Identical files and directory/directory
-coexistence are nonconflicting. Missing payload targets are added. In error
-mode report conflicting paths before ANY payload mutation, including additions.
-In overwrite mode replace conflicting targets, including the subtree of an
-incompatible directory target; otherwise preserve saved paths absent from the
-payload. The request is application of entries, not an implicit whole-project
-reset. An archive's user/control namespaces remain disjoint; control entries
-are never installed as project files.
+## Acceptance
 
-No policy branch examines whether a conflicting path is package.json,
-package-lock.json or node_modules: the user explicitly rejected that distinction.
-A producer artifact still needs valid compatibility and integrity proofs.
-Preserving extra/local files does not authorize claiming the entire resulting
-tree equals the producer's installed tree. Retire/rederive affected install
-claims through their existing authority; do not bypass conflict policy or run
-an automatic install to manufacture a clean claim. Source edits outside the
-application targets must remain usable as ordinary project state.
+1. Default and `{ mode: 'initial-deployment-only' }` keep an existing Scratch
+   or named project's saved files when only unused snapshot provenance
+   (snapshotId / unused templateId) changes, including dirty Scratch without
+   `preserveDirtySameStarter`; the unused asset is not fetched; catalog
+   adoption stays on the last applied snapshot. `workbench-snapshot-application.contract.test.ts`
+   initial-only Scratch, named-open, and no-fetch cases. → I8
+2. `{ mode: 'apply', conflict?: 'error' | 'overwrite' }` evaluates snapshot
+   payload on every requested apply, including unchanged snapshotId.
+   Identical bytes and directory/directory coexistence are not conflicts;
+   different bytes or file-vs-directory/ancestor clashes are. Error (default)
+   throws `SnapshotApplicationConflictError` with `paths` before any payload
+   mutation, including additions. Overwrite replaces conflicts, adds missing
+   payload files, and keeps extras. Package filenames are ordinary collision
+   fixtures. Same file. → I8
+3. After a successful apply, catalog adoption matches the applied snapshot
+   and install claims are retired/rederived through the existing stamp
+   authority; apply does not run an automatic install to manufacture trust.
+   Missing install trust never counts as "project absent". Same file plus
+   claim case. → I8 → ADR-0396
 
-The policy owns selection/preflight; catalog transactions and package-acquisition
-remain the existing effect owners. Wire/API names are agent-owned ADR decisions.
-Cover Scratch and named saved projects on reopen, new/same snapshot ids, ordinary
-file/path-type conflicts, exact-equal files, absent targets, retained extra
-files, and error-before-any-write. Package filenames are ordinary collision
-fixtures, not a separate semantic mode. Real OPFS crash/reopen must not publish
-partial application as completed or destroy the only preserved copy.
+## Fault matrix
+
+- Structural conflict × apply-error: conflicting paths are reported and the
+  pre-apply tree is byte-identical, including extras and would-be additions.
+  `workbench-snapshot-application.contract.test.ts` error-before-write case. → I8
+- Crash/reopen × apply-overwrite: a torn payload write is not published as
+  completed; the preserved copy remains. `workbench-snapshot-application.fault.test.ts`. → I8
+- Corrupt/incompatible snapshot × apply: existing snapshot identity/restore
+  failures reject before destination mutation. Existing first-materialization
+  identity/restore-plan cases. → ADR-0396
+
+## Out of scope
+
+Snapshot-only admission, storage namespace, orphan recovery, preview prefix,
+and operation budgets remain named siblings. `reset` stays an explicit
+whole-tree replace. Install-kind `createScratch` reseed/`preserveDirtySameStarter`
+behavior is unchanged. Builder-owned registry auth stays excluded.
 
 ## Decisions
 
+- 2026-09-08 — ADR-0396: operation-level `snapshotApplication`; last-applied
+  catalog identity; existing catalog/restore/stamp owners execute effects.
 - 2026-09-07 — user: initial-deployment-only default; saved state wins afterward; explicit apply mode exists (I8).
 - 2026-09-07 — user: conflicts choose overwrite/error, no dependency-specific behavior; applies independently of prior snapshotId (I8).
 - 2026-09-07 — default error follows the user's preserve/stop choice; paths not targeted by application remain saved data, not deletion candidates.
-- 2026-09-07 — exact API/carrier and install-claim reconciliation need an ADR at pickup, preserving the user-owned policy; inherit production tier for new persistence transitions.
+- 2026-09-07 — inherit production tier for new persistence transitions.
 
 ## Challenge
 
-challenge: 2026-09-07 — clear
+challenge: 2026-09-08 — clear
