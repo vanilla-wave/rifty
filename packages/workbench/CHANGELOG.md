@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Dependency snapshots support deterministic standard tar/gzip envelopes with disjoint payload/control paths, long UTF-8 names and empty directories; legacy v3 JSON/gzip remains readable (ADR-0386).
+
 - Package preparation delegates to registry; ordinary `.vite` files survive snapshots/archives and generic diagnostics use Workbench provenance (ADR-0384).
 
 - No-COI worker loads install/activation code on first install or restore; failed chunk fetch rejects that request while eval/fs remain usable.

@@ -8,3 +8,4 @@
 - 2026-09-07 — round 3 user resolved F3/F4 with generic overwrite/error conflict policy; dependency-specific fork framing discarded; application-policy child added for I8 before strict acquisition; re-fit critique pending.
 - 2026-09-07 — re-fit goal, producer, strict acquisition and new application-policy independent critiques clear; eight draft children, goal ready after settled rounds 2/3.
 - 2026-09-08 — user authorized whole-goal implementation in PR #316; codec split before producer while lockfile admission is probed; no destination change.
+- 2026-09-08 — dep-snapshot-tar Contract+RED PASS @ 04bf115f294f9ebfbcc8388accf5202e9a36bf46; fresh reviewer tar_red_verify; after main merge 9b528dbb2, unchanged codec rerun: 4 expected RED / 36 GREEN.

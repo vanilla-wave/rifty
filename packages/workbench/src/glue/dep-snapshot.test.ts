@@ -9,6 +9,7 @@ import {
   parseDepSnapshot,
   restoreDepSnapshot,
   serializeDepSnapshot,
+  serializeDepSnapshotTar,
 } from './dep-snapshot.ts';
 import {
   type TestEnsureProjectDepsOptions,
@@ -322,6 +323,79 @@ describe('dep snapshot (ADR-0135)', () => {
       transport: 'cache',
     });
   });
+
+  it('replays the real LightningCSS tarball offline after a tar-envelope round trip', async () => {
+    const baked = await lightningSnapshot();
+    const tar = serializeDepSnapshotTar(baked);
+    const assetFetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(tar.slice().buffer));
+    let snapshot: DepSnapshotV3;
+    try {
+      snapshot = await fetchDepSnapshot('https://host.test/snapshot.tar');
+    } finally {
+      assetFetch.mockRestore();
+    }
+    expect(snapshot.tarballCache.files).toEqual(baked.tarballCache.files);
+    const restored = createMemoryFs();
+    await restored.vfs.mkdir(ROOT, { recursive: true });
+    await restored.vfs.writeFile(`${ROOT}/package.json`, snapshot.packageJsonText);
+    await restoreDepSnapshot(restored.fsSync, ROOT, snapshot);
+    const registryFetch = vi.fn<typeof fetch>(async () => {
+      throw new Error('registry fetch forbidden during tar snapshot replay');
+    });
+    const replay = await install('fixture', '1.0.0', LIGHTNING_DEPENDENCIES, {
+      vfs: restored.vfs,
+      cwd: ROOT,
+      registry: new RegistryClient({ baseUrl: 'https://registry.invalid', fetch: registryFetch }),
+      onSubstitution: () => undefined,
+    });
+    expect(registryFetch).not.toHaveBeenCalled();
+    expect(replay.provenance.resolution).toBe('lockfile');
+    expect(replay.provenance.packages).toContainEqual({
+      name: LIGHTNING_SOURCE,
+      version: LIGHTNING_VERSION,
+      transport: 'cache',
+    });
+  });
+
+  it.each(['missing', 'corrupt'])(
+    '[fault: poisoned-cache] rejects %s tar replay closure before mutation',
+    async (fault) => {
+      const snapshot = await lightningSnapshot();
+      const tar = serializeDepSnapshotTar({
+        ...snapshot,
+        tarballCache: {
+          ...snapshot.tarballCache,
+          files:
+            fault === 'missing'
+              ? []
+              : snapshot.tarballCache.files.map((file) => ({ ...file, content: btoa('corrupt') })),
+        },
+      });
+      const assetFetch = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(tar.slice().buffer));
+      const target = new MemoryFsSync();
+      write(target, `${ROOT}/node_modules/keep/index.js`, enc.encode('saved'));
+      try {
+        await expect(
+          restoreDepSnapshot(
+            target,
+            ROOT,
+            await fetchDepSnapshot('https://host.test/snapshot.tar'),
+          ),
+        ).rejects.toThrow(fault === 'missing' ? /lockfile closure/ : /integrity mismatch/);
+      } finally {
+        assetFetch.mockRestore();
+      }
+      expect(dec.decode(target.readFileBytesSync(`${ROOT}/node_modules/keep/index.js`))).toBe(
+        'saved',
+      );
+      expect(target.existsSync(`${ROOT}/package-lock.json`)).toBe(false);
+      expect(target.existsSync('/.rifty/tarball-cache')).toBe(false);
+    },
+  );
 
   it('never serializes top-level or nested install-stamp claims', () => {
     const fs = bakedFs();

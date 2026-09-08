@@ -338,7 +338,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 146 → 147 (ADR-0379): deep resident-entry admission authority.
     // 147 → 148 (PR #313): first-use no-COI install/activation module.
     // ADR-0384: seven package implementations now belong to registry.
-    expect(packageProductionFiles).toHaveLength(141);
+    // ADR-0386: standard dependency snapshot tar codec.
+    expect(packageProductionFiles).toHaveLength(142);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

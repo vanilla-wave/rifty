@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Read and write standard dependency snapshot tar envelopes
 created: 2026-09-08
 why: Published dependency snapshots must be inspectable with ordinary archive tools without colliding with user filenames.
@@ -31,7 +31,14 @@ Reference and RED: `reference/dep-snapshot-tar-evidence.md`.
 - Snapshot identity/replay integrity × restore: mismatched identity never admits bytes; absent/altered replay closure fails before mutation. Existing `dep-snapshot.test.ts` replay faults + new identity case. → I1
 - Oversized compressed/decoded body × fetch: existing 128 MiB caps and typed fetch/decompress failure remain. Existing `bounded-asset-fetch.fault.test.ts` declared/streamed caps and `dep-snapshot.test.ts` typed fetch failure; decode uses the same bounded stream owner. → I1
 
+## Out of scope
+
+Public producer, packed browser, application policy and runtime deployment
+remain the named successor units; no arbitrary installed-tree import.
+
 ## Decisions
+
+ready-verdict: 2026-09-08 — Contract+RED @ 04bf115f294f9ebfbcc8388accf5202e9a36bf46
 
 - re-cut: 2026-09-08 — split codec from distribution/dep-snapshot-producer; producer retains public bake/packed-consumer obligations and depends on this codec — trace: none
 - 2026-09-08 — ADR-0386: standard envelope, strict input validation, legacy decode reuse; no new coordinator or external dependency.

@@ -22,3 +22,15 @@ Legacy reader/replay/cache carriers remain in `dep-snapshot.test.ts`; byte-cap o
 Review found macOS AppleDouble sidecars and fault edits targeting PAX headers.
 The fixture now disables copyfile metadata and locates the actual regular-file
 header before corruption; payload attacks keep the control manifest intact.
+
+## Implementation regression — 2026-09-08
+
+`pnpm exec vitest run packages/workbench/src/glue/dep-snapshot-tar.test.ts -t "literal POSIX"`: RED, unsafe-path rejection on literal backslash accepted by Memory VFS. Removed Windows path restrictions from this POSIX envelope; slash traversal/collisions remain rejected. The test restores exact VFS bytes and extracts the literal name with system tar.
+
+## Gate inventory adjustment
+
+First `pr:check` reproduced one test failure in isolation (zero timeouts):
+`extraction-boundary.contract.test.ts` pinned 141 production files; the new
+codec makes 142. Update only that count; exact closed-graph equality and
+unreachable-runtime checks remain. This is an inventory update under PR-4,
+not removal of a behavior assertion.
