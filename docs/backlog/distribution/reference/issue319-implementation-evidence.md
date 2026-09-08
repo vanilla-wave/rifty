@@ -58,3 +58,11 @@ Counts and elapsed time are separate observations, not latency guarantees:
 Original repeat-install baseline counted 26 writable acquisitions. Final three
 remaining writes are installation metadata; persisted-equal package writes are
 skipped. Vite is exercised as acceptance, not used as infrastructure policy.
+
+## Closure
+
+Final source gate: `VITEST_MAX_THREADS=4 VITEST_MIN_THREADS=1 VITEST_MAX_FORKS=4 VITEST_MIN_FORKS=1 pnpm pr:check` PASS, all 25 lanes; test:run 184.6s and parity 62.6s, no retries. Only worker count was limited; all assertions, lanes and timeout criteria stayed intact.
+
+Independent `/root/goal_final_review`: Final+GREEN PASS on a013f8ae7ee1861fa6f2d7b423402f94968a8c4c, 45/45 coverage, no findings. Independently executed extraction/stamp-writer criteria 17/17 and the existing successive OPFS-memory-OPFS recovery case 1/1 (4.9s); raw recovery command uses no-coi-dev-hmr.spec.ts with grep `memory-backend restart` and ports 5561/5562/5563.
+
+All accepted I1–I5 obligations proven. Completed goal/child documents and the consumed unreadable-preload finding are removed; their accepted source and history remain at the reviewed revision. Existing generic directory-healing and cross-realm coherence backlog owners retain their separate scope. PR #321 delivers implementation; merge is outside this hand-off.
