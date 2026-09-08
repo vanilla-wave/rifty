@@ -552,6 +552,22 @@ describe('openWorkbench normalized composition', () => {
     await workbench.close();
   });
 
+  it('threads storage.namespace into the owner start input', async () => {
+    const h = harness();
+    const base = optionsWithDefaults();
+    const workbench = await h.open({
+      ...base,
+      storage: { persistence: 'required', namespace: 'plugin-sandbox' },
+    } as WorkbenchOptions);
+
+    expect(h.owner.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storage: { persistence: 'required', namespace: 'plugin-sandbox' },
+      }),
+    );
+    await workbench.close();
+  });
+
   it('carries an optional companion TypeScript worker through the normalized owner input', async () => {
     const h = harness();
     const base = optionsWithDefaults();
