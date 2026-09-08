@@ -1,0 +1,151 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "I3 unit concern (advisory harness leftovers only) — not a whole-goal merge; I4/I6/I5/I7 and the I1 packed residual remain.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "085d55b3627533977113b6e86759e20af4576372",
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-only.md @ 085d55b3627533977113b6e86759e20af4576372 (BASE 89c106c1c079ad6f66df5ffbdd188409d6a065ef); ready-verdict Contract+RED @ 67655b61000899083e535251e6fc57e97a16a612",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Selected OPFS namespace isolation, empty-on-first-selection, and former-setting reopening remain."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Byte-exact retained orphan Scratch enumeration/download plus fresh Scratch, surviving reopen, remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Host-selected preview prefix under a non-root SW scope with navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Public effective boot/file/tool budgets without hidden shorter sibling deadlines remain."
+    },
+    {
+      "clause": "I1 (packed residual)",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Packed produce/restore from an installed tarball inside the composed whole-scenario packed-host proof remains after the sealed producer landed."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: packageAcquisition: {} (omitted registryUrl and eddy) is valid Workbench admission; Eddy still requires registryUrl (packageAcquisition.eddy requires packageAcquisition.registryUrl).",
+      "source": "acceptance",
+      "trace": "I3+ADR-0400",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-snapshot-only.contract.test.ts:33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: A required snapshot that is missing, corrupt, or identity-mismatched rejects before guest start and does not return kind: 'install'. Registry-present deferred-install cases stay.",
+      "source": "acceptance",
+      "trace": "I3+ADR-0400",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:197",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Snapshot-only restore and later package/terminal commands make zero registry/Eddy requests; absent exact bytes fail loudly rather than network-install.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:227",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: A compatible required snapshot restores as kind: 'ready' and does not schedule install.",
+      "source": "acceptance",
+      "trace": "I3+ADR-0400",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:241",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Corrupt/incompatible required snapshot × first seed or apply — reject before guest start; no deferred install.",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0400",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:197",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Unused new snapshot × initial-only reopen — unused asset is not fetched and does not fail snapshot-only admission.",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:637",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:150",
+          "authority": "",
+          "summary": "I3 workers harness correctly omits RegistryClient, but still constructs registryFetch/networkInstall spies that are never passed to createOwnerPackageState; expect(not.toHaveBeenCalled) on those spies cannot discriminate a restore-time global-fetch registry mutant. Later-install is still killed by the stderr /snapshot-only|registryUrl|packageAcquisition/ assertion and the adapter throw at owner-package-state.ts:391.",
+          "evidence": "pnpm exec vitest run packages/workbench/src/workbench/workbench-snapshot-only.contract.test.ts packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts --reporter=verbose\n\nRUN  v2.1.9 /Users/vanilla-wave/.cursor/worktrees/rifty/main-a07\nTests  7 passed (7)\nHarness: createOwnerPackageState has no registry/install; returned registryFetch/networkInstall are unused. Product throw: owner-package-state.ts:391-394."
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:662",
+          "authority": "",
+          "summary": "Fault matrix 2 still rides the I8 no-fetch case, which constructs RegistryClient and expects reopened.acquisition kind: 'install'. No I3 omitted-registry unused-reopen GREEN case. One-read: skipUnusedSnapshot rewrites materialization to kind: 'install' and prepare-first-materialization returns a deferred plan without consulting registry, so unused reopen does not hard-fail snapshot-only admission.",
+          "evidence": "pnpm exec vitest run packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts -t \"does not fetch an unused new snapshot under initial-only\" --reporter=verbose\n\nTests  1 passed | 16 skipped (17)\nI8 harness RegistryClient; expect kind: 'install'. skipUnusedSnapshot rewrites to install plan without a registry check."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workers/workbench-first-materialization.contract.test.ts:1836",
+          "authority": "",
+          "summary": "The required -t \"records $name exactly, defers install\" is a Vitest regex in which $ anchors, so the control skipped 26/26; a follow-up filter on the interpolated title still proves registry-present deferred install.",
+          "evidence": "Follow-up: pnpm exec vitest run packages/workbench/src/workers/workbench-first-materialization.contract.test.ts -t \"parsed snapshot version failure\" --reporter=verbose\nTests  1 passed | 25 skipped (26). Control harness still constructs RegistryClient."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
