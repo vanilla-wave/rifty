@@ -64,12 +64,20 @@ const expectedOutput = execFileSync(process.execPath, ['main.cjs'], {
   encoding: 'utf8',
 }).trim();
 assert.equal(expectedOutput, 'packed-snapshot-2000');
+const savedEntrySource = "console.log('packed-saved-' + require('ms')('3s'))\n";
+await writeFile(resolve(extracted, 'payload/saved-main.cjs'), savedEntrySource);
+const savedExpectedOutput = execFileSync(process.execPath, ['saved-main.cjs'], {
+  cwd: resolve(extracted, 'payload'),
+  encoding: 'utf8',
+}).trim();
 await writeFile(
   resolve('dist/producer-snapshot.json'),
   JSON.stringify({
     packageJsonText: emittedManifest,
     entrySource,
     expectedOutput,
+    savedEntrySource,
+    savedExpectedOutput,
     snapshotId: first.snapshotId,
     installArtifactIdentity: first.installArtifactIdentity,
     templateId: options.templateId,

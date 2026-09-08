@@ -66,3 +66,7 @@ description: a capable dedicated Worker may select OPFS without COI, while a
 main-window detector describes only that main realm. This ADR's
 Playground/Workbench COI hard gate and honest owner-backed storage/degradation
 contract remain unchanged.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0394 supersedes decision 5's `replace:true` for explicit snapshot application; project-scoped claims and explicit whole-project Reset remain.

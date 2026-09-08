@@ -1221,6 +1221,28 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     console.log(
       'Packed producer browser restore: raw gzip and HTTP-decoded tar, zero registry requests',
     );
+    const registryBeforeApplication = registry.requests.length;
+    const unusedAssetsBefore = observedUrls.filter((url) =>
+      url.includes('/unused-new-snapshot.tar'),
+    ).length;
+    await page.evaluate(
+      async (assetUrl) =>
+        (await window.__RIFTY_PACKED_WORKBENCH__).proveSnapshotApplication(assetUrl),
+      new URL('/producer-snapshot.tar.gz', previewOrigin).href,
+    );
+    assert.equal(
+      registry.requests.length,
+      registryBeforeApplication,
+      'snapshot application never falls back to registry',
+    );
+    assert.equal(
+      observedUrls.filter((url) => url.includes('/unused-new-snapshot.tar')).length,
+      unusedAssetsBefore,
+      'saved state does not fetch the unused new asset',
+    );
+    console.log(
+      'Packed snapshot policy: durable saved-state reopen, public conflict details, repeated same-ID overwrite and real Node output',
+    );
     await page.evaluate(async () => (await window.__RIFTY_PACKED_WORKBENCH__).proveCopiedAssets());
     if (pageErrors.length > 0) {
       throw new Error(`Packed Workbench Chromium page errors:\n${pageErrors.join('\n')}`);

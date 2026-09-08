@@ -4,6 +4,7 @@ import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
 import { type SnapshotProof, runSnapshotProof as proveSnapshot } from './snapshot-proof';
 
 import { proveCopiedToolchain } from './copied-worker-proof';
+import { proveSnapshotApplication } from './snapshot-application-proof';
 
 const assetUrl = (name: string): string => new URL(`./rifty/${name}`, document.baseURI).href;
 const quickjsWasmUrl = assetUrl('quickjs.wasm');
@@ -30,6 +31,7 @@ export interface PackedWorkbenchAcceptance {
   writeMessage(message: string): Promise<void>;
   runSnapshotProof(assetUrl: string): Promise<SnapshotProof>;
   proveCopiedAssets(): Promise<void>;
+  proveSnapshotApplication(assetUrl: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -189,6 +191,9 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     hostWasm: Object.freeze({ quickjs: quickjsWasmUrl, sqlite: sqlWasmUrl }),
     proveCopiedAssets(): Promise<void> {
       return proveCopiedToolchain(noCoiToolchainWorkerUrl);
+    },
+    proveSnapshotApplication(assetUrl: string): Promise<void> {
+      return proveSnapshotApplication(workbenchOptions(), assetUrl);
     },
     runSnapshotProof(assetUrl: string): Promise<SnapshotProof> {
       return proveSnapshot(workbenchOptions(), assetUrl);
