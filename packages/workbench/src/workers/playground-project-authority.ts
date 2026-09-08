@@ -2366,7 +2366,11 @@ export async function createPlaygroundProjectAuthority(
               },
             ]);
           }
-          return snapshot;
+          if (stored.active?.kind === 'scratch') return snapshot;
+          return runCatalogMutation(
+            changedCatalog(stored, { active: Object.freeze({ kind: 'scratch' }) }),
+            [],
+          );
         }
         if (
           input.preserveDirtySameStarter === true &&

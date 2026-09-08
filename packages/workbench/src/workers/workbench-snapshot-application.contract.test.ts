@@ -369,6 +369,43 @@ describe('snapshot application policy (I8)', () => {
     await h.owner.close();
   });
 
+  it('createScratch activates Scratch when only unused snapshot provenance changes', async () => {
+    const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
+    const h = await catalogHarness();
+    const scratchDef = definition('scratch', first.snapshotId, '/snapshots/a.json.gz');
+    await seedDirtyScratch(h, scratchDef, { '/user.txt': 'saved' });
+    await h.catalog.saveScratch({
+      id: 'project-a',
+      name: 'Project A',
+      definition: definition('project-a', first.snapshotId, '/snapshots/a.json.gz'),
+    });
+    await h.catalog.createScratch({ definition: scratchDef });
+    await markDirty(h, scratchDef, { '/user.txt': 'after-save scratch' });
+    await h.catalog.activate({ kind: 'project', id: 'project-a' });
+
+    await h.catalog.createScratch(
+      withApplication(
+        {
+          definition: definition('scratch', next.snapshotId, '/snapshots/b.json.gz'),
+          preserveDirtySameStarter: true,
+        },
+        { mode: 'initial-deployment-only' },
+      ),
+    );
+    const opened = await h.owner.openProject(
+      definition('scratch', next.snapshotId, '/snapshots/b.json.gz'),
+    );
+
+    expect(h.catalog.snapshot().active).toEqual({ kind: 'scratch' });
+    expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('after-save scratch');
+    await close(opened);
+    await h.owner.close();
+  });
+
   it('does not treat apply as a whole-tree reseed', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
     const next = snapshotFixture(
@@ -622,7 +659,7 @@ describe('snapshot application policy (I8)', () => {
     );
 
     expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('user edit');
-    expect(reopened.acquisition).toMatchObject({ kind: 'ready' });
+    expect(reopened.acquisition).toMatchObject({ kind: 'install' });
     expect(
       h.fetchSnapshot.mock.calls.map(
         (call) => new URL(String(call[0]), 'https://playground.invalid/app/').pathname,
