@@ -4,7 +4,7 @@
 
 - Unjournaled orphan Scratch bytes are retained for public catalog
   download while `createScratch` opens a fresh starter; a failed preserve
-  leaves the only copy (ADR-0403).
+  leaves the only copy (ADR-0403, ADR-0404).
 
 - Optional `storage.namespace` confines Workbench OPFS preload and writes
   to a host-selected relative directory; omitted keeps the origin root

@@ -214,6 +214,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0359 | Durability-drain progress as a health-event kind on the workbench owner port |
 | 0360 | Owner operation deadline is a host-configurable budget of durability-progress silence |
 | 0403 | Retain downloadable orphan Scratch beside a fresh Scratch |
+| 0404 | Orphan retain pairs scratch replace so rollback restores the only copy |
 
 ### toolchain-build
 
@@ -373,6 +374,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0403 create + waived-precondition clause | 0404 / note 2026-09-09 | retain transaction scratch half is replace; detection, pointer, list/read, fail-leaves-only-copy, and no second journal stand |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |

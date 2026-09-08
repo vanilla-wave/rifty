@@ -56,7 +56,7 @@ async function harness(fs: DurableOwnerFs) {
       ensure: async () => Object.freeze({ kind: 'install' as const, snapshotFailures: [] }),
     }),
     projectSave: {
-      projectSave: async (_input, run) => run(async () => {}),
+      projectSave: async (_input, run) => run(async () => ({ status: 'untrusted' })),
     },
   });
   return {

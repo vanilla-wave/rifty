@@ -88,3 +88,10 @@ preserve without a fresh Scratch).
 - Catalog schema admits an optional `retainedOrphans` key.
 - Page catalog gains three query methods and matching owner commands.
 - Failed preserve stays a loud pre-state restore, same owner as Save.
+
+## Corrections (active)
+
+2026-09-09 — ADR-0404 overrules the `create` + waived-precondition clause:
+the scratch half of the retain transaction is `replace` so ADR-0279
+before-stage rollback restores the only copy. Detection, pointer, public
+list/read, fail-leaves-only-copy, and no second journal stand.
