@@ -74,6 +74,8 @@ remain I5/I7. Existing storage/claim transaction semantics are not replaced.
 
 ## Decisions
 
+- ready-verdict: 2026-09-09 — Contract+RED @ 1bf453c0ed35ee6dc1734384ab4c79a14f815a9c; reference/workbench-storage-namespace-contract-red.json.
+
 - 2026-09-09 — pickup: ADR-0402 chooses a literal optional namespace and one native handle at the existing pair; default storage, owner/lease and logical identities remain.
 
 - 2026-09-07 — finding draft; observable scope is settled by goal I4; carrier choices and Contract+RED remain at pickup.
