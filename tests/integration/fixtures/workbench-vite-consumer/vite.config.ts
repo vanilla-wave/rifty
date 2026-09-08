@@ -1,11 +1,9 @@
 import { cpSync, existsSync, mkdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 const consumerRoot = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
 
 const crossOriginIsolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -27,10 +25,8 @@ const registryProxy =
       };
 
 function copyWorkbenchRuntime(): void {
-  const entry = dirname(require.resolve('@riftydev/workbench'));
-  const candidates = [resolve(entry, 'runtime'), resolve(entry, '../dist/runtime')];
-  const from = candidates.find((path) => existsSync(path));
-  if (from === undefined) {
+  const from = resolve(consumerRoot, 'node_modules/@riftydev/workbench/dist/runtime');
+  if (!existsSync(from)) {
     throw new Error(
       'copyable Workbench runtime assets are missing under @riftydev/workbench/dist/runtime',
     );
