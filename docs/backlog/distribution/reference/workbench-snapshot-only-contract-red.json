@@ -1,0 +1,424 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS; можно IMPLEMENT. Merge ещё рано: обязательны GREEN/packed Chromium и независимый Final+GREEN. Независимо 94 случая:64 RED/30 GREEN; baseline producer/shims36 GREEN; native Vite build3 modules GREEN;17 original npm tarball/SRI verified. PR-4: исходные npm bytes усиливают fixture, positive assertions сохранены; отмена только pre-shim missing-companion rejection явно ограничена ADR-0399.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-only.md; BASE 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c; clean HEAD 98773a29fc8058ff0c31776c753beb6fc697ac6d. Fresh read-only reviewer /root/snapshot_only_contract_review independently read raw user decision records/goal/map, ADR0398/0399 and active corrections. RDY-6: final compiled scope matches accepted I3/I8; I1 Vite composition remains required without new ordinary/package/bin compatibility. Executed artifacts: /tmp/rifty-316-i3-review-independent-red.json and .log; /tmp/rifty-316-i3-review-existing.json and .log; /tmp/rifty-316-i3-review-artifacts.mjs and .log. Raw packed TS2353 read at /tmp/rifty-316-i3-packed-red.log: public type RED only, semantic RED supplied separately; browser implementation proof remains due. No I3 product implementation or tracked edits.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3 + I1 composed Vite producer",
+      "location": "docs/backlog/distribution/workbench-snapshot-only.md:59",
+      "summary": "Подготовка принята; реализовать registry-free owner/npm и scoped companion repair, затем полный GREEN/packed Chromium и Final+GREEN."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Выбранный OPFS namespace; прежнее хранилище доступно при прежней настройке."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Сохранение orphan Scratch, публичное перечисление/скачивание, fresh Scratch и reopen proof."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Preview prefix внутри non-root SW scope; навигация/assets/HMR."
+    },
+    {
+      "clause": "I7 + scenario",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Эффективные публичные бюджеты и окончательный composed packed-host proof всех инвариантов."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: URL-free closed public/owner snapshot-only branch; contradictory/executable input rejects; omitted registry mode retained",
+      "source": "acceptance",
+      "trace": "I3+ADR-0398",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/workbench-snapshot-only-options.contract.test.ts:43; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:43",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: real producer admission; required unavailable/corrupt/incompatible/replay-invalid/over-limit input rejects with public reason and retry state",
+      "source": "acceptance",
+      "trace": "I3+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:141; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:55",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: core/companion/direct automatic entries cannot defer/install; registry fallback remains",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:235; packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:296; packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:349",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: explicit exact local npm replay; required misses loud across overloads/terminal/prefix/prefer-online; Eddy without registry has no effects; local lifecycle/bin behavior retained",
+      "source": "acceptance",
+      "trace": "I3+ADR-0023",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-without-registry.contract.test.ts:157; packages/workbench/src/workers/workbench-snapshot-only-terminal.contract.test.ts:36; packages/workbench/src/glue/npm-shell-without-registry.contract.test.ts:139; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:112",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: edited persistent saved project ignores unused changed snapshot; trust miss refuses; explicit invalid apply preserves bytes",
+      "source": "acceptance",
+      "trace": "I3+I8+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:369; packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:438; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: mandatory packed copied-assets public producer Vite npm build/dev/render/HMR; zero registry/Eddy across strict journey; registry positive control retained",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+scenario2+scenario4",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:43; tests/integration/workbench-packed-consumer.mjs:1208; package.json:42; .github/workflows/ci.yml:192",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: original npm Vite/Rollup locks admit declared companions; scoped retained/nested identities and ordinary-child refusal; installer/Eddy same frontier",
+      "source": "acceptance",
+      "trace": "I1+I3+ADR-0399",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-companion-frontier.contract.test.ts:59; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:114; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:30",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: exact installed cache bytes and real local program output; no npm --offline claim",
+      "source": "acceptance",
+      "trace": "I3+ADR-0023",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-without-registry.contract.test.ts:167; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:32; packages/workbench/src/glue/npm-shell-without-registry.contract.test.ts:177",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: unchanged native npm Vite7.3.6 reference succeeds; producer/browser route builds and renders same supported package graph",
+      "source": "acceptance",
+      "trace": "I1+I3+ADR-0399",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/workbench-snapshot-companion-decision.md:22; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:74; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:116; /tmp/rifty-316-i3-review-artifacts.log:7",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × public/owner policy: reject contradictory/executable input before effects",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/workbench-snapshot-only-options.contract.test.ts:85",
+      "note": ""
+    },
+    {
+      "row": "false-fallback/corrupt-input × required snapshot: useful public reason, no deferred handle, recoverable admission",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:159; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:55",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × saved trust/unused asset: preserve bytes and avoid acquisition",
+      "source": "fault-matrix",
+      "trace": "I3+I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:369; packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:438",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache × explicit local install: missing/corrupt required cache cannot trigger registry/Eddy",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0023",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-without-registry.contract.test.ts:198; packages/workbench/src/workers/workbench-snapshot-only-terminal.contract.test.ts:79",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × alternate automatic/direct/npm entry: owner policy wins; configured registry control retained",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:296; packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:349; packages/workbench/src/workers/workbench-snapshot-only-terminal.contract.test.ts:104",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift/provenance-lie × companion projection: shared source frontier, scoped pins, unrelated/malformed missing-edge refusal",
+      "source": "fault-matrix",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-companion-frontier.contract.test.ts:126; packages/npm-client/src/installer-companion-frontier.contract.test.ts:146; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:139; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:171",
+      "note": ""
+    },
+    {
+      "row": "openWorkbench options: explicit URL-free policy and closed normalized owner union",
+      "source": "public-api",
+      "trace": "I3+ADR-0398",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/workbench-snapshot-only-options.contract.test.ts:43",
+      "note": ""
+    },
+    {
+      "row": "openPlaygroundWorkbench options: same URL-free public branch reaches physical owner",
+      "source": "public-api",
+      "trace": "I3+ADR-0398",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:43; tests/integration/workbench-packed-consumer.mjs:1227",
+      "note": ""
+    },
+    {
+      "row": "install(options): absent registry retains local capability and refuses unavailable required acquisition",
+      "source": "public-api",
+      "trace": "I3+ADR-0398+ADR-0023",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-without-registry.contract.test.ts:157",
+      "note": ""
+    },
+    {
+      "row": "install(name, version, options): absent registry retains local capability and refuses unavailable required acquisition",
+      "source": "public-api",
+      "trace": "I3+ADR-0398+ADR-0023",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-without-registry.contract.test.ts:157",
+      "note": ""
+    },
+    {
+      "row": "install(name, version, dependencies, options): absent registry retains local capability and refuses unavailable required acquisition",
+      "source": "public-api",
+      "trace": "I3+ADR-0398+ADR-0023",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-without-registry.contract.test.ts:157",
+      "note": ""
+    },
+    {
+      "row": "produceDependencySnapshot: caller lock permits only actual declared companion additions and preserves existing source identities",
+      "source": "public-api",
+      "trace": "I1+I3+ADR-0399",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:114",
+      "note": ""
+    },
+    {
+      "row": "Original npm @types/estree@1.0.9: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/types-estree-1.0.9.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm rollup@4.63.1: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/rollup-4.63.1.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm @rollup/wasm-node@4.63.1: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/rollup-wasm-node-4.63.1.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm @rollup/wasm-node@4.62.2: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/rollup-wasm-node-4.62.2.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm @types/estree@1.0.7: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/types-estree-1.0.7.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm esbuild@0.28.0: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/esbuild-0.28.0.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm fdir@6.5.0: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/fdir-6.5.0.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm nanoid@3.3.18: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/nanoid-3.3.18.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm picocolors@1.1.1: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/picocolors-1.1.1.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm picomatch@4.0.7: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/picomatch-4.0.7.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm postcss@8.5.28: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/postcss-8.5.28.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm rollup@4.42.0: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/rollup-4.42.0.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm source-map-js@1.2.1: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/source-map-js-1.2.1.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm tinyglobby@0.2.17: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/tinyglobby-0.2.17.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm vite@7.3.6: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/vite-7.3.6.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm @rollup/wasm-node@4.42.0: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/rollup-wasm-node-4.42.0.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm esbuild-wasm@0.28.0: metadata and tarball identity/SRI",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/packages/esbuild-wasm-0.28.0.json:1; tests/integration/fixtures/registry/rollup-companions/fixture.mjs:17; /tmp/rifty-316-i3-review-artifacts.log:5",
+      "note": ""
+    },
+    {
+      "row": "Original npm v3 root manifest/lock graph",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/root/package-lock.json:1; tests/integration/fixtures/registry/rollup-companions/README.md:3; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:25",
+      "note": ""
+    },
+    {
+      "row": "Original npm v3 retained manifest/lock graph",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/retained/package-lock.json:1; tests/integration/fixtures/registry/rollup-companions/README.md:3; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:25",
+      "note": ""
+    },
+    {
+      "row": "Original npm v3 conflict manifest/lock graph",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/conflict/package-lock.json:1; tests/integration/fixtures/registry/rollup-companions/README.md:3; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:25",
+      "note": ""
+    },
+    {
+      "row": "Original npm v3 nested manifest/lock graph",
+      "source": "frozen-artifact",
+      "trace": "I1+ADR-0399",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/nested/package-lock.json:1; tests/integration/fixtures/registry/rollup-companions/README.md:3; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:25",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/distribution/reference/workbench-snapshot-only-evidence.md:121",
+          "summary": "Лишняя пустая строка в конце evidence.",
+          "authority": "",
+          "evidence": "git diff --check 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c..HEAD: new blank line at EOF."
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "98773a29fc8058ff0c31776c753beb6fc697ac6d"
+}

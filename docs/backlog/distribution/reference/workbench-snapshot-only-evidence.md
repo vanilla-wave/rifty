@@ -118,4 +118,3 @@ Workbench/npm-client typecheck, targeted Biome, refs/backlog pass. Clean
 independent Contract+RED remains before implementation. Packed browser GREEN
 must additionally run after implementation; baseline packed type rejection
 alone is not execution proof.
-
