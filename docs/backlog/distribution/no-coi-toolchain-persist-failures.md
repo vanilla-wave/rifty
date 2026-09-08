@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Reject no-COI install and build when OPFS persistence fails
 created: 2026-09-08
 why: The toolchain worker ignores the flush failure report and acknowledges an install whose lockfile did not persist.
@@ -28,7 +28,28 @@ This unit delivers the reported-write-failure part of I3. Its unreadable-preload
 part stays with `vfs/opfs-preload-failure-empty-bytes` and on the goal map;
 neither successful flush nor this repair proves fresh readable content.
 
+## Acceptance
+
+1. Install and installed-bin completion reject reported persistence failure; clean and memory paths keep normal settlement. → I3
+
+## Fault matrix
+
+| Axis × operation | Outcome | Carrier |
+| --- | --- | --- |
+| quota-perm-fail × install/build flush | Reject, include native failure | tests/no-coi/no-coi-persistence.fault.spec.ts → I3 |
+
+## Out of scope
+
+Unreadable preload remains linked on the goal map; no crash-atomic persistence promise.
+
+## Challenge
+
+challenge: 2026-09-08 — clear; reuse goal’s unchanged I3 premise.
+
 ## Decisions
+
+- 2026-09-08 — observed-defect RED: both native quota cases resolved on baseline; evidence in reference/issue319-implementation-evidence.md; RDY-8 baseline route.
+- challenge: 2026-09-08 — clear; reuse goal's unchanged I3 premise.
 
 - 2026-09-08 — FIT seeds an observed-defect draft from I3; PICKUP owns RED and implementation preparation, not another user-scope interview.
 - 2026-09-08 — dedup: no existing no-COI flush-result repair item; the linked preload finding owns the distinct read-honesty boundary.

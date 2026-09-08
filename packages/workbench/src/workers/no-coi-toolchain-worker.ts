@@ -20,7 +20,7 @@ import {
   claimSandboxToolchainResidentTransition,
   releaseSandboxToolchainResidentTransition,
 } from '@riftydev/runtime-js/internal';
-import { dirname, syncMirror } from '@riftydev/vfs';
+import { type PersistFailureReport, dirname, syncMirror } from '@riftydev/vfs';
 import { declaredGapCause } from './declared-gap-cause.ts';
 import { startResidentNodeEntry } from './resident-node-entry.ts';
 
@@ -44,8 +44,13 @@ function post(message: ToolchainResult): void {
 }
 
 async function flushMirror(): Promise<void> {
-  const mirror = syncMirror() as { flush?: () => Promise<void> };
-  if (typeof mirror.flush === 'function') await mirror.flush();
+  const mirror = syncMirror() as { flush?: () => Promise<PersistFailureReport> };
+  const report = await mirror.flush?.();
+  if (report === undefined || report.total === 0) return;
+  const detail = report.failures.map((failure) => `${failure.path}: ${failure.message}`).join('; ');
+  const error = new Error(`OPFS persistence failed (${report.total} unhealed): ${detail}`);
+  error.name = 'SandboxPersistenceError';
+  throw error;
 }
 
 function snapshotFiles(): readonly ToolchainRecoveryFile[] {
