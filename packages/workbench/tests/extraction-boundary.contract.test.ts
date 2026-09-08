@@ -343,7 +343,9 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0389: sealed producer entry.
     // 143 → 146 (ADR-0396): snapshot apply preflight, catalog adoption, and
     // catalog JSON helpers split off the authority file-size pin.
-    expect(packageProductionFiles).toHaveLength(146);
+    // 146 → 149 (ADR-0403): stored-catalog parse, orphan retain/download, and
+    // retained catalog result helper split off the authority file-size pin.
+    expect(packageProductionFiles).toHaveLength(149);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

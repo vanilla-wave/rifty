@@ -185,6 +185,9 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
           listener(state.catalog);
           return () => listeners.delete(listener);
         },
+        listRetainedOrphans: async () => [],
+        listRetainedOrphanEntries: async () => [],
+        readRetainedOrphanFile: async () => new Uint8Array(),
         createScratch: ({ definition }: { readonly definition: ProjectDefinition<unknown> }) =>
           mutate('create:scratch', () => {
             events.push('catalog:create:scratch');

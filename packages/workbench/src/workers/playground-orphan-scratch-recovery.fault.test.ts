@@ -1,4 +1,4 @@
-import { MemoryFsSync, resetSyncMirror } from '@riftydev/vfs/internal';
+import { type MemoryFsSync, resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createPlaygroundProjectCatalog } from '../workbench/internal/playground-project-catalog.ts';
 import { definePlaygroundProject } from '../workbench/internal/playground-project-definition.ts';
