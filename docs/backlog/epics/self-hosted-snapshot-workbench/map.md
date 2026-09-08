@@ -2,13 +2,11 @@
 
 ## Items
 
-1. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
-   selection, with the old setting preserving access to old projects (I4).
-2. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
+1. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
    open fresh Scratch, using the selected storage namespace (I6).
-3. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
+2. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
    on the same static host (I5).
-4. `distribution/workbench-operation-budgets` — public effective boot/file/tool
+3. `distribution/workbench-operation-budgets` — public effective boot/file/tool
    budgets, then composed packed-host proof of the whole scenario including
    installed-tarball produce/restore (I7, remaining I1 packed residual).
 
@@ -28,7 +26,8 @@
   invents an independent update policy. Existing transaction/acquisition owners
   execute selected effects, without a second installer or write coordinator.
 - Storage/recovery: paired OPFS backend + owner catalog transaction authority
-  (ADR-0072/0279); both storage children share those existing owners.
+  (ADR-0072/0279/0401); both storage children share those existing owners.
+  I4 landed: optional `storage.namespace` bounds paired preload/writes.
 - Preview addressing: io preview-protocol and existing SW bridge; one prefix
   authority across HTTP and HMR.
 - Timeouts: existing owner port, VFS commit coordinator and tool transport;

@@ -6,7 +6,7 @@ created: 2026-09-07
 why: An unjournaled Scratch tree blocks catalog creation with no public recovery path.
 user_story: As the Tracker plugin-sandbox embedder, I want to retain downloadable orphan scratch bytes while opening a fresh scratch, but today an unjournaled Scratch tree blocks catalog creation with no public recovery path.
 epic: self-hosted-snapshot-workbench
-blocked_by: [vfs/workbench-storage-namespace]
+blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md]
 code: [packages/workbench/src/workers/playground-project-authority.ts, packages/workbench/src/workbench/playground.ts, packages/workbench/src/workers/playground-project-catalog.contract.test.ts]
 ---
