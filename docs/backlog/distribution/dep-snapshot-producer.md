@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Bake dependency snapshots through a published producer
 created: 2026-09-07
 why: A host cannot bake its dependency snapshot in its own CI using only installed rifty packages.
@@ -76,6 +76,8 @@ authentication, streaming restore and larger snapshot limits remain excluded by 
 Public application-policy and registry-free mode follow their own goal units.
 
 ## Decisions
+
+ready-verdict: 2026-09-08 — Contract+RED @ 514533e5bedfa58fa09becd73dbf3bd7de69781c
 
 - 2026-09-08 — ADR-0387: public root producer, existing installer plus output-pin postcondition; no parallel resolver.
 

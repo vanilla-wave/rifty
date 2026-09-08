@@ -41,3 +41,15 @@ pack function-bind@1.1.2, before the producer. Isolated exact installed package
 `npm pack --loglevel=verbose --ignore-scripts --pack-destination <temp>` passed
 in0.14s with npm11.17.0; no timeout raised or speculative tooling fix. That
 interrupted run is not producer RED/acceptance evidence.
+
+## GREEN
+
+`pnpm exec vitest run packages/workbench/src/glue/dep-snapshot-producer.test.ts`:
+9/9 PASS, including real LightningCSS bundled source and ms/debug pin refusal.
+Workbench and npm-client typecheck PASS.
+
+`pnpm test:packed-consumer`: PASS (88.40s). Packed public producer uses a real
+npm-generated ms lock, standard tar and native Node execution; Chromium restores
+raw gzip and HTTP Content-Encoding decoded tar, runs the same source, checks
+ms@2.0.0, and makes zero registry requests during either restore. Existing real
+Vite7.3.6 preview/HMR and SQLite journey remains in the same required runner.

@@ -1,5 +1,11 @@
 import { createBrowserOpenWorkbench } from './internal/browser-workbench-composition.ts';
 
+export { produceDependencySnapshot } from '../glue/dep-snapshot-producer.ts';
+export type {
+  ProduceDependencySnapshotOptions,
+  ProducedDependencySnapshot,
+} from '../glue/dep-snapshot-producer.ts';
+
 export {
   ClosedHandleError,
   DirtyProjectDocumentError,

@@ -29,3 +29,46 @@ directly leaves browser QuickJS asset resolution unconfigured (ADR-0352).
 Playground's `quickjs-kernel-worker-host.ts` is the reference composition.
 
 See ADR-0263 and ADR-0282.
+
+
+## Dependency snapshot production
+
+Node22+; only installed packages are needed. Supply a registry accessible to the
+CI environment and an npm v3 lockfile. No builder credential manager or new
+package compatibility is implied.
+
+```js
+import { readFile, writeFile } from 'node:fs/promises';
+import { produceDependencySnapshot } from '@riftydev/workbench';
+
+const result = await produceDependencySnapshot({
+  templateId: 'my-project',
+  packageJsonText: await readFile('package.json', 'utf8'),
+  packageLockText: await readFile('package-lock.json', 'utf8'),
+  registryUrl: process.argv[2],
+});
+await writeFile('dependencies.tar.gz', result.archive);
+await writeFile('dependencies.json', JSON.stringify({
+  snapshotId: result.snapshotId,
+  installArtifactIdentity: result.installArtifactIdentity,
+}));
+```
+
+Ordinary tar lists/extracts `payload/package.json`, `payload/package-lock.json`
+and `payload/node_modules/`. `rifty/manifest.json` and `rifty/replay-cache/` are
+control data, never project files. SnapshotId hashes decoded tar; gzip delivery
+with or without HTTP Content-Encoding works. Legacy v3 JSON/gzip remains readable.
+
+The producer uses the shared canonical manifest spelling without changing its
+JSON values. Use the emitted `payload/package.json` bytes when supplying raw
+files to a neutral `npm-dev-server` Playground plan; its snapshot descriptor is
+`{snapshotId, assetUrl, templateId}`. Preset factories may add policy defaults;
+bake the final requested manifest. The packed consumer fixture demonstrates the
+public bake → Node reference → browser restore path.
+
+Ordinary output identities must match caller lock pins. Attested native-to-WASM
+materialization, fixed source acquisition and bundled children use existing
+installer policy; other newly resolved identities fail before an artifact is
+returned. Canonical npm tarball URLs use the configured registry proxy; other pinned
+resolved URLs retain their location. Compressed and decoded archives keep the
+existing 128 MiB limit.

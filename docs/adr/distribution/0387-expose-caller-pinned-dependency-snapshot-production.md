@@ -33,7 +33,8 @@ Old unused/native entries may be pruned by the existing installer.
 Candidates: a new frozen resolver — duplicates installer authority; disallow
 metadata — real Vite8 lock requires lightningcss-wasm acquisition; verify
 emitted pins and existing attested policy paths — the real Vite8 probe passes
-20 packages while rejecting a newly resolved ordinary output pin.
+20 packages. Refusal of newly resolved ordinary output pins is an acceptance
+target carried by the ms/debug producer REDs, not a measured result of that probe.
 
 ## Consequences
 

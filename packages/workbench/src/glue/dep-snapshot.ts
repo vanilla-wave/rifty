@@ -377,7 +377,7 @@ function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshotV3 
   }
 }
 
-async function sha256Identity(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+export async function sha256Identity(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
   let hex = '';
   for (const byte of digest) hex += byte.toString(16).padStart(2, '0');

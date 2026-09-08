@@ -10,3 +10,4 @@
 - 2026-09-08 — user authorized whole-goal implementation in PR #316; codec split before producer while lockfile admission is probed; no destination change.
 - 2026-09-08 — dep-snapshot-tar Contract+RED PASS @ 04bf115f294f9ebfbcc8388accf5202e9a36bf46; fresh reviewer tar_red_verify; after main merge 9b528dbb2, unchanged codec rerun: 4 expected RED / 36 GREEN.
 - 2026-09-08 — re-chart after dep-snapshot-tar (final-green PASS @ fd829ca42ba698c168e5442278a3e5d50ffbbc7f): codec complete; independent tar_final_review, full pr:check25/25 and system-tar/replay proof; producer remains next I1 obligation.
+- 2026-09-08 — dep-snapshot-producer Contract+RED PASS @ 514533e5bedfa58fa09becd73dbf3bd7de69781c; producer_red_review, nine behavioral REDs plus packed API-absence RED; Vite8 reference probe retained and reproduced.

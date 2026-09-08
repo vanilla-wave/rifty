@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Share lock-root and attested acquisition/bundled-path validation through the internal capsule for the published Workbench snapshot producer; resolution policy unchanged.
+
 - Installed esbuild facade reads the registry-owned realm carrier; substitution/admission semantics unchanged (ADR-0384).
 
 ### Changed

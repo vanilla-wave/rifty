@@ -339,7 +339,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 147 → 148 (PR #313): first-use no-COI install/activation module.
     // ADR-0384: seven package implementations now belong to registry.
     // ADR-0386: standard dependency snapshot tar codec.
-    expect(packageProductionFiles).toHaveLength(142);
+    // ADR-0387: published dependency snapshot producer.
+    expect(packageProductionFiles).toHaveLength(143);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
