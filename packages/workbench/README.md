@@ -57,6 +57,21 @@ Playground's `quickjs-kernel-worker-host.ts` is the reference composition.
 See ADR-0263 and ADR-0282.
 
 
+## Registry policy
+
+Both Workbench entrypoints accept `packageAcquisition: { mode: 'snapshot-only' }`.
+Omit registryUrl and Eddy configuration. Fresh projects require a compatible
+snapshot; a needed missing/corrupt snapshot rejects with its reason before
+startup. Valid saved projects still ignore unused new snapshots. Explicit
+`npm install` can replay available lock/cache bytes; required missing bytes fail
+without registry/Eddy requests. Local scripts and installed bins remain usable.
+Snapshot replay cache carries substitution acquisitions; full npm installs may
+need other tarballs.
+
+Existing `{ registryUrl, eddy? }` configuration keeps registry acquisition;
+`mode: 'registry'` is optional. This policy does not block guest application
+network access. The producer still uses the CI environment's registry.
+
 ## Dependency snapshot production
 
 Node22+; only installed packages are needed. Supply a registry accessible to the
@@ -94,8 +109,10 @@ public bake → Node reference → browser restore path.
 
 Ordinary output identities must match caller lock pins. Attested native-to-WASM
 materialization, fixed source acquisition and bundled children use existing
-installer policy; other newly resolved identities fail before an artifact is
-returned. Canonical npm tarball URLs use the configured registry proxy; other pinned
+installer policy. Declared same-version companions, such as Rollup's WASM
+companion, are allowed at their verified installed paths; existing companion
+pins remain exact. Other new ordinary identities/paths fail before an artifact
+is returned. Canonical npm tarball URLs use the configured registry proxy; other pinned
 resolved URLs retain their location. Compressed and decoded archives keep the
 existing 128 MiB limit.
 

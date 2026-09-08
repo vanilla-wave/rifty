@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Workbench snapshot-only mode keeps one acquisition owner and local npm replay; declared companion origin/permission shares existing installer authorities, with lower source ratchets (ADR-0398/0399).
+
 - Process: model owned in-process policy/graph projection faults; transport loss/duplication/reorder do not apply to ordinary value calls.
 
 - Workbench snapshot application preserves saved projects; catalog/claim helpers shrink oversized owners and lower their source ratchets (ADR-0394).

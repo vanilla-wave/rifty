@@ -46,14 +46,14 @@ export interface OwnerPackageStateOptions {
   readonly flush: () => Promise<PersistFailureReport | undefined>;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   readonly log: (line: string) => void;
-  readonly registry: RegistryClient;
+  readonly registry?: RegistryClient;
   /** Test seam at the external registry/install boundary. */
   readonly install?: InstallFn;
   /** Fold one exact first-install lock into the fresh Starter Git baseline. */
   readonly amendGeneratedBaseline?: (root: string, lockfile: Uint8Array) => Promise<boolean>;
-  readonly resolverUrl: () => string | undefined;
-  readonly resolverBundleBaseUrl: () => string | undefined;
-  readonly resolverPin: (templateId: string) => string | undefined;
+  readonly resolverUrl?: () => string | undefined;
+  readonly resolverBundleBaseUrl?: () => string | undefined;
+  readonly resolverPin?: (templateId: string) => string | undefined;
 }
 
 export interface OwnerPackageState {

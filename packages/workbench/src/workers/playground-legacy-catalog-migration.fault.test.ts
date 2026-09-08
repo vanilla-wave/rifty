@@ -1034,7 +1034,7 @@ describe('legacy workspace boot selection', () => {
           wasm: { sqlite: '/sqlite.wasm' },
           previewProbeTimeoutMs: 1_000,
         },
-        packageAcquisition: { registryUrl: 'https://registry.invalid/' },
+        packageAcquisition: { mode: 'registry', registryUrl: 'https://registry.invalid/' },
         storage: { persistence: 'required' },
         legacyWorkspacePrefix,
       },

@@ -41,6 +41,7 @@ export type {
   WorkbenchSnapshot,
   WorkbenchStorageSnapshot,
 } from './open-workbench.ts';
+export type { WorkbenchPackageAcquisition } from './internal/workbench-package-acquisition.ts';
 export type { PreviewHandle } from './preview-readiness.ts';
 export { projects } from './project-definition.ts';
 export type { ProjectDefinition } from './project-definition.ts';

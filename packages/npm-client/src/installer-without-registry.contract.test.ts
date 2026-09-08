@@ -38,14 +38,12 @@ afterEach(() => {
   }
 });
 
-// Preparation bridge only: the real object has NO registry. Remove this cast
-// when InstallOptions.registry becomes optional; no client or installer is replaced.
 function invoke(
   kind: Overload,
   options: LocalOptions,
   dependencies: Record<string, string> = DEPS,
 ): Promise<InstallResult> {
-  const input = options as InstallOptions;
+  const input = options;
   if (kind === 'options') return install(input);
   if (kind === 'name-version-options') return install('offline-root', '1.0.0', input);
   return install('offline-root', '1.0.0', dependencies, input);

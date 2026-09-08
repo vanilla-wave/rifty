@@ -43,7 +43,7 @@ const input: WorkbenchOwnerStartInput = Object.freeze({
     wasm: Object.freeze({ sqlite: '/wasm/sqlite.wasm' }),
     previewProbeTimeoutMs: 1_000,
   }),
-  packageAcquisition: Object.freeze({ registryUrl: '/npm-registry' }),
+  packageAcquisition: Object.freeze({ mode: 'registry', registryUrl: '/npm-registry' }),
   storage: Object.freeze({ persistence: 'ephemeral' as const }),
 });
 const encoder = new TextEncoder();

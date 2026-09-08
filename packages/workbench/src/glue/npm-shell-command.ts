@@ -1,9 +1,6 @@
 /**
- * Wire an `npm` builtin into the playground shell. Closes the M9 prompt-install
- * UX gap (follow-ups item #15, 2026-05-27): without it `npm install <pkg>` hits
- * the shell's "command not found" path and exits 127. Installs run through
- * `@riftydev/npm-client.install` like `realVite.ts` — same registry, VFS bridge,
- * proxy fetcher.
+ * Shell npm commands use the existing installer and package mutation authority.
+ * Without a registry, explicit install retains local replay; network misses fail.
  *
  * Scope: `npm install`, `npm install <name>[@<range>] …`, `i`/`add` synonyms,
  * plus `npm run <script>` via an injected host script runner. Deferred:
@@ -79,7 +76,7 @@ export interface NpmShellCommandDeps {
   readonly vfs: Vfs;
   /** Playground wires one through `proxiedRegistryFetch()` so traffic stays on
    *  the proxy origin. */
-  readonly registry: RegistryClient;
+  readonly registry?: RegistryClient;
   /** Test seam; defaults to `@riftydev/npm-client.install`. */
   readonly install?: InstallFn;
   /** Host-owned all-target namespace preflight, before the installer links bytes. */
@@ -699,6 +696,8 @@ export async function executeNpmInstallOperation(
 > {
   const { target, prefer, packageSpecs: pkgSpecs } = request;
   if (ctx.signal?.aborted) throw ctx.signal.reason;
+  if (deps.registry === undefined && deps.resolverUrl !== undefined)
+    throw new TypeError('Eddy acquisition requires a registry');
 
   // Tree preparation INSIDE the authority queue and AFTER the demote+proof: a
   // preparation that clears the tree (from-scratch clean-start) must not run

@@ -41,10 +41,7 @@ function boot(packageAcquisition: unknown) {
 describe('I3 acquisition policy is a closed public and owner union', () => {
   it.each([
     [{ mode: 'snapshot-only' }, { mode: 'snapshot-only' }],
-    [
-      { registryUrl: '/registry' },
-      { mode: 'registry', registryUrl: 'https://host.test/registry' },
-    ],
+    [{ registryUrl: '/registry' }, { mode: 'registry', registryUrl: 'https://host.test/registry' }],
     [
       { mode: 'registry', registryUrl: '/registry' },
       { mode: 'registry', registryUrl: 'https://host.test/registry' },

@@ -27,6 +27,11 @@ export default defineConfig({
       name: 'producer-http-decoding-proof',
       configurePreviewServer(server) {
         server.middlewares.use((request, response, next) => {
+          if (request.url === '/required-missing-snapshot.tar.gz') {
+            response.statusCode = 404;
+            response.end('snapshot fixture is unavailable');
+            return;
+          }
           if (request.url !== '/producer-snapshot-decoded.tar') return next();
           response.setHeader('Content-Type', 'application/x-tar');
           response.setHeader('Content-Encoding', 'gzip');

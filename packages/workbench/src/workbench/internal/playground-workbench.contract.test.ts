@@ -1344,7 +1344,7 @@ describe('Playground plan validation', () => {
         ...options().packageAcquisition,
         snapshotUrl: '/retired-snapshot.json.gz',
       },
-    } as WorkbenchOptions;
+    } as unknown as WorkbenchOptions;
 
     await expect(open(legacy)).rejects.toThrow(/snapshotUrl/);
     expect(effect).not.toHaveBeenCalled();

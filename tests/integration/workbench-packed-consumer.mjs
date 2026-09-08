@@ -412,7 +412,9 @@ async function browserRegistryPackages() {
   const provenance = await readJson(resolve(fixture, 'provenance.json'));
   const packages = new Map();
   for (const [name, version] of required) {
-    const source = provenance.packages.find((item) => item.name === name && item.version === version);
+    const source = provenance.packages.find(
+      (item) => item.name === name && item.version === version,
+    );
     if (!source) throw new Error(`Missing original npm fixture ${name}@${version}`);
     const manifest = await readJson(resolve(fixture, 'packages', `${source.file}.json`));
     assert.equal(manifest.name, name);
@@ -488,7 +490,13 @@ async function startBrowserRegistry(packages) {
       const requestUrl = new URL(request.url ?? '/', origin || 'http://127.0.0.1');
       requests.push(`${request.method ?? 'GET'} ${requestUrl.pathname}`);
       if (denied) {
-        sendResponse(request, response, 503, { 'Content-Type': 'text/plain' }, 'Registry denied by snapshot-only proof');
+        sendResponse(
+          request,
+          response,
+          503,
+          { 'Content-Type': 'text/plain' },
+          'Registry denied by snapshot-only proof',
+        );
         return;
       }
       if (request.method === 'OPTIONS') {
@@ -606,7 +614,9 @@ async function startBrowserRegistry(packages) {
     origin,
     requests,
     responses,
-    deny: () => { denied = true; },
+    deny: () => {
+      denied = true;
+    },
     close: () => registryResource.cleanup(),
   };
 }
@@ -1231,16 +1241,24 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       assert.match(strictProof.buildOutput, /built in|build completed/i, 'real npm Vite build');
       const strictApp = strictPage.frameLocator('#preview').locator('#app');
       await strictApp.waitFor({ state: 'visible', timeout: 120_000 });
-      await strictPage.waitForFunction(() =>
-        document.querySelector('#preview')?.contentDocument?.querySelector('#app')?.textContent === 'snapshot-only-vite-ready',
-        undefined, { timeout: 120_000 });
+      await strictPage.waitForFunction(
+        () =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === 'snapshot-only-vite-ready',
+        undefined,
+        { timeout: 120_000 },
+      );
       await waitForHmrBridge(strictApp, 30_000);
       const strictKey = `rifty:packed-snapshot-only:${Date.now()}`;
       const strictSentinel = await strictApp.evaluate((_, key) => {
         globalThis.__riftyPackedHmrSentinel = key;
         localStorage.setItem(`${key}:messages`, '[]');
         localStorage.removeItem(`${key}:beforeunload`);
-        globalThis.addEventListener('beforeunload', () => localStorage.setItem(`${key}:beforeunload`, '1'), { once: true });
+        globalThis.addEventListener(
+          'beforeunload',
+          () => localStorage.setItem(`${key}:beforeunload`, '1'),
+          { once: true },
+        );
         globalThis.addEventListener('rifty:ws:message', (event) => {
           const messages = JSON.parse(localStorage.getItem(`${key}:messages`) ?? '[]');
           messages.push(event.detail);
@@ -1249,26 +1267,52 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         return key;
       }, strictKey);
       const strictMessage = 'snapshot-only-vite-edited';
-      await strictPage.evaluate(async (message) => (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).writeMessage(message), strictMessage);
-      await strictPage.waitForFunction((message) =>
-        document.querySelector('#preview')?.contentDocument?.querySelector('#app')?.textContent === message,
-        strictMessage, { timeout: 60_000 });
-      const strictHmr = await strictApp.evaluate((_, key) => ({
-        sentinel: globalThis.__riftyPackedHmrSentinel,
-        beforeUnload: localStorage.getItem(`${key}:beforeunload`),
-        messages: JSON.parse(localStorage.getItem(`${key}:messages`) ?? '[]'),
-      }), strictKey);
+      await strictPage.evaluate(
+        async (message) => (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).writeMessage(message),
+        strictMessage,
+      );
+      await strictPage.waitForFunction(
+        (message) =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === message,
+        strictMessage,
+        { timeout: 60_000 },
+      );
+      const strictHmr = await strictApp.evaluate(
+        (_, key) => ({
+          sentinel: globalThis.__riftyPackedHmrSentinel,
+          beforeUnload: localStorage.getItem(`${key}:beforeunload`),
+          messages: JSON.parse(localStorage.getItem(`${key}:messages`) ?? '[]'),
+        }),
+        strictKey,
+      );
       assertHmrProof({ expectedSentinel: strictSentinel, ...strictHmr });
-      await strictPage.evaluate(async () => (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).closeAndProveSavedState());
-      assert.equal(registry.requests.length, strictBefore, 'zero registry requests including service worker proxy');
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).closeAndProveSavedState(),
+      );
+      assert.equal(
+        registry.requests.length,
+        strictBefore,
+        'zero registry requests including service worker proxy',
+      );
       assert.deepEqual(strictBlocked, [], 'snapshot-only attempted no external acquisition');
-      assert.deepEqual(strictRequests.filter((url) => /npm-registry|eddy|unused-new-snapshot/.test(new URL(url).pathname)), [], 'no implicit registry/Eddy/unused snapshot routes');
+      assert.deepEqual(
+        strictRequests.filter((url) =>
+          /npm-registry|eddy|unused-new-snapshot/.test(new URL(url).pathname),
+        ),
+        [],
+        'no implicit registry/Eddy/unused snapshot routes',
+      );
       assert.deepEqual(strictErrors, [], 'snapshot-only public browser errors');
-      console.log('Packed snapshot-only: producer Vite npm build/dev/HMR, local script, refused required install and persistent saved-state proof; zero registry/Eddy requests');
+      console.log(
+        'Packed snapshot-only: producer Vite npm build/dev/HMR, local script, refused required install and persistent saved-state proof; zero registry/Eddy requests',
+      );
     } finally {
       await strictContext.close();
     }
-    console.log('Packed Workbench Chromium passed: registry Vite/HMR/sqlite and snapshot-only Vite');
+    console.log(
+      'Packed Workbench Chromium passed: registry Vite/HMR/sqlite and snapshot-only Vite',
+    );
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.stack : String(error)}\nPacked consumer preview output:\n${preview.output()}\nRegistry requests:\n${registry.requests.join('\n')}`,

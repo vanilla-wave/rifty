@@ -36,6 +36,7 @@ const BOOT_CONFIG = Object.freeze({
     previewProbeTimeoutMs: 3_000,
   }),
   packageAcquisition: Object.freeze({
+    mode: 'registry',
     registryUrl: 'https://registry.invalid/',
     eddy: Object.freeze({
       resolverUrl: 'https://eddy.invalid/resolve',

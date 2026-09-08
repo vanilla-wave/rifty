@@ -6,4 +6,7 @@ export {
   registryShadowEmbeddedSourcesFromLockfile,
   type ShadowSubstitutionPlan,
 } from './planner.ts';
-export { shadowSubstitutionPlanForInstallResult } from './install-result.ts';
+export {
+  companionInstallPathsForInstallResult,
+  shadowSubstitutionPlanForInstallResult,
+} from './install-result.ts';

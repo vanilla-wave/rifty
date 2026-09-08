@@ -285,7 +285,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   });
   installSqliteWasmSyncProvider(config.deployment.wasm.sqlite);
 
-  const eddy = config.packageAcquisition.eddy;
+  const acquisition = config.packageAcquisition;
   const ownerVfs = new SyncMirrorVfs();
   const starterInitialOids = new Map<string, string>();
   const amendGeneratedBaseline = createStarterBaselineFinalizer(
@@ -293,9 +293,6 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     starterInitialOids,
     async () => assertCleanDurability(await authority.flush()),
   );
-  const registry = createProxiedRegistryClient({
-    proxyPrefix: config.packageAcquisition.registryUrl,
-  });
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
@@ -307,10 +304,18 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     amendGeneratedBaseline,
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
-    registry,
-    resolverUrl: () => eddy?.resolverUrl,
-    resolverBundleBaseUrl: () => eddy?.bundleBaseUrl,
-    resolverPin: (templateId) => eddy?.presetPins[templateId],
+    ...(acquisition.mode === 'snapshot-only'
+      ? {}
+      : {
+          registry: createProxiedRegistryClient({ proxyPrefix: acquisition.registryUrl }),
+          ...(acquisition.eddy === undefined
+            ? {}
+            : {
+                resolverUrl: () => acquisition.eddy?.resolverUrl,
+                resolverBundleBaseUrl: () => acquisition.eddy?.bundleBaseUrl,
+                resolverPin: (templateId: string) => acquisition.eddy?.presetPins[templateId],
+              }),
+        }),
   });
   let materializer: ProjectMaterializer | undefined;
   let playgroundAuthority: PlaygroundProjectAuthority | undefined;

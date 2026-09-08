@@ -5,6 +5,7 @@ import {
   serializePackageJson,
 } from '@riftydev/npm-client';
 import {
+  companionInstallPathsForInstallResult,
   lockfileRootMatchesRequest,
   planShadowSubstitutionsFromLockfile,
   readExistingLockfile,
@@ -89,7 +90,7 @@ function assertCallerPins(original: Lockfile, result: InstallResult): void {
   const materializations = new Set(
     plan.substitutions.map((item) => item.materialization.installPath),
   );
-  const additions = new Set<string>();
+  const additions = new Set(companionInstallPathsForInstallResult(result));
   for (const item of plan.substitutions) {
     if (item.acquisition.kind === 'registry') additions.add(registryAcquisitionInstallPath(item));
   }

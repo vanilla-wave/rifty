@@ -18,9 +18,8 @@ const HASH = 'a'.repeat(64);
 const network: string[] = [];
 type OperationDeps = Parameters<typeof executeNpmInstallOperation>[2];
 
-// Preparation bridge only: actual absent capability, never a dummy client.
 function withoutRegistry(deps: Omit<OperationDeps, 'registry'>): OperationDeps {
-  return deps as OperationDeps;
+  return deps;
 }
 
 async function localRegistry() {

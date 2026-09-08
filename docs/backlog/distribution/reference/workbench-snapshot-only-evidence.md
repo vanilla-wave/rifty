@@ -177,3 +177,57 @@ exact success/path/identity/Node oracle; no producer permission, placement rule
 or contract is relaxed. Source record uses the existing install-result WeakMap
 and companion-only demand set, intersected with actual declared parent/path/
 version facts. Ordinary co-demand cannot become a companion exemption.
+
+Final preparation binding4053ad0a adds the approved nested oracle and an erased
+TypeScript read of npm's optional marker (internal LockfileEntry omits it).
+Same reviewer verified exact committed changes and old-producer semantic RED;
+no product files entered those preparation commits.
+
+## Companion GREEN and guard checks
+
+New companion/producer17/17 GREEN16.27s; existing shim/lockfile/Eddy/bin/recipe/
+producer128/128 GREEN41.38s. One corrupt-case5s contention timeout after the
+earlier enormous failed-archive dump passed isolated52ms, timeout unchanged.
+Final corrected suite has no such dump. Logs and source hashes:
+/tmp/rifty-316-companion-implementation.md.
+
+Reverting the shared companion frontier produces2 semantic RED (root+Eddy);
+reverting producer permission produces1 RED. Both files restored in finally,
+before/after SHA256 equal; restored smoke3/3 GREEN. Artifact:
+/tmp/rifty-316-companion-revert-check.json. npm-client/Workbench types and Biome
+pass. Old pre-shim rejection changed only under ADR-0399's reviewed supersession;
+ordinary missing-child, identity, optional and bin guards remain.
+
+## Packed public GREEN
+
+PASS80.50s: /tmp/rifty-316-i3-packed-green-3.log. Original npm Vite producer,
+copied runtime assets, no registry URL, missing-snapshot reason across owner,
+local script, actual npm build/dev, real iframe/native HMR, explicit npm failures
+and persistent saved/application proof all execute. Server-side registry and
+browser registry/Eddy/unused-asset observations remain zero. Earlier configured
+registry Vite/HMR/sqlite and I1/I2/I8 journeys remain positive controls.
+
+Harness corrections preserve the promised behavior:
+
+- Vite preview's missing asset used SPA200 fallback, correctly yielding
+  snapshot-id-mismatch rather than404. A deliberate404 response was added only
+  for the fault fixture URL; the original public reason assertion remains.
+  /tmp/rifty-316-i3-packed-green-1.log.
+- Parent's additional full npm-install success assumption was false: snapshot
+  replay cache carries substitution acquisitions, not every ordinary tarball.
+  Independent real15-package producer has1 cached esbuild-wasm tarball and
+  correctly refuses a later required cache miss without egress. PR-4 evidence:
+  /tmp/rifty-316-i3-public-replay-oracle-verification.md. The added call now runs
+  after dev/HMR and awaited run.close(), asserting the exact missing-tarball
+  refusal. Lower warm-cache success and new-package negative remain. No archive,
+  cache, installer or producer policy was changed for this harness assumption.
+  /tmp/rifty-316-i3-packed-green-2.log is the captured failure.
+
+Architecture, directory ownership, reduced file-size ceilings, current snapshot
+artifacts and original exact compiler/WASM retirement fingerprints pass. The
+hand-maintained compat row was committed before the drift gate's index comparison.
+
+Final `pnpm pr:check`25/25 PASS: test:run184.0s, parity62.0s;
+/tmp/rifty-316-i3-pr-check-final.log. First full run passed24 lanes and found
+only three formatting errors in test/harness files; formatted those, lint passed,
+then repeated the full gate. No product or assertion change after packed80.50s.

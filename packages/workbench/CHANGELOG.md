@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add snapshot-only acquisition without a registry URL/client or Eddy; required snapshots fail with public reasons, saved state keeps priority, and explicit npm calls retain local replay (ADR-0398).
+- Produce ordinary npm Vite/Rollup locks through declared companion acquisition while preserving caller ordinary/companion source identities (ADR-0399).
+
 - Preserve saved snapshot projects by default; explicit error/overwrite application runs on every request, retains untargeted files, and reports public conflict paths. Catalog transactions cover first admission, rollback and recovery (ADR-0394).
 
 - Publish a complete `dist/assets` Worker/SW/WASM closure; hosts copy it and supply ordinary URLs without worker compilation, aliases or a QuickJS wrapper (ADR-0390).

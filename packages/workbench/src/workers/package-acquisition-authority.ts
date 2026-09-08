@@ -1,5 +1,4 @@
 import { NotImplementedError } from '@riftydev/io';
-import type { InstallResult } from '@riftydev/npm-client';
 import {
   type ShadowSubstitutionPlan,
   planAppliedShadowSubstitutions,
@@ -47,6 +46,8 @@ import {
   type SnapshotFailure,
   type SnapshotRestorePlan,
   type TerminalInstallCommand,
+  installedProvenance,
+  snapshotUnavailableError,
 } from './package-acquisition-types.ts';
 
 export * from './package-acquisition-types.ts';
@@ -109,22 +110,6 @@ function promotionReason(result: InstallStampPromotionResult): string {
   return 'stamp-identity-mismatch';
 }
 
-function installedProvenance(result: InstallResult): AcquisitionProvenance {
-  const provenance = result.provenance;
-  return {
-    outcome: 'installed',
-    resolution: provenance.resolution,
-    packages: provenance.packages.map((entry) => ({
-      name: entry.name,
-      version: entry.version,
-      transport: entry.transport,
-    })),
-    ...(provenance.eddyFallback
-      ? { eddyFallback: { reason: provenance.eddyFallback.reason } }
-      : {}),
-  };
-}
-
 function unreachable(value: never): never {
   throw new Error(`unknown package acquisition command: ${String(value)}`);
 }
@@ -148,6 +133,7 @@ function resolveScheduledProject(
 }
 
 class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
+  readonly #automaticFallback: 'install' | 'snapshot-only';
   readonly #stamps: InstallStampAuthority;
   readonly #stampTransition: InstallStampTransitionOptions | undefined;
   readonly #adapter: PackageAcquisitionAdapter;
@@ -163,6 +149,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   #completedAdmission = 0;
 
   constructor(options: PackageAcquisitionAuthorityOptions) {
+    this.#automaticFallback = options.automaticFallback ?? 'install';
     this.#stamps = options.stamps;
     this.#stampTransition = options.stampTransition;
     this.#adapter = options.adapter;
@@ -209,6 +196,8 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     packageJsonText: string,
     snapshotFailures: readonly SnapshotFailure[],
   ): Promise<ProjectAcquisitionPlan> {
+    if (this.#automaticFallback === 'snapshot-only')
+      throw snapshotUnavailableError(project.projectId, snapshotFailures);
     this.#invalidatePackageTrees(project.root);
     await this.#publishEmptyPackageTree(project, packageJsonText);
     return Object.freeze({
@@ -1006,6 +995,8 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       : await this.#trustedProvenance(command.project, command.packageJsonText);
     if (existing !== null) return existing;
 
+    const snapshotOnly =
+      this.#automaticFallback === 'snapshot-only' || command.fallback === 'snapshot-only';
     const failures: SnapshotFailure[] = [];
     let snapshot = command.snapshot;
     if (!snapshot && command.snapshotSource) {
@@ -1069,20 +1060,12 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           'snapshot-not-configured',
         );
       }
-      throw new PackageAcquisitionError(
-        'ensure',
-        `verified snapshot unavailable for ${command.project.projectId}`,
-        {
-          failure: 'snapshot-unavailable',
-          cause: new Error('snapshot-only acquisition has no verified snapshot'),
-          snapshotFailures: failures,
-        },
-      );
+      throw snapshotUnavailableError(command.project.projectId, failures);
     };
 
     // Validation rejection is pre-mutation: a snapshot-only arrival keeps the
     // existing destination and claim byte-identical.
-    if (!snapshotPlan && command.fallback === 'snapshot-only') throwSnapshotUnavailable();
+    if (!snapshotPlan && snapshotOnly) throwSnapshotUnavailable();
 
     let claim: InstallStampClaim;
     try {
@@ -1130,7 +1113,10 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           snapshotPlan.shadowPlan,
           command.onPromotion,
         );
-        if (command.requireTrustedSnapshot && promotion.status !== 'trusted')
+        if (
+          (command.requireTrustedSnapshot || this.#automaticFallback === 'snapshot-only') &&
+          promotion.status !== 'trusted'
+        )
           throw new Error(`Snapshot ${promotionReason(promotion)}`);
         return {
           outcome: 'snapshot',
@@ -1141,7 +1127,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       }
     }
 
-    if (restoreRejected) {
+    if (restoreRejected && this.#automaticFallback !== 'snapshot-only') {
       try {
         await this.#adapter.prepareEnsure?.(command, {
           claim,
@@ -1156,7 +1142,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       }
     }
 
-    if (command.fallback === 'snapshot-only') throwSnapshotUnavailable();
+    if (snapshotOnly) throwSnapshotUnavailable();
 
     const installed = await this.#install(
       {

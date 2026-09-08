@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 import { SyncMirrorVfs } from '../../glue/sync-mirror-vfs.ts';
 import { createPlaygroundProjectCatalog } from '../../workbench/internal/playground-project-catalog.ts';
 import { definePlaygroundProject } from '../../workbench/internal/playground-project-definition.ts';
-import { type OwnerPackageStateOptions, createOwnerPackageState } from '../owner-package-state.ts';
+import { createOwnerPackageState } from '../owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from '../owner-vfs-authority.ts';
 import { createPlaygroundProjectAuthority } from '../playground-project-authority.ts';
 import { workbenchFirstMaterializationPackageConfig } from '../workbench-package-config.ts';
@@ -54,12 +54,8 @@ export async function openSnapshotOnlyOwner(
           }),
         }
       : {}),
-    resolverUrl: () => undefined,
-    resolverBundleBaseUrl: () => undefined,
-    resolverPin: () => undefined,
   };
-  // I3 RED shape: current type requires a capability absent in the accepted policy.
-  const packages = createOwnerPackageState(options as unknown as OwnerPackageStateOptions);
+  const packages = createOwnerPackageState(options);
   const owner = await createPlaygroundProjectAuthority({
     ...composition,
     persistence: 'required',

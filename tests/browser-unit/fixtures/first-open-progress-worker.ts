@@ -287,7 +287,7 @@ async function runFirstOpen(deployment: FirstOpenDeployment): Promise<FirstOpenR
         wasm: { sqlite: deployment.wasm.sqlite },
         previewProbeTimeoutMs: 30_000,
       },
-      packageAcquisition: { registryUrl: '/npm-registry' },
+      packageAcquisition: { mode: 'registry', registryUrl: '/npm-registry' },
       storage: { persistence: 'preferred' },
     },
   });

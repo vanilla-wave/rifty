@@ -152,6 +152,16 @@ if (import.meta.hot) import.meta.hot.accept('./message.ts', (module) => render(m
     async closeAndProveSavedState() {
       try {
         await run.close();
+        const uncached = await command(project, 'npm install');
+        if (
+          uncached.exit.code === 0 ||
+          uncached.exit.signal !== null ||
+          !uncached.output.includes('npm-client.registry.tarball') ||
+          !uncached.output.includes('not cached')
+        )
+          throw new Error(
+            `Uncached required tarball did not fail loudly: ${JSON.stringify(uncached)}`,
+          );
         const denied = await command(
           project,
           'npm install rifty-packed-unavailable --prefer-online',

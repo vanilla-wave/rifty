@@ -129,6 +129,12 @@ function packageLockValue(authority: OwnerVfsAuthority, root: string): unknown {
 }
 
 export function createOwnerPackageState(options: OwnerPackageStateOptions): OwnerPackageState {
+  const registry = options.registry;
+  if (
+    registry === undefined &&
+    (options.resolverUrl || options.resolverBundleBaseUrl || options.resolverPin)
+  )
+    throw new TypeError('Eddy acquisition requires a registry capability');
   const configs = new Map<string, OwnerPackageConfig>();
 
   const templateNodeModulesFiles = (
@@ -143,7 +149,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
   }
 
-  const registry = options.registry;
   const resolverUrl = options.resolverUrl;
   const resolverBundleBaseUrl = options.resolverBundleBaseUrl;
   const resolverPin = options.resolverPin;
@@ -164,7 +169,8 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   };
 
   const primePrefetch = (config: OwnerPackageConfig): void => {
-    const url = resolverUrl();
+    if (registry === undefined) return;
+    const url = resolverUrl?.();
     const identity = JSON.stringify([
       config.templateId,
       config.cfg.root,
@@ -190,7 +196,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       },
       pinFor: () =>
         learnedPinForPackageJsonSync(options.fsSync, config.cfg.packageJson) ??
-        resolverPin(config.templateId),
+        resolverPin?.(config.templateId),
     });
     if (decision.kind === 'keep') return;
     if (decision.kind === 'clear') {
@@ -205,14 +211,14 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             packageJsonText: config.cfg.packageJson,
             resolverUrl: url as string,
             closureHash: decision.closureHash,
-            bundleBaseUrl: resolverBundleBaseUrl(),
+            bundleBaseUrl: resolverBundleBaseUrl?.(),
           })
         : undefined;
   };
 
   const baseNpmDeps: Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'> = {
     vfs: options.vfs,
-    registry,
+    ...(registry === undefined ? {} : { registry }),
     ...(options.install ? { install: options.install } : {}),
     assertPortablePaths: (paths) => options.fsSync.assertPortablePaths(paths),
     flush: options.flush,
@@ -222,27 +228,32 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         ? activeProject.slug
         : `root:${normalized}`;
     },
-    resolverUrl: resolverUrl(),
-    resolverBundleBaseUrl: resolverBundleBaseUrl(),
-    learnedPins: {
-      get: (key) => readLearnedPin(options.vfs, key),
-      set: async (key, hash, expectedCurrent) => {
-        await writeLearnedPin(options.vfs, key, hash, undefined, expectedCurrent);
-      },
-      revalidate: async (_key, request, servedHash) => {
-        const url = resolverUrl();
-        if (!url) throw new Error('eddy resolver is not configured');
-        await revalidateLearnedPin({
-          vfs: options.vfs,
-          resolverUrl: url,
-          request,
-          staleClosureHash: servedHash,
-        });
-      },
-    },
+    ...(registry === undefined
+      ? {}
+      : {
+          resolverUrl: resolverUrl?.(),
+          resolverBundleBaseUrl: resolverBundleBaseUrl?.(),
+          learnedPins: {
+            get: (key) => readLearnedPin(options.vfs, key),
+            set: async (key, hash, expectedCurrent) => {
+              await writeLearnedPin(options.vfs, key, hash, undefined, expectedCurrent);
+            },
+            revalidate: async (_key, request, servedHash) => {
+              const url = resolverUrl?.();
+              if (!url) throw new Error('eddy resolver is not configured');
+              await revalidateLearnedPin({
+                vfs: options.vfs,
+                resolverUrl: url,
+                request,
+                staleClosureHash: servedHash,
+              });
+            },
+          },
+        }),
   };
 
   const packages = createPackageAcquisitionAuthority({
+    automaticFallback: registry === undefined ? 'snapshot-only' : 'install',
     stamps,
     stampTransition: { flush: options.flush },
     resolveTreeGuards: (root, knownProjects) =>
@@ -356,13 +367,17 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                   priorTrustedTree: info.priorTrustedTree,
                 });
               },
-              resolverClosureHash: () => resolverPin(config.templateId),
-              resolverPrefetch: () =>
-                configured !== undefined &&
-                configKey(configured.cfg.root, configured.slug) ===
-                  configKey(request.project.root, request.project.slug)
-                  ? installPrefetch
-                  : undefined,
+              ...(registry === undefined
+                ? {}
+                : {
+                    resolverClosureHash: () => resolverPin?.(config.templateId),
+                    resolverPrefetch: () =>
+                      configured !== undefined &&
+                      configKey(configured.cfg.root, configured.slug) ===
+                        configKey(request.project.root, request.project.slug)
+                        ? installPrefetch
+                        : undefined,
+                  }),
             }
           : operationBase;
         const sink = {

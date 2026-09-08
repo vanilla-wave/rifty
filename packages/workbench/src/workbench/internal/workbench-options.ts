@@ -7,6 +7,10 @@
 import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
 import type { OwnerStoragePersistence } from '../../workers/owner-storage.ts';
 import type { WorkbenchOwnerStartInput } from '../workbench-owner-port.ts';
+import {
+  type WorkbenchPackageAcquisition,
+  normalizeWorkbenchPackageAcquisition,
+} from './workbench-package-acquisition.ts';
 
 export type StoragePersistence = OwnerStoragePersistence;
 
@@ -40,14 +44,7 @@ export interface WorkbenchOptions {
      */
     readonly ownerOperationSilenceTimeoutMs?: number;
   };
-  readonly packageAcquisition: {
-    readonly registryUrl: string;
-    readonly eddy?: {
-      readonly resolverUrl: string;
-      readonly bundleBaseUrl?: string;
-      readonly presetPins?: Readonly<Record<string, string>>;
-    };
-  };
+  readonly packageAcquisition: WorkbenchPackageAcquisition;
   readonly storage: {
     readonly persistence: StoragePersistence;
   };
@@ -76,12 +73,10 @@ export function validateWorkbenchOptions(
   const workers = record(deployment.workers, 'deployment.workers');
   const serviceWorker = record(deployment.serviceWorker, 'deployment.serviceWorker');
   const wasm = record(deployment.wasm, 'deployment.wasm');
-  const acquisition = record(root.packageAcquisition, 'packageAcquisition');
-  if (Reflect.ownKeys(acquisition).includes('snapshotUrl')) {
-    throw new TypeError(
-      'packageAcquisition.snapshotUrl is retired; trusted snapshots belong to Playground definitions',
-    );
-  }
+  const packageAcquisition = normalizeWorkbenchPackageAcquisition(
+    root.packageAcquisition,
+    (value, field, pathBase) => httpEndpointUrl(value, field, urlContext.apiBaseUrl, { pathBase }),
+  );
   const storage = record(root.storage, 'storage');
 
   const timeoutValue = deployment.previewProbeTimeoutMs;
@@ -98,32 +93,6 @@ export function validateWorkbenchOptions(
     silenceValue === undefined
       ? undefined
       : positiveFinite(silenceValue, 'deployment.ownerOperationSilenceTimeoutMs');
-
-  const eddyValue = acquisition.eddy;
-  let eddy: NormalizedWorkbenchOwnerInput['packageAcquisition']['eddy'];
-  if (eddyValue !== undefined) {
-    const input = record(eddyValue, 'packageAcquisition.eddy');
-    const hasExplicitBundleBase = input.bundleBaseUrl !== undefined;
-    const resolverUrl = httpEndpointUrl(
-      input.resolverUrl,
-      'packageAcquisition.eddy.resolverUrl',
-      urlContext.apiBaseUrl,
-      { pathBase: !hasExplicitBundleBase },
-    );
-    const presetPins = stringMap(input.presetPins, 'packageAcquisition.eddy.presetPins');
-    eddy = Object.freeze({
-      resolverUrl,
-      bundleBaseUrl: !hasExplicitBundleBase
-        ? resolverUrl
-        : httpEndpointUrl(
-            input.bundleBaseUrl,
-            'packageAcquisition.eddy.bundleBaseUrl',
-            urlContext.apiBaseUrl,
-            { pathBase: true },
-          ),
-      presetPins,
-    });
-  }
 
   const persistence = storage.persistence;
   if (persistence !== 'required' && persistence !== 'preferred' && persistence !== 'ephemeral') {
@@ -178,15 +147,7 @@ export function validateWorkbenchOptions(
         previewProbeTimeoutMs,
         ...(ownerOperationSilenceTimeoutMs === undefined ? {} : { ownerOperationSilenceTimeoutMs }),
       }),
-      packageAcquisition: Object.freeze({
-        registryUrl: httpEndpointUrl(
-          acquisition.registryUrl,
-          'packageAcquisition.registryUrl',
-          urlContext.apiBaseUrl,
-          { pathBase: true },
-        ),
-        ...(eddy === undefined ? {} : { eddy }),
-      }),
+      packageAcquisition,
     }),
     storage: persistence,
   });
@@ -340,22 +301,4 @@ function positiveFinite(value: unknown, path: string): number {
     throw new TypeError(`${path} must be a positive finite number`);
   }
   return value;
-}
-
-function stringMap(value: unknown, path: string): Readonly<Record<string, string>> {
-  if (value === undefined) return Object.freeze({});
-  const input = record(value, path);
-  const result: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(input)) {
-    if (key.length === 0 || typeof entry !== 'string' || entry.trim().length === 0) {
-      throw new TypeError(`${path}.${key || '<empty>'} must be a non-empty string`);
-    }
-    Object.defineProperty(result, key, {
-      value: entry,
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
-  }
-  return Object.freeze(result);
 }

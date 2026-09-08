@@ -287,7 +287,9 @@ describe('I3 owner policy without a registry capability', () => {
       expect.soft(opened).toBeUndefined();
       expect
         .soft(publicFailure(failure).message)
-        .toMatch(/replay.*(?:missing|absent)|(?:missing|absent).*replay|tarball cache.*lockfile closure/i);
+        .toMatch(
+          /replay.*(?:missing|absent)|(?:missing|absent).*replay|tarball cache.*lockfile closure/i,
+        );
       expect.soft(h.fs.liveSnapshot()).toEqual(before);
       expect.soft(h.fs.durableSnapshot()).toEqual(before);
       expect.soft(network.requests).toEqual([descriptor.assetUrl]);

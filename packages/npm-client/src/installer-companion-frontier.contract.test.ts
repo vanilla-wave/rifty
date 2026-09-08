@@ -116,6 +116,16 @@ describe('declared companion source frontier from real npm locks', () => {
     expect(metadataRequests(state.http)).toEqual([]);
   });
 
+  it('does not synthesize a missing companion pin from cached bytes without a registry', async () => {
+    const { vfs, registry } = await prepare('retained');
+    const installed = await install({ vfs, cwd: '/project', registry });
+    Reflect.deleteProperty(installed.lockfile.packages, companion);
+    await vfs.writeFile('/project/package-lock.json', JSON.stringify(installed.lockfile));
+    await expect(install({ vfs, cwd: '/project' })).rejects.toThrow(
+      /registry unavailable for @rollup\/wasm-node/,
+    );
+  });
+
   it('[fault: corrupt-input] keeps a missing ordinary child of a retained trigger loud', async () => {
     const { vfs, registry } = await prepare('root', (lock) => {
       Reflect.deleteProperty(lock.packages, 'node_modules/@types/estree');

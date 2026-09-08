@@ -19,6 +19,22 @@ import type {
 
 export type AcquisitionProvenance = ProjectAcquisitionProvenance;
 
+export function installedProvenance(result: InstallResult): AcquisitionProvenance {
+  const provenance = result.provenance;
+  return {
+    outcome: 'installed',
+    resolution: provenance.resolution,
+    packages: provenance.packages.map((entry) => ({
+      name: entry.name,
+      version: entry.version,
+      transport: entry.transport,
+    })),
+    ...(provenance.eddyFallback
+      ? { eddyFallback: { reason: provenance.eddyFallback.reason } }
+      : {}),
+  };
+}
+
 export interface PackageAcquisitionProject {
   readonly projectId: string;
   readonly root: string;
@@ -280,6 +296,8 @@ export type AcquisitionObservation =
     };
 
 export interface PackageAcquisitionAuthorityOptions {
+  /** Owner capability policy; per-command fallback cannot grant automatic installation. */
+  readonly automaticFallback?: 'install' | 'snapshot-only';
   readonly stamps: InstallStampAuthority;
   /** The owner durability barrier forwarded to every stamp state transition. */
   readonly stampTransition?: InstallStampTransitionOptions;
@@ -314,6 +332,24 @@ export class PackageAcquisitionError extends Error {
     this.failure = options.failure;
     this.snapshotFailures = [...options.snapshotFailures];
   }
+}
+
+export function snapshotUnavailableError(
+  projectId: string,
+  failures: readonly SnapshotFailure[],
+): PackageAcquisitionError {
+  const reason =
+    failures.map((failure) => failure.reason).join('; ') ||
+    'automatic package installation is unavailable';
+  return new PackageAcquisitionError(
+    'ensure',
+    `verified snapshot unavailable for ${projectId} (snapshot-only acquisition): ${reason}`,
+    {
+      failure: 'snapshot-unavailable',
+      cause: new Error('snapshot-only acquisition has no verified snapshot'),
+      snapshotFailures: failures,
+    },
+  );
 }
 
 export type PackageAcquisitionFailure =

@@ -1,4 +1,5 @@
 import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
+import type { NormalizedWorkbenchPackageAcquisition } from './internal/workbench-package-acquisition.ts';
 import type {
   PlaygroundProjectCatalog,
   PlaygroundProjectOpenOptions,
@@ -79,14 +80,7 @@ export interface WorkbenchOwnerStartInput {
      *  operation; unset = the shipped default at the transport. */
     readonly ownerOperationSilenceTimeoutMs?: number;
   };
-  readonly packageAcquisition: {
-    readonly registryUrl: string;
-    readonly eddy?: {
-      readonly resolverUrl: string;
-      readonly bundleBaseUrl: string;
-      readonly presetPins: Readonly<Record<string, string>>;
-    };
-  };
+  readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
   readonly storage: { readonly persistence: OwnerStoragePersistence };
   /** First-party companion only; captured historical selection, never guest env. */
   readonly legacyWorkspacePrefix?: string;

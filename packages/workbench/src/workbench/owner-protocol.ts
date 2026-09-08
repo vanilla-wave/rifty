@@ -5,8 +5,11 @@ import {
   inspectSerializedWorkbenchOwnerError as inspectSerializedError,
 } from './errors.ts';
 import {
+  type NormalizedWorkbenchPackageAcquisition,
+  inspectNormalizedWorkbenchPackageAcquisition,
+} from './internal/workbench-package-acquisition.ts';
+import {
   absoluteHttpUrl,
-  copyStringMap,
   exact,
   exactMatch,
   invalid,
@@ -54,14 +57,7 @@ export interface WorkbenchOwnerBootConfig {
     readonly wasm: { readonly sqlite: string };
     readonly previewProbeTimeoutMs: number;
   };
-  readonly packageAcquisition: {
-    readonly registryUrl: string;
-    readonly eddy?: {
-      readonly resolverUrl: string;
-      readonly bundleBaseUrl: string;
-      readonly presetPins: Readonly<Record<string, string>>;
-    };
-  };
+  readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
   readonly storage: { readonly persistence: 'required' | 'preferred' | 'ephemeral' };
   readonly legacyWorkspacePrefix?: string;
   readonly playgroundUrlContext?: {
@@ -242,22 +238,9 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     'owner boot preview proof timeout',
   );
 
-  const packageAcquisition = record(config.packageAcquisition, 'owner boot package acquisition');
-  exact(
-    packageAcquisition,
-    optionalKeys(packageAcquisition, ['registryUrl'], ['eddy']),
-    'owner boot package acquisition',
+  const packageAcquisition = inspectNormalizedWorkbenchPackageAcquisition(
+    config.packageAcquisition,
   );
-  let eddy: WorkbenchOwnerBootConfig['packageAcquisition']['eddy'];
-  if (own(packageAcquisition, 'eddy')) {
-    const candidate = record(packageAcquisition.eddy, 'owner boot Eddy config');
-    exact(candidate, ['resolverUrl', 'bundleBaseUrl', 'presetPins'], 'owner boot Eddy config');
-    eddy = Object.freeze({
-      resolverUrl: nonEmptyString(candidate.resolverUrl, 'owner boot Eddy resolverUrl'),
-      bundleBaseUrl: nonEmptyString(candidate.bundleBaseUrl, 'owner boot Eddy bundleBaseUrl'),
-      presetPins: copyStringMap(candidate.presetPins, 'owner boot Eddy presetPins'),
-    });
-  }
 
   const storage = record(config.storage, 'owner boot storage policy');
   exact(storage, ['persistence'], 'owner boot storage policy');
@@ -283,10 +266,6 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     }),
     previewProbeTimeoutMs,
   });
-  const frozenAcquisition = Object.freeze({
-    registryUrl: nonEmptyString(packageAcquisition.registryUrl, 'owner boot registryUrl'),
-    ...(eddy === undefined ? {} : { eddy }),
-  });
   let legacyWorkspacePrefix: string | undefined;
   if (own(config, 'legacyWorkspacePrefix')) {
     const candidate = nonEmptyString(
@@ -308,7 +287,7 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   }
   return Object.freeze({
     deployment: frozenDeployment,
-    packageAcquisition: frozenAcquisition,
+    packageAcquisition,
     storage: Object.freeze({ persistence: storage.persistence }),
     ...(legacyWorkspacePrefix === undefined ? {} : { legacyWorkspacePrefix }),
     ...(playgroundUrlContext === undefined ? {} : { playgroundUrlContext }),
