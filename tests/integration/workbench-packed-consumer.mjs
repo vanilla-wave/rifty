@@ -1290,6 +1290,9 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       await strictPage.evaluate(async () =>
         (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).closeAndProveSavedState(),
       );
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveStorageNamespaces(),
+      );
       assert.equal(
         registry.requests.length,
         strictBefore,

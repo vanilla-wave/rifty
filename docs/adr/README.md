@@ -19,6 +19,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0276 | Semantic VFS replacements use applied owner evidence |
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
 | 0372 | Dedicated-Worker sync capability selects OPFS without COI |
+| 0402 | Mount Workbench namespaces through one captured OPFS root |
 
 ### kernel
 

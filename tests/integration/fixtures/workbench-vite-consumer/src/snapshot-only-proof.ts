@@ -4,6 +4,7 @@ import {
   openPlaygroundWorkbench,
 } from '@riftydev/workbench/playground';
 import { proveSnapshotApplication } from './snapshot-application-proof';
+import { proveStorageNamespaces } from './storage-namespace-proof';
 
 interface Snapshot {
   readonly packageJsonText: string;
@@ -16,6 +17,7 @@ export interface SnapshotOnlyAcceptance {
   readonly buildOutput: string;
   writeMessage(message: string): Promise<void>;
   closeAndProveSavedState(): Promise<void>;
+  proveStorageNamespaces(): Promise<void>;
 }
 
 async function command(project: ProjectSession<PreviewHandle>, line: string) {
@@ -149,6 +151,7 @@ if (import.meta.hot) import.meta.hot.accept('./message.ts', (module) => render(m
         { expectedVersion: current.version },
       );
     },
+    proveStorageNamespaces: () => proveStorageNamespaces(strict),
     async closeAndProveSavedState() {
       try {
         await run.close();
