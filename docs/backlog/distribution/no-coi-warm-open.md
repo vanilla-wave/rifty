@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Open a proven saved no-COI installation without repairing its files
 created: 2026-09-08
 why: Fresh SDK Workers lack runtime adapter activation; reinstalling to activate them replaces saved dependency edits.
@@ -64,6 +64,8 @@ before activation reads can serve as proof.
 No automatic repair on open, tree-byte surveillance, cross-owner coherence or crash transaction.
 
 ## Decisions
+
+ready-verdict: 2026-09-08 — Contract+RED @ f822d4e2281bd66c28aeafbf63056309e23452a9 — docs/backlog/distribution/reference/issue319-contract-red.json
 
 - 2026-09-08 — preparation only; RED executed on absent public method, downstream acceptance awaits GREEN; record: reference/no-coi-warm-open-red-evidence.md.
 - 2026-09-08 — 0.6 no-COI install did not mint compatible authority; preserve bytes and require explicit install, never adopt lock/tree presence as proof.

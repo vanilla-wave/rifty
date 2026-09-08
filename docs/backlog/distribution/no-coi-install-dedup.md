@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Skip only proven durable installer writes and directories
 created: 2026-09-08
 why: Repeated no-COI installs rewrite unchanged native OPFS package files.
@@ -40,5 +40,7 @@ challenge: 2026-09-08 — clear; reuse goal I4 premise. Fresh reads cost lookup,
 but establish equality without a new byte ledger or mutable-cache assumption.
 
 ## Decisions
+
+ready-verdict: 2026-09-08 — Contract+RED @ f822d4e2281bd66c28aeafbf63056309e23452a9 — docs/backlog/distribution/reference/issue319-contract-red.json
 
 - 2026-09-08 — RED native nanoid repeat: index.js writable calls 4, nanoid mkdir(create) 5; repair succeeds. Command in tests/no-coi/no-coi-install-dedup.spec.ts via pnpm test:no-coi, ports 5511–5513.

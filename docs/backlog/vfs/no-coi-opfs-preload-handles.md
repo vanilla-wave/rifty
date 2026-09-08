@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: draft
+status: ready
 title: Load persisted OPFS bytes honestly in one native traversal
 created: 2026-09-08
 why: Reopening cannot trust unreadable bytes; boot repeats native handle acquisition already paid by the index walk.
@@ -77,5 +77,7 @@ sync-OPFS realms retain NotImplementedError('OpfsFsSync'); no new capability cla
 challenge: 2026-09-08 — clear; single traversal uses handles already obtained; no native wrapper/invalidation mechanism needed.
 
 ## Decisions
+
+ready-verdict: 2026-09-08 — Contract+RED @ f822d4e2281bd66c28aeafbf63056309e23452a9 — docs/backlog/distribution/reference/issue319-contract-red.json
 
 - 2026-09-08 — ADR-0393 records independent DEC-2 review; preparation only, Contract+RED remains with goal driver.
