@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Claude shares `rifty-review-inline` with Codex via a skill symlink, replacing
+  the duplicate slash command; `disable-model-invocation: true` enforces manual
+  invocation in Claude. Codex keeps `allow_implicit_invocation: false`.
+
 - Process: replace empty-frontier refinement closure with one `RDY-6` check
   against raw user input, material reachable transitions and decision authority;
   refine/FIT reuse its evidence, Challenge checks omissions, live user choices
