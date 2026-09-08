@@ -278,3 +278,30 @@ receipt or generic trust framework. Final written-result review is separate.
 - Initial `pnpm pr:check`: five environment/setup failures (four tsx IPC EPERM, one missing build outputs); no product-test failure.
 - `pnpm build:libs`: passed. Repeated `pnpm pr:check` with local IPC permitted: docs-only 20/20 passed; typecheck/build:libs/check:arch/test:run/test:parity skipped by diff classification.
 - Fresh reviewer `/root/warm_reopen_final` checked the complete final draft set against the raw request, definitive answer and PR #316 sources: [Final+GREEN PASS](issue319-refine-final-green.json), reviewed bb749252fe55528160fbf45bc0f5fea51b5b708d. No material scope fork found. Goal implementation remains unproven.
+
+## FIT completion
+
+User asked: «По процессам оформелние эпика заканчивается на draft? Все user fork разрешены?»
+`docs/process/stages/fit.md` steps 5/8/9 require a seeded route, fresh final
+written-result check and ready goal; child contracts stay draft. Refine had
+closed the identified user frontier, but had stopped before that FIT completion.
+The remaining three map questions are technical choices, not user-scope blockers.
+
+Current-main check:
+
+```text
+gh api repos/vanilla-wave/rifty/commits/main --jq .sha
+9a6331194f4b67245c2ab118a72f93920da584c5
+gh api repos/vanilla-wave/rifty/compare/da485021fab3f9f881ebafe29106b604f347b2b3...9a6331194f4b67245c2ab118a72f93920da584c5
+ahead_by: 2
+Share manual inline review skill with Claude (#320)
+Fix Express command exit after server close (#318)
+```
+
+The returned file list changes review tooling and Express drain/lifecycle
+ownership. It contains no no-COI toolchain public API/worker install changes,
+installer/linker, OpfsVfs or OpfsFsSync changes. Thus I1/I2's missing warm-open
+entry, I3's ignored flush report, I4's unconditional linking and I5's repeated
+OPFS lookup remain absent on this main. No new runtime run/timing is implied.
+The independent flush-result repair can be seeded without resolving the new
+activation authority or handle ownership; its draft leaves RED to PICKUP.

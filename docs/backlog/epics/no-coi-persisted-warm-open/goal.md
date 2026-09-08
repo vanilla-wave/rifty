@@ -62,6 +62,10 @@ Baseline: da485021fab3f9f881ebafe29106b604f347b2b3. I1/I2 are missing public
 warm-open behavior (source + issue); I3/I4 have the executed nanoid probe;
 I5 is absent in OpfsVfs lookup/init code and has baseline native-call counts.
 These are proposed delivered results, not passing acceptance proofs.
+FIT rechecked current main 9a6331194f4b67245c2ab118a72f93920da584c5: the two
+intervening commits change review entry/Express drain ownership, not these
+missing public warm-open, flush-report, installer or OPFS lookup boundaries.
+The baseline absence evidence remains applicable; see the research FIT record.
 
 1. I1. Full sandbox/page recreation has a supported warm-open path that validates
    compatible installation authority and activates fresh-worker adapters without
@@ -87,6 +91,7 @@ These are proposed delivered results, not passing acceptance proofs.
 
 ## Decisions
 
+- 2026-09-08 — FIT: all identified user forks resolved; reuse the checked I1–I5 destination and tier, retain three agent-owned route questions, seed the independent I3 persistence-error draft; no implementation authorized by this preparation.
 - 2026-09-08 — user, final repeated round 1: «Сохранять правки при открытии; восстановление — только по явному install»; supersedes the earlier selection of repair-on-open.
 - 2026-09-08 — issue repair examples now belong to explicit install; open cannot distinguish intentional edits from corruption, consistent with ADR-0307.
 - 2026-09-08 — user requested PR #316 context; its saved-state priority/incompatibility-preserve decisions corroborate this direction, without importing its COI-only snapshot/namespace APIs or production tier.
