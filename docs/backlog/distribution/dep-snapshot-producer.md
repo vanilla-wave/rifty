@@ -6,7 +6,7 @@ created: 2026-09-07
 why: A host cannot bake its dependency snapshot in its own CI using only installed rifty packages.
 user_story: As the Tracker plugin-sandbox embedder, I want to bake a browsable dependency archive in my own CI, but today a host cannot bake its dependency snapshot in its own CI using only installed rifty packages.
 epic: self-hosted-snapshot-workbench
-blocked_by: []
+blocked_by: [distribution/dep-snapshot-tar]
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md]
 code: [apps/playground/tools/bake-dep-snapshots.ts, packages/workbench/src/glue/dep-snapshot.ts, packages/workbench/src/workbench/public.ts]
 ---
@@ -56,6 +56,8 @@ Scope and user decisions: goal I1. Baseline/dedup and executed evidence:
 docs/backlog/distribution/reference/embedder-gaps-evidence.md.
 
 ## Decisions
+
+- re-cut: 2026-09-08 — distribution/dep-snapshot-tar owns codec proof first; this unit retains public producer and packed-consumer I1 proof — trace: none
 
 - 2026-09-07 — F1 user decision: builder-owned registry authentication excluded; host environment provides access.
 

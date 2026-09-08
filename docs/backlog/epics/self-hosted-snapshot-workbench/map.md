@@ -2,7 +2,7 @@
 
 ## Items
 
-1. `distribution/dep-snapshot-producer` — published manifest/lock producer,
+1. `distribution/dep-snapshot-tar` — standard envelope codec and ordinary-tool proof (I1); then `distribution/dep-snapshot-producer` — published manifest/lock producer,
    identity output and standard tar.gz consumer proof (I1).
 2. `distribution/workbench-static-assets` — copyable Worker/SW/WASM closure,
    first proven with the existing install-enabled mode (I2).
