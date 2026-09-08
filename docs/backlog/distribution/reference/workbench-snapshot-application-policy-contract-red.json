@@ -1,0 +1,162 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concern only) at ebffc3a6f88bab8ae7a32fa76114c0c852d55e37; proceed to implementation, not a merge approval. All 13 tests fail for the missing I8 policy (reseed / definition mismatch / no SnapshotApplicationConflictError / absent export), not import, typecheck, or URL admission.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-application-policy.md @ ebffc3a6f88bab8ae7a32fa76114c0c852d55e37 (BASE 7dbce1fe7574041108f67952de7e2ef1bdd32339); ADR-0396 docs/adr/distribution/0396-apply-snapshots-through-host-selected-initial-only-and-conflict-policies.md; goal docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I8; evidence docs/backlog/distribution/reference/workbench-snapshot-application-policy-evidence.md and reference/embedder-gaps-evidence.md I8 / Re-fit.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:5",
+      "summary": "Initial-deployment-only default, last-applied catalog identity, and explicit generic overwrite/error apply remain unimplemented; this checkpoint proves RED readiness only."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Registry-free snapshot-only admission and loud selected-snapshot failure remain; still waits on application policy."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Selected OPFS namespace isolation, empty-on-first-selection, and former-setting reopening remain."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Byte-exact retained orphan Scratch enumeration/download plus fresh Scratch, surviving reopen, remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Host-selected preview prefix under a non-root SW scope with navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:15",
+      "summary": "Public effective boot/file/tool budgets without hidden shorter sibling deadlines remain."
+    },
+    {
+      "clause": "I1 (packed residual)",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:16",
+      "summary": "Packed produce/restore from an installed tarball inside the composed whole-scenario packed-host proof remains after the sealed producer landed."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Default and { mode: 'initial-deployment-only' } keep an existing Scratch or named project's saved files when only unused snapshot provenance changes, including dirty Scratch without preserveDirtySameStarter; the unused asset is not fetched; catalog adoption stays on the last applied snapshot.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:283",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: { mode: 'apply', conflict?: 'error' | 'overwrite' } evaluates snapshot payload on every requested apply, including unchanged snapshotId. Identical bytes and directory/directory coexistence are not conflicts; different bytes or file-vs-directory/ancestor clashes are. Error throws SnapshotApplicationConflictError with paths before any payload mutation, including additions. Overwrite replaces conflicts, adds missing payload files, and keeps extras. Package filenames are ordinary collision fixtures.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:369",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: After a successful apply, catalog adoption matches the applied snapshot and install claims are retired/rederived through the existing stamp authority; apply does not run an automatic install to manufacture trust. Missing install trust never counts as project absent.",
+      "source": "acceptance",
+      "trace": "I8+ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:535",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Structural conflict × apply-error — conflicting paths are reported and the pre-apply tree is byte-identical, including extras and would-be additions.",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:369",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Crash/reopen × apply-overwrite — a torn payload write is not published as completed; the preserved copy remains.",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.fault.test.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Corrupt/incompatible snapshot × apply — existing snapshot identity/restore failures reject before destination mutation.",
+      "source": "fault-matrix",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-first-materialization.contract.test.ts:700",
+      "note": ""
+    },
+    {
+      "row": "Public API: SnapshotApplication ({ mode: 'initial-deployment-only' } | { mode: 'apply'; conflict?: 'error' | 'overwrite' }) on Playground createScratch / openProject; omitted field is initial-deployment-only.",
+      "source": "public-api",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:81",
+      "note": ""
+    },
+    {
+      "row": "Public API: SnapshotApplicationConflictError (name, paths: readonly string[]) exported from @riftydev/workbench.",
+      "source": "public-api",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:554",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-snapshot-application.fault.test.ts:134",
+          "evidence": "pnpm exec vitest run packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts packages/workbench/src/workers/workbench-snapshot-application.fault.test.ts — Vitest 2.1.9, Node v24.16.0: 13 failed / 0 passed. Fault case failed at fault.test.ts:167 ENOENT /.rifty/workbench/v1/projects/scratch/tree/user.txt after createScratch({ snapshotApplication: { mode: 'apply', conflict: 'error' } }) then DurableOwnerFs restart. playground-project-authority.ts:2437-2442 replaces the scratch tree when snapshotId changes (preserveDirtySameStarter requires baselineMatches). The test never tears an overwrite write. contract.test.ts:345 and :462 (extras-only apply cases) also fail ENOENT user.txt; :411 additionally expects node_modules/pin/readme.txt pin-b. pnpm exec tsc -p packages/workbench/tsconfig.json --noEmit: no errors in these files.",
+          "summary": "The crash/reopen RED is apply-error plus reopen, not a torn apply-overwrite publish. Extras-only apply cases (not-whole-tree-reseed, identical-payload) would keep extras if apply were ignored after initial-only; apply-error and overwrite+pin-b still fail without apply. Catalog last-applied identity after initial-only/apply is not asserted. Advisory (REV-4).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "ebffc3a6f88bab8ae7a32fa76114c0c852d55e37"
+}
