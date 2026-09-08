@@ -36,3 +36,25 @@ I4 RED: `RIFTY_NO_COI_PORT=5511 RIFTY_NO_COI_ORACLE_PORT=5512 RIFTY_NO_COI_RESOU
 ## Integrated gate inventory
 
 Final gate on main-integrated ae4ecd4: 24/25 lanes passed; test:run reproduces only extraction-boundary inventory count141 vs145 (0 timeouts). Four added Workbench modules are the shared claim guard, thin claim FS, no-COI composition context and install-only Vfs. Update count to145; keep exact closure equality, runtime reachability and all forbidden import checks. PR-4 final review compares the old/new criterion; no product assertion is weakened.
+
+## Final executed acceptance
+
+Source: main-integrated 7c057344260c2bab74dd4002f00fd97f6a26f565; subsequent
+no-coi spec edit adds counters/timing only. Chromium 148.0.7778.96.
+
+- `pnpm test:packed-toolchain-surface`: PASS, 15 first-party + 72 external tarballs, strict TS and actual packed SDK/Worker browser graphs.
+- `RIFTY_PLAYGROUND_PORT=5366 pnpm test:e2e:prod`: 7/7 PASS (2.5 min), including production owner boot and real package journeys.
+- `RIFTY_NO_COI_PORT=5511 RIFTY_NO_COI_ORACLE_PORT=5512 RIFTY_NO_COI_RESOURCE_PORT=5513 pnpm test:no-coi no-coi-warm-open.spec.ts no-coi-install-dedup.spec.ts no-coi-persistence.fault.spec.ts no-coi-preload-failure.spec.ts`: 18/18 PASS (28.0s). Full-page Vite 7.3.6 activation/preservation/cached repair case: 9.9s total.
+- `RIFTY_PLAYGROUND_PORT=5355 pnpm test:browser-unit opfs-preload-handles.spec.ts install-mirror-proof.spec.ts`: 7/7 PASS (4.6s).
+
+Counts and elapsed time are separate observations, not latency guarantees:
+
+| Operation | Native counts | Elapsed |
+| --- | --- | --- |
+| Eight-file paired boot | root 1, directory lookup 0, fileHandle 0, getFile 8 (baseline 2/24/8/16) | 1.8ms |
+| nanoid 3.3.18 explicit repeat install | writable 3, directory lookup 120, fileHandle 36, getFile 26; unchanged index.js writes 0 and nanoid directory creates 0 | 15.8ms |
+| Same nanoid cold install | no comparative latency claim; includes first acquisition | 510.6ms |
+
+Original repeat-install baseline counted 26 writable acquisitions. Final three
+remaining writes are installation metadata; persisted-equal package writes are
+skipped. Vite is exercised as acceptance, not used as infrastructure policy.
