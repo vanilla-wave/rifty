@@ -316,6 +316,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0378 | Causal resident port ownership |
 | 0379 | Resident entry admission authority |
 | 0386 | Publish deterministic dependency snapshot archives |
+| 0387 | Expose caller-pinned dependency snapshot production |
 
 ## Superseded (removed)
 

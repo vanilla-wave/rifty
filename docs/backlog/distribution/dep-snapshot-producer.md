@@ -6,7 +6,7 @@ created: 2026-09-07
 why: A host cannot bake its dependency snapshot in its own CI using only installed rifty packages.
 user_story: As the Tracker plugin-sandbox embedder, I want to bake a browsable dependency archive in my own CI, but today a host cannot bake its dependency snapshot in its own CI using only installed rifty packages.
 epic: self-hosted-snapshot-workbench
-blocked_by: [distribution/dep-snapshot-tar]
+blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md]
 code: [apps/playground/tools/bake-dep-snapshots.ts, packages/workbench/src/glue/dep-snapshot.ts, packages/workbench/src/workbench/public.ts]
 ---
@@ -55,7 +55,29 @@ here; that draft retains only the independent tree/cache duplication question.
 Scope and user decisions: goal I1. Baseline/dedup and executed evidence:
 docs/backlog/distribution/reference/embedder-gaps-evidence.md.
 
+## Acceptance
+
+1. `produceDependencySnapshot` is exported from the packed Workbench root, accepts caller manifest text, npm v3 lock text, templateId and configured registryUrl; emits tar.gz bytes, snapshotId and current install-artifact identity using the existing installer. `dep-snapshot-producer.test.ts` real ms bake. → I1
+2. Every emitted ordinary package identity matches its exact caller lock path in version/resolved/integrity; only attested materialization, new fixed acquisition and validated bundled paths may differ. Existing acquisition pins still match. New ordinary root/nested pins fail; current supported native adaptation remains. Real ms/debug/LightningCSS fixtures and Vite8 probe. → I1
+3. Shared manifest canonicalization preserves caller JSON values and matches public project definitions. Archive emission is deterministic for identical admitted installed bytes; ordinary tar extracts the actual package bytes. Identities bind decoded tar and the runtime installation recipe. → I1
+4. Unsupported/malformed locks, root request mismatch, integrity failures and existing unsupported-package gates fail visibly with no emitted artifact or caller-disk writes. The existing 128 MiB reader limits bound emitted archives. → I1
+5. A consumer installed only from packed packages bakes its caller manifest/lock, then public snapshot-backed Workbench restores and executes real ms code through raw gzip and HTTP-decoded tar; browser dependency acquisition cannot substitute a registry install for this proof. `workbench-packed-consumer.mjs` producer journey. → I1
+
+## Fault matrix
+
+- Registry corrupt/missing bytes × bake: integrity/acquisition failure, no artifact. Real tarballs through substituted external HTTP only. → I1
+- Incomplete/range-drifted lock × output admission: reject new ordinary output paths, including a nested copy beside a retained hoisted pin. → I1
+- Attested registry-source/bundled replay × bake/restore: exact source bytes admitted; retained caller source pins cannot drift. Codec's existing real LightningCSS replay proof is inherited; producer/public packed path adds emission proof. → I1
+
+## Out of scope
+
+Arbitrary installed-tree import, new package compatibility, builder-owned registry
+authentication, streaming restore and larger snapshot limits remain excluded by goal.
+Public application-policy and registry-free mode follow their own goal units.
+
 ## Decisions
+
+- 2026-09-08 — ADR-0387: public root producer, existing installer plus output-pin postcondition; no parallel resolver.
 
 - re-cut: 2026-09-08 — distribution/dep-snapshot-tar owns codec proof first; this unit retains public producer and packed-consumer I1 proof — trace: none
 

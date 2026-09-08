@@ -34,3 +34,7 @@ First `pr:check` reproduced one test failure in isolation (zero timeouts):
 codec makes 142. Update only that count; exact closed-graph equality and
 unreachable-runtime checks remain. This is an inventory update under PR-4,
 not removal of a behavior assertion.
+
+## GREEN / accepted codec
+
+Commit fd829ca42ba698c168e5442278a3e5d50ffbbc7f: full `pnpm pr:check`25/25 PASS after the inventory adjustment. Scoped tar/legacy/archive/fault/cap suite81/81. Fresh Final+GREEN reviewer additionally ran extraction and POSIX/UTF-8 boundary probes:82/82 tests and11 path cases, no blockers. Verdicts retained beside this evidence; producer/public packed-consumer and full goal proof remain separate obligations.

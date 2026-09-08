@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { hostBuiltinAliases } from './host-builtins';
@@ -29,6 +31,19 @@ const resolvedHostBuiltinAliases = Object.fromEntries(
 );
 
 export default defineConfig({
+  plugins: [
+    {
+      name: 'producer-http-decoding-proof',
+      configurePreviewServer(server) {
+        server.middlewares.use((request, response, next) => {
+          if (request.url !== '/producer-snapshot-decoded.tar') return next();
+          response.setHeader('Content-Type', 'application/x-tar');
+          response.setHeader('Content-Encoding', 'gzip');
+          response.end(readFileSync(resolve('dist/producer-snapshot.tar.gz')));
+        });
+      },
+    },
+  ],
   server: {
     headers: crossOriginIsolationHeaders,
     proxy: registryProxy,

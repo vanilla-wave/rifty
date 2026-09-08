@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   cp,
@@ -504,6 +504,17 @@ async function browserRegistryPackages(options) {
       shasum: createHash('sha1').update(bytes).digest('hex'),
     });
   }
+  const msTarball = resolve(repoRoot, 'tests/integration/fixtures/registry/ms-2.0.0.tgz');
+  const msBytes = await readFile(msTarball);
+  packages.set('ms', {
+    name: 'ms',
+    tarball: msTarball,
+    manifest: JSON.parse(
+      execFileSync('tar', ['-xzOf', msTarball, 'package/package.json'], { encoding: 'utf8' }),
+    ),
+    integrity: tarballIntegrity(msBytes),
+    shasum: createHash('sha1').update(msBytes).digest('hex'),
+  });
   return packages;
 }
 
@@ -984,6 +995,10 @@ function assertHmrProof(proof) {
 
 async function runChromiumJourney(consumerRoot, registryPackages) {
   const registry = await startBrowserRegistry(registryPackages);
+  await run('node', ['produce-snapshot.mjs', registry.origin], {
+    cwd: consumerRoot,
+    timeoutMs: 120_000,
+  });
   const previewPort = await reserveLoopbackPort();
   const previewOrigin = `http://127.0.0.1:${previewPort}`;
   const preview = startProcess(
@@ -1191,6 +1206,21 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     assertHmrProof({ expectedSentinel, ...hmrProof });
 
     await page.evaluate(async () => (await window.__RIFTY_PACKED_WORKBENCH__).close());
+    for (const assetPath of ['/producer-snapshot.tar.gz', '/producer-snapshot-decoded.tar']) {
+      const before = registry.requests.length;
+      const proof = await page.evaluate(
+        async (assetUrl) => (await window.__RIFTY_PACKED_WORKBENCH__).runSnapshotProof(assetUrl),
+        new URL(assetPath, previewOrigin).href,
+      );
+      if (proof.version !== '2.0.0' || !proof.output.includes('packed-snapshot-2000')) {
+        throw new Error(`Packed producer restore failed: ${JSON.stringify(proof)}`);
+      }
+      if (registry.requests.length !== before)
+        throw new Error('Packed snapshot restore attempted registry acquisition');
+    }
+    console.log(
+      'Packed producer browser restore: raw gzip and HTTP-decoded tar, zero registry requests',
+    );
     if (pageErrors.length > 0) {
       throw new Error(`Packed Workbench Chromium page errors:\n${pageErrors.join('\n')}`);
     }

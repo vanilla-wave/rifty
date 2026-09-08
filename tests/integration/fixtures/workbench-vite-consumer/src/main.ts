@@ -10,6 +10,7 @@ import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
 import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&url';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import kernelWorkerUrl from './kernel-worker-entry.ts?worker&url';
+import { type SnapshotProof, runSnapshotProof as proveSnapshot } from './snapshot-proof';
 
 export interface PackedWorkbenchAcceptance {
   readonly previewUrl: string;
@@ -23,6 +24,7 @@ export interface PackedWorkbenchAcceptance {
     readonly sqlite: string;
   };
   writeMessage(message: string): Promise<void>;
+  runSnapshotProof(assetUrl: string): Promise<SnapshotProof>;
   close(): Promise<void>;
 }
 
@@ -79,14 +81,15 @@ console.log('packed-sqlite-' + row.answer)
 db.close()
 `;
 
-async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
-  const workbench = await openWorkbench({
+function workbenchOptions() {
+  return {
     deployment: {
       workers: {
         owner: ownerWorkerUrl,
         kernel: kernelWorkerUrl,
         node: nodeWorkerUrl,
         devServer: devServerWorkerUrl,
+        typescript: typescriptWorkerUrl,
       },
       serviceWorker: { url: serviceWorkerUrl, scope: '/' },
       wasm: { sqlite: sqlWasmUrl },
@@ -95,8 +98,12 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     packageAcquisition: {
       registryUrl: new URL('/npm-registry/', globalThis.location.href).href,
     },
-    storage: { persistence: 'ephemeral' },
-  });
+    storage: { persistence: 'ephemeral' as const },
+  };
+}
+
+async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
+  const workbench = await openWorkbench(workbenchOptions());
   diagnostics.stage = 'opening project';
   const project = await workbench.openProject(
     projects.vite({
@@ -175,6 +182,9 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     noCoiToolchainWorkerUrl,
     typescriptWorkerUrl,
     hostWasm: Object.freeze({ quickjs: quickjsWasmUrl, sqlite: sqlWasmUrl }),
+    runSnapshotProof(assetUrl: string): Promise<SnapshotProof> {
+      return proveSnapshot(workbenchOptions(), assetUrl);
+    },
     async writeMessage(message: string): Promise<void> {
       const current = await project.files.readFile('/src/message.ts');
       await project.files.writeFile(
