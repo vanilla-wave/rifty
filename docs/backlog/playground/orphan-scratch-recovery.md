@@ -75,6 +75,7 @@ budgets (I7).
 ## Decisions
 
 - ready-verdict: 2026-09-09 — Contract+RED @ 43cea32d6b78463f5376749324a80634c2db3842
+- 2026-09-09 — Final+GREEN PASS @ cab2cec60c3959cb345cf01dd6c8420596c12006; advisory path-rejection carrier, torn-state ordinal-1, tree-less container throw.
 - 2026-09-09 — ADR-0404: retain-orphan + replace (not waived create); replace before-stage restores the only copy.
 - 2026-09-09 — ADR-0403: detect on createScratch; one staged retain-orphan+create transaction; catalog.retainedOrphans pointer; public list/read methods; fail leaves only copy; no second journal.
 - 2026-09-07 — finding draft; observable scope is settled by goal I6; carrier choices and Contract+RED remain at pickup.
