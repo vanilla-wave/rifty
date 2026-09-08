@@ -89,6 +89,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0381 | Browser scoped eval compiler distribution |
 | 0382 | Preserve tsconfig discovery through explicit compiler preload |
 | 0383 | No COI VM default and preboot worker selection |
+| 0385 | Keep one foreground drain across HTTP server close |
 
 ### runtime-wasi
 
