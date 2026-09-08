@@ -1,0 +1,273 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS (advisory concern only) at 89c106c1c079ad6f66df5ffbdd188409d6a065ef; critic STRETCH on package-json-mismatch-as-apply-gate. I8 application policy is delivered; remaining goal map I3, I4, I6, I5, I7 and I1 packed produce/restore stay open.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-application-policy.md @ 89c106c1c079ad6f66df5ffbdd188409d6a065ef (BASE 78f9332a3f9b805c9cc08aefc5668e749b44d3a8); ADR-0396 docs/adr/distribution/0396-apply-snapshots-through-host-selected-initial-only-and-conflict-policies.md; goal docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I8 + map.md item 1; preparation docs/backlog/distribution/reference/workbench-snapshot-application-policy-contract-red.json (Contract+RED @ ebffc3a6f88bab8ae7a32fa76114c0c852d55e37) and reference/workbench-snapshot-application-policy-evidence.md.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Registry-free snapshot-only admission and loud selected-snapshot failure remain; composes the application policy."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Selected OPFS namespace isolation, empty-on-first-selection, and former-setting reopening remain."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Byte-exact retained orphan Scratch enumeration/download plus fresh Scratch, surviving reopen, remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Host-selected preview prefix under a non-root SW scope with navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:15",
+      "summary": "Public effective boot/file/tool budgets without hidden shorter sibling deadlines remain."
+    },
+    {
+      "clause": "I1 (packed residual)",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:16",
+      "summary": "Packed produce/restore from an installed tarball inside the composed whole-scenario packed-host proof remains after the sealed producer landed."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Default and { mode: 'initial-deployment-only' } keep an existing Scratch or named project's saved files when only unused snapshot provenance (snapshotId / unused templateId) changes, including dirty Scratch without preserveDirtySameStarter; the unused asset is not fetched; catalog adoption stays on the last applied snapshot.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:299,323,348,372,637,696",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: { mode: 'apply', conflict?: 'error' | 'overwrite' } evaluates snapshot payload on every requested apply, including unchanged snapshotId. Identical bytes and directory/directory coexistence are not conflicts; different bytes or file-vs-directory/ancestor clashes are. Error (default) throws SnapshotApplicationConflictError with paths before any payload mutation, including additions. Overwrite replaces conflicts, adds missing payload files, and keeps extras. Package filenames are ordinary collision fixtures.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:409,439,480,526,551,570,604,764",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: After a successful apply, catalog adoption matches the applied snapshot and install claims are retired/rederived through the existing stamp authority; apply does not run an automatic install to manufacture trust. Missing install trust never counts as \"project absent\".",
+      "source": "acceptance",
+      "trace": "I8+ADR-0396",
+      "status": "weak",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:673",
+      "note": "Only the third sentence is discriminated. Two named plausible wrong implementations survive the whole workbench suite: (a) apply leaves catalog adoption unchanged (playground-project-authority.ts:2358 -> `adoption: existing.adoption`), (b) apply keeps install claims in the replacement image (playground-project-authority.ts:2405-2408 filter neutralised). See the Completeness findings for the executed mutant runs. Advisory (REV-4)."
+    },
+    {
+      "row": "Fault matrix: Structural conflict × apply-error — conflicting paths are reported and the pre-apply tree is byte-identical, including extras and would-be additions.",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:439-478,570-601",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Crash/reopen × apply-overwrite — a torn payload write is not published as completed; the preserved copy remains.",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.fault.test.ts:139-192",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Corrupt/incompatible snapshot × apply — existing snapshot identity/restore failures reject before destination mutation.",
+      "source": "fault-matrix",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:730",
+      "note": ""
+    },
+    {
+      "row": "Public API: SnapshotApplication = { mode: 'initial-deployment-only' } | { mode: 'apply'; conflict?: SnapshotConflictPolicy }; SnapshotConflictPolicy = 'error' | 'overwrite'; omitted field is initial-deployment-only, omitted conflict is 'error'.",
+      "source": "public-api",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/playground.ts:46-50; packages/workbench/src/workbench/public.ts:41; packages/workbench/src/glue/snapshot-payload-apply.ts:10-38",
+      "note": ""
+    },
+    {
+      "row": "Public API: PlaygroundProjectCatalog.createScratch({ definition, snapshotApplication?, preserveDirtySameStarter? }).",
+      "source": "public-api",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/playground.ts:139; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:381",
+      "note": ""
+    },
+    {
+      "row": "Public API: PlaygroundProjectOpenOptions.snapshotApplication on openProject.",
+      "source": "public-api",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/playground.ts:53; packages/workbench/src/workbench/internal/playground-terminal-state.ts:93-146; packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:783-787",
+      "note": ""
+    },
+    {
+      "row": "Public API: SnapshotApplicationConflictError (name, paths: readonly string[]) exported from @riftydev/workbench and surviving the owner boundary.",
+      "source": "public-api",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/errors.ts:34-42,191-215; packages/workbench/src/workbench/errors.test.ts:22-35; packages/workbench/src/workbench/owner-protocol.test.ts:264-283",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact: @riftydev/workbench extraction-boundary production file count 143 → 146 (ADR-0396 split of apply preflight, catalog adoption and catalog JSON helpers).",
+      "source": "frozen-artifact",
+      "trace": "ADR-0396",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:341-346",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/playground-project-authority.ts:2358",
+          "evidence": "Mutant in a detached scratch copy /tmp/i8-mutant (repo under review untouched; `diff -r --brief packages/workbench/src` vs HEAD = identical before and after). Replaced `adoption: adoptedProof(definition)` with `adoption: existing.adoption` in the createScratch apply branch, then: `pnpm exec vitest run packages/workbench/src/workers packages/workbench/src/workbench` -> `Test Files  81 passed (81) / Tests  2003 passed (2003)`. The clause 'After a successful apply, catalog adoption matches the applied snapshot' therefore has no discriminating carrier. Control: the symmetric Acceptance-1 mutant (initial-only writing `adoptedProof(definition)`) DOES die -> `Test Files 1 failed | 80 passed`, `workbench-snapshot-application.contract.test.ts:667 .not.toContain('/snapshots/b.json.gz')`.",
+          "summary": "Acceptance 3's 'catalog adoption matches the applied snapshot' is not discriminated: leaving adoption on the previous snapshot after a successful apply passes the entire workbench suite.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/playground-project-authority.ts:2405-2408",
+          "evidence": "Same scratch copy. Neutralised `includeExceptInstallClaims` to `return true` (keeping `tree/.rifty` and install-claim files in the replacement image), then `pnpm exec vitest run packages/workbench/src/workers packages/workbench/src/workbench` -> `Test Files  81 passed (81) / Tests  2003 passed (2003)`.",
+          "summary": "Acceptance 3's 'install claims are retired/rederived through the existing stamp authority' is not discriminated: retaining a stale install claim across an apply-overwrite passes every test.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-snapshot-application.fault.test.ts:171-179",
+          "evidence": "`await expect(...).rejects.toThrow()` pins no failure identity, so an apply that throws for an unrelated reason still satisfies it. Mitigating probe (scratch copy): sweeping the injection point `durable.armPersistFailure(n, 'quota-report')` over n = 2,3,4,5,6 keeps the test green each time (`Tests  1 passed (1)` per ordinal), so the preserved-copy behaviour is robust across injection points, not an artifact of ordinal 1.",
+          "summary": "The crash/reopen assertion accepts any rejection; the post-restart byte assertions carry the row. Verified robust across six injection ordinals, so advisory only.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/glue/snapshot-payload-apply.ts:70-78",
+          "evidence": "",
+          "summary": "`existingKind` infers directory-ness from a failed `readFileBytesSync` rather than the `statSyncOrNull(...).isDirectory` the same file family already uses (playground-project-authority.ts `isDirectory`); any non-EISDIR read failure is silently classified as a directory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/distribution/0396-apply-snapshots-through-host-selected-initial-only-and-conflict-policies.md:62-68,100-103",
+          "evidence": "PR-4 inspection of the changed criterion. At BASE the apply-error case seeded `'/package.json': '{\"name\":\"edited\"}\\n'` and asserted `caught.paths` contained `/package.json`; HEAD drops both (git diff 78f9332..89c106c, workbench-snapshot-application.contract.test.ts). Verified the code side: `payloadEntries` emits only `/package-lock.json` and `/node_modules/*` (snapshot-payload-apply.ts:56-68), matching `restoreDepSnapshot`, which never writes package.json (dep-snapshot.ts:181-217). But the same ADR paragraph still names 'tar `payload/`' as the payload, and the tar envelope really does carry `payload/package.json` as a member (dep-snapshot-tar.ts:106,121,237,280), so 'only when that path is in the payload' reads as satisfied for tar snapshots while the code never evaluates it. goal.md and the contract's user-scenario/acceptance rows are unchanged in this diff (no user-traced row weakened; the change is confined to the agent-owned ADR §Corrections).",
+          "summary": "ADR-0396's Apply paragraph is self-inconsistent after the correction: it defines the payload as 'tar `payload/`' (which contains `payload/package.json`) while the correction and the code exclude root package.json unconditionally. The behaviour is defensible and matches the existing restore model, but the recorded decision no longer describes it unambiguously.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/playground-catalog-adoption.ts:84-99",
+          "evidence": "`applicationKeyFromBaseline` re-parses the length-prefixed `playground-baseline:v1` identity string and re-filters `snapshot-id:`/`snapshot-template:` fields to reconstruct an application key for adoptions persisted before `applicationFingerprint` existed. It duplicates the derivation already performed by `applicationFields` (playground-project-definition.ts:486-491) in a second, string-parsing form, and re-parsing an identity encoding is a new decoder for data the definition already owns.",
+          "summary": "Legacy-adoption compatibility is bought with a second, string-level reimplementation of the application fingerprint derivation. It is carried by a committed test (contract.test.ts:696), so it is not machinery the contract is deliverable without, but a stored-schema migration on read would keep one derivation.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/glue/snapshot-payload-apply.ts:205-215",
+          "evidence": "",
+          "summary": "`preflightSnapshotApply` computes the full conflict set and discards it when the policy is `overwrite`; only the `error` branch consumes it.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workers/playground-project-authority.ts:2606-2608",
+          "evidence": "",
+          "summary": "After the openProject apply commits, `entry` is re-read and null-checked, but the only later use (`unusedNewSnapshot`) is gated on `application.mode !== 'apply'`, so the refresh is unreachable work on that branch.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/workbench/src/glue/snapshot-payload-apply.ts:126-138; packages/workbench/src/workers/playground-project-authority.ts:2342-2368,2573-2608",
+          "evidence": "Executed probe in the detached scratch copy /tmp/i8-mutant (probe file deleted afterwards; `diff -r --brief packages/workbench/src` vs HEAD = identical; no tracked file in the repo under review was edited). The probe reuses the unit's own harness shape and prints the acquisition owner's own verdict on the same snapshot:\n\n  PROBE baked packageJsonText === project package.json ? false\n  PROBE first-materialization plan for snapshot A: {\"kind\":\"install\",\"snapshotFailures\":[{\"snapshotId\":\"sha256:c7bd857f...\",\"reason\":\"package-json-mismatch\"}]}\n  PROBE after apply-overwrite, node_modules/pin/readme.txt exists: true\n  PROBE applied bytes: \"pin-b\\n\"\n  PROBE plan after apply: {\"kind\":\"install\",\"snapshotFailures\":[{\"snapshotId\":\"sha256:6bbdfc53...\",\"reason\":\"package-json-mismatch\"}]}\n\nThe destination tree is mutated and the catalog transaction commits with a snapshot the existing acquisition owner classifies as incompatible; the incompatibility is only surfaced afterwards as a deferred-install plan. Code path: `loadVerifiedApplySnapshot` gates on snapshotId bytes and templateId only; the existing rejections `package-json-mismatch` and `install-artifact-identity-mismatch` (package-acquisition-authority.ts:1192-1199) and the `planSnapshotRestore` rejection (1201-1216) live in `#ensure`, which apply bypasses because it builds its own image via `mergeSnapshotPayloadIntoTree`/`appliedReplaceImage` instead of `restoreDepSnapshot`.",
+          "summary": "Apply mutates the destination with a snapshot the existing acquisition/restore owner rejects as incompatible. The traced fault row requires existing snapshot identity/restore failures to reject BEFORE destination mutation; apply evaluates none of them, because it re-implements the payload write instead of routing effects through the existing snapshot restore.",
+          "authority": "Traced unit row `## Fault matrix` — `Corrupt/incompatible snapshot × apply: existing snapshot identity/restore failures reject before destination mutation. Existing first-materialization identity/restore-plan cases. → ADR-0396` (docs/backlog/distribution/workbench-snapshot-application-policy.md:60-62), together with active ADR-0396 §Decision `Effects stay on ADR-0279 catalog transactions and existing snapshot restore/acquisition` (docs/adr/distribution/0396-...md:77-78)"
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/glue/snapshot-payload-apply.ts:56-68",
+          "evidence": "`payloadEntries` maps only `snapshot.lockfile` and `snapshot.nodeModules`; `snapshot.tarballCache` is never merged, while the existing `restoreDepSnapshot` imports it into TARBALL_CACHE_ROOT (dep-snapshot.ts:203-214) and `verifyDepSnapshotReplayCache` proves it is the exact integrity-pinned lockfile closure (dep-snapshot.ts:290-330).",
+          "summary": "After an apply-overwrite the project holds the new snapshot's node_modules and lockfile, but the shared replay cache still holds only the previous closure and is never verified, so a later offline/registry-free replay for the applied lockfile has no bytes. ADR-0396 excludes the cache from conflict evaluation, not from application, so this is advisory here but bears on I3.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/playground-project-authority.ts:2569",
+          "evidence": "`definitionMetadata(authority, selected) !== definition.identity && !unusedSnapshot` — on the unused-snapshot path the on-disk `definition.json` identity check is skipped and the file is left holding the previous identity, while `proofMatches` is likewise bypassed. This is required for the invariant (adoption stays on the last applied snapshot), but it means the container metadata and the supplied definition can diverge indefinitely with no further consistency check on that path.",
+          "summary": "The unused-snapshot open path deliberately relaxes two identity checks. Correct for I8, but no test pins which other definition drift must still reach `projectDefinitionMismatch` through that branch (starter/plan drift is caught earlier by `applicationBaselineMatches`, verified by reading `applicationFields`).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:108-141,51-75",
+          "evidence": "Executed probe (same scratch run as the Bugs blocker): every `snapshotFixture` bakes from `{\"name\":\"app\",\"dependencies\":{\"pin\":\"1.0.0\"}}` while every `definition` plan ships `/package.json` = `{\"name\":\"app\",\"scripts\":{\"dev\":\"vite\"},\"devDependencies\":{\"vite\":\"8.0.0\"}}`. The acquisition owner therefore records `package-json-mismatch` for the snapshot on the very first materialization — `{\"kind\":\"install\",\"snapshotFailures\":[{...\"reason\":\"package-json-mismatch\"}]}` — so no case in this unit ever runs a snapshot the acquisition layer accepts.",
+          "summary": "The unit's acceptance is proved only against snapshots the acquisition owner already considers incompatible; the compatible path (apply produces a trusted, install-satisfied node_modules tree) is never observed, which is also why the Acceptance-3 claim mutants survive.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "89c106c1c079ad6f66df5ffbdd188409d6a065ef",
+  "adjudication": [
+    {
+      "summary": "Apply mutates the destination with a snapshot the existing acquisition/restore owner rejects as incompatible. The traced fault row requires existing snapshot identity/restore failures to reject BEFORE destination mutation; apply evaluates none of them, because it re-implements the payload write instead of routing effects through the existing snapshot restore.",
+      "ruling": "STRETCH",
+      "clause": "docs/backlog/distribution/workbench-snapshot-application-policy.md:60-62 — \"Corrupt/incompatible snapshot × apply: existing snapshot identity/restore failures reject before destination mutation. Existing first-materialization identity/restore-plan cases. → ADR-0396\"",
+      "by": "critic"
+    }
+  ]
+}

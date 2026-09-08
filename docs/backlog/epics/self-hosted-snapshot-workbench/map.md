@@ -2,17 +2,15 @@
 
 ## Items
 
-1. `distribution/workbench-snapshot-application-policy` — explicit initial-only/
-   apply modes and generic file-conflict policy, preserving saved state (I8).
-2. `distribution/workbench-snapshot-only` — registry-free admission and loud
+1. `distribution/workbench-snapshot-only` — registry-free admission and loud
    snapshot failure; composes published producer/assets and application policy (I3).
-3. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
+2. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
    selection, with the old setting preserving access to old projects (I4).
-4. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
+3. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
    open fresh Scratch, using the selected storage namespace (I6).
-5. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
+4. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
    on the same static host (I5).
-6. `distribution/workbench-operation-budgets` — public effective boot/file/tool
+5. `distribution/workbench-operation-budgets` — public effective boot/file/tool
    budgets, then composed packed-host proof of the whole scenario including
    installed-tarball produce/restore (I7, remaining I1 packed residual).
 

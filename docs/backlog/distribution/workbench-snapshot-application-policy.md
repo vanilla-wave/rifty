@@ -71,6 +71,7 @@ behavior is unchanged. Builder-owned registry auth stays excluded.
 ## Decisions
 
 ready-verdict: 2026-09-08 — Contract+RED @ ebffc3a6f88bab8ae7a32fa76114c0c852d55e37
+- 2026-09-08 — Final+GREEN PASS @ 89c106c1c079ad6f66df5ffbdd188409d6a065ef; critic STRETCH on package-json-mismatch as an apply pre-mutation gate.
 - 2026-09-08 — ADR-0396: operation-level `snapshotApplication`; last-applied
   catalog identity; existing catalog/restore/stamp owners execute effects.
 - 2026-09-07 — user: initial-deployment-only default; saved state wins afterward; explicit apply mode exists (I8).
