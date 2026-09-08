@@ -49,6 +49,7 @@ Playground may keep compiling sealed source entries.
 
 ## Decisions
 
+ready-verdict: 2026-09-08 — Contract+RED @ 7345497d9f21c19fbec9ce81e69e4982821f24a3
 - 2026-09-08 — REV-12 FIX of Contract+RED @ 1d0f317: incomplete-copy + ADR-0352 kernel order + manifest header carriers; packed-consumer alias/wrapper cases retire explicitly at implement.
 - 2026-09-08 — ADR-0395: bundled `dist/runtime/` copy set; kernel asset publishes sibling QuickJS URL; sealed source entries remain.
 - 2026-09-07 — finding draft; observable scope is settled by goal I2; carrier choices and Contract+RED remain at pickup.

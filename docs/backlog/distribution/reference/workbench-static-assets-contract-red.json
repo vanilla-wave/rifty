@@ -1,0 +1,159 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concern only) at 7345497d9f21c19fbec9ce81e69e4982821f24a3; proceed to implementation, not a merge approval. All three REV-12 FIX defects are gone. All 6 tests fail for the missing copyable closure / still-compiling consumer, not import/typecheck.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "7345497d9f21c19fbec9ce81e69e4982821f24a3",
+  "unit_goal_source": "docs/backlog/distribution/workbench-static-assets.md @ 7345497d9f21c19fbec9ce81e69e4982821f24a3 (BASE 26cb95ae76b422f31be0fcf43a6478b0b249f48d); ADR-0395 docs/adr/distribution/0395-publish-a-copyable-workbench-runtime-asset-closure.md; goal docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I2; evidence docs/backlog/distribution/reference/workbench-static-assets-evidence.md and reference/embedder-gaps-evidence.md I2.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:5",
+      "summary": "Copyable dist/runtime closure implementation and packed-consumer boot of a real Vite command through copied URLs remain; this checkpoint proves RED readiness only."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Initial-deployment-only default with saved-state priority and explicit generic overwrite/error application policy remain."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Registry-free snapshot-only admission with loud pre-startup failure remains."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Selected OPFS namespace isolation, empty-on-first-selection and former-setting reopening remain."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Byte-exact retained orphan Scratch enumeration/download plus fresh Scratch, surviving reopen, remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:15",
+      "summary": "Host-selected preview prefix under a non-root SW scope with navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:17",
+      "summary": "Public effective boot/file/tool budgets without hidden shorter sibling deadlines remain."
+    },
+    {
+      "clause": "I1 (packed residual)",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:19",
+      "summary": "Packed produce/restore from an installed tarball inside the composed whole-scenario packed-host proof remains after the sealed producer landed (ledger re-chart @ 067f1f9654b15742f7f4008f569a739aa8f17f66)."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Published dist/runtime/ contains bundled owner/kernel/node/dev-server/typescript/no-coi workers, sw.js, sqlite.wasm, quickjs.wasm and manifest.json; worker/SW JS contain no @riftydev/ import specifiers; manifest.json lists every file and documents required host headers (COOP/COEP/CORP, Service-Worker-Allowed).",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/workbench/src/runtime-assets.contract.test.ts:125",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: The packed consumer copies that directory, compiles no Worker/SW entries, and writes no builtin-alias file or QuickJS host wrapper; startup plus an installed Vite command use the copied dist/runtime/ URLs, not workspace-resolved entries.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/workbench-static-assets.contract.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Existing sealed source/custom deployment entries remain importable; a host that still compiles is not forced onto the copyable path.",
+      "source": "acceptance",
+      "trace": "ADR-0395",
+      "status": "pass",
+      "citation": "packages/workbench/tests/package-surface.contract.test.ts:47",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Missing/unreadable copied asset \u00d7 boot \u2014 a published copy that omits a manifest-listed worker, SW or WASM is undeployable; fetching that omitted URL fails before guest start; the incomplete copy does not grow a workspace worker/SW/WASM entry.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/workbench/src/runtime-assets.contract.test.ts:161",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Sibling-drift \u00d7 kernel WASM \u2014 the copyable kernel assigns QUICKJS_WASM_URL_ENV from new URL('./quickjs.wasm', import.meta.url) before the kernel message listener (ADR-0352 order); omitting sibling quickjs.wasm is the incomplete-copy fault.",
+      "source": "fault-matrix",
+      "trace": "ADR-0395",
+      "status": "pass",
+      "citation": "packages/workbench/src/runtime-assets.contract.test.ts:149",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Poisoned asset bytes \u00d7 fetch \u2014 corrupt copied worker/SW/WASM fail at load/compile with the existing typed fetch/compile error; guest code does not start.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/vm/quickjs-loader-browser-location.test.ts:183",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/runtime-assets.contract.test.ts:149",
+          "evidence": "node v24.16.0 replay of NEW kernel-order/header predicates: empty source \u2192 sibling/env/listener all -1, orderOk false; 1d0f317 comment mutant '// placeholder comment: quickjs.wasm __RIFTY_QUICKJS_WASM_URL - no code, boots nothing' \u2192 old toContain greps true, new sibling -1 listener -1 orderOk false; empty headers {} and comment-string headers \u2192 all four required names missing. Deeper mutant '// new URL(\"./quickjs.wasm\", import.meta.url)\\n// __RIFTY_QUICKJS_WASM_URL\\n// addEventListener(\"message\"' \u2192 new.orderOk true. Advisory only (REV-4 mutant beyond the declared 1d0f317 defect).",
+          "summary": "The three FIX defects are gone (tautological missing-owner-worker.js removed; old name-only comments fail ADR-0352 order; manifest.headers is required). A comment that embeds the exact new URL('./quickjs.wasm', import.meta.url) expression plus listener in source order would still satisfy the kernel-order greps; not the original mutant and not a missing carrier.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/workbench-static-assets.contract.test.ts:32",
+          "evidence": "tests/integration/workbench-packed-consumer-contract.test.ts:5 still statically imports './fixtures/workbench-vite-consumer/host-builtins'; :201 asserts that alias map; the new RED requires host-builtins.ts and src/kernel-worker-entry.ts absent. docs/backlog/distribution/workbench-static-assets.md:52 records retire-at-implement.",
+          "summary": "The new consumer RED and the existing packed-consumer alias/wrapper cases remain mutually exclusive. Goal I2 authorizes the retirement; keep it explicit at implement (named retired case, not a silent delete to make RED green).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
