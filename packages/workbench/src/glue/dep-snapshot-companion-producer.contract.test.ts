@@ -200,11 +200,28 @@ describe('public producer admits only actual declared companion acquisitions', (
     );
   });
 
-  it('[fault: provenance-lie] a nested companion cannot authorize a newly placed ordinary child', async () => {
-    const { options } = await prepare('nested');
-    await expect(produceDependencySnapshot(options)).rejects.toThrow(
-      /Dependency snapshot requires a caller lockfile pin for .*@types\/estree/,
+  it('[fault: lossy-aggregate] preserves nested caller pins while adding only declared companions', async () => {
+    const { options, lock } = await prepare('nested');
+    const output = await extract((await produceDependencySnapshot(options)).archive);
+    const nestedCompanion = `node_modules/vite/node_modules/rollup/${companion}`;
+    const additions = Object.keys(output.lock.packages).filter((path) => !lock.packages[path]);
+    expect(additions.sort()).toEqual(
+      [companion, 'node_modules/esbuild-wasm', nestedCompanion].sort(),
     );
+    for (const [path, entry] of Object.entries(lock.packages)) {
+      if (path === '' || entry.optional || path === 'node_modules/esbuild') continue;
+      expect(identity(output.lock, path)).toEqual(identity(lock, path));
+    }
+    expect(output.lock.packages[companion]?.version).toBe('4.42.0');
+    expect(output.lock.packages[nestedCompanion]?.version).toBe('4.63.1');
+    expect(await executeRollup(output.root, 'node_modules/rollup')).toEqual({
+      answer: 42,
+      companionVersion: '4.42.0',
+    });
+    expect(await executeRollup(output.root, 'node_modules/vite/node_modules/rollup')).toEqual({
+      answer: 42,
+      companionVersion: '4.63.1',
+    });
   }, 90_000);
 
   it('[fault: corrupt-input] refuses changed retained companion bytes before emitting an artifact', async () => {

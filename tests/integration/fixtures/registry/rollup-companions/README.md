@@ -28,8 +28,10 @@ mutate copies of input locks or HTTP responses; committed inputs stay unchanged.
 Positive retained-companion controls use the real lock returned by a fresh
 existing rifty install of `root`, then replay it in a fresh Memory VFS. This
 retains companion provenance without inventing ordinary root dependencies or
-removing upstream bins. The nested producer case refuses new ordinary child
-paths; it promises no new placement or general nested snapshot compatibility.
+removing upstream bins. The producer canonicalizes root dependency order before
+installing; the nested case preserves every ordinary caller pin and adds only
+both scoped companions plus attested esbuild-wasm. A separate omitted ordinary
+child case remains a refusal. No new placement or general nested compatibility.
 
 Independent real Node oracle: the same Vite7.3.6/Rollup4.63.1/esbuild0.28.0 pins
 passed `npm ci --ignore-scripts` then real `vite build` (3modules, exit0).

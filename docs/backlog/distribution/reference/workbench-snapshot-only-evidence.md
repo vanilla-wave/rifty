@@ -90,7 +90,9 @@ full preparation corrections and command: red-evidence.md in that directory.
 
 RED: root/nested declared companion loses policy source; corruption never reaches
 required acquisition; Eddy mirror suppresses its resolver; producer root fails;
-new ordinary companion-child/nested paths must reach strict producer refusal.
+new ordinary companion-child paths must reach strict producer refusal. The
+nested-refusal forecast was subsequently corrected against actual retained
+placement, below.
 Controls retain actual fresh-install companion lock and exact source identities,
 reject ordinary missing children/corrupt bytes, and execute extracted real WASM
 Rollup under Node with bundle result42. Node control0.59s:
@@ -99,9 +101,9 @@ Rollup under Node with bundle result42. Node control0.59s:
 Native npm {rollup,wasm-node} co-demand is not a supported success control:
 existing ordinary bins collide. Original locks remain provenance, no upstream
 bin/metadata stripping. Retained success uses actual existing fresh installation.
-Nested original graph introduces ordinary @types placement; producer continues
-refusing unpinned new ordinary paths. No new placement mechanism or all-nested
-success promise is introduced. Current ordinary/direct-bin tests remain; old
+The initial fresh-install forecast for nested @types placement was incorrect;
+producer still refuses actual unpinned ordinary paths. No new placement mechanism
+or all-nested success promise is introduced. Current ordinary/direct-bin tests remain; old
 pre-shim missing-companion rejection is explicitly superseded by ADR-0399 and
 must be judged independently before any old test expectation changes.
 
@@ -111,10 +113,67 @@ ms JSON/tgz data, preserving both published versions and the real RegistryClient
 All35 named outcomes unchanged:30RED/5GREEN. Typecheck/Biome PASS;
 /tmp/rifty-316-i3-npm-typecheck.log and red-fixed.json/log.
 
-## Preparation status
+## Preparation acceptance and corrected oracles
 
-No product source changed. Public surface and semantic RED are recorded;
-Workbench/npm-client typecheck, targeted Biome, refs/backlog pass. Clean
-independent Contract+RED remains before implementation. Packed browser GREEN
-must additionally run after implementation; baseline packed type rejection
-alone is not execution proof.
+Preparation contains no product source. Fresh snapshot_only_contract_review
+independently reproduced94 cases64RED/30GREEN,36 original controls GREEN,
+checked all17 original archives and reran native Vite build. Contract+RED42/42
+PASS at98773a29f; implementation then began.
+
+The same reviewer found two missed oracle mistakes during implementation and
+verified their exact corrections against executed old-source probes:
+five expected registry/Eddy URLs must preserve the input's absent trailing slash;
+missing replay files produce the existing tarball-cache/lockfile-closure reason.
+No production diagnostic or URL behavior was changed to match the bad tests.
+Only those six lines changed in preparation-only307655de2; corrected same review
+re-bound there. /tmp/rifty-316-i3-url-oracle-verification.md,
+/tmp/rifty-316-i3-url-oracle-probe.log,
+/tmp/rifty-316-i3-replay-reason-probe.log.
+
+## Implementation verification in progress
+
+Public/owner acquisition uses one closed union decoder. The physical strict
+owner supplies no registry/Eddy capability; the package actor derives immutable
+automatic-fallback policy from the actual registry capability. Saved trust,
+initial receipt and apply/rollback owners remain I8. Required failures keep
+their concrete message across the wire; refused restore/promotion cannot
+schedule destructive preparation or publish ready.
+
+The real installer recognizes all overloads without registry, keeps existing
+local metadata/tarball caches and throws only on a required network miss.
+Contradictory Eddy is rejected at install normalization and before shell
+callbacks/preparation. Preparation casts removed; no denying RegistryClient.
+
+Executed: new Workbench36/36, registry/shell42/42, existing
+open/wire/legacy338/338 and package/I8 saved/apply123/123 GREEN. Parent mixed
+old/new installer/lockfile/shell regression274/274 GREEN. Raw:
+/tmp/rifty-316-i3-workbench-green.json,
+/tmp/rifty-316-i3-workbench-implementation-evidence.json,
+/tmp/rifty-316-i3-registry-capability-green.json,
+/tmp/rifty-316-i3-registry-regression.json.
+
+One cohesive private acquisition decoder adds source inventory150→151;
+complete exact closure assertion remains. Old private wire fixtures gain
+explicit mode:registry; old public omitted-mode inputs remain. The first-open
+browser Worker fixture follows the same private normalized shape. Package actor
+and shell source ratchets shrink; no ceiling raised.
+
+Full gate, original-tarball packed browser proof and independent Final remain;
+baseline packed type rejection alone is not execution proof.
+
+## Nested placement oracle correction
+
+The public producer canonicalizes manifest dependency order and retains caller
+lock paths. Fresh installation, sorted or unsorted, is not its placement oracle.
+Independent current producer output retained12 ordinary path/version/resolved/
+integrity triples; only the existing esbuild recipe and two declared companions
+added paths. Real Node executes both acquired Rollups with result42. Old source987
+replays this emitted complete lock without metadata; the separate actually
+unpinned ordinary-child case still rejects. Reviewer's evidence:
+/tmp/rifty-316-i3-nested-review/{probe.log,report.json,replay-control.log}.
+
+PR-4 approves replacing only the incorrect nested-refusal expectation with this
+exact success/path/identity/Node oracle; no producer permission, placement rule
+or contract is relaxed. Source record uses the existing install-result WeakMap
+and companion-only demand set, intersected with actual declared parent/path/
+version facts. Ordinary co-demand cannot become a companion exemption.
