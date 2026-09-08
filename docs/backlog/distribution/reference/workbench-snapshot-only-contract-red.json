@@ -1,0 +1,151 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concerns only) — proceed to implementation, not a merge approval. All 7 I3 REDs fail for unimplemented admission, deferred-install fallback, or later network-install, not import or typecheck.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "67655b61000899083e535251e6fc57e97a16a612",
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-only.md @ 67655b61000899083e535251e6fc57e97a16a612 (BASE 89c106c1c079ad6f66df5ffbdd188409d6a065ef); ADR-0400 docs/adr/distribution/0400-admit-snapshot-only-workbench-acquisition-without-a-registry-url.md; goal I3 docs/backlog/epics/self-hosted-snapshot-workbench/goal.md",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Selected OPFS namespace isolation, empty-on-first-selection, and former-setting reopening remain."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Byte-exact retained orphan Scratch enumeration/download plus fresh Scratch, surviving reopen, remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Host-selected preview prefix under a non-root SW scope with navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Public effective boot/file/tool budgets without hidden shorter sibling deadlines remain."
+    },
+    {
+      "clause": "I1 (packed residual)",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Packed produce/restore from an installed tarball inside the composed whole-scenario packed-host proof remains after the sealed producer landed."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: packageAcquisition: {} (omitted registryUrl and eddy) is valid Workbench admission; Eddy still requires registryUrl (packageAcquisition.eddy requires packageAcquisition.registryUrl).",
+      "source": "acceptance",
+      "trace": "I3+ADR-0400",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-snapshot-only.contract.test.ts:33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: A required snapshot that is missing, corrupt, or identity-mismatched rejects before guest start and does not return kind: 'install'. Registry-present deferred-install cases stay.",
+      "source": "acceptance",
+      "trace": "I3+ADR-0400",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:207",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Snapshot-only restore and later package/terminal commands make zero registry/Eddy requests; absent exact bytes fail loudly rather than network-install.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:237",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: A compatible required snapshot restores as kind: 'ready' and does not schedule install.",
+      "source": "acceptance",
+      "trace": "I3+ADR-0400",
+      "status": "weak",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:251",
+      "note": "kind: 'ready' and restore-time registryFetch assertions already pass on the I8 baseline; the named case goes red only on Acc 3's later-install stderr. See Completeness finding."
+    },
+    {
+      "row": "Fault matrix: Corrupt/incompatible required snapshot × first seed or apply — reject before guest start; no deferred install.",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0400",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:207",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Unused new snapshot × initial-only reopen — unused asset is not fetched and does not fail snapshot-only admission.",
+      "source": "fault-matrix",
+      "trace": "I3+ADR-0396",
+      "status": "weak",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:637",
+      "note": "Cited I8 no-fetch case is already GREEN and asserts reopened.acquisition kind: 'install' under a RegistryClient harness; it does not construct packageAcquisition: {} or prove unused reopen survives snapshot-only (no deferred install). See Completeness finding."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:251",
+          "evidence": "pnpm exec vitest run packages/workbench/src/workbench/workbench-snapshot-only.contract.test.ts packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts --reporter=verbose\n\nRUN  v2.1.9 /Users/vanilla-wave/.cursor/worktrees/rifty/main-a07\nNode v24.16.0\nTests  7 failed (7)\n\nFAIL workbench-snapshot-only.contract.test.ts > admits omitted registryUrl and Eddy as snapshot-only\nTypeError: packageAcquisition.registryUrl must be a non-empty string\n  at workbench-options.ts:204 / :34\n\nFAIL workbench-snapshot-only.contract.test.ts > rejects Eddy when registryUrl is omitted\nAssertionError: expected [Function] to throw error matching /packageAcquisition\\.eddy requires packageAcquisition\\.registryUrl/ but got 'packageAcquisition.registryUrl must be a non-empty string'\n  at :57\n\nFAIL workbench-snapshot-only.contract.test.ts > admits a clone-safe initialize frame without registryUrl\nAssertionError: expected [Function] to not throw but 'TypeError: Invalid owner boot package acquisition' was thrown\n  at :78\n\nFAIL workers/workbench-snapshot-only.contract.test.ts > rejects a missing required snapshot instead of returning deferred install\nAssertionError: promise resolved \"{ projectKey: 'scratch', … }\" instead of rejecting\nReceived acquisition: { kind: 'install', snapshotFailures: [{ reason: 'snapshot-fetch-failed: ... HTTP 404', snapshotId: 'sha256:000…' }] }\n  at :211\n\nFAIL workers > rejects a corrupt required snapshot instead of returning deferred install\nResolved kind: 'install', reason snapshot-fetch-failed / Unsupported dep snapshot version 1\n  at :221\n\nFAIL workers > rejects a snapshot-id mismatch before guest start and does not return install\nResolved kind: 'install', reason 'snapshot-id-mismatch'\n  at :232\n\nFAIL workers > restores a compatible snapshot as ready and refuses a later network install\nAssertionError: expected '$ npm install left-pad@1.3.0\\nnpm: installing left-pad@1.3.0…\\nnpm: install failed: network install must not run\\n' to match /snapshot-only|registryUrl|packageAcquisition/\n  at :268\n(kind: 'ready' and registryFetch-not-called during restore already passed; failure is Acc 3 later-install only.)",
+          "summary": "Acceptance 4's named compatible-restore assertions already pass on the I8 baseline; I3 unimplemented still yields kind: 'ready' without first-materialization install. The same test is red only because later npm install still calls networkInstall. Advisory (REV-4 weak / REV-5 class 4 on the restore half).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:162",
+          "evidence": "Workers I3 acquisitionHarness always constructs RegistryClient({ baseUrl: 'https://registry.invalid/', fetch: registryFetch }) at workbench-snapshot-only.contract.test.ts:162-165 and never omits registryUrl. Cited Fault matrix 2 carrier:\n\npnpm exec vitest run packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts -t 'does not fetch an unused new snapshot under initial-only' --reporter=verbose\n\nRUN  v2.1.9  Node v24.16.0\n✓ snapshot application policy (I8) > does not fetch an unused new snapshot under initial-only\nTests  1 passed | 16 skipped\n\nThat GREEN case asserts expect(reopened.acquisition).toMatchObject({ kind: 'install' }) at workbench-snapshot-application.contract.test.ts:662 under the same RegistryClient pattern (I8 harness :220-223).",
+          "summary": "Workers Acc 2/3/4 REDs do not construct public snapshot-only admission (packageAcquisition: {}). The I8 no-fetch oracle cited for unused-reopen is already green and expects kind: 'install', so it does not discriminate 'does not fail snapshot-only admission'. Named mutant: unused initial-only reopen in snapshot-only still returns deferred install or hard-fails that install plan. Advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/workbench-snapshot-only.md:37",
+          "evidence": "git diff 89c106c1c079ad6f66df5ffbdd188409d6a065ef...67655b61000899083e535251e6fc57e97a16a612 -- docs/backlog/distribution/workbench-snapshot-only.md\n\nHEAD 67655b610 (Discriminate snapshot-only REDs…) changed Acc 4:\n- 4. A compatible required snapshot under omitted registry restores as kind: 'ready' …\n+ 4. A compatible required snapshot restores as kind: 'ready' …\nNo re-cut:/fork: line in ## Decisions. Predecessor b9d7bb789 compatible-restore case ended after kind: 'ready' + registryFetch-not-called and would have passed on this I8 tree (class 4); HEAD added later npm install left-pad to keep that file red.",
+          "summary": "Ready Acc 4 (→ I3) dropped 'under omitted registry' without a re-cut fork after the restore-only RED would have passed. Scenario + Acc 1 + Acc 3 still name omitted-registry restore; wording change is advisory (REV-10 axis 3 / PR-4), not a dropped user row.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

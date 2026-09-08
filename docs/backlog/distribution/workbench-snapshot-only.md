@@ -51,6 +51,7 @@ Retired `snapshotUrl` stays retired.
 
 ## Decisions
 
+- ready-verdict: 2026-09-08 — Contract+RED @ 67655b61000899083e535251e6fc57e97a16a612
 - 2026-09-08 — ADR-0400: omitted registryUrl+eddy is snapshot-only; required snapshot failure does not become deferred install.
 - 2026-09-08 — packed Vite/command proof stays on I7; this unit owns admission, loud required-snapshot failure, zero registry/Eddy requests, and compatible restore without install.
 - 2026-09-07 — round 3: compose the separate generic application-policy authority; registry admission never chooses which existing files to overwrite.
