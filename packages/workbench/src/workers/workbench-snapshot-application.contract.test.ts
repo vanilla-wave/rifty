@@ -564,6 +564,39 @@ describe('snapshot application policy (I8)', () => {
     await h.owner.close();
   });
 
+  it('overwrite replaces an ancestor file-vs-directory clash', async () => {
+    const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
+    const next = snapshotFixture(
+      '{"lockfileVersion":3,"packages":{"node_modules/pin":{}}}\n',
+      'pin-b\n',
+    );
+    const h = await acquisitionHarness({
+      '/snapshots/a.json.gz': first.gzip,
+      '/snapshots/b.json.gz': next.gzip,
+    });
+    await seedDirtyScratch(h, definition('scratch', first.snapshotId, '/snapshots/a.json.gz'), {
+      '/user.txt': 'extra',
+    });
+    h.authority.rmSync(`${SCRATCH_ROOT}/node_modules`, { recursive: true, force: true });
+    h.authority.writeFileSync(`${SCRATCH_ROOT}/node_modules`, encoder.encode('i-am-a-file\n'));
+
+    await h.catalog.createScratch(
+      withApplication(
+        { definition: definition('scratch', next.snapshotId, '/snapshots/b.json.gz') },
+        { mode: 'apply', conflict: 'overwrite' },
+      ),
+    );
+    const opened = await h.owner.openProject(
+      definition('scratch', next.snapshotId, '/snapshots/b.json.gz'),
+    );
+
+    expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('extra');
+    expect(readText(h, SCRATCH_ROOT, '/node_modules/pin/readme.txt')).toBe('pin-b\n');
+    expect(() => h.authority.readFileBytesSync(`${SCRATCH_ROOT}/node_modules`)).toThrow();
+    await close(opened);
+    await h.owner.close();
+  });
+
   it('does not fetch an unused new snapshot under initial-only', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
     const next = snapshotFixture(

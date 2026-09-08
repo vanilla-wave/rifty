@@ -77,11 +77,13 @@ function existingKind(fs: WorkspaceArchiveFs, path: string): 'file' | 'dir' | 'm
   }
 }
 
-function ancestorConflict(fs: WorkspaceArchiveFs, path: string): string | null {
+function ancestorConflict(fs: WorkspaceArchiveFs, path: string, root: string): string | null {
+  const rootPrefix = normalizePath(root);
   const parts = path.split('/').filter((part) => part.length > 0);
   let current = '';
   for (const part of parts.slice(0, -1)) {
     current = `${current}/${part}`;
+    if (current === rootPrefix || !current.startsWith(`${rootPrefix}/`)) continue;
     if (existingKind(fs, current) === 'file') return current;
   }
   return null;
@@ -95,7 +97,7 @@ export function collectSnapshotPayloadConflicts(
   const conflicts = new Set<string>();
   for (const [relative, expected] of payloadEntries(snapshot)) {
     const path = joinPath(root, relative);
-    const ancestor = ancestorConflict(fs, path);
+    const ancestor = ancestorConflict(fs, path, root);
     if (ancestor !== null) {
       conflicts.add(ancestor.slice(root.length) || ancestor);
       continue;
@@ -148,9 +150,14 @@ function removeTargetAndDescendants(
   }
 }
 
-function addAncestorDirectories(directories: Set<string>, path: string): void {
+function addAncestorDirectories(
+  directories: Set<string>,
+  files: Map<string, readonly number[]>,
+  path: string,
+): void {
   let parent = dirname(path);
   while (parent !== '.' && parent !== '') {
+    if (files.has(parent)) removeTargetAndDescendants(directories, files, parent);
     directories.add(parent);
     parent = dirname(parent);
   }
@@ -166,7 +173,7 @@ export function mergeSnapshotPayloadIntoTree(
   const files = new Map(tree.files.map((file) => [file.path, file.bytes]));
   for (const [relative, expected] of payloadEntries(snapshot)) {
     const path = `${TREE_PREFIX}${relative}`;
-    addAncestorDirectories(directories, path);
+    addAncestorDirectories(directories, files, path);
     if (expected === 'dir') {
       if (files.has(path)) removeTargetAndDescendants(directories, files, path);
       directories.add(path);
