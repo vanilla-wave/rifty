@@ -27,11 +27,10 @@ const registryProxy =
       };
 
 function copyWorkbenchRuntime(): void {
-  const from = resolve(
-    dirname(require.resolve('@riftydev/workbench/package.json')),
-    'dist/runtime',
-  );
-  if (!existsSync(from)) {
+  const entry = dirname(require.resolve('@riftydev/workbench'));
+  const candidates = [resolve(entry, 'runtime'), resolve(entry, '../dist/runtime')];
+  const from = candidates.find((path) => existsSync(path));
+  if (from === undefined) {
     throw new Error(
       'copyable Workbench runtime assets are missing under @riftydev/workbench/dist/runtime',
     );
