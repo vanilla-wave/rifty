@@ -30,7 +30,7 @@ import {
   type PlaygroundProjectAuthority,
   createPlaygroundProjectAuthority,
 } from './playground-project-authority.ts';
-import { workbenchPackageConfig } from './workbench-package-config.ts';
+import { workbenchFirstMaterializationPackageConfig } from './workbench-package-config.ts';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -234,7 +234,7 @@ async function acquisitionHarness(
     acquisition: Object.freeze({
       ensure: async (request: ProjectAcquisitionRequest): Promise<ProjectAcquisitionPlan> =>
         (await packageState.activateAndEnsure(
-          workbenchPackageConfig(request.definition, request.projectRoot, {
+          workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
             packageJsonBytes: composition.authority.readFileBytesSync(
               `${request.projectRoot}/package.json`,
             ),
