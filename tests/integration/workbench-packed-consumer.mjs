@@ -1221,6 +1221,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     console.log(
       'Packed producer browser restore: raw gzip and HTTP-decoded tar, zero registry requests',
     );
+    await page.evaluate(async () => (await window.__RIFTY_PACKED_WORKBENCH__).proveCopiedAssets());
     if (pageErrors.length > 0) {
       throw new Error(`Packed Workbench Chromium page errors:\n${pageErrors.join('\n')}`);
     }

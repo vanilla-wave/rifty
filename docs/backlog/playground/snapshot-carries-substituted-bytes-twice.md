@@ -17,7 +17,7 @@ A snapshot must restore an exact tree AND let the next `npm install` replay
 with zero registry reads (ADR-0346). Today it buys the second guarantee by
 shipping the package's tarball beside the very files that tarball unpacks to,
 and stores both as base64 in JSON. The standard-container part was selected on 2026-09-07 and is now owned by
-docs/backlog/distribution/dep-snapshot-producer.md in
+docs/backlog/distribution/reference/dep-snapshot-producer-evidence.md in
 docs/backlog/epics/self-hosted-snapshot-workbench/goal.md. It uses a browsable
 tar.gz with disjoint user/control namespaces; this is assigned work, not a
 claim that it has landed. This draft retains the independent question:
@@ -94,7 +94,7 @@ name the other.
 
 ## Options or Next
 
-- Standard-container work is owned by `distribution/dep-snapshot-producer`;
+- Standard-container work is defined by ADR-0386/0387;
   do not duplicate it here. This draft remains unscheduled for deduplication.
 - Replay reads member bytes from the restored tree instead of a cached tarball.
   Blocker to check first: the lockfile pins SRI integrity over the tarball, so

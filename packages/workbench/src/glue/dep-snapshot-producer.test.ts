@@ -290,4 +290,64 @@ describe('public caller-pinned dependency snapshot producer', () => {
     await registry(true);
     await expect(produce(options)).rejects.toThrow(/integrity/i);
   });
+  it('rejects a retained acquisition pin drift before emitting an archive', async () => {
+    const produce = producer();
+    const { options, lock } = await inputs();
+    const realLock = JSON.parse(
+      await readFile(
+        new URL(
+          '../../../../tests/e2e/fixtures/npm-lock-replay/vite8/package-lock.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ) as {
+      packages: Record<string, Record<string, unknown>>;
+    };
+    const deps = { lightningcss: '^1.32.0' };
+    lock.packages = {
+      '': { ...manifest, dependencies: deps },
+      'node_modules/lightningcss': realLock.packages['node_modules/lightningcss']!,
+    };
+    const sourceRoot = new URL('../../../../tools/shadow-registry/src/fixtures/', import.meta.url);
+    const source = JSON.parse(
+      await readFile(new URL('lightningcss-wasm-1.32.0-registry.json', sourceRoot), 'utf8'),
+    ) as {
+      dist: { integrity: string };
+      name: string;
+      version: string;
+    };
+    const tarball = `${registryUrl}/lightningcss-wasm/-/lightningcss-wasm-1.32.0.tgz`;
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      requests.push(url);
+      if (url === `${registryUrl}/lightningcss-wasm`)
+        return Response.json({
+          name: source.name,
+          'dist-tags': { latest: source.version },
+          versions: { [source.version]: { ...source, dist: { ...source.dist, tarball } } },
+        });
+      if (url === tarball)
+        return new Response(
+          new Uint8Array(await readFile(new URL('lightningcss-wasm-1.32.0.tgz', sourceRoot)))
+            .buffer,
+        );
+      throw new Error(`Unexpected shadow producer fetch ${url}`);
+    });
+    lock.packages['node_modules/lightningcss-wasm'] = {
+      version: '0.0.0',
+      resolved: tarball,
+      integrity: source.dist.integrity,
+    };
+    const outcome = await produce({
+      ...options,
+      packageJsonText: JSON.stringify({ ...manifest, dependencies: deps }),
+      packageLockText: JSON.stringify(lock),
+    }).then(
+      () => 'emitted',
+      (error: unknown) => String(error),
+    );
+    expect(outcome).toMatch(/caller lockfile pin for node_modules\/lightningcss-wasm/);
+  });
 });

@@ -55,3 +55,5 @@ ms@2.0.0, and makes zero registry requests during either restore. Existing real
 Vite7.3.6 preview/HMR and SQLite journey remains in the same required runner.
 
 First full gate reproduced one sealed-root export-list failure in isolation (zero timeouts). ADR-0387 adds produceDependencySnapshot, so that exact allowlist now includes it; no other public-surface restriction changed.
+
+Final+GREEN PASS atc798a8e84a6d1489c89aeefe3788ceda7d0570e5; full pr:check25/25. Independent reviewer found no product defect. Its extra retained-acquisition-pin test catches removal of the missing-original guard (mutant RED, original GREEN); test promoted into the following preparation batch.

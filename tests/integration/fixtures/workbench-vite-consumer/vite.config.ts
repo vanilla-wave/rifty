@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
-import { hostBuiltinAliases } from './host-builtins';
 
 const crossOriginIsolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -22,13 +20,6 @@ const registryProxy =
           rewrite: (path: string) => path.replace(/^\/npm-registry/u, ''),
         },
       };
-
-const resolvedHostBuiltinAliases = Object.fromEntries(
-  Object.entries(hostBuiltinAliases).map(([builtin, specifier]) => [
-    builtin,
-    fileURLToPath(import.meta.resolve(specifier)),
-  ]),
-);
 
 export default defineConfig({
   plugins: [
@@ -56,15 +47,5 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
     assetsInlineLimit: 0,
-  },
-  worker: {
-    format: 'es',
-  },
-  resolve: {
-    alias: resolvedHostBuiltinAliases,
-  },
-  define: {
-    __filename: '"/typescript.js"',
-    __dirname: '"/"',
   },
 });
