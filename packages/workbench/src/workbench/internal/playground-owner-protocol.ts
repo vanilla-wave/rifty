@@ -4,6 +4,8 @@ import type { OwnerProjectToken } from '../owner-protocol.ts';
 import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectRef,
+  PlaygroundRetainedOrphan,
+  PlaygroundRetainedOrphanEntry,
   SnapshotApplication,
 } from '../playground.ts';
 import type {
@@ -50,7 +52,28 @@ export type PlaygroundCatalogCommand =
       readonly target: PlaygroundProjectRef;
       readonly definition: PlaygroundProjectDefinitionWire;
     }
-  | { readonly kind: 'delete'; readonly id: string };
+  | { readonly kind: 'delete'; readonly id: string }
+  | { readonly kind: 'list-retained-orphans' }
+  | { readonly kind: 'list-retained-orphan-entries'; readonly id: string }
+  | {
+      readonly kind: 'read-retained-orphan-file';
+      readonly id: string;
+      readonly path: string;
+    };
+
+export type PlaygroundRetainedCatalogResult =
+  | { readonly kind: 'orphans'; readonly orphans: readonly PlaygroundRetainedOrphan[] }
+  | {
+      readonly kind: 'entries';
+      readonly id: string;
+      readonly entries: readonly PlaygroundRetainedOrphanEntry[];
+    }
+  | {
+      readonly kind: 'file';
+      readonly id: string;
+      readonly path: string;
+      readonly bytes: readonly number[];
+    };
 
 export type PageToPlaygroundOwnerMessage =
   | {
@@ -98,6 +121,11 @@ export type PlaygroundOwnerToPageMessage =
     }
   | { readonly type: 'workbench:playground-catalog-completed'; readonly opId: string }
   | {
+      readonly type: 'workbench:playground-retained-completed';
+      readonly opId: string;
+      readonly result: PlaygroundRetainedCatalogResult;
+    }
+  | {
       readonly type: 'workbench:playground-project-opened';
       readonly opId: string;
       readonly projectToken: OwnerProjectToken;
@@ -122,6 +150,7 @@ const OWNER_TYPES = new Set([
   'workbench:playground-ready',
   'workbench:playground-catalog-updated',
   'workbench:playground-catalog-completed',
+  'workbench:playground-retained-completed',
   'workbench:playground-project-opened',
   'workbench:playground-project-tools',
 ]);
@@ -311,9 +340,77 @@ function catalogCommand(
       const command = exactRecord(value, ['kind', 'id'], 'delete command');
       return Object.freeze({ kind, id: nonEmpty(command.id, 'delete id') });
     }
+    case 'list-retained-orphans': {
+      exactRecord(value, ['kind'], 'list-retained-orphans command');
+      return Object.freeze({ kind });
+    }
+    case 'list-retained-orphan-entries': {
+      const command = exactRecord(value, ['kind', 'id'], 'list-retained-orphan-entries command');
+      return Object.freeze({ kind, id: nonEmpty(command.id, 'retained orphan id') });
+    }
+    case 'read-retained-orphan-file': {
+      const command = exactRecord(
+        value,
+        ['kind', 'id', 'path'],
+        'read-retained-orphan-file command',
+      );
+      return Object.freeze({
+        kind,
+        id: nonEmpty(command.id, 'retained orphan id'),
+        path: nonEmpty(command.path, 'retained orphan path'),
+      });
+    }
     default:
       throw new TypeError('Playground catalog command kind is invalid');
   }
+}
+
+function inspectRetainedCatalogResult(value: unknown): PlaygroundRetainedCatalogResult {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError('Playground retained result must be an object');
+  }
+  const kind = Object.getOwnPropertyDescriptor(value, 'kind')?.value;
+  if (kind === 'orphans') {
+    const record = exactRecord(value, ['kind', 'orphans'], 'retained orphans result');
+    const orphans = plainArray(record.orphans, 'retained orphans').map((entry, index) => {
+      const orphan = exactRecord(entry, ['id', 'retainedAt'], `retained orphan ${String(index)}`);
+      return Object.freeze({
+        id: nonEmpty(orphan.id, 'retained orphan id'),
+        retainedAt: nonEmpty(orphan.retainedAt, 'retained orphan retainedAt'),
+      });
+    });
+    return Object.freeze({ kind, orphans: Object.freeze(orphans) });
+  }
+  if (kind === 'entries') {
+    const record = exactRecord(value, ['kind', 'id', 'entries'], 'retained orphan entries result');
+    const entries = plainArray(record.entries, 'retained orphan entries').map((entry, index) => {
+      const item = exactRecord(entry, ['path'], `retained orphan entry ${String(index)}`);
+      return Object.freeze({ path: nonEmpty(item.path, 'retained orphan path') });
+    });
+    return Object.freeze({
+      kind,
+      id: nonEmpty(record.id, 'retained orphan id'),
+      entries: Object.freeze(entries),
+    });
+  }
+  if (kind === 'file') {
+    const record = exactRecord(
+      value,
+      ['kind', 'id', 'path', 'bytes'],
+      'retained orphan file result',
+    );
+    const bytes = plainArray(record.bytes, 'retained orphan bytes');
+    if (bytes.some((byte) => !Number.isInteger(byte) || Number(byte) < 0 || Number(byte) > 255)) {
+      throw new TypeError('retained orphan bytes are invalid');
+    }
+    return Object.freeze({
+      kind,
+      id: nonEmpty(record.id, 'retained orphan id'),
+      path: nonEmpty(record.path, 'retained orphan path'),
+      bytes: Object.freeze(bytes as number[]),
+    });
+  }
+  throw new TypeError('Playground retained result kind is invalid');
 }
 
 export function inspectPageToPlaygroundOwnerMessage(
@@ -526,6 +623,18 @@ export function inspectPlaygroundOwnerToPageMessage(value: unknown): PlaygroundO
   if (type === 'workbench:playground-catalog-completed') {
     const message = exactRecord(value, ['type', 'opId'], 'Playground catalog completion');
     return Object.freeze({ type, opId: nonEmpty(message.opId, 'Playground catalog opId') });
+  }
+  if (type === 'workbench:playground-retained-completed') {
+    const message = exactRecord(
+      value,
+      ['type', 'opId', 'result'],
+      'Playground retained completion',
+    );
+    return Object.freeze({
+      type,
+      opId: nonEmpty(message.opId, 'Playground retained opId'),
+      result: inspectRetainedCatalogResult(message.result),
+    });
   }
   if (type === 'workbench:playground-project-tools') {
     const message = exactRecord(

@@ -9,6 +9,7 @@ import {
   type PlaygroundCatalogCommand,
   type PlaygroundOwnerToPageMessage,
   type PlaygroundProjectRuntimeDecision,
+  type PlaygroundRetainedCatalogResult,
   inspectPageToPlaygroundOwnerMessage,
   inspectPlaygroundOwnerToPageMessage,
   isPageToPlaygroundOwnerMessage,
@@ -114,6 +115,7 @@ type PendingOperation =
   | (Deferred<OpenedProject> & { readonly kind: 'open' })
   | (Deferred<OpenedPlaygroundProject> & { readonly kind: 'playground-open' })
   | (Deferred<PlaygroundCatalogSnapshot> & { readonly kind: 'playground-catalog' })
+  | (Deferred<PlaygroundRetainedCatalogResult> & { readonly kind: 'playground-retained' })
   | (Deferred<void> & { readonly kind: 'close'; readonly projectToken: OwnerProjectToken })
   | (Deferred<void> & { readonly kind: 'delete'; readonly id: string });
 
@@ -384,6 +386,11 @@ export function startBrowserWorkspaceOwner(
       case 'workbench:playground-catalog-completed': {
         const operation = takePending(message.opId, 'playground-catalog');
         operation.resolve(currentCatalog());
+        return;
+      }
+      case 'workbench:playground-retained-completed': {
+        const operation = takePending(message.opId, 'playground-retained');
+        operation.resolve(message.result);
         return;
       }
       case 'workbench:playground-project-opened': {
@@ -970,6 +977,22 @@ export function startBrowserWorkspaceOwner(
     });
   };
 
+  const requestRetained = (
+    command: PlaygroundCatalogCommand,
+  ): Promise<PlaygroundRetainedCatalogResult> => {
+    currentCatalog();
+    const opId = dependencies.operationId();
+    const operation = {
+      ...deferred<PlaygroundRetainedCatalogResult>(),
+      kind: 'playground-retained' as const,
+    };
+    return request<PlaygroundRetainedCatalogResult>(operation, {
+      type: 'workbench:playground-catalog',
+      opId,
+      command,
+    });
+  };
+
   const catalog: PlaygroundProjectCatalog | undefined = companionMode
     ? Object.freeze({
         snapshot: currentCatalog,
@@ -981,6 +1004,27 @@ export function startBrowserWorkspaceOwner(
           catalogListeners.add(listener);
           listener(snapshot);
           return () => catalogListeners.delete(listener);
+        },
+        listRetainedOrphans() {
+          return requestRetained({ kind: 'list-retained-orphans' }).then((result) => {
+            if (result.kind !== 'orphans')
+              throw new TypeError('retained orphans result is invalid');
+            return result.orphans;
+          });
+        },
+        listRetainedOrphanEntries(id: string) {
+          return requestRetained({ kind: 'list-retained-orphan-entries', id }).then((result) => {
+            if (result.kind !== 'entries')
+              throw new TypeError('retained orphan entries result is invalid');
+            return result.entries;
+          });
+        },
+        readRetainedOrphanFile(id: string, path: string) {
+          return requestRetained({ kind: 'read-retained-orphan-file', id, path }).then((result) => {
+            if (result.kind !== 'file')
+              throw new TypeError('retained orphan file result is invalid');
+            return Uint8Array.from(result.bytes);
+          });
         },
         createScratch(input: Parameters<PlaygroundProjectCatalog['createScratch']>[0]) {
           inspectCompanionDefinition(input.definition);

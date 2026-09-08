@@ -23,6 +23,8 @@ import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectCatalog,
   PlaygroundProjectRef,
+  PlaygroundRetainedOrphan,
+  PlaygroundRetainedOrphanEntry,
   SnapshotApplication,
 } from '../workbench/playground.ts';
 import { projectStorageSegment } from '../workbench/project-definition.ts';
@@ -39,7 +41,6 @@ import {
   adoptedProof,
   applicationBaselineMatches,
   baselineMatches,
-  parseAdoption,
   proofMatches,
 } from './playground-catalog-adoption.ts';
 import {
@@ -51,6 +52,24 @@ import {
   readJson,
   writeJson,
 } from './playground-catalog-json.ts';
+import {
+  RETAINED_ORPHANS_ROOT,
+  SCRATCH_TREE,
+  assertRetainOrphanPreconditions,
+  isUnjournaledOrphanScratch,
+  listRetainedOrphanEntries,
+  publicRetainedOrphans,
+  readRetainedOrphanFile,
+  retainedOrphanRoot,
+} from './playground-orphan-scratch-retention.ts';
+import {
+  type StoredCatalog,
+  type StoredProject,
+  type StoredScratch,
+  emptyCatalog,
+  parseStoredCatalog,
+  publicSnapshot,
+} from './playground-stored-catalog.ts';
 
 const WORKBENCH_ROOT = '/.rifty/workbench/v1';
 const PROJECTS_ROOT = `${WORKBENCH_ROOT}/projects`;
@@ -64,28 +83,6 @@ const MIGRATION_INTENTS_ROOT = `${PLAYGROUND_ROOT}/migration-intents`;
 const PROMOTION_MARKER = 'migration-promotion.json';
 const LEGACY_INDEX_NAME = '.rifty-project-index.json';
 const INSTALL_CLAIM_NAME = '.rifty-install-stamp.json';
-
-interface StoredScratch {
-  readonly starterId: string;
-  readonly dirty: boolean;
-  readonly editedAt: string;
-  readonly adoption: CatalogAdoption;
-}
-
-interface StoredProject {
-  readonly id: string;
-  readonly name: string;
-  readonly starterId: string;
-  readonly editedAt: string;
-  readonly adoption: CatalogAdoption;
-}
-
-interface StoredCatalog {
-  readonly version: 1;
-  readonly active: PlaygroundProjectRef | null;
-  readonly scratch: StoredScratch | null;
-  readonly projects: readonly StoredProject[];
-}
 
 type MigrationPhase =
   | { readonly kind: 'pending' }
@@ -142,7 +139,7 @@ interface InlineCatalogMutationTransaction {
 
 type StagedCatalogMutation =
   | {
-      readonly role: 'create' | 'replace' | 'remove';
+      readonly role: 'create' | 'replace' | 'remove' | 'retain-orphan';
       readonly id: string;
     }
   | {
@@ -181,7 +178,7 @@ type CatalogMutationPlan =
       readonly after: TreeImage;
     }
   | {
-      readonly role: 'remove';
+      readonly role: 'remove' | 'retain-orphan';
       readonly id: string;
     }
   | {
@@ -257,6 +254,9 @@ export interface PlaygroundProjectAuthority {
     input: Parameters<PlaygroundProjectCatalog['reset']>[0],
   ): Promise<PlaygroundCatalogSnapshot>;
   delete(id: string): Promise<PlaygroundCatalogSnapshot>;
+  listRetainedOrphans(): Promise<readonly PlaygroundRetainedOrphan[]>;
+  listRetainedOrphanEntries(id: string): Promise<readonly PlaygroundRetainedOrphanEntry[]>;
+  readRetainedOrphanFile(id: string, path: string): Promise<Uint8Array>;
   deleteProject(id: string): Promise<void>;
   openProject(
     definition: ProjectDefinition<unknown>,
@@ -563,108 +563,6 @@ function imageMatches(
   );
 }
 
-function parseActive(value: unknown, label: string): PlaygroundProjectRef | null {
-  if (value === null) return null;
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${label} must be null or an object`);
-  }
-  const kind = (value as Readonly<Record<string, unknown>>).kind;
-  if (kind === 'scratch') {
-    exactObject(value, ['kind'], label);
-    return Object.freeze({ kind });
-  }
-  if (kind === 'project') {
-    const record = exactObject(value, ['kind', 'id'], label);
-    return Object.freeze({ kind, id: nonEmpty(record.id, `${label}.id`) });
-  }
-  throw new TypeError(`${label}.kind is invalid`);
-}
-
-function parseStoredCatalog(value: unknown): StoredCatalog {
-  const catalog = exactObject(value, ['version', 'active', 'scratch', 'projects'], 'catalog');
-  if (catalog.version !== 1) throw new TypeError('catalog.version must be 1');
-  const active = parseActive(catalog.active, 'catalog.active');
-  let scratch: StoredScratch | null = null;
-  if (catalog.scratch !== null) {
-    const value = exactObject(
-      catalog.scratch,
-      ['starterId', 'dirty', 'editedAt', 'adoption'],
-      'catalog.scratch',
-    );
-    scratch = Object.freeze({
-      starterId: nonEmpty(value.starterId, 'catalog.scratch.starterId'),
-      dirty: booleanValue(value.dirty, 'catalog.scratch.dirty'),
-      editedAt: nonEmpty(value.editedAt, 'catalog.scratch.editedAt'),
-      adoption: parseAdoption(value.adoption, 'catalog.scratch.adoption'),
-    });
-  }
-  if (!Array.isArray(catalog.projects)) throw new TypeError('catalog.projects must be an array');
-  const ids = new Set<string>();
-  const projects = catalog.projects.map((entry, index): StoredProject => {
-    const value = exactObject(
-      entry,
-      ['id', 'name', 'starterId', 'editedAt', 'adoption'],
-      `catalog.projects[${String(index)}]`,
-    );
-    const id = nonEmpty(value.id, `catalog.projects[${String(index)}].id`);
-    if (id === 'scratch' || ids.has(id))
-      throw new TypeError(`catalog project id is invalid: ${id}`);
-    ids.add(id);
-    return Object.freeze({
-      id,
-      name: nonEmpty(value.name, `catalog.projects[${String(index)}].name`),
-      starterId: nonEmpty(value.starterId, `catalog.projects[${String(index)}].starterId`),
-      editedAt: nonEmpty(value.editedAt, `catalog.projects[${String(index)}].editedAt`),
-      adoption: parseAdoption(value.adoption, `catalog.projects[${String(index)}].adoption`),
-    });
-  });
-  if (active?.kind === 'scratch' && scratch === null) {
-    throw new TypeError('catalog active Scratch is absent');
-  }
-  if (active?.kind === 'project' && !ids.has(active.id)) {
-    throw new TypeError(`catalog active project is absent: ${active.id}`);
-  }
-  return Object.freeze({
-    version: 1,
-    active,
-    scratch,
-    projects: Object.freeze(projects),
-  });
-}
-
-function publicSnapshot(catalog: StoredCatalog): PlaygroundCatalogSnapshot {
-  return Object.freeze({
-    active:
-      catalog.active === null
-        ? null
-        : catalog.active.kind === 'scratch'
-          ? Object.freeze({ kind: 'scratch' as const })
-          : Object.freeze({ kind: 'project' as const, id: catalog.active.id }),
-    scratch:
-      catalog.scratch === null
-        ? null
-        : Object.freeze({
-            starterId: catalog.scratch.starterId,
-            dirty: catalog.scratch.dirty,
-            editedAt: catalog.scratch.editedAt,
-          }),
-    projects: Object.freeze(
-      catalog.projects.map((project) =>
-        Object.freeze({
-          id: project.id,
-          name: project.name,
-          starterId: project.starterId,
-          editedAt: project.editedAt,
-        }),
-      ),
-    ),
-  });
-}
-
-function emptyCatalog(): StoredCatalog {
-  return Object.freeze({ version: 1, active: null, scratch: null, projects: Object.freeze([]) });
-}
-
 function parseMigrationPhase(value: unknown, label: string): MigrationPhase {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new TypeError(`${label} must be an object`);
@@ -897,7 +795,7 @@ function parseStagedCatalogMutation(value: unknown, index: number): StagedCatalo
     throw new TypeError(`${label} is invalid`);
   }
   const role = (value as Readonly<Record<string, unknown>>).role;
-  if (role === 'create' || role === 'replace' || role === 'remove') {
+  if (role === 'create' || role === 'replace' || role === 'remove' || role === 'retain-orphan') {
     const record = exactObject(value, ['role', 'id'], label);
     return Object.freeze({ role, id: nonEmpty(record.id, `${label}.id`) });
   }
@@ -1233,6 +1131,10 @@ function assertCatalogMutationPreconditions(
   for (const plan of plans) {
     if (ids.has(plan.id)) throw new TypeError(`Catalog mutation id is duplicated: ${plan.id}`);
     ids.add(plan.id);
+    if (plan.role === 'retain-orphan') {
+      assertRetainOrphanPreconditions(authority, plan.id);
+      continue;
+    }
     const target = authority.statSyncOrNull(projectContainer(plan.id));
     if (plan.role === 'create' || plan.role === 'convert-scratch') {
       if (target !== null)
@@ -1309,6 +1211,15 @@ async function prepareStagedCatalogMutation(
         definitionIdentity: plan.definitionIdentity,
       });
     }
+    if (plan.role === 'retain-orphan') {
+      await copyManagedTreeDurably(
+        authority,
+        claims,
+        SCRATCH_TREE,
+        catalogMutationStage(transaction, index, 'after'),
+        { copyClaims: false },
+      );
+    }
   }
   if (plans.length > 0) {
     await durableWriteJson(authority, catalogTransactionPreparedMarker(transaction), {
@@ -1325,6 +1236,16 @@ async function applyStagedCatalogMutation(
 ): Promise<void> {
   for (const [index, mutation] of transaction.mutations.entries()) {
     if (mutation.role === 'convert-scratch') continue;
+    if (mutation.role === 'retain-orphan') {
+      await copyManagedTreeDurably(
+        authority,
+        claims,
+        catalogMutationStage(transaction, index, 'after'),
+        retainedOrphanRoot(mutation.id),
+        { copyClaims: false },
+      );
+      continue;
+    }
     const target = projectContainer(mutation.id);
     await removeManagedTreeDurably(authority, claims, target);
     if (mutation.role !== 'remove') {
@@ -1350,6 +1271,13 @@ async function rollbackStagedCatalogMutation(
   for (const [index, mutation] of transaction.mutations.entries()) {
     if (mutation.role === 'convert-scratch') {
       const target = projectContainer(mutation.id);
+      if (authority.statSyncOrNull(target) !== null) {
+        removeManagedTree(authority, claims, target);
+      }
+      continue;
+    }
+    if (mutation.role === 'retain-orphan') {
+      const target = retainedOrphanRoot(mutation.id);
       if (authority.statSyncOrNull(target) !== null) {
         removeManagedTree(authority, claims, target);
       }
@@ -1423,6 +1351,7 @@ function cleanupEmptyManagedParents(
     CATALOG_TRANSACTIONS_ROOT,
     STAGES_ROOT,
     PROJECTS_ROOT,
+    RETAINED_ORPHANS_ROOT,
     WORKBENCH_ROOT,
     PLAYGROUND_ROOT,
     '/.rifty/workbench',
@@ -2326,6 +2255,18 @@ export async function createPlaygroundProjectAuthority(
       return () => listeners.delete(listener);
     },
 
+    listRetainedOrphans() {
+      return enqueue(async () => publicRetainedOrphans(stored));
+    },
+
+    listRetainedOrphanEntries(id: string) {
+      return enqueue(async () => listRetainedOrphanEntries(authority, stored, id));
+    },
+
+    readRetainedOrphanFile(id: string, path: string) {
+      return enqueue(async () => readRetainedOrphanFile(authority, stored, id, path));
+    },
+
     createScratch(input: Parameters<PlaygroundProjectCatalog['createScratch']>[0]) {
       return enqueue(async () => {
         assertNoLiveProject();
@@ -2380,6 +2321,13 @@ export async function createPlaygroundProjectAuthority(
           return snapshot;
         }
         const editedAt = now();
+        const retain =
+          existing === null && isUnjournaledOrphanScratch(authority, stored)
+            ? Object.freeze({
+                id: `orphan-scratch-${validateStageId(options.createStageId())}`,
+                retainedAt: editedAt,
+              })
+            : null;
         const next = changedCatalog(stored, {
           active: Object.freeze({ kind: 'scratch' }),
           scratch: Object.freeze({
@@ -2388,10 +2336,16 @@ export async function createPlaygroundProjectAuthority(
             editedAt,
             adoption: adoptedProof(definition),
           }),
+          ...(retain === null
+            ? {}
+            : {
+                retainedOrphans: Object.freeze([...(stored.retainedOrphans ?? []), retain]),
+              }),
         });
         return runCatalogMutation(next, [
+          ...(retain === null ? [] : [{ role: 'retain-orphan' as const, id: retain.id }]),
           {
-            role: existing === null ? 'create' : 'replace',
+            role: existing === null && retain === null ? 'create' : 'replace',
             id: 'scratch',
             after: definitionTree('scratch', definition),
           },

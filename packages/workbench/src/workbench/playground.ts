@@ -130,9 +130,21 @@ export interface PlaygroundCatalogSnapshot {
   readonly projects: readonly PlaygroundProject[];
 }
 
+export interface PlaygroundRetainedOrphan {
+  readonly id: string;
+  readonly retainedAt: string;
+}
+
+export interface PlaygroundRetainedOrphanEntry {
+  readonly path: string;
+}
+
 export interface PlaygroundProjectCatalog {
   snapshot(): PlaygroundCatalogSnapshot;
   subscribe(listener: (snapshot: PlaygroundCatalogSnapshot) => void): () => void;
+  listRetainedOrphans(): Promise<readonly PlaygroundRetainedOrphan[]>;
+  listRetainedOrphanEntries(id: string): Promise<readonly PlaygroundRetainedOrphanEntry[]>;
+  readRetainedOrphanFile(id: string, path: string): Promise<Uint8Array>;
   createScratch(input: {
     readonly definition: ProjectDefinition<unknown>;
     readonly preserveDirtySameStarter?: boolean;

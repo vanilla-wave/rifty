@@ -157,6 +157,10 @@ export function createPlaygroundProjectCatalog(
     snapshot: () => authority.catalogSnapshot(),
     subscribe: (listener: Parameters<PlaygroundProjectCatalog['subscribe']>[0]) =>
       authority.subscribeCatalog(listener),
+    listRetainedOrphans: () => authority.listRetainedOrphans(),
+    listRetainedOrphanEntries: (id: string) => authority.listRetainedOrphanEntries(id),
+    readRetainedOrphanFile: (id: string, path: string) =>
+      authority.readRetainedOrphanFile(id, path),
     createScratch: (input: Parameters<PlaygroundProjectCatalog['createScratch']>[0]) =>
       authority.createScratch(input),
     saveScratch: (input: Parameters<PlaygroundProjectCatalog['saveScratch']>[0]) =>

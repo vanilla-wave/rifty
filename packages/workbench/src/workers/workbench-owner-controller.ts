@@ -39,6 +39,7 @@ import type {
   PlaygroundProjectAuthority,
   PlaygroundProjectMutationKind,
 } from './playground-project-authority.ts';
+import { retainedCatalogResult } from './playground-retained-catalog-result.ts';
 
 type ProjectPtyInput = Extract<
   PageToWorkbenchOwnerMessage,
@@ -525,6 +526,18 @@ export function createWorkbenchOwnerController(
         case 'delete':
           await playground.authority.delete(command.id);
           break;
+        case 'list-retained-orphans':
+        case 'list-retained-orphan-entries':
+        case 'read-retained-orphan-file': {
+          const result = await retainedCatalogResult(playground.authority, command);
+          if (shutdownRequested) throw closedOwnerError();
+          playground.send({
+            type: 'workbench:playground-retained-completed',
+            opId: message.opId,
+            result,
+          });
+          return;
+        }
       }
       if (shutdownRequested) throw closedOwnerError();
       playground.send({ type: 'workbench:playground-catalog-completed', opId: message.opId });

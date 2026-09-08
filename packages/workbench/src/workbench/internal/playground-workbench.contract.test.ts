@@ -446,6 +446,9 @@ function catalog(
     rename: async () => snapshot,
     reset: async () => snapshot,
     delete: deleteProject,
+    listRetainedOrphans: async () => [],
+    listRetainedOrphanEntries: async () => [],
+    readRetainedOrphanFile: async () => new Uint8Array(),
   });
 }
 
