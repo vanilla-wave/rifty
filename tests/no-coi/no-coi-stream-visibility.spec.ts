@@ -94,9 +94,7 @@ test('toolchain createReadStream sees sync-written bytes while native OPFS persi
             const heldDuringStreams = held;
             const nativeAfterStreams = await nativeBytes();
             release();
-            while (JSON.stringify(await nativeBytes()) !== JSON.stringify(${JSON.stringify(payload)}))
-              await new Promise(resolve => setTimeout(resolve, 0));
-            console.log(JSON.stringify({ streams, heldDuringStreams, nativeBefore, nativeAfterStreams, persisted: await nativeBytes() }));
+            console.log(JSON.stringify({ streams, heldDuringStreams, nativeBefore, nativeAfterStreams }));
           } finally {
             release();
             FileSystemFileHandle.prototype.createWritable = nativeWrite;
@@ -104,7 +102,10 @@ test('toolchain createReadStream sees sync-written bytes while native OPFS persi
         })()`);
         off();
         if (!evaluated.ok) throw new Error(`stream probe failed: ${JSON.stringify(evaluated)}`);
-        return { coi: crossOriginIsolated, ...JSON.parse(output.join('').trim()) };
+        // runtime.eval resolves after its real OPFS flush; do not race getFile
+        // snapshots against the in-flight native replacement on Linux.
+        const persisted = Array.from(new Uint8Array(await (await file.getFile()).arrayBuffer()));
+        return { coi: crossOriginIsolated, ...JSON.parse(output.join('').trim()), persisted };
       } finally {
         sandbox.dispose();
       }

@@ -47,3 +47,19 @@ await the new CI result; do not manufacture GREEN by editing the benchmark.
 
 `VITEST_MAX_THREADS=4 VITEST_MIN_THREADS=1 VITEST_MAX_FORKS=4 VITEST_MIN_FORKS=1 pnpm pr:check`:25/25 PASS; test:run182.3s, parity61.1s. Assertions/timeouts unchanged.
 Independent `/root/concerns_final_review`: Final+GREEN PASS at ba59f8a0d3fd47765cde66a3b2643a44caa30233, no findings. Independently executed stream1/1 and unreadable-dedup1/1; PR-4 confirms the recovery observer retains the no-copy criterion. Record: pr321-concerns-final-green.json.
+
+## Linux CI stream-carrier race
+
+CI34258496002 on 4e9a10ea8 passed all product suites, including the unchanged
+browser-unit/performance lane and recovery-copy regression. Only the new stream
+carrier failed with native NotReadableError;59 other no-coi cases passed.
+The carrier polled getFile/arrayBuffer after releasing a pending replacement,
+so a File snapshot could become unreadable between acquisition and consumption.
+
+Readback now follows the existing runtime.eval flush acknowledgement. The full
+and windowed stream comparisons still run while native persistence is held;
+both old-durable-byte assertions, Node oracle, and final exact persisted bytes
+are unchanged. No retry, sleep, threshold or product change added.
+`pnpm test:no-coi no-coi-stream-visibility.spec.ts --repeat-each=3` with ports
+5591/5592/5593 passed3/3. Full local pr:check evidence remains valid for unchanged
+product; the edited browser carrier and lint are rechecked before push.
