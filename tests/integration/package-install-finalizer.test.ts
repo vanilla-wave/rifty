@@ -19,8 +19,8 @@ const dec = new TextDecoder();
 const CLI_SOURCE = 'class Cli { parse() { this.runMatchedCommand(); } }';
 const ROOT_WATCH_SOURCE = [
   'const EMPTY_STR = "";',
-  'const ONE_DOT = "../../packages/workbench/src/workers";',
-  'const TWO_DOTS = "../../packages/workbench/src";',
+  'const ONE_DOT = ".";',
+  'const TWO_DOTS = "..";',
   'if (item !== ONE_DOT && item !== TWO_DOTS) items.add(item);',
 ].join('\n');
 

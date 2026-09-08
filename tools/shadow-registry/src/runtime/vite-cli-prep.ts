@@ -30,6 +30,7 @@ export interface ViteCliPreparation {
   readonly root: string;
   readonly mode: ViteCliMode;
   readonly executedBinPath: string;
+  /** Required for action modes; informational invocations may omit it. */
   readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
 }
 
@@ -149,7 +150,15 @@ export async function prepareViteCliAcquisitionFiles(
   if (installCliActionPatch(packageRoot)) installRootWatchPatch(packageRoot);
 }
 
+/** Reject an incomplete host capability before adapter startup or CLI execution. */
+export function assertViteCliKeepalive(options: ViteCliPreparation): void {
+  if (options.mode !== 'info' && typeof options.trackKeepalivePromise !== 'function') {
+    throw new TypeError('Vite CLI action requires host trackKeepalivePromise');
+  }
+}
+
 export async function prepareViteCli(options: ViteCliPreparation): Promise<void> {
+  assertViteCliKeepalive(options);
   const packageRoot = vitePackageRoot(options.root, options.executedBinPath);
   validateCliActionPatch(packageRoot);
   validateRootWatchPatch(packageRoot);
@@ -160,7 +169,7 @@ async function completeViteCliPreparation(
   options: ViteCliPreparation,
   packageRoot: string,
 ): Promise<void> {
-  if (options.trackKeepalivePromise !== undefined)
+  if (typeof options.trackKeepalivePromise === 'function')
     globalThis.__riftyTrackCliPromise = options.trackKeepalivePromise;
   if (options.mode === 'info') return;
   const fs = syncMirror();

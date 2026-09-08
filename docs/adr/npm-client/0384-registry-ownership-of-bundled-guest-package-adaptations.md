@@ -28,4 +28,4 @@ PR #314 accepts SDK rebuilds, all existing adaptations and optional public Vite 
 - ADR-0375: registry preparation serves existing COI/no-COI paths; no application-owned package policy. Generic no-COI control plane remains generic.
 - ADR-0336 D1/D4: registry owns manifest compatibility policy; Workbench delegates. D2 caller priority, D3 visible serialized manifest and D5 real-package evidence retained.
 - ADR-0278 archive clauses and ADR-0286 derived-directory list: remove only `.vite`; other validation/private-root/storage clauses remain.
-- ADR-0335 concrete consumer edges move under registry ownership; generic transport/admission still holds.
+- ADR-0361 concrete consumer edges move under registry ownership; generic transport/admission still holds.

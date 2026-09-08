@@ -6,6 +6,7 @@ import {
   setSyncMirror,
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
+import { preparePackageEntryRuntime } from '../../tools/shadow-registry/src/runtime/entry-preparation.ts';
 import {
   publishRuntimeEsbuild,
   readRuntimeEsbuild,
@@ -54,8 +55,8 @@ const CAC_CALL_SITE = [
 
 const CHOKIDAR_DIR_ENTRY_CALL_SITE = [
   'const EMPTY_STR = "";',
-  'const ONE_DOT = "../../packages/workbench/src/workers";',
-  'const TWO_DOTS = "../../packages/workbench/src";',
+  'const ONE_DOT = ".";',
+  'const TWO_DOTS = "..";',
   'class TestDirEntry {',
   '  constructor() { this.items = new Set(); }',
   '  add(item) {',
@@ -247,6 +248,8 @@ describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
       if (!DirEntry) throw new Error('fixture config.js did not register TestDirEntry');
       const root = new DirEntry();
       root.add('');
+      root.add('.');
+      root.add('..');
       root.add('vite.config.js');
 
       expect([...root.items]).toEqual(['vite.config.js']);
@@ -262,6 +265,81 @@ describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
     await expect(prepareViteCliAcquisitionFiles('/app')).rejects.toThrow(
       /expected exactly one Chokidar DirEntry\.add anchor; found 0/,
     );
+  });
+});
+
+describe('Vite action keepalive admission', () => {
+  it.each(['dev', 'build', 'preview', 'optimize'] as const)(
+    'rejects %s without a host tracker even if a previous global exists',
+    async (mode) => {
+      const fs = bootFs({
+        [CLI_PATH]: CAC_CALL_SITE,
+        [VITE_PACKAGE_JSON]: JSON.stringify({ name: 'vite', version: '8.0.16' }),
+      });
+      await prepareViteCliAcquisitionFiles('/app');
+      for (const prior of [undefined, trackKeepalivePromise]) {
+        g.__riftyTrackCliPromise = prior;
+        await expect(
+          prepareViteCli({ root: '/app', executedBinPath: VITE_BIN, mode }),
+        ).rejects.toThrow(/requires.*trackKeepalivePromise/);
+        await expect(
+          preparePackageEntryRuntime({
+            bin: true,
+            root: '/app',
+            args: mode === 'dev' ? [] : [mode],
+            entryPath: VITE_BIN,
+            runtimeBindings: [],
+            fs,
+          }),
+        ).rejects.toThrow(/requires.*trackKeepalivePromise/);
+        expect(g.__riftyTrackCliPromise).toBe(prior);
+      }
+    },
+  );
+});
+
+describe('Vite keepalive capability shape', () => {
+  it('rejects a non-callable tracker rather than publishing it', async () => {
+    bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    await prepareViteCliAcquisitionFiles('/app');
+    g.__riftyTrackCliPromise = undefined;
+    await expect(
+      prepareViteCli({
+        root: '/app',
+        executedBinPath: VITE_BIN,
+        mode: 'build',
+        trackKeepalivePromise: null as unknown as (promise: PromiseLike<unknown>) => void,
+      }),
+    ).rejects.toThrow(/requires.*trackKeepalivePromise/);
+    expect(g.__riftyTrackCliPromise).toBeUndefined();
+  });
+
+  it('allows info and ordinary eval without an action tracker', async () => {
+    const fs = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    await prepareViteCliAcquisitionFiles('/app');
+    g.__riftyTrackCliPromise = undefined;
+    await expect(
+      prepareViteCli({ root: '/app', executedBinPath: VITE_BIN, mode: 'info' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      preparePackageEntryRuntime({
+        bin: true,
+        root: '/app',
+        args: ['--version'],
+        entryPath: VITE_BIN,
+        runtimeBindings: [],
+        fs,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      preparePackageEntryRuntime({
+        kind: 'eval',
+        root: '/app',
+        runtimeBindings: [],
+        fs,
+      }),
+    ).resolves.toBeUndefined();
+    expect(g.__riftyTrackCliPromise).toBeUndefined();
   });
 });
 

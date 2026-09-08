@@ -1,4 +1,3 @@
-import { trackKeepalivePromise } from '@riftydev/runtime-js';
 /// <reference lib="webworker" />
 
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
@@ -9,6 +8,7 @@ import {
   installConsole,
   installEventLoopKeepalive,
   installFetchKeepalive,
+  trackKeepalivePromise,
 } from '@riftydev/runtime-js';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';

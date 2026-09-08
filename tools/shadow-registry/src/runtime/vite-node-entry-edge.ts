@@ -1,5 +1,6 @@
 import {
   type ViteCliPreparation,
+  assertViteCliKeepalive,
   prepareViteCli,
   viteCliPreparationFromArgs,
 } from './vite-cli-prep.ts';
@@ -16,6 +17,7 @@ const NO_CONCRETE_INTEGRATION: NodeEntryIntegrationPlan = Object.freeze({
 });
 
 function planned(preparation: ViteCliPreparation): NodeEntryIntegrationPlan {
+  assertViteCliKeepalive(preparation);
   return Object.freeze({
     // ADR-0226: informational Vite invocations validate their prepared tree,
     // but never start or publish esbuild.

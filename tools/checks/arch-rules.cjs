@@ -74,6 +74,7 @@ const dependencyPolicyRules = [
     name: `no-reverse-import-${pkgs[0]}`,
     severity: 'error',
     comment: `layer [${pkgs.join(', ')}] must not import a higher layer`,
+    // Host artifact tooling is outside the browser layer graph (ADR-0384).
     from: { path: seg(pkgs), pathNot: '(?:^|/)shadow-registry/tools/' },
     to: { path: seg(TIERS.slice(i + 1).flat()) },
   })),

@@ -5,6 +5,7 @@ import { runtimeAdapterBoundaryViolations } from './runtime-adapter-boundary.mjs
 describe('registry ownership of existing package adaptations', () => {
   it('guards package policy across platform workers, including renamed/new modules', () => {
     const root = 'packages/workbench/src/workers';
+    // workbench-package-config retains helper identity transport (ADR-0263/0278), not adaptation policy.
     const files = readdirSync(root).filter(
       (name) =>
         name.endsWith('.ts') && !name.includes('.test.') && name !== 'workbench-package-config.ts',
