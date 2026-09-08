@@ -128,3 +128,11 @@ asserts code 0 on both runs, removing its stop-after-response workaround.
 Post-rebase original registry/archive/reopen browser fixture: 1/1 (13.1s), both
 real Express commands naturally exited 0. Package migration is no longer tested
 with explicit stop after its response.
+
+## Final acceptance
+
+`pnpm pr:check` at `3191bc4c8d1f70a67bbf1a5bf372eef123384f78`: 25/25 PASS;
+9776 unit/conformance tests passed, 18 existing skips, 0 failed, no isolated
+reruns; full parity passed. Independent `/root/final_review`: Final+GREEN PASS,
+10/10 coverage rows, no findings/residuals; its bounded real-carrier rerun passed
+35 tests (52 filtered out). Same verdict stored beside this evidence.
