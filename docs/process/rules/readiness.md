@@ -8,7 +8,8 @@ nothing numeric is declared at pickup.
 
 PICKUP identifies the accepted result and missing evidence for any authorized
 change. A goal's children compile just in time; FIT sets the destination,
-not every implementation contract. A draft can be captured without review.
+not every implementation contract. A draft can record open questions; completing
+its write-up requires the final check in `RDY-6`, not implementation readiness.
 Do not implement an unsettled promise: prepare it by `RDY-2`/`RDY-8` first.
 
 ## RDY-2 Compile
@@ -93,6 +94,73 @@ The goal changes only by a user amendment (`RDY-6`).
 ## RDY-6 Authority and amendments
 
 The user owns observable scope; the agent owns carriers and implementation.
+
+### Establishing scope
+
+Before claiming refinement settled or setting a promise ready, check its
+material assumptions against the original user request and answers, not only
+the scenario the agent wrote. An empty known question frontier is not that check.
+
+1. Walk the requested actions and their reachable interactions/transitions:
+   what existing user state meets new input, repeated use or changed settings?
+   Inspect material defaults, exclusions and meanings hidden in technical terms.
+   No full state cross-product or implementation design is required.
+2. Try two outcomes allowed by the draft's words. A difference is a user fork
+   only when it is reachable, materially affects the requested value, and no
+   accepted decision or applicable ADR/reference/baseline already settles it.
+   Name the action, difference and source of that value. Otherwise resolve it
+   as an internal choice or an unrelated suggestion; never manufacture scope.
+   A probe establishes current behavior, not consent to a new policy. An
+   agent-written exclusion or narrower fixture cannot supply user authority.
+3. Keep a compact source → observable consequence → authority or open owner
+   record for material assumptions in existing Decisions/evidence/map locations.
+   Cite actual user answers or the clause/probe and why it applies. Reuse valid
+   records for unchanged scope; baseline-only work needs no invented interview.
+   A just-file capture may retain open questions without claiming scope settled.
+4. Ask the informed independent frontier together. After an answer or new fact,
+   revisit affected assumptions and dependent choices before closure. A live
+   unresolved user choice cannot be declared settled or compiled into a ready
+   promise; dependent work waits, independent work continues (`STOP-1`).
+   Route-only unknowns remain agent-owned fog; unknowable user questions follow
+   FIT's fog rule and cannot be used to invent a destination-changing answer.
+
+Later facts may open new forks; report checked scope and remaining uncertainty,
+never a guarantee that no future choice exists. Machines validate records, not
+completeness. Early Challenge checks inform choices; they do not close a write-up.
+
+### Final check of the written result
+
+Before completing a backlog write-up (capture, refine or FIT), and before
+declaring its scope settled/ready, one fresh read-only reviewer checks the
+actual final draft set. No inherited author conversation or reused early-critic
+context: provide the original request/source, actual user answers, applicable
+authority/probe evidence, and the final item or goal/map/seeded drafts together.
+The author supplies sources, not a summary substituting for them or a verdict
+to confirm. A prior premise check is evidence, never a replacement for this pass.
+
+The reviewer independently applies §Establishing scope: compare raw intent with
+the written result, identify omitted or silently decided material choices, and
+verify decision attribution. Missing source authority stays explicit. Record
+the verdict, reviewed revision and reviewer identity in existing review evidence
+locations (`REV-8`); no new status, schema, approval or separate PR is needed.
+One pass covers the related draft set, not one reviewer per child. It may also
+serve as docs Final+GREEN when that pass satisfies `RDY-8`/`REV-8`.
+
+Verify findings by their evidence/authority (`REV-12`). A live user choice
+returns to the interview; an incorrect transcription is corrected by the agent.
+After material edits or new answers, a new clean-context pass checks the final
+result again. Pure formatting and review-record additions do not invalidate it.
+An unchanged already-final-checked result can be reused at FIT/PICKUP; early
+Challenge alone, or a final check of a different result, cannot be reused as closure.
+
+A just-file or agent-only capture gets this source/attribution check too, not a
+new premise study or user interview. Explicit questions can remain in a draft;
+the pass certifies honest capture, not settled scope. Report unresolved choices
+as unresolved. Only then report the write-up complete; no user approval of the
+report, no automatic implementation authorization.
+
+### Amendments
+
 A user decision may amend a ready goal in place. Record in `## Decisions`:
 `amend: <date> — user: <their words> — <changed obligations and why>`.
 Keep prior evidence/history; rechart dependencies and independently recheck

@@ -66,25 +66,32 @@ Use `docs/process/rules/fault-classes.md`. Template: `TEMPLATE.md`.
 
 ## Challenge
 
-Recording a fact or question needs no independent critic. When refine recommends
+Recording a fact or question needs no premise critic. When refine recommends
 a new direction whose value or competing direct route could change what or
 whether the user chooses to build, check the premise before that choice is
 treated as settled. Otherwise check it at FIT/PICKUP before adopting the plan;
 the Contract+RED reviewer may do it in the same pass.
 
-One fresh read-only critic receives the user's outcome, evidence, alternatives
-and unresolved forks, not just the polished solution. It asks whether the value
-follows and a cheaper direct route reaches it. Verify factual objections;
+One fresh read-only critic receives the original user request/answers, proposed
+outcome, evidence, alternatives and unresolved forks, not just the polished
+solution. It asks whether the value follows and a cheaper direct route reaches
+it, and checks for omitted material user choices by `RDY-6` §Establishing scope.
+An omission names a reachable action, consequential difference and missing
+authority; a preferred extra feature is not an omitted choice. Verify objections;
 return new scope/value choices to the current research/interview frontier.
 Record the verdict verbatim in `## Challenge`, including an early draft check.
 FIT/PICKUP and goal children reuse a checked premise for unchanged promises;
 new evidence or materially changed promises need reconsideration, a new stage
-name does not. Existing-baseline repairs and just-file captures gain no critic.
+name does not. Existing-baseline repairs and just-file captures gain no premise critic.
+Every completed backlog write-up still gets `RDY-6` §Final check of the written
+result after drafting; reuse of an early premise check cannot skip it.
 
 A ready document records `challenge: <date> — clear | N problems` in
 `## Challenge`. Resolve a value/cheaper-route objection with evidence or the
 user's explicit decision before adoption; other concerns are advisory. The
-machine checks this record at ready, not when an observation is captured.
+verified live user forks follow `RDY-6` / `STOP-1a` even when reported as concerns;
+they cannot be waved through as advice. The machine checks this record at ready,
+not when an observation is captured; `clear` alone is not scope-closure evidence.
 
 ## Epic fit
 
@@ -115,7 +122,8 @@ probe-or-fog and the completion report: `docs/process/stages/fit.md`.
 
 ## Report
 
-Every user-facing refine ends with a report in the conversation, before any
+Every user-facing refine ends with a report after the fresh final written-result
+check (`RDY-6`), in the conversation, before any
 implementation. The driver writes it from recorded facts, in the user's
 language: proposed observable result; decisive findings and evidence; chosen
 direction and meaningful rejected alternative; major steps and what becomes
