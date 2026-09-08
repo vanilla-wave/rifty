@@ -2,7 +2,7 @@
 
 ## Reference — existing installer, 2026-09-08
 
-Command: `pnpm exec tsx docs/backlog/distribution/reference/dep-snapshot-producer-probe.ts https://registry.npmjs.org`. Full output: `dep-snapshot-producer-probe.json`.
+Command: `pnpm exec tsx docs/backlog/distribution/reference/dep-snapshot-producer-probe.ts https://registry.npmjs.org`. Full output: `dep-snapshot-producer-probe.json`. Default probe is read-only and compares the retained JSON; explicit `--write` refreshes it, then run Biome format.
 
 Node24.16.0, npm11.17.0; real npm-authored Vite8.0.16 fixture:
 `tests/e2e/fixtures/npm-lock-replay/vite8/{package.json,package-lock.json}`.

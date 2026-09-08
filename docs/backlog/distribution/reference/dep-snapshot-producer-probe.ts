@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import {
@@ -103,10 +104,12 @@ async function main() {
       shadowPlan: shadowSubstitutionPlanForInstallResult(result),
       outputLockfile: result.lockfile,
     };
-    await writeFile(
-      new URL('./dep-snapshot-producer-probe.json', import.meta.url),
-      `${JSON.stringify(evidence, null, 2)}\n`,
-    );
+    const outputUrl = new URL('./dep-snapshot-producer-probe.json', import.meta.url);
+    if (process.argv[3] === '--write') {
+      await writeFile(outputUrl, `${JSON.stringify(evidence, null, 2)}\n`);
+    } else {
+      assert.deepEqual(evidence, JSON.parse(await readFile(outputUrl, 'utf8')) as unknown);
+    }
     console.log(
       JSON.stringify({
         nodeVersion: evidence.nodeVersion,
