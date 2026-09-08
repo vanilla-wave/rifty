@@ -29,7 +29,7 @@ Reference and RED: `reference/dep-snapshot-tar-evidence.md`.
 
 - Poisoned/truncated archive × decode: bad checksum, unsafe/duplicate/ancestor paths, unsupported types or control entries reject before destination effects. `dep-snapshot-tar.test.ts` poisoned-artifact cases. → I1
 - Snapshot identity/replay integrity × restore: mismatched identity never admits bytes; absent/altered replay closure fails before mutation. Existing `dep-snapshot.test.ts` replay faults + new identity case. → I1
-- Oversized compressed/decoded body × fetch: existing 128 MiB caps and typed fetch/decompress failure remain. Existing `dep-snapshot.test.ts` bounded-fetch cases. → I1
+- Oversized compressed/decoded body × fetch: existing 128 MiB caps and typed fetch/decompress failure remain. Existing `bounded-asset-fetch.fault.test.ts` declared/streamed caps and `dep-snapshot.test.ts` typed fetch failure; decode uses the same bounded stream owner. → I1
 
 ## Decisions
 

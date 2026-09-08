@@ -42,16 +42,31 @@ function standardTar(extra: Record<string, Uint8Array> = {}): Uint8Array {
     writeFileSync(join(root, path), bytes);
   }
   mkdirSync(join(root, 'payload/node_modules/empty'), { recursive: true });
-  execFileSync('tar', [
-    '--format=pax',
-    '-cf',
-    join(root, 'snapshot.tar'),
-    '-C',
-    root,
-    ...Object.keys(entries),
-    'payload/node_modules/empty',
-  ]);
+  execFileSync(
+    'tar',
+    [
+      '--format=pax',
+      '-cf',
+      join(root, 'snapshot.tar'),
+      '-C',
+      root,
+      ...Object.keys(entries),
+      'payload/node_modules/empty',
+    ],
+    { env: { ...process.env, COPYFILE_DISABLE: '1' } },
+  );
   return new Uint8Array(readFileSync(join(root, 'snapshot.tar')));
+}
+
+function fileOffset(tar: Uint8Array, name: string): number {
+  for (let offset = 0; offset + 512 <= tar.length; ) {
+    const header = tar.subarray(offset, offset + 512);
+    const actual = dec.decode(header.subarray(0, 100)).split('\0')[0];
+    if (actual === name && header[156] === 48) return offset;
+    const size = Number.parseInt(dec.decode(header.subarray(124, 136)), 8) || 0;
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+  throw new Error(`System tar omitted regular file ${name}`);
 }
 
 function serve(bytes: Uint8Array): void {
@@ -164,11 +179,17 @@ describe('producer tar snapshot envelope', () => {
       let tar = standardTar(
         fault === 'control' ? { 'rifty/unknown': enc.encode('unexpected') } : {},
       );
-      if (fault === 'checksum') tar[0] = 88;
+      const offset = fileOffset(tar, 'payload/node_modules/rifty/manifest.json');
+      if (fault === 'checksum') tar[offset] = 88;
       if (fault === 'truncated') tar = tar.slice(0, 700);
-      if (fault === 'duplicate') tar = new Uint8Array([...tar.slice(0, 1024), ...tar]);
+      if (fault === 'duplicate')
+        tar = new Uint8Array([
+          ...tar.slice(0, offset),
+          ...tar.slice(offset, offset + 1024),
+          ...tar.slice(offset),
+        ]);
       if (fault === 'symlink' || fault === 'traversal' || fault === 'ancestor') {
-        const header = tar.subarray(0, 512);
+        const header = tar.subarray(offset, offset + 512);
         if (fault === 'symlink') header[156] = 50;
         else {
           header.fill(0, 0, 100);

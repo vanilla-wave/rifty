@@ -17,4 +17,8 @@ Earlier fixture attempts used unsupported bsdtar `--format=gnu` and a Node
 Buffer backing allocation in Response. Corrected to standard PAX and copied
 Uint8Array body before this RED; those harness failures are not product proof.
 
-Legacy reader/replay/cache/byte-cap carriers remain in `dep-snapshot.test.ts`.
+Legacy reader/replay/cache carriers remain in `dep-snapshot.test.ts`; byte-cap owner is covered by `bounded-asset-fetch.fault.test.ts`.
+
+Review found macOS AppleDouble sidecars and fault edits targeting PAX headers.
+The fixture now disables copyfile metadata and locates the actual regular-file
+header before corruption; payload attacks keep the control manifest intact.
