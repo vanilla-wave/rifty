@@ -42,8 +42,9 @@ for (const p of paths) {
 
 ## I5 REDs
 
-Vitest 2.1.9, Node v24.16.0 — 12 failed | 1 passed (omitted `/preview/`
-parse still works). Failures are unimplemented prefix, not import/typecheck:
+Vitest 2.1.9, Node v24.16.0 — 13 failed | 1 passed (omitted `/preview/`
+parse still works). Failures are unimplemented prefix / routing version,
+not import/typecheck:
 
 ```text
 $ pnpm exec vitest run packages/io/src/preview-prefix.contract.test.ts \
@@ -56,14 +57,19 @@ admitted.previewPrefix → undefined
 invalid prefix / out-of-scope prefix → no throw
 registry url → '/preview/5173/'
 match('/sandbox/preview/5173/', '/sandbox/preview') → null
+SW_ROUTING_VERSION still '6' (pin expects '7')
 ```
 
-Playwright 1.60.0 Chromium:
+Playwright 1.60.0 Chromium — page is `/sandbox/unit-harness.html`, SW
+scope `/sandbox/`, prefix `/sandbox/preview`. Failure is unimplemented
+prefix routing, not harness 404:
 
 ```text
-$ RIFTY_PLAYGROUND_PORT=5411 pnpm exec playwright test \
+$ RIFTY_PLAYGROUND_PORT=5412 pnpm exec playwright test \
   --config playwright.browser-unit.config.ts \
   tests/browser-unit/workbench-preview-prefix.spec.ts
-1 failed: parsePreviewPath('/sandbox/preview/5173/src/main.ts',
-  '/sandbox/preview') is null (not import/NotFound).
+1 failed (9.5s): advertisedUrl `/preview/43872/` (expected
+`/sandbox/preview/43872/`); prefixed iframe/asset are the Vite SPA shell;
+rootRelativeBody ''; hmrInjected false. `/preview/43872/` still serves
+the guest (today's default prefix).
 ```

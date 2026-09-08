@@ -26,6 +26,10 @@ export interface SealedWorkbenchBootOptions {
   /** #255: host budget of owner durability-progress SILENCE; unset = shipped 60 s. */
   readonly ownerOperationSilenceTimeoutMs?: number;
   readonly plan?: PlaygroundProjectPlan;
+  /** I5: host-selected preview pathname; omitted keeps today's `/preview`. */
+  readonly previewPrefix?: string;
+  /** I5: SW scope must contain the harness document URL. */
+  readonly serviceWorkerScope?: string;
 }
 
 interface HostAssets {
@@ -245,16 +249,18 @@ export async function openSealedWorkbenchFixture(
   let workbench: PlaygroundWorkbench | null = null;
   let project: ProjectSession<unknown> | null = null;
   try {
+    const deployment = {
+      workers: { ...assets.workers, owner: ownerWorkerReference },
+      serviceWorker: { url: '/sw.js', scope: options.serviceWorkerScope ?? '/' },
+      wasm: assets.wasm,
+      previewProbeTimeoutMs: 30_000,
+      ...(options.ownerOperationSilenceTimeoutMs === undefined
+        ? {}
+        : { ownerOperationSilenceTimeoutMs: options.ownerOperationSilenceTimeoutMs }),
+      ...(options.previewPrefix === undefined ? {} : { previewPrefix: options.previewPrefix }),
+    };
     workbench = await openPlaygroundWorkbench({
-      deployment: {
-        workers: { ...assets.workers, owner: ownerWorkerReference },
-        serviceWorker: { url: '/sw.js', scope: '/' },
-        wasm: assets.wasm,
-        previewProbeTimeoutMs: 30_000,
-        ...(options.ownerOperationSilenceTimeoutMs === undefined
-          ? {}
-          : { ownerOperationSilenceTimeoutMs: options.ownerOperationSilenceTimeoutMs }),
-      },
+      deployment: deployment as Parameters<typeof openPlaygroundWorkbench>[0]['deployment'],
       packageAcquisition: { registryUrl: '/npm-registry' },
       storage: {
         persistence: options.persistence ?? 'ephemeral',

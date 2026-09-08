@@ -42,12 +42,18 @@ describe('Workbench preview prefix faults (I5)', () => {
     'rejects invalid deployment.previewPrefix %j before SW register',
     (previewPrefix) => {
       expect(() => validateWorkbenchOptions(withPrefix(previewPrefix), SANDBOX_CONTEXT)).toThrow(
+        TypeError,
+      );
+      expect(() => validateWorkbenchOptions(withPrefix(previewPrefix), SANDBOX_CONTEXT)).toThrow(
         /deployment\.previewPrefix/,
       );
     },
   );
 
   it('rejects a prefix outside the SW scope before SW register', () => {
+    expect(() => validateWorkbenchOptions(withPrefix('/preview'), SANDBOX_CONTEXT)).toThrow(
+      TypeError,
+    );
     expect(() => validateWorkbenchOptions(withPrefix('/preview'), SANDBOX_CONTEXT)).toThrow(
       /deployment\.previewPrefix/,
     );

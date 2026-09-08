@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as ioPublic from './index.ts';
 import * as protocol from './preview-protocol.ts';
 import { parsePreviewPath } from './preview-protocol.ts';
 
@@ -25,6 +26,13 @@ describe('preview prefix addressing (I5)', () => {
   });
 
   it('parses and builds /sandbox/preview/<port>/ when that prefix is selected', () => {
+    expect(
+      (
+        ioPublic as {
+          previewDocumentPath?: (prefix: string, port: number) => string;
+        }
+      ).previewDocumentPath?.('/sandbox/preview', 5173),
+    ).toBe('/sandbox/preview/5173/');
     expect(previewDocumentPath?.('/sandbox/preview', 5173)).toBe('/sandbox/preview/5173/');
     expect(parse('/sandbox/preview/5173/', '/sandbox/preview')).toEqual({
       port: 5173,

@@ -36,7 +36,7 @@ host route outside the SW scope is not intercepted.
 3. Invalid prefix spelling (`''`, `'preview'`, `'/sandbox/preview/'`, `'//x'`, `'/a/../b'`, `'/a//b'`, `'\\x'`) throws `TypeError` / `deployment.previewPrefix` before SW register. Same workbench file plus `workbench-preview-prefix.fault.test.ts`. → I5 → ADR-0405
 4. Prefix outside SW scope (`scope: '/sandbox/'`, `previewPrefix: '/preview'`) throws `TypeError` / `deployment.previewPrefix` before SW register. Same fault file. → I5 → scenario → ADR-0405
 5. With prefix `/sandbox/preview`, `parsePreviewPath` / `matchPreviewUrl` / preview-registry emit and match `/sandbox/preview/<port>/` (and rest paths); `/preview/<port>/` and `/api/preview/<port>/` are not that prefix. `preview-prefix.contract.test.ts` (io + SW + registry). → I5 → ADR-0405
-6. Real Chromium: page under `/sandbox/` , SW scope `/sandbox/`, prefix `/sandbox/preview` — iframe navigation, a preview asset, and HMR use the prefixed URL; an unrelated origin path outside the scope is not a preview route. `tests/browser-unit/workbench-preview-prefix.spec.ts`. → I5 → scenario
+6. Real Chromium: page under `/sandbox/`, SW scope `/sandbox/`, prefix `/sandbox/preview` — iframe navigation, a preview asset, a root-relative guest request, and HMR use the prefixed URL; an unrelated origin path outside the scope is not a preview route. `tests/browser-unit/workbench-preview-prefix.spec.ts`. → I5 → scenario
 
 ## Fault matrix
 

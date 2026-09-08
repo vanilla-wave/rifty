@@ -16,6 +16,8 @@ export interface BootOwnerOptions {
   /** #255: host budget of owner durability-progress SILENCE; unset = shipped 60 s. */
   readonly ownerOperationSilenceTimeoutMs?: number;
   readonly plan?: Readonly<Record<string, unknown>>;
+  readonly previewPrefix?: string;
+  readonly serviceWorkerScope?: string;
 }
 
 export interface BootAttempt {
@@ -40,6 +42,11 @@ export interface OwnerExecOutcome {
 
 export async function gotoHarness(page: Page): Promise<void> {
   await page.goto('/unit-harness.html');
+  await expect(page.locator('#browser-unit-harness')).toHaveAttribute('data-status', 'ready');
+}
+
+export async function gotoSandboxHarness(page: Page): Promise<void> {
+  await page.goto('/sandbox/unit-harness.html');
   await expect(page.locator('#browser-unit-harness')).toHaveAttribute('data-status', 'ready');
 }
 

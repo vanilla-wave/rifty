@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>rifty browser-unit harness (sandbox)</title>
+  </head>
+  <body>
+    <!--
+      Same thin harness as /unit-harness.html, served under /sandbox/ so I5
+      can register SW scope /sandbox/ without a 404 (REV-5 class 3).
+    -->
+    <main id="browser-unit-harness" data-status="wiring" data-sandbox="1">
+      rifty browser-unit harness
+    </main>
+    <script type="module">
+      const el = document.getElementById('browser-unit-harness');
+      el.dataset.coi = String(globalThis.crossOriginIsolated === true);
+      el.dataset.status = 'ready';
+    </script>
+  </body>
+</html>
