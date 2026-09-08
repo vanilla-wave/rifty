@@ -1,8 +1,15 @@
 export type CatalogPointerBoundary = 'before-close' | 'after-close';
 
 /** Pause only the native atomic-swap close; every VFS/claim/catalog operation is real. */
-export function pauseCatalogPointer(boundary: CatalogPointerBoundary, reached: () => void) {
-  const targetPath = '/.rifty/workbench/playground/catalog.json';
+export function pauseCatalogPointer(
+  boundary: CatalogPointerBoundary,
+  reached: () => void,
+  options: {
+    readonly targetPath?: string;
+    readonly afterNativeClose?: (handle: FileSystemFileHandle) => void | Promise<void>;
+  } = {},
+) {
+  const targetPath = options.targetPath ?? '/.rifty/workbench/playground/catalog.json';
   const getDirectory = navigator.storage.getDirectory.bind(navigator.storage);
   let armed = false;
   const hold = async (): Promise<never> => {
@@ -22,6 +29,9 @@ export function pauseCatalogPointer(boundary: CatalogPointerBoundary, reached: (
                   return async () => {
                     if (armed && path === targetPath && boundary === 'before-close') await hold();
                     await stream.close();
+                    if (path === targetPath && options.afterNativeClose !== undefined) {
+                      await options.afterNativeClose(target);
+                    }
                     if (armed && path === targetPath && boundary === 'after-close') await hold();
                   };
                 }

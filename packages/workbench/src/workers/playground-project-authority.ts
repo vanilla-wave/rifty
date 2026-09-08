@@ -6,6 +6,7 @@ import {
   type InspectedPlaygroundProjectDefinition,
   inspectPlaygroundProjectDefinition,
   playgroundProjectDefinitionScope,
+  playgroundRuntimeAssociationMatches,
 } from '../workbench/internal/playground-project-definition.ts';
 import {
   ownProjectTerminalSnapshot,
@@ -21,11 +22,38 @@ import { projectStorageSegment } from '../workbench/project-definition.ts';
 import type {
   ProjectAcquisitionPlan,
   ProjectAcquisitionPort,
+  ProjectSnapshotAdmission,
 } from '../workbench/project-materialization.ts';
 import type { ProjectTerminalSnapshot } from '../workbench/project-terminal-state.ts';
 import type { ProjectDefinition } from '../workbench/public.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import type { PackageAcquisitionAuthority } from './package-acquisition-authority.ts';
+import {
+  type TreeImage,
+  type TreeImageFile,
+  applyTree,
+  applyTreeDurably,
+  bytesEqual,
+  captureTree,
+  compareCodeUnits,
+  copyManagedTree,
+  copyManagedTreeDurably,
+  durableRemove,
+  durableWriteJson,
+  flushRequired,
+  imageMatches,
+  isDirectory,
+  isFile,
+  isInstallClaimRelative,
+  jsonBytes,
+  legacyTree,
+  pathDepth,
+  readJson,
+  removeManagedTree,
+  removeManagedTreeDurably,
+  tombstoneManagedTree,
+  writeJson,
+} from './playground-catalog-tree.ts';
 
 const WORKBENCH_ROOT = '/.rifty/workbench/v1';
 const PROJECTS_ROOT = `${WORKBENCH_ROOT}/projects`;
@@ -38,9 +66,6 @@ const CATALOG_TRANSACTIONS_ROOT = `${PLAYGROUND_ROOT}/catalog-transactions`;
 const MIGRATION_INTENTS_ROOT = `${PLAYGROUND_ROOT}/migration-intents`;
 const PROMOTION_MARKER = 'migration-promotion.json';
 const LEGACY_INDEX_NAME = '.rifty-project-index.json';
-const INSTALL_CLAIM_NAME = '.rifty-install-stamp.json';
-const encoder = new TextEncoder();
-const decoder = new TextDecoder('utf-8', { fatal: true });
 
 type CatalogAdoption =
   | { readonly kind: 'pending-adoption'; readonly sourceRoot: string }
@@ -48,6 +73,7 @@ type CatalogAdoption =
       readonly kind: 'adopted';
       readonly definitionIdentity: string;
       readonly baselineFingerprint: string;
+      readonly firstMaterialization?: 'pending';
     };
 
 interface StoredScratch {
@@ -67,6 +93,7 @@ interface StoredProject {
 
 interface StoredCatalog {
   readonly version: 1;
+  readonly transactionId?: string;
   readonly active: PlaygroundProjectRef | null;
   readonly scratch: StoredScratch | null;
   readonly projects: readonly StoredProject[];
@@ -92,22 +119,13 @@ interface MigrationRef {
   readonly starterId: string;
   readonly sourceRoot: string;
   readonly phase: MigrationPhase;
+  readonly preserveDependencies?: true;
 }
 
 interface MigrationJournal {
   readonly version: 1;
   readonly legacyWorkspacePrefix: string;
   readonly refs: readonly MigrationRef[];
-}
-
-interface TreeImageFile {
-  readonly path: string;
-  readonly bytes: readonly number[];
-}
-
-interface TreeImage {
-  readonly directories: readonly string[];
-  readonly files: readonly TreeImageFile[];
 }
 
 interface TransactionRoot {
@@ -127,7 +145,7 @@ interface InlineCatalogMutationTransaction {
 
 type StagedCatalogMutation =
   | {
-      readonly role: 'create' | 'replace' | 'remove';
+      readonly role: 'create' | 'replace' | 'remove' | 'overlay';
       readonly id: string;
     }
   | {
@@ -160,6 +178,7 @@ interface LegacyPublicationTransaction {
 type DurableTransaction = CatalogMutationTransaction | LegacyPublicationTransaction;
 
 type CatalogMutationPlan =
+  | { readonly role: 'overlay'; readonly id: string }
   | {
       readonly role: 'create' | 'replace';
       readonly id: string;
@@ -256,14 +275,6 @@ export interface PlaygroundProjectAuthority {
   close(): Promise<void>;
 }
 
-function compareCodeUnits(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-function pathDepth(path: string): number {
-  return path === '' ? 0 : path.split('/').length;
-}
-
 function ownKeys(value: object): readonly string[] {
   return Object.keys(value).sort(compareCodeUnits);
 }
@@ -295,41 +306,6 @@ function nonEmpty(value: unknown, label: string): string {
 function booleanValue(value: unknown, label: string): boolean {
   if (typeof value !== 'boolean') throw new TypeError(`${label} must be boolean`);
   return value;
-}
-
-function jsonBytes(value: unknown): Uint8Array {
-  return encoder.encode(`${JSON.stringify(value, null, 2)}\n`);
-}
-
-function parseJsonBytes(bytes: Uint8Array, label: string): unknown {
-  try {
-    return JSON.parse(decoder.decode(bytes));
-  } catch (error) {
-    throw new TypeError(
-      `${label} is unreadable: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-function readJson(authority: OwnerVfsAuthority, path: string, label: string): unknown {
-  return parseJsonBytes(authority.readFileBytesSync(path), label);
-}
-
-function ensureParent(authority: OwnerVfsAuthority, path: string): void {
-  authority.mkdirSync(dirname(path), { recursive: true });
-}
-
-function writeJson(authority: OwnerVfsAuthority, path: string, value: unknown): void {
-  ensureParent(authority, path);
-  authority.writeFileSync(path, jsonBytes(value));
-}
-
-function isDirectory(authority: OwnerVfsAuthority, path: string): boolean {
-  return authority.statSyncOrNull(path)?.isDirectory === true;
-}
-
-function isFile(authority: OwnerVfsAuthority, path: string): boolean {
-  return authority.statSyncOrNull(path)?.isFile === true;
 }
 
 function projectContainer(id: string): string {
@@ -392,7 +368,7 @@ function metadataImage(id: string, identity: string, tree: TreeImage): TreeImage
       ),
     ),
     files: Object.freeze([
-      Object.freeze({ path: 'definition.json', bytes: Object.freeze([...jsonBytes(metadata)]) }),
+      Object.freeze({ path: 'definition.json', bytes: jsonBytes(metadata) }),
       ...files,
     ]),
   });
@@ -410,188 +386,12 @@ function definitionTree(id: string, definition: InspectedPlaygroundProjectDefini
       directories.add(parent);
       parent = dirname(parent);
     }
-    files.push(Object.freeze({ path: relative, bytes: Object.freeze([...bytes]) }));
+    files.push(Object.freeze({ path: relative, bytes: bytes.slice() }));
   }
   return metadataImage(
     id,
     definition.identity,
     Object.freeze({ directories: Object.freeze([...directories]), files: Object.freeze(files) }),
-  );
-}
-
-function captureTree(
-  authority: OwnerVfsAuthority,
-  root: string,
-  include: (relativePath: string, kind: 'file' | 'directory') => boolean = () => true,
-): TreeImage | null {
-  const rootStat = authority.statSyncOrNull(root);
-  if (rootStat === null) return null;
-  if (!rootStat.isDirectory) throw new TypeError(`Managed tree is not a directory: ${root}`);
-  const directories = new Set<string>(['']);
-  const files: TreeImageFile[] = [];
-  const walk = (directory: string, relativeDirectory: string): void => {
-    const children = [...authority.readdirSync(directory)].sort((left, right) =>
-      compareCodeUnits(left.name, right.name),
-    );
-    for (const child of children) {
-      const path = `${directory}/${child.name}`;
-      const relative = relativeDirectory === '' ? child.name : `${relativeDirectory}/${child.name}`;
-      if (child.isDirectory) {
-        if (!include(relative, 'directory')) continue;
-        directories.add(relative);
-        walk(path, relative);
-      } else if (include(relative, 'file')) {
-        files.push(
-          Object.freeze({
-            path: relative,
-            bytes: Object.freeze([...authority.readFileBytesSync(path)]),
-          }),
-        );
-      }
-    }
-  };
-  walk(root, '');
-  return Object.freeze({
-    directories: Object.freeze(
-      [...directories].sort(
-        (left, right) => pathDepth(left) - pathDepth(right) || compareCodeUnits(left, right),
-      ),
-    ),
-    files: Object.freeze(files.sort((left, right) => compareCodeUnits(left.path, right.path))),
-  });
-}
-
-function claimRootForRelative(root: string, relative: string): string {
-  const absolute = `${root}/${relative}`;
-  return dirname(dirname(absolute));
-}
-
-function isInstallClaimRelative(relative: string): boolean {
-  const segments = relative.split('/');
-  return segments.at(-1) === INSTALL_CLAIM_NAME && segments.at(-2) === 'node_modules';
-}
-
-function removeClaims(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  root: string,
-): void {
-  if (!isDirectory(authority, root)) return;
-  const claimRoots: string[] = [];
-  const walk = (directory: string): void => {
-    for (const child of authority.readdirSync(directory)) {
-      const path = `${directory}/${child.name}`;
-      if (child.isDirectory) walk(path);
-      else if (
-        child.name === INSTALL_CLAIM_NAME &&
-        directory.split('/').at(-1) === 'node_modules'
-      ) {
-        claimRoots.push(dirname(directory));
-      }
-    }
-  };
-  walk(root);
-  claimRoots.sort((left, right) => pathDepth(right) - pathDepth(left));
-  for (const claimRoot of claimRoots) claims.remove(claimRoot);
-}
-
-function removeManagedTree(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  root: string,
-): void {
-  removeClaims(authority, claims, root);
-  authority.rmSync(root, { recursive: true, force: true });
-}
-
-function applyTree(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  root: string,
-  image: TreeImage | null,
-): void {
-  removeManagedTree(authority, claims, root);
-  if (image === null) return;
-  authority.mkdirSync(root, { recursive: true });
-  for (const relative of image.directories) {
-    if (relative !== '') authority.mkdirSync(`${root}/${relative}`, { recursive: true });
-  }
-  for (const file of image.files) {
-    const target = `${root}/${file.path}`;
-    const bytes = new Uint8Array(file.bytes);
-    if (isInstallClaimRelative(file.path)) {
-      claims.write(claimRootForRelative(root, file.path), bytes, { mkdirTree: true });
-    } else {
-      authority.mkdirSync(dirname(target), { recursive: true });
-      authority.writeFileSync(target, bytes);
-    }
-  }
-}
-
-function legacyTree(authority: OwnerVfsAuthority, sourceRoot: string): TreeImage {
-  const source = captureTree(authority, sourceRoot, (relative, kind) => {
-    const segments = relative.split('/');
-    if (segments[0] === '.rifty') return false;
-    if (segments.includes('node_modules')) return false;
-    if (kind === 'file' && isInstallClaimRelative(relative)) return false;
-    return true;
-  });
-  if (source === null) throw new TypeError(`Legacy migration source is missing: ${sourceRoot}`);
-  const retainedDirectories = new Set<string>(['']);
-  for (const file of source.files) {
-    let parent = dirname(file.path);
-    while (parent !== '.' && parent !== '') {
-      retainedDirectories.add(parent);
-      parent = dirname(parent);
-    }
-  }
-  return Object.freeze({
-    directories: Object.freeze(
-      [
-        ...new Set([
-          '',
-          'tree',
-          ...[...retainedDirectories].map((path) => (path ? `tree/${path}` : 'tree')),
-        ]),
-      ].sort((left, right) => pathDepth(left) - pathDepth(right) || compareCodeUnits(left, right)),
-    ),
-    files: Object.freeze(
-      source.files.map((file) =>
-        Object.freeze({ path: `tree/${file.path}`, bytes: Object.freeze([...file.bytes]) }),
-      ),
-    ),
-  });
-}
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.byteLength !== right.byteLength) return false;
-  for (let index = 0; index < left.byteLength; index += 1) {
-    if (left[index] !== right[index]) return false;
-  }
-  return true;
-}
-
-function imageMatches(
-  authority: OwnerVfsAuthority,
-  root: string,
-  expected: TreeImage,
-  allowSubset: boolean,
-): boolean {
-  const actual = captureTree(authority, root);
-  if (actual === null) return false;
-  const expectedDirs = new Set(expected.directories);
-  const expectedFiles = new Map(
-    expected.files.map((file) => [file.path, new Uint8Array(file.bytes)]),
-  );
-  if (actual.directories.some((path) => !expectedDirs.has(path))) return false;
-  for (const file of actual.files) {
-    const bytes = expectedFiles.get(file.path);
-    if (bytes === undefined || !bytesEqual(new Uint8Array(file.bytes), bytes)) return false;
-  }
-  if (allowSubset) return true;
-  return (
-    actual.directories.length === expected.directories.length &&
-    actual.files.length === expected.files.length
   );
 }
 
@@ -608,11 +408,29 @@ function parseAdoption(value: unknown, label: string): CatalogAdoption {
     });
   }
   if (kind === 'adopted') {
-    const record = exactObject(value, ['kind', 'definitionIdentity', 'baselineFingerprint'], label);
+    const record = exactObject(
+      value,
+      [
+        'kind',
+        'definitionIdentity',
+        'baselineFingerprint',
+        ...(Object.hasOwn(value, 'firstMaterialization') ? ['firstMaterialization'] : []),
+      ],
+      label,
+    );
+    if (
+      Object.hasOwn(record, 'firstMaterialization') &&
+      record.firstMaterialization !== 'pending'
+    ) {
+      throw new TypeError(`${label}.firstMaterialization is invalid`);
+    }
     return Object.freeze({
       kind,
       definitionIdentity: nonEmpty(record.definitionIdentity, `${label}.definitionIdentity`),
       baselineFingerprint: nonEmpty(record.baselineFingerprint, `${label}.baselineFingerprint`),
+      ...(record.firstMaterialization === 'pending'
+        ? { firstMaterialization: 'pending' as const }
+        : {}),
     });
   }
   throw new TypeError(`${label}.kind is invalid`);
@@ -636,7 +454,19 @@ function parseActive(value: unknown, label: string): PlaygroundProjectRef | null
 }
 
 function parseStoredCatalog(value: unknown): StoredCatalog {
-  const catalog = exactObject(value, ['version', 'active', 'scratch', 'projects'], 'catalog');
+  const catalog = exactObject(
+    value,
+    [
+      'version',
+      'active',
+      'scratch',
+      'projects',
+      ...(value !== null && typeof value === 'object' && Object.hasOwn(value, 'transactionId')
+        ? ['transactionId']
+        : []),
+    ],
+    'catalog',
+  );
   if (catalog.version !== 1) throw new TypeError('catalog.version must be 1');
   const active = parseActive(catalog.active, 'catalog.active');
   let scratch: StoredScratch | null = null;
@@ -684,6 +514,9 @@ function parseStoredCatalog(value: unknown): StoredCatalog {
     active,
     scratch,
     projects: Object.freeze(projects),
+    ...(Object.hasOwn(catalog, 'transactionId')
+      ? { transactionId: validateStageId(nonEmpty(catalog.transactionId, 'catalog.transactionId')) }
+      : {}),
   });
 }
 
@@ -769,11 +602,25 @@ function parseMigrationJournal(value: unknown): MigrationJournal {
   const refs = journal.refs.map((entry, index): MigrationRef => {
     const record = exactObject(
       entry,
-      ['kind', 'id', 'starterId', 'sourceRoot', 'phase'],
+      [
+        'kind',
+        'id',
+        'starterId',
+        'sourceRoot',
+        'phase',
+        ...(entry !== null &&
+        typeof entry === 'object' &&
+        Object.hasOwn(entry, 'preserveDependencies')
+          ? ['preserveDependencies']
+          : []),
+      ],
       `legacy migration journal ref ${String(index)}`,
     );
     if (record.kind !== 'scratch' && record.kind !== 'project') {
       throw new TypeError(`legacy migration journal ref ${String(index)} kind is invalid`);
+    }
+    if (Object.hasOwn(record, 'preserveDependencies') && record.preserveDependencies !== true) {
+      throw new TypeError('legacy migration preservation policy is invalid');
     }
     const id = nonEmpty(record.id, `legacy migration journal ref ${String(index)} id`);
     if (ids.has(id)) throw new TypeError(`legacy migration journal duplicate ref: ${id}`);
@@ -793,6 +640,7 @@ function parseMigrationJournal(value: unknown): MigrationJournal {
         record.phase,
         `legacy migration journal ref ${String(index)} phase`,
       ),
+      ...(record.preserveDependencies === true ? { preserveDependencies: true as const } : {}),
     });
   });
   return Object.freeze({ version: 1, legacyWorkspacePrefix, refs: Object.freeze(refs) });
@@ -941,7 +789,7 @@ function parseImage(value: unknown, label: string): TreeImage | null {
     ) {
       throw new TypeError(`${label}.files[${String(index)}].bytes is invalid`);
     }
-    return Object.freeze({ path, bytes: Object.freeze(file.bytes as number[]) });
+    return Object.freeze({ path, bytes: new Uint8Array(file.bytes as number[]) });
   });
   return Object.freeze({ directories: Object.freeze(directories), files: Object.freeze(files) });
 }
@@ -952,7 +800,7 @@ function parseStagedCatalogMutation(value: unknown, index: number): StagedCatalo
     throw new TypeError(`${label} is invalid`);
   }
   const role = (value as Readonly<Record<string, unknown>>).role;
-  if (role === 'create' || role === 'replace' || role === 'remove') {
+  if (role === 'create' || role === 'replace' || role === 'remove' || role === 'overlay') {
     const record = exactObject(value, ['role', 'id'], label);
     return Object.freeze({ role, id: nonEmpty(record.id, `${label}.id`) });
   }
@@ -1055,221 +903,6 @@ function parseTransaction(value: unknown): DurableTransaction {
   throw new TypeError('Playground transaction kind is invalid');
 }
 
-async function flushRequired(authority: OwnerVfsAuthority): Promise<void> {
-  const report = await authority.flush();
-  if (report !== undefined && report.total > 0) {
-    const sample = report.failures[0]?.message;
-    throw new Error(
-      `${String(report.total)} unhealed persistence failure(s)${sample ? `: ${sample}` : ''}`,
-    );
-  }
-}
-
-async function durableWriteJson(
-  authority: OwnerVfsAuthority,
-  path: string,
-  value: unknown,
-): Promise<void> {
-  const parent = dirname(path);
-  if (!isDirectory(authority, parent)) {
-    authority.mkdirSync(parent, { recursive: true });
-    await flushRequired(authority);
-  }
-  authority.writeFileSync(path, jsonBytes(value));
-  await flushRequired(authority);
-}
-
-async function durableRemove(authority: OwnerVfsAuthority, path: string): Promise<void> {
-  if (authority.statSyncOrNull(path) === null) return;
-  authority.rmSync(path, { recursive: true, force: true });
-  await flushRequired(authority);
-}
-
-async function applyTreeDurably(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  root: string,
-  image: TreeImage | null,
-): Promise<void> {
-  if (authority.statSyncOrNull(root) !== null) {
-    removeManagedTree(authority, claims, root);
-  }
-  if (image === null) {
-    await flushRequired(authority);
-    return;
-  }
-  const orderedImageDirectories = [...image.directories]
-    .filter((relative) => relative !== '')
-    .sort((left, right) => pathDepth(right) - pathDepth(left) || compareCodeUnits(left, right));
-  for (const relative of orderedImageDirectories) {
-    const directory = `${root}/${relative}`;
-    if (!isDirectory(authority, directory)) {
-      authority.mkdirSync(directory, { recursive: true });
-    }
-  }
-  if (!isDirectory(authority, root)) authority.mkdirSync(root, { recursive: true });
-  await flushRequired(authority);
-  for (const file of image.files) {
-    const target = `${root}/${file.path}`;
-    const bytes = new Uint8Array(file.bytes);
-    if (isInstallClaimRelative(file.path)) {
-      claims.write(claimRootForRelative(root, file.path), bytes, { mkdirTree: true });
-    } else {
-      authority.writeFileSync(target, bytes);
-    }
-  }
-  if (image.files.length > 0) await flushRequired(authority);
-}
-
-async function removeManagedTreeDurably(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  root: string,
-): Promise<void> {
-  if (authority.statSyncOrNull(root) === null) return;
-  removeManagedTree(authority, claims, root);
-  await flushRequired(authority);
-}
-
-function tombstoneManagedTree(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  root: string,
-): void {
-  if (authority.statSyncOrNull(root) === null) {
-    authority.mkdirSync(root, { recursive: true });
-  }
-  removeManagedTree(authority, claims, root);
-}
-
-interface ManagedCopyPlanFile {
-  readonly sourcePath: string;
-  readonly relative: string;
-  readonly claim: boolean;
-}
-
-interface ManagedCopyPlan {
-  readonly sourceRoot: string;
-  readonly targetRoot: string;
-  readonly directories: readonly string[];
-  readonly files: readonly ManagedCopyPlanFile[];
-}
-
-function planManagedTreeCopy(
-  authority: OwnerVfsAuthority,
-  sourceRoot: string,
-  targetRoot: string,
-  options: {
-    readonly copyClaims: boolean;
-    readonly include?: (relativePath: string, kind: 'file' | 'directory') => boolean;
-  },
-): ManagedCopyPlan {
-  const source = authority.statSyncOrNull(sourceRoot);
-  if (source === null || !source.isDirectory) {
-    throw new TypeError(`Managed copy source is not a directory: ${sourceRoot}`);
-  }
-  if (authority.statSyncOrNull(targetRoot) !== null) {
-    throw new TypeError(`Managed copy target already exists: ${targetRoot}`);
-  }
-  const include = options.include ?? (() => true);
-  const directories: string[] = [];
-  const files: ManagedCopyPlanFile[] = [];
-  const walk = (sourceDirectory: string, relativeDirectory: string): void => {
-    const children = [...authority.readdirSync(sourceDirectory)].sort((left, right) =>
-      compareCodeUnits(left.name, right.name),
-    );
-    for (const child of children) {
-      const sourcePath = `${sourceDirectory}/${child.name}`;
-      const relative = relativeDirectory === '' ? child.name : `${relativeDirectory}/${child.name}`;
-      if (child.isDirectory) {
-        if (!include(relative, 'directory')) continue;
-        directories.push(relative);
-        walk(sourcePath, relative);
-        continue;
-      }
-      if (!include(relative, 'file')) continue;
-      if (isInstallClaimRelative(relative)) {
-        if (!options.copyClaims) continue;
-        files.push(Object.freeze({ sourcePath, relative, claim: true }));
-      } else {
-        files.push(Object.freeze({ sourcePath, relative, claim: false }));
-      }
-    }
-  };
-  walk(sourceRoot, '');
-  return Object.freeze({
-    sourceRoot,
-    targetRoot,
-    directories: Object.freeze(directories),
-    files: Object.freeze(files),
-  });
-}
-
-function applyManagedCopyDirectories(authority: OwnerVfsAuthority, plan: ManagedCopyPlan): void {
-  for (const relative of [...plan.directories].sort(
-    (left, right) => pathDepth(right) - pathDepth(left) || compareCodeUnits(left, right),
-  )) {
-    const target = `${plan.targetRoot}/${relative}`;
-    if (!isDirectory(authority, target)) authority.mkdirSync(target, { recursive: true });
-  }
-  if (!isDirectory(authority, plan.targetRoot)) {
-    authority.mkdirSync(plan.targetRoot, { recursive: true });
-  }
-}
-
-function applyManagedCopyFiles(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  plan: ManagedCopyPlan,
-): void {
-  for (const file of plan.files) {
-    if (file.claim) {
-      const sourceClaimRoot = claimRootForRelative(plan.sourceRoot, file.relative);
-      const claim = claims.read(sourceClaimRoot);
-      if (claim === null) {
-        throw new TypeError(`Managed install claim disappeared: ${sourceClaimRoot}`);
-      }
-      claims.write(claimRootForRelative(plan.targetRoot, file.relative), claim, {
-        mkdirTree: true,
-      });
-    } else {
-      authority.copyFileSync(file.sourcePath, `${plan.targetRoot}/${file.relative}`);
-    }
-  }
-}
-
-function copyManagedTree(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  sourceRoot: string,
-  targetRoot: string,
-  options: {
-    readonly copyClaims: boolean;
-    readonly include?: (relativePath: string, kind: 'file' | 'directory') => boolean;
-  },
-): void {
-  const plan = planManagedTreeCopy(authority, sourceRoot, targetRoot, options);
-  applyManagedCopyDirectories(authority, plan);
-  applyManagedCopyFiles(authority, claims, plan);
-}
-
-async function copyManagedTreeDurably(
-  authority: OwnerVfsAuthority,
-  claims: InstallStampClaimIo,
-  sourceRoot: string,
-  targetRoot: string,
-  options: {
-    readonly copyClaims: boolean;
-    readonly include?: (relativePath: string, kind: 'file' | 'directory') => boolean;
-  },
-): Promise<void> {
-  const plan = planManagedTreeCopy(authority, sourceRoot, targetRoot, options);
-  applyManagedCopyDirectories(authority, plan);
-  await flushRequired(authority);
-  applyManagedCopyFiles(authority, claims, plan);
-  if (plan.files.length > 0) await flushRequired(authority);
-}
-
 function stagedMutationFromPlan(plan: CatalogMutationPlan): StagedCatalogMutation {
   return plan.role === 'convert-scratch'
     ? Object.freeze({
@@ -1325,7 +958,7 @@ async function prepareStagedCatalogMutation(
     ) {
       throw new TypeError(`Catalog transaction mutation ${String(index)} disagrees with its plan`);
     }
-    if (plan.role === 'replace' || plan.role === 'remove') {
+    if (plan.role === 'replace' || plan.role === 'remove' || plan.role === 'overlay') {
       await copyManagedTreeDurably(
         authority,
         claims,
@@ -1379,7 +1012,7 @@ async function applyStagedCatalogMutation(
   transaction: StagedCatalogMutationTransaction,
 ): Promise<void> {
   for (const [index, mutation] of transaction.mutations.entries()) {
-    if (mutation.role === 'convert-scratch') continue;
+    if (mutation.role === 'convert-scratch' || mutation.role === 'overlay') continue;
     const target = projectContainer(mutation.id);
     await removeManagedTreeDurably(authority, claims, target);
     if (mutation.role !== 'remove') {
@@ -1402,6 +1035,15 @@ async function rollbackStagedCatalogMutation(
   const prepared =
     transaction.mutations.length === 0 ||
     isFile(authority, catalogTransactionPreparedMarker(transaction));
+  const stageRoot = catalogTransactionRoot(transaction.txId);
+  // Heal failed journal/marker writes while retaining recovery evidence.
+  writeJson(authority, TRANSACTION_FILE, transaction);
+  if (prepared && transaction.mutations.length > 0) {
+    writeJson(authority, catalogTransactionPreparedMarker(transaction), {
+      version: 1,
+      txId: transaction.txId,
+    });
+  }
   for (const [index, mutation] of transaction.mutations.entries()) {
     if (mutation.role === 'convert-scratch') {
       const target = projectContainer(mutation.id);
@@ -1415,7 +1057,7 @@ async function rollbackStagedCatalogMutation(
     if (authority.statSyncOrNull(target) !== null) {
       removeManagedTree(authority, claims, target);
     }
-    if (mutation.role === 'replace' || mutation.role === 'remove') {
+    if (mutation.role === 'replace' || mutation.role === 'remove' || mutation.role === 'overlay') {
       copyManagedTree(
         authority,
         claims,
@@ -1427,7 +1069,12 @@ async function rollbackStagedCatalogMutation(
   }
   if (transaction.beforeCatalog === null) authority.rmSync(CATALOG_FILE, { force: true });
   else writeJson(authority, CATALOG_FILE, transaction.beforeCatalog);
-  const stageRoot = catalogTransactionRoot(transaction.txId);
+  if (!prepared && authority.statSyncOrNull(stageRoot) !== null) {
+    removeManagedTree(authority, claims, stageRoot);
+  }
+  cleanupEmptyManagedParents(authority);
+  // Recovery copies remain available until the restored tree and pointer settle.
+  await flushRequired(authority);
   if (authority.statSyncOrNull(stageRoot) !== null) {
     removeManagedTree(authority, claims, stageRoot);
   }
@@ -1564,14 +1211,12 @@ function markerImage(
 ): TreeImageFile {
   return Object.freeze({
     path: PROMOTION_MARKER,
-    bytes: Object.freeze([
-      ...jsonBytes({
-        version: 1,
-        id,
-        definitionIdentity: phase.definitionIdentity,
-        baselineFingerprint: phase.baselineFingerprint,
-      }),
-    ]),
+    bytes: jsonBytes({
+      version: 1,
+      id,
+      definitionIdentity: phase.definitionIdentity,
+      baselineFingerprint: phase.baselineFingerprint,
+    }),
   });
 }
 
@@ -1615,8 +1260,14 @@ function validateMigrationState(
   for (const project of catalog.projects) {
     expected.push({ kind: 'project', id: project.id, starterId: project.starterId });
   }
-  if (journal.refs.length !== expected.length) {
-    throw new TypeError('legacy migration journal refs disagree with catalog');
+  for (const candidate of expected) {
+    const entry = catalogEntry(catalog, candidate.id);
+    if (
+      entry?.adoption.kind === 'pending-adoption' &&
+      !journal.refs.some((ref) => ref.id === candidate.id && ref.phase.kind !== 'adopted')
+    ) {
+      throw new TypeError('legacy migration pending catalog entry has no active journal ref');
+    }
   }
   const needsLegacyIndex = journal.refs.some((ref) => ref.phase.kind !== 'adopted');
   const legacyIndex = `${journal.legacyWorkspacePrefix}/${LEGACY_INDEX_NAME}`;
@@ -1624,22 +1275,21 @@ function validateMigrationState(
     throw new TypeError('legacy migration index was tombstoned before every ref was adopted');
   }
 
-  for (const [index, ref] of journal.refs.entries()) {
-    const expectedRef = expected[index];
-    if (
-      expectedRef === undefined ||
-      ref.kind !== expectedRef.kind ||
-      ref.id !== expectedRef.id ||
-      ref.starterId !== expectedRef.starterId
-    ) {
-      throw new TypeError('legacy migration journal ref identity disagrees with catalog');
-    }
+  for (const ref of journal.refs) {
     const expectedSource =
       ref.id === 'scratch'
         ? `${journal.legacyWorkspacePrefix}/scratch`
         : `${journal.legacyWorkspacePrefix}/projects/${ref.id}`;
     if (ref.sourceRoot !== expectedSource) {
       throw new TypeError('legacy migration journal source identity disagrees');
+    }
+    const expectedRef = expected.find((candidate) => candidate.id === ref.id);
+    if (
+      expectedRef === undefined ||
+      ref.kind !== expectedRef.kind ||
+      ref.starterId !== expectedRef.starterId
+    ) {
+      throw new TypeError('legacy migration journal ref identity disagrees with catalog');
     }
     const entry = catalogEntry(catalog, ref.id);
     if (entry === null) throw new TypeError('legacy migration catalog ref is absent');
@@ -1693,7 +1343,7 @@ function validateMigrationState(
         throw new TypeError('legacy migration copy stage is missing');
       }
       if (isDirectory(authority, stage) && !promoteIntentPresent) {
-        const expectedStage = legacyTree(authority, ref.sourceRoot);
+        const expectedStage = legacyTree(authority, ref.sourceRoot, ref.preserveDependencies);
         if (!imageMatches(authority, stage, expectedStage, true)) {
           throw new TypeError('legacy migration copy stage contains invalid bytes');
         }
@@ -1704,7 +1354,7 @@ function validateMigrationState(
       if (!sourcePresent) throw new TypeError('legacy migration promote source is missing');
       const stage = stageContainer(ref.id, ref.phase.stageId);
       const stagePresent = isDirectory(authority, stage);
-      const sourceImage = legacyTree(authority, ref.sourceRoot);
+      const sourceImage = legacyTree(authority, ref.sourceRoot, ref.preserveDependencies);
       if (isFile(authority, migrationPromoteIntent(ref.id))) continue;
       if (stagePresent && !imageMatches(authority, stage, sourceImage, false)) {
         throw new TypeError('legacy migration promote stage is incomplete');
@@ -1733,7 +1383,7 @@ function validateMigrationState(
     }
     if (ref.phase.kind === 'mark') {
       if (!sourcePresent) throw new TypeError('legacy migration mark source is missing');
-    } else if (ref.phase.kind === 'adopted' && sourcePresent) {
+    } else if (ref.phase.kind === 'adopted' && authority.statSyncOrNull(ref.sourceRoot) !== null) {
       throw new TypeError('legacy migration adopted ref retained its source');
     }
   }
@@ -1847,7 +1497,7 @@ async function recoverMigrationState(
     if (phase.kind === 'promote') {
       const target = projectContainer(current.id);
       const marker = `${target}/${PROMOTION_MARKER}`;
-      const sourceImage = legacyTree(authority, current.sourceRoot);
+      const sourceImage = legacyTree(authority, current.sourceRoot, current.preserveDependencies);
       const completePromoted =
         isFile(authority, marker) &&
         imageMatches(authority, target, promotedImage(current.id, phase, sourceImage, true), false);
@@ -2028,11 +1678,17 @@ function activeId(ref: PlaygroundProjectRef | null): string | null {
   return ref.kind === 'scratch' ? 'scratch' : ref.id;
 }
 
-function adoptedProof(definition: InspectedPlaygroundProjectDefinition): CatalogAdoption {
+function adoptedProof(
+  definition: InspectedPlaygroundProjectDefinition,
+  initialMaterialization = false,
+): CatalogAdoption {
   return Object.freeze({
     kind: 'adopted',
     definitionIdentity: definition.identity,
     baselineFingerprint: definition.baselineFingerprint,
+    ...(initialMaterialization && definition.firstMaterialization.kind === 'snapshot'
+      ? { firstMaterialization: 'pending' as const }
+      : {}),
   });
 }
 
@@ -2202,10 +1858,38 @@ export async function createPlaygroundProjectAuthority(
     return inspected;
   };
 
+  const retireCompletedMigrationRefs = async (): Promise<void> => {
+    const current = migration;
+    if (current === null || !current.refs.some((ref) => ref.phase.kind === 'adopted')) return;
+    validateMigrationState(authority, stored, current, options.legacyWorkspacePrefix);
+    const before = authority.readFileBytesSync(MIGRATION_JOURNAL_FILE).slice();
+    const next = Object.freeze({
+      ...current,
+      refs: Object.freeze(current.refs.filter((ref) => ref.phase.kind !== 'adopted')),
+    });
+    try {
+      await durableWriteJson(authority, MIGRATION_JOURNAL_FILE, next);
+    } catch (error) {
+      try {
+        authority.writeFileSync(MIGRATION_JOURNAL_FILE, before);
+        await flushRequired(authority);
+      } catch (rollbackError) {
+        closing = true;
+        throw new AggregateError(
+          [error, rollbackError],
+          'Legacy receipt retirement persistence failed',
+        );
+      }
+      throw error;
+    }
+    migration = next;
+  };
+
   const runCatalogMutation = async (
-    next: StoredCatalog,
+    nextValue: StoredCatalog,
     plans: readonly CatalogMutationPlan[],
     beforeCatalogCommit?: () => Promise<void>,
+    afterRollback?: () => Promise<void>,
   ): Promise<PlaygroundCatalogSnapshot> => {
     if (pendingCatalogCleanup !== null) {
       await recoverStagedCatalogTransaction(
@@ -2216,12 +1900,15 @@ export async function createPlaygroundProjectAuthority(
       );
       pendingCatalogCleanup = null;
     }
-    const before = stored;
     assertCatalogMutationPreconditions(authority, plans);
+    await retireCompletedMigrationRefs();
+    const before = stored;
+    const txId = validateStageId(options.createStageId());
+    const next = Object.freeze({ ...nextValue, transactionId: txId });
     const transaction: StagedCatalogMutationTransaction = Object.freeze({
       version: 2,
       kind: 'catalog-mutation',
-      txId: validateStageId(options.createStageId()),
+      txId,
       phase: 'prepared',
       beforeCatalog: persistedCatalog ? before : null,
       afterCatalog: next,
@@ -2267,7 +1954,9 @@ export async function createPlaygroundProjectAuthority(
             transaction,
             'before',
           );
+          await afterRollback?.();
         } catch (rollbackError) {
+          closing = true;
           throw new AggregateError(
             [error, rollbackError],
             error instanceof Error ? error.message : 'Playground catalog persistence failed',
@@ -2288,6 +1977,7 @@ export async function createPlaygroundProjectAuthority(
   const adoptPending = async (
     ref: MigrationRef,
     definition: InspectedPlaygroundProjectDefinition,
+    preserveDependencies = false,
   ): Promise<void> => {
     if (migration === null) throw new TypeError('Pending legacy adoption has no journal');
     if (ref.phase.kind !== 'pending') {
@@ -2300,8 +1990,21 @@ export async function createPlaygroundProjectAuthority(
       definitionIdentity: definition.identity,
       baselineFingerprint: definition.baselineFingerprint,
     });
+    const chosen = Object.freeze({
+      ...migration,
+      refs: Object.freeze(
+        migration.refs.map((candidate) => {
+          if (candidate.id !== ref.id) return candidate;
+          const { preserveDependencies: _prior, ...base } = candidate;
+          return Object.freeze({
+            ...base,
+            ...(preserveDependencies ? { preserveDependencies: true as const } : {}),
+          });
+        }),
+      ),
+    });
     let journal = replaceJournalPhase(
-      migration,
+      chosen,
       ref.id,
       Object.freeze({ kind: 'copy' as const, ...proof }),
     );
@@ -2314,7 +2017,7 @@ export async function createPlaygroundProjectAuthority(
     writeJson(authority, MIGRATION_JOURNAL_FILE, journal);
     await flushRequired(authority);
 
-    const sourceImage = legacyTree(authority, ref.sourceRoot);
+    const sourceImage = legacyTree(authority, ref.sourceRoot, preserveDependencies);
     const stage = stageContainer(ref.id, stageId);
     applyTree(authority, installStampClaims, stage, sourceImage);
     await flushRequired(authority);
@@ -2417,6 +2120,21 @@ export async function createPlaygroundProjectAuthority(
         const definition = inspectDefinition(input.definition);
         if (definition.id !== 'scratch') throw projectDefinitionMismatch('scratch');
         const existing = stored.scratch;
+        if (existing !== null && definition.firstMaterialization.kind === 'snapshot') {
+          const apply = definition.firstMaterialization.application?.mode === 'apply-snapshot';
+          if (
+            !apply &&
+            existing.adoption.kind === 'adopted' &&
+            !playgroundRuntimeAssociationMatches(existing.adoption.definitionIdentity, definition)
+          ) {
+            throw projectDefinitionMismatch('scratch');
+          }
+          if (stored.active?.kind === 'scratch') return snapshot;
+          return runCatalogMutation(
+            changedCatalog(stored, { active: Object.freeze({ kind: 'scratch' }) }),
+            [],
+          );
+        }
         if (
           input.preserveDirtySameStarter === true &&
           existing?.dirty === true &&
@@ -2431,7 +2149,7 @@ export async function createPlaygroundProjectAuthority(
             starterId: definition.starterId,
             dirty: false,
             editedAt,
-            adoption: adoptedProof(definition),
+            adoption: adoptedProof(definition, true),
           }),
         });
         return runCatalogMutation(next, [
@@ -2540,7 +2258,7 @@ export async function createPlaygroundProjectAuthority(
               starterId: definition.starterId,
               dirty: false,
               editedAt,
-              adoption: adoptedProof(definition),
+              adoption: adoptedProof(definition, true),
             }),
           });
         } else {
@@ -2552,7 +2270,7 @@ export async function createPlaygroundProjectAuthority(
                   ...project,
                   starterId: definition.starterId,
                   editedAt,
-                  adoption: adoptedProof(definition),
+                  adoption: adoptedProof(definition, true),
                 })
               : project,
           );
@@ -2587,34 +2305,106 @@ export async function createPlaygroundProjectAuthority(
         }
         let entry = catalogEntry(stored, selected);
         if (entry === null) throw new TypeError('Active catalog ref is absent');
+        const isSnapshot = definition.firstMaterialization.kind === 'snapshot';
+        const applying =
+          isSnapshot && definition.firstMaterialization.application?.mode === 'apply-snapshot';
+        let legacy: MigrationRef | undefined;
         if (entry.adoption.kind === 'pending-adoption') {
+          if (isSnapshot && !applying) {
+            throw new TypeError('Saved legacy project has no compatible managed install claim');
+          }
           if (entry.starterId !== definition.starterId) {
             throw projectDefinitionMismatch(definition.id);
           }
           if (migration === null) throw new TypeError('Pending adoption has no migration journal');
           const ref = migration.refs.find((candidate) => candidate.id === selected);
           if (ref === undefined) throw new TypeError('Pending adoption ref is absent');
-          await adoptPending(ref, definition);
-          entry = catalogEntry(stored, selected);
-          if (entry === null) throw new TypeError('Adopted catalog ref disappeared');
+          if (applying) legacy = ref;
+          else {
+            await adoptPending(ref, definition);
+            entry = catalogEntry(stored, selected);
+            if (entry === null) throw new TypeError('Adopted catalog ref disappeared');
+          }
         }
-        if (!proofMatches(entry.adoption, definition)) {
-          throw projectDefinitionMismatch(definition.id);
+        if (legacy === undefined) {
+          if (
+            entry.adoption.kind !== 'adopted' ||
+            definitionMetadata(authority, selected) !== entry.adoption.definitionIdentity
+          ) {
+            throw projectDefinitionMismatch(definition.id);
+          }
+          if (isSnapshot) {
+            if (
+              !applying &&
+              !playgroundRuntimeAssociationMatches(entry.adoption.definitionIdentity, definition)
+            ) {
+              throw projectDefinitionMismatch(definition.id);
+            }
+          } else if (!proofMatches(entry.adoption, definition)) {
+            throw projectDefinitionMismatch(definition.id);
+          }
         }
         const container = projectContainer(selected);
-        if (!isDirectory(authority, `${container}/tree`)) {
+        if (legacy === undefined && !isDirectory(authority, `${container}/tree`)) {
           throw new TypeError(`Workbench project tree is missing: ${selected}`);
-        }
-        if (definitionMetadata(authority, selected) !== definition.identity) {
-          throw projectDefinitionMismatch(definition.id);
         }
         const projectKey = projectStorageSegment(selected);
         const root = `${container}/tree`;
-        await options.beforeOpenProject?.(root);
+        if (legacy === undefined) await options.beforeOpenProject?.(root);
+        const pendingInitial =
+          entry.adoption.kind === 'adopted' && entry.adoption.firstMaterialization === 'pending';
+        const snapshotAdmission: ProjectSnapshotAdmission | undefined = !isSnapshot
+          ? undefined
+          : !applying && !pendingInitial
+            ? { mode: 'saved' }
+            : {
+                mode: applying ? 'apply' : 'initial',
+                ...(legacy === undefined ? {} : { preflightRoot: legacy.sourceRoot }),
+                transaction: async (operation, reconcileRollback) => {
+                  if (legacy !== undefined) {
+                    await adoptPending(legacy, definition, true);
+                    await options.beforeOpenProject?.(root);
+                  }
+                  const current = catalogEntry(stored, selected);
+                  if (current?.adoption.kind !== 'adopted') {
+                    throw new TypeError('Snapshot application has no adopted catalog entry');
+                  }
+                  const next = replaceCatalogAdoption(
+                    stored,
+                    selected,
+                    Object.freeze({
+                      kind: 'adopted',
+                      definitionIdentity: applying
+                        ? definition.identity
+                        : current.adoption.definitionIdentity,
+                      baselineFingerprint: current.adoption.baselineFingerprint,
+                    }),
+                  );
+                  let result: ProjectAcquisitionPlan | undefined;
+                  await runCatalogMutation(
+                    next,
+                    [{ role: 'overlay', id: selected }],
+                    async () => {
+                      if (applying)
+                        writeJson(authority, `${container}/definition.json`, {
+                          version: 1,
+                          projectKey,
+                          definitionIdentity: definition.identity,
+                        });
+                      result = await operation();
+                    },
+                    reconcileRollback,
+                  );
+                  if (result === undefined)
+                    throw new Error('Snapshot catalog transaction did not acquire');
+                  return result;
+                },
+              };
         const acquisitionResult = await acquisition.ensure({
           projectKey,
           projectRoot: root,
           definition,
+          ...(snapshotAdmission === undefined ? {} : { snapshotAdmission }),
         });
         const acknowledgedInitialTerminalState =
           initialTerminalState === undefined

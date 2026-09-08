@@ -1,13 +1,10 @@
 import type { InstallResult } from '@riftydev/npm-client';
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { MemoryFsSync, createMemoryFs } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createOwnerVfsAuthorityComposition } from '../workers/owner-vfs-authority.ts';
 import { type DepSnapshotV3, buildDepSnapshot } from './dep-snapshot.ts';
-import {
-  type InstallStampAuthority,
-  createInstallStampAuthority,
-} from './install-stamp-authority.ts';
+import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import { installStampSatisfied, readInstallStamp } from './install-stamp.ts';
 import {
   type TestEnsureProjectDepsOptions,
@@ -924,22 +921,8 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
 
   it('restore-only with no snapshot returns none before any demote', async () => {
     const { vfs, fsSync, logFn } = project();
-    const demoteFailure = new Error('durable revocation failed');
-    let demoteCalls = 0;
-    const installStampAuthority: InstallStampAuthority = {
-      check: async () => ({ status: 'absent' }),
-      checkSync: () => ({ status: 'absent' }),
-      demote: async () => {
-        demoteCalls += 1;
-        throw demoteFailure;
-      },
-      prepareTreeMutation: async () => {},
-      promote: async () => ({ status: 'stale' }),
-      rebindProjectSave: async () => {
-        throw new Error('unexpected project Save');
-      },
-      revoke: async () => {},
-    };
+    const installStampAuthority = createInstallStampAuthority({ vfs, fsSync });
+    const demote = vi.spyOn(installStampAuthority, 'demote');
     const result = await ensureProjectDependencies({
       vfs,
       fsSync,
@@ -951,7 +934,11 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
 
     expect(result).toEqual({ source: 'none', packages: 0 });
-    expect(demoteCalls).toBe(0);
+    expect(demote).not.toHaveBeenCalled();
+    expect(await installStampAuthority.check({ root: ROOT, slug: 'project-files' })).toEqual({
+      status: 'absent',
+    });
+    demote.mockRestore();
   });
 
   it('restore-only with a matching snapshot RESTORES (still never installs)', async () => {

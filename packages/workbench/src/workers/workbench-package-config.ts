@@ -1,7 +1,10 @@
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 import { defineOwnEnumerableProperty } from '../workbench/internal/own-property.ts';
 import type { InspectedProjectDefinition } from '../workbench/project-definition.ts';
-import type { ProjectFirstMaterialization } from '../workbench/project-materialization.ts';
+import {
+  type ProjectFirstMaterialization,
+  normalizeProjectSnapshotApplication,
+} from '../workbench/project-materialization.ts';
 import type {
   FirstMaterializationOwnerPackageConfig,
   OwnerPackageConfig,
@@ -58,6 +61,7 @@ function firstMaterializationMetadata(definition: InspectedProjectDefinition): {
     }
     firstMaterialization = Object.freeze({
       kind: 'snapshot',
+      application: normalizeProjectSnapshotApplication(materialization.application),
       snapshot: Object.freeze({
         snapshotId: snapshot.snapshotId,
         assetUrl: snapshot.assetUrl,

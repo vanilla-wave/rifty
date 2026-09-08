@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Workbench snapshot application preserves saved projects; catalog/claim helpers shrink oversized owners and lower their source ratchets (ADR-0394).
+
 - Publish Workbench runtime assets with exact compiler/WASM exceptions in the esbuild-retirement inventory; substituted esbuild bytes remain package-owned (ADR-0390/0391).
 
 - Process: replace empty-frontier refinement closure with one `RDY-6` check

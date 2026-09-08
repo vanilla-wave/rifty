@@ -58,8 +58,16 @@ export interface PlaygroundTrustedSnapshot {
   readonly templateId: string;
 }
 
+export type PlaygroundSnapshotApplication =
+  | { readonly mode: 'initial-deployment-only' }
+  | { readonly mode: 'apply-snapshot'; readonly conflict?: 'error' | 'overwrite' };
+
 export type PlaygroundFirstMaterialization =
-  | { readonly kind: 'snapshot'; readonly snapshot: PlaygroundTrustedSnapshot }
+  | {
+      readonly kind: 'snapshot';
+      readonly snapshot: PlaygroundTrustedSnapshot;
+      readonly application?: PlaygroundSnapshotApplication;
+    }
   | { readonly kind: 'install' };
 
 interface PlaygroundPlanBase {

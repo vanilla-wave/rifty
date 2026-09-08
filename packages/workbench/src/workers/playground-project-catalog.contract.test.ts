@@ -108,6 +108,7 @@ const EMPTY = freezeExpected<PlaygroundCatalogSnapshot>({
 });
 
 interface CatalogHarness {
+  readonly latestStageId: () => string;
   readonly fs: MemoryFsSync;
   readonly authority: OwnerVfsAuthority;
   readonly installStampClaims: OwnerVfsAuthorityComposition['installStampClaims'];
@@ -188,6 +189,7 @@ async function harness(
     packages,
     owner,
     catalog: createPlaygroundProjectCatalog(owner),
+    latestStageId: () => `catalog-stage-${String(stageSequence)}`,
   };
 }
 
@@ -283,9 +285,10 @@ async function expectUntrustedSaveOfflineOpen(
         packages.activateAndEnsure(
           workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
             packageJsonBytes: composition.authority.readFileBytesSync(
-              `${request.projectRoot}/package.json`,
+              `${request.snapshotAdmission !== undefined && request.snapshotAdmission.mode !== 'saved' ? (request.snapshotAdmission.preflightRoot ?? request.projectRoot) : request.projectRoot}/package.json`,
             ),
           }),
+          request.snapshotAdmission,
         ),
     },
     projectSave: packages,
@@ -1693,10 +1696,14 @@ describe('Playground catalog crash recovery', () => {
           ),
         );
 
+        const failedStageId = h.latestStageId();
         await testCase.mutate(h);
-        expectCatalogState(h, fs, expectedPost);
+        const retryStageId = h.latestStageId();
+        expect(retryStageId).not.toBe(failedStageId);
+        const expectedRetry = withCatalogTransactionId(expectedPost, retryStageId);
+        expectCatalogState(h, fs, expectedRetry);
         expect(observed).toEqual([expectedPre.catalog, expectedPost.catalog]);
-        await expectHardRestartState(fs, expectedPost);
+        await expectHardRestartState(fs, expectedRetry);
         unsubscribe();
 
         const recoveredFs = createDurableOwnerFsFromTree(finalFaultTree);
@@ -2067,6 +2074,29 @@ function classifyCatalogState(
     return 'post';
   }
   return 'neither';
+}
+
+function withCatalogTransactionId(
+  expected: ExactCatalogState,
+  transactionId: string,
+): ExactCatalogState {
+  const original = expected.tree.files[CATALOG_FILE];
+  if (original === undefined) throw new Error('Expected committed catalog is absent');
+  const catalog = JSON.parse(decoder.decode(original)) as Record<string, unknown>;
+  if (typeof catalog.transactionId !== 'string')
+    throw new Error('Expected commit identity is absent');
+  return Object.freeze({
+    catalog: expected.catalog,
+    tree: Object.freeze({
+      directories: expected.tree.directories,
+      files: Object.freeze({
+        ...expected.tree.files,
+        [CATALOG_FILE]: encoder.encode(
+          `${JSON.stringify({ ...catalog, transactionId }, null, 2)}\n`,
+        ),
+      }),
+    }),
+  });
 }
 
 function expectCatalogState(

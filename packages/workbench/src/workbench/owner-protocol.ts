@@ -1,6 +1,9 @@
 import type { PtyPreview, PtyPreviewReq } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
-import type { SerializedWorkbenchOwnerError } from './errors.ts';
+import {
+  type SerializedWorkbenchOwnerError,
+  inspectSerializedWorkbenchOwnerError as inspectSerializedError,
+} from './errors.ts';
 import {
   absoluteHttpUrl,
   copyStringMap,
@@ -489,15 +492,6 @@ function inspectStorage(value: unknown): OwnerStorageSnapshot {
     });
   }
   throw invalid('owner storage snapshot');
-}
-
-function inspectSerializedError(value: unknown): WorkbenchOwnerFailure['error'] {
-  const error = record(value, 'serialized owner error');
-  exact(error, ['name', 'message'], 'serialized owner error');
-  return Object.freeze({
-    name: nonEmptyString(error.name, 'serialized owner error name'),
-    message: string(error.message, 'serialized owner error message'),
-  });
 }
 
 function ownerProjectToken(value: unknown): OwnerProjectToken {

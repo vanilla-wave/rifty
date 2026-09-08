@@ -46,6 +46,8 @@ export interface DepSnapshotV3 {
 }
 
 export interface PreparedDepSnapshotRestore {
+  applyCache(): void;
+  applyPayload(): void;
   apply(): void;
 }
 
@@ -202,13 +204,18 @@ export async function prepareDepSnapshotRestore(
     replace: false,
   });
   const lockfile = snapshot.lockfile.length > 0 ? enc.encode(snapshot.lockfile) : null;
+  const applyPayload = (): void => {
+    nodeModules.apply();
+    if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
+  };
   return {
+    applyCache: () => tarballCache.apply(),
+    applyPayload,
     apply() {
-      nodeModules.apply();
       // The global cache is shared across projects: merge this exact closure;
       // never replace unrelated warm entries. Publish the lockfile last.
       tarballCache.apply();
-      if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
+      applyPayload();
     },
   };
 }

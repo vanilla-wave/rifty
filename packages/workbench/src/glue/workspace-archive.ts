@@ -181,12 +181,17 @@ export function applyWorkspaceArchive(
   prepareWorkspaceArchiveImport(fs, archive, options).apply();
 }
 
-/** Validate/decode without mutation; the returned apply owns the root replace. */
-export function prepareWorkspaceArchiveImport(
-  fs: WorkspaceArchiveFs,
+export interface DecodedWorkspaceArchive {
+  readonly root: string;
+  readonly files: readonly { readonly target: string; readonly content: Uint8Array }[];
+  readonly directories: readonly { readonly target: string }[];
+}
+
+/** One path/namespace/decode boundary for replacement and entry-overlay imports. */
+export function decodeWorkspaceArchive(
   archive: unknown,
   options: ImportWorkspaceArchiveOptions = {},
-): PreparedWorkspaceArchiveImport {
+): DecodedWorkspaceArchive {
   assertArchive(archive);
   const root = normalizePath(options.root ?? archive.root);
   const archiveRoot = normalizePath(archive.root);
@@ -246,6 +251,15 @@ export function prepareWorkspaceArchiveImport(
     }
   }
 
+  return { root, files: decoded, directories };
+}
+
+export function prepareWorkspaceArchiveImport(
+  fs: WorkspaceArchiveFs,
+  archive: unknown,
+  options: ImportWorkspaceArchiveOptions = {},
+): PreparedWorkspaceArchiveImport {
+  const { root, files: decoded, directories } = decodeWorkspaceArchive(archive, options);
   return {
     root,
     apply() {

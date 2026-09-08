@@ -7,7 +7,7 @@ why: Changing snapshotId currently reseeds an edited Scratch, while hosts need s
 user_story: As the plugin-sandbox embedder, I want saved projects to win after initial deployment and choose overwrite or error when explicitly applying a snapshot, but current catalog identity changes can silently replace edited files.
 epic: self-hosted-snapshot-workbench
 blocked_by: []
-sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, ADR-0394, ADR-0279, ADR-0261]
+sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, ADR-0394, ADR-0397, ADR-0279, ADR-0261]
 code: [packages/workbench/src/workbench/internal/playground-project-definition.ts, packages/workbench/src/workers/playground-project-authority.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/glue/dep-snapshot.ts]
 ---
 
@@ -107,6 +107,7 @@ outside the accepted goal. Existing unsupported capabilities stay loud errors.
 
 ready-verdict: 2026-09-08 — Contract+RED @ fe0c879ba1de72fd2b56ad5690ffbf8fa1b3a383
 
+- 2026-09-08 — ADR-0397 resolves observed completed-receipt lifetime defects while restoring all old corruption guards; independent DEC-2/PR-4 decision and added fault carriers preserve I8 scope.
 - 2026-09-08 — reception: Contract+RED PASS, 0 blockers; two advisory NOTES accepted as additional Save-before-open and cache-durability carriers, no scope change.
 - 2026-09-08 — ADR-0394 selects exact application API, durable admission receipt, staged overlay and claim rollback reconciliation; independent DEC-2 research recorded under reference/.
 - 2026-09-07 — user: initial-deployment-only default; saved state wins afterward; explicit apply mode exists (I8).

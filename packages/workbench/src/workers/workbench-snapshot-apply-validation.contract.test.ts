@@ -7,7 +7,12 @@ import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/inte
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { produceDependencySnapshot } from '../glue/dep-snapshot-producer.ts';
 import { decodeDepSnapshotTar } from '../glue/dep-snapshot-tar.ts';
-import { parseDepSnapshot, serializeDepSnapshotTar } from '../glue/dep-snapshot.ts';
+import {
+  type DepSnapshotV3,
+  parseDepSnapshot,
+  serializeDepSnapshot,
+  serializeDepSnapshotTar,
+} from '../glue/dep-snapshot.ts';
 import { readInstallStampSync, stampTrusted } from '../glue/install-stamp.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { createOwnerPackageState } from './owner-package-state.ts';
@@ -16,7 +21,11 @@ import {
   type OpenedPlaygroundProject,
   createPlaygroundProjectAuthority,
 } from './playground-project-authority.ts';
-import { type ExactFsTree, snapshotExactFsTree } from './test-fixtures/durable-owner-fs.ts';
+import {
+  DurableOwnerFs,
+  type ExactFsTree,
+  snapshotExactFsTree,
+} from './test-fixtures/durable-owner-fs.ts';
 import {
   type SavedSnapshotFixture,
   installSnapshotNetwork,
@@ -29,9 +38,10 @@ const source = "console.log('snapshot validation fixture');\n";
 const decoder = new TextDecoder();
 type Fault = 'corrupt-replay-cache' | 'missing-replay-cache' | 'incompatible-install-artifact';
 let valid: SavedSnapshotFixture;
+let cacheApplication: SavedSnapshotFixture;
 let invalid: Readonly<Record<Fault, SavedSnapshotFixture>>;
 
-async function produceLightningSnapshot(): Promise<SavedSnapshotFixture> {
+async function produceLightningSnapshot(version = '1.0.0'): Promise<SavedSnapshotFixture> {
   const fixtureRoot = new URL('../../../../tools/shadow-registry/src/fixtures/', import.meta.url);
   const metadata = JSON.parse(
     await readFile(new URL('lightningcss-wasm-1.32.0-registry.json', fixtureRoot), 'utf8'),
@@ -74,7 +84,7 @@ async function produceLightningSnapshot(): Promise<SavedSnapshotFixture> {
   });
   const manifest = {
     name: 'apply-validation',
-    version: '1.0.0',
+    version,
     dependencies: { lightningcss: '^1.32.0' },
   };
   const produced = await produceDependencySnapshot({
@@ -109,7 +119,7 @@ async function produceLightningSnapshot(): Promise<SavedSnapshotFixture> {
     descriptor: {
       snapshotId: produced.snapshotId,
       templateId: payload.templateId,
-      assetUrl: 'https://host.test/lightning-valid.tar.gz',
+      assetUrl: `https://host.test/lightning-valid-${version}.tar.gz`,
     },
   };
 }
@@ -148,6 +158,8 @@ function invalidArtifact(fault: Fault): SavedSnapshotFixture {
 
 beforeAll(async () => {
   valid = await produceLightningSnapshot();
+  cacheApplication = await produceLightningSnapshot('1.0.1');
+  expect(cacheApplication.payload.lockfile).not.toBe(valid.payload.lockfile);
   invalid = {
     'corrupt-replay-cache': invalidArtifact('corrupt-replay-cache'),
     'missing-replay-cache': invalidArtifact('missing-replay-cache'),
@@ -160,9 +172,11 @@ afterEach(() => {
 });
 
 /** Real memory owner graph; persistence faults belong to the separate OPFS carrier. */
-async function seedWarmOwner(artifact: SavedSnapshotFixture) {
+async function seedWarmOwner(
+  artifact: SavedSnapshotFixture,
+  fs: MemoryFsSync = new MemoryFsSync(),
+) {
   const network = installSnapshotNetwork(valid, artifact);
-  const fs = new MemoryFsSync();
   const composition = createOwnerVfsAuthorityComposition(fs, { initialRoots: ['/', '/.rifty'] });
   const vfs = new SyncMirrorVfs();
   setSyncMirror(composition.authority, { async: vfs });
@@ -180,7 +194,7 @@ async function seedWarmOwner(artifact: SavedSnapshotFixture) {
   });
   const owner = await createPlaygroundProjectAuthority({
     ...composition,
-    persistence: 'ephemeral',
+    persistence: fs instanceof DurableOwnerFs ? 'required' : 'ephemeral',
     now: () => '2026-09-08T00:00:00.000Z',
     createStageId: () => globalThis.crypto.randomUUID(),
     acquisition: {
@@ -188,9 +202,10 @@ async function seedWarmOwner(artifact: SavedSnapshotFixture) {
         packages.activateAndEnsure(
           workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
             packageJsonBytes: composition.authority.readFileBytesSync(
-              `${request.projectRoot}/package.json`,
+              `${request.snapshotAdmission?.mode !== 'saved' && request.snapshotAdmission?.preflightRoot ? request.snapshotAdmission.preflightRoot : request.projectRoot}/package.json`,
             ),
           }),
+          request.snapshotAdmission,
         ),
     },
     projectSave: packages,
@@ -212,7 +227,7 @@ async function seedWarmOwner(artifact: SavedSnapshotFixture) {
   await warm.close();
   expect(network.requests).toEqual([valid.descriptor.assetUrl]);
   expect(decoder.decode(composition.authority.readFileBytesSync(`${root}/package.json`))).toBe(
-    artifact.payload.packageJsonText,
+    valid.payload.packageJsonText,
   );
   const stamp = readInstallStampSync(composition.authority, root);
   expect(stamp !== null && stampTrusted(stamp)).toBe(true);
@@ -225,7 +240,40 @@ async function seedWarmOwner(artifact: SavedSnapshotFixture) {
     ).toBe(0);
   }
   network.requests.length = 0;
-  return { ...composition, fs, owner, packages, network };
+  return { ...composition, fs, owner, packages, network, root };
+}
+
+class ReplayCacheBoundaryFs extends DurableOwnerFs {
+  cachePath: string | undefined;
+  lockPath: string | undefined;
+  incomingLock: Uint8Array | undefined;
+  cacheQueued = false;
+  cacheDurable = false;
+  injected = false;
+  prematureLockWrites = 0;
+
+  override writeFileSync(path: string, bytes: Uint8Array): void {
+    if (path === this.cachePath) this.cacheQueued = true;
+    if (
+      path === this.lockPath &&
+      !this.cacheDurable &&
+      this.incomingLock !== undefined &&
+      Buffer.compare(bytes, this.incomingLock) === 0
+    )
+      this.prematureLockWrites += 1;
+    super.writeFileSync(path, bytes);
+  }
+
+  override async flush() {
+    if (this.cacheQueued && !this.injected) {
+      this.injected = true;
+      throw new Error('injected replay cache persistence failure');
+    }
+    const result = await super.flush();
+    if (this.cachePath !== undefined && this.durableSnapshot().files[this.cachePath] !== undefined)
+      this.cacheDurable = true;
+    return result;
+  }
 }
 
 function failureReason(failure: unknown): string {
@@ -249,6 +297,125 @@ function expectExactTree(actual: ExactFsTree, expected: ExactFsTree): void {
 }
 
 describe('I8 explicit snapshot apply validates the artifact before effects over a warm tree', () => {
+  it.each([
+    ['version', /unsupported.*archive.*version/i],
+    ['root', /archive root must be a string/i],
+    ['absolute path', /unsafe archive path/i],
+  ] as const)(
+    'rejects invalid original nodeModules archive %s in a correctly hashed legacy JSON asset',
+    async (field, reason) => {
+      const nodeModules =
+        field === 'version'
+          ? { ...valid.payload.nodeModules, version: 99 }
+          : field === 'root'
+            ? { ...valid.payload.nodeModules, root: 99 }
+            : {
+                ...valid.payload.nodeModules,
+                files: valid.payload.nodeModules.files.map((file, index) =>
+                  index === 0 ? { ...file, path: `/${file.path}` } : file,
+                ),
+              };
+      const payload = { ...valid.payload, nodeModules } as unknown as DepSnapshotV3;
+      const json = new TextEncoder().encode(serializeDepSnapshot(payload));
+      const snapshotId = `sha256:${createHash('sha256').update(json).digest('hex')}`;
+      const artifact: SavedSnapshotFixture = {
+        ...valid,
+        payload,
+        snapshotId,
+        archive: new Uint8Array(gzipSync(json)),
+        descriptor: {
+          ...valid.descriptor,
+          snapshotId,
+          assetUrl: 'https://host.test/unsupported-nested-archive.json.gz',
+        },
+      };
+      const h = await seedWarmOwner(artifact);
+      const before = snapshotExactFsTree(h.fs);
+      const catalogBefore = h.owner.catalogSnapshot();
+      let opened: OpenedPlaygroundProject | undefined;
+      let failure: unknown;
+      try {
+        try {
+          opened = await h.owner.openProject(
+            savedSnapshotDefinition('scratch', artifact.descriptor, {
+              packageJsonText: artifact.payload.packageJsonText,
+              source,
+              application: { mode: 'apply-snapshot', conflict: 'overwrite' },
+            }),
+          );
+        } catch (error) {
+          failure = error;
+        }
+        expect.soft(failure).toBeInstanceOf(Error);
+        expect.soft(failureReason(failure)).toMatch(reason);
+        expect
+          .soft(failureReason(failure))
+          .not.toMatch(/snapshot-id-mismatch|package-json-mismatch/);
+        expect.soft(opened).toBeUndefined();
+        expect.soft(h.network.requests).toEqual([artifact.descriptor.assetUrl]);
+        expect.soft(h.owner.catalogSnapshot()).toEqual(catalogBefore);
+        expectExactTree(snapshotExactFsTree(h.fs), before);
+      } finally {
+        await opened?.close();
+        await h.owner.close();
+        await h.packages.quiesce();
+      }
+    },
+    30_000,
+  );
+  it('proves replay cache durability before writing the corresponding live lock; failed cache persistence preserves the saved project', async () => {
+    const fs = new ReplayCacheBoundaryFs();
+    const h = await seedWarmOwner(cacheApplication, fs);
+    const cacheFile = cacheApplication.payload.tarballCache.files[0];
+    if (cacheFile === undefined) throw new Error('LightningCSS replay file absent');
+    const cachePath = `${cacheApplication.payload.tarballCache.root}/${cacheFile.path}`;
+    fs.rmSync(cachePath, { force: true });
+    await fs.flush();
+    const before = fs.durableSnapshot();
+    fs.cachePath = cachePath;
+    fs.lockPath = `${h.root}/package-lock.json`;
+    fs.incomingLock = new TextEncoder().encode(cacheApplication.payload.lockfile);
+    let opened: OpenedPlaygroundProject | undefined;
+    let failure: unknown;
+    try {
+      try {
+        opened = await h.owner.openProject(
+          savedSnapshotDefinition('scratch', cacheApplication.descriptor, {
+            packageJsonText: cacheApplication.payload.packageJsonText,
+            source,
+            application: { mode: 'apply-snapshot', conflict: 'overwrite' },
+          }),
+        );
+      } catch (error) {
+        failure = error;
+      }
+      expect.soft(fs.injected, 'actual cache persistence boundary reached').toBe(true);
+      expect
+        .soft(fs.prematureLockWrites, 'no live lock write before verified cache persistence')
+        .toBe(0);
+      expect.soft(failureReason(failure)).toMatch(/replay cache persistence failure/);
+      expect.soft(opened).toBeUndefined();
+      expect.soft(h.network.requests).toEqual([cacheApplication.descriptor.assetUrl]);
+      const withoutCache = (tree: ExactFsTree): ExactFsTree => ({
+        directories: tree.directories.filter(
+          (path) =>
+            path !== cacheApplication.payload.tarballCache.root &&
+            !path.startsWith(`${cacheApplication.payload.tarballCache.root}/`),
+        ),
+        files: Object.fromEntries(
+          Object.entries(tree.files).filter(
+            ([path]) => !path.startsWith(`${cacheApplication.payload.tarballCache.root}/`),
+          ),
+        ),
+      });
+      expectExactTree(withoutCache(fs.liveSnapshot()), withoutCache(before));
+      expectExactTree(withoutCache(fs.durableSnapshot()), withoutCache(before));
+    } finally {
+      await opened?.close();
+      await h.owner.close();
+      await h.packages.quiesce();
+    }
+  }, 30_000);
   it.each([
     ['corrupt-replay-cache', /replay.*integrity|cache.*integrity/i],
     ['missing-replay-cache', /cache.*(closure|missing)|missing.*cache/i],

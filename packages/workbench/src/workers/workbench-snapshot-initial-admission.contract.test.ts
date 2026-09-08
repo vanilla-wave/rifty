@@ -31,6 +31,39 @@ function projectAndCatalog(tree: ExactFsTree): ExactFsTree {
 }
 
 describe('snapshot first acquisition admission survives the catalog lifetime', () => {
+  it('does not transfer unused first-admission entitlement through Save', async () => {
+    const network = installSnapshotNetwork(fixture);
+    const h = await openSavedSnapshotOwner(network);
+    await h.catalog.createScratch({
+      definition: savedSnapshotDefinition('scratch', fixture.descriptor),
+    });
+    const id = 'saved-before-first-open';
+    const definition = savedSnapshotDefinition(id, fixture.descriptor);
+    await h.catalog.saveScratch({ id, name: 'Unopened saved seed', definition });
+    await h.authority.flush();
+    await h.close();
+    const before = h.fs.durableSnapshot();
+    expect(network.requests).toEqual([]);
+    const reopened = await openSavedSnapshotOwner(network, h.fs.restartFromDurableState());
+    let opened: OpenedPlaygroundProject | undefined;
+    let failure: unknown;
+    try {
+      try {
+        opened = await reopened.owner.openProject(definition);
+      } catch (error) {
+        failure = error;
+      }
+      expect.soft(failure).toBeInstanceOf(Error);
+      expect.soft(opened).toBeUndefined();
+      expect.soft(network.requests).toEqual([]);
+      expect.soft(reopened.fs.liveSnapshot()).toEqual(before);
+      expect.soft(reopened.fs.durableSnapshot()).toEqual(before);
+    } finally {
+      await opened?.close();
+      await reopened.close();
+    }
+  });
+
   it('permits the first acquisition after create, close and reload', async () => {
     const network = installSnapshotNetwork(fixture);
     const first = await openSavedSnapshotOwner(network);

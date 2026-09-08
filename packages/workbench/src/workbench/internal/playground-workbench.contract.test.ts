@@ -649,6 +649,7 @@ describe('Playground companion sealed contract', () => {
       'ProjectDocumentSaveInProgressError',
       'ProjectFileOperationError',
       'ProjectRunExitedBeforeReadyError',
+      'SnapshotApplicationConflictError',
       'StaleProjectDocumentError',
       'StdinClosedError',
       'WorkbenchOriginOccupiedError',

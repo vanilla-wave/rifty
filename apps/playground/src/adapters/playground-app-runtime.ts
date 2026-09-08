@@ -214,14 +214,23 @@ export function createPlaygroundAppRuntime(
       if (plan.id !== 'scratch') {
         return Promise.reject(new TypeError('Scratch plan id must be "scratch"'));
       }
-      return defineTransition(plan, (definition) =>
-        catalog.createScratch({
+      return defineTransition(plan, async (definition) => {
+        const scratch = catalog.snapshot().scratch;
+        if (
+          scratch !== null &&
+          plan.firstMaterialization.kind === 'snapshot' &&
+          (options.preserveDirtySameStarter !== true || scratch.starterId !== plan.starterId)
+        ) {
+          await catalog.reset({ target: { kind: 'scratch' }, definition });
+          return catalog.activate({ kind: 'scratch' });
+        }
+        return catalog.createScratch({
           definition,
           ...(options.preserveDirtySameStarter === undefined
             ? {}
             : { preserveDirtySameStarter: options.preserveDirtySameStarter }),
-        }),
-      );
+        });
+      });
     },
 
     saveScratch(plan, name) {

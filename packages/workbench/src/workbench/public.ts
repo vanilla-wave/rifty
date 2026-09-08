@@ -15,6 +15,7 @@ export {
   ProjectDocumentSaveInProgressError,
   ProjectFileOperationError,
   ProjectRunExitedBeforeReadyError,
+  SnapshotApplicationConflictError,
   StaleProjectDocumentError,
   StdinClosedError,
   WorkbenchOriginOccupiedError,

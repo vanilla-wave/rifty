@@ -340,7 +340,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0384: seven package implementations now belong to registry.
     // ADR-0386: standard dependency snapshot tar codec.
     // ADR-0387: published dependency snapshot producer.
-    expect(packageProductionFiles).toHaveLength(143);
+    // ADR-0394: snapshot overlay, claim reading and owner type/tree helpers.
+    expect(packageProductionFiles).toHaveLength(150);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

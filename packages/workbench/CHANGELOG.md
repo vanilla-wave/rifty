@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve saved snapshot projects by default; explicit error/overwrite application runs on every request, retains untargeted files, and reports public conflict paths. Catalog transactions cover first admission, rollback and recovery (ADR-0394).
+
 - Publish a complete `dist/assets` Worker/SW/WASM closure; hosts copy it and supply ordinary URLs without worker compilation, aliases or a QuickJS wrapper (ADR-0390).
 
 - Public `produceDependencySnapshot` bakes caller-pinned npm v3 locks into tar.gz and returns snapshot/runtime identities; packed Node/Chromium restore proof covers real package execution (ADR-0387).

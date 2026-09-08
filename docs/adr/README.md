@@ -320,6 +320,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0390 | Ship a copyable Workbench runtime asset closure |
 | 0391 | Attest copyable runtime asset exceptions to the esbuild retirement gate |
 | 0394 | Apply dependency snapshots through catalog transactions and saved-state policy |
+| 0397 | Retire completed legacy migration receipts before catalog mutations |
 
 ## Superseded (removed)
 

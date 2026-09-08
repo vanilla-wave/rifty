@@ -10,18 +10,33 @@ import {
 import {
   type InstallStamp,
   createInstallStamp,
-  effectiveDepsFromPackageJsonText,
   installStampPath,
   installTreeDir,
   isStampedTreeDamage,
   lockfileMatchesStamp,
   lockfilePath,
-  parseInstallStamp,
-  readInstallStamp,
   reportHasFailure,
   sha256Hex,
   stampTrusted,
 } from './install-stamp.ts';
+
+import {
+  type InstallStampCheck,
+  type InstallStampCheckInput,
+  classifyCheck,
+  classifyCheckSync,
+  decodeRawClaim,
+  directoryExists,
+  pathExists,
+  readExactFileBytes,
+  readLockfileBytesIo,
+  readRawClaim,
+  readStamp,
+  readStampSync,
+  readText,
+} from './install-stamp-reading.ts';
+
+export type { InstallStampCheck, InstallStampCheckInput } from './install-stamp-reading.ts';
 
 export interface InstallStampIdentity {
   readonly root: string;
@@ -37,18 +52,6 @@ export interface InstallStampClaim {
   /** Exact prior on-disk claim owner, sampled before this demotion. */
   readonly priorSlug?: string;
 }
-
-export interface InstallStampCheckInput {
-  readonly root: string;
-  readonly slug?: string;
-  /** Template request which the current exact package.json must cover. */
-  readonly expectedPackageJsonText?: string;
-}
-
-export type InstallStampCheck =
-  | { readonly status: 'absent' }
-  | { readonly status: 'pending'; readonly stamp?: InstallStamp }
-  | { readonly status: 'trusted'; readonly stamp: InstallStamp };
 
 export type InstallStampPromotionResult =
   | { readonly status: 'trusted'; readonly stamp: InstallStamp }
@@ -87,6 +90,10 @@ export interface InstallStampPromoteOptions extends InstallStampTransitionOption
 }
 
 export interface InstallStampAuthority {
+  withRollback<T>(
+    roots: readonly string[],
+    operation: (reconcile: () => Promise<void>) => Promise<T>,
+  ): Promise<T>;
   check(input: InstallStampCheckInput): Promise<InstallStampCheck>;
   checkSync(input: InstallStampCheckInput): InstallStampCheck;
   demote(
@@ -126,7 +133,8 @@ export type InstallStampAuthoritySyncFs = Pick<
 type InstallStampAuthorityErrorCode =
   | 'INSTALL_STAMP_DEMOTE_UNPROVEN'
   | 'INSTALL_STAMP_MUTATION_CLAIM_STALE'
-  | 'INSTALL_STAMP_REVOKE_UNPROVEN';
+  | 'INSTALL_STAMP_REVOKE_UNPROVEN'
+  | 'INSTALL_STAMP_ROLLBACK_UNPROVEN';
 
 export class InstallStampAuthorityError extends Error {
   readonly code: InstallStampAuthorityErrorCode;
@@ -162,13 +170,6 @@ function canonicalAuthorityRoot(root: string): string {
     throw new Error(`install-stamp authority root must be absolute; got: '${root}'`);
   }
   return normalizePath(root);
-}
-
-function depsInclude(
-  full: Readonly<Record<string, string>>,
-  subset: Readonly<Record<string, string>>,
-): boolean {
-  return Object.entries(subset).every(([key, value]) => full[key] === value);
 }
 
 function pendingForInput(state: RootClaimState, input: InstallStampCheckInput): InstallStampCheck {
@@ -218,66 +219,6 @@ function guardedScopeFailed(report: PersistFailureReport | undefined, root: stri
 function claimFailed(report: PersistFailureReport | undefined, root: string): boolean {
   const path = installStampPath(root);
   return failureAt(report, (candidate) => candidate === path);
-}
-
-async function readText(io: StampIo, path: string): Promise<string | null> {
-  if (io.fsSync) {
-    if (!io.fsSync.existsSync(path)) return null;
-    try {
-      return dec.decode(io.fsSync.readFileBytesSync(path));
-    } catch {
-      return null;
-    }
-  }
-  if (!(await io.vfs.exists(path))) return null;
-  try {
-    return await io.vfs.readFileText(path);
-  } catch {
-    return null;
-  }
-}
-
-function readTextSync(fsSync: InstallStampAuthoritySyncFs, path: string): string | null {
-  if (!fsSync.existsSync(path)) return null;
-  try {
-    return dec.decode(fsSync.readFileBytesSync(path));
-  } catch {
-    return null;
-  }
-}
-
-async function readStamp(io: StampIo, root: string): Promise<InstallStamp | null> {
-  if (io.claimIo) {
-    try {
-      const bytes = io.claimIo.read(root);
-      if (bytes === null) return null;
-      return parseInstallStamp(JSON.parse(dec.decode(bytes)), root);
-    } catch {
-      return null;
-    }
-  }
-  if (!io.fsSync) return readInstallStamp(io.vfs, root);
-  const text = readTextSync(io.fsSync, installStampPath(root));
-  if (text === null) return null;
-  try {
-    return parseInstallStamp(JSON.parse(text), root);
-  } catch {
-    return null;
-  }
-}
-
-function readStampSync(fsSync: InstallStampAuthoritySyncFs, root: string): InstallStamp | null {
-  const text = readTextSync(fsSync, installStampPath(root));
-  if (text === null) return null;
-  try {
-    return parseInstallStamp(JSON.parse(text), root);
-  } catch {
-    return null;
-  }
-}
-
-async function pathExists(io: StampIo, path: string): Promise<boolean> {
-  return io.fsSync ? io.fsSync.existsSync(path) : io.vfs.exists(path);
 }
 
 async function writeRawStamp(
@@ -344,113 +285,6 @@ function trustedStamp(
   return stamp;
 }
 
-async function readLockfileBytesIo(io: StampIo, root: string): Promise<Uint8Array | null> {
-  const path = lockfilePath(root);
-  try {
-    if (io.fsSync) return readLockfileBytesSync(io.fsSync, root);
-    return (await io.vfs.exists(path)) ? await io.vfs.readFile(path) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function readExactFileBytes(io: StampIo, path: string): Promise<Uint8Array | null> {
-  if (io.fsSync) {
-    return io.fsSync.existsSync(path) ? io.fsSync.readFileBytesSync(path) : null;
-  }
-  return (await io.vfs.exists(path)) ? io.vfs.readFile(path) : null;
-}
-
-function readLockfileBytesSync(
-  fsSync: Pick<InstallStampAuthoritySyncFs, 'existsSync' | 'readFileBytesSync'>,
-  root: string,
-): Uint8Array | null {
-  const path = lockfilePath(root);
-  try {
-    return fsSync.existsSync(path) ? fsSync.readFileBytesSync(path) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function classifyCheck(
-  io: StampIo,
-  input: InstallStampCheckInput,
-): Promise<{
-  readonly result: InstallStampCheck;
-  readonly diskPhase: RootClaimState['phase'];
-  readonly stamp: InstallStamp | null;
-}> {
-  const stamp = await readStamp(io, input.root);
-  if (!stamp) return { result: { status: 'absent' }, diskPhase: 'absent', stamp: null };
-  if (!stampTrusted(stamp)) {
-    const result: InstallStampCheck =
-      input.slug === undefined || input.slug === stamp.slug
-        ? { status: 'pending', stamp }
-        : { status: 'absent' };
-    return { result, diskPhase: 'pending', stamp };
-  }
-  const currentText = await readText(io, joinPath(input.root, 'package.json'));
-  const treeExists = await pathExists(io, installTreeDir(input.root));
-  let expectedCovered = true;
-  if (input.expectedPackageJsonText !== undefined) {
-    const expected = effectiveDepsFromPackageJsonText(input.expectedPackageJsonText);
-    const current = currentText === null ? null : effectiveDepsFromPackageJsonText(currentText);
-    expectedCovered = expected !== null && current !== null && depsInclude(current, expected);
-  }
-  const lockfileOk = lockfileMatchesStamp(stamp, await readLockfileBytesIo(io, input.root));
-  const matches =
-    (input.slug === undefined || input.slug === stamp.slug) &&
-    treeExists &&
-    currentText !== null &&
-    stamp.packageJsonText === currentText &&
-    lockfileOk &&
-    expectedCovered;
-  return {
-    result: matches ? { status: 'trusted', stamp } : { status: 'absent' },
-    diskPhase: 'trusted',
-    stamp,
-  };
-}
-
-function classifyCheckSync(
-  fsSync: InstallStampAuthoritySyncFs,
-  input: InstallStampCheckInput,
-): {
-  readonly result: InstallStampCheck;
-  readonly diskPhase: RootClaimState['phase'];
-  readonly stamp: InstallStamp | null;
-} {
-  const stamp = readStampSync(fsSync, input.root);
-  if (!stamp) return { result: { status: 'absent' }, diskPhase: 'absent', stamp: null };
-  if (!stampTrusted(stamp)) {
-    const result: InstallStampCheck =
-      input.slug === undefined || input.slug === stamp.slug
-        ? { status: 'pending', stamp }
-        : { status: 'absent' };
-    return { result, diskPhase: 'pending', stamp };
-  }
-  const currentText = readTextSync(fsSync, joinPath(input.root, 'package.json'));
-  let expectedCovered = true;
-  if (input.expectedPackageJsonText !== undefined) {
-    const expected = effectiveDepsFromPackageJsonText(input.expectedPackageJsonText);
-    const current = currentText === null ? null : effectiveDepsFromPackageJsonText(currentText);
-    expectedCovered = expected !== null && current !== null && depsInclude(current, expected);
-  }
-  const matches =
-    (input.slug === undefined || input.slug === stamp.slug) &&
-    fsSync.existsSync(installTreeDir(input.root)) &&
-    currentText !== null &&
-    stamp.packageJsonText === currentText &&
-    lockfileMatchesStamp(stamp, readLockfileBytesSync(fsSync, input.root)) &&
-    expectedCovered;
-  return {
-    result: matches ? { status: 'trusted', stamp } : { status: 'absent' },
-    diskPhase: 'trusted',
-    stamp,
-  };
-}
-
 export function createInstallStampAuthority(options: {
   readonly vfs: Vfs;
   readonly fsSync?: InstallStampAuthoritySyncFs;
@@ -512,6 +346,86 @@ export function createInstallStampAuthority(options: {
     updatePhaseFromStamp(state, stamp);
   };
 
+  const withRollback = async <T>(
+    rawRoots: readonly string[],
+    operation: (reconcile: () => Promise<void>) => Promise<T>,
+  ): Promise<T> => {
+    const targets = [...new Set(rawRoots.map(canonicalAuthorityRoot))]
+      .sort()
+      .map((root) => ({ root, state: stateFor(root) }));
+    // Hold existing queues only while capturing or reconciling all roots.
+    const queued = <Result>(task: () => Promise<Result>): Promise<Result> => {
+      const enter = (index: number): Promise<Result> => {
+        const target = targets[index];
+        return target === undefined ? task() : enqueue(target.state, () => enter(index + 1));
+      };
+      return enter(0);
+    };
+    const fail = (message: string): never => {
+      throw new InstallStampAuthorityError('INSTALL_STAMP_ROLLBACK_UNPROVEN', message);
+    };
+    const prior = await queued(async () => {
+      const captured = await Promise.all(
+        targets.map(async ({ root, state }) => ({
+          root,
+          state,
+          phase: state.phase,
+          slug: state.slug,
+          materialized: state.materialized,
+          transition: state.transition,
+          bytes: await readRawClaim(io, root),
+        })),
+      );
+      for (const claim of captured) {
+        if (claim.state.transition !== claim.transition) {
+          fail(`install-stamp rollback capture changed at ${claim.root}`);
+        }
+      }
+      return captured;
+    });
+    let active = true;
+    const reconcile = (): Promise<void> => {
+      if (!active) return Promise.reject(new Error('install-stamp rollback operation expired'));
+      return queued(async () => {
+        if (!active) fail('install-stamp rollback operation expired');
+        const transitions = prior.map(({ state }) => state.transition);
+        const current = await Promise.all(prior.map(({ root }) => readRawClaim(io, root)));
+        if (!active) fail('install-stamp rollback operation expired');
+        for (const [index, claim] of prior.entries()) {
+          const bytes = current[index];
+          if (
+            claim.state.transition !== transitions[index] ||
+            (claim.bytes === null
+              ? bytes !== null
+              : bytes === null ||
+                bytes === undefined ||
+                bytes.length !== claim.bytes.length ||
+                !claim.bytes.every((byte, offset) => byte === bytes[offset]))
+          ) {
+            fail(`install-stamp rollback claim differs at ${claim.root}`);
+          }
+        }
+        for (const claim of prior) {
+          const { state } = claim;
+          if (claim.phase === 'absent' || claim.phase === 'pending') {
+            state.phase = claim.phase;
+            state.slug = claim.slug;
+            state.materialized = claim.materialized;
+          } else {
+            updatePhaseFromStamp(state, decodeRawClaim(claim.bytes, claim.root));
+          }
+          state.epoch = null;
+          state.transition++;
+        }
+      });
+    };
+    try {
+      return await operation(reconcile);
+    } finally {
+      active = false;
+    }
+  };
+
   const check = async (rawInput: InstallStampCheckInput): Promise<InstallStampCheck> => {
     if (!isAbsolute(rawInput.root)) return { status: 'absent' };
     const input = { ...rawInput, root: canonicalAuthorityRoot(rawInput.root) };
@@ -563,7 +477,7 @@ export function createInstallStampAuthority(options: {
       const trustedPrior = prior && stampTrusted(prior) ? prior : null;
       const currentText = await readText(io, joinPath(input.root, 'package.json'));
       const packageJsonText = currentText ?? prior?.packageJsonText;
-      const installTreeExists = await pathExists(io, installTreeDir(input.root));
+      const installTreeExists = await directoryExists(io, installTreeDir(input.root));
       const dependencyTreeExists = prior !== null || installTreeExists;
       const flush = options.flush;
       const restoreAndThrow = async (message: string, cause?: unknown): Promise<never> => {
@@ -993,6 +907,7 @@ export function createInstallStampAuthority(options: {
   };
 
   return {
+    withRollback,
     check,
     checkSync,
     demote,

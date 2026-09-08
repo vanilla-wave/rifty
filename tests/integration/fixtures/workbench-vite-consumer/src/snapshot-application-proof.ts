@@ -1,4 +1,4 @@
-import type { ProjectSession } from '@riftydev/workbench';
+import { type ProjectSession, SnapshotApplicationConflictError } from '@riftydev/workbench';
 import {
   type PlaygroundWorkbench,
   type PlaygroundWorkbenchOptions,
@@ -146,7 +146,7 @@ export async function proveSnapshotApplication(
       await unexpected?.close();
     }
     if (
-      !(failed instanceof Error) ||
+      !(failed instanceof SnapshotApplicationConflictError) ||
       failed.name !== 'SnapshotApplicationConflictError' ||
       JSON.stringify(Reflect.get(failed, 'conflictingPaths')) !== JSON.stringify([indexPath])
     ) {

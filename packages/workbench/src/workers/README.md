@@ -4,6 +4,6 @@ Worker-side owners spawned via the kernel: project and catalog authority, owner
 VFS authority, package acquisition, PTY, preview, and Node child
 bootstraps. Package adaptation policy belongs to shadow-registry/runtime (ADR-0384).
 
-Belongs here: owner/worker-realm code holding authoritative state or spawning
-child realms. Doesn't: page-realm bridging (→ `../glue`), Workbench facade and
+Belongs here: owner/worker-realm authorities, their private codecs/tree operations,
+and child spawning. Doesn't: page-realm bridging (→ `../glue`), Workbench facade and
 protocol (→ `../workbench`), or host UI.

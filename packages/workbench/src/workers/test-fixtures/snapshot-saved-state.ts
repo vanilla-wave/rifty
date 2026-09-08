@@ -185,9 +185,10 @@ export async function openSavedSnapshotOwner(
         packages.activateAndEnsure(
           workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
             packageJsonBytes: composition.authority.readFileBytesSync(
-              `${request.projectRoot}/package.json`,
+              `${request.snapshotAdmission !== undefined && request.snapshotAdmission.mode !== 'saved' ? (request.snapshotAdmission.preflightRoot ?? request.projectRoot) : request.projectRoot}/package.json`,
             ),
           }),
+          request.snapshotAdmission,
         ),
     },
     projectSave: packages,

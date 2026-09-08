@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Intentional snapshot starter replacement uses Reset; same-starter reload preserves saved source under Workbench's default snapshot policy (ADR-0394).
+
 - Refresh installed-package snapshots for registry-owned adaptation identity; normal semver resolution also updates PostCSS 8.5.26 → 8.5.28 (ADR-0384).
 
 ### Added
