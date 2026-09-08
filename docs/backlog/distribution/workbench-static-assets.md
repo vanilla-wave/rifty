@@ -31,15 +31,15 @@ through the copied assets.
 
 ## Acceptance
 
-1. Published `dist/runtime/` contains bundled owner/kernel/node/dev-server/typescript/no-coi workers, `sw.js`, `sqlite.wasm`, `quickjs.wasm` and `manifest.json`; worker/SW JS contain no `@riftydev/` import specifiers. `runtime-assets.contract.test.ts` closure cases. → I2
-2. The packed consumer copies that directory, compiles no Worker/SW entries, and writes no builtin-alias file or QuickJS host wrapper; startup plus an installed Vite command use the copied URLs, not workspace-resolved entries. `tests/integration/workbench-static-assets.contract.test.ts` plus packed-consumer lane. → I2
+1. Published `dist/runtime/` contains bundled owner/kernel/node/dev-server/typescript/no-coi workers, `sw.js`, `sqlite.wasm`, `quickjs.wasm` and `manifest.json`; worker/SW JS contain no `@riftydev/` import specifiers; `manifest.json` lists every file and documents required host headers (`Cross-Origin-Opener-Policy`, `Cross-Origin-Embedder-Policy`, `Cross-Origin-Resource-Policy`, `Service-Worker-Allowed`). `runtime-assets.contract.test.ts` closure and headers cases. → I2
+2. The packed consumer copies that directory, compiles no Worker/SW entries, and writes no builtin-alias file or QuickJS host wrapper; startup plus an installed Vite command use the copied `dist/runtime/` URLs, not workspace-resolved entries. `tests/integration/workbench-static-assets.contract.test.ts` plus packed-consumer lane. → I2
 3. Existing sealed source/custom deployment entries remain importable; a host that still compiles is not forced onto the copyable path. Existing worker export/package-surface cases. → ADR-0395
 
 ## Fault matrix
 
-- Missing/unreadable copied asset × boot: absent worker, SW or WASM URL fails before guest start with the existing deployment URL/fetch error; no silent fallback to workspace entries. `runtime-assets.contract.test.ts` missing-asset case. → I2
-- Sibling-drift × kernel WASM: the copyable kernel publishes only the sibling `quickjs.wasm` URL (ADR-0352 order); a host that omits that file fails QuickJS preload loudly. `runtime-assets.contract.test.ts` kernel-sibling case. → ADR-0395
-- Poisoned asset bytes × fetch: corrupt copied worker/SW/WASM fail at load/compile with the existing typed fetch/compile error; guest code does not start. Existing worker/WASM load faults plus kernel-sibling case. → I2
+- Missing/unreadable copied asset × boot: a published copy that omits a manifest-listed worker, SW or WASM is undeployable — fetching that omitted URL fails with the existing deployment URL/fetch error before guest start; the incomplete copy does not grow a workspace worker/SW/WASM entry. `runtime-assets.contract.test.ts` incomplete-copy case; existing `packages/runtime-js/src/builtins/vm/quickjs-loader-browser-location.test.ts` HTTP-404 preload. → I2
+- Sibling-drift × kernel WASM: the copyable kernel assigns `QUICKJS_WASM_URL_ENV` from `new URL('./quickjs.wasm', import.meta.url)` before the kernel message listener (ADR-0352 order); omitting sibling `quickjs.wasm` from the copy is the incomplete-copy fault, and existing QuickJS preload fails that URL loudly. `runtime-assets.contract.test.ts` kernel-sibling case; `quickjs-loader-browser-location.test.ts` HTTP-404 preload. → ADR-0395
+- Poisoned asset bytes × fetch: corrupt copied worker/SW/WASM fail at load/compile with the existing typed fetch/compile error; guest code does not start. `packages/runtime-js/src/builtins/vm/quickjs-loader-browser-location.test.ts` compile-error case plus kernel-sibling case. → I2
 
 ## Out of scope
 
@@ -49,6 +49,7 @@ Playground may keep compiling sealed source entries.
 
 ## Decisions
 
+- 2026-09-08 — REV-12 FIX of Contract+RED @ 1d0f317: incomplete-copy + ADR-0352 kernel order + manifest header carriers; packed-consumer alias/wrapper cases retire explicitly at implement.
 - 2026-09-08 — ADR-0395: bundled `dist/runtime/` copy set; kernel asset publishes sibling QuickJS URL; sealed source entries remain.
 - 2026-09-07 — finding draft; observable scope is settled by goal I2; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.

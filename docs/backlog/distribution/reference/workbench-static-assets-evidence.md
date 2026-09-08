@@ -22,14 +22,18 @@ files and writes none of them.
 No `dist/runtime/` closure exists. `packages/workbench/dist/` is build
 output only and is not a copyable asset set.
 
+Contract+RED @ 1d0f317 was blocked (REV-12): tautological missing-asset
+name, comment-satisfiable kernel greps, and no manifest-header clause.
+Carriers now: incomplete-copy fetch of an omitted listed file, ADR-0352
+kernel URL-before-listener, and `manifest.headers`.
+
 Vitest 2.1.9 / Node v24:
 
 ```text
 pnpm exec vitest run packages/workbench/src/runtime-assets.contract.test.ts \
   tests/integration/workbench-static-assets.contract.test.ts
-4 failed / 0 passed.
-- dist/runtime/manifest.json absent
-- kernel-worker.js not published under dist/runtime/
+6 failed / 0 passed.
+- copyable runtime asset manifest.json missing under dist/runtime/
 - packed consumer main.ts still matches ?worker&url
 ```
 
