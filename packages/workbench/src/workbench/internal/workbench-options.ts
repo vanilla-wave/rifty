@@ -41,7 +41,7 @@ export interface WorkbenchOptions {
     readonly ownerOperationSilenceTimeoutMs?: number;
   };
   readonly packageAcquisition: {
-    readonly registryUrl: string;
+    readonly registryUrl?: string;
     readonly eddy?: {
       readonly resolverUrl: string;
       readonly bundleBaseUrl?: string;
@@ -100,6 +100,9 @@ export function validateWorkbenchOptions(
       : positiveFinite(silenceValue, 'deployment.ownerOperationSilenceTimeoutMs');
 
   const eddyValue = acquisition.eddy;
+  if (eddyValue !== undefined && !Reflect.ownKeys(acquisition).includes('registryUrl')) {
+    throw new TypeError('packageAcquisition.eddy requires packageAcquisition.registryUrl');
+  }
   let eddy: NormalizedWorkbenchOwnerInput['packageAcquisition']['eddy'];
   if (eddyValue !== undefined) {
     const input = record(eddyValue, 'packageAcquisition.eddy');
@@ -179,12 +182,16 @@ export function validateWorkbenchOptions(
         ...(ownerOperationSilenceTimeoutMs === undefined ? {} : { ownerOperationSilenceTimeoutMs }),
       }),
       packageAcquisition: Object.freeze({
-        registryUrl: httpEndpointUrl(
-          acquisition.registryUrl,
-          'packageAcquisition.registryUrl',
-          urlContext.apiBaseUrl,
-          { pathBase: true },
-        ),
+        ...(acquisition.registryUrl === undefined
+          ? {}
+          : {
+              registryUrl: httpEndpointUrl(
+                acquisition.registryUrl,
+                'packageAcquisition.registryUrl',
+                urlContext.apiBaseUrl,
+                { pathBase: true },
+              ),
+            }),
         ...(eddy === undefined ? {} : { eddy }),
       }),
     }),

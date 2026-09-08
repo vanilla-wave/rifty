@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Snapshot-only Workbench admission: omitted `packageAcquisition.registryUrl`
+  (and Eddy) is valid; a required unrestorable snapshot rejects before guest
+  start instead of becoming deferred install; later `npm install` fails
+  without a registry request (ADR-0400).
+
 - Snapshot application is host-selected: default initial-deployment-only keeps
   saved files when only snapshotId changes; apply evaluates payload conflicts
   with error/overwrite (ADR-0396).

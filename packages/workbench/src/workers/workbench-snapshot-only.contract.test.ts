@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
-import { RegistryClient } from '@riftydev/npm-client';
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDepSnapshot, serializeDepSnapshot } from '../glue/dep-snapshot.ts';
@@ -159,11 +158,6 @@ async function acquisitionHarness(
     flush: () => composition.authority.flush(),
     nodeWorkerRuntimeEnv: {},
     log: () => {},
-    registry: new RegistryClient({
-      baseUrl: 'https://registry.invalid/',
-      fetch: registryFetch,
-    }),
-    install: networkInstall,
     resolverUrl: () => undefined,
     resolverBundleBaseUrl: () => undefined,
     resolverPin: () => undefined,

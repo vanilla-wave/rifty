@@ -273,6 +273,8 @@ export interface PackageAcquisitionAuthorityOptions {
   ) => readonly PackageMutationTransition[];
   /** Diagnostic sink only. A throwing observer cannot change acquisition. */
   readonly observe?: (event: AcquisitionObservation) => void;
+  /** Registry-present Workbench keeps today's deferred-install fallback. */
+  readonly deferUnrestorableSnapshot?: boolean;
 }
 
 export class PackageAcquisitionError extends Error {
@@ -449,6 +451,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   readonly #adapter: PackageAcquisitionAdapter;
   readonly #resolveTreeGuards?: PackageAcquisitionAuthorityOptions['resolveTreeGuards'];
   readonly #observe?: (event: AcquisitionObservation) => void;
+  readonly #deferUnrestorableSnapshot: boolean;
   readonly #queue: QueueEntry[] = [];
   readonly #terminalActivity = new Map<string, string>();
   readonly #knownProjects = new Map<string, PackageAcquisitionProject>();
@@ -464,6 +467,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     this.#adapter = options.adapter;
     this.#resolveTreeGuards = options.resolveTreeGuards;
     this.#observe = options.observe;
+    this.#deferUnrestorableSnapshot = options.deferUnrestorableSnapshot !== false;
   }
 
   knownProjects(): readonly PackageAcquisitionProject[] {
@@ -1033,16 +1037,17 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           return Object.freeze({ kind: 'ready', provenance: Object.freeze(provenance) });
         } catch (error) {
           if (
-            !(error instanceof PackageAcquisitionError) ||
-            error.failure !== 'snapshot-unavailable'
+            this.#deferUnrestorableSnapshot &&
+            error instanceof PackageAcquisitionError &&
+            error.failure === 'snapshot-unavailable'
           ) {
-            throw error;
+            return this.#deferredInstallPlan(
+              command.to,
+              command.packageJsonText,
+              error.snapshotFailures,
+            );
           }
-          return this.#deferredInstallPlan(
-            command.to,
-            command.packageJsonText,
-            error.snapshotFailures,
-          );
+          throw error;
         }
       }
       default:

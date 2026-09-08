@@ -79,7 +79,7 @@ export interface NpmShellCommandDeps {
   readonly vfs: Vfs;
   /** Playground wires one through `proxiedRegistryFetch()` so traffic stays on
    *  the proxy origin. */
-  readonly registry: RegistryClient;
+  readonly registry?: RegistryClient;
   /** Test seam; defaults to `@riftydev/npm-client.install`. */
   readonly install?: InstallFn;
   /** Host-owned all-target namespace preflight, before the installer links bytes. */
@@ -823,7 +823,7 @@ export async function executeNpmInstallOperation(
     const result = await installFn({
       vfs: deps.vfs,
       cwd: ctx.cwd,
-      registry: deps.registry,
+      registry: deps.registry!,
       ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
       ...(deps.assertPortablePaths ? { assertPortablePaths: deps.assertPortablePaths } : {}),
       ...(deps.resolverUrl ? { resolverUrl: deps.resolverUrl } : {}),

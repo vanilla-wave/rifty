@@ -293,9 +293,9 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     starterInitialOids,
     async () => assertCleanDurability(await authority.flush()),
   );
-  const registry = createProxiedRegistryClient({
-    proxyPrefix: config.packageAcquisition.registryUrl,
-  });
+  const registryUrl = config.packageAcquisition.registryUrl;
+  const registry =
+    registryUrl === undefined ? undefined : createProxiedRegistryClient({ proxyPrefix: registryUrl });
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
@@ -307,7 +307,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     amendGeneratedBaseline,
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
-    registry,
+    ...(registry === undefined ? {} : { registry }),
     resolverUrl: () => eddy?.resolverUrl,
     resolverBundleBaseUrl: () => eddy?.bundleBaseUrl,
     resolverPin: (templateId) => eddy?.presetPins[templateId],

@@ -95,7 +95,7 @@ export interface OwnerPackageStateOptions {
   readonly flush: () => Promise<PersistFailureReport | undefined>;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   readonly log: (line: string) => void;
-  readonly registry: RegistryClient;
+  readonly registry?: RegistryClient;
   /** Test seam at the external registry/install boundary. */
   readonly install?: InstallFn;
   /** Fold one exact first-install lock into the fresh Starter Git baseline. */
@@ -283,7 +283,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
 
   const baseNpmDeps: Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'> = {
     vfs: options.vfs,
-    registry,
+    ...(registry === undefined ? {} : { registry }),
     ...(options.install ? { install: options.install } : {}),
     assertPortablePaths: (paths) => options.fsSync.assertPortablePaths(paths),
     flush: options.flush,
@@ -316,6 +316,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   const packages = createPackageAcquisitionAuthority({
     stamps,
     stampTransition: { flush: options.flush },
+    deferUnrestorableSnapshot: options.registry !== undefined,
     resolveTreeGuards: (root, knownProjects) =>
       discoverPackageAcquisitionGuardTransitions(options.fsSync, knownProjects, root),
     observe: (event) => {
@@ -387,6 +388,11 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         }
       },
       install: async (request, execution) => {
+        if (options.registry === undefined) {
+          throw new TypeError(
+            'snapshot-only packageAcquisition has no registryUrl — cannot network-install',
+          );
+        }
         const parsed = parseNpmInstallRequest(
           request.type === 'terminal-install' ? request.argv : [],
         );

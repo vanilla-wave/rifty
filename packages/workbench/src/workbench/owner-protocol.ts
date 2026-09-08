@@ -52,7 +52,7 @@ export interface WorkbenchOwnerBootConfig {
     readonly previewProbeTimeoutMs: number;
   };
   readonly packageAcquisition: {
-    readonly registryUrl: string;
+    readonly registryUrl?: string;
     readonly eddy?: {
       readonly resolverUrl: string;
       readonly bundleBaseUrl: string;
@@ -242,9 +242,12 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   const packageAcquisition = record(config.packageAcquisition, 'owner boot package acquisition');
   exact(
     packageAcquisition,
-    optionalKeys(packageAcquisition, ['registryUrl'], ['eddy']),
+    optionalKeys(packageAcquisition, [], ['registryUrl', 'eddy']),
     'owner boot package acquisition',
   );
+  if (own(packageAcquisition, 'eddy') && !own(packageAcquisition, 'registryUrl')) {
+    throw new TypeError('packageAcquisition.eddy requires packageAcquisition.registryUrl');
+  }
   let eddy: WorkbenchOwnerBootConfig['packageAcquisition']['eddy'];
   if (own(packageAcquisition, 'eddy')) {
     const candidate = record(packageAcquisition.eddy, 'owner boot Eddy config');
@@ -281,7 +284,9 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     previewProbeTimeoutMs,
   });
   const frozenAcquisition = Object.freeze({
-    registryUrl: nonEmptyString(packageAcquisition.registryUrl, 'owner boot registryUrl'),
+    ...(own(packageAcquisition, 'registryUrl')
+      ? { registryUrl: nonEmptyString(packageAcquisition.registryUrl, 'owner boot registryUrl') }
+      : {}),
     ...(eddy === undefined ? {} : { eddy }),
   });
   let legacyWorkspacePrefix: string | undefined;

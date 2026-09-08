@@ -80,7 +80,7 @@ export interface WorkbenchOwnerStartInput {
     readonly ownerOperationSilenceTimeoutMs?: number;
   };
   readonly packageAcquisition: {
-    readonly registryUrl: string;
+    readonly registryUrl?: string;
     readonly eddy?: {
       readonly resolverUrl: string;
       readonly bundleBaseUrl: string;
