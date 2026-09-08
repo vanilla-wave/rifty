@@ -1,6 +1,8 @@
 ---
 name: rifty-review-inline
 description: Run the rifty-review rubric inline, in this agent, against a PR or the current branch. Invoke only when the user explicitly requests rifty-review-inline.
+argument-hint: "[PR number | base ref]  (default: origin/main)"
+disable-model-invocation: true
 ---
 
 Run the `rifty-review` rubric yourself, in this context. Do not spawn an agent,

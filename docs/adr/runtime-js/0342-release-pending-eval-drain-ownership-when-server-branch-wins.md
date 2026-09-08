@@ -53,3 +53,7 @@ drain cancellation, `AbortSignal`, or a second process lifecycle.
 - Package race tests and physical Node differentials cover release before and
   after terminal claim, direct-terminal-before-drain, duplicate terminal, and
   loud failure.
+
+## Corrections (2026-09-08)
+
+ADR-0385 supersedes the Workbench release-on-port handoff. Its single drain stays active; runtime lease validation and terminal precedence remain.
