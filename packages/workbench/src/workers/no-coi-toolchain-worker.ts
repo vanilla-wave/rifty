@@ -82,7 +82,7 @@ function snapshotFiles(): readonly ToolchainRecoveryFile[] {
         continue;
       }
       // postMessage takes byte ownership through structured clone before the next task.
-      files.push({ path, data: fs.readFileBytesSync(path) });
+      files.push({ path, data: installContext.readRecoveryFile(path) });
     }
   };
   walk('/');

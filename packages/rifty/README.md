@@ -136,8 +136,19 @@ before `runBin` or `startBin`. Open validates the saved installation and activat
 adapters without registry requests, reinstalling, or replacing dependency edits,
 extra files, deletions, or source edits. Explicit `install` reconciles/repairs
 dependencies. Missing, old, or incompatible installation proof throws
-`SandboxInstallRequiredError`; saved bytes stay intact. Install once after an
-upgrade from SDK 0.6 installations, which did not record this proof.
+an error with `name === "SandboxInstallRequiredError"`; saved bytes stay intact.
+Install once after an upgrade from SDK 0.6 installations, which did not record this proof.
+
+Update the SDK and self-hosted toolchain Worker together: this API uses protocol
+v3; an older Worker is rejected during handshake. Serialized SDK errors are
+ordinary `Error` objects: branch on `error.name`, including
+`SandboxInstallRequiredError` and `SandboxPersistenceError`, rather than `instanceof`
+a named SDK error class.
+
+Edited runtime assets (for example `esbuild.wasm`) can surface their original
+adapter/integrity error during open. Explicit install repairs package files.
+For an unreadable OPFS entry, retry after a transient fault clears or repair the
+entry with the host’s storage tooling, then recreate the sandbox.
 
 This mode owns runtime, VFS, npm install, installed registry-twin admission, and bin
 execution in one Worker. `startBin` is package-generic; the requested port

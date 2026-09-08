@@ -101,6 +101,71 @@ async function run() {
   release();
   await raw.flush();
   const duringRead = await native.readFileText('/proof/file');
+  FileSystemFileHandle.prototype.getFile = nativeGetFile;
+
+  const unreadable = [];
+  for (const boundary of ['getFile', 'arrayBuffer'] as const) {
+    const name = `unreadable-${boundary}`;
+    const path = `/proof/${name}`;
+    raw.writeFileSync(path, bytes('nonempty durable bytes'));
+    await raw.flush();
+    const cleanBefore = raw.isPersistenceClean(path);
+    let rejectRead = true;
+    let readFailures = 0;
+    const nativeArrayBuffer = Blob.prototype.arrayBuffer;
+    FileSystemFileHandle.prototype.getFile = function (...args) {
+      if (boundary === 'getFile' && this.name === name && rejectRead) {
+        readFailures++;
+        return Promise.reject(new DOMException('proof unreadable file', 'NotReadableError'));
+      }
+      return Reflect.apply(nativeGetFile, this, args);
+    };
+    Blob.prototype.arrayBuffer = function (...args) {
+      if (boundary === 'arrayBuffer' && this instanceof File && this.name === name && rejectRead) {
+        readFailures++;
+        return Promise.reject(new DOMException('proof unreadable bytes', 'NotReadableError'));
+      }
+      return Reflect.apply(nativeArrayBuffer, this, args);
+    };
+    writes = 0;
+    await install.writeFile(path, 'nonempty durable bytes');
+    const repaired = await raw.flush();
+    const repairWrites = writes;
+    rejectRead = false;
+    const repairedBytes = await native.readFileText(path);
+    rejectRead = true;
+    quota = true;
+    writes = 0;
+    await install.writeFile(path, 'nonempty durable bytes');
+    const failedReadRepair = await raw.flush();
+    const failedWrites = writes;
+    const stillFailed = await raw.flush();
+    const cleanAfterFailure = raw.isPersistenceClean(path);
+    quota = false;
+    rejectRead = false;
+    writes = 0;
+    await install.writeFile(path, 'nonempty durable bytes');
+    const healedReadRepair = await raw.flush();
+    unreadable.push({
+      boundary,
+      cleanBefore,
+      readFailures,
+      repairWrites,
+      repaired: repaired.total,
+      repairedBytes,
+      failedWrites,
+      failed: failedReadRepair.total,
+      failedPaths: failedReadRepair.failures.map(({ path, op }) => ({ path, op })),
+      stillFailed: stillFailed.total,
+      cleanAfterFailure,
+      healWrites: writes,
+      healed: healedReadRepair.total,
+      healedBytes: await native.readFileText(path),
+      cleanAfterHeal: raw.isPersistenceClean(path),
+    });
+    FileSystemFileHandle.prototype.getFile = nativeGetFile;
+    Blob.prototype.arrayBuffer = nativeArrayBuffer;
+  }
 
   return {
     cleanWrites,
@@ -114,5 +179,6 @@ async function run() {
     duringRead,
     directoryFailed: directoryFailed.total,
     directoryHealed: directoryHealed.total,
+    unreadable,
   };
 }

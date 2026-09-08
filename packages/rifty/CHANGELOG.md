@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- No-COI toolchain protocol is now v3. Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.
+
 - Add toolchain.open({cwd, registryUrl}) for compatible saved installations; preserve dependency edits and require explicit install for missing/incompatible proof.
 
 - Load the page VFS backend only for generic sandbox creation; import failure retains the visible memory fallback.

@@ -5,7 +5,7 @@ import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts'
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { createInstallClaimFs } from './install-claim-fs.ts';
 
-/** One composition per Worker; retained raw persistence capability is installer-only. */
+/** One composition per Worker; raw capabilities stay in the owner. */
 export function createNoCoiInstallContext() {
   const raw = syncMirror();
   const native = asyncVfs();
@@ -14,6 +14,8 @@ export function createNoCoiInstallContext() {
   setSyncMirror(guarded.fs, { async: new SyncMirrorVfs() });
   return Object.freeze({
     fs: guarded.fs,
+    // Structured clone owns the snapshot copy; guest reads remain detached.
+    readRecoveryFile: (path: string) => raw.readFileBytesSync(path),
     claims: guarded.claims,
     installerVfs: new InstallMirrorVfs(raw instanceof OpfsFsSync ? raw : undefined, native),
     stamps: createInstallStampAuthority({
