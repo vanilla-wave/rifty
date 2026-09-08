@@ -1,8 +1,8 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Contract+RED PASS; можно IMPLEMENT. Merge ещё рано: обязательны GREEN/packed Chromium и независимый Final+GREEN. Независимо 94 случая:64 RED/30 GREEN; baseline producer/shims36 GREEN; native Vite build3 modules GREEN;17 original npm tarball/SRI verified. PR-4: исходные npm bytes усиливают fixture, positive assertions сохранены; отмена только pre-shim missing-companion rejection явно ограничена ADR-0399.",
+  "merge_call": "Contract+RED PASS; можно IMPLEMENT. Merge ещё рано: обязательны GREEN/packed Chromium и независимый Final+GREEN. Независимо 94 случая:64 RED/30 GREEN; baseline producer/shims36 GREEN; native Vite build3 modules GREEN;17 original npm tarball/SRI verified. PR-4: исходные npm bytes усиливают fixture, positive assertions сохранены; отмена только pre-shim missing-companion rejection явно ограничена ADR-0399. REV-12 revised PASS @4053ad0a07586e857ccba77b728752c83d0507f3: six earlier URL/reason corrections retained; corrected nested oracle independently proves exact ordinary pins, scoped companions and real Node42. Old producer semantic RED and2 targeted current-source controls executed; no implementation Final+GREEN claim.",
   "checkpoint": "Contract+RED",
-  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-only.md; BASE 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c; clean HEAD 98773a29fc8058ff0c31776c753beb6fc697ac6d. Fresh read-only reviewer /root/snapshot_only_contract_review independently read raw user decision records/goal/map, ADR0398/0399 and active corrections. RDY-6: final compiled scope matches accepted I3/I8; I1 Vite composition remains required without new ordinary/package/bin compatibility. Executed artifacts: /tmp/rifty-316-i3-review-independent-red.json and .log; /tmp/rifty-316-i3-review-existing.json and .log; /tmp/rifty-316-i3-review-artifacts.mjs and .log. Raw packed TS2353 read at /tmp/rifty-316-i3-packed-red.log: public type RED only, semantic RED supplied separately; browser implementation proof remains due. No I3 product implementation or tracked edits.",
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-only.md; BASE 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c; original clean preparation 98773a29fc8058ff0c31776c753beb6fc697ac6d; revised committed preparation 4053ad0a07586e857ccba77b728752c83d0507f3. Fresh read-only reviewer /root/snapshot_only_contract_review independently read raw user decision records/goal/map, ADR0398/0399 and active corrections. RDY-6: final compiled scope matches accepted I3/I8; I1 Vite composition remains required without new ordinary/package/bin compatibility. Executed artifacts: /tmp/rifty-316-i3-review-independent-red.json and .log; /tmp/rifty-316-i3-review-existing.json and .log; /tmp/rifty-316-i3-review-artifacts.mjs and .log. Raw packed TS2353 read at /tmp/rifty-316-i3-packed-red.log: public type RED only, semantic RED supplied separately; browser implementation proof remains due. No I3 product implementation in reviewed commits; dirty implementation excluded and reviewer made no tracked edits. REV-12 reviewer correction: initial PASS missed five wrong endpoint expectations in three registry-shape cases. Exact full old normalizer independently executed via node --import tsx /tmp/rifty-316-i3-url-baseline/probe.ts: registryUrl=https://host.test/registry, resolverUrl=bundleBaseUrl=https://host.test/eddy. See /tmp/rifty-316-i3-url-oracle-verification.md and /tmp/rifty-316-i3-url-oracle-probe.log. The historical64 RED/30 GREEN count remains; slash differences are erroneous oracle assertions, not product gaps. Only exact five expected literals may change; all mode/closed/frozen/wire assertions retained. Dirty implementation not reviewed. Second independent oracle correction: unchanged baseline prepareDepSnapshotRestore with real committed Vite8 snapshot succeeds intact, then missing one required replay-cache closure throws Dep snapshot tarball cache does not match its lockfile closure. /tmp/rifty-316-i3-replay-reason-probe.ts and .log prove old regex=false, additive alternative=true. Exact committed307655de delta verified by /tmp/rifty-316-i3-prep-correction-commit.log: only five URL expected values and one regex alternative; all other assertions unchanged. Intermediatec2c67bbf contains only previous review bookkeeping and EOF nit repair. Same reviewer corrects prior missed oracle assumptions under REV-12; new revision is independently PASS, with no claim of implementation GREEN. Third REV-12 oracle correction: original nested refusal was a fresh-install placement forecast, not an observed retained-lock result. Actual public producer keeps all12 ordinary source identities, adds only existing esbuild-wasm and two scoped Rollup companions; both real Node bundles return42. Immutable old installer replays emitted complete lock identically; separate genuinely unpinned ordinary child remains refused. Exact final4053ad0a preparation verified: approved nested block+README/evidence, then erased optional-field cast; all prior6 corrected lines and other tests retained, no committed product changes. Evidence /tmp/rifty-316-i3-nested-oracle-verification.md and /tmp/rifty-316-i3-nested-review/commit-verification.log. Corrected positive scenario independently remains RED on immutable old producer/npm-client987 at EBROKENLOCK missing @rollup/wasm-node (/tmp/rifty-316-i3-nested-review/old-producer-red.log). Exact committed nested positive and unchanged unpinned-child negative2/2 pass against current source solely as oracle verification (/tmp/rifty-316-i3-nested-review/committed-carrier-live-source.json). Dirty source broader correctness/Final remains unreviewed.",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -38,7 +38,7 @@
       "source": "acceptance",
       "trace": "I3+ADR-0398",
       "status": "pass",
-      "citation": "packages/workbench/src/workbench/internal/workbench-snapshot-only-options.contract.test.ts:43; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:43",
+      "citation": "packages/workbench/src/workbench/internal/workbench-snapshot-only-options.contract.test.ts:43; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:43; /tmp/rifty-316-i3-url-oracle-verification.md:6; /tmp/rifty-316-i3-url-baseline/corrected-options.contract.test.ts:43",
       "note": ""
     },
     {
@@ -46,7 +46,7 @@
       "source": "acceptance",
       "trace": "I3+ADR-0394",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:141; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:55",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:141; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:55; /tmp/rifty-316-i3-replay-reason-probe.log:1; /tmp/rifty-316-i3-url-oracle-verification.md:64",
       "note": ""
     },
     {
@@ -86,7 +86,7 @@
       "source": "acceptance",
       "trace": "I1+I3+ADR-0399",
       "status": "pass",
-      "citation": "packages/npm-client/src/installer-companion-frontier.contract.test.ts:59; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:114; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:30",
+      "citation": "packages/npm-client/src/installer-companion-frontier.contract.test.ts:59; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:114; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:30; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:203; /tmp/rifty-316-i3-nested-oracle-verification.md:6",
       "note": ""
     },
     {
@@ -118,7 +118,7 @@
       "source": "fault-matrix",
       "trace": "I3+ADR-0394",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:159; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:55",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:159; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:55; /tmp/rifty-316-i3-replay-reason-probe.log:1; /tmp/rifty-316-i3-url-oracle-verification.md:64",
       "note": ""
     },
     {
@@ -150,7 +150,7 @@
       "source": "fault-matrix",
       "trace": "I1+ADR-0399",
       "status": "pass",
-      "citation": "packages/npm-client/src/installer-companion-frontier.contract.test.ts:126; packages/npm-client/src/installer-companion-frontier.contract.test.ts:146; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:139; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:171",
+      "citation": "packages/npm-client/src/installer-companion-frontier.contract.test.ts:126; packages/npm-client/src/installer-companion-frontier.contract.test.ts:146; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:139; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:171; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:203; /tmp/rifty-316-i3-nested-oracle-verification.md:6",
       "note": ""
     },
     {
@@ -158,7 +158,7 @@
       "source": "public-api",
       "trace": "I3+ADR-0398",
       "status": "pass",
-      "citation": "packages/workbench/src/workbench/internal/workbench-snapshot-only-options.contract.test.ts:43",
+      "citation": "packages/workbench/src/workbench/internal/workbench-snapshot-only-options.contract.test.ts:43; /tmp/rifty-316-i3-url-oracle-verification.md:6; /tmp/rifty-316-i3-url-baseline/corrected-options.contract.test.ts:43",
       "note": ""
     },
     {
@@ -166,7 +166,7 @@
       "source": "public-api",
       "trace": "I3+ADR-0398",
       "status": "pass",
-      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:43; tests/integration/workbench-packed-consumer.mjs:1227",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:43; tests/integration/workbench-packed-consumer.mjs:1227; /tmp/rifty-316-i3-url-oracle-verification.md:6; /tmp/rifty-316-i3-url-baseline/corrected-options.contract.test.ts:43",
       "note": ""
     },
     {
@@ -198,7 +198,7 @@
       "source": "public-api",
       "trace": "I1+I3+ADR-0399",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:114",
+      "citation": "packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:114; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:203; /tmp/rifty-316-i3-nested-oracle-verification.md:6",
       "note": ""
     },
     {
@@ -366,7 +366,7 @@
       "source": "frozen-artifact",
       "trace": "I1+ADR-0399",
       "status": "pass",
-      "citation": "tests/integration/fixtures/registry/rollup-companions/nested/package-lock.json:1; tests/integration/fixtures/registry/rollup-companions/README.md:3; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:25",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/nested/package-lock.json:1; tests/integration/fixtures/registry/rollup-companions/README.md:3; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:25; packages/workbench/src/glue/dep-snapshot-companion-producer.contract.test.ts:203; /tmp/rifty-316-i3-nested-oracle-verification.md:6",
       "note": ""
     }
   ],
@@ -394,15 +394,7 @@
     {
       "axis": "Scope",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "nit",
-          "location": "docs/backlog/distribution/reference/workbench-snapshot-only-evidence.md:121",
-          "summary": "Лишняя пустая строка в конце evidence.",
-          "authority": "",
-          "evidence": "git diff --check 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c..HEAD: new blank line at EOF."
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Bugs",
@@ -420,5 +412,5 @@
       "findings": []
     }
   ],
-  "reviewed_sha": "98773a29fc8058ff0c31776c753beb6fc697ac6d"
+  "reviewed_sha": "4053ad0a07586e857ccba77b728752c83d0507f3"
 }

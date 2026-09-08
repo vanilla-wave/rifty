@@ -122,7 +122,7 @@ and recovery authorities are preserved; no new storage or timeout mechanism.
 
 ## Decisions
 
-ready-verdict: 2026-09-08 — Contract+RED @ 98773a29fc8058ff0c31776c753beb6fc697ac6d
+ready-verdict: 2026-09-08 — Contract+RED @ 4053ad0a07586e857ccba77b728752c83d0507f3
 
 - 2026-09-08 — required discovery: ADR-0399 repairs original npm Vite/Rollup companion acquisition and scoped producer permission in this unit; caller-pin protection remains.
 - 2026-09-08 — pickup: ADR-0398 selects explicit compatible acquisition union and actual absent registry capability; I8 is accepted; compiled RED preparation awaits independent Contract+RED.
