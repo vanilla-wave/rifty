@@ -28,6 +28,13 @@ Registry-enabled first-materialization contract asserts that fallback
 
 Internal snapshot-only ensure already exists; the public catch undoes it.
 
+I3 REDs (7 failing, Vitest 2.1.9): omitted `registryUrl` still required;
+Eddy-without-registry throws the required-URL error, not
+`packageAcquisition.eddy requires packageAcquisition.registryUrl`; missing,
+corrupt, and id-mismatched required snapshots return `kind: 'install'`; a
+compatible snapshot restores `kind: 'ready'` then `npm install left-pad@1.3.0`
+still starts a network install.
+
 ## I8 composition
 
 Unused new snapshot under `initial-deployment-only` does not fetch or reseed

@@ -31,10 +31,10 @@ not fetch that asset.
 
 ## Acceptance
 
-1. `packageAcquisition: {}` (omitted `registryUrl` and `eddy`) is valid Workbench admission; Eddy still requires `registryUrl`. `workbench-snapshot-only.contract.test.ts` admission cases. → I3 → ADR-0400
+1. `packageAcquisition: {}` (omitted `registryUrl` and `eddy`) is valid Workbench admission; Eddy still requires `registryUrl` (`packageAcquisition.eddy requires packageAcquisition.registryUrl`). `workbench-snapshot-only.contract.test.ts` admission cases. → I3 → ADR-0400
 2. A required snapshot that is missing, corrupt, or identity-mismatched rejects before guest start and does not return `kind: 'install'`. `workers/workbench-snapshot-only.contract.test.ts` unrestorable cases; registry-present deferred-install cases stay. → I3 → ADR-0400
-3. Snapshot-only restore and later package/terminal commands make zero registry/Eddy requests; absent exact bytes fail loudly rather than network-install. Same workers file request-count case. → I3
-4. A compatible required snapshot under omitted registry restores as `kind: 'ready'` and does not schedule install. Same workers file compatible-restore case. → I3 → ADR-0400
+3. Snapshot-only restore and later package/terminal commands make zero registry/Eddy requests; absent exact bytes fail loudly rather than network-install. Same workers file compatible-restore plus later `npm install left-pad` case. → I3
+4. A compatible required snapshot restores as `kind: 'ready'` and does not schedule install. Same workers file compatible-restore case. → I3 → ADR-0400
 
 ## Fault matrix
 

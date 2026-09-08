@@ -54,7 +54,7 @@ describe('snapshot-only Workbench admission (I3)', () => {
         },
         URL_CONTEXT,
       ),
-    ).toThrow(/packageAcquisition\.(eddy|registryUrl)/);
+    ).toThrow(/packageAcquisition\.eddy requires packageAcquisition\.registryUrl/);
   });
 
   it('admits a clone-safe initialize frame without registryUrl', () => {
