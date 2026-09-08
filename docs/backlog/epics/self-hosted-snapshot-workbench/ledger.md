@@ -10,3 +10,4 @@
 - 2026-09-08 — user authorized whole-goal implementation in PR #316; codec split before producer while lockfile admission is probed; no destination change.
 - 2026-09-08 — dep-snapshot-tar Contract+RED PASS @ 04bf115f294f9ebfbcc8388accf5202e9a36bf46; fresh reviewer tar_red_verify; after main merge 9b528dbb2, unchanged codec rerun: 4 expected RED / 36 GREEN.
 - 2026-09-08 — user asked for a separate PR of the PR #316 goal; work continues on `self-hosted-snapshot-workbench` / PR #322. Codec files carried from #316; producer compiled (ADR-0389) with 6 expected RED.
+- 2026-09-08 — producer Contract+RED reception: FIX local tar fixtures and createMemoryFs `{ fsSync }`; foreign `_test-fixtures` import and `{ fs }` destructure were authoring defects, not destination changes.

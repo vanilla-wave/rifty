@@ -7,12 +7,18 @@ Node v24; Vitest 2.1.9.
 
 `pnpm exec vitest run packages/workbench/src/dep-snapshot-producer.test.ts`
 
-6 failed / 0 passed:
+First RED used a foreign `npm-client` `_test-fixtures` import and a wrong
+`createMemoryFs` destructure (`{ fs }`). Those were authoring defects
+(Contract+RED review, TS6059/TS2339). Fixtures are now local; gzip/HTTP
+case uses `{ fsSync }`. `tsc -p packages/workbench/tsconfig.json --noEmit`
+reports no errors in this file.
+
+Rerun: 6 failed / 0 passed:
 
 - sealed `./dep-snapshot` export is absent from `@riftydev/workbench`
 - `produceDepSnapshot` is undefined on the existing glue module
-- lock-pin, gzip/HTTP restore, lifecycle/corrupt-lock, and abort cases
-  fail for the missing producer, not import/typecheck
+- lock-pin, gzip/HTTP restore, lifecycle/corrupt-lock/file-spec, and abort
+  cases fail for the missing producer, not import/typecheck
 
 Existing codec suite remains green:
 
