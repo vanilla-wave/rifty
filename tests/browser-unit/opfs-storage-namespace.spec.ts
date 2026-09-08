@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import type { NamespaceRunResult } from './fixtures/opfs-storage-namespace-worker.ts';
 import { gotoHarness } from './fixtures.ts';
+import type { NamespaceRunResult } from './fixtures/opfs-storage-namespace-worker.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const workerModuleUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts?worker&url`;

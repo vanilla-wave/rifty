@@ -42,10 +42,7 @@ async function listNames(dir: FileSystemDirectoryHandle): Promise<string[]> {
   return names.sort();
 }
 
-async function readText(
-  dir: FileSystemDirectoryHandle,
-  name: string,
-): Promise<string | undefined> {
+async function readText(dir: FileSystemDirectoryHandle, name: string): Promise<string | undefined> {
   try {
     const file = await (await dir.getFileHandle(name)).getFile();
     return await file.text();
