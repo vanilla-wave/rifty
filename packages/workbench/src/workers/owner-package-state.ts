@@ -110,6 +110,7 @@ export interface OwnerPackageState {
   /** Register, activate, and install/reuse one exact project through one FIFO admission. */
   activateAndEnsure(
     config: FirstMaterializationOwnerPackageConfig,
+    options?: { readonly skipUnusedSnapshot?: boolean },
   ): Promise<ProjectAcquisitionPlan>;
   activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
   /** Settle package commands and durability work admitted before this call. */
@@ -613,13 +614,52 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     }
   };
 
+  async function reuseExistingTree(config: OwnerPackageConfig): Promise<ProjectAcquisitionPlan> {
+    registerActivation(config);
+    const project = packageProject(config);
+    await packages.dispatch({
+      type: 'project-switch',
+      from: activeProject,
+      to: project,
+    });
+    const existing = await stamps.check({
+      root: config.cfg.root,
+      slug: config.slug,
+      expectedPackageJsonText: config.cfg.packageJson,
+    });
+    if (
+      existing.status === 'trusted' &&
+      existing.stamp.installArtifactIdentity === installArtifactIdentity
+    ) {
+      return Object.freeze({
+        kind: 'ready',
+        provenance: Object.freeze({
+          outcome: 'existing' as const,
+          identity: existing.stamp.installArtifactIdentity,
+          packages: existing.stamp.packages,
+        }),
+      });
+    }
+    return Object.freeze({
+      kind: 'ready',
+      provenance: Object.freeze({
+        outcome: 'existing' as const,
+        identity: installArtifactIdentity,
+        packages: 0,
+      }),
+    });
+  }
+
   function activateAndEnsure(
     config: FirstMaterializationOwnerPackageConfig,
+    options?: { readonly skipUnusedSnapshot?: boolean },
   ): Promise<ProjectAcquisitionPlan>;
   function activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
   function activateAndEnsure(
     config: OwnerPackageConfig,
+    options?: { readonly skipUnusedSnapshot?: boolean },
   ): Promise<ProjectAcquisitionPlan | AcquisitionProvenance> {
+    if (options?.skipUnusedSnapshot === true) return reuseExistingTree(config);
     if (!hasFirstMaterialization(config)) {
       return packages.dispatch({
         type: 'activate-and-ensure',

@@ -59,6 +59,8 @@ export interface ProjectAcquisitionRequest {
   readonly projectKey: string;
   readonly projectRoot: string;
   readonly definition: InspectedProjectDefinition;
+  /** Reuse the existing tree; do not fetch or install an unused snapshot. */
+  readonly skipUnusedSnapshot?: boolean;
 }
 
 export interface ProjectAcquisitionPort<TAcquisition = unknown> {

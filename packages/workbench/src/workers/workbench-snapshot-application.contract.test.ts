@@ -239,6 +239,7 @@ async function acquisitionHarness(
               `${request.projectRoot}/package.json`,
             ),
           }),
+          request.skipUnusedSnapshot === true ? { skipUnusedSnapshot: true } : {},
         )) as unknown as ProjectAcquisitionPlan,
     }),
     projectSave: packageState,
@@ -458,6 +459,12 @@ describe('snapshot application policy (I8)', () => {
       `${SCRATCH_ROOT}/node_modules/local-patch/keep.txt`,
       encoder.encode('keep-me\n'),
     );
+    h.authority.writeFileSync(`${SCRATCH_ROOT}/.riftyrc`, encoder.encode('keep-dotfile\n'));
+    h.authority.mkdirSync(`${SCRATCH_ROOT}/.rifty-notes`, { recursive: true });
+    h.authority.writeFileSync(
+      `${SCRATCH_ROOT}/.rifty-notes/keep.txt`,
+      encoder.encode('keep-notes\n'),
+    );
 
     await h.catalog.createScratch(
       withApplication(
@@ -472,6 +479,8 @@ describe('snapshot application policy (I8)', () => {
     expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('extra');
     expect(readText(h, SCRATCH_ROOT, '/src/main.ts')).toBe('dirty main\n');
     expect(readText(h, SCRATCH_ROOT, '/node_modules/local-patch/keep.txt')).toBe('keep-me\n');
+    expect(readText(h, SCRATCH_ROOT, '/.riftyrc')).toBe('keep-dotfile\n');
+    expect(readText(h, SCRATCH_ROOT, '/.rifty-notes/keep.txt')).toBe('keep-notes\n');
     expect(readText(h, SCRATCH_ROOT, '/node_modules/pin/readme.txt')).toBe('pin-b\n');
     await close(opened);
     await h.owner.close();
@@ -580,6 +589,7 @@ describe('snapshot application policy (I8)', () => {
     );
 
     expect(readText(h, SCRATCH_ROOT, '/user.txt')).toBe('user edit');
+    expect(reopened.acquisition).toMatchObject({ kind: 'ready' });
     expect(
       h.fetchSnapshot.mock.calls.map(
         (call) => new URL(String(call[0]), 'https://playground.invalid/app/').pathname,

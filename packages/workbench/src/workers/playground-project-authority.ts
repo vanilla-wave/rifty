@@ -414,9 +414,8 @@ function captureTree(
 }
 
 function includeExceptInstallClaims(relative: string, kind: 'file' | 'directory'): boolean {
-  return (
-    !relative.startsWith('tree/.rifty') && !(kind === 'file' && isInstallClaimRelative(relative))
-  );
+  if (relative === 'tree/.rifty' || relative.startsWith('tree/.rifty/')) return false;
+  return !(kind === 'file' && isInstallClaimRelative(relative));
 }
 
 function appliedReplaceImage(
@@ -2341,9 +2340,6 @@ export async function createPlaygroundProjectAuthority(
           applicationBaselineMatches(existing, definition)
         ) {
           if (application.mode === 'apply') {
-            if (definition.firstMaterialization.kind !== 'snapshot') {
-              throw new TypeError('Apply requires a snapshot-backed definition');
-            }
             const loaded = await loadVerifiedApplySnapshot(
               definition.firstMaterialization.snapshot.assetUrl,
               definition.firstMaterialization.snapshot,
@@ -2608,14 +2604,14 @@ export async function createPlaygroundProjectAuthority(
         }
         await options.beforeOpenProject?.(root);
         const unusedNewSnapshot = unusedSnapshot && !proofMatches(entry.adoption, definition);
-        const acquisitionResult =
-          unusedNewSnapshot && application.mode !== 'apply'
-            ? Object.freeze({ kind: 'install' as const, snapshotFailures: [] })
-            : await acquisition.ensure({
-                projectKey,
-                projectRoot: root,
-                definition,
-              });
+        const acquisitionResult = await acquisition.ensure({
+          projectKey,
+          projectRoot: root,
+          definition,
+          ...(unusedNewSnapshot && application.mode !== 'apply'
+            ? { skipUnusedSnapshot: true }
+            : {}),
+        });
         const acknowledgedInitialTerminalState =
           initialTerminalState === undefined
             ? undefined

@@ -347,6 +347,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
             workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
               packageJsonBytes: authority.readFileBytesSync(`${request.projectRoot}/package.json`),
             }),
+            request.skipUnusedSnapshot === true ? { skipUnusedSnapshot: true } : {},
           ),
       },
       projectSave: packageState,
