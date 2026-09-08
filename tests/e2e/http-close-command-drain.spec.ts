@@ -12,6 +12,9 @@ import {
 } from '../browser-unit/fixtures.ts';
 import type * as SealedFixture from '../browser-unit/fixtures/sealed-playground-workbench.ts';
 
+// Native Node oracles share a loopback port; retain independent retries.
+test.describe.configure({ mode: 'default' });
+
 const program = `const express = require('express');
 const http = require('node:http');
 const app = express();

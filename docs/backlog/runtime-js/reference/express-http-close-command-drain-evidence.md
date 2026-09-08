@@ -103,3 +103,16 @@ success and fault criteria. First full parity lane passed (60.2s).
 - Revert-check: removing `hasRef` gate returns early-print RED (1 failed);
   removing listening audit returns missing-report RED (1 failed). Both originals
   restored in `finally`; no mutant remains.
+
+The legacy generic-server e2e claimed close-without-process-exit while its guest
+owned no remaining handles. It now explicitly keeps a ref interval and requires
+AFTER_CLOSE output before Ctrl-C, retaining its original port-vs-process proof.
+The test already documents preview reply loss during bridge teardown; its
+closed-channel pageerror is that existing boundary, not a new socket-drain claim.
+
+- Existing node-command / cli-report / generic-server e2e: 15/15 (1.5m).
+  Updated explicit-ref generic-server assertions: 2/2 (25.6s).
+- Production build lane: 7/7 (2.5m): child Buffer, owner boot, Express+SQLite,
+  Hono, Koa, TypeScript editor, Webpack cold install/HMR/reload.
+- Express oracle cases run in order even under fullyParallel: the native
+  reference shares a loopback port; failures/retries remain independent.
