@@ -63,3 +63,9 @@ are unchanged. No retry, sleep, threshold or product change added.
 `pnpm test:no-coi no-coi-stream-visibility.spec.ts --repeat-each=3` with ports
 5591/5592/5593 passed3/3. Full local pr:check evidence remains valid for unchanged
 product; the edited browser carrier and lint are rechecked before push.
+
+Independent PR-4 verification at5640f97da: existing Worker handleEval finally
+awaits mirror.flush before posting its result; moving final native readback after
+that acknowledgement preserves all held-stream/old-native/Node/exact-byte
+assertions. Current committed carrier independently passed1/1 (4.4s); same
+Final+GREEN record updated, no findings.

@@ -1,8 +1,8 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN PASS at ba59f8a0d; merge only after the eventual pushed HEAD passes required CI, including the unchanged drain benchmark.",
+  "merge_call": "Final+GREEN PASS at 5640f97da; PR-4 stream readback verification passes with criteria preserved. Merge after required CI passes on the eventual pushed HEAD.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "ba59f8a0d3fd47765cde66a3b2643a44caa30233",
+  "reviewed_sha": "5640f97da4c3c469780dadbadd69f11d02be0d5e",
   "unit_goal_source": "Standalone user-authorized PR321 concern follow-up; raw input /tmp/wrap-up-pr321-review-concerns-2026-09-08.md; BASE 0e065420ca0e67ac55480c64c09e2c87a03fd970; existing baseline recovery-copy behavior and ADR-0377/0392/0393. Previous goal closed; no new goal contract.",
   "unit_residuals": [],
   "goal_residuals": [],
@@ -37,7 +37,7 @@
       "source": "acceptance",
       "trace": "Named baseline behavior in user concern 2: immediate sync-write visibility through createReadStream",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-stream-visibility.spec.ts:114",
+      "citation": "tests/no-coi/no-coi-stream-visibility.spec.ts:115",
       "note": ""
     }
   ],
