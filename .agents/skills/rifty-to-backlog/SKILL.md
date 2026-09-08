@@ -44,14 +44,21 @@ audit) it is its own docs-only PR (`docs/process/rules/pr.md` `PR-2`). A draft i
 one of two shapes (README §Shape): **question** (`## Question`, no prescribed
 carrier) or **finding** (observed `## Context`, honest sources, compat ❌ /
 code-marker link) — never a solution without its decision. Optional real-path
-`user_story`. Done when `pnpm backlog:check` passes.
+`user_story`. Run `pnpm backlog:check`; this validates shape, not completion of
+the write-up. Continue to the final check below.
 
 ## 5. Adoption and report
 
-A factual capture needs no independent critic. A proposed direction follows
+A factual capture needs no premise critic. A proposed direction follows
 `docs/backlog/README.md` §Challenge: early when it informs the user's choice,
 otherwise at FIT/PICKUP. Preserve any early record for reuse; formalizing the
-same premise does not require another critic.
+same premise does not require another premise critique.
+
+Every completed write-up, including a factual/agent-only capture, gets `RDY-6`
+§Final check of the written result after the draft is written. Use a fresh
+reviewer on the final draft set and original sources; an early Challenge cannot
+substitute. Keep explicit unanswered questions in drafts; do not self-run a
+user interview in an agent-only context or claim their scope settled.
 
 The driver delivers user-facing work with `docs/backlog/README.md` §Report,
 before implementation. A mid-task capture needs only its durable record.

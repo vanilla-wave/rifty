@@ -38,7 +38,12 @@ epic). Output: a ready goal directory (`../artifacts/goal.md`, `map.md`,
    check or new evidence/changed promises gets a fresh critic with the original
    user input/answers, `goal.md`, `map.md` and evidence per §Challenge.
    Record its verdict in `## Challenge`.
-8. **Report.** After the `RDY-6` scope check, flip `status: ready`; the driver writes the
+8. **Final written-result check.** After all drafts exist, apply `RDY-6`
+   §Final check of the written result to goal/map/seeded drafts together in
+   a fresh reviewer context. Reuse only an unchanged result already checked
+   at this final boundary, never an early premise verdict. Resolve findings
+   and recheck material edits before completing FIT.
+9. **Report.** After the final check establishes settled scope, flip `status: ready`; the driver writes the
    completion report from the recorded facts (`docs/backlog/README.md` §Report);
    relay it. No approval gate. Pushback before the first PICKUP re-fits in
    place; after a run started → explicit user amendment (`RDY-6`).

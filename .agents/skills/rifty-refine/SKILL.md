@@ -3,7 +3,7 @@ name: rifty-refine
 description: Single human entry for rifty backlog input. Dedup, research observable choices, independently challenge a proposed direction when it could change the user's choice, resolve scope forks, formalize and report before implementation. Mid-task observations use rifty-to-backlog.
 ---
 
-Refine = scan → research ↔ informed choices → formalize → report.
+Refine = scan → research ↔ informed choices → formalize → fresh final check → report.
 `rifty-to-backlog` is its formalize tail plus the mid-task intake — never offer
 it to the user as an alternative entry.
 
@@ -31,7 +31,7 @@ before presenting the affected user choice as settled. Bring verified critic
 findings back into this same research/question loop. Stop researching when the
 next choice is informed; a new fact can open or close dependent forks.
 Explicit just-file and settled factual captures need honest sources, not an
-extra study or critic; proceed to Formalize.
+extra study or premise critic; proceed to Formalize and the final written-result check.
 
 Before treating a no-fork result as settled, apply `docs/process/rules/readiness.md`
 `RDY-6` §Establishing scope. Research discovers material choices from the raw
@@ -53,8 +53,10 @@ completion, not a refusal.
 ## 4. Formalize and report
 
 Hand the settled result to `rifty-to-backlog` in this invocation: mint/update
-with evidence, decisions and any early Challenge record. FIT/PICKUP reuses an
-unchanged checked premise; document shape, `draft → ready` and `backlog:check`
-stay with the ordinary workflow. The driver delivers `docs/backlog/README.md`
+with evidence, decisions and any early Challenge record. Before completion,
+run `RDY-6` §Final check of the written result on the actual final drafts in
+a fresh context; early Challenge does not replace it. FIT/PICKUP can reuse
+that final check only for an unchanged result. Document shape, `draft → ready`
+and `backlog:check` stay with the ordinary workflow. The driver delivers `docs/backlog/README.md`
 §Report before implementation. Refine-only ends with preparation; already
 authorized implementation continues without another permission request.

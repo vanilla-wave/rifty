@@ -66,7 +66,7 @@ Use `docs/process/rules/fault-classes.md`. Template: `TEMPLATE.md`.
 
 ## Challenge
 
-Recording a fact or question needs no independent critic. When refine recommends
+Recording a fact or question needs no premise critic. When refine recommends
 a new direction whose value or competing direct route could change what or
 whether the user chooses to build, check the premise before that choice is
 treated as settled. Otherwise check it at FIT/PICKUP before adopting the plan;
@@ -82,7 +82,9 @@ return new scope/value choices to the current research/interview frontier.
 Record the verdict verbatim in `## Challenge`, including an early draft check.
 FIT/PICKUP and goal children reuse a checked premise for unchanged promises;
 new evidence or materially changed promises need reconsideration, a new stage
-name does not. Existing-baseline repairs and just-file captures gain no critic.
+name does not. Existing-baseline repairs and just-file captures gain no premise critic.
+Every completed backlog write-up still gets `RDY-6` §Final check of the written
+result after drafting; reuse of an early premise check cannot skip it.
 
 A ready document records `challenge: <date> — clear | N problems` in
 `## Challenge`. Resolve a value/cheaper-route objection with evidence or the
@@ -120,7 +122,8 @@ probe-or-fog and the completion report: `docs/process/stages/fit.md`.
 
 ## Report
 
-Every user-facing refine ends with a report in the conversation, before any
+Every user-facing refine ends with a report after the fresh final written-result
+check (`RDY-6`), in the conversation, before any
 implementation. The driver writes it from recorded facts, in the user's
 language: proposed observable result; decisive findings and evidence; chosen
 direction and meaningful rejected alternative; major steps and what becomes
