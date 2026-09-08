@@ -1,16 +1,11 @@
 export {
   DepSnapshotFetchError,
-  buildDepSnapshot,
   createDepSnapshotMemoryFs,
   fetchDepSnapshot,
   fetchVerifiedDepSnapshot,
   parseDepSnapshot,
   produceDepSnapshot,
   restoreDepSnapshot,
-  serializeDepSnapshot,
-  serializeDepSnapshotTar,
-  snapshotIdFromBytes,
-  verifyDepSnapshotReplayCache,
 } from './glue/dep-snapshot.ts';
 export type {
   DepSnapshotFetchStage,

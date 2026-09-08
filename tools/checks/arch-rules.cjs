@@ -134,7 +134,7 @@ const dependencyPolicyRules = [
     to: {
       path: '(?:^|/)workbench/src/',
       pathNot:
-        '(?:^|/)workbench/src/(?:index|dep-snapshot|workbench/playground|workers/(?:workbench-owner-bootstrap|kernel-worker-entry|node-entry-bootstrap|dev-server-child-bootstrap|ts-lsp-worker-entry|no-coi-toolchain-worker))\\.ts$',
+        '(?:^|/)workbench/src/(?:index|dep-snapshot|workbench/playground|workers/(?:workbench-owner-bootstrap|kernel-worker-entry|node-entry-bootstrap|dev-server-child-bootstrap|ts-lsp-worker-entry))\\.ts$',
     },
   },
   {

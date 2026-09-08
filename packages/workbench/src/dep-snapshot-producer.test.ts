@@ -146,9 +146,16 @@ interface PublicProducerApi {
   readonly produceDepSnapshot?: (input: ProduceInput) => Promise<ProduceResult>;
   readonly restoreDepSnapshot?: typeof glue.restoreDepSnapshot;
   readonly fetchDepSnapshot?: typeof glue.fetchDepSnapshot;
+  readonly parseDepSnapshot?: typeof glue.parseDepSnapshot;
   readonly createDepSnapshotMemoryFs?: () => {
     fs: import('./glue/workspace-archive.ts').WorkspaceArchiveFs;
   };
+  readonly installArtifactIdentity?: string;
+  readonly buildDepSnapshot?: unknown;
+  readonly serializeDepSnapshot?: unknown;
+  readonly serializeDepSnapshotTar?: unknown;
+  readonly snapshotIdFromBytes?: unknown;
+  readonly verifyDepSnapshotReplayCache?: unknown;
 }
 
 function producer(): (input: ProduceInput) => Promise<ProduceResult> {
@@ -175,6 +182,14 @@ describe('published dependency snapshot producer', () => {
     expect(api.produceDepSnapshot).toBeTypeOf('function');
     expect(api.restoreDepSnapshot).toBeTypeOf('function');
     expect(api.createDepSnapshotMemoryFs).toBeTypeOf('function');
+    expect(api.fetchDepSnapshot).toBeTypeOf('function');
+    expect(api.parseDepSnapshot).toBeTypeOf('function');
+    expect(api.installArtifactIdentity).toBeTypeOf('string');
+    expect(api.buildDepSnapshot).toBeUndefined();
+    expect(api.serializeDepSnapshot).toBeUndefined();
+    expect(api.serializeDepSnapshotTar).toBeUndefined();
+    expect(api.snapshotIdFromBytes).toBeUndefined();
+    expect(api.verifyDepSnapshotReplayCache).toBeUndefined();
   });
 
   it('bakes caller manifest+lock and restores matching bytes through the public entry', async () => {
