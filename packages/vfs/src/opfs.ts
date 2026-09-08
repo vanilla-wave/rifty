@@ -49,14 +49,24 @@ export class OpfsVfs implements Vfs {
     return Boolean(s && typeof s.getDirectory === 'function');
   }
 
-  async init(): Promise<void> {
-    if (this.root) return;
+  async init(root?: FileSystemDirectoryHandle): Promise<void> {
+    if (this.root) {
+      if (root !== undefined && root !== this.root && !(await this.root.isSameEntry(root))) {
+        throw new VfsError('EINVAL', '/', 'OPFS instance is already mounted at another root');
+      }
+      return;
+    }
+    if (root !== undefined) {
+      this.root = root;
+      return;
+    }
     if (!OpfsVfs.isSupported()) {
       throw new VfsError('EPERM', '/', 'OPFS is not available in this environment');
     }
     const dir = await navigator.storage?.getDirectory();
     if (!dir) throw new VfsError('EPERM', '/', 'OPFS getDirectory returned undefined');
-    this.root = dir;
+    // A concurrent explicit mount may have completed while origin lookup waited.
+    if (this.root === null) this.root = dir;
   }
 
   private async getDirectory(

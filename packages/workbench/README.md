@@ -56,6 +56,22 @@ Playground's `quickjs-kernel-worker-host.ts` is the reference composition.
 
 See ADR-0263 and ADR-0282.
 
+## Persistent storage
+
+Set `storage: { persistence: 'required', namespace: 'my-workbench' }` to mount
+one OPFS directory as the Workbench root. Both entrypoints support it. All
+project, catalog, cache and proof paths stay inside that directory; guest paths
+stay unchanged. New selections have no old projects; existing selections retain
+their files. Close Workbench before switching; the origin-wide owner lease
+still permits one Workbench at a time.
+
+Omit `namespace` to use the historical origin root. No migration or clearing.
+The name is one literal component: no empty/blank value, NUL, slash, backslash,
+`.` or `..`; other characters and spaces are preserved. Valid ephemeral mode
+creates no OPFS directory. Namespace open/proof failures reject required storage
+or appear in preferred storage's fallback reason. This is storage addressing;
+host-owned storage remains the host's responsibility. See ADR-0402.
+
 
 ## Registry policy
 

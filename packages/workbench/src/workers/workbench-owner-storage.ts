@@ -4,6 +4,7 @@ import {
   type OwnerStoragePersistence,
   type OwnerStorageSnapshot,
   selectOwnerStorage,
+  validateOwnerStorageNamespace,
 } from './owner-storage.ts';
 
 const PROOF_ROOT = '/.rifty/workbench/v1/storage-proof';
@@ -31,6 +32,7 @@ export interface WorkbenchOwnerStorageInstallers {
 }
 
 export interface WorkbenchOwnerStorageOptions {
+  readonly namespace?: string;
   readonly installers?: WorkbenchOwnerStorageInstallers;
   readonly proofTimeoutMs?: number;
   readonly createProofId?: () => string;
@@ -43,12 +45,17 @@ function defaultProofId(): string {
   return globalThis.crypto.randomUUID();
 }
 
-function defaultInstallers(): WorkbenchOwnerStorageInstallers {
+function defaultInstallers(namespace: string | undefined): WorkbenchOwnerStorageInstallers {
   return Object.freeze({
     openMemory: () => {
       installMemoryFs();
     },
-    openOpfs: installOpfsFs,
+    openOpfs: async () => {
+      if (namespace === undefined) return installOpfsFs();
+      const origin = await navigator.storage.getDirectory();
+      const root = await origin.getDirectoryHandle(namespace, { create: true });
+      return installOpfsFs(root);
+    },
   });
 }
 
@@ -146,11 +153,12 @@ export async function installWorkbenchOwnerStorageAuthority(
   policy: OwnerStoragePersistence,
   options: WorkbenchOwnerStorageOptions = {},
 ): Promise<WorkbenchOwnerStorageAuthority> {
+  const namespace = validateOwnerStorageNamespace(options.namespace);
   const timeoutMs = options.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new RangeError('Workbench OPFS proof timeout must be positive');
   }
-  const installers = options.installers ?? defaultInstallers();
+  const installers = options.installers ?? defaultInstallers(namespace);
   const createProofId = options.createProofId ?? defaultProofId;
   let openedOpfs: OpfsInstallation | undefined;
   const snapshot = await selectOwnerStorage(policy, {

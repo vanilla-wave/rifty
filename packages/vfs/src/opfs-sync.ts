@@ -274,27 +274,24 @@ export class OpfsFsSync implements FsSync {
     this.index.set('/', { kind: 'dir', size: 0, children: new Set() });
   }
 
-  /**
-   * Acquires the OPFS root via `navigator.storage.getDirectory()`,
-   * builds the warm path index, preloads file content into the sync cache,
-   * and returns a ready-to-use `OpfsFsSync`. Throws (via the constructor)
-   * if called outside a Worker realm that supports `createSyncAccessHandle`.
-   *
-   * `paired` is the async OPFS surface ({@link OpfsVfs}); passing it enables
-   * content write-through and the boot preload (ADR-0072). Omitting it
-   * keeps the no-persistence test path working.
-   */
-  static async init(paired?: PairedAsyncSurface): Promise<OpfsFsSync> {
+  /** Worker-only mount/index/preload; paired surface owns write-through (ADR-0072/0402). */
+  static async init(
+    paired?: PairedAsyncSurface,
+    root?: FileSystemDirectoryHandle,
+  ): Promise<OpfsFsSync> {
     if (!OpfsFsSync.isSupported()) {
       throw new NotImplementedError(
         'OpfsFsSync',
         'sync OPFS only available inside a Web Worker realm',
       );
     }
-    if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
-      throw new VfsError('EPERM', '/', 'OPFS navigator.storage.getDirectory unavailable');
+    let dir = root;
+    if (dir === undefined) {
+      if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
+        throw new VfsError('EPERM', '/', 'OPFS navigator.storage.getDirectory unavailable');
+      }
+      dir = await navigator.storage.getDirectory();
     }
-    const dir = await navigator.storage.getDirectory();
     const instance = new OpfsFsSync(dir, paired);
     await instance.refreshIndex();
     await instance.preloadContent();

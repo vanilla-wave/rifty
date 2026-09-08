@@ -87,3 +87,35 @@ export function nativeRootNames(page: Page): Promise<readonly string[]> {
     return names.sort();
   });
 }
+
+/** Refuse only an actual native write inside the selected owner's proof directory. */
+export async function denyNamespaceProofWrites(
+  page: Page,
+  namespace: string,
+): Promise<() => Promise<void>> {
+  const ownerUrl = await page.evaluate(async () => {
+    const assetsUrl = '/src/browser-unit/workbench-vite-host-assets.ts';
+    const { workbenchViteHostAssets } = await import(/* @vite-ignore */ assetsUrl);
+    return new URL(workbenchViteHostAssets.workers.owner, location.href).href;
+  });
+  const prefix = `${namespace}/.rifty/workbench/v1/storage-proof/`;
+  const nativeFault = `
+(() => {
+  const createWritable = FileSystemFileHandle.prototype.createWritable;
+  FileSystemFileHandle.prototype.createWritable = async function(options) {
+    const origin = await navigator.storage.getDirectory();
+    const path = await origin.resolve(this);
+    if (path !== null && path.join('/').startsWith(${JSON.stringify(prefix)})) {
+      throw new DOMException('namespace-proof-denied:' + path.join('/'), 'NotAllowedError');
+    }
+    return createWritable.call(this, options);
+  };
+})();
+`;
+  const handler = async (route: import('@playwright/test').Route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: `${nativeFault}\n${await response.text()}` });
+  };
+  await page.route(ownerUrl, handler);
+  return () => page.unroute(ownerUrl, handler);
+}

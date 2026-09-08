@@ -1,5 +1,25 @@
 export type OwnerStoragePersistence = 'required' | 'preferred' | 'ephemeral';
 
+export interface OwnerStorageConfig {
+  readonly persistence: OwnerStoragePersistence;
+  readonly namespace?: string;
+}
+
+/** One literal native directory component; undefined keeps the historical origin root. */
+export function validateOwnerStorageNamespace(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== 'string' ||
+    value.trim().length === 0 ||
+    /[\0/\\]/.test(value) ||
+    value === '.' ||
+    value === '..'
+  ) {
+    throw new TypeError('storage.namespace must be one non-empty literal OPFS directory component');
+  }
+  return value;
+}
+
 export type OwnerStorageSnapshot =
   | {
       readonly policy: 'required';

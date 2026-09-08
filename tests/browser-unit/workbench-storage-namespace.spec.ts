@@ -10,6 +10,7 @@ import {
   writeOwnerFile,
 } from './fixtures.ts';
 import {
+  denyNamespaceProofWrites,
   encoded,
   nativeRootNames,
   outsideBytes,
@@ -197,3 +198,88 @@ test('preferred owner falls back to memory on native namespace file conflict and
     await closeOwner(page);
   }
 });
+
+for (const persistence of ['required', 'preferred'] as const) {
+  test(`${persistence} namespace proof refusal preserves existing roots and permits fresh recovery`, async ({
+    page,
+  }) => {
+    await gotoHarness(page);
+    await seedNamespaceOrigin(page);
+    await page.evaluate(async () => {
+      const root = await navigator.storage.getDirectory();
+      const b = await root.getDirectoryHandle('B', { create: true });
+      const file = await b.getFileHandle('existing.bin', { create: true });
+      const writable = await file.createWritable();
+      await writable.write(new Uint8Array([7, 0, 128, 255]));
+      await writable.close();
+    });
+    const paths = [
+      '/outside-sentinel.bin',
+      '/existing.bin',
+      '/A/existing.bin',
+      '/B/existing.bin',
+      '/blocked',
+    ];
+    const before = await readNativeFiles(page, paths);
+    const rootNames = await nativeRootNames(page);
+    const restore = await denyNamespaceProofWrites(page, 'A');
+    const options = { workspaceId: 'namespace-proof-fault', namespace: 'A', persistence } as const;
+    try {
+      const attempt = await attemptBootOwner(page, options);
+      if (persistence === 'required') {
+        expect.soft(attempt.ok).toBe(false);
+        expect
+          .soft(attempt.messages.join('\n'))
+          .toContain('namespace-proof-denied:A/.rifty/workbench/v1/storage-proof/');
+      } else {
+        expect(attempt).toEqual({ ok: true, messages: [] });
+        expect
+          .soft(
+            await page.evaluate(async (url) => {
+              const fixture = await import(/* @vite-ignore */ url);
+              return fixture.currentWorkbench().snapshot().storage;
+            }, sealedWorkbenchFixtureUrl),
+          )
+          .toEqual({
+            policy: 'preferred',
+            backend: 'memory',
+            durability: 'ephemeral',
+            fallback: {
+              reason: expect.stringContaining(
+                'namespace-proof-denied:A/.rifty/workbench/v1/storage-proof/',
+              ),
+            },
+          });
+        await writeOwnerFile(page, '/scratch/fallback-only.txt', 'memory-only');
+      }
+    } finally {
+      await closeOwner(page);
+      await restore();
+    }
+    expect.soft(await nativeRootNames(page)).toEqual(rootNames);
+    expect(await readNativeFiles(page, paths)).toEqual(before);
+    try {
+      await bootOwner(page, { ...options, persistence: 'required' });
+      expect.soft((await readOwnerFile(page, '/scratch/fallback-only.txt')).ok).toBe(false);
+      expect(
+        await page.evaluate(async (url) => {
+          const fixture = await import(/* @vite-ignore */ url);
+          return fixture.currentWorkbench().snapshot().storage;
+        }, sealedWorkbenchFixtureUrl),
+      ).toEqual({ policy: 'required', backend: 'opfs', durability: 'durable' });
+      await writeOwnerFile(page, '/scratch/recovered.txt', 'proof-recovered');
+      await flushOwnerDurable(page);
+      await closeOwner(page);
+      await bootOwner(page, { ...options, persistence: 'required' });
+      expect(await readOwnerFile(page, '/scratch/recovered.txt')).toEqual({
+        ok: true,
+        text: 'proof-recovered',
+        error: '',
+      });
+    } finally {
+      await closeOwner(page);
+    }
+    expect.soft(await nativeRootNames(page)).toEqual(rootNames);
+    expect(await readNativeFiles(page, paths)).toEqual(before);
+  });
+}

@@ -1,5 +1,9 @@
 import type { PtyPreview, PtyPreviewReq } from '../glue/pty-protocol.ts';
-import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
+import {
+  type OwnerStorageConfig,
+  type OwnerStorageSnapshot,
+  validateOwnerStorageNamespace,
+} from '../workers/owner-storage.ts';
 import {
   type SerializedWorkbenchOwnerError,
   inspectSerializedWorkbenchOwnerError as inspectSerializedError,
@@ -58,7 +62,7 @@ export interface WorkbenchOwnerBootConfig {
     readonly previewProbeTimeoutMs: number;
   };
   readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
-  readonly storage: { readonly persistence: 'required' | 'preferred' | 'ephemeral' };
+  readonly storage: OwnerStorageConfig;
   readonly legacyWorkspacePrefix?: string;
   readonly playgroundUrlContext?: {
     readonly apiBaseUrl: string;
@@ -243,7 +247,11 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   );
 
   const storage = record(config.storage, 'owner boot storage policy');
-  exact(storage, ['persistence'], 'owner boot storage policy');
+  exact(
+    storage,
+    optionalKeys(storage, ['persistence'], ['namespace']),
+    'owner boot storage policy',
+  );
   if (
     storage.persistence !== 'required' &&
     storage.persistence !== 'preferred' &&
@@ -251,6 +259,7 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   ) {
     throw invalid('owner boot storage policy');
   }
+  const namespace = validateOwnerStorageNamespace(storage.namespace);
 
   const frozenDeployment = Object.freeze({
     workers: Object.freeze({
@@ -288,7 +297,10 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   return Object.freeze({
     deployment: frozenDeployment,
     packageAcquisition,
-    storage: Object.freeze({ persistence: storage.persistence }),
+    storage: Object.freeze({
+      persistence: storage.persistence,
+      ...(namespace === undefined ? {} : { namespace }),
+    }),
     ...(legacyWorkspacePrefix === undefined ? {} : { legacyWorkspacePrefix }),
     ...(playgroundUrlContext === undefined ? {} : { playgroundUrlContext }),
   });

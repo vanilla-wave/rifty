@@ -5,7 +5,11 @@
  * keeps a second, drifting option parser from appearing beside it.
  */
 import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
-import type { OwnerStoragePersistence } from '../../workers/owner-storage.ts';
+import {
+  type OwnerStorageConfig,
+  type OwnerStoragePersistence,
+  validateOwnerStorageNamespace,
+} from '../../workers/owner-storage.ts';
 import type { WorkbenchOwnerStartInput } from '../workbench-owner-port.ts';
 import {
   type WorkbenchPackageAcquisition,
@@ -45,9 +49,7 @@ export interface WorkbenchOptions {
     readonly ownerOperationSilenceTimeoutMs?: number;
   };
   readonly packageAcquisition: WorkbenchPackageAcquisition;
-  readonly storage: {
-    readonly persistence: StoragePersistence;
-  };
+  readonly storage: OwnerStorageConfig;
 }
 
 export interface ValidatedOptions {
@@ -56,7 +58,7 @@ export interface ValidatedOptions {
     readonly scope: string;
   };
   readonly owner: Omit<NormalizedWorkbenchOwnerInput, 'storage'>;
-  readonly storage: StoragePersistence;
+  readonly storage: OwnerStorageConfig;
 }
 
 export interface ValidatedUrlContext {
@@ -98,6 +100,7 @@ export function validateWorkbenchOptions(
   if (persistence !== 'required' && persistence !== 'preferred' && persistence !== 'ephemeral') {
     throw new TypeError('storage.persistence must be required, preferred, or ephemeral');
   }
+  const namespace = validateOwnerStorageNamespace(storage.namespace);
 
   const serviceWorkerUrl = riftyServiceWorkerUrl(
     serviceWorker.url,
@@ -149,7 +152,10 @@ export function validateWorkbenchOptions(
       }),
       packageAcquisition,
     }),
-    storage: persistence,
+    storage: Object.freeze({
+      persistence,
+      ...(namespace === undefined ? {} : { namespace }),
+    }),
   });
 }
 

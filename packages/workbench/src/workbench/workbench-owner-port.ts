@@ -1,4 +1,8 @@
-import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
+import type {
+  OwnerStorageConfig,
+  OwnerStoragePersistence,
+  OwnerStorageSnapshot,
+} from '../workers/owner-storage.ts';
 import type { NormalizedWorkbenchPackageAcquisition } from './internal/workbench-package-acquisition.ts';
 import type {
   PlaygroundProjectCatalog,
@@ -81,7 +85,7 @@ export interface WorkbenchOwnerStartInput {
     readonly ownerOperationSilenceTimeoutMs?: number;
   };
   readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
-  readonly storage: { readonly persistence: OwnerStoragePersistence };
+  readonly storage: OwnerStorageConfig;
   /** First-party companion only; captured historical selection, never guest env. */
   readonly legacyWorkspacePrefix?: string;
   /** First-party companion only; one immutable page URL snapshot for definition ingress. */

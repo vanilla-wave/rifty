@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- OPFS initialization accepts a captured native root; paired installation uses the same handle for both surfaces. Conflicting async re-init rejects; omission preserves origin storage (ADR-0402).
+
 ### Fixed
 
 - **Dedicated Workers select OPFS from sync-access-handle capability, not

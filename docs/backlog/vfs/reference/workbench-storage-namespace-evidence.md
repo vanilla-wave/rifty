@@ -54,3 +54,43 @@ packages/workbench/src/workers/workbench-owner-storage.test.ts`:15/15 GREEN,
 including exact persisted read-back refusal and bounded preferred fallback.
 Raw /tmp/rifty-316-i4-storage-controls.log. `pnpm docs:check` GREEN,
 /tmp/rifty-316-i4-prep-docs.log.
+
+## Implementation proof
+
+ADR-0402 uses existing storage config/validator and paired mount. No new source
+module, queue, registry, identity field or lease. Source inventory151 unchanged;
+opfs-sync shrinks1195→1192 lines and its gate pin1215→1193.
+
+- Workbench namespace/storage45/45 and full open/wire/options/control355/355
+  GREEN; /tmp/rifty-316-i4-workbench-first-green.json and
+  /tmp/rifty-316-i4-workbench-green.json. TypeScript/Biome GREEN;
+  source hashes /tmp/rifty-316-i4-workbench-implementation-evidence.json.
+- VFS controls: opfs-sync/opfs-errors/opfs-stream plus conformance vfs-boot,
+  124 passed/1 historical skip; /tmp/rifty-316-i4-vfs-controls.log.
+  VFS TypeScript and file-size gate GREEN.
+- Actual native/public browser13/13 GREEN,13.4s,Chrome148.0.7778.96;
+  /tmp/rifty-316-i4-browser-green-final.log. Added2 advisory-strengthening cases
+  inject only native createWritable refusal at the selected A proof path:
+  required refuses/preferred reports memory fallback, original A/B/default bytes
+  remain exact, normal A reopen/proof/write/reopen succeeds. Their first run
+  already used integrated source, so no new baseline RED claimed. Existing
+  contract carriers/criteria unchanged. Focused browser types/Biome GREEN.
+- Mandatory `pnpm test:packed-consumer` GREEN,87.62s;
+  /tmp/rifty-316-i4-packed-green.log. Installed tarballs/copied assets, old
+  registry Vite/HMR/sqlite journey, strict snapshot-only Vite/build/HMR and saved
+  state, then persistent same-id A/B/default Node execution/byte checks all pass.
+  Existing zero registry/Eddy/unused-asset checks cover the added namespace proof.
+
+First full `pnpm pr:check`:24/25 GREEN, unit207.2s/parity64.2s; only the exact
+TypeScript-worker fingerprint drifted. /tmp/rifty-316-i4-pr-check.log.
+Fresh independent namespace_asset_pin_review reproduced the prior source/pin
+and current40-output graph with write:false builds. Worker size remains
+10,022,664B;46 differing byte positions are solely6 hash-imports. After import
+normalization the whole worker is byte-identical. The20-output transitive closure
+has actual source changes only in the VFS chunk; other compiler/client and
+QuickJS/sql/cjs-lexer pins unchanged. ADR-0391 permits the exact SHA update to
+29e68b80b025ca6a4ab64f9b5dc7a62637885778549101add971b7874f5c69c9;
+no ceiling or content-detector change. Artifacts /tmp/rifty-316-i4-pin-review.md,
+.json, /tmp/rifty-316-i4-pin-reproducer.mjs and its PASS log.
+Full gate rerun: /tmp/rifty-316-i4-pr-check-final.log; independent Final+GREEN
+follows on the committed integrated source.
