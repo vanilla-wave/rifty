@@ -74,6 +74,7 @@ budgets (I7).
 
 ## Decisions
 
+- ready-verdict: 2026-09-09 — Contract+RED @ 43cea32d6b78463f5376749324a80634c2db3842
 - 2026-09-09 — ADR-0403: detect on createScratch; one staged retain-orphan+create transaction; catalog.retainedOrphans pointer; public list/read methods; fail leaves only copy; no second journal.
 - 2026-09-07 — finding draft; observable scope is settled by goal I6; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.
