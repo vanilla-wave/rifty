@@ -131,6 +131,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0160 | Window owner ports and anti-hijack ready-frame routing |
 | 0265 | Owner-correlated preview readiness by PTY run |
 | 0271 | Correlated service-worker control proofs fence Workbench preview revocation |
+| 0405 | Host-selected preview prefix uses the one io addressing authority |
 
 ### npm-client
 
