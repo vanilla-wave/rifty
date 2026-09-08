@@ -94,3 +94,8 @@ no ceiling or content-detector change. Artifacts /tmp/rifty-316-i4-pin-review.md
 .json, /tmp/rifty-316-i4-pin-reproducer.mjs and its PASS log.
 Full gate rerun: /tmp/rifty-316-i4-pr-check-final.log; independent Final+GREEN
 follows on the committed integrated source.
+
+Final fullgate25/25 GREEN, unit209.7s/parity61.3s. Fresh independent
+storage_namespace_final_review:20/20 coverage,0 findings; unit45/45 and native
+Chromium13/13 independently GREEN13.7s. Final JSON binds source71d5837158953c2ac1f3ac53d712162c3ea04cd7;
+workbench-storage-namespace-final-green.json. I4 accepted; I6/I5/I7 remain.

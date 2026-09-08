@@ -2,13 +2,12 @@
 
 ## Items
 
-1. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
-   selection, with the old setting preserving access to old projects (I4).
-2. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
-   open fresh Scratch, using the selected storage namespace (I6).
-3. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
+1. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
+   open fresh Scratch in the selected namespace, including the captured
+   missing-cache read/copy honesty prerequisite (I6).
+2. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
    on the same static host (I5).
-4. `distribution/workbench-operation-budgets` — public effective boot/file/tool
+3. `distribution/workbench-operation-budgets` — public effective boot/file/tool
    budgets, then composed packed-host proof of the whole scenario (I7).
 
 ## Open questions
