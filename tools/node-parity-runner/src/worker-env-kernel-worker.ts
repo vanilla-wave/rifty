@@ -2,7 +2,7 @@ import hostProcess from 'node:process';
 import { parentPort, workerData } from 'node:worker_threads';
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { SyncRpcFsSync, awaitDrain, releaseNodeEvalDrainOwnership } from '@riftydev/runtime-js';
+import { SyncRpcFsSync, awaitDrain } from '@riftydev/runtime-js';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { postNodeProcessListeningControl } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
@@ -165,7 +165,7 @@ function reportChildLocalVfsAudit(syncCall: (method: string, payload: unknown) =
   childLocalVfsAuditReported = true;
 }
 
-function installChildLocalVfsExitAudit(spec: WorkerSpawnSpec): void {
+function installChildLocalVfsLifecycleAudit(spec: WorkerSpawnSpec): void {
   if (!request.nodeCliEvalVfsAudit) return;
   const ipc = spec.stdio.ipc;
   const nativePost = ipc.postMessage.bind(ipc) as (
@@ -176,7 +176,9 @@ function installChildLocalVfsExitAudit(spec: WorkerSpawnSpec): void {
     configurable: true,
     value(message: unknown, options?: StructuredSerializeOptions | Transferable[]): void {
       const frame = message as { readonly kind?: unknown } | null;
-      if (frame?.kind === 'control:self-exit') {
+      // A served bootstrap now awaits natural drain. Capture the same completed
+      // decoder/eval interval before preview admission lets the parent stop it.
+      if (frame?.kind === 'control:self-exit' || frame?.kind === 'control:listening') {
         reportChildLocalVfsAudit(createSyncCall(spec));
       }
       nativePost(message, options);
@@ -295,8 +297,8 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
     runEntry,
     listPorts,
     onPortsChange: onRegistryChange,
-    awaitDrain: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
-    releaseDrainOwnership: releaseNodeEvalDrainOwnership,
+    awaitDrain: () =>
+      awaitDrain({ capMs: Number.POSITIVE_INFINITY, hasRef: () => listPorts().length > 0 }),
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
@@ -413,7 +415,7 @@ async function runNodeWorker(spec: WorkerSpawnSpec): Promise<void> {
     'stderr',
     spec.stdio.ipc,
   );
-  installChildLocalVfsExitAudit(spec);
+  installChildLocalVfsLifecycleAudit(spec);
   if (request.nodeCliEvalVfsAudit) {
     // This starts before runEntryLifecycle publishes/decodes the bootstrap and
     // stays live through process adoption, entry, and failure settlement.

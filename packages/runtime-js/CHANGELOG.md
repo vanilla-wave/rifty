@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Remove esbuild-specific realm API/key; exact CJS identity now belongs to registry (ADR-0384).
+- Drain accepts a caller-owned live-handle query; listening ports prevent early completion/eval flush while terminal failures still win (ADR-0385).
 
 - Resolve VM overrides from native Worker construction metadata before boot;
   rewrite skips QuickJS preload. No-COI toolchain realm defaults to rewrite,
