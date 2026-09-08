@@ -116,3 +116,15 @@ closed-channel pageerror is that existing boundary, not a new socket-drain claim
   Hono, Koa, TypeScript editor, Webpack cold install/HMR/reload.
 - Express oracle cases run in order even under fullyParallel: the native
   reference shares a loopback port; failures/retries remain independent.
+
+## Integration with landed registry migration
+
+PR #314 landed as `da485021f` during final checks. Rebased cleanly; core lifecycle
+changes retained. The then-running gate was explicitly terminated before rebase,
+not counted as a pass/failure. Its completed static lanes were green.
+The original registry/archive/reopen fixture now awaits real command exit and
+asserts code 0 on both runs, removing its stop-after-response workaround.
+
+Post-rebase original registry/archive/reopen browser fixture: 1/1 (13.1s), both
+real Express commands naturally exited 0. Package migration is no longer tested
+with explicit stop after its response.
