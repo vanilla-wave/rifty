@@ -6,7 +6,7 @@ created: 2026-09-07
 why: Fixed root /preview URLs prevent iframe preview under a narrow embedding scope.
 user_story: As the Tracker plugin-sandbox embedder, I want to serve workbench preview inside a host-selected service-worker scope, but today fixed root /preview URLs prevent iframe preview under a narrow embedding scope.
 epic: self-hosted-snapshot-workbench
-blocked_by: [distribution/workbench-static-assets]
+blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md]
 code: [packages/io/src/preview-protocol.ts, packages/service-worker/src/preview-bridge.ts, packages/workbench/src/workbench/internal/workbench-options.ts]
 ---
