@@ -2,15 +2,13 @@
 
 ## Items
 
-1. `distribution/workbench-snapshot-only` — registry-free admission and loud
-   snapshot failure; composes published producer/assets and application policy (I3).
-2. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
+1. `vfs/workbench-storage-namespace` — opt-in isolated root, empty on first
    selection, with the old setting preserving access to old projects (I4).
-3. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
+2. `playground/orphan-scratch-recovery` — retain/download orphan bytes and
    open fresh Scratch, using the selected storage namespace (I6).
-4. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
+3. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
    on the same static host (I5).
-5. `distribution/workbench-operation-budgets` — public effective boot/file/tool
+4. `distribution/workbench-operation-budgets` — public effective boot/file/tool
    budgets, then composed packed-host proof of the whole scenario (I7).
 
 ## Open questions
