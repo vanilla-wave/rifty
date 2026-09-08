@@ -1,0 +1,148 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS at 90b1a7533; proceed to implementation, then required browser/packed acceptance and Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/npm-client/registry-package-adaptations.md against BASE c64cb2ebb; corrected HEAD 90b1a75335476e27f98cad56574acdef95f94cff; accepted scope also compared with PR head df3cd222f",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1 + I2 + I3 + scenario",
+      "location": "docs/backlog/epics/vite-knowledge-boundary/goal.md:14",
+      "summary": "Implement registry ownership and ordinary-file fix; run preserved browser/packed/real-package acceptance and Final+GREEN."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: finite registry ownership and mechanical ownership checks",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tools/checks/package-adaptation-ownership.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: exact realm identity, startup, info suppression and installed-tree authority",
+      "source": "acceptance",
+      "trace": "I2 + scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts:21; tests/browser-unit/esbuild-vite-contract.spec.ts:1258; packages/workbench/src/workers/vite-node-entry-edge.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: ordinary .vite snapshot/archive/import and neutral diagnostics",
+      "source": "acceptance",
+      "trace": "I3 + scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/ordinary-package-files.contract.test.ts:24; tools/checks/package-adaptation-ownership.test.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: supported COI/no-COI Vite and ordinary Express behavior",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vite7-build-preview.spec.ts:46; tests/no-coi/no-coi-dev-hmr.spec.ts:1052; tests/integration/workbench-packed-consumer.test.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: existing package substitutions and emnapi results",
+      "source": "acceptance",
+      "trace": "I1 + scenario",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/index.test.ts:6; packages/workbench/src/workers/package-install-finalizer.test.ts:126; tests/browser-unit/sass-vite-contract.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: existing real-Node esbuild differential rows and loud gaps",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-contract-oracle.test.ts:21; tests/browser-unit/esbuild-vite-contract.spec.ts:1258",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input \u00d7 binding dispatch: reject unknown/duplicate/path/size/hash before publication",
+      "source": "fault-matrix",
+      "trace": "I2 + scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts:34",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache \u00d7 installed tree reuse: reject stale prepared tree",
+      "source": "fault-matrix",
+      "trace": "I1 + scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/package-install-finalizer.test.ts:170; tests/e2e/vite-save-trust-rebind.spec.ts:54",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift \u00d7 COI/no-COI activation: supported results preserved",
+      "source": "fault-matrix",
+      "trace": "I1 + scenario",
+      "status": "pass",
+      "citation": "tests/e2e/vite7-build-preview.spec.ts:46; tests/no-coi/no-coi-dev-hmr.spec.ts:1052",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/checks/package-adaptation-ownership.test.ts:5",
+          "evidence": "",
+          "summary": "Ownership checks cover named old paths, not the full inventory or dependency direction. Final review must inspect executable policy and registry root/internal isolation per ADR-0384; a file rename alone is not ownership proof.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workbench/ordinary-package-files.contract.test.ts:34",
+          "evidence": "Original executed artifact: /tmp/pr314-contract-red-run.log, malformed absolute portable path. Independently verified correction 90b1a7533, reran both RED suites: /tmp/pr314-contract-red-verified.log, Vitest 2.1.9, 6 intended failures; foreign import now throws reserved segment \".vite\"; snapshot and roundtrip omit expected bytes. Existing baseline suites independently rerun: /tmp/pr314-contract-baseline-run.log, 4 files/42 pass.",
+          "summary": "RESOLVED at 90b1a7533: archive fixture and lookup now use portable relative paths; original unrelated-failure blocker repaired, verified, no residual.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "90b1a75335476e27f98cad56574acdef95f94cff"
+}

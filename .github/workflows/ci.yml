@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # ready_for_review re-runs the gates a draft PR skips (check:pass-binding, REV-8).
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
     types: [checks_requested]
   push:
@@ -57,6 +59,7 @@ jobs:
       - run: pnpm check:e2e-coverage
       - run: pnpm check:compat-drift # docs-only PRs still prove generated compatibility claims
       - run: pnpm test:docs-contract # lightweight source↔compat/ADR honesty guards
+      - run: pnpm check:eval-compiler-drift
       - run: pnpm check:shadow-catalog-drift
       - run: pnpm check:install-artifact-drift
       - run: pnpm check:snapshot-artifact-drift
@@ -66,6 +69,7 @@ jobs:
       - run: pnpm check:esbuild-legacy-retirement # cutover: vendored ADR-0047 path cannot return
       - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
       - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
+      - run: pnpm check:pass-binding # blocking on a ready PR: product/test changes carry a landing verdict bound to an ancestor sha (REV-8); draft PRs skipped
       - run: pnpm backlog:check # blocking: frontmatter + TODO(backlog:) integrity
       - run: pnpm refs:check # blocking: ADR index + cross-ref integrity
 
@@ -295,6 +299,8 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+      - name: Packed client bundle budgets
+        run: pnpm test:client-bundles
       - run: pnpm test:no-coi
       - if: failure()
         uses: actions/upload-artifact@v4

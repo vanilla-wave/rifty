@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Vite action preparation rejects a missing/non-callable host keepalive tracker before adapter startup or CLI execution; informational and unrelated entries remain valid without it.
+
+- Own existing Vite/esbuild/emnapi runtime, patches, manifest and launch preparation through a closed runtime entry; data catalog stays separate (ADR-0384).
+
 ### Changed
 
 - **One registry-twin byte carrier (ADR-0371).** The esbuild recipe now

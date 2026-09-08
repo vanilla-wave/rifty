@@ -411,7 +411,7 @@ export type DuplexConstructor = CallableStreamConstructor<
   DuplexOptions
 >;
 
-export const Duplex: DuplexConstructor = makeCallableStreamConstructor(
+export const Duplex: DuplexConstructor = /* @__PURE__ */ makeCallableStreamConstructor(
   'Duplex',
   DuplexImplementation,
   (receiver, options) => {

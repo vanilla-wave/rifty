@@ -10,6 +10,7 @@
   "dependencies": {
     "@riftydev/runtime-js": "0.1.0",
     "@riftydev/sdk": "0.1.0",
+    "@riftydev/vfs": "0.1.0",
     "@riftydev/workbench": "0.1.0"
   },
   "devDependencies": {

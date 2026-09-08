@@ -12,7 +12,7 @@ import {
   toProjectFileEntry,
 } from './project-file-boundary.ts';
 
-const EXCLUDED_DIRECTORY_NAMES = Object.freeze(['node_modules', '.git', '.vite', 'dist'] as const);
+const EXCLUDED_DIRECTORY_NAMES = Object.freeze(['node_modules', '.git', 'dist'] as const);
 const EXCLUDED_DIRECTORIES = new Set<string>(EXCLUDED_DIRECTORY_NAMES);
 
 export interface ProjectFileRead {

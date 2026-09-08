@@ -908,7 +908,7 @@ describe('install — package.json defaults', () => {
     expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual(['esbuild-wasm@0.28.0']);
     expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(true);
     expect(await vfs.readFileText('/proj/node_modules/esbuild/lib/main.cjs')).toContain(
-      '__rifty?.esbuild',
+      '__riftyShadowRegistry?.esbuild',
     );
     expect(result.lockfile.packages['node_modules/esbuild']).toMatchObject({
       version: '0.28.0',

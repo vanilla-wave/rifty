@@ -14,13 +14,18 @@
       "type": "string",
       "enum": ["Contract+RED", "Final+GREEN"]
     },
+    "reviewed_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Added by the runner before the verdict is committed under docs/backlog/<area>/reference/: the exact commit the reviewer saw (REV-8 binding; tools/checks/pass-binding.mjs)."
+    },
     "unit_goal_source": {
       "type": "string",
       "description": "Exact ready contract/path and baseline used for the current unit."
     },
     "unit_residuals": {
       "type": "array",
-      "description": "Current PR/slice contract clauses not covered at this checkpoint. Any entry blocks the slice.",
+      "description": "Current PR/slice contract clauses not covered at this checkpoint. Any entry blocks until independent verification proves or corrects it; adjudicating another finding never removes it.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -40,7 +45,7 @@
     },
     "goal_residuals": {
       "type": "array",
-      "description": "Frozen run-goal clauses still open after this honest slice. They require continuation but do not block this slice.",
+      "description": "Accepted goal obligations still open after this slice; required continuation, never silently dropped.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -64,7 +69,7 @@
     },
     "coverage": {
       "type": "array",
-      "description": "One row per TRACED obligation of the unit inside the review boundary (docs/process/rules/review.md REV-4): every contract `## Fault matrix` line, every Acceptance/Parity clause, every public API entry point the diff adds or changes, every frozen oracle/golden artifact — each carrying its trace. Untraced rows raise no coverage row.",
+      "description": "One row per TRACED obligation of the unit inside the review boundary (docs/process/rules/review.md REV-4): every contract `## Fault matrix` line, every Acceptance/Parity clause, every public API entry point the diff adds or changes, every frozen oracle/golden artifact \u2014 each carrying its trace. Untraced rows raise no coverage row.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -84,7 +89,7 @@
           "status": {
             "type": "string",
             "enum": ["pass", "weak", "missing"],
-            "description": "pass: a committed RED discriminates it (a plausible wrong implementation fails); weak: a carrier exists but a named plausible wrong implementation passes while violating the obligation AS DECLARED (lossy/inexact assertion, non-discriminating fixture, absent count/order/identity check the trace target states) — advisory, report-only (REV-4); a mutant beyond the declared clause is a concern, not weak; missing: no carrier — blocks."
+            "description": "pass: a committed RED discriminates it (a plausible wrong implementation fails); weak: a carrier exists but a named plausible wrong implementation passes while violating the obligation AS DECLARED (lossy/inexact assertion, non-discriminating fixture, absent count/order/identity check the trace target states) \u2014 advisory, report-only (REV-4); a mutant beyond the declared clause is a concern, not weak; missing: no carrier \u2014 blocks."
           },
           "citation": {
             "type": "string",
@@ -122,11 +127,15 @@
                 "severity": {
                   "type": "string",
                   "enum": ["blocker", "concern", "nit"],
-                  "description": "blocker: violates the cited authority or a traced obligation has no carrier; concern: advisory (weak evidence, deeper mutant, hardening, premise doubt, taste) — report-only, never spends a round (REV-3); nit: style."
+                  "description": "blocker: violates the cited authority or a traced obligation has no carrier; concern: advisory (weak evidence, deeper mutant, hardening, premise doubt, taste) \u2014 report-only, NOTE under reception (REV-3, REV-12); nit: style."
                 },
                 "location": {
                   "type": "string",
                   "description": "file:line, cited from the diff."
+                },
+                "evidence": {
+                  "type": "string",
+                  "description": "Executed artifact behind the finding \u2014 command + output excerpt (REV-5 Contract+RED classes 1/3/4, mutant claims at Final+GREEN); the critic reads it at reception (REV-12). Empty when the finding is a reading."
                 },
                 "summary": {
                   "type": "string",
@@ -134,7 +143,7 @@
                 },
                 "authority": {
                   "type": "string",
-                  "description": "For blockers: the violated DECLARED authority (REV-2) — an invariant I#, a `## User scenario` line, a traced unit row (e.g. `Acceptance 3 → I3`), an active ADR-NNNN, named baseline behavior, or one of the rules REV-2 lists as blocker-capable (AGENTS.md §Fidelity, REV-7, REV-11, REV-10 axis 3); any other rule id is a concern. A blocker without one is invalid. Empty for concern/nit."
+                  "description": "For blockers: the violated DECLARED authority (REV-2) \u2014 an invariant I#, a `## User scenario` line, a traced unit row (e.g. `Acceptance 3 \u2192 I3`), an active ADR-NNNN, named baseline behavior, or one of the rules REV-2 lists as blocker-capable (AGENTS.md \u00a7Fidelity \u2014 written as `AGENTS.md \u00a7Fidelity: <which rule>` so reception can tell it apart; RDY-8; REV-7; REV-11; REV-10 axis 3); any other rule id is a concern. A blocker without one is invalid. Empty for concern/nit."
                 }
               },
               "required": ["severity", "location", "summary", "authority"]
@@ -142,6 +151,29 @@
           }
         },
         "required": ["axis", "verdict", "findings"]
+      }
+    },
+    "adjudication": {
+      "type": "array",
+      "description": "Independent rulings on disputed blockers, embedded by the driver after reception.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "ruling": {
+            "enum": ["HOLDS", "STRETCH", "FALSE"]
+          },
+          "clause": {
+            "type": "string"
+          },
+          "by": {
+            "enum": ["critic"]
+          }
+        },
+        "required": ["summary", "ruling", "clause", "by"]
       }
     }
   },

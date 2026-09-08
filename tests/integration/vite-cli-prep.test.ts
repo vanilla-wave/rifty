@@ -1,4 +1,4 @@
-import { publishRuntimeEsbuild, readRuntimeEsbuild } from '@riftydev/runtime-js';
+import { trackKeepalivePromise } from '@riftydev/runtime-js';
 import {
   type MemoryFsSync,
   createMemoryFs,
@@ -6,14 +6,19 @@ import {
   setSyncMirror,
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
+import { preparePackageEntryRuntime } from '../../tools/shadow-registry/src/runtime/entry-preparation.ts';
+import {
+  publishRuntimeEsbuild,
+  readRuntimeEsbuild,
+} from '../../tools/shadow-registry/src/runtime/realm.ts';
 import {
   prepareViteBinSpawnRequest,
   prepareViteCli,
   prepareViteCliAcquisitionFiles,
   viteCliMode,
   viteCliPreparationFromArgs,
-} from './vite-cli-prep.ts';
-import { decideViteEsbuildRuntime } from './vite-esbuild-runtime.ts';
+} from '../../tools/shadow-registry/src/runtime/vite-cli-prep.ts';
+import { decideViteEsbuildRuntime } from '../../tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts';
 
 // Behavioral heirs of the retired vite-cli-prep source greps (epic
 // playground-testable-core): file tests drive the pre-runtime preparation over
@@ -29,6 +34,7 @@ const VITE_BIN = '/app/node_modules/.bin/vite';
 function prepareVite(mode: 'dev' | 'build' | 'preview' | 'optimize' | 'info', bin = VITE_BIN) {
   return prepareViteCli({
     root: '/app',
+    trackKeepalivePromise,
     mode,
     executedBinPath: bin,
   });
@@ -63,7 +69,7 @@ const CHOKIDAR_DIR_ENTRY_CALL_SITE = [
 ].join('\n');
 
 interface TestGlobals {
-  __rifty?: { esbuild?: unknown };
+  __riftyShadowRegistry?: { esbuild?: unknown };
   __riftyTestCac?: new (action: () => unknown) => { parse(): void };
   __riftyTestDirEntry?: new () => { items: Set<string>; add(item: string): void };
   __riftyTrackCliPromise?: (promise: PromiseLike<unknown>) => void;
@@ -71,7 +77,7 @@ interface TestGlobals {
 const g = globalThis as TestGlobals;
 
 function clearEsbuildRuntimeSlot(): void {
-  if (g.__rifty) Reflect.deleteProperty(g.__rifty, 'esbuild');
+  if (g.__riftyShadowRegistry) Reflect.deleteProperty(g.__riftyShadowRegistry, 'esbuild');
 }
 
 function bootFs(files: Record<string, string> = {}): MemoryFsSync {
@@ -164,7 +170,9 @@ describe('viteCliPreparationFromArgs — executed entry authority', () => {
 
 describe('prepareViteCliAcquisitionFiles — pre-promotion CLI keepalive patch', () => {
   it('module parses and loads (a stray backtick in a template-literal comment breaks the worker fetch)', async () => {
-    await expect(import('./vite-cli-prep.ts')).resolves.toBeDefined();
+    await expect(
+      import('../../tools/shadow-registry/src/runtime/vite-cli-prep.ts'),
+    ).resolves.toBeDefined();
   });
 
   it('patched CLI hands a detached async action promise to the keepalive tracker', async () => {
@@ -240,6 +248,8 @@ describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
       if (!DirEntry) throw new Error('fixture config.js did not register TestDirEntry');
       const root = new DirEntry();
       root.add('');
+      root.add('.');
+      root.add('..');
       root.add('vite.config.js');
 
       expect([...root.items]).toEqual(['vite.config.js']);
@@ -255,6 +265,81 @@ describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
     await expect(prepareViteCliAcquisitionFiles('/app')).rejects.toThrow(
       /expected exactly one Chokidar DirEntry\.add anchor; found 0/,
     );
+  });
+});
+
+describe('Vite action keepalive admission', () => {
+  it.each(['dev', 'build', 'preview', 'optimize'] as const)(
+    'rejects %s without a host tracker even if a previous global exists',
+    async (mode) => {
+      const fs = bootFs({
+        [CLI_PATH]: CAC_CALL_SITE,
+        [VITE_PACKAGE_JSON]: JSON.stringify({ name: 'vite', version: '8.0.16' }),
+      });
+      await prepareViteCliAcquisitionFiles('/app');
+      for (const prior of [undefined, trackKeepalivePromise]) {
+        g.__riftyTrackCliPromise = prior;
+        await expect(
+          prepareViteCli({ root: '/app', executedBinPath: VITE_BIN, mode }),
+        ).rejects.toThrow(/requires.*trackKeepalivePromise/);
+        await expect(
+          preparePackageEntryRuntime({
+            bin: true,
+            root: '/app',
+            args: mode === 'dev' ? [] : [mode],
+            entryPath: VITE_BIN,
+            runtimeBindings: [],
+            fs,
+          }),
+        ).rejects.toThrow(/requires.*trackKeepalivePromise/);
+        expect(g.__riftyTrackCliPromise).toBe(prior);
+      }
+    },
+  );
+});
+
+describe('Vite keepalive capability shape', () => {
+  it('rejects a non-callable tracker rather than publishing it', async () => {
+    bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    await prepareViteCliAcquisitionFiles('/app');
+    g.__riftyTrackCliPromise = undefined;
+    await expect(
+      prepareViteCli({
+        root: '/app',
+        executedBinPath: VITE_BIN,
+        mode: 'build',
+        trackKeepalivePromise: null as unknown as (promise: PromiseLike<unknown>) => void,
+      }),
+    ).rejects.toThrow(/requires.*trackKeepalivePromise/);
+    expect(g.__riftyTrackCliPromise).toBeUndefined();
+  });
+
+  it('allows info and ordinary eval without an action tracker', async () => {
+    const fs = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+    await prepareViteCliAcquisitionFiles('/app');
+    g.__riftyTrackCliPromise = undefined;
+    await expect(
+      prepareViteCli({ root: '/app', executedBinPath: VITE_BIN, mode: 'info' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      preparePackageEntryRuntime({
+        bin: true,
+        root: '/app',
+        args: ['--version'],
+        entryPath: VITE_BIN,
+        runtimeBindings: [],
+        fs,
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      preparePackageEntryRuntime({
+        kind: 'eval',
+        root: '/app',
+        runtimeBindings: [],
+        fs,
+      }),
+    ).resolves.toBeUndefined();
+    expect(g.__riftyTrackCliPromise).toBeUndefined();
   });
 });
 
@@ -543,7 +628,9 @@ describe('Vite esbuild runtime startup policy', () => {
       await prepareViteCliAcquisitionFiles('/app');
       await prepareVite('build');
       expect(fetchCalls).toBe(0);
-      expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
+      expect(
+        g.__riftyShadowRegistry === undefined || !Reflect.has(g.__riftyShadowRegistry, 'esbuild'),
+      ).toBe(true);
     } finally {
       globalThis.fetch = savedFetch;
       clearEsbuildRuntimeSlot();
@@ -564,7 +651,9 @@ describe('Vite esbuild runtime startup policy', () => {
       await prepareVite('info');
       expect(readText(fsSync, CLI_PATH)).toContain('__riftyTrackCliPromise');
       expect(fetchCalls).toBe(0);
-      expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
+      expect(
+        g.__riftyShadowRegistry === undefined || !Reflect.has(g.__riftyShadowRegistry, 'esbuild'),
+      ).toBe(true);
     } finally {
       globalThis.fetch = savedFetch;
       clearEsbuildRuntimeSlot();
@@ -617,7 +706,9 @@ describe('prepareViteCli — mode-independent esbuild admission fault (ADR-0308)
       await prepareViteCliAcquisitionFiles('/app');
       await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.runtime');
       expect(fetchCalls).toBe(0);
-      expect(g.__rifty === undefined || !Reflect.has(g.__rifty, 'esbuild')).toBe(true);
+      expect(
+        g.__riftyShadowRegistry === undefined || !Reflect.has(g.__riftyShadowRegistry, 'esbuild'),
+      ).toBe(true);
       await expect(prepareVite('build')).rejects.toThrow('vite.esbuild.runtime');
       expect(fetchCalls).toBe(0);
     } finally {

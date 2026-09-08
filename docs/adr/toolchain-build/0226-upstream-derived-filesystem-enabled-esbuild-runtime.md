@@ -82,3 +82,7 @@ ADR-0047 remains the WASI-preview1 CLI forcing-consumer decision. Its gojs-moot 
 - Source, wasm, shadow version, oracle, and fixtures stay exact-pinned at 0.28.0.
 - D4 surfaces remain `NotImplementedError` + compat ❌; validation-before-gap is contract.
 - No PR #125 esbuild-facade production code is carried forward; independent slices remain separate.
+
+## Corrections (active)
+
+- 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.

@@ -1,5 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { normalizePath } from '@riftydev/vfs';
+import { vmEngineWorkerName } from './internal/worker-vm-engine.ts';
 import type {
   EvalResult,
   FsReadEncoding,
@@ -25,10 +26,8 @@ export interface RuntimeOptions {
   /** Optional pre-populated fixture for the in-Worker VFS (path → source). */
   readonly fixture?: Readonly<Record<string, string>>;
   /**
-   * Programmatic `node:vm` sandbox engine override (ADR-0142). When set, the host
-   * sends a `vm-config` message on worker readiness so the worker applies it via
-   * `setVmEngineOverride`. When absent, behavior is unchanged — the worker
-   * resolves the engine itself (`resolveVmEngineName`: env-config / default).
+   * Programmatic vm override, delivered through the native Worker name before
+   * boot/preload (ADR-0383). Absent preserves worker env/global/default selection.
    */
   readonly vmEngine?: VmEngineName;
 }
@@ -318,15 +317,16 @@ function createRuntimeController(
   }
 
   function start(): void {
-    worker = new Worker(opts.workerUrl, { type: 'module' });
+    const name = vmEngineWorkerName(opts.vmEngine);
+    worker = new Worker(opts.workerUrl, {
+      type: 'module',
+      ...(name === undefined ? {} : { name }),
+    });
     worker.addEventListener('message', (event: MessageEvent<ToolchainWorkerMessage>) => {
       const msg = event.data;
       switch (msg.type) {
         case 'ready':
           ready = true;
-          // Apply the programmatic vm-engine override (ADR-0142) before anything
-          // runs, so the first eval already sees the chosen engine.
-          if (opts.vmEngine) send({ type: 'vm-config', engine: opts.vmEngine });
           if (opts.fixture) send({ type: 'load-fixture', files: opts.fixture });
           emit({ type: 'ready' });
           settleToolchainReady();

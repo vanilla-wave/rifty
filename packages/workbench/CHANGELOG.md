@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Package preparation delegates to registry; ordinary `.vite` files survive snapshots/archives and generic diagnostics use Workbench provenance (ADR-0384).
+
+- No-COI worker loads install/activation code on first install or restore; failed chunk fetch rejects that request while eval/fs remain usable.
+
+- Preserve every source worker entry in bare-import consumer wrappers, beside published dist entries.
+
 ### Fixed
 
 - No-COI install snapshots reuse mirror bytes until outgoing structured clone instead of pre-copying the full tree.

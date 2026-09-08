@@ -22,7 +22,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { WebSocketServer, createHttpServer } from '@riftydev/net';
 import { type FSWatcher, watch } from '@riftydev/runtime-js/builtins/fs-watch';
-import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { createModuleLoader, preloadTsconfigPaths } from '@riftydev/runtime-js/loader';
 import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 import { parse } from 'acorn';
 
@@ -285,6 +285,7 @@ function encodeServedPath(path: string): string {
 }
 
 export async function startDevServer(opts: DevServerOptions): Promise<DevServer> {
+  await preloadTsconfigPaths();
   const root = normalizePath(opts.root);
   const interval = opts.watchInterval ?? 100;
   const decoder = new TextDecoder();

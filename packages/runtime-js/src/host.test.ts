@@ -210,14 +210,15 @@ describe('spawnRuntime fs controller', () => {
   });
 });
 
-// T15 — vm-config host option + diagnostic surfacing.
-describe('spawnRuntime vm-config + diagnostic', () => {
-  it('sends vm-config on ready when vmEngine is set', () => {
+// ADR-0383 VM bootstrap + diagnostic surfacing.
+describe('spawnRuntime VM bootstrap + diagnostic', () => {
+  it('supplies the engine at Worker construction before ready', () => {
     installFakeWorker();
     spawnRuntime({ workerUrl: '/worker.js', vmEngine: 'quickjs' });
     const worker = fakeWorker(0);
+    expect(worker.options).toEqual({ type: 'module', name: 'rifty-vm-engine=quickjs' });
     worker.emit({ type: 'ready' });
-    expect(worker.sent).toContainEqual({ type: 'vm-config', engine: 'quickjs' });
+    expect(worker.sent.some((message) => message.type === 'vm-config')).toBe(false);
   });
 
   it('does NOT send vm-config when vmEngine is absent', () => {

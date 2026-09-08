@@ -56,13 +56,13 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0068 | `with { type: "file" }` file-loader import attribute (asset → path) |
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings |
 | 0136 | Transformed-module stack remapping via scoped prepareStackTrace |
+| 0170 | Auto-discover tsconfig path aliases in runtime loader |
 | 0142 | node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud opt-in |
 | 0152 | Child realm event-loop drain + loud-fail exit contract |
 | 0153 | node:constants hybrid faithful static data syscall boundary gap |
 | 0158 | Count detached fetch in child-realm event-loop keepalive |
 | 0159 | node:zlib web-compression-backed async subset |
 | 0162 | Vite 8 Rolldown WASI browser-boot runtime surface |
-| 0170 | Auto-discover tsconfig path aliases in runtime loader |
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
@@ -85,6 +85,10 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0352 | Realm-wide QuickJS preload uses host-published WASM |
 | 0353 | Callable Node stream constructors preserve legacy initialization |
 | 0365 | Single-hop small-file sync-RPC reads |
+| 0380 | Lazy eval compiler and explicit loader paths |
+| 0381 | Browser scoped eval compiler distribution |
+| 0382 | Preserve tsconfig discovery through explicit compiler preload |
+| 0383 | No COI VM default and preboot worker selection |
 
 ### runtime-wasi
 
@@ -160,6 +164,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0363 | Eddy memory envelope and fail-fast admission |
 | 0364 | One npm package-bin normalization authority follows active npm package-json semantics |
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
+| 0384 | Registry ownership of bundled guest-package adaptations |
 
 ### playground
 
@@ -354,6 +359,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
 | 0374 | 0375 | explicit Worker/API/registry authority retained; Vite identity, lifecycle and build-only finalizer removed from generic no-COI control |
 
+
 ## Corrections (active)
 
 Active ADRs below carry in-place correction notes; only the named clause is
@@ -404,6 +410,9 @@ superseded.
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
+| 0142 D1 no-COI toolchain default | 0383 | Tier defaults to rewrite with explicit quickjs opt-in; generic default and engine limits unchanged |
+| 0380 D1 discovery removal | 0382 | Missed example consumer retained; explicit compiler preload prepares synchronous discovery |
+| 0170 synchronous discovery prerequisite | 0382 | preloadTsconfigPaths before opt-in construction; explicit maps/default paths remain immediate |
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
 | 0015 preview1 redirect / `esbuildShimFiles` consolidation clauses | 0316 / note 2026-07-24 | registry remains the substitution owner; catalog-owned esbuild-wasm recipe replaces the legacy esbuild carriers |
@@ -437,7 +446,6 @@ superseded.
 | 0174 deferred curated-helper cleanup | 0174 note 2026-07-13 | direct Vite/helpers/file-change IPC deleted; installed `.bin/vite` is the only Vite path |
 | 0165 Starter bundle shape | 0165 note 2026-06-29 | preset `source` overlay removed; `files[]` is the ordinary file bundle and must include the template entry |
 | 0166 D-a vendored fallback clause | 0177 | workspace-installed `node_modules/typescript` is required; missing or broken workspace TS fails loudly |
-| 0066 explicit-only tsconfig paths clause | 0170 | `autoDiscoverTsconfigPaths` can opt into TypeScript-parser-backed tsconfig discovery; default remains explicit/off |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |

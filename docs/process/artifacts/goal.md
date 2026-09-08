@@ -1,21 +1,21 @@
-# goal.md — destination (frozen once `status: ready`)
+# goal.md — user-owned destination
 
-`docs/backlog/epics/<slug>/goal.md`. The only frozen artifact of a run. Machine
-gate: `check:contract-drift` refuses changes to `value`, `tier`, `## Outcome`,
-`## User scenario`, `## Invariants` beside source; review (`review.md` `REV-10`
-axis 3) owns the rest.
+`docs/backlog/epics/<slug>/goal.md`. Accepted scope changes only with the user's
+recorded decision (`RDY-6`); the agent owns implementation, not the promise.
+The machine checks that a changed goal carries a new `amend:` record. Review
+checks authorization and the affected obligations.
 
 | Section | Owner | Edits |
 |---|---|---|
-| frontmatter `kind: epic`, `status`, `title`, `created`, `value`, `user_story`, `tier` (required at ready) | user via FIT | FIT only |
-| `## Outcome` — user value + faithful-runtime payoff | user | FIT only |
-| `## User scenario` — end-to-end steps whose success closes the goal | user | FIT only |
-| `## Invariants` — numbered `I#`, user-observable, each false on current main (evidence comment above the list) | user via FIT | FIT only; the trace targets of every child row (`readiness.md` `RDY-3`) |
-| `## Challenge` — fresh critic verdict `challenge: <date> — clear | N problems` (`docs/backlog/README.md` §Challenge) | critic | append at FIT / re-fit |
-| `## Decisions` — fit-time one-liners; `rejected route: <route> — violates <I#|Outcome clause>` | user + agent at FIT | FIT only |
+| frontmatter `kind: epic`, `status`, `title`, `created`, `value`, `user_story`, `tier` (required at ready) | user via FIT | FIT or explicit user amendment |
+| `## Outcome` — user value + faithful-runtime payoff | user | FIT or explicit user amendment |
+| `## User scenario` — end-to-end steps whose success closes the goal | user | FIT or explicit user amendment |
+| `## Invariants` — numbered `I#`, user-observable, each false on current main (evidence comment above the list) | user via FIT | FIT or explicit user amendment; the trace targets of every child row (`readiness.md` `RDY-3`) |
+| `## Challenge` — fresh critic verdict `challenge: <date> — clear | N problems` (`docs/backlog/README.md` §Challenge) | critic | refine / FIT; reuse unchanged premise |
+| `## Decisions` — fit-time one-liners; `rejected route: <route> — violates <I#|Outcome clause>` | user + agent at FIT | FIT or explicit user amendment |
 
-Rules: a ready goal never changes inside a run — amend = CLOSE + FIT
-(`stops.md` `STOP-1e`); before the first PICKUP report-driven pushback re-fits
-it in place. Tier bounds required fault behavior (`docs/backlog/README.md`
-§Tier); raising it needs an ADR. A rival route is recorded checkable, never as
-prose; no invariant excludes it = a missing invariant. Procedure: `../stages/fit.md`.
+Amend in place: `amend: <date> — user: <their words> — <what changed and why>`
+in `## Decisions`. Rechart dependencies and obtain missing proof for the new
+promise; retain valid unchanged evidence. History stays in git. Tier still
+bounds faults; raising it needs the user's choice and the ADR (`RDY-7`).
+Procedure: `../stages/fit.md`, `readiness.md` `RDY-6`.

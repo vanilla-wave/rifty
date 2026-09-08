@@ -63,7 +63,7 @@ export const ALLOWED_SHADOW_PRODUCTION_SOURCES = Object.freeze([
 export const ALLOWED_COORDINATION_SOURCES = Object.freeze([
   'packages/workbench/src/glue/vfs-snapshot-port.ts',
   'packages/workbench/src/workbench/service-worker-control.ts',
-  'packages/workbench/src/workers/generated/esbuild-runtime.js',
+  'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
   'packages/workbench/src/workers/no-coi-toolchain-worker.ts',
 ]);
 
@@ -257,7 +257,7 @@ export function evaluateEsbuildBundleInventory(
       `emitted generated esbuild client count is ${generatedClients.length}, expected 1`,
     );
   } else {
-    if (!generatedClients[0].source.endsWith('/src/workers/generated/esbuild-runtime.js')) {
+    if (!generatedClients[0].source.endsWith('/src/runtime/generated/esbuild-runtime.js')) {
       violations.push(
         `emitted generated esbuild client source is ${generatedClients[0].source}, expected the recorded generated source`,
       );

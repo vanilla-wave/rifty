@@ -174,3 +174,12 @@ singleton state — safe to mix.
 ## License
 
 MIT
+
+### No-COI VM selection
+
+Toolchain sandboxes default `node:vm` to `rewrite`, with no QuickJS WASM preload.
+This is degraded: direct eval can reach host globals, fresh contexts see host
+globals, and cross-realm `instanceof` differs. The capability report discloses it.
+Pass top-level `vmEngine: 'quickjs'` to `createSandbox` for the existing real-realm
+engine; it loads WASM before the first eval and retains selection on restart.
+Generic runtime defaults remain unchanged (ADR-0383).

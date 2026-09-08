@@ -20,12 +20,22 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 import ts from 'typescript';
+import {
+  CLIENT_BUNDLE_BUDGETS,
+  assertClientBundleBudgets,
+} from '../../tools/checks/client-bundle-budget.mjs';
+import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
+import { provePackedInstallLoading } from './no-coi-install-browser-proof.mjs';
+import { provePackedVmSelection } from './no-coi-vm-browser-proof.mjs';
+import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const surfaceOnly = process.argv.includes('--surface-only');
+const checkBudgets = process.argv.includes('--check-budgets');
+if (checkBudgets && !surfaceOnly) throw new Error('--check-budgets requires --surface-only');
 const fixtureRoot = resolve(
   repoRoot,
   surfaceOnly
@@ -44,7 +54,7 @@ const esbuildWasmManifest = resolve(
 const keepTemp = process.argv.includes('--keep');
 const unknownArguments = process.argv
   .slice(2)
-  .filter((argument) => argument !== '--keep' && argument !== '--surface-only');
+  .filter((argument) => !['--keep', '--surface-only', '--check-budgets'].includes(argument));
 if (unknownArguments.length > 0) {
   throw new Error(`Unknown packed-consumer arguments: ${unknownArguments.join(', ')}`);
 }
@@ -1287,6 +1297,32 @@ async function main() {
       }
       await stat(resolve(consumerRoot, 'dist/main.js'));
       await stat(resolve(consumerRoot, 'dist/worker.js'));
+      const boot = await provePackedCompilerLoading(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await provePackedVmSelection(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await proveSdkPackaging(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      await provePackedInstallLoading(
+        consumerRoot,
+        await readJson(resolve(consumerRoot, 'measure/report.json')),
+      );
+      if (checkBudgets) {
+        const report = await readJson(resolve(consumerRoot, 'measure/report.json'));
+        assertClientBundleBudgets(report, boot);
+        for (const row of report.rows.filter((row) => row.name in CLIENT_BUNDLE_BUDGETS)) {
+          const ceiling = CLIENT_BUNDLE_BUDGETS[row.name];
+          console.log(
+            `${row.name}: min ${row.min}/${ceiling.min} B; gzip ${row.gzip}/${ceiling.gzip} B`,
+          );
+        }
+      }
       console.log(
         `Packed toolchain surface passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, strict TypeScript + generic SDK/Worker graphs`,
       );

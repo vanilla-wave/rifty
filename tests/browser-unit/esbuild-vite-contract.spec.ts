@@ -279,7 +279,7 @@ function devRunner(bundle: string, token: string, paths: ContractPaths): string 
   const policyRoot = `${paths.dir}/dev-policy-workspace`;
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:dev\n`;
   return `${bundle}
-const runtimeRealmBeforeImport = globalThis.__rifty;
+const runtimeRealmBeforeImport = globalThis.__riftyShadowRegistry;
 const runtimeSlotPresentBeforeImport =
   runtimeRealmBeforeImport !== undefined && Reflect.has(runtimeRealmBeforeImport, 'esbuild');
 const runtimeBeforeImport = runtimeRealmBeforeImport?.esbuild;
@@ -342,7 +342,7 @@ function moduleRunner(
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:${mode}\n`;
   return `import { createRequire } from 'node:module';
 ${bundle}
-const runtimeRealmBeforeImport = globalThis.__rifty;
+const runtimeRealmBeforeImport = globalThis.__riftyShadowRegistry;
 const runtimeSlotPresentBeforeImport =
   runtimeRealmBeforeImport !== undefined && Reflect.has(runtimeRealmBeforeImport, 'esbuild');
 const runtimeBeforeImport = runtimeRealmBeforeImport?.esbuild;
@@ -389,7 +389,7 @@ globalThis.process.stdout.write(${JSON.stringify(completion)});
 function infoRunner(token: string, paths: ContractPaths): string {
   const completion = `RIFTY_ESBUILD_CONTRACT_COMPLETE:${token}:info\n`;
   return `const fs = require('node:fs');
-const runtimeRealm = globalThis.__rifty;
+const runtimeRealm = globalThis.__riftyShadowRegistry;
 const runtimeNotPublished =
   runtimeRealm === undefined || !Reflect.has(runtimeRealm, 'esbuild');
 const legacyBridgeAbsent = !Reflect.has(globalThis, '__riftyEsbuildTransform');
@@ -448,7 +448,7 @@ module.exports.__promise = (async () => {
       namespaceVersion: esm.version,
       defaultSame: esm.default === cjs,
       moduleExportsSame: esm['module.exports'] === cjs,
-      runtimeSame: globalThis.__rifty?.esbuild === cjs,
+      runtimeSame: globalThis.__riftyShadowRegistry?.esbuild === cjs,
       namespaceKeys,
       namespaceRelations,
       code: transformed.code,
@@ -497,7 +497,7 @@ fs.writeFileSync(
     namespaceVersion: esm.version,
     defaultSame: esm.default === cjs,
     moduleExportsSame: esm['module.exports'] === cjs,
-    runtimeSame: globalThis.__rifty?.esbuild === cjs,
+    runtimeSame: globalThis.__riftyShadowRegistry?.esbuild === cjs,
     namespaceKeys,
     namespaceRelations,
     code: transformed.code,
@@ -1045,11 +1045,11 @@ test('Vite 7 config graph and dependency optimizer use real esbuild over owner V
       .toBe('rifty.shadow-substitution.esbuild.v2');
     expect.soft(esbuildRecipe?.catalog, 'real Chromium esbuild catalog identity').toEqual({
       id: 'rifty.shadow-substitutions.builtin.v2',
-      digest: 'c9f38a0ea9218c64fdc68bca65eb34817cb51f1c1132c89048ffcb86b510d4b0',
+      digest: '68b82251f296d987ba8ca8883b14adf2785b507b4ed3b69a84ebcad76b6f7002',
     });
     expect
       .soft(esbuildRecipe?.recipeDigest, 'real Chromium esbuild recipe digest')
-      .toBe('7cd677fe08657829bf151d3d97520984d81f70323cdc948f8fd0a7116e4a4afd');
+      .toBe('844104d3f7a0f7fb997a3678d63f8d34af0fe52c8f6788413b9bae8a92618c2d');
     expect
       .soft(esbuildRecipe?.materialization, 'real Chromium esbuild materialization identity')
       .toMatchObject({
@@ -1519,118 +1519,131 @@ test('real Rifty install honors the npm-standard Vite 8 WASI runtime alias', asy
   }
 });
 
-test('Vite 8.0.16 base "./" build/preview stay green with no esbuild fetch or activation', async ({
-  context,
-  page,
-}) => {
-  test.setTimeout(240_000);
-  const requests: string[] = [];
-  context.on('request', (request) => requests.push(request.url()));
-  await gotoHarness(page);
-  requests.length = 0;
-  await bootOwner(page, {
-    workspaceId: 'bu-vite8-empty-esbuild-plan',
-    persistence: 'ephemeral',
-    plan: {
-      kind: 'vite',
-      id: 'scratch',
-      starterId: 'vite8-empty-esbuild-plan',
-      templateId: 'browser-unit:vite8-empty-esbuild-plan',
-      files: {
-        '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>',
-        '/src/main.js': "document.getElementById('app').textContent = 'vite8';\n",
-        '/vite.config.js': DEFAULT_VITE8_CONFIG_JS.replace(
-          'export default {',
-          "export default {\n  base: './',",
-        ),
+for (const ordinary of [false, true]) {
+  test(`Vite 8.0.16 base "./" build/preview without esbuild — ${ordinary ? 'ordinary npm project' : 'optional Vite helper'}`, async ({
+    context,
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const requests: string[] = [];
+    context.on('request', (request) => requests.push(request.url()));
+    await gotoHarness(page);
+    requests.length = 0;
+    await bootOwner(page, {
+      workspaceId: 'bu-vite8-empty-esbuild-plan',
+      persistence: 'ephemeral',
+      plan: {
+        ...(ordinary
+          ? { kind: 'npm-dev-server' as const }
+          : { kind: 'vite' as const, viteVersion: '8.0.16', port: 5174 }),
+        id: 'scratch',
+        starterId: 'vite8-empty-esbuild-plan',
+        templateId: 'browser-unit:vite8-empty-esbuild-plan',
+        files: {
+          ...(ordinary
+            ? {
+                '/package.json': JSON.stringify({
+                  private: true,
+                  type: 'module',
+                  devDependencies: { vite: '8.0.16' },
+                  scripts: { dev: 'vite --host 127.0.0.1 --port 5174' },
+                  overrides: PROVEN_VITE8_WASI_RUNTIME_OVERRIDE,
+                }),
+              }
+            : {}),
+          '/index.html': '<div id="app"></div><script type="module" src="/src/main.js"></script>',
+          '/src/main.js': "document.getElementById('app').textContent = 'vite8';\n",
+          '/vite.config.js': DEFAULT_VITE8_CONFIG_JS.replace(
+            'export default {',
+            "export default {\n  base: './',",
+          ),
+        },
+        firstMaterialization: { kind: 'install' },
       },
-      viteVersion: '8.0.16',
-      firstMaterialization: { kind: 'install' },
-      port: 5174,
-    },
-  });
+    });
 
-  try {
-    const install = await execLine(page, 'npm install');
-    expect(install.exit, install.out).toBe(0);
-    expect(await installedPackageVersion(page, '@napi-rs/wasm-runtime')).toBe('1.1.6');
-    expect(await installedPackageVersion(page, '@rolldown/binding-wasm32-wasi')).toBe('1.0.3');
-    expect(await installedPackageVersion(page, '@emnapi/core')).toBe('1.10.0');
-    expect(await installedPackageVersion(page, '@emnapi/runtime')).toBe('1.10.0');
+    try {
+      const install = await execLine(page, 'npm install');
+      expect(install.exit, install.out).toBe(0);
+      expect(await installedPackageVersion(page, '@napi-rs/wasm-runtime')).toBe('1.1.6');
+      expect(await installedPackageVersion(page, '@rolldown/binding-wasm32-wasi')).toBe('1.0.3');
+      expect(await installedPackageVersion(page, '@emnapi/core')).toBe('1.10.0');
+      expect(await installedPackageVersion(page, '@emnapi/runtime')).toBe('1.10.0');
 
-    const version = await execLine(page, 'vite --version');
-    expect(version.exit, version.out).toBe(0);
-    expect(version.out).toContain('vite/8.0.16');
+      const version = await execLine(page, 'vite --version');
+      expect(version.exit, version.out).toBe(0);
+      expect(version.out).toContain('vite/8.0.16');
 
-    const build = await execLine(page, 'vite build');
-    expect(build.exit, build.out).toBe(0);
-    const distIndex = await readOwnerFile(page, '/scratch/dist/index.html');
-    expect(distIndex.ok, distIndex.error).toBe(true);
-    expect(distIndex.text).toContain('<div id="app"></div>');
-    expect(distIndex.text).not.toContain('/src/main.js');
-    expect(distIndex.text).not.toMatch(/(?:src|href)=["']\.assets\//);
-    const distJsName = /src=["']\.\/assets\/([^"']+\.js)["']/.exec(distIndex.text)?.[1];
-    expect(distJsName, distIndex.text).toBeDefined();
-    if (!distJsName) throw new Error('Vite 8 build emitted no hashed JavaScript asset');
-    const distJs = await readOwnerFile(page, `/scratch/dist/assets/${distJsName}`);
-    expect(distJs.ok, distJs.error).toBe(true);
-    expect(await executeBuiltBrowserModule(page, distJs.text)).toBe('vite8');
+      const build = await execLine(page, 'vite build');
+      expect(build.exit, build.out).toBe(0);
+      const distIndex = await readOwnerFile(page, '/scratch/dist/index.html');
+      expect(distIndex.ok, distIndex.error).toBe(true);
+      expect(distIndex.text).toContain('<div id="app"></div>');
+      expect(distIndex.text).not.toContain('/src/main.js');
+      expect(distIndex.text).not.toMatch(/(?:src|href)=["']\.assets\//);
+      const distJsName = /src=["']\.\/assets\/([^"']+\.js)["']/.exec(distIndex.text)?.[1];
+      expect(distJsName, distIndex.text).toBeDefined();
+      if (!distJsName) throw new Error('Vite 8 build emitted no hashed JavaScript asset');
+      const distJs = await readOwnerFile(page, `/scratch/dist/assets/${distJsName}`);
+      expect(distJs.ok, distJs.error).toBe(true);
+      expect(await executeBuiltBrowserModule(page, distJs.text)).toBe('vite8');
 
-    const servers = await runViteServerRenders(page);
-    expect(servers.dev.out).toContain('Local');
-    expect(servers.dev.status).toBe(200);
-    expect(servers.dev.body).toContain('<div id="app"></div>');
-    expect(servers.dev.source).toBe('node');
-    expect(servers.preview.out).toContain('Local');
-    expect(servers.preview.status).toBe(200);
-    expect(servers.preview.body).toContain('<div id="app"></div>');
-    expect(servers.preview.body).toContain(`./assets/${distJsName}`);
-    expect(servers.preview.source).toBe('preview');
-    expect(servers.preview.renderedText).toBe('vite8');
+      const servers = await runViteServerRenders(page);
+      expect(servers.dev.out).toContain('Local');
+      expect(servers.dev.status).toBe(200);
+      expect(servers.dev.body).toContain('<div id="app"></div>');
+      expect(servers.dev.source).toBe('node');
+      expect(servers.preview.out).toContain('Local');
+      expect(servers.preview.status).toBe(200);
+      expect(servers.preview.body).toContain('<div id="app"></div>');
+      expect(servers.preview.body).toContain(`./assets/${distJsName}`);
+      expect(servers.preview.source).toBe('preview');
+      expect(servers.preview.renderedText).toBe('vite8');
 
-    const original = await readOwnerFile(page, VITE_BIN);
-    expect(original.ok, original.error).toBe(true);
-    await writeOwnerFile(
-      page,
-      '/scratch/.vite8-no-esbuild.cjs',
-      `const fs = require('node:fs');
-const runtime = globalThis.__rifty;
+      const original = await readOwnerFile(page, VITE_BIN);
+      expect(original.ok, original.error).toBe(true);
+      await writeOwnerFile(
+        page,
+        '/scratch/.vite8-no-esbuild.cjs',
+        `const fs = require('node:fs');
+const runtime = globalThis.__riftyShadowRegistry;
 fs.writeFileSync('/vite8-no-esbuild.json', JSON.stringify({
   runtimePresent: runtime !== undefined && Reflect.has(runtime, 'esbuild'),
   legacyBridgePresent: Reflect.has(globalThis, '__riftyEsbuildTransform'),
 }));
 globalThis.process.stdout.write('RIFTY_VITE8_NO_ESBUILD\\n');
 `,
-    );
-    try {
-      await writeOwnerFile(page, VITE_BIN, launcher('/.vite8-no-esbuild.cjs'));
-      const probe = await execLine(page, 'vite build');
-      expect(probe.exit, probe.out).toBe(0);
-      expect(probe.out).toContain('RIFTY_VITE8_NO_ESBUILD');
-    } finally {
-      await writeOwnerFile(page, VITE_BIN, original.text);
-    }
+      );
+      try {
+        await writeOwnerFile(page, VITE_BIN, launcher('/.vite8-no-esbuild.cjs'));
+        const probe = await execLine(page, 'vite build');
+        expect(probe.exit, probe.out).toBe(0);
+        expect(probe.out).toContain('RIFTY_VITE8_NO_ESBUILD');
+      } finally {
+        await writeOwnerFile(page, VITE_BIN, original.text);
+      }
 
-    const probeFile = await readOwnerFile(page, '/scratch/vite8-no-esbuild.json');
-    expect(
-      parseResult<{ runtimePresent: boolean; legacyBridgePresent: boolean }>(
-        probeFile,
-        'Vite 8 empty adapter plan',
-      ),
-    ).toEqual({
-      runtimePresent: false,
-      legacyBridgePresent: false,
-    });
-    expect((await readOwnerFile(page, '/scratch/node_modules/esbuild/package.json')).ok).toBe(
-      false,
-    );
-    expect(
-      registryPackageRequests(requests, 'esbuild'),
-      'Vite 8 cold install must not fetch any esbuild package or asset',
-    ).toEqual([]);
-    expect(aliasRequests(requests)).toEqual([]);
-    expect(nonQuickjsHostWasmLedger(requests)).toEqual(NON_QUICKJS_HOST_WASM_BOOT_LEDGER);
-  } finally {
-    await closeOwner(page);
-  }
-});
+      const probeFile = await readOwnerFile(page, '/scratch/vite8-no-esbuild.json');
+      expect(
+        parseResult<{ runtimePresent: boolean; legacyBridgePresent: boolean }>(
+          probeFile,
+          'Vite 8 empty adapter plan',
+        ),
+      ).toEqual({
+        runtimePresent: false,
+        legacyBridgePresent: false,
+      });
+      expect((await readOwnerFile(page, '/scratch/node_modules/esbuild/package.json')).ok).toBe(
+        false,
+      );
+      expect(
+        registryPackageRequests(requests, 'esbuild'),
+        'Vite 8 cold install must not fetch any esbuild package or asset',
+      ).toEqual([]);
+      expect(aliasRequests(requests)).toEqual([]);
+      expect(nonQuickjsHostWasmLedger(requests)).toEqual(NON_QUICKJS_HOST_WASM_BOOT_LEDGER);
+    } finally {
+      await closeOwner(page);
+    }
+  });
+}

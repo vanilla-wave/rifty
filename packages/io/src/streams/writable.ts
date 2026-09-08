@@ -784,7 +784,7 @@ export type WritableConstructor = CallableStreamConstructor<
   WritableOptions
 >;
 
-export const Writable: WritableConstructor = makeCallableStreamConstructor(
+export const Writable: WritableConstructor = /* @__PURE__ */ makeCallableStreamConstructor(
   'Writable',
   WritableImplementation,
   (receiver, options) => {

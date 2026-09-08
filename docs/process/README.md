@@ -1,91 +1,83 @@
 # Process — map
 
-One frozen layer; everything else is path. Rules carry ids (`DEC-n`, `RDY-n`,
-`REV-n`, `STOP-n`, `PR-n`); a reviewer, a gate, or a stop cites the id. Each
-rule has exactly one home; other files link, never restate.
+The user owns the destination; the agent owns the route. Fidelity is unchanged:
+real reference behavior, RED before a product repair, no fake implementation,
+independent review. Rules have one home; other documents link to it.
 
 ## Layers
 
-| Layer | Artifact | Owner | Changes |
-|---|---|---|---|
-| Destination (frozen) | `goal.md`: Outcome, User scenario, Invariants `I#`, tier, rejected routes | user | never inside a run; amend = CLOSE + FIT |
-| Path (live) | `map.md`, unit contracts, bands, rounds, mechanisms, splits | agent | any time, one ledger line each (`RDY-5`); membership + budget fixed at pickup (`RDY-8`, `RDY-9`) |
-| Journal (append-only) | `ledger.md`; one status line per checkpoint in the unit | agent writes | ledger grows only; status line overwritten per round (`REV-8`) |
+| Layer | Artifact | Owner |
+|---|---|---|
+| Destination | `goal.md`: outcome, scenario, invariants, tier | user; explicit amendments in place (`RDY-6`) |
+| Route | `map.md`, unit contracts, ordering, mechanisms | agent (`RDY-5`) |
+| Evidence and history | review JSON, tests, `ledger.md`, git | producer; prior observations stay history |
 
-An obligation is a contract row traced to the destination (`→ I3`), the user
-scenario, or an ADR (`RDY-3`). Untraced and rule-id-only rows are notes: no
-coverage row, no blocker (`REV-2`). Size: one intent, one session (`RDY-4`).
-
-## Roles
-
-| Role | Session | Edits | Never |
-|---|---|---|---|
-| user | interactive | `goal.md` via FIT/refine; stop resolutions | — |
-| driver (orchestrator + worker + runner) | the hand-off session; one fresh session per stage only where a harness driver exists (`goal-run.js`) | path + journal | its own checkpoint verdict; narrating a wait (`DEC-5`) |
-| reviewer | fresh, read-only per checkpoint | `verdict.json` | tracked files |
-| critic / adjudicator | fresh, read-only | `challenge:` line, `adjudication.json` | fix |
-
-Fresh context only where it is the evidence: reviewer, critic (`REV-11`). A
-decision leaves a session only through the journal (`DEC-5`).
+An obligation comes from the accepted scenario, an invariant, an ADR, or the
+existing baseline. A reviewer's suggestion becomes work only if that authority
+requires it. The source of a discovery does not decide its route (`REV-12`).
 
 ## Stages
 
-| Stage | Doc | Input → output | Gate |
-|---|---|---|---|
-| FIT | `stages/fit.md` | outcome → ready goal dir | `backlog:check`; report |
-| PICKUP | `stages/pickup.md` | frontier child → ready unit + band + rounds | `RDY-2..4`, `RDY-8..9` |
-| Contract+RED | `stages/contract-red.md` | contract + RED → `ready-verdict:` | `REV-5`, `STOP-5` |
-| IMPLEMENT | `stages/implement.md` | RED → GREEN, `pr:check` | band |
-| Final+GREEN | `stages/final-green.md` | slice tree → PASS recorded by RECHART | `REV`, `STOP-2..4` |
-| RECHART | `stages/rechart.md` | landed slice → map + ledger | `re-chart after` line |
-| CLOSE | `stages/close.md` | empty map → deleted goal dir | invariants proof |
+Every authorized change follows one route. The evidence already available
+decides which preparation remains; a document or a skill name does not.
 
-Checkpoint mechanics (runner, passes, adjudication, lineage):
-`stages/checkpoint-run.md`. A run starts only on an explicit whole-ready-goal
-hand-off (never for single items, fixes, or process work) and loops PICKUP →
-Contract+RED → IMPLEMENT → Final+GREEN → RECHART until the map is empty, then
-CLOSE. Claude sessions may drive it via `.claude/workflows/goal-run.js`; the
-script owns order and bookkeeping only, its prompts point here; any other
-session drives the loop itself (`rifty-goal`) and never ends a turn between
-stages. Entry points outside the loop: `rifty-refine` (user input), `rifty-to-backlog` (agent
-intake), `rifty-fix` (unplanned defect).
+| Stage | Procedure | Result |
+|---|---|---|
+| FIT, goals only | `stages/fit.md` | accepted destination and initial map |
+| PICKUP | `stages/pickup.md` | authority and missing proof identified |
+| Contract+RED, when needed | `stages/contract-red.md` | independent promise/RED proof before new behavior |
+| IMPLEMENT | `stages/implement.md` | honest implementation, GREEN |
+| Final+GREEN | `stages/final-green.md` | independent review of the delivered result |
+| RECHART, goals only | `stages/rechart.md` | obligations/map reflect the result |
+| CLOSE | `stages/close.md` | accepted obligations proven, residuals resolved |
+
+An observed defect already has a baseline: reproduce, RED, fix, Final+GREEN.
+A new parity/stateful promise needs Contract+RED first. Proof about existing
+behavior uses that behavior as its authority. Documentation has no product RED.
+All use the same review procedure and verdict (`stages/checkpoint-run.md`).
+
+An explicit whole-goal hand-off loops the route over the map, then CLOSE.
+A standalone request finishes its unit. The starting session drives the entire
+route, including routine records and its report; never return control between
+stages. `.claude/workflows/goal-run.js` is a single-driver entry, not a stage
+orchestration engine. Fresh contexts are for independent decisions (`DEC-5`).
+
+## Entry points
+
+Intent selects the entry: unsettled user input → `rifty-refine`; observed
+failure → `rifty-fix`; authorized item/change → PICKUP; whole goal →
+`rifty-goal`. `rifty-to-backlog` records work that must wait. Capturing a fact
+never requires another hand-off for work already authorized in this session.
 
 ## Stops
 
-Closed list (`rules/stops.md` `STOP-1`): observable-scope fork · premise
-concern · budget exhausted after the agent's own re-cut, or 2nd contract
-escalation · slice cap · destination conflict. Everything else never asks
-(`STOP-1` names it).
+`STOP-1`: a choice only the user can make. A technical failure stays agent-owned.
+Continue independent work; an unresolved dependency stays visible. No progress
+means change the approach, then report the technical limit if none remains —
+never ask the user to authorize another attempt (`rules/stops.md`).
 
-## Rules
+## Rules and artifacts
 
-| ids | home | subject |
-|---|---|---|
-| `DEC` | `rules/decisions.md` | reversibility, reconsidering, confirm-first, subagents, session hygiene |
-| `RDY` | `rules/readiness.md` | draft → ready, trace, size, re-cut ownership, membership, budget |
-| `REV` | `rules/review.md` | scope, authority, severity, coverage, evidence bar, lineage, rubric |
-| `STOP` | `rules/stops.md` | closed stop list, budget, stall, re-cut, escalation, stop report |
-| `PR` | `rules/pr.md` | unit of delivery, goal-run PR, referees |
-| — | `rules/fault-classes.md` | fault taxonomy, boundary failure models, class-kill, seam |
-| — | `rules/testing.md` | test pyramid, why parity |
-| — | `traps.md` | hard-won gotchas |
+| ids | home |
+|---|---|
+| DEC | `rules/decisions.md` |
+| RDY | `rules/readiness.md` |
+| REV | `rules/review.md` |
+| STOP | `rules/stops.md` |
+| PR | `rules/pr.md` |
 
-## Artifacts
-
-`artifacts/goal.md` · `artifacts/map.md` · `artifacts/ledger.md` ·
-`artifacts/unit.md` · `artifacts/verdict.md` — shape, owner/editors per
-section, line forms. Store rules (areas, statuses, challenge, tier, gates):
-`docs/backlog/README.md`.
+Shapes: `artifacts/goal.md`, `map.md`, `ledger.md`, `unit.md`, `verdict.md`.
+Fault models: `rules/fault-classes.md`; test pyramid: `rules/testing.md`;
+lessons: `traps.md`; backlog storage: `docs/backlog/README.md`.
 
 ## Machine gates
 
-| Gate | Enforces |
-|---|---|
-| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge; trace + size on ready items `created ≥ 2026-09-03` (`RDY-3`, `RDY-4`) |
-| `check:contract-drift` | frozen goal fields beside source (single-file and `epics/<slug>/goal.md`); ready contract change carries `re-cut:`; user-traced row (`→ I#`/`→ scenario`) change carries `fork:` (`RDY-5`); referees land separately (`PR-4`) |
-| `tools/review/blockers.mjs` | verdict shape, authority on blockers, trace on coverage rows, exit codes (`artifacts/verdict.md`) |
-| `refs:check` | dangling doc/ADR references cited from `docs/adr` and `docs/backlog` |
+- `backlog:check`: schema, links, ready sections, trace, premise check at pickup.
+- `check:contract-drift`: changes to accepted scope carry their decision record.
+- `tools/review/blockers.mjs`: the one verdict validator; coverage and authority.
+- `check:pass-binding`: the same validator plus the reviewed version at merge.
+- `refs:check`: durable documentation links.
 
-Machine gates prove only the listed facts; review owns everything else.
-`docs/process/decision-workflow.md` and `docs/process/fault-classes.md` are
-stubs kept for immutable ADR citations.
+Machines validate records, never infer human authorization or prove reference
+semantics from a filename. Independent review verifies both. PR packaging is
+agent-owned (`PR-3..4`). Historical rule ids remain readable in git history.

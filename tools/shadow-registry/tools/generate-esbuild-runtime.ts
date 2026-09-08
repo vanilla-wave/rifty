@@ -66,10 +66,7 @@ interface NativeValidationLocations {
 
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
 const manifestUrl = new URL('../generated/esbuild-runtime-manifest.json', import.meta.url);
-const outputUrl = new URL(
-  '../../../packages/workbench/src/workers/generated/esbuild-runtime.js',
-  import.meta.url,
-);
+const outputUrl = new URL('../src/runtime/generated/esbuild-runtime.js', import.meta.url);
 const policy = JSON.parse(readFileSync(policyUrl, 'utf8')) as RuntimePolicy;
 const require = createRequire(import.meta.url);
 const lines = (...parts: readonly string[]): string => parts.join('\n');
@@ -453,7 +450,7 @@ function derive(): { readonly manifest: string; readonly output: string } {
     patches: policy.patches,
     hunks: generated.patches,
     output: {
-      path: 'packages/workbench/src/workers/generated/esbuild-runtime.js',
+      path: 'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
       format: 'esm',
       bytes: Buffer.byteLength(output),
       sha256: sha256(output),

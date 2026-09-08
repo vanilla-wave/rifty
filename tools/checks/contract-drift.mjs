@@ -1,16 +1,22 @@
 #!/usr/bin/env node
-/**
- * Contract-authority tripwire on the aggregate PR diff (merge-base vs head).
- * Beside source: frozen epic fields never change; a ready contract change
- * carries a `re-cut:` line and a changed user-traced row (→ I# / → scenario)
- * carries `fork:` in it (docs/process/rules/readiness.md RDY-5); lineage lines
- * and closure of items deleted here are free; ready flips need a recorded
- * pickup verdict. Process referees land separately (rules/pr.md PR-4).
- */
+// Scope changes need an explicit record; PR packaging and document lifecycle are not gates.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { classifyAutonomousRunPath } from './run-pickup.mjs';
+import {
+  goalContract,
+  itemContract,
+  statusOf,
+  tracedRows,
+  userTracedRowCount,
+} from '../review/contract.mjs';
+export {
+  goalContract,
+  itemContract,
+  statusOf,
+  tracedRowCount,
+  userTracedRowCount,
+} from '../review/contract.mjs';
 
 const EXACT_SHA_RE = /^[0-9a-f]{40}$/u;
 
@@ -39,180 +45,55 @@ export function historyHeadRevision(env, readEvent) {
       };
 }
 
-function frontmatterValue(text, key) {
-  const frontmatter = /^---\r?\n([\s\S]*?)^---\s*$/mu.exec(text ?? '')?.[1];
-  if (!frontmatter) return null;
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^${escaped}:\\s*([^\\r\\n]*?)\\s*$`, 'mu').exec(frontmatter)?.[1] ?? null;
-}
-
-function section(text, name) {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return (
-    new RegExp(`^##\\s+${escaped}\\s*$\\r?\\n([\\s\\S]*?)(?=^##\\s+|$(?![\\s\\S]))`, 'mu')
-      .exec(text ?? '')?.[1]
-      ?.trim() ?? null
-  );
-}
-
-/** Canonical observable part of a ready epic (legacy single-file format). */
-export function goalContract(text) {
-  if (text === null || text === undefined) return null;
-  return {
-    value: frontmatterValue(text, 'value'),
-    tier: frontmatterValue(text, 'tier'),
-    outcome: section(text, 'Outcome'),
-    userScenario: section(text, 'User scenario'),
-    invariants: section(text, 'Invariants'),
-  };
-}
-
-const CONTRACT_RE = /^docs\/backlog\/.+\.md$/;
-const SKIP_RE = /\/(?:README|TEMPLATE)\.md$/;
 const GUARDED = new Set(['ready', 'in-progress']);
-const ITEM_PATH_RE = /^docs\/backlog\/(?!epics\/)(.+)\.md$/;
-const EPIC_PATH_RE = /^docs\/backlog\/epics\/[^/]+\.md$/;
-const GOAL_PATH_RE = /^docs\/backlog\/epics\/[^/]+\/goal\.md$/;
-const REFEREE_RE =
-  /^(?:tools\/checks\/(?:(?:contract-drift|run-pickup)(?:\.test)?\.(?:mjs|ts)|review-blockers\.test\.ts)|tools\/review\/(?:review-schema\.json|blockers\.mjs))$/;
-// Journal lines a unit accrues during a run (artifacts/unit.md) — never a rewrite.
-const LINEAGE_LINE_RE =
-  /^(?:ready-verdict|contract-red|final-green|review|re-cut|override):[^\n]*\n?/gm;
-const RECUT_LINE_RE = /^re-cut: \d{4}-\d{2}-\d{2} — .*$/gm;
-const USER_TRACE_RE = /→\s*(?:I\d+|scenario)\b/u;
-const TRACED_SECTIONS = ['Acceptance', 'Parity cases', 'Fault matrix'];
-const FROZEN_FIELDS = [
-  ['value', 'value'],
-  ['tier', 'tier'],
-  ['outcome', 'Outcome'],
-  ['userScenario', 'User scenario'],
-  ['invariants', 'Invariants'],
-];
+const GOAL_RE = /^docs\/backlog\/epics\/(?:[^/]+\.md|[^/]+\/goal\.md)$/u;
+const ITEM_RE = /^docs\/backlog\/(?!epics\/)[^/]+\/(?!README\.md$|TEMPLATE\.md$)[^/]+\.md$/u;
+const RECORD_RE = /^(?:[-*]\s+)?`?(?:re-cut|amend): \d{4}-\d{2}-\d{2} — .+$/gmu;
 
-/** Frontmatter `status:` value, or null. */
-export function statusOf(text) {
-  const match = /^---[\s\S]*?^status:\s*(\S+)\s*$/m.exec(text ?? '');
-  return match ? match[1] : null;
+function newRecords(base, head) {
+  const old = new Set((base ?? '').match(RECORD_RE) ?? []);
+  return ((head ?? '').match(RECORD_RE) ?? []).filter((line) => !old.has(line));
 }
 
-/** Remove only deleted ready-item keys from a dependent's blocked_by list. */
-export function closeItemDependencies(itemText, deletedItems) {
-  if (deletedItems.length === 0) return null;
-  const closed = new Set(deletedItems);
-  const line = /^blocked_by:\s*\[([^\]]*)\]\s*\r?\n?/m.exec(itemText);
-  if (!line) return null;
-  const dependencies = line[1]
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const remaining = dependencies.filter((dependency) => !closed.has(dependency));
-  if (remaining.length === dependencies.length) return null;
-  const replacement = remaining.length > 0 ? `blocked_by: [${remaining.join(', ')}]\n` : '';
-  return itemText.replace(line[0], replacement);
-}
-
-function stripLineage(text) {
-  return (text ?? '').replace(LINEAGE_LINE_RE, '');
-}
-
-function recutLines(text) {
-  return (text ?? '').match(RECUT_LINE_RE) ?? [];
-}
-
-/** Rows of a list/table section: a wrapped row joins its continuation lines. */
-export function sectionRows(body) {
-  const rows = [];
-  for (const raw of (body ?? '').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === '' || line.startsWith('<!--')) continue;
-    if (/^(?:\d+\.|[-*]|\|)\s/u.test(line) || line.startsWith('|')) rows.push(line);
-    else if (rows.length > 0) rows[rows.length - 1] += ` ${line}`;
-  }
-  return rows.map((row) => row.replace(/\s+/g, ' '));
-}
-
-/** Rows a re-cut may not change without a recorded fork (RDY-5): traced to I# or scenario. */
-export function userTracedRows(text) {
-  return TRACED_SECTIONS.flatMap((name) => sectionRows(section(text, name))).filter((row) =>
-    USER_TRACE_RE.test(row),
-  );
-}
-
-/**
- * @param {{status:string,path:string}[]} entries  aggregate base..head name-status rows
- * @param {(path:string, side:'base'|'head') => string|null} read
- * @param {{status:string,path:string}[]} refereeEntries  full-PR rows
- * @returns {string[]} violations (empty = pass)
- */
-export function evaluate(entries, read, refereeEntries = entries) {
-  if (!entries.some((entry) => classifyAutonomousRunPath(entry.path) === 'production')) return [];
-  const refereeChanges = refereeEntries.filter((entry) => REFEREE_RE.test(entry.path));
-  if (refereeChanges.length > 0) {
-    return refereeChanges.map(
-      (entry) =>
-        `${entry.path}: implementation diff edits its own process referee — land gate semantics separately`,
-    );
-  }
-  const closedItems = [];
-  for (const entry of entries) {
-    if (entry.status !== 'D') continue;
-    const item = ITEM_PATH_RE.exec(entry.path)?.[1];
-    if (!item) continue;
-    if (statusOf(read(entry.path, 'base')) !== 'ready') continue;
-    closedItems.push(item);
-  }
+/** Records prove attribution, not authorization: independent review checks the user's words. */
+export function evaluate(entries, read) {
   const violations = [];
-  for (const entry of entries) {
-    if (entry.status === 'D' || !CONTRACT_RE.test(entry.path) || SKIP_RE.test(entry.path)) {
-      continue;
-    }
-    const baseText = read(entry.path, 'base');
-    const headText = read(entry.path, 'head');
-    if (headText === null) continue;
-    // Frozen destination: single-file epics and dir-format goal.md (artifacts/goal.md).
-    if (EPIC_PATH_RE.test(entry.path) || GOAL_PATH_RE.test(entry.path)) {
-      if (!GUARDED.has(statusOf(baseText))) continue;
-      const base = goalContract(baseText);
-      const head = goalContract(headText);
-      for (const [key, label] of FROZEN_FIELDS) {
-        if (base[key] !== head[key]) {
-          violations.push(`${entry.path}: frozen ${label} changed beside source`);
-        }
+  for (const { path, status } of entries) {
+    if (status === 'D' || (!GOAL_RE.test(path) && !ITEM_RE.test(path))) continue;
+    const base = read(path, 'base');
+    const head = read(path, 'head');
+    if (head === null || !GUARDED.has(statusOf(base))) continue;
+    const records = newRecords(base, head);
+    if (GOAL_RE.test(path)) {
+      if (
+        JSON.stringify(goalContract(base)) !== JSON.stringify(goalContract(head)) &&
+        !records.some((line) => /amend:.*— user: \S/u.test(line))
+      ) {
+        violations.push(`${path}: goal changed without a recorded user amendment (RDY-6)`);
       }
       continue;
     }
-    // map.md / ledger.md are the agent's path and journal — review owns them
-    if (entry.path.startsWith('docs/backlog/epics/')) continue;
-    const baseStatus = statusOf(baseText);
-    const headStatus = statusOf(headText);
-    if (GUARDED.has(baseStatus)) {
-      if (!GUARDED.has(headStatus)) continue; // demotion — review discipline owns the fork record
-      const strippedBase = stripLineage(baseText);
-      const strippedHead = stripLineage(headText);
-      if (strippedHead === strippedBase) continue;
-      const closed = closeItemDependencies(strippedBase, closedItems);
-      if (closed !== null && closed === strippedHead) continue;
-      const baseRecuts = new Set(recutLines(baseText));
-      const newRecuts = recutLines(headText).filter((line) => !baseRecuts.has(line));
-      if (newRecuts.length === 0) {
+    if (!GUARDED.has(statusOf(head)) || itemContract(base) === itemContract(head)) continue;
+    const recuts = records.filter((line) => /re-cut:/u.test(line));
+    if (recuts.length === 0) {
+      violations.push(`${path}: ready contract changed without a re-cut line (RDY-5)`);
+      continue;
+    }
+    if (
+      userTracedRowCount(head) < userTracedRowCount(base) &&
+      !recuts.some((line) => /— fork:/u.test(line))
+    ) {
+      violations.push(`${path}: user-traced row dropped without a recorded fork (RDY-5)`);
+    }
+    const adrIds = (text) =>
+      new Set(tracedRows(text).flatMap((row) => row.match(/ADR-\d{4}/gu) ?? []));
+    const remaining = adrIds(head);
+    for (const id of adrIds(base)) {
+      if (!remaining.has(id) && !recuts.some((line) => line.includes(id))) {
         violations.push(
-          `${entry.path}: ready contract changed beside source without a re-cut line (RDY-5)`,
-        );
-        continue;
-      }
-      const headRows = new Set(
-        sectionRows(TRACED_SECTIONS.map((n) => section(headText, n) ?? '').join('\n')),
-      );
-      const dropped = userTracedRows(baseText).filter((row) => !headRows.has(row));
-      if (dropped.length > 0 && !newRecuts.some((line) => /\bfork:/u.test(line))) {
-        violations.push(
-          `${entry.path}: user-traced row changed without a recorded fork (RDY-5): ${dropped[0].slice(0, 80)}`,
+          `${path}: ${id}-traced row dropped without ${id} named in the re-cut line (RDY-5)`,
         );
       }
-      continue;
-    }
-    if (GUARDED.has(headStatus) && !/^ready-verdict:/m.test(headText)) {
-      violations.push(`${entry.path}: ready flip without pickup Contract+RED verdict`);
     }
   }
   return violations;

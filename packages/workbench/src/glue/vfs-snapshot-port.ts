@@ -24,7 +24,7 @@ import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.t
 import type { OwnerVfsRevisionFrame, PathVersion } from './owner-vfs-protocol.ts';
 
 /** Dirs never walked into a snapshot — heavy or derived, not user project source. */
-export const SNAPSHOT_EXCLUDE_DIRS: readonly string[] = ['node_modules', '.git', '.vite', 'dist'];
+export const SNAPSHOT_EXCLUDE_DIRS: readonly string[] = ['node_modules', '.git', 'dist'];
 
 /** Files at/under this many bytes ship their content; larger send size only. */
 export const SNAPSHOT_MAX_CONTENT_BYTES = 128 * 1024;

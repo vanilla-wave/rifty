@@ -709,3 +709,7 @@ validates its implied topology before decode or effects. Page terminal disposal
 releases only UI bindings; `ProjectSession.close()` remains the single remote
 tool/runtime/PTY teardown authority. Host terminal persistence strips legacy
 `devCommand` before exact project-rooted companion restore.
+
+## Corrections (active)
+
+- 2026-09-07 — ADR-0384 supersedes package-adaptation owner/carrier clauses and `.vite` archive classification where applicable; all other decisions remain active.

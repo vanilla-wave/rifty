@@ -1,14 +1,14 @@
 import type { FsSync } from '@riftydev/vfs';
 import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
-// TODO(backlog: runtime-js/lazy-typescript-tsconfig-discovery): load TypeScript only when auto-discovery is enabled.
-import ts from 'typescript';
+import type * as TsTypes from 'typescript';
 import { ModuleLoadError } from './errors.ts';
+import ts from './generated/typescript-browser.js';
 import type { PathAliases } from './resolver.ts';
 
 const utf8 = new TextDecoder('utf-8');
 const NON_FATAL_EMPTY_PROJECT_CODES = new Set([18002, 18003]);
 
-interface CompilerOptionsWithPathsBasePath extends ts.CompilerOptions {
+interface CompilerOptionsWithPathsBasePath extends TsTypes.CompilerOptions {
   readonly pathsBasePath?: string;
 }
 
@@ -44,7 +44,7 @@ export function loadTsconfigPathResolution(
     throw tsconfigError(configPath, [root.error]);
   }
 
-  const host: ts.ParseConfigHost = {
+  const host: TsTypes.ParseConfigHost = {
     useCaseSensitiveFileNames: true,
     fileExists: (path) => vfs.statSyncOrNull(normalizePath(path))?.isFile === true,
     readFile: (path) => {
@@ -130,7 +130,10 @@ function tsconfigShapeError(configPath: string, detail: string): ModuleLoadError
   );
 }
 
-function tsconfigError(configPath: string, diagnostics: readonly ts.Diagnostic[]): ModuleLoadError {
+function tsconfigError(
+  configPath: string,
+  diagnostics: readonly TsTypes.Diagnostic[],
+): ModuleLoadError {
   const message = diagnostics
     .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '))
     .join('; ');

@@ -30,6 +30,7 @@ const EXPECTED_EXTERNAL_PACKAGES = [
   '@riftydev/npm-client',
   '@riftydev/runtime-js',
   '@riftydev/service-worker',
+  '@riftydev/shadow-registry',
   '@riftydev/shell',
   '@riftydev/ts-language-service',
   '@riftydev/vfs',
@@ -43,7 +44,6 @@ interface PackageManifest {
 interface ModuleReference {
   readonly importer: string;
   readonly specifier: string;
-  readonly isStatic: boolean;
 }
 
 interface ClosureAudit {
@@ -82,11 +82,11 @@ function moduleReferences(path: string, sourceText: string): readonly ModuleRefe
       node.moduleSpecifier !== undefined &&
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
-      references.push({ importer: path, specifier: node.moduleSpecifier.text, isStatic: true });
+      references.push({ importer: path, specifier: node.moduleSpecifier.text });
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const argument = node.arguments[0];
       if (node.arguments.length === 1 && argument !== undefined && ts.isStringLiteral(argument)) {
-        references.push({ importer: path, specifier: argument.text, isStatic: false });
+        references.push({ importer: path, specifier: argument.text });
       }
     }
     ts.forEachChild(node, visit);
@@ -176,7 +176,6 @@ function sourceClosure(entries: readonly string[]): ClosureAudit {
     const references = moduleReferences(path, sourceText);
     allReferences.push(...references);
     for (const reference of references) {
-      if (!reference.isStatic) continue;
       const dependency = relativeSource(path, reference.specifier);
       if (dependency === null) {
         externalPackages.add(packageName(reference.specifier));
@@ -337,7 +336,9 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 143 → 145 (2026-09-01, ADR-0375): generic finalizer + bounded gap provenance.
     // 145 → 146 (PR #122): browser-project-runtime.ts owns kind dispatch.
     // 146 → 147 (ADR-0379): deep resident-entry admission authority.
-    expect(packageProductionFiles).toHaveLength(147);
+    // 147 → 148 (PR #313): first-use no-COI install/activation module.
+    // ADR-0384: seven package implementations now belong to registry.
+    expect(packageProductionFiles).toHaveLength(141);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

@@ -731,7 +731,7 @@ describe('shadow substitutions — registry twins + retained legacy redirects', 
     );
 
     const aliasMain = await readText(vfs, '/proj/node_modules/esbuild/lib/main.cjs');
-    expect(aliasMain).toContain('__rifty?.esbuild');
+    expect(aliasMain).toContain('__riftyShadowRegistry?.esbuild');
     expect(await readText(vfs, '/proj/node_modules/esbuild/package.json')).toContain('"esbuild"');
     const wasm = await vfs.readFile('/proj/node_modules/esbuild-wasm/esbuild.wasm');
     expect(wasm.byteLength).toBe(13_918_738);

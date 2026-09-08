@@ -385,6 +385,9 @@ importers:
       '@riftydev/service-worker':
         specifier: workspace:*
         version: link:../service-worker
+      '@riftydev/shadow-registry':
+        specifier: workspace:*
+        version: link:../../tools/shadow-registry
       '@riftydev/shell':
         specifier: workspace:*
         version: link:../shell
@@ -455,10 +458,14 @@ importers:
         version: 0.28.0
 
   tools/shadow-registry:
-    devDependencies:
+    dependencies:
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../../packages/io
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
+    devDependencies:
       esbuild:
         specifier: 0.28.0
         version: 0.28.0

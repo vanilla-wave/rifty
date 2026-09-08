@@ -141,7 +141,7 @@ The same seeded bytes run unchanged under local Node 24/npm.
 ## Decisions
 
 ready-verdict: 2026-09-03 — Contract+RED @ 76e669240
-review: checkpoints rounds:2
+review: checkpoints
 contract-red: round 1 — blocker @ 75802657a
 final-green: 2026-09-03 — pass @ f068554e6 (legacy pre-RDY-3 record)
 re-cut: 2026-09-03 — grouped 21 legacy rows into 15 traced rows after concurrent RDY-3/RDY-4 merge — trace: none

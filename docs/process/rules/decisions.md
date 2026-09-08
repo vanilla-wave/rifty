@@ -57,8 +57,10 @@ merge permission persists once given. The closed list of run stops is
 Fresh isolated context is required only where the fresh context is the
 evidence: reviewer and critic/adjudicator (`review.md` `REV-11`) — always a
 fresh `codex exec` or subagent, read-only. Orchestrator, worker and runner are
-one driver: on a hand-off, the interactive session itself; one fresh session
-per stage only where a harness driver exists (`.claude/workflows/goal-run.js`).
+one driver: on a hand-off, the interactive session itself; the same driver across stages, including the harness entry
+(`.claude/workflows/goal-run.js`). No fresh agent for state reads, a journal
+line, or a user-facing report. A fresh critic is needed only for a new-plan
+premise check or a disputed blocker, never for every captured observation.
 A decision leaves a session only through the journal (ledger line, verdict
 line, `## Decisions` line) — written before it can fall out of context; the
 journal, not a session boundary, is what survives compaction.
