@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Apply snapshots through explicit saved-state and file-conflict policies
 created: 2026-09-07
 why: Changing snapshotId currently reseeds an edited Scratch, while hosts need saved state by default and an explicit uniform file-conflict policy for application.
@@ -105,6 +105,9 @@ outside the accepted goal. Existing unsupported capabilities stay loud errors.
 
 ## Decisions
 
+ready-verdict: 2026-09-08 — Contract+RED @ fe0c879ba1de72fd2b56ad5690ffbf8fa1b3a383
+
+- 2026-09-08 — reception: Contract+RED PASS, 0 blockers; two advisory NOTES accepted as additional Save-before-open and cache-durability carriers, no scope change.
 - 2026-09-08 — ADR-0394 selects exact application API, durable admission receipt, staged overlay and claim rollback reconciliation; independent DEC-2 research recorded under reference/.
 - 2026-09-07 — user: initial-deployment-only default; saved state wins afterward; explicit apply mode exists (I8).
 - 2026-09-07 — user: conflicts choose overwrite/error, no dependency-specific behavior; applies independently of prior snapshotId (I8).

@@ -1,0 +1,279 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS with two advisory notes; continue implementation, not merge. Independent raw checks: /tmp/rifty-316-application-review-{vitest.json,opfs.log,packed.log,node.log,replay.json}.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-application-policy.md at fe0c879ba1de72fd2b56ad5690ffbf8fa1b3a383; BASE ab3871d714525c4b7db75d6be0b3631817997783; fresh reviewer /root/snapshot_application_red_review. RDY-6 final source/attribution check compares goal.md and embedder-gaps-evidence.md raw answers with final unit/map/ledger and ADR-0394; no unresolved material user fork or weakened I8 found. Product sources unchanged. PR-4: packed runner/producer/main additions preserve prior assertions; I2 closure bookkeeping is prior accepted scope.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3",
+      "location": "docs/backlog/distribution/workbench-snapshot-only.md",
+      "summary": "Snapshot-only registry-free admission and terminal/package restrictions remain required."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/vfs/workbench-storage-namespace.md",
+      "summary": "Host-selected storage namespace and former-root access remain required."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/service-worker/workbench-preview-prefix.md",
+      "summary": "Scoped preview, assets and HMR prefix remain required."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/playground/orphan-scratch-recovery.md",
+      "summary": "Byte-exact orphan retention and public download remain required."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/distribution/workbench-operation-budgets.md",
+      "summary": "Effective public budgets and composed whole-goal acceptance remain required."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: exact owned/wire application shapes, defaults and identity independence",
+      "source": "acceptance",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-snapshot-application-options.contract.test.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: default clean/dirty Scratch and named saved state survives changed initializer with no unused fetch",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:95; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:84",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: saved absent/pending/incompatible claim and legacy pending adoption reject before effects",
+      "source": "acceptance",
+      "trace": "I8+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:143; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:165",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: durable first admission, transactional consumption, failed-admission retry, legacy records and Save semantics",
+      "source": "acceptance",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:34; packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:55; packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:109; packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:148; packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:65",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: same/new ID applies actual payload; error preflights structural conflicts; equal/missing entries coexist",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:332; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:378; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:139",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: overwrite retains untargeted source/package files and empty directories; legacy overlay preserves source data",
+      "source": "acceptance",
+      "trace": "I8+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:259; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:332; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:212",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: warm apply validates artifact and replay closure/integrity before effects; replay precedes lock publication",
+      "source": "acceptance",
+      "trace": "ADR-0346+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:252; packages/workbench/src/glue/dep-snapshot.test.ts:238",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: prior-state rollback, post-pointer recovery, equal-metadata commit distinction, same-owner retry and stale-promoter fencing",
+      "source": "acceptance",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:307; packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:391; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:67; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:87; tests/browser-unit/workbench-snapshot-application.spec.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: mandatory packed public save/reopen, serialized conflict, repeated overwrite, real Node output and zero registry fallback",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:49; tests/integration/workbench-packed-consumer.mjs:1224",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 10: explicit Reset/starter replacement reseeds; normal reload retains edited source",
+      "source": "acceptance",
+      "trace": "ADR-0165+ADR-0394",
+      "status": "pass",
+      "citation": "tests/e2e/project-switch.spec.ts:182; tests/e2e/instant-preset-reset.spec.ts:8; tests/e2e/starter-file-edit-survives-reload.spec.ts:41",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: actual saved ms program runs in real extracted Node project and browser after saved reopen/repeated overwrite",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:67; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:31; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:131; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:167",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × default saved admission: no arrival or byte changes for absent/pending/incompatible trust",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:143; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:165",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × application plan/payload: exact shape and real artifact/replay checks precede effects",
+      "source": "fault-matrix",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-snapshot-application-options.contract.test.ts:66; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:252",
+      "note": ""
+    },
+    {
+      "row": "destructive-update × conflict preflight: file/type/ancestor conflicts block even absent-target additions",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:332; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:191",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × first admission/ready proof: no false ready, seed and receipt restored for retry",
+      "source": "fault-matrix",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:55",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × saved apply catalog pointer: exact rollback plus same-owner saved open and explicit retry",
+      "source": "fault-matrix",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:307",
+      "note": ""
+    },
+    {
+      "row": "permission-loss × rollback persistence: fenced owner preserves journal/before-copy for fresh-owner recovery",
+      "source": "fault-matrix",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:391",
+      "note": ""
+    },
+    {
+      "row": "torn-state × real OPFS Worker kill around catalog close: before rolls back, after completes, equal metadata cannot prove false commit",
+      "source": "fault-matrix",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-snapshot-application.spec.ts:23; tests/browser-unit/fixtures/opfs-catalog-pointer-boundary.ts:21",
+      "note": ""
+    },
+    {
+      "row": "stale-epoch × rollback reconciliation: compare every captured claim before trust, preserve absent/pending and fence old promoters",
+      "source": "fault-matrix",
+      "trace": "ADR-0261+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:87; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:123; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:138; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:154",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache × verified overlay: complete replay validation before effects and cache before lock",
+      "source": "fault-matrix",
+      "trace": "ADR-0346",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:252; packages/workbench/src/glue/dep-snapshot.test.ts:238; packages/workbench/src/glue/dep-snapshot.test.ts:362",
+      "note": ""
+    },
+    {
+      "row": "Snapshot firstMaterialization.application public policy: initial-deployment-only or apply-snapshot with error/overwrite",
+      "source": "public-api",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-snapshot-application-options.contract.test.ts:37; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:71",
+      "note": ""
+    },
+    {
+      "row": "SnapshotApplicationConflictError.conflictingPaths crosses public owner boundary with project-rooted paths",
+      "source": "public-api",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:147; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:146",
+      "note": ""
+    },
+    {
+      "row": "Node program oracle savedExpectedOutput captured from actual producer-extracted ms@2.0.0 bytes for browser comparison",
+      "source": "frozen-artifact",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:67; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:31",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/workbench-snapshot-application-policy.md:73",
+          "summary": "Save-before-first-open is not directly exercised: saved-state Save fixtures consume admission by opening Scratch before Save. Consider a create → Save → reopen carrier for non-transfer of a still-pending receipt. Existing carriers remain pass at Contract+RED; no executed surviving mutant establishes a REV-5 blocker.",
+          "authority": "",
+          "evidence": "Read packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:35-66 and packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:34-192. Independent complete new-suite run: pnpm --filter @riftydev/workbench exec vitest run src/workbench/internal/playground-snapshot-application-options.contract.test.ts src/workers/workbench-snapshot-saved-state.contract.test.ts src/workers/workbench-snapshot-initial-admission.contract.test.ts src/workers/workbench-snapshot-apply.contract.test.ts src/workers/workbench-snapshot-apply-validation.contract.test.ts src/workers/workbench-snapshot-apply-rollback.contract.test.ts src/workers/workbench-snapshot-legacy-application.contract.test.ts src/glue/install-stamp-rollback.contract.test.ts --reporter=json --outputFile=/tmp/rifty-316-application-review-vitest.json. Result: 48 expected RED, 12 GREEN, no import/typecheck/setup failure. Raw /tmp/rifty-316-application-review-vitest.log; this execution establishes RED, not a surviving mutant for this advisory."
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/workbench-snapshot-application-policy.md:76",
+          "summary": "The cache-before-lock carrier injects a synchronous MemoryFs cache-write failure; it does not isolate durable cache completion before the live lock on the new overlay path. Consider a cache persistence boundary assertion during implementation. No imagined implementation is graded weak or blocked at Contract+RED.",
+          "authority": "",
+          "evidence": "pnpm --filter @riftydev/workbench exec vitest run src/glue/dep-snapshot.test.ts --reporter=json --outputFile=/tmp/rifty-316-application-review-replay.json: 27/27 PASS. The cited ordering test is packages/workbench/src/glue/dep-snapshot.test.ts:238-265 (FailingCacheWriteFs.writeFileSync). New warm validation tests execute RED at unsupported application shape: /tmp/rifty-316-application-review-vitest.json. Real OPFS tests execute 3 expected RED: RIFTY_PLAYGROUND_PORT=53266 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/workbench-snapshot-application.spec.ts; /tmp/rifty-316-application-review-opfs.log. Reset reaches native before-close with outcome=snapshot, requests=1, rollbackMatches=false; two apply cases reject missing application shape."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "fe0c879ba1de72fd2b56ad5690ffbf8fa1b3a383"
+}
