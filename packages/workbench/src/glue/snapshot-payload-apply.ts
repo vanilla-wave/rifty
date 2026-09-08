@@ -1,10 +1,11 @@
-import { joinPath, normalizePath } from '@riftydev/vfs';
+import { dirname, joinPath, normalizePath } from '@riftydev/vfs';
 import { SnapshotApplicationConflictError } from '../workbench/errors.ts';
 import type { SnapshotApplication } from '../workbench/playground.ts';
-import { type DepSnapshotV3, fetchDepSnapshot, prepareDepSnapshotRestore } from './dep-snapshot.ts';
+import { type DepSnapshotV3, fetchVerifiedDepSnapshot } from './dep-snapshot.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
 
 const encoder = new TextEncoder();
+const TREE_PREFIX = 'tree';
 
 export function inspectSnapshotApplication(value: unknown): SnapshotApplication {
   if (value === undefined) return Object.freeze({ mode: 'initial-deployment-only' });
@@ -35,6 +36,21 @@ export function inspectSnapshotApplication(value: unknown): SnapshotApplication 
     return Object.freeze({ mode: 'apply', conflict: record.conflict });
   }
   throw new TypeError('snapshotApplication.mode is invalid');
+}
+
+export interface ApplySnapshotIdentity {
+  readonly snapshotId: string;
+  readonly templateId: string;
+}
+
+export interface SnapshotTreeFile {
+  readonly path: string;
+  readonly bytes: readonly number[];
+}
+
+export interface SnapshotTreeImage {
+  readonly directories: readonly string[];
+  readonly files: readonly SnapshotTreeFile[];
 }
 
 function payloadEntries(snapshot: DepSnapshotV3): ReadonlyMap<string, Uint8Array | 'dir'> {
@@ -105,18 +121,88 @@ export function collectSnapshotPayloadConflicts(
   return [...conflicts].sort();
 }
 
-export async function applySnapshotPayload(
+export async function loadVerifiedApplySnapshot(
+  assetUrl: string,
+  expected: ApplySnapshotIdentity,
+): Promise<DepSnapshotV3> {
+  const verified = await fetchVerifiedDepSnapshot(assetUrl, expected.snapshotId);
+  if (verified.status === 'mismatch') {
+    throw new Error(`snapshot-id-mismatch: ${assetUrl}`);
+  }
+  if (verified.snapshot.templateId !== expected.templateId) {
+    throw new Error(`snapshot-template-mismatch: ${assetUrl}`);
+  }
+  return verified.snapshot;
+}
+
+function removeTargetAndDescendants(
+  directories: Set<string>,
+  files: Map<string, readonly number[]>,
+  target: string,
+): void {
+  for (const path of [...files.keys()]) {
+    if (path === target || path.startsWith(`${target}/`)) files.delete(path);
+  }
+  for (const directory of [...directories]) {
+    if (directory === target || directory.startsWith(`${target}/`)) directories.delete(directory);
+  }
+}
+
+function addAncestorDirectories(directories: Set<string>, path: string): void {
+  let parent = dirname(path);
+  while (parent !== '.' && parent !== '') {
+    directories.add(parent);
+    parent = dirname(parent);
+  }
+}
+
+/** Merge payload into a captured project-container image. Extras stay; only
+ * overwritten conflict targets (and their descendants) are removed. */
+export function mergeSnapshotPayloadIntoTree(
+  tree: SnapshotTreeImage,
+  snapshot: DepSnapshotV3,
+): SnapshotTreeImage {
+  const directories = new Set(tree.directories);
+  const files = new Map(tree.files.map((file) => [file.path, file.bytes]));
+  for (const [relative, expected] of payloadEntries(snapshot)) {
+    const path = `${TREE_PREFIX}${relative}`;
+    addAncestorDirectories(directories, path);
+    if (expected === 'dir') {
+      if (files.has(path)) removeTargetAndDescendants(directories, files, path);
+      directories.add(path);
+      continue;
+    }
+    if (directories.has(path)) removeTargetAndDescendants(directories, files, path);
+    files.set(path, [...expected]);
+  }
+  return Object.freeze({
+    directories: Object.freeze(
+      [...directories].sort((left, right) =>
+        left.length === right.length
+          ? left < right
+            ? -1
+            : left > right
+              ? 1
+              : 0
+          : left.length - right.length,
+      ),
+    ),
+    files: Object.freeze(
+      [...files.entries()]
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([path, bytes]) => Object.freeze({ path, bytes: Object.freeze([...bytes]) })),
+    ),
+  });
+}
+
+export function preflightSnapshotApply(
   fs: WorkspaceArchiveFs,
   root: string,
-  assetUrl: string,
+  snapshot: DepSnapshotV3,
   application: Extract<SnapshotApplication, { readonly mode: 'apply' }>,
-): Promise<void> {
-  const snapshot = await fetchDepSnapshot(assetUrl);
+): void {
   const conflicts = collectSnapshotPayloadConflicts(fs, root, snapshot);
-  const conflict = application.conflict ?? 'error';
-  if (conflict === 'error' && conflicts.length > 0) {
+  if ((application.conflict ?? 'error') === 'error' && conflicts.length > 0) {
     throw new SnapshotApplicationConflictError(conflicts);
   }
-  const prepared = await prepareDepSnapshotRestore(fs, root, snapshot);
-  prepared.apply();
 }

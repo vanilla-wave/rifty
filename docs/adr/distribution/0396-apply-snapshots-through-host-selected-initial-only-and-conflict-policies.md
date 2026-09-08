@@ -95,3 +95,9 @@ Embedders reopen with a newer baked snapshot without losing edits. Explicit
 apply is the only update. Snapshot-only admission (I3) reads this policy
 before it demands a snapshot. Playground first-party UI may keep passing
 `preserveDirtySameStarter` for starter changes.
+
+## Corrections
+
+- 2026-09-08 — v3 apply payload is `nodeModules` + `package-lock.json` only.
+  `packageJsonText` is not `/package.json`; root package.json conflicts only
+  when that path is in the payload.

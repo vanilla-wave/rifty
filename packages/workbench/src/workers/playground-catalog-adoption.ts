@@ -80,6 +80,32 @@ export function baselineMatches(
   );
 }
 
+function parseLengthPrefixedFields(identity: string, prefix: string): readonly string[] | null {
+  if (!identity.startsWith(`${prefix}:`)) return null;
+  let rest = identity.slice(prefix.length + 1);
+  const fields: string[] = [];
+  while (rest.length > 0) {
+    const colon = rest.indexOf(':');
+    if (colon <= 0) return null;
+    const length = Number(rest.slice(0, colon));
+    if (!Number.isSafeInteger(length) || length < 0) return null;
+    const start = colon + 1;
+    const end = start + length;
+    if (end > rest.length) return null;
+    fields.push(rest.slice(start, end));
+    rest = rest.slice(end);
+  }
+  return fields;
+}
+
+function applicationKeyFromBaseline(baseline: string): string | null {
+  const fields = parseLengthPrefixedFields(baseline, 'playground-baseline:v1');
+  if (fields === null) return null;
+  return fields
+    .filter((field) => !field.startsWith('snapshot-id:') && !field.startsWith('snapshot-template:'))
+    .join('\0');
+}
+
 export function applicationBaselineMatches(
   entry: { readonly starterId: string; readonly adoption: CatalogAdoption },
   definition: InspectedPlaygroundProjectDefinition,
@@ -88,5 +114,7 @@ export function applicationBaselineMatches(
   if (entry.adoption.applicationFingerprint !== undefined) {
     return entry.adoption.applicationFingerprint === definition.applicationFingerprint;
   }
-  return entry.adoption.baselineFingerprint === definition.baselineFingerprint;
+  const stored = applicationKeyFromBaseline(entry.adoption.baselineFingerprint);
+  const current = applicationKeyFromBaseline(definition.baselineFingerprint);
+  return stored !== null && current !== null && stored === current;
 }

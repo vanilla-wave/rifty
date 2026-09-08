@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { type MemoryFsSync, createMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDepSnapshot, serializeDepSnapshot } from '../glue/dep-snapshot.ts';
 import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
@@ -131,13 +131,24 @@ async function harness(fs: MemoryFsSync | DurableOwnerFs) {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   resetSyncMirror();
 });
 
 describe('snapshot application fault (I8)', () => {
-  it('reopen after apply-error keeps the only preserved copy', async () => {
+  it('reopen after torn apply-overwrite keeps the preserved copy', async () => {
     const first = snapshotFixture('{"lockfileVersion":3,"packages":{}}\n', 'pin-a\n');
     const next = snapshotFixture('{"lockfileVersion":3,"packages":{"x":{}}}\n', 'pin-b\n');
+    const assets: Readonly<Record<string, Uint8Array>> = {
+      '/snapshots/a.json.gz': first.gzip,
+      '/snapshots/b.json.gz': next.gzip,
+    };
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'https://playground.invalid/app/');
+      const body = assets[url.pathname];
+      if (body === undefined) return new Response('missing', { status: 404 });
+      return new Response(body.slice(), { headers: { 'Content-Type': 'application/gzip' } });
+    });
     const durable = new DurableOwnerFs();
     const h = await harness(durable);
     const initial = definition(first.snapshotId, '/snapshots/a.json.gz');
@@ -156,17 +167,15 @@ describe('snapshot application fault (I8)', () => {
     await opened.close();
     await h.authority.flush();
 
-    try {
-      await h.catalog.createScratch({
+    durable.armPersistFailure(1, 'quota-report');
+    await expect(
+      h.catalog.createScratch({
         definition: definition(next.snapshotId, '/snapshots/b.json.gz'),
-        ...({ snapshotApplication: { mode: 'apply', conflict: 'error' } } satisfies {
+        ...({ snapshotApplication: { mode: 'apply', conflict: 'overwrite' } } satisfies {
           snapshotApplication: SnapshotApplication;
         }),
-      } as Parameters<PlaygroundProjectCatalog['createScratch']>[0]);
-    } catch {
-      // apply-error must keep bytes; reseed today may not throw
-    }
-    await h.authority.flush();
+      } as Parameters<PlaygroundProjectCatalog['createScratch']>[0]),
+    ).rejects.toThrow();
     await h.owner.close();
 
     const restarted = await harness(durable.restartFromDurableState());
@@ -176,6 +185,9 @@ describe('snapshot application fault (I8)', () => {
     expect(
       decoder.decode(restarted.authority.readFileBytesSync(`${SCRATCH_ROOT}/package-lock.json`)),
     ).toBe('saved-lock\n');
+    expect(restarted.authority.existsSync(`${SCRATCH_ROOT}/node_modules/pin/readme.txt`)).toBe(
+      false,
+    );
     await restarted.owner.close();
   });
 });

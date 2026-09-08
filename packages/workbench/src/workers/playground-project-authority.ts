@@ -1,8 +1,11 @@
 import { dirname } from '@riftydev/vfs';
+import type { DepSnapshotV3 } from '../glue/dep-snapshot.ts';
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
 import {
-  applySnapshotPayload,
   inspectSnapshotApplication,
+  loadVerifiedApplySnapshot,
+  mergeSnapshotPayloadIntoTree,
+  preflightSnapshotApply,
 } from '../glue/snapshot-payload-apply.ts';
 import { ProjectBusyError, ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import {
@@ -408,6 +411,23 @@ function captureTree(
     ),
     files: Object.freeze(files.sort((left, right) => compareCodeUnits(left.path, right.path))),
   });
+}
+
+function includeExceptInstallClaims(relative: string, kind: 'file' | 'directory'): boolean {
+  return (
+    !relative.startsWith('tree/.rifty') && !(kind === 'file' && isInstallClaimRelative(relative))
+  );
+}
+
+function appliedReplaceImage(
+  authority: OwnerVfsAuthority,
+  id: string,
+  identity: string,
+  snapshot: DepSnapshotV3,
+): TreeImage {
+  const captured = captureTree(authority, projectContainer(id), includeExceptInstallClaims);
+  if (captured === null) throw new TypeError(`Workbench project tree is missing: ${id}`);
+  return metadataImage(id, identity, mergeSnapshotPayloadIntoTree(captured, snapshot));
 }
 
 function claimRootForRelative(root: string, relative: string): string {
@@ -2321,15 +2341,17 @@ export async function createPlaygroundProjectAuthority(
           applicationBaselineMatches(existing, definition)
         ) {
           if (application.mode === 'apply') {
-            await applySnapshotPayload(
-              authority,
-              `${projectContainer('scratch')}/tree`,
+            if (definition.firstMaterialization.kind !== 'snapshot') {
+              throw new TypeError('Apply requires a snapshot-backed definition');
+            }
+            const loaded = await loadVerifiedApplySnapshot(
               definition.firstMaterialization.snapshot.assetUrl,
-              {
-                mode: 'apply',
-                ...(application.conflict === undefined ? {} : { conflict: application.conflict }),
-              },
+              definition.firstMaterialization.snapshot,
             );
+            preflightSnapshotApply(authority, `${projectContainer('scratch')}/tree`, loaded, {
+              mode: 'apply',
+              ...(application.conflict === undefined ? {} : { conflict: application.conflict }),
+            });
             const editedAt = now();
             const next = changedCatalog(stored, {
               active: Object.freeze({ kind: 'scratch' }),
@@ -2340,7 +2362,13 @@ export async function createPlaygroundProjectAuthority(
                 adoption: adoptedProof(definition),
               }),
             });
-            return runCatalogMutation(next, []);
+            return runCatalogMutation(next, [
+              {
+                role: 'replace',
+                id: 'scratch',
+                after: appliedReplaceImage(authority, 'scratch', definition.identity, loaded),
+              },
+            ]);
           }
           return snapshot;
         }
@@ -2543,36 +2571,40 @@ export async function createPlaygroundProjectAuthority(
         const projectKey = projectStorageSegment(selected);
         const root = `${container}/tree`;
         if (application.mode === 'apply' && definition.firstMaterialization.kind === 'snapshot') {
-          await applySnapshotPayload(
-            authority,
-            root,
+          const loaded = await loadVerifiedApplySnapshot(
             definition.firstMaterialization.snapshot.assetUrl,
-            {
-              mode: 'apply',
-              ...(application.conflict === undefined ? {} : { conflict: application.conflict }),
-            },
+            definition.firstMaterialization.snapshot,
           );
-          if (!proofMatches(entry.adoption, definition)) {
-            await runCatalogMutation(
-              selected === 'scratch' && stored.scratch !== null
-                ? changedCatalog(stored, {
-                    scratch: Object.freeze({
-                      ...stored.scratch,
-                      adoption: adoptedProof(definition),
-                    }),
-                  })
-                : changedCatalog(stored, {
-                    projects: Object.freeze(
-                      stored.projects.map((project) =>
-                        project.id === selected
-                          ? Object.freeze({ ...project, adoption: adoptedProof(definition) })
-                          : project,
-                      ),
-                    ),
+          preflightSnapshotApply(authority, root, loaded, {
+            mode: 'apply',
+            ...(application.conflict === undefined ? {} : { conflict: application.conflict }),
+          });
+          const nextCatalog =
+            selected === 'scratch' && stored.scratch !== null
+              ? changedCatalog(stored, {
+                  scratch: Object.freeze({
+                    ...stored.scratch,
+                    adoption: adoptedProof(definition),
                   }),
-              [],
-            );
-          }
+                })
+              : changedCatalog(stored, {
+                  projects: Object.freeze(
+                    stored.projects.map((project) =>
+                      project.id === selected
+                        ? Object.freeze({ ...project, adoption: adoptedProof(definition) })
+                        : project,
+                    ),
+                  ),
+                });
+          await runCatalogMutation(nextCatalog, [
+            {
+              role: 'replace',
+              id: selected,
+              after: appliedReplaceImage(authority, selected, definition.identity, loaded),
+            },
+          ]);
+          entry = catalogEntry(stored, selected);
+          if (entry === null) throw new TypeError('Applied catalog ref disappeared');
         }
         await options.beforeOpenProject?.(root);
         const unusedNewSnapshot = unusedSnapshot && !proofMatches(entry.adoption, definition);
