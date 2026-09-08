@@ -236,3 +236,45 @@ Final source: `pnpm pr:check`25/25 PASS (test:run187.5s, parity64.2s), then
 archive schema validation repair and strict receipt retirement, plus public
 error instanceof, saved/repeated-apply/Node proof and all prior packed journeys.
 No compiler/WASM fingerprint exemption changed.
+
+## Final review B1 repair
+
+Independent Final found the live-manifest read preceded generic application.
+Its six cases reproduced ENOENT/parse/EISDIR with zero snapshot requests.
+Committed coverage adds Scratch/named/legacy × absent/malformed/directory ×
+error/overwrite:18/18 semantic RED, then18/18 GREEN. Existing config, saved,
+initial, apply, validation, legacy and catalog regressions112/112 GREEN.
+Logs: /tmp/rifty-316-manifest-application-red.json,
+/tmp/rifty-316-manifest-application-green.json,
+/tmp/rifty-316-manifest-config-regression-green.json.
+
+One admission helper now selects provisional owned definition bytes for apply;
+the existing package actor still validates the incoming payload and commits
+its actual manifest configuration. All seven callers use that helper.
+Default saved admission still reads the actual tree. No early payload write,
+new acquisition owner or placeholder manifest.
+
+The sibling stamp path previously parsed malformed current JSON while demoting.
+Six cases cover the three manifest states with/without a prior claim; two
+semantic RED become6/6 GREEN. Demotion uses a valid current manifest or the
+already-validated prior claim, otherwise keeps pending in memory without
+inventing marker provenance. Combined new24 and existing138 cases162/162 GREEN:
+/tmp/rifty-316-stamp-manifest-combined-green.log. Read-only report classification
+moved to the existing helper; authority ratchet lowers920→904.
+
+Packed public proof now damages package.json through real file APIs, checks
+serialized conflicts, restores each state and executes the retained Node-oracle
+program. PASS78.64s: /tmp/rifty-316-b1-packed-green.log. No old assertions or
+compiler/WASM fingerprints weakened. Workbench typecheck, Biome and one-writer
+checks pass; full gate and independent repair verification follow.
+
+First repair full gate found the seventh caller in the Vite manifest integration
+test still used the retired signature (three failures, reproduced in isolation).
+Its real Memory VFS now carries the same manifest bytes into the new request
+signature; assertions unchanged. Isolated3/3 GREEN:
+/tmp/rifty-316-b1-manifest-integration-green.log. Full failure log:
+/tmp/rifty-316-b1-pr-check.log.
+
+Repair full gate25/25 PASS: test:run198.2s, parity61.3s;
+/tmp/rifty-316-b1-pr-check-final.log. Packed78.64s ran on the same production
+source; only the missed integration test adapter changed afterward.

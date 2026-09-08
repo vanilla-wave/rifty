@@ -90,7 +90,7 @@ export const BASELINE = [
   { file: 'packages/net/src/http/upgrade-socket.ts', max: 976 },
   { file: 'apps/playground/src/templates/socket-lab.ts', max: 968 },
   { file: 'packages/runtime-js/src/module-loader/resolver.ts', max: 953 },
-  { file: 'packages/workbench/src/glue/install-stamp-authority.ts', max: 920 },
+  { file: 'packages/workbench/src/glue/install-stamp-authority.ts', max: 904 },
   { file: 'packages/ts-language-service/src/worker/protocol.ts', max: 890 },
   { file: 'apps/playground/public/sw.js', max: 879 },
   { file: 'packages/workbench/src/workers/workbench-project-vfs.ts', max: 875 },

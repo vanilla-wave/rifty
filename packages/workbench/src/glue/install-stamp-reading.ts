@@ -1,14 +1,16 @@
-/** Read-only claim decoding and manifest/lock classification (ADR-0261). */
-import { type FsSync, type Vfs, joinPath } from '@riftydev/vfs';
+/** Read-only claim, manifest/lock and durability-report classification (ADR-0261). */
+import { type FsSync, type PersistFailureReport, type Vfs, joinPath } from '@riftydev/vfs';
 import {
   type InstallStamp,
   effectiveDepsFromPackageJsonText,
   installStampPath,
   installTreeDir,
+  isStampedTreeDamage,
   lockfileMatchesStamp,
   lockfilePath,
   parseInstallStamp,
   readInstallStamp,
+  reportHasFailure,
   stampTrusted,
 } from './install-stamp.ts';
 
@@ -56,6 +58,17 @@ export async function readText(io: StampReadIo, path: string): Promise<string | 
   } catch {
     return null;
   }
+}
+
+export async function readDemotionManifest(
+  io: StampReadIo,
+  root: string,
+  prior: InstallStamp | null,
+): Promise<string | undefined> {
+  const current = await readText(io, joinPath(root, 'package.json'));
+  return current !== null && effectiveDepsFromPackageJsonText(current) !== null
+    ? current
+    : prior?.packageJsonText;
 }
 
 function readTextSync(fsSync: StampReadFs, path: string): string | null {
@@ -234,4 +247,23 @@ export function decodeRawClaim(bytes: Uint8Array | null, root: string): InstallS
   } catch {
     return null;
   }
+}
+
+function failureAt(
+  report: PersistFailureReport | undefined,
+  predicate: (path: string) => boolean,
+): boolean {
+  return report !== undefined && reportHasFailure(report, predicate);
+}
+
+export function guardedScopeFailed(
+  report: PersistFailureReport | undefined,
+  root: string,
+): boolean {
+  return failureAt(report, (path) => isStampedTreeDamage(path, root));
+}
+
+export function claimFailed(report: PersistFailureReport | undefined, root: string): boolean {
+  const path = installStampPath(root);
+  return failureAt(report, (candidate) => candidate === path);
 }

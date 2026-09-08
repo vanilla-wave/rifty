@@ -344,11 +344,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       acquisition: {
         ensure: (request) =>
           packageState.activateAndEnsure(
-            workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
-              packageJsonBytes: authority.readFileBytesSync(
-                `${request.snapshotAdmission !== undefined && request.snapshotAdmission.mode !== 'saved' ? (request.snapshotAdmission.preflightRoot ?? request.projectRoot) : request.projectRoot}/package.json`,
-              ),
-            }),
+            workbenchFirstMaterializationPackageConfig(request, authority),
             request.snapshotAdmission,
           ),
       },

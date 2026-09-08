@@ -18,6 +18,8 @@
 
 ### Fixed
 
+- Explicit snapshot application handles absent, malformed or directory `package.json` through ordinary file conflicts; stamp demotion retains only valid prior provenance.
+
 - No-COI install snapshots reuse mirror bytes until outgoing structured clone instead of pre-copying the full tree.
 
 ### Added

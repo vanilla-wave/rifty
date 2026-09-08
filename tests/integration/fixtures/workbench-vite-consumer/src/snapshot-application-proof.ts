@@ -177,6 +177,67 @@ export async function proveSnapshotApplication(
         await applied.close();
       }
     }
+
+    for (const state of ['malformed', 'absent', 'directory'] as const) {
+      const damaged = await workbench.openProject(definition(workbench, 'packed-saved', unused));
+      try {
+        const manifest = await damaged.files.readFile('/package.json');
+        if (state === 'malformed') {
+          await damaged.files.writeFile('/package.json', encoder.encode('{ unfinished edit'), {
+            expectedVersion: manifest.version,
+          });
+        } else {
+          await damaged.files.remove('/package.json', { expectedVersion: manifest.version });
+          if (state === 'directory') {
+            await damaged.files.mkdir('/package.json', { expectedVersion: null });
+            await damaged.files.writeFile('/package.json/local.txt', encoder.encode(retainedText), {
+              expectedVersion: null,
+            });
+          }
+        }
+        await workbench.playground.forSession(damaged).awaitDurability();
+      } finally {
+        await damaged.close();
+      }
+      if (state !== 'absent') {
+        let conflict: unknown;
+        let unexpected: ProjectSession<void> | undefined;
+        try {
+          unexpected = await workbench.openProject(
+            definition(workbench, 'packed-saved', original, { mode: 'apply-snapshot' }),
+          );
+        } catch (error) {
+          conflict = error;
+        } finally {
+          await unexpected?.close();
+        }
+        if (
+          !(conflict instanceof SnapshotApplicationConflictError) ||
+          JSON.stringify(conflict.conflictingPaths) !== JSON.stringify(['/package.json'])
+        ) {
+          throw new Error(
+            `Public ${state} manifest bypassed generic conflict policy: ${String(conflict)}`,
+          );
+        }
+      }
+      const restored = await workbench.openProject(
+        definition(workbench, 'packed-saved', original, {
+          mode: 'apply-snapshot',
+          conflict: state === 'absent' ? 'error' : 'overwrite',
+        }),
+      );
+      try {
+        expectBytes(
+          (await restored.files.readFile('/package.json')).bytes,
+          encoder.encode(snapshot.packageJsonText),
+          `${state} manifest restore`,
+        );
+        await checkRetained(restored, originalIndex);
+        await runSavedProgram(restored, snapshot.savedExpectedOutput);
+      } finally {
+        await restored.close();
+      }
+    }
   } finally {
     await workbench.close();
   }

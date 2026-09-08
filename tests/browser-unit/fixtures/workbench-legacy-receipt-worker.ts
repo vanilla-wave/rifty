@@ -178,11 +178,7 @@ async function run(input: LegacyReceiptInput): Promise<ReceiptSeed | ReceiptReco
     acquisition: {
       ensure: (request) =>
         packages.activateAndEnsure(
-          workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
-            packageJsonBytes: authority.readFileBytesSync(
-              `${request.snapshotAdmission !== undefined && request.snapshotAdmission.mode !== 'saved' ? (request.snapshotAdmission.preflightRoot ?? request.projectRoot) : request.projectRoot}/package.json`,
-            ),
-          }),
+          workbenchFirstMaterializationPackageConfig(request, authority),
           request.snapshotAdmission,
         ),
     },

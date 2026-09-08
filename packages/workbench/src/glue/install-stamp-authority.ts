@@ -12,10 +12,8 @@ import {
   createInstallStamp,
   installStampPath,
   installTreeDir,
-  isStampedTreeDamage,
   lockfileMatchesStamp,
   lockfilePath,
-  reportHasFailure,
   sha256Hex,
   stampTrusted,
 } from './install-stamp.ts';
@@ -23,11 +21,14 @@ import {
 import {
   type InstallStampCheck,
   type InstallStampCheckInput,
+  claimFailed,
   classifyCheck,
   classifyCheckSync,
   decodeRawClaim,
   directoryExists,
+  guardedScopeFailed,
   pathExists,
+  readDemotionManifest,
   readExactFileBytes,
   readLockfileBytesIo,
   readRawClaim,
@@ -203,22 +204,6 @@ function currentPhase(state: RootClaimState): RootClaimState['phase'] {
 
 function unreachable(value: never): never {
   throw new Error(`unreachable install-stamp state: ${String(value)}`);
-}
-
-function failureAt(
-  report: PersistFailureReport | undefined,
-  predicate: (path: string) => boolean,
-): boolean {
-  return report !== undefined && reportHasFailure(report, predicate);
-}
-
-function guardedScopeFailed(report: PersistFailureReport | undefined, root: string): boolean {
-  return failureAt(report, (path) => isStampedTreeDamage(path, root));
-}
-
-function claimFailed(report: PersistFailureReport | undefined, root: string): boolean {
-  const path = installStampPath(root);
-  return failureAt(report, (candidate) => candidate === path);
 }
 
 async function writeRawStamp(
@@ -475,8 +460,7 @@ export function createInstallStampAuthority(options: {
     return enqueue(state, async () => {
       const prior = await readStamp(io, input.root);
       const trustedPrior = prior && stampTrusted(prior) ? prior : null;
-      const currentText = await readText(io, joinPath(input.root, 'package.json'));
-      const packageJsonText = currentText ?? prior?.packageJsonText;
+      const packageJsonText = await readDemotionManifest(io, input.root, prior);
       const installTreeExists = await directoryExists(io, installTreeDir(input.root));
       const dependencyTreeExists = prior !== null || installTreeExists;
       const flush = options.flush;

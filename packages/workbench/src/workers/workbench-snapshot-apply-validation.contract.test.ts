@@ -200,11 +200,7 @@ async function seedWarmOwner(
     acquisition: {
       ensure: (request) =>
         packages.activateAndEnsure(
-          workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
-            packageJsonBytes: composition.authority.readFileBytesSync(
-              `${request.snapshotAdmission?.mode !== 'saved' && request.snapshotAdmission?.preflightRoot ? request.snapshotAdmission.preflightRoot : request.projectRoot}/package.json`,
-            ),
-          }),
+          workbenchFirstMaterializationPackageConfig(request, composition.authority),
           request.snapshotAdmission,
         ),
     },
