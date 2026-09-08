@@ -1,5 +1,6 @@
 import {
   type ViteCliPreparation,
+  assertViteCliKeepalive,
   prepareViteCli,
   viteCliPreparationFromArgs,
 } from './vite-cli-prep.ts';
@@ -16,6 +17,7 @@ const NO_CONCRETE_INTEGRATION: NodeEntryIntegrationPlan = Object.freeze({
 });
 
 function planned(preparation: ViteCliPreparation): NodeEntryIntegrationPlan {
+  assertViteCliKeepalive(preparation);
   return Object.freeze({
     // ADR-0226: informational Vite invocations validate their prepared tree,
     // but never start or publish esbuild.
@@ -30,6 +32,7 @@ export function planViteNodeEntryEdge(options: {
   readonly root: string;
   readonly args: readonly string[];
   readonly entryPath: string;
+  readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
 }): NodeEntryIntegrationPlan {
   if (!options.bin) return NO_CONCRETE_INTEGRATION;
   const preparation = viteCliPreparationFromArgs({
@@ -37,5 +40,12 @@ export function planViteNodeEntryEdge(options: {
     args: options.args,
     executedBinPath: options.entryPath,
   });
-  return preparation === null ? NO_CONCRETE_INTEGRATION : planned(preparation);
+  return preparation === null
+    ? NO_CONCRETE_INTEGRATION
+    : planned({
+        ...preparation,
+        ...(options.trackKeepalivePromise === undefined
+          ? {}
+          : { trackKeepalivePromise: options.trackKeepalivePromise }),
+      });
 }

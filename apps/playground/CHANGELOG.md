@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Refresh installed-package snapshots for registry-owned adaptation identity; normal semver resolution also updates PostCSS 8.5.26 → 8.5.28 (ADR-0384).
+
 ### Added
 
 - **"Real npm project" is now an ordinary React app.** The `real-vite` tile

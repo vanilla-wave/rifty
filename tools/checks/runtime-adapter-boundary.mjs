@@ -35,6 +35,13 @@ export const GENERIC_RUNTIME_ADAPTER_MODULES = Object.freeze([
   'packages/workbench/src/workers/owner-child-dev-server.ts',
   'packages/workbench/src/workers/node-entry-bootstrap.ts',
   'packages/workbench/src/workers/node-entry-runtime-preparation.ts',
+  'packages/workbench/src/workers/workbench-runtime-adapters.ts',
+  'packages/workbench/src/workers/package-install-finalizer.ts',
+  'packages/workbench/src/workers/package-install-generic-finalizer.ts',
+  'packages/workbench/src/workers/preview-producer-bindings.ts',
+  'packages/workbench/src/glue/project-deps.ts',
+  'packages/workbench/src/workers/dev-server-boot.ts',
+  'packages/runtime-js/src/internal/worker-globals.ts',
 ]);
 
 export const SASS_FORBIDDEN_SURFACE = Object.freeze({
@@ -63,14 +70,14 @@ export const SASS_FORBIDDEN_SURFACE = Object.freeze({
   ]),
   esbuildAdapter: Object.freeze([
     'packages/workbench/src/workers/workbench-runtime-adapters.ts',
-    'packages/workbench/src/workers/esbuild-runtime-fs.ts',
-    'packages/workbench/src/workers/vite-esbuild-runtime.ts',
+    'tools/shadow-registry/src/runtime/esbuild-runtime-fs.ts',
+    'tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts',
   ]),
 });
 
 const CONSUMER_NAME =
-  /(?:^|[^a-z])(?:esbuild|lightningcss(?:-wasm)?|napi-wasm|sass(?:-embedded)?|vite)(?:[^a-z]|$)/iu;
-const CONSUMER_IDENTIFIER = /(?:esbuild|lightning_?css|napi_?wasm|sass|vite)/iu;
+  /(?:^|[^a-z])(?:esbuild|lightningcss(?:-wasm)?|napi-wasm|emnapi|sass(?:-embedded)?|vite)(?:[^a-z]|$)/iu;
+const CONSUMER_IDENTIFIER = /(?:esbuild|lightning_?css|napi_?wasm|emnapi|sass|vite)/iu;
 const SASS_NAME = /(?:^|[^a-z])sass(?:-embedded)?(?:[^a-z]|$)/iu;
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/u;
 const NON_PRODUCTION_SOURCE =

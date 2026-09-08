@@ -1,15 +1,18 @@
 import { createMemoryFs, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  emnapiCoreOrphanedReferencePatchApplied,
-  emnapiCoreOrphanedReferencePatchPolicy,
-} from './emnapi-core-install-policy.ts';
-import {
   finalizePackageInstallFiles,
   finalizerPackagesFromLockfile,
-} from './package-install-finalizer.ts';
-import { finalizeGenericPackageInstallFiles } from './package-install-generic-finalizer.ts';
-import { viteCliActionPatchApplied, viteRootWatchPatchApplied } from './vite-cli-install-policy.ts';
+} from '../../packages/workbench/src/workers/package-install-finalizer.ts';
+import { finalizeGenericPackageInstallFiles } from '../../packages/workbench/src/workers/package-install-generic-finalizer.ts';
+import {
+  emnapiCoreOrphanedReferencePatchApplied,
+  emnapiCoreOrphanedReferencePatchPolicy,
+} from '../../tools/shadow-registry/src/runtime/emnapi-core-install-policy.ts';
+import {
+  viteCliActionPatchApplied,
+  viteRootWatchPatchApplied,
+} from '../../tools/shadow-registry/src/runtime/vite-cli-install-policy.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

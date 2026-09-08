@@ -10,7 +10,7 @@
 // Layer tiers, low → high. A lower tier importing a strictly-higher tier = reverse (forbidden).
 const TIERS = [
   ['vfs', 'io', 'net', 'service-worker', 'git'],
-  ['kernel'],
+  ['kernel', 'shadow-registry'],
   ['runtime-js', 'runtime-wasi'],
   ['shell', 'terminal', 'npm-client', 'ts-language-service'],
   ['workbench'],
@@ -61,12 +61,21 @@ const runtimeTopologyRules = [
 ];
 
 const dependencyPolicyRules = [
+  {
+    name: 'registry-data-does-not-load-runtime',
+    severity: 'error',
+    comment: 'ADR-0384: npm catalog consumers do not load executable package adaptations',
+    from: { path: '(?:^|/)shadow-registry/src/', pathNot: '(?:^|/)shadow-registry/src/runtime/' },
+    to: { path: '(?:^|/)shadow-registry/src/runtime/' },
+  },
+
   // Layer direction: each tier must not import a strictly-higher tier (reverse import).
   ...TIERS.slice(0, -1).map((pkgs, i) => ({
     name: `no-reverse-import-${pkgs[0]}`,
     severity: 'error',
     comment: `layer [${pkgs.join(', ')}] must not import a higher layer`,
-    from: { path: seg(pkgs) },
+    // Host artifact tooling is outside the browser layer graph (ADR-0384).
+    from: { path: seg(pkgs), pathNot: '(?:^|/)shadow-registry/tools/' },
     to: { path: seg(TIERS.slice(i + 1).flat()) },
   })),
   {

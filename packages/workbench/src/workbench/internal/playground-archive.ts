@@ -2,7 +2,7 @@ import type { FsSync } from '@riftydev/vfs';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
 const MEBIBYTE = 1024 * 1024;
-const DERIVED_DIRECTORY_SEGMENTS = new Set(['node_modules', '.vite', 'dist']);
+const DERIVED_DIRECTORY_SEGMENTS = new Set(['node_modules', 'dist']);
 const PRIVATE_ROOT_SEGMENT = '.rifty';
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 

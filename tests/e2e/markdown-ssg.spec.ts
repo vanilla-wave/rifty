@@ -28,7 +28,7 @@ test.describe('Markdown SSG template through the SW preview bridge', () => {
 
     await expectTerminalContains(
       page,
-      '[real-vite/worker] starting server /src/main.js on port 3333',
+      '[workbench/worker] starting server /src/main.js on port 3333',
       150_000,
     );
     await expectTerminalContains(page, 'npm: + marked@', 120_000);

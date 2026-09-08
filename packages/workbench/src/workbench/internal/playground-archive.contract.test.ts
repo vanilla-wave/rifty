@@ -467,9 +467,11 @@ describe('Playground archive v1 export contract', () => {
     expect(parsed.files).toEqual([
       file('.git/config', 'private'),
       file('.github/workflows/check.yml', 'lookalike-kept'),
+      file('.vite/deps/pkg.js', 'derived'),
       file('distillery/source.ts', 'lookalike-kept'),
       file('nested/.git/config', 'nested-private'),
       file('nested/.rifty/private.json', 'nested-authority'),
+      file('nested/.vite/deps/pkg.js', 'nested-derived'),
       file('src/main.ts', 'kept'),
     ]);
   });
@@ -662,8 +664,6 @@ describe('Playground archive v1 strict import boundary', () => {
   it.each([
     'node_modules/pkg/index.js',
     'nested/node_modules/pkg/index.js',
-    '.vite/deps/pkg.js',
-    'nested/.vite/deps/pkg.js',
     'dist/bundle.js',
     'nested/dist/bundle.js',
     '.rifty/install/claim.json',

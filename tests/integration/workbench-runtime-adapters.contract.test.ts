@@ -1,16 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { readRuntimeEsbuild } from '@riftydev/runtime-js';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
-import { activateWorkbenchRuntimeAdapters } from './workbench-runtime-adapters.ts';
+import { activateWorkbenchRuntimeAdapters } from '../../packages/workbench/src/workers/workbench-runtime-adapters.ts';
+import { readRuntimeEsbuild } from '../../tools/shadow-registry/src/runtime/realm.ts';
 
 const ESBUILD_BINDING = Object.freeze({
   adapterId: 'rifty.runtime-adapter.esbuild.v1',
   packagePath: '/workspace/node_modules/esbuild-wasm',
 });
 const requireFromRegistry = createRequire(
-  new URL('../../../../tools/shadow-registry/package.json', import.meta.url),
+  new URL('../../tools/shadow-registry/package.json', import.meta.url),
 );
 const exactEsbuildWasm = new Uint8Array(
   readFileSync(requireFromRegistry.resolve('esbuild-wasm/esbuild.wasm')),

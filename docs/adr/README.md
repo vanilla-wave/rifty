@@ -164,6 +164,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0363 | Eddy memory envelope and fail-fast admission |
 | 0364 | One npm package-bin normalization authority follows active npm package-json semantics |
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
+| 0384 | Registry ownership of bundled guest-package adaptations |
 
 ### playground
 

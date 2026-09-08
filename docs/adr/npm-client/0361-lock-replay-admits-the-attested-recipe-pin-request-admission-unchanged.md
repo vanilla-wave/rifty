@@ -178,3 +178,7 @@ the same synthetic facade/bin, and its binding carries only adapter id plus the
 attested acquisition path. Runtime-asset catalog/CAS/port fields and kernel
 entry capability ports are removed. All recipe, admission, projection, trace,
 bin, and replay authorities above stand.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0384 moves concrete consumer adaptation/startup ownership to registry; generic recipe/admission/replay authorities remain unchanged.

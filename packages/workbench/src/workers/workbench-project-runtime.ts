@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { readRootProcessSnapshot } from '@riftydev/kernel';
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
+import { binNameOf, createPreviewScope } from '@riftydev/shadow-registry/runtime';
 import {
   type BinExecutor,
   type CommandContext,
@@ -43,7 +44,6 @@ import {
   createProjectTerminalNamespace,
 } from './project-terminal-namespace.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
-import { binNameOf, createPreviewScope } from './vite-cli-prep.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
   /** Materializer-owned root. Page claims and project ids are resolved before this seam. */

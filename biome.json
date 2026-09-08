@@ -28,7 +28,7 @@
       "tools/shadow-registry/src/fixtures/sass-1.100.0-contract.json",
       "tools/shadow-registry/src/fixtures/sass-embedded-1.100.0-contract.json",
       "tests/browser-unit/fixtures/real-tree-manifest.json",
-      "packages/workbench/src/workers/generated/**",
+      "tools/shadow-registry/src/runtime/generated/**",
       "packages/runtime-js/src/module-loader/generated/typescript-browser.js",
       "tools/shadow-registry/generated/**",
       "packages/ts-language-service/vendor/**",

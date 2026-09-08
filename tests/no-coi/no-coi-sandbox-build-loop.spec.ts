@@ -2365,9 +2365,9 @@ test('build parity: headerless SDK dist equals live COI product bytes — design
         substitutionId: 'rifty.shadow-substitution.esbuild.v2',
         catalog: {
           id: 'rifty.shadow-substitutions.builtin.v2',
-          digest: 'c9f38a0ea9218c64fdc68bca65eb34817cb51f1c1132c89048ffcb86b510d4b0',
+          digest: '68b82251f296d987ba8ca8883b14adf2785b507b4ed3b69a84ebcad76b6f7002',
         },
-        recipeDigest: '7cd677fe08657829bf151d3d97520984d81f70323cdc948f8fd0a7116e4a4afd',
+        recipeDigest: '844104d3f7a0f7fb997a3678d63f8d34af0fe52c8f6788413b9bae8a92618c2d',
         acquisition: {
           kind: 'registry',
           name: 'esbuild-wasm',

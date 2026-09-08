@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Remove esbuild-specific realm API/key; exact CJS identity now belongs to registry (ADR-0384).
+
 - Resolve VM overrides from native Worker construction metadata before boot;
   rewrite skips QuickJS preload. No-COI toolchain realm defaults to rewrite,
   generic remains quickjs; existing env/global precedence retained (ADR-0383).

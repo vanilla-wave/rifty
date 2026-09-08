@@ -179,7 +179,10 @@ const SPEC = {
   '@riftydev/shadow-registry': {
     dir: 'tools/shadow-registry',
     sideEffects: false,
-    addExports: { './internal': './src/internal/index.ts' },
+    addExports: {
+      './runtime': './src/runtime/index.ts',
+      './internal': './src/internal/index.ts',
+    },
     keywords: ['npm-overrides'],
   },
 };

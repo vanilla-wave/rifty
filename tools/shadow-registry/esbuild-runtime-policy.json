@@ -189,8 +189,8 @@
     "packages/npm-client/src/installer-shadow-shims.test.ts",
     "packages/npm-client/src/internal/shadow/installer.contract.test.ts",
     "packages/npm-client/src/internal/shadow/planner.contract.test.ts",
-    "packages/workbench/src/workers/vite-cli-prep.test.ts",
-    "packages/workbench/src/workers/workbench-runtime-adapters.contract.test.ts",
+    "tests/integration/vite-cli-prep.test.ts",
+    "tests/integration/workbench-runtime-adapters.contract.test.ts",
     "packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts",
     "tests/browser-unit/esbuild-vite-contract.spec.ts",
     "tests/browser-unit/workbench-playground-companion.spec.ts"

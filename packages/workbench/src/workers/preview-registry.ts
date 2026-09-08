@@ -1,3 +1,4 @@
+import { installedBinPreviewLabel } from '@riftydev/shadow-registry/runtime';
 import type {
   DevServerStatus,
   OwnerPtyRunAdmission,
@@ -211,7 +212,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
           entry: {
             port,
             url: `/preview/${port}/`,
-            label: 'vite preview',
+            label: installedBinPreviewLabel,
             source: 'preview' as const,
             sid: PREVIEW_SID,
             ...previewIdentity(origin),

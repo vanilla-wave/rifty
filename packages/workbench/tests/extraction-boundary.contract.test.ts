@@ -30,6 +30,7 @@ const EXPECTED_EXTERNAL_PACKAGES = [
   '@riftydev/npm-client',
   '@riftydev/runtime-js',
   '@riftydev/service-worker',
+  '@riftydev/shadow-registry',
   '@riftydev/shell',
   '@riftydev/ts-language-service',
   '@riftydev/vfs',
@@ -336,7 +337,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 145 → 146 (PR #122): browser-project-runtime.ts owns kind dispatch.
     // 146 → 147 (ADR-0379): deep resident-entry admission authority.
     // 147 → 148 (PR #313): first-use no-COI install/activation module.
-    expect(packageProductionFiles).toHaveLength(148);
+    // ADR-0384: seven package implementations now belong to registry.
+    expect(packageProductionFiles).toHaveLength(141);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

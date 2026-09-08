@@ -14,7 +14,7 @@ import {
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const GENERATED_CLIENT = readFileSync(
-  new URL('../../packages/workbench/src/workers/generated/esbuild-runtime.js', import.meta.url),
+  new URL('../shadow-registry/src/runtime/generated/esbuild-runtime.js', import.meta.url),
   'utf8',
 );
 
@@ -70,7 +70,7 @@ describe('esbuild carrier retirement', () => {
     expect(ALLOWED_COORDINATION_SOURCES).toEqual([
       'packages/workbench/src/glue/vfs-snapshot-port.ts',
       'packages/workbench/src/workbench/service-worker-control.ts',
-      'packages/workbench/src/workers/generated/esbuild-runtime.js',
+      'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
       'packages/workbench/src/workers/no-coi-toolchain-worker.ts',
     ]);
   });
@@ -111,7 +111,7 @@ describe('esbuild carrier retirement', () => {
     const map = Buffer.from(
       JSON.stringify({
         sources: [
-          '../src/workers/generated/esbuild-runtime.js',
+          '../src/runtime/generated/esbuild-runtime.js',
           '../src/workers/renamed-runtime-broker.ts',
         ],
         sourcesContent: ['export const startEsbuildRuntime = 1;', 'createShadowAssetPortClient();'],
@@ -162,7 +162,7 @@ describe('esbuild carrier retirement', () => {
     const copiedClientMap = Buffer.from(
       JSON.stringify({
         sources: [
-          '../src/workers/generated/esbuild-runtime.js',
+          '../src/runtime/generated/esbuild-runtime.js',
           '../src/workers/renamed-derived-client.js',
         ],
         sourcesContent: [GENERATED_CLIENT, GENERATED_CLIENT],
@@ -193,7 +193,7 @@ describe('esbuild carrier retirement', () => {
           path.endsWith('.js.map')
             ? Buffer.from(
                 JSON.stringify({
-                  sources: ['../src/workers/generated/esbuild-runtime.js'],
+                  sources: ['../src/runtime/generated/esbuild-runtime.js'],
                   sourcesContent: [GENERATED_CLIENT],
                 }),
               )

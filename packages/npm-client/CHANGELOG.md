@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Installed esbuild facade reads the registry-owned realm carrier; substitution/admission semantics unchanged (ADR-0384).
+
 ### Changed
 
 - Test registry tarballs normalize the RFC 1952 OS byte, so fixture integrity
