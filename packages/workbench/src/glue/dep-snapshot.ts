@@ -10,12 +10,12 @@
  * V4 tar envelopes normalize to this restore model; legacy JSON remains readable.
  */
 import {
+  type RegistryClient,
   TARBALL_CACHE_ROOT,
   computeIntegrity,
   install,
   parseIntegrityAlgorithm,
   tarballCachePath,
-  type RegistryClient,
 } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import { joinPath } from '@riftydev/vfs';

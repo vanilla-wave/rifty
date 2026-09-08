@@ -10,6 +10,7 @@ const EXPECTED_DEV_EXPORTS = {
   './dev-server-worker': './src/workers/dev-server-child-bootstrap.ts',
   './typescript-worker': './src/workers/ts-lsp-worker-entry.ts',
   './no-coi-toolchain-worker': './src/workers/no-coi-toolchain-worker.ts',
+  './dep-snapshot': './src/dep-snapshot.ts',
 } as const;
 
 const EXPECTED_PUBLISHED_EXPORTS = Object.fromEntries(
@@ -43,7 +44,7 @@ async function readManifest(): Promise<WorkbenchManifest> {
 }
 
 describe('@riftydev/workbench package surface', () => {
-  it('publishes exactly the root, Playground companion, and six worker entries', async () => {
+  it('publishes exactly the root, Playground companion, six worker entries, and dep-snapshot', async () => {
     const manifest = await readManifest();
 
     expect(manifest.name).toBe('@riftydev/workbench');

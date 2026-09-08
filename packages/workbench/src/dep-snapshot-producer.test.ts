@@ -1,8 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { NotImplementedError } from '@riftydev/io';
+import type { NotImplementedError } from '@riftydev/io';
 import { install } from '@riftydev/npm-client';
 import type { Packument, VersionManifest } from '@riftydev/npm-client';
 import { RegistryClient } from '@riftydev/npm-client';
@@ -11,7 +8,6 @@ import { describe, expect, it, vi } from 'vitest';
 import * as glue from './glue/dep-snapshot.ts';
 import { installArtifactIdentity } from './glue/install-artifact-identity.ts';
 
-const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dec = new TextDecoder();
 const enc = new TextEncoder();
 const publicEntry = ['@riftydev', 'workbench/dep-snapshot'].join('/');
@@ -175,12 +171,6 @@ async function seedLock(
 
 describe('published dependency snapshot producer', () => {
   it('exposes produce/restore on the sealed workbench entry', async () => {
-    const manifest = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
-      readonly exports: Readonly<Record<string, string>>;
-      readonly publishConfig: { readonly exports: Readonly<Record<string, { readonly import: string }>> };
-    };
-    expect(manifest.exports['./dep-snapshot']).toBe('./src/dep-snapshot.ts');
-    expect(manifest.publishConfig.exports['./dep-snapshot']?.import).toBe('./dist/dep-snapshot.js');
     const api = (await import(publicEntry)) as PublicProducerApi;
     expect(api.produceDepSnapshot).toBeTypeOf('function');
     expect(api.restoreDepSnapshot).toBeTypeOf('function');
@@ -279,9 +269,9 @@ describe('published dependency snapshot producer', () => {
       vi.unstubAllGlobals();
     }
     expect(dec.decode(fs.readFileBytesSync('/project/node_modules/pin/marker.txt'))).toBe('v1');
-    expect(JSON.parse(dec.decode(fs.readFileBytesSync('/project/node_modules/pin/package.json')))).toMatchObject(
-      { version: '1.0.0' },
-    );
+    expect(
+      JSON.parse(dec.decode(fs.readFileBytesSync('/project/node_modules/pin/package.json'))),
+    ).toMatchObject({ version: '1.0.0' });
   });
 
   it('restores produced gzip and HTTP-decoded tar through public fetch', async () => {
@@ -324,7 +314,10 @@ describe('published dependency snapshot producer', () => {
     db.set(
       'with-script',
       new Map([
-        ['1.0.0', await entry('with-script', '1.0.0', { scripts: { postinstall: 'node build.js' } })],
+        [
+          '1.0.0',
+          await entry('with-script', '1.0.0', { scripts: { postinstall: 'node build.js' } }),
+        ],
       ]),
     );
     const packageJsonText = JSON.stringify({
