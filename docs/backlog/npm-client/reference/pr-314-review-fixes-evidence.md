@@ -18,3 +18,7 @@ Targeted command from handoff (both integration files, ownership gate, Workbench
 Chromium `playwright.browser-unit.config.ts`, isolated port 5579, workers=1: all 7 esbuild/Vite scenarios passed (50.6s), including actual CLI actions, direct module identity, offline/cache behavior, and helper/ordinary npm project paths.
 
 Markdown SSG rerun: `RIFTY_PLAYGROUND_PORT=5580 pnpm exec playwright test tests/e2e/markdown-ssg.spec.ts --project=chromium-light --workers=1` → 1 passed (10.7s), real generated HTML and preview bridge.
+
+## Final verify-pass
+
+`pnpm pr:check` on `8e3a2b81af4bff138c44fc6fdf493fad60e676ff`: all 25 gates PASS (unit 234.8s, Node parity 59.9s; no isolated retry needed). Fresh independent Final+GREEN PASS, no findings; reviewer independently ran 119 tests, docs gates and diff whitespace checks. Previous whole-migration verdict remains in git at `0c3b9248e`; unchanged consumer proof is reused under REV-1. Current verdict updates the same canonical final-green path per REV-8/12.

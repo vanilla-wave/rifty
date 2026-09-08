@@ -1,267 +1,59 @@
 {
-  "overall_verdict": "concern",
-  "merge_call": "Final+GREEN PASS with one advisory; accepted unit and goal outcomes proven. Driver may complete RECHART/CLOSE bookkeeping and push the same PR; merge was not requested.",
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS: all PR314 review fixes verified; 119 focused tests and docs:check independently pass; raw RED/mutant, 7 browser cases, Markdown SSG and 25/25 pr:check artifacts inspected. Ready for pass binding and authorized merge.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "c31cd02ae759a3e6eea7515da33e3297d4f1ab3d",
-  "unit_goal_source": "docs/backlog/npm-client/registry-package-adaptations.md against BASE c64cb2ebb; accepted docs/backlog/epics/vite-knowledge-boundary/goal.md and PR baseline df3cd222f; complete goal evidence reviewed. Express automatic-close/drain is independently reproduced on unchanged baseline and outside the accepted ownership/preserved-supported-results obligation; explicit-stop HTTP execution and persistence are proven.",
+  "reviewed_sha": "8e3a2b81af4bff138c44fc6fdf493fad60e676ff",
+  "unit_goal_source": "PR314 review fixes against observed BASE 0c3b9248ed889db2bd4b9c60db6e27e04508d7d3, as requested by handoff-pr314-fix-and-merge. Historical authorities: vite-knowledge-boundary goal and registry-package-adaptations unit at 0feeb5c89; active ADR-0384. REV-1 preserves unaffected accepted coverage and end-to-end goal proof in docs/backlog/npm-client/reference/registry-package-adaptations-final-green.json (reviewed c31cd02ae759a3e6eea7515da33e3297d4f1ab3d). Its PostCSS advisory was recorded in existing migration evidence and remains history; no snapshot bytes change in this repair. No new current contract.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
   "coverage": [
     {
-      "row": "Acceptance 1: registry owns finite executable adaptations; platform retains no independent package adaptation policy",
+      "row": "Preserve existing installed Chokidar adaptation behavior: empty/current/parent entries excluded, ordinary child retained; restore both corrupted fixture literals and strengthen execution criteria against BASE.",
       "source": "acceptance",
-      "trace": "I1",
+      "trace": "I1 + scenario + ADR-0384 D3",
       "status": "pass",
-      "citation": "tools/checks/package-adaptation-ownership.test.ts:5; tools/shadow-registry/src/runtime/runtime-adapters.ts:69; tools/shadow-registry/src/runtime/installed-files.ts:41; tools/shadow-registry/src/runtime/vite-cli-prep.ts:141; tests/browser-unit/esbuild-vite-contract.spec.ts:1258",
+      "citation": "tests/integration/vite-cli-prep.test.ts:232; tests/integration/package-install-finalizer.test.ts:21; /tmp/pr314-review-fix-red.log; /tmp/pr314-fixes-reviewer-focused.log",
       "note": ""
     },
     {
-      "row": "Acceptance 2: exact CJS realm identity, before-import startup, info suppression and installed-tree/offline authority",
+      "row": "Preserve detached action tracking and startup-before-import; info and unrelated entries require no action tracker.",
       "source": "acceptance",
-      "trace": "I2 + scenario",
+      "trace": "I2 + scenario + ADR-0384 D1/D2",
       "status": "pass",
-      "citation": "tools/shadow-registry/src/runtime/realm.test.ts:22; tests/browser-unit/esbuild-vite-contract.spec.ts:1004; tests/browser-unit/esbuild-vite-contract.spec.ts:1258",
+      "citation": "tests/integration/vite-cli-prep.test.ts:178; tests/integration/vite-cli-prep.test.ts:271; tests/integration/vite-cli-prep.test.ts:317; tools/shadow-registry/src/runtime/vite-node-entry-edge.test.ts:5; tests/browser-unit/esbuild-vite-contract.spec.ts:1004; /tmp/pr314-fixes-reviewer-focused.log; /tmp/pr314-fix-browser.log",
       "note": ""
     },
     {
-      "row": "Acceptance 3: ordinary .vite snapshot/archive/import and project diagnostics",
+      "row": "Generic server diagnostics identify the project subsystem: Markdown SSG expectation changes only the accepted generic prefix; real HTTP/content/render assertions and timeouts remain intact.",
       "source": "acceptance",
-      "trace": "I3 + scenario",
+      "trace": "I3 + scenario + ADR-0384 D4",
       "status": "pass",
-      "citation": "packages/workbench/src/workbench/ordinary-package-files.contract.test.ts:24; tests/browser-unit/registry-package-ownership.spec.ts:5; packages/workbench/src/workers/dev-server-boot.test.ts:75",
+      "citation": "tests/e2e/markdown-ssg.spec.ts:29; packages/workbench/src/workers/dev-server-boot.ts:62; /tmp/pr314-ci-light-failure.log:369; /tmp/pr314-fix-markdown.log",
       "note": ""
     },
     {
-      "row": "Acceptance 4: supported Vite COI/no-COI build/dev/HMR/restore, optional helpers and ordinary Express acquisition/execution/files/diagnostics",
+      "row": "Supported Vite action paths remain functional for optional helper and ordinary npm projects, retaining exact esbuild identity and offline/cache behavior; unaffected COI/no-COI/HMR/restore proof retained from prior accepted review.",
       "source": "acceptance",
-      "trace": "scenario",
+      "trace": "scenario + ADR-0384 D2/D3/D5",
       "status": "pass",
-      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1523; tests/no-coi/no-coi-dev-hmr.spec.ts:1052; tests/integration/workbench-packed-consumer.test.ts:1; tests/browser-unit/registry-package-ownership.spec.ts:5",
+      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1004; tests/browser-unit/esbuild-vite-contract.spec.ts:1258; tests/browser-unit/esbuild-vite-contract.spec.ts:1523; /tmp/pr314-fix-browser.log; docs/backlog/npm-client/reference/registry-package-adaptations-final-green.json:1",
       "note": ""
     },
     {
-      "row": "Acceptance 5: existing Rollup/LightningCSS/Sass/bcrypt substitutions and emnapi behavior remain",
-      "source": "acceptance",
-      "trace": "I1 + scenario",
-      "status": "pass",
-      "citation": "tools/shadow-registry/src/index.test.ts:6; tests/integration/package-install-finalizer.test.ts:129; tests/browser-unit/sass-vite-contract.spec.ts:1; tests/browser-unit/esbuild-vite-contract.spec.ts:1475",
-      "note": ""
-    },
-    {
-      "row": "Parity 1: real-Node esbuild differential rows and loud gaps remain",
-      "source": "acceptance",
-      "trace": "scenario",
-      "status": "pass",
-      "citation": "tools/shadow-registry/src/esbuild-contract-oracle.test.ts:21; tests/browser-unit/esbuild-vite-contract.spec.ts:1004; tests/browser-unit/esbuild-vite-contract.spec.ts:1258",
-      "note": ""
-    },
-    {
-      "row": "corrupt-input \u00d7 binding dispatch: unknown/duplicate/path/size/hash errors precede publication",
+      "row": "Corrupt-input at host keepalive admission: missing/non-callable tracker throws before CLI preparation or adapter activation; stale realm global cannot satisfy the current request.",
       "source": "fault-matrix",
-      "trace": "I2 + scenario",
+      "trace": "ADR-0384 D1 + scenario",
       "status": "pass",
-      "citation": "tests/integration/workbench-runtime-adapters.contract.test.ts:34",
+      "citation": "tests/integration/vite-cli-prep.test.ts:271; tests/integration/vite-cli-prep.test.ts:302; tools/shadow-registry/src/runtime/vite-node-entry-edge.test.ts:25; tools/shadow-registry/src/runtime/vite-node-entry-edge.ts:20; /tmp/pr314-guard-mutant-0.log; /tmp/pr314-guard-mutant-1.log",
       "note": ""
     },
     {
-      "row": "poisoned-cache \u00d7 installed tree reuse: exact installed-byte authority and stale prepared-tree rejection",
-      "source": "fault-matrix",
-      "trace": "I1 + scenario",
-      "status": "pass",
-      "citation": "tests/integration/vite-cli-prep.test.ts:268; tests/integration/package-install-finalizer.test.ts:173; tests/browser-unit/esbuild-vite-contract.spec.ts:1004",
-      "note": ""
-    },
-    {
-      "row": "sibling-drift \u00d7 COI/no-COI activation: common registry owner preserves supported results",
-      "source": "fault-matrix",
-      "trace": "I1 + scenario",
-      "status": "pass",
-      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2341; tests/no-coi/no-coi-dev-hmr.spec.ts:1052; tests/browser-unit/esbuild-vite-contract.spec.ts:1004",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: PackageRuntimeBinding",
+      "row": "Registry ./runtime preparePackageEntryRuntime rejects unsupported Vite action host capabilities, preserves info/eval and unrelated-bin entry paths, and receives the real host tracker from Workbench.",
       "source": "public-api",
-      "trace": "ADR-0384",
+      "trace": "ADR-0384 D1/D2/D3",
       "status": "pass",
-      "citation": "tests/integration/workbench-runtime-adapters.contract.test.ts:21",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: activatePackageRuntimeAdapters",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/integration/workbench-runtime-adapters.contract.test.ts:34",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: ESBUILD_RUNTIME_ADAPTER_ID",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/integration/workbench-runtime-adapters.contract.test.ts:34",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: preparePackageEntryRuntime",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts:12; tests/browser-unit/esbuild-vite-contract.spec.ts:1258",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: finalizeToolchainInstallFiles",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/integration/package-install-finalizer.test.ts:129",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: finalizerPackagesFromLockfile",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/integration/package-install-finalizer.test.ts:66",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: prepareInstalledConsumerFiles",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/integration/vite-cli-prep.test.ts:170; tests/integration/package-install-finalizer.test.ts:83",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: binNameOf",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/integration/vite-cli-prep.test.ts:459",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: createPreviewScope",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/integration/vite-cli-prep.test.ts:468",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: preparePackageServerEnvironment",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workers/owner-child-dev-server.test.ts:186",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: installedBinPreviewSource",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1523; packages/workbench/src/workers/preview-producer-bindings.test.ts:1",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: installedBinPreviewLabel",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workers/preview-registry.test.ts:1; tests/browser-unit/esbuild-vite-contract.spec.ts:1523",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: preparePackageBinSpawnRequest",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "tests/integration/vite-cli-prep.test.ts:459",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: preparePackageManifest",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workbench/project-definition.test.ts:329; packages/workbench/src/workbench/project-definition.test.ts:356; tests/browser-unit/esbuild-vite-contract.spec.ts:1475",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: VITE_CONFIG_FILENAMES",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workbench/project-definition.test.ts:1",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: DEFAULT_VITE8_VERSION",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workbench/project-definition.test.ts:263",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: DEFAULT_VITE8_CONFIG_PATH",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workbench/project-definition.test.ts:394",
-      "note": ""
-    },
-    {
-      "row": "Registry ./runtime export: DEFAULT_VITE8_CONFIG_JS",
-      "source": "public-api",
-      "trace": "ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workbench/project-definition.test.ts:394; tests/browser-unit/esbuild-vite-contract.spec.ts:1523",
-      "note": ""
-    },
-    {
-      "row": "runtime-js removes package-specific publish/read/type exports and realm key",
-      "source": "public-api",
-      "trace": "I2 + ADR-0384",
-      "status": "pass",
-      "citation": "tools/checks/package-adaptation-ownership.test.ts:30; tools/shadow-registry/src/runtime/realm.test.ts:22; tests/browser-unit/esbuild-vite-contract.spec.ts:1258",
-      "note": ""
-    },
-    {
-      "row": "Project file snapshots expose ordinary .vite files; archive export/import retains them",
-      "source": "public-api",
-      "trace": "I3 + ADR-0384",
-      "status": "pass",
-      "citation": "packages/workbench/src/workbench/ordinary-package-files.contract.test.ts:24; tests/browser-unit/registry-package-ownership.spec.ts:5",
-      "note": ""
-    },
-    {
-      "row": "Generated esbuild client/provenance relocates without source/wasm/semantic drift",
-      "source": "frozen-artifact",
-      "trace": "ADR-0226 + ADR-0384",
-      "status": "pass",
-      "citation": "tools/shadow-registry/src/esbuild-generated-provenance.test.ts:79; tools/shadow-registry/src/esbuild-generated-provenance.test.ts:173",
-      "note": ""
-    },
-    {
-      "row": "Catalog/facade identity changes bind registry-owned realm lookup to exact replay bytes",
-      "source": "frozen-artifact",
-      "trace": "ADR-0371 + ADR-0384",
-      "status": "pass",
-      "citation": "packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts:78; tests/browser-unit/esbuild-vite-contract.spec.ts:1045",
-      "note": ""
-    },
-    {
-      "row": "Install artifact identity and three baked snapshots retain admitted installed-tree/replay authority",
-      "source": "frozen-artifact",
-      "trace": "ADR-0371 + ADR-0336 + ADR-0384",
-      "status": "pass",
-      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:1; tests/browser-unit/esbuild-vite-contract.spec.ts:1427; tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2341",
+      "citation": "tests/integration/vite-cli-prep.test.ts:285; tests/integration/vite-cli-prep.test.ts:317; tools/shadow-registry/src/runtime/vite-node-entry-edge.test.ts:37; packages/workbench/src/workers/node-entry-runtime-preparation.ts:6; packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts:1; /tmp/pr314-fixes-reviewer-focused.log",
       "note": ""
     }
   ],
@@ -288,16 +80,8 @@
     },
     {
       "axis": "Scope",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "apps/playground/public/snapshots/vite-node-modules.json.gz:1",
-          "evidence": "Independent Python gzip/JSON/base64 comparison against git show c64cb2ebb:<snapshot>: all three snapshots change postcss/package.json and lock entry 8.5.26 \u2192 8.5.28, plus eight other postcss files (including parser/list/stringifier). Project manifest remains unchanged; esbuild facade/identity changes are separate. Existing Chromium/packed acceptance passes.",
-          "summary": "Snapshot rebake also upgrades PostCSS 8.5.26 to 8.5.28. Record this incidental dependency change in delivery evidence; ownership migration alone does not explain those semantic byte changes. No observed contract regression; advisory only.",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Bugs",
