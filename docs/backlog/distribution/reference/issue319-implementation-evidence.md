@@ -32,3 +32,7 @@ I4 RED: `RIFTY_NO_COI_PORT=5511 RIFTY_NO_COI_ORACLE_PORT=5512 RIFTY_NO_COI_RESOU
 - Warm activation, cached repair, request/authority drift, nested install, quota and dedup: integrated Chromium 16/16; details and required supporting REDs in no-coi-warm-open-red-evidence.md.
 
 - Preload-refusal revert-check (controlled native read after real listener installation): removing the OpfsPreloadError guard makes toolchain boot resolve and pending eval fulfill instead of rejecting. Restoring the guard: both tests GREEN. No product or test timeout changed.
+
+## Integrated gate inventory
+
+Final gate on main-integrated ae4ecd4: 24/25 lanes passed; test:run reproduces only extraction-boundary inventory count141 vs145 (0 timeouts). Four added Workbench modules are the shared claim guard, thin claim FS, no-COI composition context and install-only Vfs. Update count to145; keep exact closure equality, runtime reachability and all forbidden import checks. PR-4 final review compares the old/new criterion; no product assertion is weakened.
