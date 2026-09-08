@@ -1,0 +1,159 @@
+{
+  "node": "v24.16.0",
+  "npm": "11.17.0",
+  "packages": [
+    {
+      "name": "@types/estree",
+      "version": "1.0.9",
+      "file": "types-estree-1.0.9",
+      "metadataUrl": "https://registry.npmjs.org/%40types%2Festree/1.0.9",
+      "tarball": "https://registry.npmjs.org/@types/estree/-/estree-1.0.9.tgz",
+      "integrity": "sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==",
+      "bytes": 5930
+    },
+    {
+      "name": "rollup",
+      "version": "4.63.1",
+      "file": "rollup-4.63.1",
+      "metadataUrl": "https://registry.npmjs.org/rollup/4.63.1",
+      "tarball": "https://registry.npmjs.org/rollup/-/rollup-4.63.1.tgz",
+      "integrity": "sha512-3Df9jsstwhccuEfmAMi9l8XUh/GOkVObmFTU7CCVBysEbcOZLl84jCtaAZMcPiMz2EGKsATzQcU+Xr3n/wU6cg==",
+      "bytes": 575965
+    },
+    {
+      "name": "@rollup/wasm-node",
+      "version": "4.63.1",
+      "file": "rollup-wasm-node-4.63.1",
+      "metadataUrl": "https://registry.npmjs.org/%40rollup%2Fwasm-node/4.63.1",
+      "tarball": "https://registry.npmjs.org/@rollup/wasm-node/-/wasm-node-4.63.1.tgz",
+      "integrity": "sha512-zuZMuBHMMhtuXagc+3p5PGeGfL0VnO/44cX1k9R4Q/Ipb863tF8ZBGeoTz3ypgANqrpREAp49mNTwv6qSyc6XQ==",
+      "bytes": 821634
+    },
+    {
+      "name": "@rollup/wasm-node",
+      "version": "4.62.2",
+      "file": "rollup-wasm-node-4.62.2",
+      "metadataUrl": "https://registry.npmjs.org/%40rollup%2Fwasm-node/4.62.2",
+      "tarball": "https://registry.npmjs.org/@rollup/wasm-node/-/wasm-node-4.62.2.tgz",
+      "integrity": "sha512-LseVv64SSO6S7eyc+LFGUnH36NMMFbtKN28vTUHFinRVzFKH4cVQ/BB22JfXM9Ei5l7x46AIQp+n2QzzJ9kxHg==",
+      "bytes": 809373
+    },
+    {
+      "name": "@types/estree",
+      "version": "1.0.7",
+      "file": "types-estree-1.0.7",
+      "metadataUrl": "https://registry.npmjs.org/%40types%2Festree/1.0.7",
+      "tarball": "https://registry.npmjs.org/@types/estree/-/estree-1.0.7.tgz",
+      "integrity": "sha512-w28IoSUCJpidD/TGviZwwMJckNESJZXFu7NBZ5YJ4mEUnNraUn9Pm8HSZm/jDF1pDWYKspWE7oVphigUPRakIQ==",
+      "bytes": 5919
+    },
+    {
+      "name": "esbuild",
+      "version": "0.28.0",
+      "file": "esbuild-0.28.0",
+      "metadataUrl": "https://registry.npmjs.org/esbuild/0.28.0",
+      "tarball": "https://registry.npmjs.org/esbuild/-/esbuild-0.28.0.tgz",
+      "integrity": "sha512-sNR9MHpXSUV/XB4zmsFKN+QgVG82Cc7+/aaxJ8Adi8hyOac+EXptIp45QBPaVyX3N70664wRbTcLTOemCAnyqw==",
+      "bytes": 34124
+    },
+    {
+      "name": "fdir",
+      "version": "6.5.0",
+      "file": "fdir-6.5.0",
+      "metadataUrl": "https://registry.npmjs.org/fdir/6.5.0",
+      "tarball": "https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz",
+      "integrity": "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==",
+      "bytes": 9742
+    },
+    {
+      "name": "nanoid",
+      "version": "3.3.18",
+      "file": "nanoid-3.3.18",
+      "metadataUrl": "https://registry.npmjs.org/nanoid/3.3.18",
+      "tarball": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz",
+      "integrity": "sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==",
+      "bytes": 5713
+    },
+    {
+      "name": "picocolors",
+      "version": "1.1.1",
+      "file": "picocolors-1.1.1",
+      "metadataUrl": "https://registry.npmjs.org/picocolors/1.1.1",
+      "tarball": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+      "bytes": 2625
+    },
+    {
+      "name": "picomatch",
+      "version": "4.0.7",
+      "file": "picomatch-4.0.7",
+      "metadataUrl": "https://registry.npmjs.org/picomatch/4.0.7",
+      "tarball": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz",
+      "integrity": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
+      "bytes": 24326
+    },
+    {
+      "name": "postcss",
+      "version": "8.5.28",
+      "file": "postcss-8.5.28",
+      "metadataUrl": "https://registry.npmjs.org/postcss/8.5.28",
+      "tarball": "https://registry.npmjs.org/postcss/-/postcss-8.5.28.tgz",
+      "integrity": "sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==",
+      "bytes": 52195
+    },
+    {
+      "name": "rollup",
+      "version": "4.42.0",
+      "file": "rollup-4.42.0",
+      "metadataUrl": "https://registry.npmjs.org/rollup/4.42.0",
+      "tarball": "https://registry.npmjs.org/rollup/-/rollup-4.42.0.tgz",
+      "integrity": "sha512-LW+Vse3BJPyGJGAJt1j8pWDKPd73QM8cRXYK1IxOBgL2AGLu7Xd2YOW0M2sLUBCkF5MshXXtMApyEAEzMVMsnw==",
+      "bytes": 549132
+    },
+    {
+      "name": "source-map-js",
+      "version": "1.2.1",
+      "file": "source-map-js-1.2.1",
+      "metadataUrl": "https://registry.npmjs.org/source-map-js/1.2.1",
+      "tarball": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
+      "bytes": 35340
+    },
+    {
+      "name": "tinyglobby",
+      "version": "0.2.17",
+      "file": "tinyglobby-0.2.17",
+      "metadataUrl": "https://registry.npmjs.org/tinyglobby/0.2.17",
+      "tarball": "https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz",
+      "integrity": "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==",
+      "bytes": 7873
+    },
+    {
+      "name": "vite",
+      "version": "7.3.6",
+      "file": "vite-7.3.6",
+      "metadataUrl": "https://registry.npmjs.org/vite/7.3.6",
+      "tarball": "https://registry.npmjs.org/vite/-/vite-7.3.6.tgz",
+      "integrity": "sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg==",
+      "bytes": 543195
+    },
+    {
+      "name": "@rollup/wasm-node",
+      "version": "4.42.0",
+      "file": "rollup-wasm-node-4.42.0",
+      "metadataUrl": "https://registry.npmjs.org/%40rollup%2Fwasm-node/4.42.0",
+      "tarball": "https://registry.npmjs.org/@rollup/wasm-node/-/wasm-node-4.42.0.tgz",
+      "integrity": "sha512-qdaa9zil2ppR/YmvFOtNtpYHdGzH9uTSy/1qSGCMldq38Tz2W/3L43rbsp4rx2O5uLI0wOsz0VULmBx9dyOqOA==",
+      "bytes": 994922
+    },
+    {
+      "name": "esbuild-wasm",
+      "version": "0.28.0",
+      "file": "esbuild-wasm-0.28.0",
+      "metadataUrl": "https://registry.npmjs.org/esbuild-wasm/0.28.0",
+      "tarball": "https://registry.npmjs.org/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz",
+      "integrity": "sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg==",
+      "bytes": 3845798
+    }
+  ]
+}

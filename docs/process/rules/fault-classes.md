@@ -32,6 +32,7 @@ fix a missing/wrong model before adding machinery.
 | BroadcastChannel | ordered per sender→receiver pair while both attached | receiver not-yet / no-longer attached silently misses frames; no delivery receipt | duplicate delivery, reorder within a pair |
 | SAB sync-RPC ring (child caller ↔ parent dispatcher) | shared memory: no loss/dup/reorder while both realms live; atomic publish/dispatch/consume claims enforce one live exchange | second caller/consumer fails at its claim · caller or responder death in `WRITING`/`READY`/`HANDLING` leaves a loud permanent wedge and the blocked caller until owner teardown · oversize reply degrades to an in-band error reply | transport loss, duplicate delivery, reorder |
 | Service worker | none — killable between any two events | inflight fetch/registration lost without notice; handler re-runs from scratch; SW-side route state outlives the page | — (full surface) |
+| Owned in-process policy/graph projection | ordinary calls carry the selected values without transport | lost policy/source provenance, malformed path/version, ambiguous projection, sibling classification drift, wrong error order | transport loss, duplicate delivery, reorder |
 | Network (registry, CDN, eddy) | none | the full distributed set: loss, duplicate, reorder, replay, stall, partial/corrupt body | — |
 | Storage (OPFS/IndexedDB) | per-op atomicity only where the API grants it | torn multi-step writes, quota/permission mid-op, cross-tab concurrent writers | — |
 

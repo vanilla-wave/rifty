@@ -165,6 +165,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0364 | One npm package-bin normalization authority follows active npm package-json semantics |
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
 | 0384 | Registry ownership of bundled guest-package adaptations |
+| 0399 | Preserve declared companion policy through retained-lock acquisition |
 
 ### playground
 
@@ -321,6 +322,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0391 | Attest copyable runtime asset exceptions to the esbuild retirement gate |
 | 0394 | Apply dependency snapshots through catalog transactions and saved-state policy |
 | 0397 | Retire completed legacy migration receipts before catalog mutations |
+| 0398 | Select registry-free snapshot acquisition through the existing package owner |
 
 ## Superseded (removed)
 

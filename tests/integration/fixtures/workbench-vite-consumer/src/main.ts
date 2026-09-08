@@ -5,6 +5,7 @@ import { type SnapshotProof, runSnapshotProof as proveSnapshot } from './snapsho
 
 import { proveCopiedToolchain } from './copied-worker-proof';
 import { proveSnapshotApplication } from './snapshot-application-proof';
+import { type SnapshotOnlyAcceptance, openSnapshotOnlyAcceptance } from './snapshot-only-proof';
 
 const assetUrl = (name: string): string => new URL(`./rifty/${name}`, document.baseURI).href;
 const quickjsWasmUrl = assetUrl('quickjs.wasm');
@@ -44,6 +45,7 @@ interface PackedWorkbenchDiagnostics {
 declare global {
   interface Window {
     __RIFTY_PACKED_WORKBENCH__: Promise<PackedWorkbenchAcceptance>;
+    __RIFTY_PACKED_SNAPSHOT_ONLY__: Promise<SnapshotOnlyAcceptance>;
     __RIFTY_PACKED_WORKBENCH_DIAGNOSTICS__: PackedWorkbenchDiagnostics;
   }
 }
@@ -214,9 +216,24 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
   });
 }
 
-const acceptance = openAcceptance().catch((error: unknown) => {
-  status.textContent = error instanceof Error ? error.message : String(error);
-  throw error;
-});
-void acceptance.catch(() => {});
-window.__RIFTY_PACKED_WORKBENCH__ = acceptance;
+if (new URL(location.href).searchParams.has('snapshot-only')) {
+  const strict = openSnapshotOnlyAcceptance(workbenchOptions())
+    .then((opened) => {
+      previewFrame.src = opened.previewUrl;
+      status.textContent = 'ready';
+      return opened;
+    })
+    .catch((error: unknown) => {
+      status.textContent = error instanceof Error ? error.message : String(error);
+      throw error;
+    });
+  void strict.catch(() => {});
+  window.__RIFTY_PACKED_SNAPSHOT_ONLY__ = strict;
+} else {
+  const acceptance = openAcceptance().catch((error: unknown) => {
+    status.textContent = error instanceof Error ? error.message : String(error);
+    throw error;
+  });
+  void acceptance.catch(() => {});
+  window.__RIFTY_PACKED_WORKBENCH__ = acceptance;
+}

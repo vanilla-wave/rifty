@@ -42,3 +42,7 @@ No new package compatibility: unsupported packages, incomplete ordinary pins
 or unpinned extra source closures fail visibly. Network work may precede that
 failure; no artifact is emitted. Public browser restore remains the existing
 snapshot-backed project definition and acquisition path.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0399 extends only new-path admission to parent/path/version-proven declared companions; all existing companion/ordinary source pins remain exact and ordinary child additions remain refused.
