@@ -6,7 +6,7 @@ created: 2026-09-07
 why: The public options require a registry URL and first-snapshot rejection schedules a real install.
 user_story: As the Tracker plugin-sandbox embedder, I want to run a snapshot-backed workbench without a browser registry, but today the public options require a registry URL and first-snapshot rejection schedules a real install.
 epic: self-hosted-snapshot-workbench
-blocked_by: [distribution/workbench-snapshot-application-policy]
+blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md]
 code: [packages/workbench/src/workbench/internal/workbench-options.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workers/owner-package-state.ts]
 ---

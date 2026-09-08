@@ -1,15 +1,9 @@
 {
-  "overall_verdict": "blocker",
-  "merge_call": "Final+GREEN BLOCK: repair B1 in I8 and independently verify. Executed existing carriers335/335 and physical OPFS5/5 GREEN; independent manifest-target probe6/6 semantic RED. Whole goal remains open.",
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS for I8 at 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c. B1 repaired and independently verified: original6, carrier199, integration3 and real OPFS5 all GREEN. Unit complete; continue I3/I4/I5/I6/I7 before whole-goal closure.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-application-policy.md at clean b6efe3ee4f853096e7f1346cde9591ac41df73b2; BASE ab3871d714525c4b7db75d6be0b3631817997783. Fresh independent reviewer /root/snapshot_application_final_review; read-only source. Raw goal/map/ledger/user answers, ADR-0394/0397 and retained catalog/stamp authorities inspected. Preparation fe0c879ba1de72fd2b56ad5690ffbf8fa1b3a383 and executed RED artifacts exist. PR-4 inspected all changed criteria: retry txId oracle remains exact apart from independently issued nonce; obsolete initializer rejection replaced by real trusted/absent legacy proof; all three adopted corruption cases retained; inventories updated for real additions; source ratchets only lowered. No goal/ledger weakening. Independent logs /tmp/rifty-316-application-independent-unit.log (335/335), /tmp/rifty-316-application-review-opfs.log (5/5), /tmp/rifty-316-application-review-manifest-target-final.log (6 semantic RED). Driver final pr:check25/25 and packed118.57s logs read; packed assertions/source and Node oracle inspected. No reviewed_sha added; runner may bind only a later PASS.",
-  "unit_residuals": [
-    {
-      "clause": "Acceptance 5+6 → I8; ADR-0394 decisions 4+5",
-      "location": "packages/workbench/src/workers/workbench-owner-runtime.ts:347",
-      "summary": "B1: explicit apply must handle absent/malformed/directory package.json as an ordinary payload target and preserve conflict-before-effects; current live-manifest prerequisite prevents it."
-    }
-  ],
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-application-policy.md at clean 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c; BASE ab3871d714525c4b7db75d6be0b3631817997783. Fresh original reviewer /root/snapshot_application_final_review independently verified the actual accepted B1 repair under REV-12; no tracked edits. Prior raw goal/map/ledger/user-answer, ADR-0394/0397 and PR-4 review remains valid: exact retry nonce discrimination, retained adopted corruption cases, real replacement for obsolete initializer oracle, exact export/source closure and lowered-only file ratchets. Repair diff additionally checked every admission caller, published browser manifest loop and unchanged Vite integration assertions; authority ratchet lowers920→904. Preparation fe0c879ba1de72fd2b56ad5690ffbf8fa1b3a383 remains; raw repair18 RED→18 GREEN inspected. B1 is fixed through one existing admission helper: owned definition supplies provisional apply configuration, generic validated payload preflight still precedes effects, actual payload manifest/config/claim publishes through the existing package actor; default saved admission reads current tree. Demotion uses valid current manifest or validated prior claim and cannot invent disk provenance when both are absent/invalid; existing epochs/durability remain. New committed18 owner and6 stamp cases cover Scratch/named/legacy and both conflict modes; deliberately different initializer vs payload manifests discriminate wrong claim/config publication. Original unchanged six-case reviewer probe now6/6 GREEN: /tmp/rifty-316-b1-independent-original-probe.log. Independent committed carrier199/199 GREEN: /tmp/rifty-316-b1-independent-carriers.log; Vite integration3/3: /tmp/rifty-316-b1-independent-integration.log; real catalog/receipt OPFS5/5: /tmp/rifty-316-b1-independent-opfs.log. Driver final pr:check25/25 and packed78.64s logs read at /tmp/rifty-316-b1-pr-check-final.log and /tmp/rifty-316-b1-packed-green.log; packed real-public manifest recovery and Node-output assertions inspected, unchanged production source after that run. Earlier B1 evidence/history remains in git and ledger; no critic ruling or scope change. Runner adds reviewed_sha after this PASS.",
+  "unit_residuals": [],
   "goal_residuals": [
     {
       "clause": "I3",
@@ -75,17 +69,17 @@
       "row": "Acceptance 5: each same/new-ID Scratch/named apply evaluates payload; error reports structural conflicts before additions; equal/missing targets admitted",
       "source": "acceptance",
       "trace": "I8",
-      "status": "weak",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204",
-      "note": "B1: carriers exercise valid JSON manifest edits and node_modules type conflicts; current live-manifest prerequisite still passes them while refusing missing/malformed/directory package.json before generic application. Independent six-case semantic RED: /tmp/rifty-316-application-review-manifest-target-final.log."
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
+      "note": ""
     },
     {
       "row": "Acceptance 6: generic overwrite replaces differing/type targets, adds absent entries, retains source/local dependencies/empty directories; legacy preserves untargeted bytes",
       "source": "acceptance",
       "trace": "I8+ADR-0394",
-      "status": "weak",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:259; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:235",
-      "note": "B1: carriers exercise valid JSON manifest edits and node_modules type conflicts; current live-manifest prerequisite still passes them while refusing missing/malformed/directory package.json before generic application. Independent six-case semantic RED: /tmp/rifty-316-application-review-manifest-target-final.log."
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:259; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:235; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181; packages/workbench/src/glue/install-stamp-invalid-manifest.contract.test.ts:20",
+      "note": ""
     },
     {
       "row": "Acceptance 7: warm application validates real artifact identity/schema/replay closure/integrity without project/cache changes; durable cache precedes live lock",
@@ -108,7 +102,7 @@
       "source": "acceptance",
       "trace": "I8",
       "status": "pass",
-      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:49; tests/integration/workbench-packed-consumer.mjs:1225",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:49; tests/integration/workbench-packed-consumer.mjs:1225; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
       "note": ""
     },
     {
@@ -147,9 +141,9 @@
       "row": "destructive-update × conflict preflight: differing file/type/ancestor conflicts report paths and do not add absent targets",
       "source": "fault-matrix",
       "trace": "I8",
-      "status": "weak",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:332; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:214",
-      "note": "B1: carriers exercise valid JSON manifest edits and node_modules type conflicts; current live-manifest prerequisite still passes them while refusing missing/malformed/directory package.json before generic application. Independent six-case semantic RED: /tmp/rifty-316-application-review-manifest-target-final.log."
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:332; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:214; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
+      "note": ""
     },
     {
       "row": "quota-perm-fail × first admission/ready proof: restore seed/entitlement and admit same-owner retry without false ready",
@@ -244,7 +238,7 @@
       "source": "public-api",
       "trace": "ADR-0394",
       "status": "pass",
-      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:147; packages/workbench/src/workbench/internal/playground-workbench.contract.test.ts:652",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:147; packages/workbench/src/workbench/internal/playground-workbench.contract.test.ts:652; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
       "note": ""
     },
     {
@@ -259,9 +253,9 @@
       "row": "openProject: saved readiness or explicit per-request application through existing owner",
       "source": "public-api",
       "trace": "I8+ADR-0394",
-      "status": "weak",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:96; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:259",
-      "note": "B1: carriers exercise valid JSON manifest edits and node_modules type conflicts; current live-manifest prerequisite still passes them while refusing missing/malformed/directory package.json before generic application. Independent six-case semantic RED: /tmp/rifty-316-application-review-manifest-target-final.log."
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:96; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:259; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
+      "note": ""
     },
     {
       "row": "catalog.reset: explicit whole-project reseed and first-admission receipt retain meaning",
@@ -292,7 +286,7 @@
       "source": "frozen-artifact",
       "trace": "ADR-0279+ADR-0394",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1699; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:2079",
+      "citation": "packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1695; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:2075",
       "note": ""
     },
     {
@@ -307,7 +301,7 @@
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "blocker",
+      "verdict": "pass",
       "findings": []
     },
     {
@@ -332,16 +326,8 @@
     },
     {
       "axis": "Bugs",
-      "verdict": "blocker",
-      "findings": [
-        {
-          "severity": "blocker",
-          "location": "packages/workbench/src/workers/workbench-owner-runtime.ts:347",
-          "summary": "B1: explicit snapshot application requires a readable valid saved package.json before generic preflight. A deleted manifest fails ENOENT, a directory fails EISDIR, and edited invalid JSON fails manifest parsing. Both conflict modes stop with zero snapshot requests; overwrite cannot restore the payload, error cannot report /package.json, and an absent target cannot be added. Resolve application metadata from the verified incoming payload through the existing acquisition owner; saved-manifest readiness must remain a default-mode prerequisite only.",
-          "authority": "I8: generic paths/types/bytes conflict policy, absent targets added, overwrite replaces conflicting targets, no package-specific dependency interpretation; Acceptance 5 and 6 → I8; ADR-0394 decisions 4 and 5.",
-          "evidence": "Executed on clean b6efe3ee4f853096e7f1346cde9591ac41df73b2: /Users/vanilla-wave/.t3/worktrees/rifty/t3code-f06339b8/node_modules/.bin/vitest run --config /tmp/rifty-316-application-review-probe/vitest.config.mts --root /tmp/rifty-316-application-review-probe. Six semantic RED, log /tmp/rifty-316-application-review-manifest-target-final.log, source /tmp/rifty-316-application-review-probe/manifest-target.test.ts. Real producer, Memory VFS, catalog/package/stamp graph and guarded project mutation; no product doubles or tracked edits. For malformed/absent/directory × overwrite and malformed/directory/absent × error: requests=[]; TypeError unreadable JSON / VfsError ENOENT / VfsError EISDIR. Test setup includes successful real initial snapshot acquisition. Original directory probe had missing fixture mkdir options; corrected before this six-semantic-RED run. Fault class: dependency-sensitive admission precondition before file-conflict selection. Missing committed RED: package.json absent/malformed/type-target cases. Sibling sweep must cover Scratch/named and legacy source composition because workbench-owner-runtime reads preflightRoot/package.json too; package-lock/node_modules targets already enter the generic overlay and should retain their carriers."
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Regressions",
@@ -353,5 +339,6 @@
       "verdict": "pass",
       "findings": []
     }
-  ]
+  ],
+  "reviewed_sha": "39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c"
 }
