@@ -22,44 +22,37 @@ snapshot is required. Evidence:
 ## User scenario
 
 The embedder opens Workbench with `packageAcquisition: {}` (no registry, no
-Eddy), seeds a snapshot-backed Scratch from a published tar.gz, and runs the
-real Vite command. No registry or Eddy request is made. A missing or
-id-mismatched snapshot required by I8 fails before guest start and does not
-schedule `npm install`. Reopening a valid saved Scratch with an unused new
-snapshotId under initial-only still does not fetch that asset.
+Eddy) and first-seeds a snapshot-backed Scratch. A compatible snapshot
+restores without a registry or Eddy request and without scheduling
+`npm install`. A missing or id-mismatched snapshot required by I8 fails
+before guest start and does not become deferred install. Reopening a valid
+saved Scratch with an unused new snapshotId under initial-only still does
+not fetch that asset.
 
 ## Acceptance
 
-1. `packageAcquisition: {}` (omitted `registryUrl` and `eddy`) is valid
-   Workbench admission; Eddy still requires `registryUrl`.
-   `workbench-snapshot-only.contract.test.ts` admission cases. → I3 → ADR-0400
-2. A required snapshot that is missing, corrupt, or identity-mismatched
-   rejects before guest start and does not return `kind: 'install'`.
-   Same file; registry-present deferred-install cases stay. → I3 → ADR-0400
-3. Snapshot-only restore and later package/terminal commands make zero
-   registry/Eddy requests; absent exact bytes fail loudly rather than
-   network-install. Same file plus existing I8 unused-snapshot no-fetch.
-   → I3
+1. `packageAcquisition: {}` (omitted `registryUrl` and `eddy`) is valid Workbench admission; Eddy still requires `registryUrl`. `workbench-snapshot-only.contract.test.ts` admission cases. → I3 → ADR-0400
+2. A required snapshot that is missing, corrupt, or identity-mismatched rejects before guest start and does not return `kind: 'install'`. `workers/workbench-snapshot-only.contract.test.ts` unrestorable cases; registry-present deferred-install cases stay. → I3 → ADR-0400
+3. Snapshot-only restore and later package/terminal commands make zero registry/Eddy requests; absent exact bytes fail loudly rather than network-install. Same workers file request-count case. → I3
+4. A compatible required snapshot under omitted registry restores as `kind: 'ready'` and does not schedule install. Same workers file compatible-restore case. → I3 → ADR-0400
 
 ## Fault matrix
 
-- Corrupt/incompatible required snapshot × first seed or apply: reject
-  before guest start; no deferred install. Same file identity/404 cases.
-  → I3 → ADR-0400
-- Unused new snapshot × initial-only reopen: unused asset is not fetched
-  and does not fail snapshot-only admission. Existing I8 no-fetch case.
-  → I3 → ADR-0396
+- Corrupt/incompatible required snapshot × first seed or apply: reject before guest start; no deferred install. Same file identity/404 cases. → I3 → ADR-0400
+- Unused new snapshot × initial-only reopen: unused asset is not fetched and does not fail snapshot-only admission. Existing I8 no-fetch case. → I3 → ADR-0396
 
 ## Out of scope
 
 Storage namespace, orphan recovery, preview prefix, and operation budgets
-remain named siblings. Registry-enabled acquisition keeps deferred install.
-Guest application network is unchanged. Retired `snapshotUrl` stays retired.
+remain named siblings. The composed packed-host Vite run of a published
+producer tar.gz is I7 (plus the I1 packed residual). Registry-enabled
+acquisition keeps deferred install. Guest application network is unchanged.
+Retired `snapshotUrl` stays retired.
 
 ## Decisions
 
-- 2026-09-08 — ADR-0400: omitted registryUrl+eddy is snapshot-only; required
-  snapshot failure does not become deferred install.
+- 2026-09-08 — ADR-0400: omitted registryUrl+eddy is snapshot-only; required snapshot failure does not become deferred install.
+- 2026-09-08 — packed Vite/command proof stays on I7; this unit owns admission, loud required-snapshot failure, zero registry/Eddy requests, and compatible restore without install.
 - 2026-09-07 — round 3: compose the separate generic application-policy authority; registry admission never chooses which existing files to overwrite.
 - 2026-09-07 — finding draft; observable scope is settled by goal I3; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.

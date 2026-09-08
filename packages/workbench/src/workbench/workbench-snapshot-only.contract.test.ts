@@ -39,6 +39,24 @@ describe('snapshot-only Workbench admission (I3)', () => {
     expect(admitted.owner.packageAcquisition).not.toHaveProperty('eddy');
   });
 
+  it('rejects Eddy when registryUrl is omitted', () => {
+    expect(() =>
+      validateWorkbenchOptions(
+        {
+          ...options(),
+          packageAcquisition: {
+            eddy: {
+              resolverUrl: 'https://eddy.invalid/resolve',
+              bundleBaseUrl: 'https://eddy.invalid/bundles',
+              presetPins: { vite: '8.0.16' },
+            },
+          },
+        },
+        URL_CONTEXT,
+      ),
+    ).toThrow(/packageAcquisition\.(eddy|registryUrl)/);
+  });
+
   it('admits a clone-safe initialize frame without registryUrl', () => {
     expect(() =>
       inspectPageToWorkbenchOwnerMessage({
