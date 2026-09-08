@@ -1,0 +1,151 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concern only) at b73743af58921a5d2ff161300599c4e6bee5bbc0; proceed to implementation, not a merge approval. Both reception FIX defects verified gone. All 6 tests fail for the missing producer/export, not import/typecheck.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "b73743af58921a5d2ff161300599c4e6bee5bbc0",
+  "unit_goal_source": "docs/backlog/distribution/dep-snapshot-producer.md @ b73743af58921a5d2ff161300599c4e6bee5bbc0 (BASE fbe724f7c230b468fb3ed010cba3c71631a385e3); ADR-0389; goal docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I1.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:5",
+      "summary": "produceDepSnapshot implementation, the ./dep-snapshot package.json export, and packed-consumer public-entry proof remain; this checkpoint proves producer RED readiness only. Codec envelope (ADR-0386) already lands at fbe724f7c."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Copyable published runtime asset closure and real packed project boot remain."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Initial-only saved-state priority and explicit generic overwrite/error application remain."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Public registry-free acquisition and honest selected-snapshot failures remain."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Selected OPFS namespace isolation and former-project reopening remain."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:15",
+      "summary": "Byte-exact retained orphan download/reopen and fresh Scratch remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:17",
+      "summary": "Configured non-root preview prefix with navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:19",
+      "summary": "Effective host operation budgets and composed whole-scenario proof remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Published produceDepSnapshot writes caller manifest+lock, runs existing install, emits ADR-0386 tar plus snapshotId and installArtifactIdentity; packed consumer imports only that entry and restores matching project bytes.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:177",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: A lock that pins older versions keeps those versions when the registry also advertises newer ones; produce does not live-resolve covered pins.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:238",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Raw gzip and HTTP-decoded tar of the produced archive restore the same bytes through public fetch/restore.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:287",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Corrupt/unsupported input × produce — unparseable lock, lifecycle scripts and native/unsupported specs throw the existing installer errors before a snapshot is emitted.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:320",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Snapshot identity/replay × restore — produced snapshotId mismatch and altered replay closure reject before destination mutation.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:209; packages/workbench/src/glue/dep-snapshot.test.ts:221",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Cancelled registry × produce — caller AbortSignal fails before destination snapshot bytes are returned.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot-producer.test.ts:385",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/dep-snapshot-producer.test.ts:316",
+          "evidence": "pnpm exec vitest run packages/workbench/src/dep-snapshot-producer.test.ts — 6 failed, all at missing produceDepSnapshot/export; tsc clean.",
+          "summary": "Acceptance 3 asserts path existence after gzip/raw restore, not byte identity. Advisory; coverage stays pass.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

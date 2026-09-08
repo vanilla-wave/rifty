@@ -47,6 +47,8 @@ named sibling units.
 
 ## Decisions
 
+ready-verdict: 2026-09-08 — Contract+RED @ b73743af58921a5d2ff161300599c4e6bee5bbc0
+
 - re-cut: 2026-09-08 — distribution/dep-snapshot-tar owns codec proof first; this unit retains public producer and packed-consumer I1 proof — trace: none
 - 2026-09-07 — F1 user decision: builder-owned registry authentication excluded; host environment provides access.
 - 2026-09-07 — user: producer-generated tar.gz, ordinary inspection, disjoint user/control paths; arbitrary caller-created installed trees are not admitted.
