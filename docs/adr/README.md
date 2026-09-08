@@ -395,6 +395,7 @@ superseded.
 | 0130 D4 generated direct-command selector | 0327 / note 2026-07-26 | exact script bytes select canonical direct entry versus installed `.bin`; no template-ID dispatch |
 | 0146 PTY-over-fork-IPC clause | 0326 / note 2026-07-26 | PTY frames use the private control lane on the same physical port |
 | 0150 P6b fork-control / all-node-server dedicated path clauses | 0326 + 0327 / note 2026-07-26 | private frames carry control; only canonical direct-entry scripts use the dedicated controller |
+| 0155 §2 permanent serve handoff; 0342 Workbench release-on-port | 0385 / note 2026-09-08 | one foreground drain follows listening ports through final close; runtime terminal precedence retained |
 | 0155 public `rifty:node-listening` clause | 0326 / note 2026-07-26 | typed private descendant control reports listening/removal/physical exit |
 | 0157 unconditional process IPC / `postListening` clauses | 0326 / note 2026-07-26 | public JSON IPC exists only for fork; private host adapter reports lifecycle |
 | 0162 worker-thread IPC lane clause | 0326 / note 2026-07-26 | worker threads keep structured clone and thread identity, outside the process table |

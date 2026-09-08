@@ -34,7 +34,7 @@ import { getKernelDispatcher, globalProcessManager, readKernelSyncApi } from '@r
 import { dispatchToPort, listPorts, onRegistryChange, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { awaitDrain, installConsole, releaseNodeEvalDrainOwnership } from '@riftydev/runtime-js';
+import { awaitDrain, installConsole } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { readNodeEntryBootstrap } from '@riftydev/runtime-js/builtins/node-entry-url';
 import {
@@ -154,16 +154,14 @@ const runEntry = (): Promise<void> =>
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
 // builtins are registered unconditionally here — http/net are needed both for
 // servers AND for client scripts that import them; the lifecycle decides
-// drain-exit vs stay-alive from whether the entry registered a port.
+// drain-exit from whether any ports or referenced runtime handles remain.
 //
 // The unhandledrejection trap + drain hook are ALREADY installed in this realm at
 // module top-level in kernel-worker-entry.ts (`installEventLoopKeepalive()`, beside
 // `installTimerGlobals()` — runs at worker module load, before any spawn; NOT in the
 // pre-entry hook). For a run-to-completion script (no listen) `awaitDrain` surfaces a
-// detached async rejection loudly (stderr + exit 1). A served entry returns without
-// awaiting the drain, so its detached rejection surfaces via the realm's default
-// `unhandledrejection` reporting (the keepalive trap deliberately does not
-// preventDefault) — never silently swallowed either way.
+// detached async rejection loudly (stderr + exit 1). The same drain remains
+// active while listening; a pending entry retains browser error reporting.
 //
 // `proc` is the ONE spec-seeded rich process the pre-entry seam installed (ADR-0157):
 // correct argv/cwd/stdin + fork-IPC `send`. No swap, so every entry path reads the
@@ -179,8 +177,8 @@ if (nodeServe) {
     // A serve-capable foreground process may be a real long-lived supervisor
     // (nodemon) whose referenced watcher/timer handles are its Node lifetime.
     // The owner signal/peer boundary remains the physical stop authority.
-    awaitDrain: () => awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
-    releaseDrainOwnership: releaseNodeEvalDrainOwnership,
+    awaitDrain: () =>
+      awaitDrain({ capMs: Number.POSITIVE_INFINITY, hasRef: () => listPorts().length > 0 }),
     servePreview: (port) =>
       serveCrossRealmPreview(
         port,
