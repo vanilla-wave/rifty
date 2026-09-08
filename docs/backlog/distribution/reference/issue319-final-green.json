@@ -1,0 +1,414 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS: I1\u2013I5 proven; pr:check 25/25, no-COI 18/18, OPFS 7/7, production 7/7, packed surface PASS; independent PR-4 17/17 and real recovery 1/1. Goal awaits linked-child RECHART/CLOSE only; no merge requested.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a013f8ae7ee1861fa6f2d7b423402f94968a8c4c",
+  "unit_goal_source": "PR #321 against origin/main 9a6331194f4b67245c2ab118a72f93920da584c5; docs/backlog/epics/no-coi-persisted-warm-open/goal.md; distribution/no-coi-warm-open, no-coi-install-dedup, no-coi-toolchain-persist-failures; vfs/no-coi-opfs-preload-handles; raw issue319-refine-evidence.md; ADR-0307/0377/0392/0393",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Warm-open Acceptance 1: real Vite install/build, full-page open/build; zero registry, installer and native mutations",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:123",
+      "note": ""
+    },
+    {
+      "row": "Warm-open Acceptance 2: same-length dependency/source edits, extra file and deletion survive; execution sees saved state",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:155",
+      "note": ""
+    },
+    {
+      "row": "Warm-open Acceptance 3: explicit cached repair restores changed/missing dependencies, preserves source and builds Vite",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:184",
+      "note": ""
+    },
+    {
+      "row": "Warm-open Acceptance 4: missing/pending/legacy/root/policy/manifest/lock/registry mismatch refuses without mutation",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:194",
+      "note": ""
+    },
+    {
+      "row": "Warm-open Acceptance 5: native lock/claim persistence failure rejects install and cannot authorize recreated open",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:260",
+      "note": ""
+    },
+    {
+      "row": "Warm-open Acceptance 6: public fs and guest copy/rename cannot manufacture or transfer authority",
+      "source": "acceptance",
+      "trace": "ADR-0307",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:279",
+      "note": ""
+    },
+    {
+      "row": "Warm-open Acceptance 7: nested explicit install demotes ancestor; ordinary edits preserve trust",
+      "source": "acceptance",
+      "trace": "ADR-0307",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:308",
+      "note": ""
+    },
+    {
+      "row": "Warm-open Parity 1: edited CommonJS returns saved-edit; missing module reports MODULE_NOT_FOUND",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:174",
+      "note": ""
+    },
+    {
+      "row": "Warm-open fault restart \u00d7 open: fresh Worker activates compatible saved tree",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:143",
+      "note": ""
+    },
+    {
+      "row": "Warm-open fault uncoordinated edit/delete \u00d7 open: preserve and execute saved bytes",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:155",
+      "note": ""
+    },
+    {
+      "row": "Warm-open fault missing/pending/legacy/policy/root/manifest/lock/registry \u00d7 open: explicit install required, no replay/mutation",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:194",
+      "note": ""
+    },
+    {
+      "row": "Warm-open fault quota-perm-fail \u00d7 lockfile/claim persistence: reject and refuse recreated activation",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:260",
+      "note": ""
+    },
+    {
+      "row": "Warm-open fault claim ingress \u00d7 write/copy/rename: reserved transfer refused without mutation",
+      "source": "fault-matrix",
+      "trace": "ADR-0307",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:279",
+      "note": ""
+    },
+    {
+      "row": "Warm-open fault nested installer \u00d7 ancestor tree: demote before mutation",
+      "source": "fault-matrix",
+      "trace": "ADR-0307",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:308",
+      "note": ""
+    },
+    {
+      "row": "Dedup Acceptance 1: repeat nanoid install skips durable index.js writes and nanoid directory creates; repairs changed bytes",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-install-dedup.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Dedup Acceptance 2: empty/unreadable/dirty/pending state does not prove equality; failure remains visible and healable",
+      "source": "acceptance",
+      "trace": "I3 + I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/install-mirror-proof.spec.ts:3; tests/browser-unit/fixtures/install-mirror-proof-worker.ts:76; tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Dedup Acceptance 3: generic writeFile and recursive mkdir retain ordinary persistence",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/install-mirror-proof.spec.ts:3; tests/browser-unit/fixtures/install-mirror-proof-worker.ts:40",
+      "note": ""
+    },
+    {
+      "row": "Flush Acceptance 1: failed install/build flush rejects; clean and memory paths settle normally",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-persistence.fault.spec.ts:6; tests/no-coi/no-coi-warm-open.spec.ts:123; tests/no-coi/no-coi-dev-hmr.spec.ts:1374",
+      "note": ""
+    },
+    {
+      "row": "Dedup fault poisoned-cache \u00d7 same-length edit: durable and mirror bytes must agree or repair",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-install-dedup.spec.ts:58; tests/browser-unit/install-mirror-proof.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Dedup fault quota-perm-fail \u00d7 reinstall: dirty paths heal or reject, never skip",
+      "source": "fault-matrix",
+      "trace": "I3 + I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-install-dedup.spec.ts:61; tests/browser-unit/install-mirror-proof.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Flush fault quota-perm-fail \u00d7 install/build flush: reject including native cause",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-persistence.fault.spec.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Preload Acceptance 1: getFile/arrayBuffer rejection prevents boot/preload/read/copy; no fabricated destination",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:53; tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Preload Acceptance 2: eight depth-three files load exact bytes with root1/getFile8/path lookups0; timing separate",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Preload Acceptance 3: twelve concurrent init calls share one root; rejection permits retry",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "Preload Acceptance 4: fresh async reads, replacement and detached old views; native receiver/argument behavior",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:66",
+      "note": ""
+    },
+    {
+      "row": "Preload Parity 1: native edit/delete/recreate observed by fresh read; old directory view remains detached",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:66",
+      "note": ""
+    },
+    {
+      "row": "Preload Parity 2: raw invalid receiver and slash-containing filename retain native TypeError",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:66",
+      "note": ""
+    },
+    {
+      "row": "Preload fault quota-perm-fail \u00d7 getFile: reject, never empty read/copy",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Preload fault quota-perm-fail \u00d7 arrayBuffer: reject, never empty read/copy",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Preload fault concurrent-same-key \u00d7 root init: one acquisition, rejection permits retry",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "Preload fault poisoned-cache \u00d7 edit/delete/recreate: fresh read or missing-file error",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:66",
+      "note": ""
+    },
+    {
+      "row": "Preload fault observable-order \u00d7 receiver/argument: native exceptions retained",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:66",
+      "note": ""
+    },
+    {
+      "row": "SandboxToolchain.open and RuntimeToolchain.open validate/snapshot request and activate through the dedicated operation",
+      "source": "public-api",
+      "trace": "I1 + ADR-0392",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-warm-open.spec.ts:123; packages/runtime-js/src/host.test.ts:622; packages/runtime-js/src/host.test.ts:928",
+      "note": ""
+    },
+    {
+      "row": "Toolchain protocol v3/open request retains exact handshake compatibility refusal",
+      "source": "public-api",
+      "trace": "ADR-0392",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host.test.ts:280; packages/runtime-js/src/host.test.ts:300; tests/no-coi/no-coi-warm-open.spec.ts:123",
+      "note": ""
+    },
+    {
+      "row": "OpfsPreloadError retains native cause; runtime boot and pending eval/fs reject without ready or memory success",
+      "source": "public-api",
+      "trace": "I3 + ADR-0393",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-preload-failure.spec.ts:5; tests/no-coi/no-coi-preload-failure.spec.ts:44",
+      "note": ""
+    },
+    {
+      "row": "OpfsVfs constructor acquired-root option and init share root/acquisition and retain retry",
+      "source": "public-api",
+      "trace": "I5 + ADR-0393",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:49; tests/browser-unit/opfs-preload-handles.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.init acquired-root option and initBackend paired composition publish one fully readable traversal",
+      "source": "public-api",
+      "trace": "I3 + I5 + ADR-0393",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:49; tests/browser-unit/opfs-preload-handles.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.preloadContent rejects unreadable bytes without publishing a partial refresh",
+      "source": "public-api",
+      "trace": "I3 + ADR-0393",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:53",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.readFileBytesSync rejects uncached indexed bytes while real empty content stays valid",
+      "source": "public-api",
+      "trace": "I3 + ADR-0393",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:53; tests/browser-unit/opfs-preload-handles.spec.ts:59",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.copyFileSync rejects uncached source without fabricating destination; true-empty copy works",
+      "source": "public-api",
+      "trace": "I3 + ADR-0393",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:53; tests/browser-unit/opfs-preload-handles.spec.ts:59",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.isPersistenceClean uses pending scheduler and complete ancestor ledger; fresh native bytes still required",
+      "source": "public-api",
+      "trace": "I3 + I4 + ADR-0392",
+      "status": "pass",
+      "citation": "tests/browser-unit/install-mirror-proof.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Existing SandboxToolchain.install/runBin reject persistence errors; install mints protocol-authorized claims",
+      "source": "public-api",
+      "trace": "I3 + ADR-0392",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-persistence.fault.spec.ts:6; tests/no-coi/no-coi-warm-open.spec.ts:260",
+      "note": ""
+    },
+    {
+      "row": "Existing ToolchainSandbox.restart restores acknowledged bytes across OPFS-memory-OPFS while preserving privileged claim ordering",
+      "source": "public-api",
+      "trace": "ADR-0377",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-dev-hmr.spec.ts:1374",
+      "note": ""
+    },
+    {
+      "row": "Recorded Node v24.16.0 edited/missing CommonJS oracle outputs retained as browser assertions",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/no-coi-warm-open-red-evidence.md:53; tests/no-coi/no-coi-warm-open.spec.ts:174",
+      "note": ""
+    },
+    {
+      "row": "Recorded Chromium native counts and handle semantics compared to exact native browser carrier",
+      "source": "frozen-artifact",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "docs/backlog/vfs/reference/no-coi-opfs-preload-handles-evidence.md:18; tests/browser-unit/opfs-preload-handles.spec.ts:49; tests/browser-unit/opfs-preload-handles.spec.ts:66",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
