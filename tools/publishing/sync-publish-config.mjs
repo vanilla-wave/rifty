@@ -173,6 +173,7 @@ const SPEC = {
     ],
     addExports: {
       './no-coi-toolchain-worker': './src/workers/no-coi-toolchain-worker.ts',
+      './dep-snapshot': './src/dep-snapshot.ts',
     },
     keywords: ['workbench', 'development-environment', 'browser-runtime'],
   },

@@ -7,6 +7,8 @@ terminal, and preview operations.
 ## Public surface
 
 - `@riftydev/workbench` — sealed generic Vite workbench.
+- `@riftydev/workbench/dep-snapshot` — published bake/restore for standard
+  dependency snapshot tar archives (ADR-0389).
 - `@riftydev/workbench/playground` — first-party neutral project plans and
   lifetime-scoped TypeScript, SCM, archive, catalog, and terminal restoration
   tools.

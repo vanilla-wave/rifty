@@ -20,6 +20,7 @@ const EXPORTED_SOURCE_ENTRIES = [
   'src/workers/dev-server-child-bootstrap.ts',
   'src/workers/ts-lsp-worker-entry.ts',
   'src/workers/no-coi-toolchain-worker.ts',
+  'src/dep-snapshot.ts',
 ] as const;
 
 const EXPECTED_EXTERNAL_PACKAGES = [
@@ -305,7 +306,7 @@ describe('@riftydev/workbench extraction boundary', () => {
     ).toEqual([]);
   });
 
-  it('resolves exactly the eight sealed package source entries', () => {
+  it('resolves exactly the nine sealed package source entries', () => {
     const entries = resolvedExportEntries();
     expect(entries.map((path) => relative(PACKAGE_ROOT, path))).toEqual(EXPORTED_SOURCE_ENTRIES);
     expect(
@@ -339,11 +340,12 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 147 → 148 (PR #313): first-use no-COI install/activation module.
     // ADR-0384: seven package implementations now belong to registry.
     // ADR-0386: standard dependency snapshot tar codec.
-    expect(packageProductionFiles).toHaveLength(142);
+    // ADR-0389: sealed producer entry.
+    expect(packageProductionFiles).toHaveLength(143);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
-  it('does not retain runtime-bearing source outside the eight published build entries', async () => {
+  it('does not retain runtime-bearing source outside the nine published build entries', async () => {
     expect(await runtimeBearingSourcesOutsideBuild()).toEqual([]);
   });
 

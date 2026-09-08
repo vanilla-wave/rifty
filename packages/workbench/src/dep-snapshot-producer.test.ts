@@ -313,7 +313,9 @@ describe('published dependency snapshot producer', () => {
       } finally {
         vi.unstubAllGlobals();
       }
-      expect(fsSync.existsSync('/project/node_modules/pin/package.json')).toBe(true);
+      expect(dec.decode(fsSync.readFileBytesSync('/project/node_modules/pin/package.json'))).toBe(
+        '{"name":"pin","version":"1.0.0"}',
+      );
     }
   });
 

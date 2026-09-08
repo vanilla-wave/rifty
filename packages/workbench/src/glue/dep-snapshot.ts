@@ -12,15 +12,18 @@
 import {
   TARBALL_CACHE_ROOT,
   computeIntegrity,
+  install,
   parseIntegrityAlgorithm,
   tarballCachePath,
+  type RegistryClient,
 } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import { joinPath } from '@riftydev/vfs';
+import { createMemoryFs } from '@riftydev/vfs/internal';
 import { drainByteStreamBounded, fetchAssetBytesBounded } from './bounded-asset-fetch.ts';
 import { decodeDepSnapshotTar, encodeDepSnapshotTar } from './dep-snapshot-tar.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
-import { depsEqual, effectiveDepsFromPackageJsonText } from './install-stamp.ts';
+import { depsEqual, effectiveDepsFromPackageJsonText, readEffectiveDeps } from './install-stamp.ts';
 import {
   type WorkspaceArchiveFs,
   type WorkspaceArchiveV1,
@@ -377,22 +380,74 @@ function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshotV3 
   }
 }
 
-async function sha256Identity(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
-  let hex = '';
-  for (const byte of digest) hex += byte.toString(16).padStart(2, '0');
-  return `sha256:${hex}`;
-}
-
 export async function fetchVerifiedDepSnapshot(
   url: string,
   expectedSnapshotId: string,
 ): Promise<VerifiedDepSnapshot> {
   const bytes = await fetchDepSnapshotBytes(url);
-  if ((await sha256Identity(bytes)) !== expectedSnapshotId) return { status: 'mismatch' };
+  if ((await snapshotIdFromBytes(bytes)) !== expectedSnapshotId) return { status: 'mismatch' };
   return { status: 'matched', snapshot: parseFetchedDepSnapshot(url, bytes) };
 }
 
 export async function fetchDepSnapshot(url: string): Promise<DepSnapshotV3> {
   return parseFetchedDepSnapshot(url, await fetchDepSnapshotBytes(url));
+}
+
+export interface ProduceDepSnapshotInput {
+  readonly templateId: string;
+  readonly packageJsonText: string;
+  readonly packageLockText: string;
+  readonly registry: RegistryClient;
+  readonly signal?: AbortSignal;
+}
+
+export interface ProduceDepSnapshotResult {
+  readonly snapshot: DepSnapshotV3;
+  readonly snapshotId: string;
+  readonly installArtifactIdentity: string;
+  readonly tarBytes: Uint8Array;
+}
+
+export function createDepSnapshotMemoryFs(): { fs: WorkspaceArchiveFs } {
+  return { fs: createMemoryFs().fsSync };
+}
+
+export async function snapshotIdFromBytes(bytes: Uint8Array): Promise<string> {
+  const copy = new Uint8Array(bytes);
+  const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', copy));
+  let hex = '';
+  for (const byte of digest) hex += byte.toString(16).padStart(2, '0');
+  return `sha256:${hex}`;
+}
+
+/** Caller manifest+lock → existing install() → ADR-0386 tar and identities. */
+export async function produceDepSnapshot(
+  input: ProduceDepSnapshotInput,
+): Promise<ProduceDepSnapshotResult> {
+  const { vfs, fsSync } = createMemoryFs();
+  const cwd = '/workspace';
+  await vfs.mkdir(cwd, { recursive: true });
+  await vfs.writeFile(`${cwd}/package.json`, input.packageJsonText);
+  await vfs.writeFile(`${cwd}/package-lock.json`, input.packageLockText);
+  const result = await install({
+    vfs,
+    cwd,
+    registry: input.registry,
+    signal: input.signal,
+  });
+  const deps = await readEffectiveDeps(vfs, cwd);
+  if (!deps) throw new Error('produceDepSnapshot: package.json unreadable after install');
+  const snapshot = buildDepSnapshot(fsSync, cwd, {
+    templateId: input.templateId,
+    deps,
+    packages: result.packages.length,
+  });
+  await verifyDepSnapshotReplayCache(snapshot);
+  const tarBytes = serializeDepSnapshotTar(snapshot);
+  return {
+    snapshot,
+    snapshotId: await snapshotIdFromBytes(tarBytes),
+    installArtifactIdentity,
+    tarBytes,
+  };
 }

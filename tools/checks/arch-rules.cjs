@@ -120,7 +120,7 @@ const dependencyPolicyRules = [
     name: 'workbench-package-uses-sealed-entrypoints',
     severity: 'error',
     comment:
-      'ADR-0282: foreign production modules reach Workbench only through its seven package entrypoints',
+      'ADR-0282: foreign production modules reach Workbench only through its sealed package entrypoints',
     from: {
       // These artifact/parity owners prove package-private recipes; no other
       // foreign module may deep-import Workbench.
@@ -134,7 +134,7 @@ const dependencyPolicyRules = [
     to: {
       path: '(?:^|/)workbench/src/',
       pathNot:
-        '(?:^|/)workbench/src/(?:index|workbench/playground|workers/(?:workbench-owner-bootstrap|kernel-worker-entry|node-entry-bootstrap|dev-server-child-bootstrap|ts-lsp-worker-entry))\\.ts$',
+        '(?:^|/)workbench/src/(?:index|dep-snapshot|workbench/playground|workers/(?:workbench-owner-bootstrap|kernel-worker-entry|node-entry-bootstrap|dev-server-child-bootstrap|ts-lsp-worker-entry|no-coi-toolchain-worker))\\.ts$',
     },
   },
   {

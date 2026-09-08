@@ -13,6 +13,7 @@ export default defineConfig({
     'dev-server-worker': 'src/workers/dev-server-child-bootstrap.ts',
     'typescript-worker': 'src/workers/ts-lsp-worker-entry.ts',
     'no-coi-toolchain-worker': 'src/workers/no-coi-toolchain-worker.ts',
+    'dep-snapshot': 'src/dep-snapshot.ts',
   },
   format: ['esm'],
   dts: true,
