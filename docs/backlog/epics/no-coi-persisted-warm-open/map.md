@@ -4,7 +4,13 @@
 
 1. [distribution/no-coi-toolchain-persist-failures](../../distribution/no-coi-toolchain-persist-failures.md) — draft, first unblocked PICKUP; reject reported install/build persistence failures (I3). No dependency on a new warm-open API or handle cache.
 
-Only the independently specifiable first unit is seeded. The remaining I3
+2. [distribution/no-coi-warm-open](../../distribution/no-coi-warm-open.md) — I1/I2 activation, depends on honest preload.
+3. [distribution/no-coi-install-dedup](../../distribution/no-coi-install-dedup.md) — I4 installer-only durable equality.
+4. [vfs/no-coi-opfs-preload-handles](../../vfs/no-coi-opfs-preload-handles.md) — remaining I3 + I5 single-pass preload.
+
+PICKUP resolved the route questions (ADR-0392/0393); new promises await Contract+RED.
+
+Originally only the independently specifiable first unit was seeded. The remaining I3
 preload boundary and I1/I2/I4/I5 remain below; RECHART compiles the next unit
 when its technical question is resolved. Child readiness belongs to PICKUP.
 
