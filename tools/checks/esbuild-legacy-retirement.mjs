@@ -210,6 +210,8 @@ export function evaluateEsbuildBundleInventory(
   const violations = [];
   const generatedClients = [];
   for (const path of files) {
+    // ADR-0395 copyable closure is a separate published set (workers + WASM).
+    if (path.startsWith('packages/workbench/dist/runtime/')) continue;
     const bytes = readOutput(path);
     if (path.endsWith('.wasm')) violations.push(`${path}: runtime wasm shipped in package output`);
     // The 2 MB ceiling already subsumes the 13.9 MB member: no output can

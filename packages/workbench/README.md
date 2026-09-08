@@ -17,17 +17,30 @@ terminal, and preview operations.
 - `no-coi-toolchain-worker` — one-Worker SDK exact-manifest/install-bin entry
   for explicit shared-memory-free mode; package identity is not policy.
   Install/activation code loads on first install or restore.
+- `dist/runtime/` — copyable bundled workers, service worker, WASM, and
+  `manifest.json` (ADR-0395). Hosts that still compile may keep the sealed
+  source entries above.
 
 Controllers, owner transports, worker protocols, and `src/internal/*` are not
 public. Browser hosts supply Worker, Service Worker, and WASM URLs; package code
 contains no bundler query imports or App policy.
 
-QuickJS-backed Node children require a host kernel wrapper: import the bundler's
+Copy `dist/runtime/` to a static origin and pass those file URLs to
+`openWorkbench`. The kernel asset publishes the sibling `quickjs.wasm` URL
+before the kernel listener (ADR-0352). Required host headers are listed in
+`dist/runtime/manifest.json`:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: credentialless
+Cross-Origin-Resource-Policy: cross-origin
+Service-Worker-Allowed: /
+```
+
+Hosts that still compile may wrap the sealed kernel entry: import the bundler's
 `@jitl/quickjs-wasmfile-release-sync/wasm?url`, publish it under
 `QUICKJS_WASM_URL_ENV` from `@riftydev/runtime-js/install-process`, and
-statically import `@riftydev/workbench/kernel-worker`. Pass that wrapper's
-emitted Worker URL as `deployment.workers.kernel`; using the sealed kernel entry
-directly leaves browser QuickJS asset resolution unconfigured (ADR-0352).
-Playground's `quickjs-kernel-worker-host.ts` is the reference composition.
+statically import `@riftydev/workbench/kernel-worker`. Playground's
+`quickjs-kernel-worker-host.ts` is that compile-path reference.
 
-See ADR-0263 and ADR-0282.
+See ADR-0263, ADR-0282, and ADR-0395.

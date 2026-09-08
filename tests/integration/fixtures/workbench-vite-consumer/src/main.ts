@@ -1,15 +1,6 @@
-import quickjsWasmUrl from '@jitl/quickjs-wasmfile-release-sync/wasm?url';
 import { createSandbox } from '@riftydev/sdk';
-import serviceWorkerUrl from '@riftydev/service-worker/sw?worker&url';
 import { type PreviewHandle, openWorkbench, projects } from '@riftydev/workbench';
-import devServerWorkerUrl from '@riftydev/workbench/dev-server-worker?worker&url';
-import noCoiToolchainWorkerUrl from '@riftydev/workbench/no-coi-toolchain-worker?worker&url';
-import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
-import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
 import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
-import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&url';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import kernelWorkerUrl from './kernel-worker-entry.ts?worker&url';
 
 export interface PackedWorkbenchAcceptance {
   readonly previewUrl: string;
@@ -46,6 +37,16 @@ function requiredElement<T extends Element>(selector: string): T {
   }
   return element;
 }
+
+const ownerWorkerUrl = '/runtime/owner-worker.js';
+const kernelWorkerUrl = '/runtime/kernel-worker.js';
+const nodeWorkerUrl = '/runtime/node-worker.js';
+const devServerWorkerUrl = '/runtime/dev-server-worker.js';
+const typescriptWorkerUrl = '/runtime/typescript-worker.js';
+const noCoiToolchainWorkerUrl = '/runtime/no-coi-toolchain-worker.js';
+const serviceWorkerUrl = '/runtime/sw.js';
+const sqliteWasmUrl = '/runtime/sqlite.wasm';
+const quickjsWasmUrl = '/runtime/quickjs.wasm';
 
 const status = requiredElement<HTMLParagraphElement>('#status');
 const previewLink = requiredElement<HTMLAnchorElement>('#preview-link');
@@ -89,7 +90,7 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
         devServer: devServerWorkerUrl,
       },
       serviceWorker: { url: serviceWorkerUrl, scope: '/' },
-      wasm: { sqlite: sqlWasmUrl },
+      wasm: { sqlite: sqliteWasmUrl },
       previewProbeTimeoutMs: 30_000,
     },
     packageAcquisition: {
@@ -174,7 +175,7 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     sdkLoaded: typeof createSandbox === 'function',
     noCoiToolchainWorkerUrl,
     typescriptWorkerUrl,
-    hostWasm: Object.freeze({ quickjs: quickjsWasmUrl, sqlite: sqlWasmUrl }),
+    hostWasm: Object.freeze({ quickjs: quickjsWasmUrl, sqlite: sqliteWasmUrl }),
     async writeMessage(message: string): Promise<void> {
       const current = await project.files.readFile('/src/message.ts');
       await project.files.writeFile(

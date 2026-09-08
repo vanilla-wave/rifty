@@ -8,7 +8,7 @@ user_story: As the Tracker plugin-sandbox embedder, I want to boot workbench fro
 epic: self-hosted-snapshot-workbench
 blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, docs/backlog/distribution/reference/workbench-static-assets-evidence.md]
-code: [packages/workbench/tsup.config.ts, packages/workbench/README.md, tests/integration/fixtures/workbench-vite-consumer/host-builtins.ts]
+code: [packages/workbench/tsup.config.ts, packages/workbench/README.md, tests/integration/fixtures/workbench-vite-consumer/vite.config.ts]
 ---
 
 ## Context

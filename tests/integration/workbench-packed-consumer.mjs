@@ -947,7 +947,11 @@ async function assertTarballInstall(consumerRoot, tarballs) {
 
 function assertHostAsset(url, origin, packageName) {
   const parsed = new URL(url, origin);
-  if (parsed.origin !== origin || !parsed.pathname.endsWith('.wasm')) {
+  if (
+    parsed.origin !== origin ||
+    !parsed.pathname.includes('/runtime/') ||
+    !parsed.pathname.endsWith('.wasm')
+  ) {
     throw new Error(`Packed Workbench ${packageName} host asset is invalid: ${url}`);
   }
   return parsed.href;
@@ -1108,8 +1112,8 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       throw new Error(`Packed Workbench sqlite proof was lost: ${acceptance.sqliteProof}`);
     }
     const hostWasmUrls = [
-      assertHostAsset(acceptance.hostWasm.quickjs, previewOrigin, 'QuickJS'),
-      assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'sql.js'),
+      assertHostAsset(acceptance.hostWasm.quickjs, previewOrigin, 'copied runtime QuickJS'),
+      assertHostAsset(acceptance.hostWasm.sqlite, previewOrigin, 'copied runtime sqlite'),
     ];
     if (new URL(acceptance.typescriptWorkerUrl, previewOrigin).origin !== previewOrigin) {
       throw new Error('Packed Workbench TypeScript worker did not resolve from the packed host');

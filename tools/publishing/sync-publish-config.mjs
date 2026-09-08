@@ -39,6 +39,7 @@ const BASE_KEYWORDS = ['rifty', 'browser', 'webcontainer'];
 // import-time registration/bootstrap and must never be tree-shaken away.
 // addExports: subpath exports to add to the dev exports map before deriving.
 // dropExports: dev-only subpaths to exclude from the published exports.
+// postBuild: optional shell after tsup (copyable runtime assets, ADR-0395).
 const SPEC = {
   // Umbrella front door (EPIC B / ADR-0071). `@riftydev/sdk`: re-exports every
   // @riftydev/* layer on a subpath plus the framework-free createSandbox()
@@ -175,6 +176,7 @@ const SPEC = {
       './no-coi-toolchain-worker': './src/workers/no-coi-toolchain-worker.ts',
       './dep-snapshot': './src/dep-snapshot.ts',
     },
+    postBuild: 'node ./build-runtime-assets.mjs',
     keywords: ['workbench', 'development-environment', 'browser-runtime'],
   },
   '@riftydev/shadow-registry': {
@@ -271,7 +273,7 @@ function rebuildPkg(orig, name, spec) {
       types: './dist/index.d.ts',
       exports: pubExports,
     },
-    scripts: { ...orig.scripts, build: 'tsup' },
+    scripts: { ...orig.scripts, build: spec.postBuild ? `tsup && ${spec.postBuild}` : 'tsup' },
   };
   if (orig.dependencies) {
     out.dependencies = { ...orig.dependencies };

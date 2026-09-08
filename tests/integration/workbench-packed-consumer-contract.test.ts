@@ -1,8 +1,8 @@
+import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
-import { hostBuiltinAliases } from './fixtures/workbench-vite-consumer/host-builtins';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
@@ -12,7 +12,6 @@ const fixtureRoot = resolve(integrationRoot, 'fixtures/workbench-vite-consumer')
 const fixtureTsconfig = resolve(fixtureRoot, 'tsconfig.json');
 const fixtureMain = resolve(fixtureRoot, 'src/main.ts');
 const quickjsHostWrappers = [
-  resolve(fixtureRoot, 'src/kernel-worker-entry.ts'),
   resolve(integrationRoot, '../../apps/playground/src/workers/quickjs-kernel-worker-host.ts'),
 ];
 const parityKernelWorker = resolve(
@@ -143,7 +142,12 @@ describe('packed Workbench resource cleanup', () => {
 });
 
 describe('packed Workbench consumer TypeScript contract', () => {
-  it('installs the kernel listener before either host wrapper can yield', () => {
+  it('retires packed-consumer host-builtins aliases and QuickJS wrapper (I2)', () => {
+    expect(existsSync(resolve(fixtureRoot, 'host-builtins.ts'))).toBe(false);
+    expect(existsSync(resolve(fixtureRoot, 'src/kernel-worker-entry.ts'))).toBe(false);
+  });
+
+  it('installs the kernel listener before either remaining compile-path host wrapper can yield', () => {
     for (const wrapper of quickjsHostWrappers) {
       const imports = moduleImports(wrapper);
       expect(
@@ -198,11 +202,13 @@ describe('packed Workbench consumer TypeScript contract', () => {
     ).toBe(true);
   });
 
-  it('maps host builtins only through published runtime-js subpaths', () => {
-    expect(Object.keys(hostBuiltinAliases).sort()).toEqual(['fs', 'os', 'path', 'perf_hooks']);
-    for (const target of Object.values(hostBuiltinAliases)) {
-      expect(target).toMatch(/^@riftydev\/runtime-js\/builtins\/[^/]+$/u);
-      const subpath = `.${target.slice('@riftydev/runtime-js'.length)}`;
+  it('keeps published runtime-js builtin subpaths for hosts that still compile', () => {
+    for (const subpath of [
+      './builtins/fs',
+      './builtins/os',
+      './builtins/path',
+      './builtins/perf_hooks',
+    ] as const) {
       expect(runtimeJsManifest.publishConfig.exports[subpath].import).toMatch(/^\.\/dist\//u);
     }
   });

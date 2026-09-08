@@ -188,16 +188,27 @@ describe('esbuild carrier retirement', () => {
     expect(
       evaluateEsbuildBundleInventory(
         '/repo',
-        ['packages/workbench/dist/runtime-payload.js', 'packages/workbench/dist/client.js.map'],
-        (path) =>
-          path.endsWith('.js.map')
+        [
+          'packages/workbench/dist/runtime/quickjs.wasm',
+          'packages/workbench/dist/runtime/owner-worker.js',
+          'packages/workbench/dist/runtime-payload.js',
+          'packages/workbench/dist/client.js.map',
+        ],
+        (path) => {
+          if (path.startsWith('packages/workbench/dist/runtime/')) {
+            return path.endsWith('.wasm')
+              ? Buffer.from([0x00, 0x61, 0x73, 0x6d])
+              : Buffer.alloc(3_000_000);
+          }
+          return path.endsWith('.js.map')
             ? Buffer.from(
                 JSON.stringify({
                   sources: ['../src/runtime/generated/esbuild-runtime.js'],
                   sourcesContent: [GENERATED_CLIENT],
                 }),
               )
-            : packed,
+            : packed;
+        },
       ),
     ).toEqual(expect.arrayContaining([expect.stringContaining('packed runtime-byte candidate')]));
   });

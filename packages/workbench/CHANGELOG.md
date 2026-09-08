@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Published `dist/runtime/` is a copyable Worker/SW/WASM closure with documented
+  COI headers; hosts boot from those file URLs without compiling entries,
+  aliasing Node builtins, or wrapping QuickJS (ADR-0395).
+
 - `@riftydev/workbench/dep-snapshot` bakes caller package.json + lockfile into a standard tar snapshot and restores it without a rifty checkout (ADR-0389).
 
 - Dependency snapshots support deterministic standard tar/gzip envelopes with disjoint payload/control paths, long UTF-8 names and empty directories; legacy v3 JSON/gzip remains readable (ADR-0386).
