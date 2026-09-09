@@ -1,4 +1,26 @@
+import { OpfsPreloadError } from '@riftydev/vfs';
+
 export type OwnerStoragePersistence = 'required' | 'preferred' | 'ephemeral';
+
+export interface OwnerStorageConfig {
+  readonly persistence: OwnerStoragePersistence;
+  readonly namespace?: string;
+}
+
+/** One literal native directory component; undefined keeps the historical origin root. */
+export function validateOwnerStorageNamespace(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== 'string' ||
+    value.trim().length === 0 ||
+    /[\0/\\]/.test(value) ||
+    value === '.' ||
+    value === '..'
+  ) {
+    throw new TypeError('storage.namespace must be one non-empty literal OPFS directory component');
+  }
+  return value;
+}
 
 export type OwnerStorageSnapshot =
   | {
@@ -50,7 +72,7 @@ export async function selectOwnerStorage<OpfsBackend>(
     await installers.proveOpfs(backend);
     return Object.freeze({ policy, backend: 'opfs', durability: 'durable' });
   } catch (error) {
-    if (policy === 'required') throw error;
+    if (policy === 'required' || error instanceof OpfsPreloadError) throw error;
     opfsFailure = error;
   }
 

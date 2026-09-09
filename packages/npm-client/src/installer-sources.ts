@@ -4,6 +4,7 @@
  * (`chooseSource`/`createIncrementalSource`) that picks between them.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import { pinnedEntryForParent, readExistingLockfile } from './installer-lockfile-reader.ts';
 import {
   assertNativeSupported,
@@ -342,6 +343,11 @@ function createRegistrySource(
     if (!pending) {
       pending = packumentSem
         .run(async () => {
+          if (opts.registry === undefined)
+            throw new NotImplementedError(
+              'npm-client.registry.packument',
+              `registry unavailable for ${name}; required packument is not cached`,
+            );
           const packument = await opts.registry.getPackument(
             name,
             opts.signal === undefined ? {} : { signal: opts.signal },

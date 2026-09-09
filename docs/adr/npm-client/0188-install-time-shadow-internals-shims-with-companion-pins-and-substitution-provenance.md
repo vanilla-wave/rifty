@@ -31,3 +31,7 @@ Two shadow-registry mechanisms existed. (1) `bakedOverrides` package redirects (
 - Pre-0188 lockfiles for rollup-bearing trees lack the companion entry → explicit `npm install` replay throws `EBROKENLOCK` with the delete-and-reinstall hint (stamped trees keep booting; a fresh install self-heals). A pre-0188 eddy deployment declines/breaks the same way — deploy eddy with the matching npm-client.
 - Dev now parses with the real WASM parser in ALL paths (previously only the CLI path did); the empty-program stub approximation is gone.
 - Follow-up: the `playground/vite8-prune-dead-shim-overlays` item is subsumed (removed) — vite8 trees no longer receive dead esbuild/rollup shim files at boot.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0399 supersedes pre-shim-lock missing-companion rejection: declared policy companions may acquire at their required version; ordinary missing children, nested placement and shim/bin/provenance rules remain.

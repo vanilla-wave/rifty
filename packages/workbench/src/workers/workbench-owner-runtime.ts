@@ -269,7 +269,11 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   const config = firstMessage(await inbox.take(), ipc);
   if (config === null) return;
 
-  const storageAuthority = await installWorkbenchOwnerStorageAuthority(config.storage.persistence);
+  const storageAuthority = await installWorkbenchOwnerStorageAuthority(config.storage.persistence, {
+    namespace: config.storage.namespace,
+    proofTimeoutMs: config.deployment.ownerStartupTimeoutMs,
+    ioReportTimeoutMs: config.deployment.ioReportTimeoutMs,
+  });
   const storage = storageAuthority.snapshot;
   const ownerComposition: OwnerVfsAuthorityComposition = createOwnerVfsAuthorityComposition(
     syncMirror(),
@@ -285,7 +289,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   });
   installSqliteWasmSyncProvider(config.deployment.wasm.sqlite);
 
-  const eddy = config.packageAcquisition.eddy;
+  const acquisition = config.packageAcquisition;
   const ownerVfs = new SyncMirrorVfs();
   const starterInitialOids = new Map<string, string>();
   const amendGeneratedBaseline = createStarterBaselineFinalizer(
@@ -293,9 +297,6 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     starterInitialOids,
     async () => assertCleanDurability(await authority.flush()),
   );
-  const registry = createProxiedRegistryClient({
-    proxyPrefix: config.packageAcquisition.registryUrl,
-  });
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
@@ -307,10 +308,18 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     amendGeneratedBaseline,
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
-    registry,
-    resolverUrl: () => eddy?.resolverUrl,
-    resolverBundleBaseUrl: () => eddy?.bundleBaseUrl,
-    resolverPin: (templateId) => eddy?.presetPins[templateId],
+    ...(acquisition.mode === 'snapshot-only'
+      ? {}
+      : {
+          registry: createProxiedRegistryClient({ proxyPrefix: acquisition.registryUrl }),
+          ...(acquisition.eddy === undefined
+            ? {}
+            : {
+                resolverUrl: () => acquisition.eddy?.resolverUrl,
+                resolverBundleBaseUrl: () => acquisition.eddy?.bundleBaseUrl,
+                resolverPin: (templateId: string) => acquisition.eddy?.presetPins[templateId],
+              }),
+        }),
   });
   let materializer: ProjectMaterializer | undefined;
   let playgroundAuthority: PlaygroundProjectAuthority | undefined;
@@ -344,9 +353,8 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       acquisition: {
         ensure: (request) =>
           packageState.activateAndEnsure(
-            workbenchFirstMaterializationPackageConfig(request.definition, request.projectRoot, {
-              packageJsonBytes: authority.readFileBytesSync(`${request.projectRoot}/package.json`),
-            }),
+            workbenchFirstMaterializationPackageConfig(request, authority),
+            request.snapshotAdmission,
           ),
       },
       projectSave: packageState,
@@ -461,6 +469,7 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
               packageState,
               nodeEntryWorkerUrl: config.deployment.workers.node,
               devServerWorkerUrl: config.deployment.workers.devServer,
+              previewPrefix: config.deployment.previewPrefix,
               nodeWorkerRuntimeEnv,
               mutationGuard: vfs.mutationGuard,
               publicationBarrier: vfs.publicationBarrier,

@@ -26,6 +26,26 @@ otherwise routing falls back to the historical first controlled window bridge.
   teardown posts `rifty:preview:goodbye`.
 - Cross-realm scope statement: ADR-0017.
 
+### Configured preview prefix
+
+Workbench's published `dist/assets/sw.js` can be copied as a static script.
+`deployment.previewPrefix` selects a pathname inside the host's SW scope;
+default `/preview/` remains. Canonical io helpers own path normalization,
+matching and URL generation for HTTP and WebSocket consumers (ADR-0409).
+
+`configurePreviewServiceWorkerUrl(url, prefix?)` appends reserved
+`__rifty_preview_prefix` without reserializing the caller's opaque query.
+Omission returns the original URL. `previewPrefixFromServiceWorkerUrl(url)`
+reads the selected prefix; duplicate or invalid configuration rejects. The
+static entry captures its own URL once, passes that prefix to routing and PONG,
+and recovers it on a fresh SW realm without a page configuration replay.
+Serve the copied asset at its query-bearing URL.
+
+Routing version7 identifies this addressing capability. Optional PONG
+`previewPrefix` defaults to `/preview/`; frame version1 remains. Workbench's
+existing transferred-port proof compares actual controller identity, versions
+and prefix. Existing owner binding and HTTP request frames stay unchanged.
+
 ### Body-transport / streaming carrier
 
 `packSerializedResponse` decides per-response whether to transfer the

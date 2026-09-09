@@ -8,6 +8,11 @@ import { internalsShims } from '@riftydev/shadow-registry';
 import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  inputFixture,
+  registryFixture,
+  registryUrl,
+} from '../../../tests/integration/fixtures/registry/rollup-companions/fixture.mjs';
+import {
   TAR_TRAILER,
   buildHeader,
   concat,
@@ -649,23 +654,21 @@ describe('install-time shadow shims — rollup internals patch + companion', () 
     });
   });
 
-  it('loud EBROKENLOCK when a pre-shim lockfile lacks the companion entry (replay)', async () => {
+  it('acquires a missing pre-shim companion through the configured registry (ADR-0399)', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    const registry = new FakeRegistry(await rollupDb());
-    await install('root', '1.0.0', { rollup: '4.62.2' }, { vfs, cwd: '/proj', registry });
-    // Simulate a lockfile written before install-time shims existed.
-    const lockfile = JSON.parse(await readText(vfs, '/proj/package-lock.json')) as {
-      packages: Record<string, unknown>;
-    };
-    lockfile.packages = Object.fromEntries(
-      Object.entries(lockfile.packages).filter(([key]) => key !== 'node_modules/@rollup/wasm-node'),
-    );
-    await vfs.writeFile('/proj/package-lock.json', JSON.stringify(lockfile));
-
-    await expect(
-      install('root', '1.0.0', { rollup: '4.62.2' }, { vfs, cwd: '/proj', registry }),
-    ).rejects.toMatchObject({ code: 'EBROKENLOCK' });
+    const input = await inputFixture('root');
+    await vfs.writeFile('/proj/package.json', input.packageJsonText);
+    await vfs.writeFile('/proj/package-lock.json', input.packageLockText);
+    const http = await registryFixture();
+    const result = await install({
+      vfs,
+      cwd: '/proj',
+      registry: new RegistryClient({ baseUrl: registryUrl, fetch: http.fetch, maxRetries: 0 }),
+    });
+    expect(result.provenance.resolution).toBe('metadata');
+    expect(result.lockfile.packages['node_modules/@rollup/wasm-node']?.version).toBe('4.63.1');
+    expect(http.requests.some(({ url }) => url.endsWith('/wasm-node-4.63.1.tgz'))).toBe(true);
   });
 
   it('applyInternalsShims refuses a companion at a drifted version', async () => {

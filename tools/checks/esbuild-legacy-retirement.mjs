@@ -86,6 +86,30 @@ const PUBLISHED_PACKAGE_ROOTS = Object.freeze([
 const EXPECTED_PACKAGE_FILES = Object.freeze(['dist', 'CHANGELOG.md']);
 const GENERATED_CLIENT_SHA256 = '7acc5cd6f0e111810d3505c0959ec2fb5767f25af8dd2c5919a5b36d4f4da553';
 const MAX_PUBLISHED_OUTPUT_BYTES = 2_000_000;
+// ADR-0391: exact existing compiler/runtime assets; never a directory-wide waiver.
+const WORKBENCH_ASSET_ROOT = 'packages/workbench/dist/assets/';
+const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
+  'chunk-EMDIREKY.js': {
+    bytes: 4_893_418,
+    sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
+  },
+  'typescript-worker.js': {
+    bytes: 10_022_664,
+    sha256: '3587a112e6f0bbae3bb9ca4565404c8ce572a5cbb146440ee2e7a4ecf7b02cf6',
+  },
+});
+const WORKBENCH_WASM_OUTPUTS = Object.freeze({
+  'quickjs.wasm': {
+    bytes: 503_134,
+    sha256: '105c3bed22d457e43e3d1c3c1c6959fda62a8fe06f0fc8a985303c3a2be72232',
+  },
+  'sql-wasm.wasm': {
+    bytes: 659_730,
+    sha256: '438c88f666dc054ce4e9395f80fe9db4218b1a3c379960454880f048a7898aed',
+  },
+});
+const CJS_MODULE_LEXER_WASM_SHA256 =
+  'b40099ca01477f581bd752acc8ed6d25c14b0e8beb9a00e0dc1744a2b041a104';
 const LARGE_BASE64_RUN = /[A-Za-z0-9+/]{1000000,}={0,2}/u;
 const COORDINATION_SOURCE =
   /\b(?:BroadcastChannel|MessageChannel|MessagePort|SharedWorker|WebSocket|WebTransport|postMessage)\b/u;
@@ -211,13 +235,32 @@ export function evaluateEsbuildBundleInventory(
   const generatedClients = [];
   for (const path of files) {
     const bytes = readOutput(path);
+    const assetName = path.startsWith(WORKBENCH_ASSET_ROOT)
+      ? path.slice(WORKBENCH_ASSET_ROOT.length)
+      : null;
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const wasm = assetName === null ? undefined : WORKBENCH_WASM_OUTPUTS[assetName];
+    if (wasm?.bytes === bytes.byteLength && wasm.sha256 === digest) continue;
     if (path.endsWith('.wasm')) violations.push(`${path}: runtime wasm shipped in package output`);
-    // The 2 MB ceiling already subsumes the 13.9 MB member: no output can
-    // inline the wasm without first breaking this bound.
-    if (bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES) {
+    // Only the two exact compiler artifacts bypass the original carrier ceiling.
+    const compiler = assetName === null ? undefined : WORKBENCH_COMPILER_OUTPUTS[assetName];
+    if (
+      bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES &&
+      (compiler?.bytes !== bytes.byteLength || compiler.sha256 !== digest)
+    ) {
       violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling`);
     }
-    const text = bytes.toString('utf8');
+    const rawText = bytes.toString('utf8');
+    const text =
+      assetName !== null && path.endsWith('.js')
+        ? rawText.replace(/AGFzbQ[A-Za-z0-9+/]*={0,2}/gu, (literal) =>
+            literal.length === 29_556 &&
+            createHash('sha256').update(Buffer.from(literal, 'base64')).digest('hex') ===
+              CJS_MODULE_LEXER_WASM_SHA256
+              ? ''
+              : literal,
+          )
+        : rawText;
     if (path.endsWith('.js') && text.includes('AGFzbQ')) {
       violations.push(`${path}: output contains an inline WebAssembly base64 prefix`);
     }

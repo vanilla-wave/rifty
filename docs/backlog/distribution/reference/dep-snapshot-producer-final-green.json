@@ -1,0 +1,186 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Producer Final+GREEN accepted with one advisory coverage note; advance the I1 slice. Keep PR #316 in progress for linked I2-I8 work; this verdict does not certify whole-goal merge.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/dep-snapshot-producer.md:58 at clean c798a8e84a6d1489c89aeefe3788ceda7d0570e5; BASE fd829ca42ba698c168e5442278a3e5d50ffbbc7f, accepted tar-codec slice. Raw authority: docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:26 and I1 at :71; ADR-0387:15-30; producer Contract+RED at 514533e5bedfa58fa09becd73dbf3bd7de69781c. Read full review canon and rifty-review skill. Goal revision unchanged; accepted codec reused, no new obligations for future mapped units. Read raw PR #316 title/body via gh (initial restricted-network error, successful read-only retry), full diff/source/tests and supporting docs. PR-4 checked BASE criteria: root export allowlist adds only the ADR-authorized producer; production-file count142->143 matches one new producer file and retains exact closure equality. Existing packed Vite7.3.6, HMR, SQLite and network restrictions remain. Independently ran source producer tests9/9 GREEN and retained read-only reference probe: pnpm exec tsx docs/backlog/distribution/reference/dep-snapshot-producer-probe.ts https://registry.npmjs.org -> exit0, Node v24.16.0,20 packages, full deep-equality with committed JSON (/tmp/rifty-316-producer-final-reference.log). The Vite8 artifact proves installer postconditions, not producer execution; ADR prose now states that distinction. Inspected exact full-gate log /tmp/rifty-316-producer-pr-check-final.log (25/25) and packed log /tmp/rifty-316-producer-packed-green.log (88.40s), plus the committed packed harness: npm-authored lock, actual tar extraction, same ms source under native Node/Chromium, raw gzip and real HTTP Content-Encoding decoding, zero registry requests during both restores. Those full gates were driver-executed, not rerun by reviewer. Independent adversarial experiment verifies the current retained-source pin guard and isolates an advisory suite weakness. Reviewer producer_final_review; no tracked edits; exact HEAD and clean status rechecked.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:77",
+      "summary": "Published static runtime asset closure remains in distribution/workbench-static-assets."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:80",
+      "summary": "Public snapshot-only acquisition and zero registry/Eddy requests remain in distribution/workbench-snapshot-only."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:85",
+      "summary": "Selected OPFS namespace and former-project reopening remain in vfs/workbench-storage-namespace."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:88",
+      "summary": "Scoped preview/assets/HMR remain in service-worker/workbench-preview-prefix."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:91",
+      "summary": "Retained orphan Scratch enumeration/download and fresh Scratch remain in playground/orphan-scratch-recovery."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:94",
+      "summary": "Effective operation budgets and whole-goal composed proof remain in distribution/workbench-operation-budgets."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:98",
+      "summary": "Default saved-state priority and explicit generic snapshot overwrite/error remain in distribution/workbench-snapshot-application-policy."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: packed root producer takes caller manifest/v3 lock/templateId/registryUrl and emits compatible tar.gz, snapshotId and install-artifact identity.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:21; packages/workbench/src/glue/dep-snapshot-producer.test.ts:115; tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:9; tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:35; packages/workbench/src/glue/dep-snapshot-producer.ts:117; packages/workbench/src/workbench/public.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: ordinary emitted pins retain exact caller paths and identities; new ordinary root/nested pins reject, while attested native acquisition/bundles remain supported.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "weak",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:115; packages/workbench/src/glue/dep-snapshot-producer.test.ts:147; packages/workbench/src/glue/dep-snapshot-producer.test.ts:156; packages/workbench/src/glue/dep-snapshot-producer.test.ts:192; docs/backlog/distribution/reference/dep-snapshot-producer-probe.ts:57",
+      "note": "Existing retained-acquisition identity drift is correctly rejected by the implementation, but the committed nine-case suite admits a mutant that removes the before===undefined restriction at producer:102. Independent real-LightningCSS probe kills it; advisory REV-4, see Completeness."
+    },
+    {
+      "row": "Acceptance 3: shared JSON canonicalization, deterministic archive, ordinary tar bytes and decoded-content/runtime identities.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:119; packages/workbench/src/glue/dep-snapshot-producer.test.ts:129; packages/npm-client/src/package-json.test.ts:5; tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:39; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-proof.ts:26; packages/workbench/src/glue/dep-snapshot.test.ts:673; packages/workbench/src/glue/dep-snapshot-producer.ts:128; packages/workbench/src/glue/dep-snapshot-producer.ts:167",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: unsupported/malformed lock, root mismatch, integrity and unsupported-package failures produce no artifact; existing byte bounds remain.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:147; packages/workbench/src/glue/dep-snapshot-producer.test.ts:265; packages/workbench/src/glue/dep-snapshot-producer.test.ts:276; packages/workbench/src/glue/dep-snapshot-producer.test.ts:287; packages/workbench/src/glue/dep-snapshot-tar.test.ts:277; packages/workbench/src/glue/bounded-asset-fetch.fault.test.ts:41; packages/npm-client/src/installer-lockfile.test.ts:69; packages/npm-client/src/installer-lockfile.test.ts:981; packages/workbench/src/glue/dep-snapshot-producer.ts:132; packages/workbench/src/glue/dep-snapshot-producer.ts:160",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: installed packed consumer bakes npm caller inputs, runs the same real ms source under Node and Workbench through raw gzip and actual HTTP decoding, without browser registry acquisition.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:12; tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:60; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-proof.ts:26; tests/integration/fixtures/workbench-vite-consumer/vite.config.ts:37; tests/integration/workbench-packed-consumer.mjs:1209",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix 1: corrupt/missing registry bytes cause integrity/acquisition failure without emitted artifact.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:64; packages/workbench/src/glue/dep-snapshot-producer.test.ts:287",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix 2: incomplete/range-drifted lock rejects new ordinary output paths, including nested beside retained hoisted pins.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:147; packages/workbench/src/glue/dep-snapshot-producer.test.ts:156",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix 3: attested registry source and bundled bytes are admitted under existing replay trust; retained caller source pins remain bound.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "weak",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:192; packages/workbench/src/glue/dep-snapshot.test.ts:327; docs/backlog/distribution/reference/dep-snapshot-producer-probe.ts:57; packages/workbench/src/glue/dep-snapshot-producer.ts:101",
+      "note": "Existing retained-acquisition identity drift is correctly rejected by the implementation, but the committed nine-case suite admits a mutant that removes the before===undefined restriction at producer:102. Independent real-LightningCSS probe kills it; advisory REV-4, see Completeness."
+    },
+    {
+      "row": "ADR-0387 public API: produceDependencySnapshot root export and returned archive/snapshotId/installArtifactIdentity shape.",
+      "source": "public-api",
+      "trace": "ADR-0387+I1",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0387-expose-caller-pinned-dependency-snapshot-production.md:15; packages/workbench/src/glue/dep-snapshot-producer.test.ts:10; packages/workbench/src/glue/dep-snapshot-producer.test.ts:21; tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:7",
+      "note": ""
+    },
+    {
+      "row": "Recorded existing-installer Vite8 reference: 20 packages, unchanged ordinary output pins, required LightningCSS WASM metadata and tarball acquisition.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0387+I1",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/dep-snapshot-producer-probe.ts:24; docs/backlog/distribution/reference/dep-snapshot-producer-probe.ts:57; docs/backlog/distribution/reference/dep-snapshot-producer-probe.json:2",
+      "note": ""
+    },
+    {
+      "row": "ADR-0387 internal capsule: share existing lock reader/root-map comparison and attested acquisition/bundled-path validators without a second resolver.",
+      "source": "public-api",
+      "trace": "ADR-0387+I1",
+      "status": "pass",
+      "citation": "packages/npm-client/src/internal/index.ts:2; packages/npm-client/src/internal/shadow/index.ts:5; packages/workbench/src/glue/dep-snapshot-producer.ts:86; packages/workbench/src/glue/dep-snapshot-producer.test.ts:147; packages/workbench/src/glue/dep-snapshot-producer.test.ts:192",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:207",
+          "authority": "",
+          "summary": "Retained acquisition-pin drift remains weakly covered. The implementation correctly checks an existing lightningcss-wasm identity; the committed LightningCSS fixture has no such source pin. An unconditional additions.has(path) exemption survives the nine tests while violating Acceptance 2 and Fault matrix 3 as written. Consider retaining the independent mismatch case. This is a REV-4 NOTE, not a product defect or required unit residual.",
+          "evidence": "Detached /tmp/rifty-316-producer-final-adversarial copy: only import/fixture locations adjusted; original committed suite first passed 9/9. Replacing producer:102 `if (before === undefined && additions.has(path)) continue;` with `if (additions.has(path)) continue;` still passed 9/9: node <repo>/node_modules/vitest/vitest.mjs run --config vitest.config.mjs, /tmp/rifty-316-producer-final-mutant-existing.log. Added real LightningCSS case with a retained lightningcss-wasm@0.0.0 source pin: mutant emitted an archive (9 pass/1 fail), /tmp/rifty-316-producer-final-mutant-probe.log. Restoring exact producer source yields 10/10 and rejects with caller lockfile pin for node_modules/lightningcss-wasm, /tmp/rifty-316-producer-final-original-probe.log. No tracked work changed. Initial scratch CLI --workspace=false was a harness error; discarded. A bulky assertion was replaced with string outcome reporting; only the final logs above are evidence."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "c798a8e84a6d1489c89aeefe3788ceda7d0570e5"
+}

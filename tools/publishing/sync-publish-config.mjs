@@ -157,6 +157,7 @@ const SPEC = {
   },
   '@riftydev/workbench': {
     dir: 'packages/workbench',
+    build: 'tsup && node ../../tools/publishing/build-workbench-assets.mjs',
     sideEffects: [
       './src/workers/workbench-owner-bootstrap.ts',
       './src/workers/kernel-worker-entry.ts',
@@ -270,7 +271,7 @@ function rebuildPkg(orig, name, spec) {
       types: './dist/index.d.ts',
       exports: pubExports,
     },
-    scripts: { ...orig.scripts, build: 'tsup' },
+    scripts: { ...orig.scripts, build: spec.build ?? 'tsup' },
   };
   if (orig.dependencies) {
     out.dependencies = { ...orig.dependencies };

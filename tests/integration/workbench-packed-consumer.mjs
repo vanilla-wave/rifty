@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import assert from 'node:assert/strict';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   cp,
@@ -31,6 +32,7 @@ import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
+import { provePackedScopedPreview } from './workbench-scoped-preview-proof.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const surfaceOnly = process.argv.includes('--surface-only');
@@ -46,10 +48,6 @@ const workbenchRoot = resolve(repoRoot, 'packages/workbench');
 const viteSnapshot = resolve(
   repoRoot,
   'apps/playground/public/snapshots/vite-node-modules.json.gz',
-);
-const esbuildWasmManifest = resolve(
-  repoRoot,
-  'tools/shadow-registry/node_modules/esbuild-wasm/package.json',
 );
 const keepTemp = process.argv.includes('--keep');
 const unknownArguments = process.argv
@@ -381,23 +379,6 @@ async function packInstalledPackages(packages, tarballRoot, npmCacheRoot) {
   return tarballs;
 }
 
-function snapshotPackagePath(path) {
-  const segments = path.split('/');
-  if (segments[0] === '.bin') return null;
-  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
-    throw new Error(`Invalid committed snapshot path: ${path}`);
-  }
-  if (segments[0]?.startsWith('@')) {
-    if (segments.length < 3) throw new Error(`Invalid scoped snapshot package path: ${path}`);
-    return {
-      name: `${segments[0]}/${segments[1]}`,
-      path: segments.slice(2).join('/'),
-    };
-  }
-  if (segments.length < 2) throw new Error(`Invalid committed snapshot package path: ${path}`);
-  return { name: segments[0], path: segments.slice(1).join('/') };
-}
-
 function lockfilePackageName(path) {
   const prefix = 'node_modules/';
   if (!path.startsWith(prefix)) throw new Error(`Unsupported snapshot lock path: ${path}`);
@@ -412,98 +393,58 @@ function lockfilePackageName(path) {
   throw new Error(`Packed consumer snapshot requires a flat package tree: ${path}`);
 }
 
-async function materializeSnapshotPackages(snapshotRoot) {
-  const compressed = await readFile(viteSnapshot);
-  const snapshot = JSON.parse(String(await gunzipAsync(compressed)));
-  if (snapshot.version !== 3 || snapshot.templateId !== 'vite') {
-    throw new Error('Packed consumer requires the committed Vite snapshot v3');
-  }
-  const lockfile = JSON.parse(snapshot.lockfile);
-  const expected = new Map();
-  for (const [path, entry] of Object.entries(lockfile.packages ?? {})) {
-    if (path.length === 0) continue;
-    const name = lockfilePackageName(path);
-    if (expected.has(name)) {
-      throw new Error(`Packed consumer snapshot contains duplicate ${name}`);
-    }
-    expected.set(name, { version: entry.version, integrity: entry.integrity });
-  }
-
-  const manifestCandidates = new Map();
-  for (const file of snapshot.nodeModules?.files ?? []) {
-    const packagePath = snapshotPackagePath(file.path);
-    if (packagePath === null || !expected.has(packagePath.name)) continue;
-    if (file.encoding !== 'base64' || typeof file.content !== 'string') {
-      throw new Error(`Unsupported committed snapshot encoding for ${file.path}`);
-    }
-    const packageRoot = resolve(snapshotRoot, ...packagePath.name.split('/'));
-    const target = resolve(packageRoot, packagePath.path);
-    if (!target.startsWith(`${packageRoot}/`)) {
-      throw new Error(`Committed snapshot path escapes ${packagePath.name}: ${file.path}`);
-    }
-    await mkdir(dirname(target), { recursive: true });
-    await writeFile(target, Buffer.from(file.content, 'base64'));
-    if (packagePath.path.endsWith('package.json')) {
-      const candidates = manifestCandidates.get(packagePath.name) ?? [];
-      candidates.push(target);
-      manifestCandidates.set(packagePath.name, candidates);
-    }
-  }
-
-  const packages = new Map();
-  for (const [name, source] of [...expected.entries()].sort(([left], [right]) =>
-    left.localeCompare(right),
-  )) {
-    let matched;
-    for (const candidate of manifestCandidates.get(name) ?? []) {
-      const manifest = await readJson(candidate);
-      if (manifest.name === name && manifest.version === source.version) {
-        matched = { dir: dirname(candidate), manifest };
-        break;
-      }
-    }
-    if (matched === undefined) {
-      throw new Error(`Committed snapshot package mismatch for ${name}@${String(source.version)}`);
-    }
-    packages.set(name, matched);
-  }
-  return packages;
-}
-
 function tarballIntegrity(bytes) {
   return `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
 }
 
-async function browserRegistryPackages(options) {
-  const snapshotPackages = await materializeSnapshotPackages(options.packageRoot);
-  const assetManifest = await readJson(esbuildWasmManifest);
-  if (assetManifest.name !== 'esbuild-wasm' || assetManifest.version !== '0.28.0') {
-    throw new Error(
-      `Packed consumer registry asset drifted: ${String(assetManifest.name)}@${String(assetManifest.version)}`,
-    );
+async function browserRegistryPackages() {
+  const snapshot = JSON.parse(String(await gunzipAsync(await readFile(viteSnapshot))));
+  if (snapshot.version !== 3 || snapshot.templateId !== 'vite')
+    throw new Error('Packed consumer requires the committed Vite snapshot v3');
+  const required = new Map();
+  for (const [path, entry] of Object.entries(JSON.parse(snapshot.lockfile).packages)) {
+    if (path.length === 0) continue;
+    const name = lockfilePackageName(path);
+    if (required.has(name)) throw new Error(`Duplicate snapshot package ${name}`);
+    required.set(name, entry.version);
   }
-  snapshotPackages.set('esbuild-wasm', {
-    dir: dirname(esbuildWasmManifest),
-    manifest: assetManifest,
-  });
-  const tarballs = await packInstalledPackages(
-    [...snapshotPackages.entries()],
-    options.tarballRoot,
-    options.npmCacheRoot,
-  );
+  assert.equal(required.get('esbuild-wasm'), '0.28.0', 'existing registry recipe asset');
+  const fixture = resolve(repoRoot, 'tests/integration/fixtures/registry/rollup-companions');
+  const provenance = await readJson(resolve(fixture, 'provenance.json'));
   const packages = new Map();
-  for (const [name, packageEntry] of snapshotPackages) {
-    const tarball = tarballs.get(name);
-    if (tarball === undefined) throw new Error(`Missing browser-registry tarball for ${name}`);
+  for (const [name, version] of required) {
+    const source = provenance.packages.find(
+      (item) => item.name === name && item.version === version,
+    );
+    if (!source) throw new Error(`Missing original npm fixture ${name}@${version}`);
+    const manifest = await readJson(resolve(fixture, 'packages', `${source.file}.json`));
+    assert.equal(manifest.name, name);
+    assert.equal(manifest.version, version);
+    assert.equal(manifest.dist.integrity, source.integrity);
+    assert.equal(manifest.dist.tarball, source.tarball);
+    const tarball = resolve(fixture, 'packages', `${source.file}.tgz`);
     const bytes = await readFile(tarball);
+    assert.equal(bytes.length, source.bytes, `original ${name} byte length`);
+    assert.equal(tarballIntegrity(bytes), source.integrity, `original ${name} npm integrity`);
     packages.set(name, {
       name,
-      manifest: packageEntry.manifest,
+      manifest,
       tarball,
-      integrity: tarballIntegrity(bytes),
+      integrity: source.integrity,
       shasum: createHash('sha1').update(bytes).digest('hex'),
     });
   }
+  const msTarball = resolve(repoRoot, 'tests/integration/fixtures/registry/ms-2.0.0.tgz');
+  const msBytes = await readFile(msTarball);
+  packages.set('ms', {
+    name: 'ms',
+    tarball: msTarball,
+    manifest: JSON.parse(
+      execFileSync('tar', ['-xzOf', msTarball, 'package/package.json'], { encoding: 'utf8' }),
+    ),
+    integrity: tarballIntegrity(msBytes),
+    shasum: createHash('sha1').update(msBytes).digest('hex'),
+  });
   return packages;
 }
 
@@ -543,11 +484,22 @@ async function startBrowserRegistry(packages) {
   const requests = [];
   const responses = [];
   let origin = '';
+  let denied = false;
   const tarballRoutes = new Map();
   const server = createServer((request, response) => {
     void (async () => {
       const requestUrl = new URL(request.url ?? '/', origin || 'http://127.0.0.1');
       requests.push(`${request.method ?? 'GET'} ${requestUrl.pathname}`);
+      if (denied) {
+        sendResponse(
+          request,
+          response,
+          503,
+          { 'Content-Type': 'text/plain' },
+          'Registry denied by snapshot-only proof',
+        );
+        return;
+      }
       if (request.method === 'OPTIONS') {
         sendResponse(request, response, 204, { 'Access-Control-Allow-Methods': 'GET, HEAD' });
         return;
@@ -663,6 +615,9 @@ async function startBrowserRegistry(packages) {
     origin,
     requests,
     responses,
+    deny: () => {
+      denied = true;
+    },
     close: () => registryResource.cleanup(),
   };
 }
@@ -984,6 +939,18 @@ function assertHmrProof(proof) {
 
 async function runChromiumJourney(consumerRoot, registryPackages) {
   const registry = await startBrowserRegistry(registryPackages);
+  await run('node', ['produce-snapshot.mjs', registry.origin], {
+    cwd: consumerRoot,
+    timeoutMs: 120_000,
+  });
+  await run('node', ['produce-vite-snapshot.mjs', registry.origin], {
+    cwd: consumerRoot,
+    timeoutMs: 120_000,
+  });
+  await run('node', ['prepare-orphan-payload.mjs'], {
+    cwd: consumerRoot,
+    timeoutMs: 120_000,
+  });
   const previewPort = await reserveLoopbackPort();
   const previewOrigin = `http://127.0.0.1:${previewPort}`;
   const preview = startProcess(
@@ -1191,6 +1158,44 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     assertHmrProof({ expectedSentinel, ...hmrProof });
 
     await page.evaluate(async () => (await window.__RIFTY_PACKED_WORKBENCH__).close());
+    for (const assetPath of ['/producer-snapshot.tar.gz', '/producer-snapshot-decoded.tar']) {
+      const before = registry.requests.length;
+      const proof = await page.evaluate(
+        async (assetUrl) => (await window.__RIFTY_PACKED_WORKBENCH__).runSnapshotProof(assetUrl),
+        new URL(assetPath, previewOrigin).href,
+      );
+      if (proof.version !== '2.0.0' || !proof.output.includes('packed-snapshot-2000')) {
+        throw new Error(`Packed producer restore failed: ${JSON.stringify(proof)}`);
+      }
+      if (registry.requests.length !== before)
+        throw new Error('Packed snapshot restore attempted registry acquisition');
+    }
+    console.log(
+      'Packed producer browser restore: raw gzip and HTTP-decoded tar, zero registry requests',
+    );
+    const registryBeforeApplication = registry.requests.length;
+    const unusedAssetsBefore = observedUrls.filter((url) =>
+      url.includes('/unused-new-snapshot.tar'),
+    ).length;
+    await page.evaluate(
+      async (assetUrl) =>
+        (await window.__RIFTY_PACKED_WORKBENCH__).proveSnapshotApplication(assetUrl),
+      new URL('/producer-snapshot.tar.gz', previewOrigin).href,
+    );
+    assert.equal(
+      registry.requests.length,
+      registryBeforeApplication,
+      'snapshot application never falls back to registry',
+    );
+    assert.equal(
+      observedUrls.filter((url) => url.includes('/unused-new-snapshot.tar')).length,
+      unusedAssetsBefore,
+      'saved state does not fetch the unused new asset',
+    );
+    console.log(
+      'Packed snapshot policy: durable saved-state reopen, public conflict details, repeated same-ID overwrite and real Node output',
+    );
+    await page.evaluate(async () => (await window.__RIFTY_PACKED_WORKBENCH__).proveCopiedAssets());
     if (pageErrors.length > 0) {
       throw new Error(`Packed Workbench Chromium page errors:\n${pageErrors.join('\n')}`);
     }
@@ -1214,7 +1219,118 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       throw new Error('Packed Workbench requested the retired @esbuild/wasi-preview1 alias');
     }
     await context.close();
-    console.log('Packed Workbench Chromium passed: Vite 7.3.6 preview + native HMR + sqlite');
+    registry.deny();
+    const strictBefore = registry.requests.length;
+    const strictContext = await browser.newContext({ serviceWorkers: 'allow' });
+    const strictRequests = [];
+    const strictBlocked = [];
+    strictContext.on('request', (request) => strictRequests.push(request.url()));
+    await strictContext.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.origin === previewOrigin || url.protocol === 'blob:' || url.protocol === 'data:') {
+        await route.continue();
+      } else {
+        strictBlocked.push(url.href);
+        await route.abort('blockedbyclient');
+      }
+    });
+    try {
+      const strictPage = await strictContext.newPage();
+      const strictErrors = [];
+      strictPage.on('pageerror', (error) => strictErrors.push(error.message));
+      await strictPage.goto(`${previewOrigin}/?snapshot-only`, { waitUntil: 'domcontentloaded' });
+      const strictProof = await strictPage.evaluate(async () => {
+        const opened = await window.__RIFTY_PACKED_SNAPSHOT_ONLY__;
+        return { previewUrl: opened.previewUrl, buildOutput: opened.buildOutput };
+      });
+      assert.match(strictProof.buildOutput, /built in|build completed/i, 'real npm Vite build');
+      const strictApp = strictPage.frameLocator('#preview').locator('#app');
+      await strictApp.waitFor({ state: 'visible', timeout: 120_000 });
+      await strictPage.waitForFunction(
+        () =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === 'snapshot-only-vite-ready',
+        undefined,
+        { timeout: 120_000 },
+      );
+      await waitForHmrBridge(strictApp, 30_000);
+      const strictKey = `rifty:packed-snapshot-only:${Date.now()}`;
+      const strictSentinel = await strictApp.evaluate((_, key) => {
+        globalThis.__riftyPackedHmrSentinel = key;
+        localStorage.setItem(`${key}:messages`, '[]');
+        localStorage.removeItem(`${key}:beforeunload`);
+        globalThis.addEventListener(
+          'beforeunload',
+          () => localStorage.setItem(`${key}:beforeunload`, '1'),
+          { once: true },
+        );
+        globalThis.addEventListener('rifty:ws:message', (event) => {
+          const messages = JSON.parse(localStorage.getItem(`${key}:messages`) ?? '[]');
+          messages.push(event.detail);
+          localStorage.setItem(`${key}:messages`, JSON.stringify(messages));
+        });
+        return key;
+      }, strictKey);
+      const strictMessage = 'snapshot-only-vite-edited';
+      await strictPage.evaluate(
+        async (message) => (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).writeMessage(message),
+        strictMessage,
+      );
+      await strictPage.waitForFunction(
+        (message) =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === message,
+        strictMessage,
+        { timeout: 60_000 },
+      );
+      const strictHmr = await strictApp.evaluate(
+        (_, key) => ({
+          sentinel: globalThis.__riftyPackedHmrSentinel,
+          beforeUnload: localStorage.getItem(`${key}:beforeunload`),
+          messages: JSON.parse(localStorage.getItem(`${key}:messages`) ?? '[]'),
+        }),
+        strictKey,
+      );
+      assertHmrProof({ expectedSentinel: strictSentinel, ...strictHmr });
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).closeAndProveSavedState(),
+      );
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveStorageNamespaces(),
+      );
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveOrphanScratchRecovery(),
+      );
+      assert.equal(
+        registry.requests.length,
+        strictBefore,
+        'zero registry requests including service worker proxy',
+      );
+      assert.deepEqual(strictBlocked, [], 'snapshot-only attempted no external acquisition');
+      assert.deepEqual(
+        strictRequests.filter((url) =>
+          /npm-registry|eddy|unused-new-snapshot/.test(new URL(url).pathname),
+        ),
+        [],
+        'no implicit registry/Eddy/unused snapshot routes',
+      );
+      assert.deepEqual(strictErrors, [], 'snapshot-only public browser errors');
+      console.log(
+        'Packed snapshot-only: producer Vite npm build/dev/HMR, local script, refused required install and persistent saved-state proof; zero registry/Eddy requests',
+      );
+    } finally {
+      await strictContext.close();
+    }
+    await provePackedScopedPreview({
+      browser,
+      origin: previewOrigin,
+      registryRequests: registry.requests,
+      waitForHmrBridge,
+      assertHmrProof,
+    });
+    console.log(
+      'Packed Workbench Chromium passed: registry Vite/HMR/sqlite and snapshot-only Vite',
+    );
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.stack : String(error)}\nPacked consumer preview output:\n${preview.output()}\nRegistry requests:\n${registry.requests.join('\n')}`,
@@ -1250,12 +1366,8 @@ async function main() {
   const consumerRoot = resolve(tempRoot, 'consumer');
   const npmCacheRoot = resolve(tempRoot, 'npm-cache');
   const npmPackCacheRoot = resolve(tempRoot, 'npm-pack-cache');
-  const browserTarballRoot = resolve(tempRoot, 'browser-tarballs');
-  const browserPackageRoot = resolve(tempRoot, 'browser-packages');
-  const browserPackCacheRoot = resolve(tempRoot, 'browser-pack-cache');
   await cp(fixtureRoot, consumerRoot, { recursive: true });
   await mkdir(tarballRoot, { recursive: true });
-  await mkdir(browserTarballRoot, { recursive: true });
 
   let failure;
   try {
@@ -1330,11 +1442,7 @@ async function main() {
       await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
       await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
       await stat(resolve(consumerRoot, 'dist/index.html'));
-      const registryPackages = await browserRegistryPackages({
-        packageRoot: browserPackageRoot,
-        tarballRoot: browserTarballRoot,
-        npmCacheRoot: browserPackCacheRoot,
-      });
+      const registryPackages = await browserRegistryPackages();
       await runChromiumJourney(consumerRoot, registryPackages);
       console.log(
         `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,

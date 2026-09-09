@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Optional registry capability retains real local replay across all install overloads; required network misses fail loudly and absent-registry Eddy rejects before effects (ADR-0398).
+- Shared installer/Eddy policy retains declared companion origin across caller-lock traversal; producer permission uses the existing companion-only role record and exact installed scope (ADR-0399).
+
+- Share lock-root and attested acquisition/bundled-path validation through the internal capsule for the published Workbench snapshot producer; resolution policy unchanged.
+
 - Installed esbuild facade reads the registry-owned realm carrier; substitution/admission semantics unchanged (ADR-0384).
 
 ### Changed

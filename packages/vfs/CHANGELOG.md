@@ -2,8 +2,17 @@
 
 ## [Unreleased]
 
+- Preserve selected roots and operation budgets through strict single-pass preload; acquired-tree failures remain distinct from unavailable roots (ADR-0411).
+
+### Added
+
+- OPFS paired installation accepts a captured per-instance IO report timeout; omission keeps30s, timeout retains native lanes/path fences and late completion heals without resend (ADR-0410).
+
+- OPFS initialization accepts a captured native root; paired installation uses the same handle for both surfaces. Conflicting async re-init rejects; omission preserves origin storage (ADR-0402).
+
 ### Fixed
 
+- Refuse sync read/copy of indexed OPFS files without acquired content; genuine empty files remain valid. Native read failure cannot silently persist an empty replacement (ADR-0406).
 - Expose scheduler/ledger-backed persistence eligibility for installer-only equality checks; pending and failed ancestors remain ineligible.
 
 - OPFS boot uses one native traversal and shared root; concurrent initialization

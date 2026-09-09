@@ -193,12 +193,13 @@ async function initializeWorkbench(
     await proveRiftyServiceWorkerControl({
       container: dependencies.serviceWorker,
       timeoutMs: options.owner.deployment.previewProbeTimeoutMs,
+      previewPrefix: options.owner.deployment.previewPrefix,
       timers: dependencies.timers,
     });
     const started = await dependencies.owner.start(
       Object.freeze({
         ...options.owner,
-        storage: Object.freeze({ persistence: options.storage }),
+        storage: options.storage,
       }),
     );
     owner = started.owner;

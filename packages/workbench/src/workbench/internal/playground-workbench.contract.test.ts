@@ -439,6 +439,12 @@ function catalog(
       listener(snapshot);
       return () => {};
     },
+    listRetainedScratch: async () => {
+      throw new Error('Unexpected retained catalog operation at this fixture boundary');
+    },
+    exportRetainedScratch: async () => {
+      throw new Error('Unexpected retained catalog operation at this fixture boundary');
+    },
     createScratch: async () => snapshot,
     saveScratch: async () => snapshot,
     activate: async () => snapshot,
@@ -649,10 +655,12 @@ describe('Playground companion sealed contract', () => {
       'ProjectDocumentSaveInProgressError',
       'ProjectFileOperationError',
       'ProjectRunExitedBeforeReadyError',
+      'SnapshotApplicationConflictError',
       'StaleProjectDocumentError',
       'StdinClosedError',
       'WorkbenchOriginOccupiedError',
       'openWorkbench',
+      'produceDependencySnapshot',
       'projects',
     ]);
     expect(rootModule).not.toHaveProperty('openPlaygroundWorkbench');
@@ -1342,7 +1350,7 @@ describe('Playground plan validation', () => {
         ...options().packageAcquisition,
         snapshotUrl: '/retired-snapshot.json.gz',
       },
-    } as WorkbenchOptions;
+    } as unknown as WorkbenchOptions;
 
     await expect(open(legacy)).rejects.toThrow(/snapshotUrl/);
     expect(effect).not.toHaveBeenCalled();

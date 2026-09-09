@@ -64,12 +64,22 @@ export class OpfsVfs implements Vfs {
     return Boolean(s && typeof s.getDirectory === 'function');
   }
 
-  async init(): Promise<void> {
-    if (this.root) return;
+  async init(root?: FileSystemDirectoryHandle): Promise<void> {
+    if (this.root) {
+      if (root !== undefined && root !== this.root && !(await this.root.isSameEntry(root))) {
+        throw new VfsError('EINVAL', '/', 'OPFS instance is already mounted at another root');
+      }
+      return;
+    }
+    if (root !== undefined) {
+      this.root = root;
+      return;
+    }
     if (!this.initialization) {
       this.initialization = acquireOpfsRoot()
         .then((root) => {
-          this.root = root;
+          // A concurrent explicit mount may finish while origin lookup waits.
+          if (this.root === null) this.root = root;
         })
         .catch((error: unknown) => {
           this.initialization = null;

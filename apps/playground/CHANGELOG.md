@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Bake the existing installed-file preparation into dependency snapshot payloads.
+
+- Regenerate the copied App SW for scoped preview routing/protocol7 (ADR-0409).
+- Nodemon stop acceptance waits for foreground completion and a real output marker before counting further starts; HTTP absence alone does not settle admitted output.
+
+- Intentional snapshot starter replacement uses Reset; same-starter reload preserves saved source under Workbench's default snapshot policy (ADR-0394).
+
 - Refresh installed-package snapshots for registry-owned adaptation identity; normal semver resolution also updates PostCSS 8.5.26 → 8.5.28 (ADR-0384).
 
 ### Added

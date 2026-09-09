@@ -1,16 +1,13 @@
 import { NotImplementedError } from '@riftydev/io';
-import type { RegistryClient } from '@riftydev/npm-client';
 import {
   planShadowSubstitutionsFromLockfile,
   shadowSubstitutionPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
 import {
   type CommandContext,
-  type ShellCommand,
   type ShellCommandResult,
   shellCommandExitCode,
 } from '@riftydev/shell';
-import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import { normalizePath } from '@riftydev/vfs';
 import {
   type DepSnapshotV3,
@@ -25,19 +22,14 @@ import {
 } from '../glue/eddy-learned-pins.ts';
 import { installArtifactIdentity } from '../glue/install-artifact-identity.ts';
 import { decideInstallPrefetch, startInstallPrefetch } from '../glue/install-prefetch.ts';
+import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts';
 import {
-  type InstallStampClaimIo,
-  createInstallStampAuthority,
-} from '../glue/install-stamp-authority.ts';
-import {
-  type InstallFn,
   type NpmShellCommandDeps,
   createNpmShellCommand,
   executeNpmInstallOperation,
   parseNpmInstallRequest,
 } from '../glue/npm-shell-command.ts';
 import {
-  type PackageMutationExecutor,
   createPackageMutationExecutor,
   discoverPackageAcquisitionGuardTransitions,
 } from '../glue/package-mutation-executor.ts';
@@ -48,97 +40,35 @@ import {
   seedTemplateNodeModulesFiles,
   templateNodeModulesSeedMutationIntents,
 } from '../glue/project-deps.ts';
-import type { ProjectPackageConfig } from '../workbench/internal/project-package-config.ts';
-import type {
-  ProjectAcquisitionPlan,
-  ProjectFirstMaterialization,
+import {
+  type ProjectAcquisitionPlan,
+  type ProjectSnapshotAdmission,
+  normalizeProjectSnapshotApplication,
 } from '../workbench/project-materialization.ts';
 import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
+import {
+  planOwnerSnapshotApplication,
+  snapshotManifestConfig,
+} from './owner-snapshot-application.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 import {
   type AcquisitionProvenance,
-  type PackageAcquisitionAuthority,
   type PackageAcquisitionProject,
-  type PackageFifoReservation,
   createPackageAcquisitionAuthority,
 } from './package-acquisition-authority.ts';
 import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 
 const enc = new TextEncoder();
 
-export type OwnerPackageMutationKind = 'dependency' | 'package-manifest' | 'package-lock';
-
-export interface OwnerNpmCommandOptions {
-  readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
-  readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
-}
-
-export interface OwnerPackageConfig {
-  readonly cfg: ProjectPackageConfig;
-  readonly templateId: string;
-  readonly slug: string;
-  readonly fromScratch: boolean;
-  /** Explicit baseline files restored after package acquisition replaces node_modules. */
-  readonly templateNodeModulesFiles?: Readonly<Record<string, string | Uint8Array>>;
-}
-
-export interface FirstMaterializationOwnerPackageConfig extends OwnerPackageConfig {
-  readonly firstMaterialization: ProjectFirstMaterialization;
-}
-
-export interface OwnerPackageStateOptions {
-  readonly initial?: OwnerPackageConfig;
-  readonly primeInitialPrefetch?: boolean;
-  readonly vfs: Vfs;
-  readonly fsSync: OwnerVfsAuthority;
-  readonly installStampClaims: InstallStampClaimIo;
-  readonly flush: () => Promise<PersistFailureReport | undefined>;
-  readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
-  readonly log: (line: string) => void;
-  readonly registry: RegistryClient;
-  /** Test seam at the external registry/install boundary. */
-  readonly install?: InstallFn;
-  /** Fold one exact first-install lock into the fresh Starter Git baseline. */
-  readonly amendGeneratedBaseline?: (root: string, lockfile: Uint8Array) => Promise<boolean>;
-  readonly resolverUrl: () => string | undefined;
-  readonly resolverBundleBaseUrl: () => string | undefined;
-  readonly resolverPin: (templateId: string) => string | undefined;
-}
-
-export interface OwnerPackageState {
-  readonly mutations: PackageMutationExecutor;
-  /** Register, activate, and install/reuse one exact project through one FIFO admission. */
-  activateAndEnsure(
-    config: FirstMaterializationOwnerPackageConfig,
-  ): Promise<ProjectAcquisitionPlan>;
-  activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
-  /** Settle package commands and durability work admitted before this call. */
-  quiesce(): Promise<void>;
-  /** Hold the package FIFO across claim-free project Save and trust publication. */
-  projectSave: PackageAcquisitionAuthority['projectSave'];
-  /** Freeze the exact installed-tree shadow facts across synchronous child spawn. */
-  reserveChildAdmission(root: string): Promise<OwnerChildPackageReservation>;
-  /** Registers the terminal-facing config and starts its optional prefetch. */
-  configure(config: OwnerPackageConfig): void;
-  /** Restore an instant config without ever turning boot into an implicit install. */
-  restore(config: OwnerPackageConfig): Promise<void>;
-  /** Serialize the active-project transition and restore instant dependencies. */
-  transition(config: OwnerPackageConfig): Promise<void>;
-  /** Reassert missing template-owned node_modules files under the package FIFO. */
-  reassertTemplateNodeModules(config: OwnerPackageConfig): Promise<void>;
-  /** The npm command already bound to the same acquisition/stamp authority. */
-  createNpmCommand(
-    runScript: (name: string, command: string, ctx: CommandContext) => Promise<ShellCommandResult>,
-    options?: OwnerNpmCommandOptions,
-  ): ShellCommand;
-}
-
-export interface OwnerChildPackageAdmission {
-  readonly root: string;
-  readonly runtimeBindings: readonly Readonly<{ adapterId: string; packagePath: string }>[];
-}
-
-export type OwnerChildPackageReservation = PackageFifoReservation<OwnerChildPackageAdmission>;
+import type {
+  FirstMaterializationOwnerPackageConfig,
+  OwnerChildPackageAdmission,
+  OwnerChildPackageReservation,
+  OwnerPackageConfig,
+  OwnerPackageState,
+  OwnerPackageStateOptions,
+} from './owner-package-types.ts';
+export * from './owner-package-types.ts';
 
 function configKey(root: string, slug: string): string {
   return `${normalizePath(root)}\0${slug}`;
@@ -199,6 +129,12 @@ function packageLockValue(authority: OwnerVfsAuthority, root: string): unknown {
 }
 
 export function createOwnerPackageState(options: OwnerPackageStateOptions): OwnerPackageState {
+  const registry = options.registry;
+  if (
+    registry === undefined &&
+    (options.resolverUrl || options.resolverBundleBaseUrl || options.resolverPin)
+  )
+    throw new TypeError('Eddy acquisition requires a registry capability');
   const configs = new Map<string, OwnerPackageConfig>();
 
   const templateNodeModulesFiles = (
@@ -213,7 +149,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
   }
 
-  const registry = options.registry;
   const resolverUrl = options.resolverUrl;
   const resolverBundleBaseUrl = options.resolverBundleBaseUrl;
   const resolverPin = options.resolverPin;
@@ -234,7 +169,8 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
   };
 
   const primePrefetch = (config: OwnerPackageConfig): void => {
-    const url = resolverUrl();
+    if (registry === undefined) return;
+    const url = resolverUrl?.();
     const identity = JSON.stringify([
       config.templateId,
       config.cfg.root,
@@ -260,7 +196,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       },
       pinFor: () =>
         learnedPinForPackageJsonSync(options.fsSync, config.cfg.packageJson) ??
-        resolverPin(config.templateId),
+        resolverPin?.(config.templateId),
     });
     if (decision.kind === 'keep') return;
     if (decision.kind === 'clear') {
@@ -275,14 +211,14 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             packageJsonText: config.cfg.packageJson,
             resolverUrl: url as string,
             closureHash: decision.closureHash,
-            bundleBaseUrl: resolverBundleBaseUrl(),
+            bundleBaseUrl: resolverBundleBaseUrl?.(),
           })
         : undefined;
   };
 
   const baseNpmDeps: Omit<NpmShellCommandDeps, 'packageAcquisitionAuthority'> = {
     vfs: options.vfs,
-    registry,
+    ...(registry === undefined ? {} : { registry }),
     ...(options.install ? { install: options.install } : {}),
     assertPortablePaths: (paths) => options.fsSync.assertPortablePaths(paths),
     flush: options.flush,
@@ -292,27 +228,32 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         ? activeProject.slug
         : `root:${normalized}`;
     },
-    resolverUrl: resolverUrl(),
-    resolverBundleBaseUrl: resolverBundleBaseUrl(),
-    learnedPins: {
-      get: (key) => readLearnedPin(options.vfs, key),
-      set: async (key, hash, expectedCurrent) => {
-        await writeLearnedPin(options.vfs, key, hash, undefined, expectedCurrent);
-      },
-      revalidate: async (_key, request, servedHash) => {
-        const url = resolverUrl();
-        if (!url) throw new Error('eddy resolver is not configured');
-        await revalidateLearnedPin({
-          vfs: options.vfs,
-          resolverUrl: url,
-          request,
-          staleClosureHash: servedHash,
-        });
-      },
-    },
+    ...(registry === undefined
+      ? {}
+      : {
+          resolverUrl: resolverUrl?.(),
+          resolverBundleBaseUrl: resolverBundleBaseUrl?.(),
+          learnedPins: {
+            get: (key) => readLearnedPin(options.vfs, key),
+            set: async (key, hash, expectedCurrent) => {
+              await writeLearnedPin(options.vfs, key, hash, undefined, expectedCurrent);
+            },
+            revalidate: async (_key, request, servedHash) => {
+              const url = resolverUrl?.();
+              if (!url) throw new Error('eddy resolver is not configured');
+              await revalidateLearnedPin({
+                vfs: options.vfs,
+                resolverUrl: url,
+                request,
+                staleClosureHash: servedHash,
+              });
+            },
+          },
+        }),
   };
 
   const packages = createPackageAcquisitionAuthority({
+    automaticFallback: registry === undefined ? 'snapshot-only' : 'install',
     stamps,
     stampTransition: { flush: options.flush },
     resolveTreeGuards: (root, knownProjects) =>
@@ -325,6 +266,13 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       }
     },
     adapter: {
+      planSnapshotApplication: (input) => planOwnerSnapshotApplication(options, input),
+      snapshotManifestApplied: (project, packageJsonText) => {
+        const updated = snapshotManifestConfig(configFor(project), packageJsonText);
+        configs.set(configKey(project.root, project.slug), updated);
+        if (configured?.cfg.root === project.root && configured.slug === project.slug)
+          configured = updated;
+      },
       readTrustedPackageLock: async (project) => packageLockValue(options.fsSync, project.root),
       attestEmptyPackageTree: async ({ project, packageJsonText }) => {
         const root = normalizePath(project.root);
@@ -367,7 +315,11 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             packages: payload.packages,
             shadowPlan: planShadowSubstitutionsFromLockfile(lockfile),
             apply: async () => {
-              prepared.apply();
+              prepared.applyCache();
+              const report = await options.flush();
+              if (report !== undefined && report.total > 0)
+                throw new Error('Snapshot replay cache persistence failed');
+              prepared.applyPayload();
               seedTemplateNodeModulesFiles(
                 options.fsSync,
                 config.cfg.root,
@@ -415,13 +367,17 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
                   priorTrustedTree: info.priorTrustedTree,
                 });
               },
-              resolverClosureHash: () => resolverPin(config.templateId),
-              resolverPrefetch: () =>
-                configured !== undefined &&
-                configKey(configured.cfg.root, configured.slug) ===
-                  configKey(request.project.root, request.project.slug)
-                  ? installPrefetch
-                  : undefined,
+              ...(registry === undefined
+                ? {}
+                : {
+                    resolverClosureHash: () => resolverPin?.(config.templateId),
+                    resolverPrefetch: () =>
+                      configured !== undefined &&
+                      configKey(configured.cfg.root, configured.slug) ===
+                        configKey(request.project.root, request.project.slug)
+                        ? installPrefetch
+                        : undefined,
+                  }),
             }
           : operationBase;
         const sink = {
@@ -581,12 +537,31 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
 
   const registerActivation = (
     config: OwnerPackageConfig,
-  ): { readonly manifestChanged: boolean } => {
-    const previous = configs.get(configKey(config.cfg.root, config.slug));
-    configure(config);
+    snapshotAdmission = false,
+  ): { readonly manifestChanged: boolean; readonly restore?: () => void } => {
+    const key = configKey(config.cfg.root, config.slug);
+    const previous = configs.get(key);
+    const priorConfigured = configured;
+    const priorProject = activeProject;
+    const priorTemplate = activeTemplateId;
+    if (snapshotAdmission) {
+      configured = config;
+      configs.set(key, config);
+    } else configure(config);
     return {
       manifestChanged:
         previous !== undefined && previous.cfg.packageJson !== config.cfg.packageJson,
+      ...(snapshotAdmission
+        ? {
+            restore: () => {
+              if (previous === undefined) configs.delete(key);
+              else configs.set(key, previous);
+              configured = priorConfigured;
+              activeProject = priorProject;
+              activeTemplateId = priorTemplate;
+            },
+          }
+        : {}),
     };
   };
 
@@ -615,10 +590,12 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
 
   function activateAndEnsure(
     config: FirstMaterializationOwnerPackageConfig,
+    snapshotAdmission?: ProjectSnapshotAdmission,
   ): Promise<ProjectAcquisitionPlan>;
   function activateAndEnsure(config: OwnerPackageConfig): Promise<AcquisitionProvenance>;
   function activateAndEnsure(
     config: OwnerPackageConfig,
+    snapshotAdmission?: ProjectSnapshotAdmission,
   ): Promise<ProjectAcquisitionPlan | AcquisitionProvenance> {
     if (!hasFirstMaterialization(config)) {
       return packages.dispatch({
@@ -632,11 +609,15 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     }
 
     const materialization = config.firstMaterialization;
+    const application =
+      materialization.kind === 'snapshot'
+        ? normalizeProjectSnapshotApplication(materialization.application)
+        : undefined;
     const key = configKey(config.cfg.root, config.slug);
     firstMaterializationPhases.set(key, 'preparing');
     const prepared = packages.dispatch({
       type: 'prepare-first-materialization',
-      register: () => registerActivation(config),
+      register: () => registerActivation(config, snapshotAdmission !== undefined),
       from: () => activeProject,
       to: packageProject(config),
       packageJsonText: config.cfg.packageJson,
@@ -645,6 +626,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           ? { kind: 'install' }
           : {
               kind: 'snapshot',
+              ...(application?.mode === 'apply-snapshot' ? { conflict: application.conflict } : {}),
               source: {
                 snapshotId: materialization.snapshot.snapshotId,
                 resolve: async () => {
@@ -672,6 +654,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
               },
             },
       replaceTreeOnMiss: true,
+      ...(snapshotAdmission === undefined ? {} : { snapshotAdmission }),
     });
     void prepared.then(
       (plan) => {

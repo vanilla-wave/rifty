@@ -4,8 +4,16 @@ export {
   ESBUILD_RUNTIME_ADAPTER_ID,
 } from './runtime-adapters.ts';
 export { preparePackageEntryRuntime } from './entry-preparation.ts';
-export { finalizeToolchainInstallFiles, finalizerPackagesFromLockfile } from './installed-files.ts';
-export { prepareViteCliAcquisitionFiles as prepareInstalledConsumerFiles } from './vite-cli-prep.ts';
+export {
+  type InstalledFilePreparation,
+  finalizeToolchainInstallFiles,
+  finalizerPackagesFromLockfile,
+  planToolchainInstallFiles,
+} from './installed-files.ts';
+export {
+  prepareViteCliAcquisitionFiles as prepareInstalledConsumerFiles,
+  planViteCliAcquisitionFiles as planInstalledConsumerFiles,
+} from './vite-cli-prep.ts';
 export { binNameOf, createPreviewScope, preparePackageServerEnvironment } from './launch.ts';
 export {
   installedBinPreviewSource,

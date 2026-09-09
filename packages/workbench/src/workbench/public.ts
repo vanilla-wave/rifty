@@ -1,5 +1,11 @@
 import { createBrowserOpenWorkbench } from './internal/browser-workbench-composition.ts';
 
+export { produceDependencySnapshot } from '../glue/dep-snapshot-producer.ts';
+export type {
+  ProduceDependencySnapshotOptions,
+  ProducedDependencySnapshot,
+} from '../glue/dep-snapshot-producer.ts';
+
 export {
   ClosedHandleError,
   DirtyProjectDocumentError,
@@ -9,6 +15,7 @@ export {
   ProjectDocumentSaveInProgressError,
   ProjectFileOperationError,
   ProjectRunExitedBeforeReadyError,
+  SnapshotApplicationConflictError,
   StaleProjectDocumentError,
   StdinClosedError,
   WorkbenchOriginOccupiedError,
@@ -34,6 +41,7 @@ export type {
   WorkbenchSnapshot,
   WorkbenchStorageSnapshot,
 } from './open-workbench.ts';
+export type { WorkbenchPackageAcquisition } from './internal/workbench-package-acquisition.ts';
 export type { PreviewHandle } from './preview-readiness.ts';
 export { projects } from './project-definition.ts';
 export type { ProjectDefinition } from './project-definition.ts';

@@ -1,0 +1,10 @@
+{
+  "name": "companion-nested",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "vite": "7.3.6",
+    "rollup": "4.42.0",
+    "esbuild": "0.28.0"
+  }
+}

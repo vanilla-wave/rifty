@@ -1,11 +1,9 @@
 import { NotImplementedError } from '@riftydev/io';
-import type { InstallResult } from '@riftydev/npm-client';
 import {
   type ShadowSubstitutionPlan,
   planAppliedShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
 } from '@riftydev/npm-client/internal';
-import type { CommandContext } from '@riftydev/shell';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 import type {
   InstallStampAuthority,
@@ -15,337 +13,44 @@ import type {
   ProjectSaveIdentity,
   ProjectSaveRebindResult,
 } from '../glue/install-stamp-authority.ts';
-import type { PackageResetPreparation } from '../glue/package-mutation-executor.ts';
 import type {
   ProjectAcquisitionPlan,
-  ProjectAcquisitionProvenance,
-  ProjectSnapshotFailure,
+  ProjectSnapshotAdmission,
 } from '../workbench/project-materialization.ts';
 
-export type AcquisitionProvenance = ProjectAcquisitionProvenance;
+import {
+  type AcquisitionObservation,
+  type AcquisitionProvenance,
+  type ActivateAndEnsurePackagesCommand,
+  type EnsurePackagesCommand,
+  type GuardedPackageMutationCommand,
+  type PackageAcquisitionAdapter,
+  type PackageAcquisitionAuthority,
+  type PackageAcquisitionAuthorityOptions,
+  type PackageAcquisitionCommand,
+  PackageAcquisitionError,
+  type PackageAcquisitionProject,
+  type PackageAcquisitionResult,
+  type PackageFifoReservation,
+  type PackageInstallAdapterResult,
+  type PackageInstallRequest,
+  type PackageJsonEditCommand,
+  type PackageMutationTransition,
+  type PackageSnapshotCandidate,
+  type PackageSnapshotResolution,
+  type PackageTreeAdmission,
+  type PrepareFirstMaterializationPackagesCommand,
+  type ProjectSwitchCommand,
+  type ResetPackagesCommand,
+  type SnapshotApplicationPlan,
+  type SnapshotFailure,
+  type SnapshotRestorePlan,
+  type TerminalInstallCommand,
+  installedProvenance,
+  snapshotUnavailableError,
+} from './package-acquisition-types.ts';
 
-export interface PackageAcquisitionProject {
-  readonly projectId: string;
-  readonly root: string;
-  readonly slug: string;
-  /** Exact install-artifact identity required for every trusted tree. */
-  readonly identity: string;
-}
-
-export type PackageAcquisitionProjectSource =
-  | PackageAcquisitionProject
-  | (() => PackageAcquisitionProject);
-
-export interface PackageSnapshotCandidate {
-  readonly snapshotId: string;
-  readonly identity: string;
-  readonly packageJsonText: string;
-  /** Adapter-owned verified bytes/tree plan. The authority never interprets it. */
-  readonly payload?: unknown;
-}
-
-export type PackageSnapshotResolution =
-  | { readonly status: 'candidate'; readonly snapshot: PackageSnapshotCandidate }
-  | { readonly status: 'rejected'; readonly reason: string };
-
-export interface PackageSnapshotSource {
-  readonly snapshotId: string;
-  /** Runs lazily after the trusted-tree check, inside the acquisition FIFO. */
-  readonly resolve: () => Promise<PackageSnapshotResolution>;
-}
-
-export interface EnsurePackagesCommand {
-  readonly type: 'ensure';
-  readonly project: PackageAcquisitionProject;
-  readonly packageJsonText: string;
-  readonly snapshot?: PackageSnapshotCandidate;
-  readonly snapshotSource?: PackageSnapshotSource;
-  /** Playground instant materialization is restore-only; Workbench uses install. */
-  readonly fallback?: 'install' | 'snapshot-only';
-  /** Adapter-owned foreign-tree clear/reseed, after durable demotion. */
-  readonly replaceTreeOnMiss?: boolean;
-  /** A prior config at this exact registration slot named different manifest bytes. */
-  readonly replaceTrustedTree?: boolean;
-  readonly onPromotion?: (result: InstallStampPromotionResult) => void;
-}
-
-export interface TerminalInstallCommand {
-  readonly type: 'terminal-install';
-  /** Resolves active project identity only when this command reaches the FIFO head. */
-  readonly project: PackageAcquisitionProjectSource;
-  /** Stamped ancestor trees whose node_modules contain this actual project.
-   * Resolved only at the FIFO head; every distinct ancestor is durably demoted
-   * before the actual-project claim or installer mutation. */
-  readonly guardProjects?: () => readonly PackageAcquisitionProject[];
-  readonly argv: readonly string[];
-  /** Present for the real npm shell adapter; authority tests may omit it. */
-  readonly context?: CommandContext;
-  /** Invocation-local reflection of the generated Starter Git baseline outcome. */
-  readonly onGeneratedBaseline?: (clean: boolean) => void;
-  readonly onPromotion?: (result: InstallStampPromotionResult) => void;
-}
-
-export interface PackageJsonEditCommand {
-  readonly type: 'package-json-edit';
-  /** A resolver samples owner state only when this command reaches the FIFO head. */
-  readonly project: PackageAcquisitionProjectSource;
-  /** Returns false for a validated no-op before any stamp transition. */
-  readonly preflight?: () => Promise<boolean>;
-  /** Runs only after durable demotion, inside the owner acquisition FIFO. */
-  readonly mutate: () => Promise<void>;
-  /** Samples exact post-mutation bytes for a strict empty-tree publication. */
-  readonly readCurrentPackageJsonText?: () => string | null;
-}
-
-export interface ResetPackagesCommand {
-  readonly type: 'reset';
-  readonly target: { readonly root: string };
-  /** Preflight runs in the FIFO; a ready mutation runs only after durable revocation. */
-  readonly prepare?: PackageResetPreparation;
-  /** Resolves every claim touched by whole-root replacement at the FIFO head. */
-  readonly resolveTransitions?: () => readonly PackageMutationTransition[];
-}
-
-export interface ProjectSwitchCommand {
-  readonly type: 'project-switch';
-  readonly from: PackageAcquisitionProject | null;
-  readonly to: PackageAcquisitionProject;
-  /** Revoke and replace dependency-owned state at the destination root. */
-  readonly resetPackages?: boolean;
-  readonly packageJsonText?: string;
-}
-
-export interface ActivateAndEnsurePackagesCommand {
-  readonly type: 'activate-and-ensure';
-  /** Bind adapter-owned config at the FIFO head before any active-project observation. */
-  readonly register: () => { readonly manifestChanged: boolean };
-  /** Resolve at the FIFO head so back-to-back activations observe the actual predecessor. */
-  readonly from: PackageAcquisitionProject | null | (() => PackageAcquisitionProject | null);
-  readonly to: PackageAcquisitionProject;
-  readonly packageJsonText: string;
-  readonly replaceTreeOnMiss?: boolean;
-  readonly onPromotion?: (result: InstallStampPromotionResult) => void;
-}
-
-export interface PrepareFirstMaterializationPackagesCommand {
-  readonly type: 'prepare-first-materialization';
-  /** Bind adapter-owned config at the FIFO head before any active-project observation. */
-  readonly register: () => { readonly manifestChanged: boolean };
-  readonly from: PackageAcquisitionProject | null | (() => PackageAcquisitionProject | null);
-  readonly to: PackageAcquisitionProject;
-  readonly packageJsonText: string;
-  readonly materialization:
-    | { readonly kind: 'install' }
-    | { readonly kind: 'snapshot'; readonly source: PackageSnapshotSource };
-  readonly replaceTreeOnMiss?: boolean;
-  readonly onPromotion?: (result: InstallStampPromotionResult) => void;
-}
-
-export type PackageMutationTransition =
-  | { readonly mode: 'demote'; readonly project: PackageAcquisitionProject }
-  | { readonly mode: 'revoke'; readonly root: string };
-
-export interface GuardedPackageMutationCommand {
-  readonly type: 'guarded-mutation';
-  /** Runs at the FIFO head before target discovery or any trust transition. */
-  readonly preflight?: () => Promise<boolean>;
-  /** Discovers every touched claim from current owner/disk state at the FIFO head. */
-  readonly resolveTransitions: () => readonly PackageMutationTransition[];
-  /** Runs only after every distinct transition is durably established. */
-  readonly mutate: () => Promise<void>;
-  /** Samples exact post-mutation manifest bytes by canonical project root. */
-  readonly readCurrentPackageJsonText?: (root: string) => string | null;
-}
-
-export type PackageAcquisitionCommand =
-  | EnsurePackagesCommand
-  | TerminalInstallCommand
-  | PackageJsonEditCommand
-  | ResetPackagesCommand
-  | GuardedPackageMutationCommand
-  | ProjectSwitchCommand
-  | ActivateAndEnsurePackagesCommand
-  | PrepareFirstMaterializationPackagesCommand;
-
-export type PackageInstallRequest =
-  | Pick<EnsurePackagesCommand, 'type' | 'project' | 'packageJsonText'>
-  | (Omit<TerminalInstallCommand, 'project'> & {
-      readonly project: PackageAcquisitionProject;
-    });
-
-export type PackageInstallAdapterResult =
-  | {
-      readonly status: 'noop';
-      /** Exact manifest bytes whose empty dependency graph was inspected. */
-      readonly packageJsonText: string | null;
-      /** Canonical empty plan produced by the package adapter. */
-      readonly shadowPlan: ShadowSubstitutionPlan;
-    }
-  | {
-      readonly status?: 'installed';
-      readonly result: InstallResult;
-      /** Installer-owned, frozen decode of this exact result. Never reparse its lockfile. */
-      readonly shadowPlan: ShadowSubstitutionPlan;
-      /** Exact manifest bytes after the installer has finished mutating the tree.
-       * `null` keeps a successful install successful but makes it unstampable. */
-      readonly packageJsonText: string | null;
-    };
-
-export interface PackageInstallExecution {
-  /** This owner already attempted a terminal install on the same tree. */
-  readonly sessionInstallActivity: boolean;
-  /** Exact project identity of that attempt; boolean activity alone cannot
-   * distinguish a same-root project switch from a same-project retry. */
-  readonly priorSessionSlug?: string;
-  /** Exact pre-demote trusted state for this project/artifact identity. */
-  readonly priorTrustedTree: boolean;
-  /** Prior on-disk claim owner; a different slug makes the lock/tree foreign. */
-  readonly priorSlug?: string;
-}
-
-export type SnapshotRestorePlan =
-  | {
-      readonly status: 'ready';
-      readonly packages: number;
-      /** Strictly decoded before any claim/tree mutation; reused without re-decoding. */
-      readonly shadowPlan: ShadowSubstitutionPlan;
-      /** Applies only the already-validated immutable restore plan. */
-      readonly apply: () => Promise<void>;
-    }
-  | { readonly status: 'rejected'; readonly reason: string };
-
-/** Internal seam. Production composition and fault adapters share this shape. */
-export interface PackageAcquisitionAdapter {
-  /** Exact lockfile for a stamp-trusted tree, decoded once at trusted admission. */
-  readTrustedPackageLock?(project: PackageAcquisitionProject): Promise<unknown>;
-  /** Prove the exact manifest still names a physically absent package tree.
-   * Sampled at the FIFO head both before publication and before child spawn. */
-  attestEmptyPackageTree?(input: {
-    readonly project: PackageAcquisitionProject;
-    readonly packageJsonText: string;
-  }): Promise<boolean>;
-  prepareEnsure?(
-    command: EnsurePackagesCommand,
-    execution: {
-      readonly claim: InstallStampClaim;
-      readonly phase: 'initial' | 'snapshot-rejected';
-    },
-  ): Promise<void>;
-  /** Parse/decode/validate the complete snapshot before any claim or tree mutation. */
-  planSnapshotRestore(input: {
-    readonly project: PackageAcquisitionProject;
-    readonly packageJsonText: string;
-    readonly snapshot: PackageSnapshotCandidate;
-  }): Promise<SnapshotRestorePlan>;
-  install(
-    request: PackageInstallRequest,
-    execution: PackageInstallExecution,
-  ): Promise<PackageInstallAdapterResult>;
-  reset(command: ResetPackagesCommand): Promise<void>;
-  switchProject(command: ProjectSwitchCommand): Promise<void>;
-}
-
-export type SnapshotFailure = ProjectSnapshotFailure;
-
-export type AcquisitionObservation =
-  | {
-      readonly type: 'snapshot-rejected';
-      readonly projectId: string;
-      readonly snapshotId: string;
-      readonly reason: string;
-    }
-  | {
-      readonly type: 'promotion-refused';
-      readonly projectId: string;
-      readonly operation: 'ensure' | 'terminal-install';
-      readonly reason: string;
-    };
-
-export interface PackageAcquisitionAuthorityOptions {
-  readonly stamps: InstallStampAuthority;
-  /** The owner durability barrier forwarded to every stamp state transition. */
-  readonly stampTransition?: InstallStampTransitionOptions;
-  readonly adapter: PackageAcquisitionAdapter;
-  /** FIFO-head ancestor/descendant claims affected by replacing `<root>/node_modules`. */
-  readonly resolveTreeGuards?: (
-    root: string,
-    knownProjects: readonly PackageAcquisitionProject[],
-  ) => readonly PackageMutationTransition[];
-  /** Diagnostic sink only. A throwing observer cannot change acquisition. */
-  readonly observe?: (event: AcquisitionObservation) => void;
-}
-
-export class PackageAcquisitionError extends Error {
-  readonly code = 'PACKAGE_ACQUISITION_FAILED' as const;
-  readonly operation: 'ensure' | 'terminal-install';
-  readonly failure: PackageAcquisitionFailure;
-  readonly snapshotFailures: readonly SnapshotFailure[];
-
-  constructor(
-    operation: 'ensure' | 'terminal-install',
-    message: string,
-    options: {
-      readonly failure: PackageAcquisitionFailure;
-      readonly cause: unknown;
-      readonly snapshotFailures: readonly SnapshotFailure[];
-    },
-  ) {
-    super(message, { cause: options.cause });
-    this.name = 'PackageAcquisitionError';
-    this.operation = operation;
-    this.failure = options.failure;
-    this.snapshotFailures = [...options.snapshotFailures];
-  }
-}
-
-export type PackageAcquisitionFailure =
-  | 'claim'
-  | 'prepare'
-  | 'snapshot-unavailable'
-  | 'install'
-  | 'invalid-noop';
-
-export interface PackageAcquisitionAuthority {
-  /** Live projects observed by this owner; retained conservatively after revoke. */
-  knownProjects?(): readonly PackageAcquisitionProject[];
-  /** Wait for commands admitted before this call. Promotion and publication stay inside FIFO. */
-  quiesce(): Promise<void>;
-  /** Hold the existing package FIFO across claim-free Save and target trust publication. */
-  projectSave<T>(
-    input: {
-      readonly source: ProjectSaveIdentity;
-      readonly target: ProjectSaveIdentity;
-    },
-    operation: (rebind: () => Promise<ProjectSaveRebindResult>) => Promise<T>,
-  ): Promise<T>;
-  /** Hold trusted package-tree ancestry across readiness capture and physical child spawn. */
-  reserveChildAdmission(root: string): Promise<PackageFifoReservation<PackageTreeAdmission>>;
-  dispatch(command: EnsurePackagesCommand): Promise<AcquisitionProvenance>;
-  dispatch(command: ActivateAndEnsurePackagesCommand): Promise<AcquisitionProvenance>;
-  dispatch(command: PrepareFirstMaterializationPackagesCommand): Promise<ProjectAcquisitionPlan>;
-  dispatch(command: TerminalInstallCommand): Promise<AcquisitionProvenance | undefined>;
-  dispatch(command: PackageJsonEditCommand): Promise<void>;
-  dispatch(command: ResetPackagesCommand): Promise<void>;
-  dispatch(command: GuardedPackageMutationCommand): Promise<void>;
-  dispatch(command: ProjectSwitchCommand): Promise<void>;
-  dispatch(command: PackageAcquisitionCommand): Promise<PackageAcquisitionResult>;
-}
-
-export interface PackageFifoReservation<T> {
-  readonly snapshot: T;
-  commit(): void;
-  abortBeforeSpawn(error: unknown): void;
-  abortAfterChildSettlement(error: unknown, exited: Promise<unknown>): Promise<void>;
-}
-
-export interface PackageTreeAdmission {
-  readonly root: string;
-  readonly project: PackageAcquisitionProject;
-  readonly plan: ShadowSubstitutionPlan;
-  readonly runtimeBindings: readonly Readonly<{ adapterId: string; packagePath: string }>[];
-}
-
-type PackageAcquisitionResult = AcquisitionProvenance | ProjectAcquisitionPlan | undefined;
+export * from './package-acquisition-types.ts';
 
 interface CommandQueueEntry {
   readonly kind: 'command';
@@ -405,22 +110,6 @@ function promotionReason(result: InstallStampPromotionResult): string {
   return 'stamp-identity-mismatch';
 }
 
-function installedProvenance(result: InstallResult): AcquisitionProvenance {
-  const provenance = result.provenance;
-  return {
-    outcome: 'installed',
-    resolution: provenance.resolution,
-    packages: provenance.packages.map((entry) => ({
-      name: entry.name,
-      version: entry.version,
-      transport: entry.transport,
-    })),
-    ...(provenance.eddyFallback
-      ? { eddyFallback: { reason: provenance.eddyFallback.reason } }
-      : {}),
-  };
-}
-
 function unreachable(value: never): never {
   throw new Error(`unknown package acquisition command: ${String(value)}`);
 }
@@ -444,6 +133,7 @@ function resolveScheduledProject(
 }
 
 class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
+  readonly #automaticFallback: 'install' | 'snapshot-only';
   readonly #stamps: InstallStampAuthority;
   readonly #stampTransition: InstallStampTransitionOptions | undefined;
   readonly #adapter: PackageAcquisitionAdapter;
@@ -459,6 +149,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   #completedAdmission = 0;
 
   constructor(options: PackageAcquisitionAuthorityOptions) {
+    this.#automaticFallback = options.automaticFallback ?? 'install';
     this.#stamps = options.stamps;
     this.#stampTransition = options.stampTransition;
     this.#adapter = options.adapter;
@@ -505,6 +196,8 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     packageJsonText: string,
     snapshotFailures: readonly SnapshotFailure[],
   ): Promise<ProjectAcquisitionPlan> {
+    if (this.#automaticFallback === 'snapshot-only')
+      throw snapshotUnavailableError(project.projectId, snapshotFailures);
     this.#invalidatePackageTrees(project.root);
     await this.#publishEmptyPackageTree(project, packageJsonText);
     return Object.freeze({
@@ -1004,50 +697,189 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           ...(command.onPromotion ? { onPromotion: command.onPromotion } : {}),
         });
       }
-      case 'prepare-first-materialization': {
-        const registration = command.register();
-        const from = typeof command.from === 'function' ? command.from() : command.from;
-        if (from) this.#rememberProject(from);
-        this.#rememberProject(command.to);
-        await this.#adapter.switchProject({ type: 'project-switch', from, to: command.to });
-
-        const existing = registration.manifestChanged
-          ? null
-          : await this.#trustedProvenance(command.to, command.packageJsonText);
-        if (existing !== null) {
-          return Object.freeze({ kind: 'ready', provenance: Object.freeze(existing) });
-        }
-        if (command.materialization.kind === 'install') {
-          return this.#deferredInstallPlan(command.to, command.packageJsonText, []);
-        }
-        try {
-          const provenance = await this.#ensure({
-            type: 'ensure',
-            project: command.to,
-            packageJsonText: command.packageJsonText,
-            snapshotSource: command.materialization.source,
-            fallback: 'snapshot-only',
-            ...(command.replaceTreeOnMiss ? { replaceTreeOnMiss: true } : {}),
-            ...(command.onPromotion ? { onPromotion: command.onPromotion } : {}),
-          });
-          return Object.freeze({ kind: 'ready', provenance: Object.freeze(provenance) });
-        } catch (error) {
-          if (
-            !(error instanceof PackageAcquisitionError) ||
-            error.failure !== 'snapshot-unavailable'
-          ) {
-            throw error;
-          }
-          return this.#deferredInstallPlan(
-            command.to,
-            command.packageJsonText,
-            error.snapshotFailures,
-          );
-        }
-      }
+      case 'prepare-first-materialization':
+        return this.#prepareFirstMaterialization(command);
       default:
         return unreachable(command);
     }
+  }
+
+  async #prepareFirstMaterialization(
+    command: PrepareFirstMaterializationPackagesCommand,
+  ): Promise<ProjectAcquisitionPlan> {
+    const registration = command.register();
+    const from = typeof command.from === 'function' ? command.from() : command.from;
+    if (from) this.#rememberProject(from);
+    this.#rememberProject(command.to);
+    await this.#adapter.switchProject({ type: 'project-switch', from, to: command.to });
+    const admission = command.snapshotAdmission;
+    try {
+      if (admission?.mode === 'saved') {
+        const provenance = await this.#trustedProvenance(command.to, command.packageJsonText);
+        if (provenance === null)
+          throw new Error(
+            `Saved project is incompatible with current install trust: ${command.to.projectId}`,
+          );
+        return Object.freeze({ kind: 'ready', provenance: Object.freeze(provenance) });
+      }
+      if (admission?.mode === 'apply')
+        return await this.#applySnapshot(command, admission, registration.restore);
+      if (admission?.mode === 'initial') {
+        const roots = [
+          command.to.root,
+          ...this.#treeGuardsFor(command.to.root).map((transition) =>
+            transition.mode === 'revoke' ? transition.root : transition.project.root,
+          ),
+        ];
+        return await this.#stamps.withRollback(roots, (reconcile) =>
+          admission.transaction(
+            async () => {
+              const result = await this.#firstMaterializationDecision(command, false, true);
+              if (result.kind === 'ready')
+                await this.#requireSnapshotDurability(command.to, command.packageJsonText);
+              return result;
+            },
+            async () => {
+              await reconcile();
+              registration.restore?.();
+              for (const root of roots) this.#invalidatePackageTrees(root);
+            },
+          ),
+        );
+      }
+      return await this.#firstMaterializationDecision(command, registration.manifestChanged, false);
+    } catch (error) {
+      registration.restore?.();
+      throw error;
+    }
+  }
+
+  async #firstMaterializationDecision(
+    command: PrepareFirstMaterializationPackagesCommand,
+    manifestChanged: boolean,
+    requireTrustedSnapshot: boolean,
+  ): Promise<ProjectAcquisitionPlan> {
+    const existing = manifestChanged
+      ? null
+      : await this.#trustedProvenance(command.to, command.packageJsonText);
+    if (existing !== null)
+      return Object.freeze({ kind: 'ready', provenance: Object.freeze(existing) });
+    if (command.materialization.kind === 'install')
+      return this.#deferredInstallPlan(command.to, command.packageJsonText, []);
+    try {
+      const provenance = await this.#ensure({
+        type: 'ensure',
+        project: command.to,
+        packageJsonText: command.packageJsonText,
+        snapshotSource: command.materialization.source,
+        fallback: 'snapshot-only',
+        requireTrustedSnapshot,
+        ...(command.replaceTreeOnMiss ? { replaceTreeOnMiss: true } : {}),
+        ...(command.onPromotion ? { onPromotion: command.onPromotion } : {}),
+      });
+      return Object.freeze({ kind: 'ready', provenance: Object.freeze(provenance) });
+    } catch (error) {
+      if (!(error instanceof PackageAcquisitionError) || error.failure !== 'snapshot-unavailable')
+        throw error;
+      return this.#deferredInstallPlan(command.to, command.packageJsonText, error.snapshotFailures);
+    }
+  }
+
+  async #requireSnapshotDurability(
+    project: PackageAcquisitionProject,
+    packageJsonText: string,
+  ): Promise<void> {
+    const report = await this.#stampTransition?.flush?.();
+    if (report !== undefined && report.total > 0)
+      throw new Error('Snapshot project durability failed');
+    const current = await this.#stamps.check({
+      root: project.root,
+      slug: project.slug,
+      expectedPackageJsonText: packageJsonText,
+    });
+    if (current.status !== 'trusted' || current.stamp.installArtifactIdentity !== project.identity)
+      throw new Error('Snapshot promotion did not establish a trusted installed tree');
+  }
+
+  async #applySnapshot(
+    command: PrepareFirstMaterializationPackagesCommand,
+    admission: Extract<ProjectSnapshotAdmission, { mode: 'initial' | 'apply' }>,
+    restoreRegistration?: () => void,
+  ): Promise<ProjectAcquisitionPlan> {
+    if (command.materialization.kind !== 'snapshot')
+      throw new Error('Snapshot application requires a snapshot source');
+    const resolution = await command.materialization.source.resolve();
+    if (resolution.status === 'rejected')
+      throw new Error(`Snapshot application rejected: ${resolution.reason}`);
+    const snapshot = resolution.snapshot;
+    if (snapshot.identity !== command.to.identity)
+      throw new Error('Snapshot application rejected: install-artifact-identity-mismatch');
+    const prepare = this.#adapter.planSnapshotApplication;
+    if (prepare === undefined)
+      throw new NotImplementedError('package-acquisition.snapshot-application');
+    const plan: SnapshotApplicationPlan = await prepare({
+      project: command.to,
+      snapshot,
+      conflict: command.materialization.conflict ?? 'error',
+      knownProjects: this.knownProjects(),
+      ...(admission.preflightRoot === undefined ? {} : { preflightRoot: admission.preflightRoot }),
+    });
+    const transitions = [
+      ...this.#treeGuardsFor(command.to.root).filter((transition) => {
+        const root = transition.mode === 'revoke' ? transition.root : transition.project.root;
+        return root !== command.to.root && pathContains(root, command.to.root);
+      }),
+      ...plan.transitions,
+    ].filter(
+      (transition) =>
+        (transition.mode === 'revoke' ? transition.root : transition.project.root) !==
+        command.to.root,
+    );
+    const roots = [
+      command.to.root,
+      ...transitions.map((transition) =>
+        transition.mode === 'revoke' ? transition.root : transition.project.root,
+      ),
+    ];
+    return this.#stamps.withRollback(roots, (reconcile) =>
+      admission.transaction(
+        async () => {
+          await plan.prepareCache();
+          await this.#applyMutationTransitions(transitions);
+          this.#invalidatePackageTrees(command.to.root);
+          const claim = await this.#stamps.demote(command.to, this.#stampTransition);
+          await this.#stamps.prepareTreeMutation(claim);
+          await plan.apply();
+          this.#adapter.snapshotManifestApplied?.(command.to, plan.packageJsonText);
+          const promotion = await this.#completePromotion(
+            command.to,
+            'ensure',
+            plan.packageJsonText,
+            plan.packages,
+            claim,
+            plan.shadowPlan,
+            command.onPromotion,
+          );
+          if (promotion.status !== 'trusted')
+            throw new Error(`Snapshot ${promotionReason(promotion)}`);
+          await this.#requireSnapshotDurability(command.to, plan.packageJsonText);
+          return Object.freeze({
+            kind: 'ready',
+            provenance: Object.freeze({
+              outcome: 'snapshot',
+              snapshotId: snapshot.snapshotId,
+              identity: snapshot.identity,
+              packages: plan.packages,
+            }),
+          });
+        },
+        async () => {
+          await reconcile();
+          restoreRegistration?.();
+          for (const root of roots) this.#invalidatePackageTrees(root);
+        },
+      ),
+    );
   }
 
   #treeGuardsFor(root: string): readonly PackageMutationTransition[] {
@@ -1163,6 +995,8 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       : await this.#trustedProvenance(command.project, command.packageJsonText);
     if (existing !== null) return existing;
 
+    const snapshotOnly =
+      this.#automaticFallback === 'snapshot-only' || command.fallback === 'snapshot-only';
     const failures: SnapshotFailure[] = [];
     let snapshot = command.snapshot;
     if (!snapshot && command.snapshotSource) {
@@ -1226,20 +1060,12 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           'snapshot-not-configured',
         );
       }
-      throw new PackageAcquisitionError(
-        'ensure',
-        `verified snapshot unavailable for ${command.project.projectId}`,
-        {
-          failure: 'snapshot-unavailable',
-          cause: new Error('snapshot-only acquisition has no verified snapshot'),
-          snapshotFailures: failures,
-        },
-      );
+      throw snapshotUnavailableError(command.project.projectId, failures);
     };
 
     // Validation rejection is pre-mutation: a snapshot-only arrival keeps the
     // existing destination and claim byte-identical.
-    if (!snapshotPlan && command.fallback === 'snapshot-only') throwSnapshotUnavailable();
+    if (!snapshotPlan && snapshotOnly) throwSnapshotUnavailable();
 
     let claim: InstallStampClaim;
     try {
@@ -1278,7 +1104,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         );
       }
       if (!restoreRejected) {
-        await this.#completePromotion(
+        const promotion = await this.#completePromotion(
           command.project,
           'ensure',
           command.packageJsonText,
@@ -1287,6 +1113,11 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
           snapshotPlan.shadowPlan,
           command.onPromotion,
         );
+        if (
+          (command.requireTrustedSnapshot || this.#automaticFallback === 'snapshot-only') &&
+          promotion.status !== 'trusted'
+        )
+          throw new Error(`Snapshot ${promotionReason(promotion)}`);
         return {
           outcome: 'snapshot',
           snapshotId: snapshot.snapshotId,
@@ -1296,7 +1127,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       }
     }
 
-    if (restoreRejected) {
+    if (restoreRejected && this.#automaticFallback !== 'snapshot-only') {
       try {
         await this.#adapter.prepareEnsure?.(command, {
           claim,
@@ -1311,7 +1142,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       }
     }
 
-    if (command.fallback === 'snapshot-only') throwSnapshotUnavailable();
+    if (snapshotOnly) throwSnapshotUnavailable();
 
     const installed = await this.#install(
       {
@@ -1489,8 +1320,8 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     claim: InstallStampClaim,
     shadowPlan: ShadowSubstitutionPlan,
     onPromotion?: (result: InstallStampPromotionResult) => void,
-  ): Promise<void> {
-    const settle = async (): Promise<void> => {
+  ): Promise<InstallStampPromotionResult> {
+    const settle = async (): Promise<InstallStampPromotionResult> => {
       let result: InstallStampPromotionResult;
       if (packageJsonText === null) {
         result = { status: 'refused', reason: 'identity-drift' };
@@ -1515,7 +1346,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         result.stamp.installArtifactIdentity === project.identity
       ) {
         await this.#publishPackageTree(project, packageJsonText, shadowPlan);
-        return;
+        return result;
       }
       this.#invalidatePackageTrees(project.root);
       try {
@@ -1528,9 +1359,10 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       } catch {
         // Observability cannot become a second package-state owner.
       }
+      return result;
     };
 
-    await settle();
+    return settle();
   }
 }
 

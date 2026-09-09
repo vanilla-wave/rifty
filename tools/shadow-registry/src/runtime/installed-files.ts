@@ -1,4 +1,4 @@
-import { normalizePath, syncMirror } from '@riftydev/vfs';
+import { type FsSync, normalizePath, syncMirror } from '@riftydev/vfs';
 import {
   type EmnapiCorePatchFormat,
   applyEmnapiCoreOrphanedReferencePatch,
@@ -7,6 +7,12 @@ import {
 
 export interface PackageInstallOptions {
   readonly root: string;
+  readonly fs?: FsSync;
+}
+
+export interface InstalledFilePreparation {
+  readonly path: string;
+  readonly bytes: Uint8Array;
 }
 
 interface FinalizerPackage {
@@ -41,8 +47,12 @@ const emnapiCoreFiles = [
   ['dist/emnapi-core.cjs.min.js', 'minified'],
 ] as const satisfies readonly (readonly [string, EmnapiCorePatchFormat])[];
 
-function patchEmnapiCoreCopies(options: PackageInstallOptions): void {
-  const fs = syncMirror();
+/** Read-only transformations; publication and source validation share this authority. */
+export function planToolchainInstallFiles(
+  options: PackageInstallOptions,
+): readonly InstalledFilePreparation[] {
+  const fs = options.fs ?? syncMirror();
+  const changes: InstalledFilePreparation[] = [];
   const lockfilePath = normalizePath(`${options.root}/package-lock.json`);
   const packages = fs.existsSync(lockfilePath)
     ? finalizerPackagesFromLockfile(
@@ -59,12 +69,15 @@ function patchEmnapiCoreCopies(options: PackageInstallOptions): void {
       }
       const source = new TextDecoder().decode(fs.readFileBytesSync(path));
       const prepared = applyEmnapiCoreOrphanedReferencePatch(source, format);
-      if (prepared !== source) fs.writeFileSync(path, new TextEncoder().encode(prepared));
+      if (prepared !== source) changes.push({ path, bytes: new TextEncoder().encode(prepared) });
     }
   }
+  return changes;
 }
 
 /** Vite-independent installed-tree mutations shared by all project kinds. */
 export function finalizeToolchainInstallFiles(options: PackageInstallOptions): void {
-  patchEmnapiCoreCopies(options);
+  const fs = options.fs ?? syncMirror();
+  for (const change of planToolchainInstallFiles({ ...options, fs }))
+    fs.writeFileSync(change.path, change.bytes);
 }

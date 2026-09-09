@@ -581,7 +581,10 @@ function analyzeLockfileRequest(
     for (const [companionName, companionRange] of Object.entries(
       companionRequestsFor(effectiveName, hit.entry.version),
     )) {
-      visit(companionName, companionRange, childContext);
+      visit(companionName, companionRange, {
+        ...childContext,
+        companionTriggerVersion: hit.entry.version,
+      });
     }
   };
 

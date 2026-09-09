@@ -37,6 +37,7 @@ export interface ProjectContentTransportOptions {
   readonly isAlive: () => boolean;
   readonly generateRequestId: () => string;
   readonly commitTimeoutMs: number;
+  readonly durabilityAckTimeoutMs?: number;
   readonly timers?: OwnerVfsClientTimers;
   readonly reportProtocolError?: (error: VfsCommitProtocolError) => void;
   readonly onDurabilityState?: (state: VfsCommitDurabilityState) => void;
@@ -182,6 +183,7 @@ export function createProjectContentTransport(
     currentOwnerEpoch: () => ownerEpoch,
     isAlive: () => closedError === null && options.isAlive(),
     generateBarrierId: options.generateRequestId,
+    durabilityAckTimeoutMs: options.durabilityAckTimeoutMs,
     ...(options.timers === undefined ? {} : { timers: options.timers }),
     reportProtocolError,
   });

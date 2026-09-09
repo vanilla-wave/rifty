@@ -481,7 +481,25 @@ export function createWorkbenchOwnerController(
       if (playground === undefined)
         throw new TypeError('Playground companion owner is unavailable');
       const command = message.command;
+      let completion: PlaygroundOwnerToPageMessage = {
+        type: 'workbench:playground-catalog-completed',
+        opId: message.opId,
+      };
       switch (command.kind) {
+        case 'list-retained-scratch':
+          completion = {
+            type: 'workbench:playground-retained-scratch-listed',
+            opId: message.opId,
+            records: await playground.authority.listRetainedScratch(),
+          };
+          break;
+        case 'export-retained-scratch':
+          completion = {
+            type: 'workbench:playground-retained-scratch-exported',
+            opId: message.opId,
+            archiveJson: await playground.authority.exportRetainedScratch(command.id),
+          };
+          break;
         case 'create-scratch':
           await playground.authority.createScratch({
             definition: recreatePlaygroundProjectDefinition(
@@ -523,7 +541,7 @@ export function createWorkbenchOwnerController(
           break;
       }
       if (shutdownRequested) throw closedOwnerError();
-      playground.send({ type: 'workbench:playground-catalog-completed', opId: message.opId });
+      playground.send(completion);
     } catch (error) {
       sendFailure(error, message.opId);
     }

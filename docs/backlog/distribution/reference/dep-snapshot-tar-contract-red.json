@@ -1,0 +1,170 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED passes at 04bf115f294f9ebfbcc8388accf5202e9a36bf46; proceed to implementation. Not a merge or goal-completion approval. Four expected RED failures, seven preserved rejection cases; legacy 24/24 and byte-cap owner 5/5 pass.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/dep-snapshot-tar.md at 04bf115f294f9ebfbcc8388accf5202e9a36bf46; BASE 89724666236755df26b74ee033c05a1743093353. Frozen authority: docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I1 and docs/backlog/distribution/reference/embedder-gaps-evidence.md from BASE (unchanged). Active codec ADR-0386. Raw PR #316 body read through gh; subsequent user instruction authorizes whole-goal implementation in the same PR.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:5",
+      "summary": "Codec implementation/GREEN and published manifest+lock producer, identities, packed public consumer remain. This checkpoint proves RED readiness only."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Copyable published runtime asset closure and real packed project boot remain."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:11",
+      "summary": "Public registry-free acquisition and honest selected-snapshot failures remain."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:13",
+      "summary": "Selected OPFS namespace isolation and former-project reopening remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:17",
+      "summary": "Configured non-root preview prefix with navigation, assets and HMR remains."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:15",
+      "summary": "Byte-exact retained orphan download/reopen and fresh Scratch remain."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:19",
+      "summary": "Effective host operation budgets and composed whole-scenario proof remain."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:9",
+      "summary": "Initial-only saved-state priority and explicit generic overwrite/error application remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: standard tar/raw gzip preserve nested, binary, long UTF-8 and empty-directory payloads with disjoint user/control names.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:82",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: deterministic ordinary-tool-extractable tar entries, fixed metadata/timestamps and stable order.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:107",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: raw gzip and HTTP-decoded tar use the same uncompressed-content SHA-256 identity.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:154",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: legacy v3 JSON/gzip and replay-cache integrity remain valid.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:200; packages/workbench/src/glue/dep-snapshot.test.ts:396; packages/workbench/src/glue/dep-snapshot.test.ts:627",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: checksums, truncation, unsafe/duplicate/ancestor paths, unsupported types and control entries reject before destination effects.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:176",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: identity mismatch never admits bytes; absent or altered replay closure fails before mutation.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:154; packages/workbench/src/glue/dep-snapshot.test.ts:221; packages/workbench/src/glue/dep-snapshot.test.ts:396",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: existing compressed/decoded byte caps and typed fetch/decompress failures remain through the shared bounded-stream owner.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/bounded-asset-fetch.fault.test.ts:41; packages/workbench/src/glue/dep-snapshot.test.ts:627; packages/workbench/src/glue/dep-snapshot.test.ts:658",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:134",
+          "summary": "Writer carrier compares two immediate serializations of the same object and verifies extraction, but does not directly inspect the fixed header metadata or permute source entry order. Likewise the empty-directory reader assertion checks existence only (line 101). These are assertion-depth concerns, not missing carriers; no executed counterexample, so coverage stays pass under REV-4/REV-5.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:32",
+          "summary": "New tar fixtures carry an empty replay closure; nonempty replay integrity is exercised only through the existing v3 restore suite. Consider a tar round-trip of a real existing replay fixture when implementing the envelope mapping. No executed wrong-implementation artifact; advisory under REV-5.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/dep-snapshot-tar.md:32",
+          "summary": "Corrected byte-cap citation exercises the shared owner with a small limit and the snapshot wrapper's fetch-stage errors; it does not directly execute a snapshot decompression-stage failure. The unchanged shared owner is real and its five tests passed. Wrapper-specific decompression proof is advisory at this Contract+RED checkpoint without an executed counterexample.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "04bf115f294f9ebfbcc8388accf5202e9a36bf46"
+}

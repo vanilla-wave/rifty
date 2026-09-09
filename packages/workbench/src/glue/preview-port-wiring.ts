@@ -10,11 +10,12 @@ export function wirePreviewBridge(
   port: number,
   ownerToken: string,
   previewScope?: string,
+  previewPrefix?: string,
 ): () => void {
-  const previewBridge = bridgeCrossRealmPreview(
-    port,
-    previewScope === undefined ? {} : { scope: previewScope },
-  );
+  const previewBridge = bridgeCrossRealmPreview(port, {
+    ...(previewScope === undefined ? {} : { scope: previewScope }),
+    ...(previewPrefix === undefined ? {} : { previewPrefix }),
+  });
   registerPort(port, previewBridge);
   const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, {
     ownerToken,

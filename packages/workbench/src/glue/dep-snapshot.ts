@@ -1,12 +1,13 @@
 /**
  * Baked dependency snapshot (ADR-0135): a template's fully installed
  * node_modules tree + lockfile replay cache, serialized at bake time (`pnpm snapshots:bake`)
- * and shipped as a same-origin gzipped JSON asset. The worker bootstrap
+ * and shipped as a same-origin tar/gzip asset. The worker bootstrap
  * restores it on a stampless boot instead of running `install()`; runtime
  * assets follow the separate verified-store contract (ADR-0320).
  *
  * Snapshot v3 carries the exact package.json text, install-artifact identity,
  * and integrity-verified cache closure that produced the tree (ADR-0346).
+ * V4 tar envelopes normalize to this restore model; legacy JSON remains readable.
  */
 import {
   TARBALL_CACHE_ROOT,
@@ -17,6 +18,7 @@ import {
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import { joinPath } from '@riftydev/vfs';
 import { drainByteStreamBounded, fetchAssetBytesBounded } from './bounded-asset-fetch.ts';
+import { decodeDepSnapshotTar, encodeDepSnapshotTar } from './dep-snapshot-tar.ts';
 import { installArtifactIdentity } from './install-artifact-identity.ts';
 import { depsEqual, effectiveDepsFromPackageJsonText } from './install-stamp.ts';
 import {
@@ -44,6 +46,8 @@ export interface DepSnapshotV3 {
 }
 
 export interface PreparedDepSnapshotRestore {
+  applyCache(): void;
+  applyPayload(): void;
   apply(): void;
 }
 
@@ -64,6 +68,11 @@ export function serializeDepSnapshot(snapshot: DepSnapshotV3): string {
     tarballCache: snapshot.tarballCache,
     nodeModules: snapshot.nodeModules,
   });
+}
+
+/** Standard archive envelope (ADR-0386); gzip remains a transport choice. */
+export function serializeDepSnapshotTar(snapshot: DepSnapshotV3): Uint8Array {
+  return encodeDepSnapshotTar(validateDepSnapshot(snapshot));
 }
 
 const enc = new TextEncoder();
@@ -111,7 +120,10 @@ export function buildDepSnapshot(
   const tarballCache = buildReplayCacheArchive(fs, lockfile);
   // exclude: [] — the default exclusion list contains 'node_modules', which
   // would silently drop the nested copies nest-on-conflict creates.
-  const nodeModules = buildWorkspaceArchive(fs, joinPath(root, 'node_modules'), { exclude: [] });
+  const nodeModules = buildWorkspaceArchive(fs, joinPath(root, 'node_modules'), {
+    exclude: [],
+    includeDirectories: true,
+  });
   return {
     version: 3,
     ...meta,
@@ -124,7 +136,12 @@ export function buildDepSnapshot(
 }
 
 export function parseDepSnapshot(json: string): DepSnapshotV3 {
-  const parsed = JSON.parse(json) as DepSnapshotV3;
+  return validateDepSnapshot(JSON.parse(json) as unknown);
+}
+
+function validateDepSnapshot(value: unknown): DepSnapshotV3 {
+  if (!isRecord(value)) throw new Error('Malformed dep snapshot: expected object');
+  const parsed = value;
   if (parsed.version !== 3) {
     throw new Error(`Unsupported dep snapshot version ${parsed.version}`);
   }
@@ -143,13 +160,17 @@ export function parseDepSnapshot(json: string): DepSnapshotV3 {
     throw new Error('Malformed dep snapshot: missing deps');
   }
   const exactDeps = effectiveDepsFromPackageJsonText(parsed.packageJsonText);
-  if (!exactDeps || !depsEqual(parsed.deps, exactDeps)) {
+  if (
+    !Object.values(parsed.deps).every((value) => typeof value === 'string') ||
+    !exactDeps ||
+    !depsEqual(parsed.deps as Record<string, string>, exactDeps)
+  ) {
     throw new Error('Malformed dep snapshot: deps do not match packageJsonText');
   }
   if (typeof parsed.lockfile !== 'string' || !parsed.tarballCache || !parsed.nodeModules) {
     throw new Error('Malformed dep snapshot: missing lockfile/tarballCache/nodeModules');
   }
-  return parsed;
+  return parsed as unknown as DepSnapshotV3;
 }
 
 /**
@@ -183,13 +204,18 @@ export async function prepareDepSnapshotRestore(
     replace: false,
   });
   const lockfile = snapshot.lockfile.length > 0 ? enc.encode(snapshot.lockfile) : null;
+  const applyPayload = (): void => {
+    nodeModules.apply();
+    if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
+  };
   return {
+    applyCache: () => tarballCache.apply(),
+    applyPayload,
     apply() {
-      nodeModules.apply();
       // The global cache is shared across projects: merge this exact closure;
       // never replace unrelated warm entries. Publish the lockfile last.
       tarballCache.apply();
-      if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
+      applyPayload();
     },
   };
 }
@@ -314,7 +340,7 @@ export async function verifyDepSnapshotReplayCache(snapshot: DepSnapshotV3): Pro
  *
  * Gzip is detected by MAGIC BYTES, not by URL or headers: some static servers
  * (vite dev among them) serve `.gz` with `Content-Encoding: gzip`, so the
- * browser hands us already-decoded JSON; others serve the raw gzip bytes.
+ * browser hands us already-decoded tar/JSON; others serve the raw gzip bytes.
  */
 async function fetchDepSnapshotBytes(url: string): Promise<Uint8Array<ArrayBuffer>> {
   let bytes: Uint8Array<ArrayBuffer>;
@@ -345,7 +371,10 @@ async function fetchDepSnapshotBytes(url: string): Promise<Uint8Array<ArrayBuffe
 
 function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshotV3 {
   try {
-    return parseDepSnapshot(new TextDecoder().decode(bytes));
+    const first = bytes.find((byte) => ![9, 10, 13, 32].includes(byte));
+    return first === 123 || first === 0xef
+      ? parseDepSnapshot(new TextDecoder().decode(bytes))
+      : validateDepSnapshot(decodeDepSnapshotTar(bytes));
   } catch (error) {
     throw new DepSnapshotFetchError(
       url,
@@ -355,7 +384,7 @@ function parseFetchedDepSnapshot(url: string, bytes: Uint8Array): DepSnapshotV3 
   }
 }
 
-async function sha256Identity(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
+export async function sha256Identity(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
   let hex = '';
   for (const byte of digest) hex += byte.toString(16).padStart(2, '0');

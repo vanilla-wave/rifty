@@ -533,6 +533,7 @@ describe('openWorkbench normalized composition', () => {
         previewProbeTimeoutMs: 3_000,
       },
       packageAcquisition: {
+        mode: 'registry',
         registryUrl: 'https://workbench.invalid/npm-registry',
         eddy: {
           resolverUrl: 'https://eddy.invalid/resolve',

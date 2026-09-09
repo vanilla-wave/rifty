@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Snapshot producer acquisition joins the exact install-tree gate contexts; claim/sibling writes remain refused. Legacy reload tests now require explicit recovery; budget tests await real IPC completion.
+- Close self-hosted snapshot Workbench I1–I8 after independent composed Vite/native proof; no required residuals. CLOSE now requires proof of accepted transitions on the same real program/state.
+
+- Deliver self-hosted snapshot Workbench I1–I8; published assets/producer, literal snapshot application and preserved saved-state boundaries. Composed completion proof replaces the earlier invalidated closure claim.
+
+- Workbench operation budgets reach existing startup/file/tool/native-IO deadlines; update the exact TypeScript-worker pin only for dependency import hashes (ADR-0410/0391).
+
+- Process: remove the generated App SW879-line pin and exclude only that bundle from source-size measurement (ADR-0016); all handwritten inputs/generator and unrelated public files retain their caps.
+
+- Workbench snapshot-only mode keeps one acquisition owner and local npm replay; declared companion origin/permission shares existing installer authorities, with lower source ratchets (ADR-0398/0399).
+
+- Process: model owned in-process policy/graph projection faults; transport loss/duplication/reorder do not apply to ordinary value calls.
+
+- Workbench snapshot application preserves saved projects; catalog/claim helpers shrink oversized owners and lower their source ratchets (ADR-0394).
+
+- Publish Workbench runtime assets with exact compiler/WASM exceptions in the esbuild-retirement inventory; substituted esbuild bytes remain package-owned (ADR-0390/0391).
 - Claude shares `rifty-review-inline` with Codex via a skill symlink, replacing
   the duplicate slash command; `disable-model-invocation: true` enforces manual
   invocation in Claude. Codex keeps `allow_implicit_invocation: false`.

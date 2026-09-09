@@ -20,6 +20,9 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
 | 0372 | Dedicated-Worker sync capability selects OPFS without COI |
 | 0393 | Single-pass honest OPFS preload |
+| 0402 | Mount Workbench namespaces through one captured OPFS root |
+| 0406 | Refuse unavailable OPFS cache bytes |
+| 0411 | Preserve acquired-tree preload failures in Workbench storage selection |
 
 ### kernel
 
@@ -132,6 +135,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0160 | Window owner ports and anti-hijack ready-frame routing |
 | 0265 | Owner-correlated preview readiness by PTY run |
 | 0271 | Correlated service-worker control proofs fence Workbench preview revocation |
+| 0409 | Capture one preview prefix in static service worker configuration |
 
 ### npm-client
 
@@ -167,6 +171,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0364 | One npm package-bin normalization authority follows active npm package-json semantics |
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
 | 0384 | Registry ownership of bundled guest-package adaptations |
+| 0399 | Preserve declared companion policy through retained-lock acquisition |
 
 ### playground
 
@@ -214,6 +219,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0355 | Webpack starter trusts the exact deployed hostname |
 | 0359 | Durability-drain progress as a health-event kind on the workbench owner port |
 | 0360 | Owner operation deadline is a host-configurable budget of durability-progress silence |
+| 0407 | Retain orphan Scratch bytes in catalog transactions |
 
 ### toolchain-build
 
@@ -317,7 +323,16 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0377 | No-COI resident tool and restart lifecycle |
 | 0378 | Causal resident port ownership |
 | 0379 | Resident entry admission authority |
+| 0386 | Publish deterministic dependency snapshot archives |
+| 0387 | Expose caller-pinned dependency snapshot production |
+| 0390 | Ship a copyable Workbench runtime asset closure |
+| 0391 | Attest copyable runtime asset exceptions to the esbuild retirement gate |
 | 0392 | Persisted no-COI warm activation and install-only durable equality |
+| 0394 | Apply dependency snapshots through catalog transactions and saved-state policy |
+| 0397 | Retire completed legacy migration receipts before catalog mutations |
+| 0398 | Select registry-free snapshot acquisition through the existing package owner |
+| 0410 | Configure existing Workbench operation deadlines end to end |
+| 0412 | Publish prepared dependency snapshot payloads |
 
 ## Superseded (removed)
 

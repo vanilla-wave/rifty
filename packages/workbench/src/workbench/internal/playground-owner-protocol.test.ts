@@ -63,7 +63,7 @@ describe('Playground owner protocol', () => {
           wasm: { sqlite: '/sqlite.wasm' },
           previewProbeTimeoutMs: 1_000,
         },
-        packageAcquisition: { registryUrl: '/registry' },
+        packageAcquisition: { mode: 'registry', registryUrl: '/registry' },
         storage: { persistence: 'ephemeral' },
         playgroundUrlContext: URL_CONTEXT,
       },

@@ -179,6 +179,12 @@ function harness(terminalState?: () => ProjectTerminalSnapshot): Harness {
     playground: {
       define: defineProject,
       catalog: {
+        listRetainedScratch: async () => {
+          throw new Error('Unexpected retained catalog operation at this fixture boundary');
+        },
+        exportRetainedScratch: async () => {
+          throw new Error('Unexpected retained catalog operation at this fixture boundary');
+        },
         snapshot: () => state.catalog,
         subscribe(listener: (snapshot: PlaygroundCatalogSnapshot) => void) {
           listeners.add(listener);

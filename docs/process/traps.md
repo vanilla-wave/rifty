@@ -53,6 +53,8 @@
 
 ## Browser runtime & bundling
 
+- **copied-asset-fingerprints**: Workbench `dist/assets` bundles the runtime; shared-chunk changes can rename imports in the large TypeScript worker. `check:esbuild-legacy-retirement` pins its complete bytes plus the lexical compiler (ADR-0391). After a reviewed source change, rebuild, inspect the new compiler outputs and update only their filename/size/SHA pins; keep negative payload tests and packed-browser proof. SW stays classic; Workers are ESM.
+
 - **worker-console-invisible**: worker-realm logs never reach page/Playwright console; BroadcastChannel is shimmed in workers → route diagnostics via `process.stdout.write`; an eval-crashed kernel worker shows only as `page.on('worker')` create→close ~0.1s apart (DOM `error`, no exit frame).
 - **pre-entry-hook-lives-in-host**: refactoring runtime-js's install path silently breaks the browser → `setKernelPreEntryHook` is last-writer-wins and the playground `kernel-worker-entry.ts` registration is the one that runs (ADR-0157) → update the host hook with any shim refactor; failure = silent emnapi pthread crash, preview 503, only the SW-preview e2e catches it.
 - **worker-entry-chunk-graph**: adding a kernel import to `runtime-js/worker-entry.ts` co-locates its side-effect into the kernel startup chunk → process globals install BEFORE the pre-entry seam publishes the spec → persistent empty-env clobber, prod-only → keep the env reads; prod e2e is the proof.
@@ -80,3 +82,5 @@
 
 - **new-toplevel-dir-invisible**: a new top-level dir (e.g. `services/`) is silently ignored → workspace/arch/test/backlog tooling hardcodes `packages|apps|tools` → wire 6 spots: pnpm-workspace glob, vitest unit include, `check:arch` args, arch-boundaries sweep, arch-rules carve-out, backlog SCAN_ROOTS; not in `build:libs`; publish build = hand-written tsup config.
 - **pnpm-eats-double-dash**: `pnpm test:parity -- foo` drops the filter → pass args bare: `pnpm test:parity foo`.
+
+- **generated-sw-source-ratchet**: `apps/playground/public/sw.js` is the ADR-0016 bundle, not handwritten source. `check:file-size` excludes exactly that output (replaces its old879-line pin); TS inputs and `build/sw-plugin.ts` stay measured. Do not hand-edit/minify/split the bundle to satisfy a source line count. Verify canonical generator bytes and production runtime; this exclusion is not an artifact-drift check.

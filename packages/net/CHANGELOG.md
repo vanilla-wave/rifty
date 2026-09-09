@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Configured preview prefix (ADR-0409).** `bridgeCrossRealmPreview` and
+  `webSocketBridgeClientScript` accept `previewPrefix`, default `/preview/`.
+  Both request paths carry the captured prefix into HTML/WS injection; relative
+  WebSocket URLs drop the full prefix while guest paths and external sockets retain
+  their behavior. Canonical io validation rejects malformed configuration.
+
 - **Causal resident port ownership (ADR-0378).** Loader-local `node:http` and
   `node:net` facades bind an opaque owner to constructed servers; registry
   registration exposes that owner so resident readiness cannot accept a stale

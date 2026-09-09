@@ -4,10 +4,39 @@ import { type InspectedProjectDefinition, projectStorageSegment } from './projec
 
 export { ClosedHandleError, ProjectDefinitionMismatchError } from './errors.ts';
 
+export type ProjectSnapshotApplication =
+  | { readonly mode: 'initial-deployment-only' }
+  | { readonly mode: 'apply-snapshot'; readonly conflict: 'error' | 'overwrite' };
+
+export function normalizeProjectSnapshotApplication(value: unknown): ProjectSnapshotApplication {
+  if (value === undefined) return Object.freeze({ mode: 'initial-deployment-only' });
+  const invalid = (): never => {
+    throw new TypeError('Invalid snapshot application policy');
+  };
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return invalid();
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== null && prototype !== Object.prototype) return invalid();
+  const properties: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || (key !== 'mode' && key !== 'conflict')) return invalid();
+    const property = Object.getOwnPropertyDescriptor(value, key);
+    if (property === undefined || !property.enumerable || !('value' in property)) return invalid();
+    properties[key] = property.value;
+  }
+  if (properties.mode === 'initial-deployment-only' && !Object.hasOwn(properties, 'conflict')) {
+    return Object.freeze({ mode: 'initial-deployment-only' });
+  }
+  if (properties.mode !== 'apply-snapshot') return invalid();
+  const conflict = Object.hasOwn(properties, 'conflict') ? properties.conflict : 'error';
+  if (conflict !== 'error' && conflict !== 'overwrite') return invalid();
+  return Object.freeze({ mode: 'apply-snapshot', conflict });
+}
+
 export type ProjectFirstMaterialization =
   | { readonly kind: 'install' }
   | {
       readonly kind: 'snapshot';
+      readonly application?: ProjectSnapshotApplication;
       readonly snapshot: {
         readonly snapshotId: string;
         readonly assetUrl: string;
@@ -35,6 +64,17 @@ export type ProjectAcquisitionPlan =
   | { readonly kind: 'ready'; readonly provenance: ProjectAcquisitionProvenance }
   | { readonly kind: 'install'; readonly snapshotFailures: readonly ProjectSnapshotFailure[] };
 
+export type ProjectSnapshotAdmission =
+  | { readonly mode: 'saved' }
+  | {
+      readonly mode: 'initial' | 'apply';
+      readonly preflightRoot?: string;
+      readonly transaction: (
+        operation: () => Promise<ProjectAcquisitionPlan>,
+        reconcileRollback: () => Promise<void>,
+      ) => Promise<ProjectAcquisitionPlan>;
+    };
+
 export interface ProjectMaterializationRecord {
   readonly definitionIdentity: string;
   readonly projectRoot: string;
@@ -59,6 +99,7 @@ export interface ProjectAcquisitionRequest {
   readonly projectKey: string;
   readonly projectRoot: string;
   readonly definition: InspectedProjectDefinition;
+  readonly snapshotAdmission?: ProjectSnapshotAdmission;
 }
 
 export interface ProjectAcquisitionPort<TAcquisition = unknown> {

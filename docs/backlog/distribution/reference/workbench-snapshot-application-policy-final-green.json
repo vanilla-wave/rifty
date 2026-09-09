@@ -1,0 +1,344 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS for I8 at 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c. B1 repaired and independently verified: original6, carrier199, integration3 and real OPFS5 all GREEN. Unit complete; continue I3/I4/I5/I6/I7 before whole-goal closure.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/workbench-snapshot-application-policy.md at clean 39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c; BASE ab3871d714525c4b7db75d6be0b3631817997783. Fresh original reviewer /root/snapshot_application_final_review independently verified the actual accepted B1 repair under REV-12; no tracked edits. Prior raw goal/map/ledger/user-answer, ADR-0394/0397 and PR-4 review remains valid: exact retry nonce discrimination, retained adopted corruption cases, real replacement for obsolete initializer oracle, exact export/source closure and lowered-only file ratchets. Repair diff additionally checked every admission caller, published browser manifest loop and unchanged Vite integration assertions; authority ratchet lowers920→904. Preparation fe0c879ba1de72fd2b56ad5690ffbf8fa1b3a383 remains; raw repair18 RED→18 GREEN inspected. B1 is fixed through one existing admission helper: owned definition supplies provisional apply configuration, generic validated payload preflight still precedes effects, actual payload manifest/config/claim publishes through the existing package actor; default saved admission reads current tree. Demotion uses valid current manifest or validated prior claim and cannot invent disk provenance when both are absent/invalid; existing epochs/durability remain. New committed18 owner and6 stamp cases cover Scratch/named/legacy and both conflict modes; deliberately different initializer vs payload manifests discriminate wrong claim/config publication. Original unchanged six-case reviewer probe now6/6 GREEN: /tmp/rifty-316-b1-independent-original-probe.log. Independent committed carrier199/199 GREEN: /tmp/rifty-316-b1-independent-carriers.log; Vite integration3/3: /tmp/rifty-316-b1-independent-integration.log; real catalog/receipt OPFS5/5: /tmp/rifty-316-b1-independent-opfs.log. Driver final pr:check25/25 and packed78.64s logs read at /tmp/rifty-316-b1-pr-check-final.log and /tmp/rifty-316-b1-packed-green.log; packed real-public manifest recovery and Node-output assertions inspected, unchanged production source after that run. Earlier B1 evidence/history remains in git and ledger; no critic ruling or scope change. Runner adds reviewed_sha after this PASS.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3",
+      "location": "docs/backlog/distribution/workbench-snapshot-only.md",
+      "summary": "Registry-free snapshot-only admission and terminal/package enforcement remain."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/vfs/workbench-storage-namespace.md",
+      "summary": "Host-selected isolated storage namespace and returning to old projects remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/service-worker/workbench-preview-prefix.md",
+      "summary": "Scoped preview navigation/assets/HMR under host-selected prefix remain."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/playground/orphan-scratch-recovery.md",
+      "summary": "Public enumeration/download of byte-exact retained orphan Scratch and fresh Scratch remain."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/distribution/workbench-operation-budgets.md",
+      "summary": "Effective public startup/file/catalog budgets and composed whole-goal acceptance remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: exact owned/wire policy, default initial/error and policy-independent definition identity",
+      "source": "acceptance",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-snapshot-application-options.contract.test.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: clean/dirty Scratch and named saved state preserves catalog/baseline/files under new initializer with no unused fetch",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:96; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:837; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:126",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: absent/pending/incompatible saved trust and pending legacy provenance reject before effects or automatic acquisition",
+      "source": "acceptance",
+      "trace": "I8+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:143; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:187",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: durable first-admission receipt, transactional ready/deferred consumption, refused-promotion rollback/retry, old catalog compatibility and no Save transfer",
+      "source": "acceptance",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:33",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: each same/new-ID Scratch/named apply evaluates payload; error reports structural conflicts before additions; equal/missing targets admitted",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: generic overwrite replaces differing/type targets, adds absent entries, retains source/local dependencies/empty directories; legacy preserves untargeted bytes",
+      "source": "acceptance",
+      "trace": "I8+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:259; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:235; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181; packages/workbench/src/glue/install-stamp-invalid-manifest.contract.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: warm application validates real artifact identity/schema/replay closure/integrity without project/cache changes; durable cache precedes live lock",
+      "source": "acceptance",
+      "trace": "ADR-0346+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:299; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:366",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: exact pre-pointer rollback and post-pointer recovery, equal-metadata commit discriminator, same-owner retry, stale epoch fencing and retained unproved recovery",
+      "source": "acceptance",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:308; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:67; tests/browser-unit/workbench-snapshot-application.spec.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: packed public save/close/reopen, conflict prototype/paths, repeated overwrite, captured Node output and unchanged registry counter",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:49; tests/integration/workbench-packed-consumer.mjs:1225; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 10: explicit Reset and intentional first-party starter replacement reseed, ordinary reload retains edits",
+      "source": "acceptance",
+      "trace": "ADR-0165+ADR-0394",
+      "status": "pass",
+      "citation": "tests/e2e/project-switch.spec.ts:182; tests/e2e/instant-preset-reset.spec.ts:8; tests/e2e/starter-file-edit-survives-reload.spec.ts:41; /tmp/rifty-316-application-first-party-green.log",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: producer-extracted real ms@2.0.0 Node output agrees with saved browser program after reopen and repeated overwrite",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:67; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:31",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × default saved admission: absent/pending/incompatible claim changes no bytes and requests no asset/registry",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:143; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:187",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × application plan/payload: exact owned shapes, artifact identity and replay validation precede effects",
+      "source": "fault-matrix",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-snapshot-application-options.contract.test.ts:66; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:299",
+      "note": ""
+    },
+    {
+      "row": "destructive-update × conflict preflight: differing file/type/ancestor conflicts report paths and do not add absent targets",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:332; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:214; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × first admission/ready proof: restore seed/entitlement and admit same-owner retry without false ready",
+      "source": "fault-matrix",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:88",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × saved apply catalog pointer: prior project/catalog/claim exactly restored, same-owner saved reuse and explicit retry",
+      "source": "fault-matrix",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:308",
+      "note": ""
+    },
+    {
+      "row": "permission-loss × rollback persistence: admission fenced with journal/before-copy retained for fresh-owner recovery",
+      "source": "fault-matrix",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:391",
+      "note": ""
+    },
+    {
+      "row": "torn-state × real OPFS Worker kill at catalog close: pre-pointer rollback, post-pointer completed overlay and equal-metadata commit discrimination",
+      "source": "fault-matrix",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-snapshot-application.spec.ts:23; tests/browser-unit/fixtures/opfs-catalog-pointer-boundary.ts:21",
+      "note": ""
+    },
+    {
+      "row": "stale-epoch × rollback reconciliation: all captured claims byte-checked before trust, absent/pending preserved and delayed promoters fenced",
+      "source": "fault-matrix",
+      "trace": "ADR-0261+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:87; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:123; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:138; packages/workbench/src/glue/install-stamp-rollback.contract.test.ts:154",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache × verified overlay: full replay validation before effects; cache durable before corresponding live lock",
+      "source": "fault-matrix",
+      "trace": "ADR-0346",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:366; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:419; packages/workbench/src/glue/dep-snapshot.test.ts:238",
+      "note": ""
+    },
+    {
+      "row": "ADR-0397 adopted proof or pending sibling corrupt: reject before retirement and repeated open unchanged",
+      "source": "fault-matrix",
+      "trace": "ADR-0397",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-legacy-catalog-migration.fault.test.ts:1628; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:796",
+      "note": ""
+    },
+    {
+      "row": "ADR-0397 quota/permission during retirement: no transaction/result, exact journal restoration or fenced admission",
+      "source": "fault-matrix",
+      "trace": "ADR-0397",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:706; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:949",
+      "note": ""
+    },
+    {
+      "row": "ADR-0397 crash around retirement durability: old validated or retired receipt, exact catalog/project/claim and pending sibling",
+      "source": "fault-matrix",
+      "trace": "ADR-0397",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-legacy-receipt.spec.ts:46; tests/browser-unit/workbench-legacy-receipt.spec.ts:97",
+      "note": ""
+    },
+    {
+      "row": "ADR-0397 later apply/Save: current catalog owns changed identity/membership; retained migration receipt cannot block legitimate reopen",
+      "source": "fault-matrix",
+      "trace": "ADR-0397",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:333; packages/workbench/src/workers/workbench-snapshot-legacy-application.contract.test.ts:432",
+      "note": ""
+    },
+    {
+      "row": "PlaygroundFirstMaterialization.application public union and default normalization",
+      "source": "public-api",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-snapshot-application-options.contract.test.ts:37; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:71",
+      "note": ""
+    },
+    {
+      "row": "SnapshotApplicationConflictError exported public prototype and project-rooted conflictingPaths survive owner serialization",
+      "source": "public-api",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:147; packages/workbench/src/workbench/internal/playground-workbench.contract.test.ts:652; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
+      "note": ""
+    },
+    {
+      "row": "catalog.createScratch: default preserves saved snapshot state and fresh snapshot seed receives pending admission",
+      "source": "public-api",
+      "trace": "I8+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:96; packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:66",
+      "note": ""
+    },
+    {
+      "row": "openProject: saved readiness or explicit per-request application through existing owner",
+      "source": "public-api",
+      "trace": "I8+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:96; packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:259; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:181",
+      "note": ""
+    },
+    {
+      "row": "catalog.reset: explicit whole-project reseed and first-admission receipt retain meaning",
+      "source": "public-api",
+      "trace": "ADR-0165+ADR-0394",
+      "status": "pass",
+      "citation": "tests/e2e/instant-preset-reset.spec.ts:8; tests/browser-unit/workbench-snapshot-application.spec.ts:23",
+      "note": ""
+    },
+    {
+      "row": "catalog.saveScratch: current saved bytes/claim rebind without transferring first-admission entitlement",
+      "source": "public-api",
+      "trace": "ADR-0329+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:34; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1580",
+      "note": ""
+    },
+    {
+      "row": "Real savedExpectedOutput oracle captured from actual producer-extracted Node execution",
+      "source": "frozen-artifact",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:67; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:31; /tmp/rifty-316-application-node-reference.json",
+      "note": ""
+    },
+    {
+      "row": "Catalog exact retry oracle changes only factory-issued transactionId; failed/retry ids differ and every other byte/path remains exact",
+      "source": "frozen-artifact",
+      "trace": "ADR-0279+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1695; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:2075",
+      "note": ""
+    },
+    {
+      "row": "Public export/source-closure inventories retain exact equality while adding conflict error and seven required helpers",
+      "source": "frozen-artifact",
+      "trace": "ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/playground-workbench.contract.test.ts:652; packages/workbench/tests/extraction-boundary.contract.test.ts:344",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "39ea3f0ca84e081c528f0d9acf9ddb873d4a9c7c"
+}

@@ -140,14 +140,18 @@ export function installMemoryFs(): MemoryBackend {
  * `syncMirror()` returns an `OpfsFsSync` and `asyncVfs()` returns the
  * paired `OpfsVfs`.
  */
-export async function installOpfsFs(): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }> {
-  const root = await acquireOpfsRoot();
-  const vfs = new OpfsVfs(root);
+export async function installOpfsFs(
+  root?: FileSystemDirectoryHandle,
+  options: { readonly ioReportTimeoutMs?: number } = {},
+): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }> {
+  const ioReportTimeoutMs = options.ioReportTimeoutMs;
+  const mount = root ?? (await acquireOpfsRoot());
+  const vfs = new OpfsVfs(mount);
   // Pair the async surface into the sync mirror (ADR-0072) so write-through
   // and boot preload route through OPFS. Passing the structural
   // `PairedAsyncSurface` (which `OpfsVfs` satisfies) avoids a reverse import of
   // `OpfsVfs` into `opfs-sync.ts`.
-  const fsSync = await OpfsFsSync.init(vfs, root);
+  const fsSync = await OpfsFsSync.init(vfs, mount, { ioReportTimeoutMs });
   setSyncMirror(fsSync, { async: vfs });
   return { vfs, fsSync };
 }

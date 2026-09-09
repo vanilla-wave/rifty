@@ -88,3 +88,9 @@ remain unchanged.
 ADR-0393 replaces empty-content fallback and memory fallback after failure reading
 an acquired OPFS tree. Eager preload uses one native traversal. Root-unavailable
 memory fallback, sync content cache and async write-through remain.
+
+## Corrections (active)
+
+- 2026-09-09 — ADR-0406 replaces only missing-content empty success: indexed
+  uncached read/copy raises EIO. Existing cache/preload/write-through, pairing,
+  lifecycle and backend-selector decisions remain.

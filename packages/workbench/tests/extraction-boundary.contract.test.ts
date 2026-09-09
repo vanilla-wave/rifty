@@ -338,8 +338,13 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 146 → 147 (ADR-0379): deep resident-entry admission authority.
     // 147 → 148 (PR #313): first-use no-COI install/activation module.
     // ADR-0384: seven package implementations now belong to registry.
+    // ADR-0386: standard dependency snapshot tar codec.
+    // ADR-0387: published dependency snapshot producer.
+    // ADR-0394: snapshot overlay, claim reading and owner type/tree helpers.
+    // ADR-0407: stored catalog schema/projection extracted without another state owner.
     // ADR-0392: shared claim guard, thin claim FS, install context and durable-equality adapter.
-    expect(packageProductionFiles).toHaveLength(145);
+    // ADR-0412: source-only dependency snapshot preparation validation.
+    expect(packageProductionFiles).toHaveLength(157);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

@@ -1,0 +1,151 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS for tar-codec unit at fd829ca42ba698c168e5442278a3e5d50ffbbc7f; accept slice and continue PR #316, not whole-goal merge. Independent 5-suite run: 82/82 PASS; 11-path POSIX/system-tar probe PASS; supplied exact-content pr:check log: 25/25 PASS. PR-4 BASE criterion comparison confirms only production inventory 141→142, with closed-graph equality and runtime-reachability assertions retained.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "fd829ca42ba698c168e5442278a3e5d50ffbbc7f",
+  "unit_goal_source": "docs/backlog/distribution/dep-snapshot-tar.md at fd829ca42ba698c168e5442278a3e5d50ffbbc7f; BASE da485021fab3f9f881ebafe29106b604f347b2b3 (merged current main). Raw authority: docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I1, byte-identical to ratified revision 89724666236755df26b74ee033c05a1743093353; ADR-0386. Raw PR #316 body read using gh. Contract+RED artifact reviewed at docs/backlog/distribution/reference/dep-snapshot-tar-contract-red.json (04bf115f294f9ebfbcc8388accf5202e9a36bf46), with executed four behavioral REDs and preserved legacy/cap checks. Independent command: pnpm exec vitest run packages/workbench/src/glue/dep-snapshot-tar.test.ts packages/workbench/src/glue/dep-snapshot.test.ts packages/workbench/src/glue/workspace-archive.test.ts packages/workbench/src/glue/bounded-asset-fetch.fault.test.ts packages/workbench/tests/extraction-boundary.contract.test.ts — 5 files, 82 tests passed. Scratch probe: node --import tsx /tmp/rifty-316-tar-adversarial.ts — PASS: 11 POSIX/UTF-8 path boundaries, binary bytes, system tar extraction, empty directory kind. Complete gate log read: /tmp/rifty-316-tar-pr-check-green.log.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:71",
+      "summary": "Published caller manifest/lock producer, machine-readable identities and packed public-consumer restore remain in distribution/dep-snapshot-producer; this unit closes only the standard envelope codec."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:77",
+      "summary": "Copyable published Worker/SW/WASM closure and packed real-project boot remain linked in distribution/workbench-static-assets."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:80",
+      "summary": "Public snapshot-only acquisition, zero registry/Eddy requests, loud selected-snapshot failures and package/terminal enforcement remain linked in distribution/workbench-snapshot-only."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:85",
+      "summary": "Selected OPFS namespace isolation and reopening previous projects remain linked in vfs/workbench-storage-namespace."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:88",
+      "summary": "Non-root scoped preview navigation, assets and HMR remain linked in service-worker/workbench-preview-prefix."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:91",
+      "summary": "Retained orphan Scratch enumeration/download, fresh Scratch and byte-exact reopen proof remain linked in playground/orphan-scratch-recovery."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:94",
+      "summary": "Effective public operation budgets and composed packed-host proof remain linked in distribution/workbench-operation-budgets."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:98",
+      "summary": "Default saved-state priority and explicit generic apply-snapshot overwrite/error behavior remain linked in distribution/workbench-snapshot-application-policy."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: standard tar and raw gzip preserve nested/binary/long UTF-8 dependency files, empty directories and disjoint payload/control paths.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:100; packages/workbench/src/glue/dep-snapshot-tar.test.ts:125; packages/workbench/src/glue/dep-snapshot-tar.test.ts:154; packages/workbench/src/glue/workspace-archive.ts:271",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: deterministic standard extractable file entries with fixed metadata/timestamps and byte-stable ordering.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:154; packages/workbench/src/glue/dep-snapshot-tar.test.ts:228",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: raw gzip and HTTP-decoded tar share uncompressed-content SHA-256 identity.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:255",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: legacy v3 JSON/gzip and replay-cache integrity remain valid.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:168; packages/workbench/src/glue/dep-snapshot.test.ts:327; packages/workbench/src/glue/dep-snapshot.test.ts:470; packages/workbench/src/glue/dep-snapshot.test.ts:701",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: bad checksum/truncation, unsafe/duplicate/ancestor paths, unsupported types and control entries reject before destination effects.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:277; packages/workbench/src/glue/dep-snapshot-tar.test.ts:345",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: mismatched snapshot identity never admits bytes; absent/altered replay closure fails before mutation.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:255; packages/workbench/src/glue/dep-snapshot.test.ts:363; packages/workbench/src/glue/dep-snapshot.test.ts:470; packages/workbench/src/glue/dep-snapshot.test.ts:673",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: existing compressed/decoded 128 MiB caps and typed fetch/decompress failures remain through the bounded stream owner.",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/bounded-asset-fetch.fault.test.ts:41; packages/workbench/src/glue/dep-snapshot.test.ts:701; packages/workbench/src/glue/dep-snapshot.test.ts:732; packages/workbench/src/glue/dep-snapshot-tar.test.ts:243; packages/workbench/src/glue/dep-snapshot.ts:338",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

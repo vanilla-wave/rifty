@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+- Publish prepared dependency snapshots; reject unprepared apply sources before effects while preserving legacy initial restore and literal saved-file conflicts. Preserve acquired-tree preload failures under preferred storage.
+
+- Configure effective owner startup/storage-proof, project-file observation/durability and Playground request budgets through public deployment options; preserve omitted defaults, uniform catalog silence and applied/unknown settlement (ADR-0410).
+- Reject invalid or overflowing deployment wait budgets before effects; bound at2,147,483,647ms and round positive fractions upward, including existing preview/silence settings.
+
+- Add deployment.previewPrefix for scoped copied-SW HTTP/iframe/HMR routing, with immutable configuration proof and preserved default routes (ADR-0409).
+
+- Retain unjournaled orphan Scratch bytes through the existing catalog transaction, open fresh Scratch, and expose non-consuming public list/export across persistent reopen (ADR-0407).
+- Refuse directories at catalog/journal paths before recovery or cleanup; malformed storage cannot authorize fresh Scratch.
+
+- Add optional literal `storage.namespace` to both entrypoints; paired OPFS preload/writes stay inside the selected directory, preserving default storage and the origin-wide lease (ADR-0402).
+
+- Add snapshot-only acquisition without a registry URL/client or Eddy; required snapshots fail with public reasons, saved state keeps priority, and explicit npm calls retain local replay (ADR-0398).
+- Produce ordinary npm Vite/Rollup locks through declared companion acquisition while preserving caller ordinary/companion source identities (ADR-0399).
+
+- Preserve saved snapshot projects by default; explicit error/overwrite application runs on every request, retains untargeted files, and reports public conflict paths. Catalog transactions cover first admission, rollback and recovery (ADR-0394).
+
+- Publish a complete `dist/assets` Worker/SW/WASM closure; hosts copy it and supply ordinary URLs without worker compilation, aliases or a QuickJS wrapper (ADR-0390).
+
+- Public `produceDependencySnapshot` bakes caller-pinned npm v3 locks into tar.gz and returns snapshot/runtime identities; packed Node/Chromium restore proof covers real package execution (ADR-0387).
+
+- Dependency snapshots support deterministic standard tar/gzip envelopes with disjoint payload/control paths, long UTF-8 names and empty directories; legacy v3 JSON/gzip remains readable (ADR-0386).
 - Recovery snapshots borrow owner bytes until structured clone; protected guest reads still copy, avoiding an extra full-tree snapshot copy.
 - No-COI read streams use the same guarded mirror as synchronous fs, so pending persistence cannot expose stale native bytes.
 
@@ -19,6 +41,8 @@
 - Preserve every source worker entry in bare-import consumer wrappers, beside published dist entries.
 
 ### Fixed
+
+- Explicit snapshot application handles absent, malformed or directory `package.json` through ordinary file conflicts; stamp demotion retains only valid prior provenance.
 
 - No-COI install snapshots reuse mirror bytes until outgoing structured clone instead of pre-copying the full tree.
 

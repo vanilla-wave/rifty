@@ -4,9 +4,22 @@
  * Split out of open-workbench.ts under the file-size ratchet; keeping it whole
  * keeps a second, drifting option parser from appearing beside it.
  */
-import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
-import type { OwnerStoragePersistence } from '../../workers/owner-storage.ts';
+import { normalizePreviewPrefix } from '@riftydev/io';
+import {
+  DEFAULT_READY_TIMEOUT_MS,
+  configurePreviewServiceWorkerUrl,
+} from '@riftydev/service-worker';
+import {
+  type OwnerStorageConfig,
+  type OwnerStoragePersistence,
+  validateOwnerStorageNamespace,
+} from '../../workers/owner-storage.ts';
+import { MAX_NATIVE_TIMEOUT_MS } from '../owner-protocol-inspect.ts';
 import type { WorkbenchOwnerStartInput } from '../workbench-owner-port.ts';
+import {
+  type WorkbenchPackageAcquisition,
+  normalizeWorkbenchPackageAcquisition,
+} from './workbench-package-acquisition.ts';
 
 export type StoragePersistence = OwnerStoragePersistence;
 
@@ -27,6 +40,8 @@ export interface WorkbenchOptions {
     readonly wasm: {
       readonly sqlite: string;
     };
+    /** Preview pathname prefix within the SW scope; omission keeps /preview/. */
+    readonly previewPrefix?: string;
     /**
      * Budget for service-worker control and, once a matching preview is
      * advertised, its routed HTTP proof. Does not bound install/start silence
@@ -39,18 +54,15 @@ export interface WorkbenchOptions {
      * the owner's shipped 60 000 ms.
      */
     readonly ownerOperationSilenceTimeoutMs?: number;
+    /** Owner readiness/storage proof after SW admission; omission keeps 30,000 ms. */
+    readonly ownerStartupTimeoutMs?: number;
+    /** Post-applied file observation and durability ACK; omission keeps 60,000/35,000 ms. */
+    readonly projectFileCommitTimeoutMs?: number;
+    /** Non-TS Playground requests from send, after save admission; default 60,000 ms. */
+    readonly playgroundRequestTimeoutMs?: number;
   };
-  readonly packageAcquisition: {
-    readonly registryUrl: string;
-    readonly eddy?: {
-      readonly resolverUrl: string;
-      readonly bundleBaseUrl?: string;
-      readonly presetPins?: Readonly<Record<string, string>>;
-    };
-  };
-  readonly storage: {
-    readonly persistence: StoragePersistence;
-  };
+  readonly packageAcquisition: WorkbenchPackageAcquisition;
+  readonly storage: OwnerStorageConfig;
 }
 
 export interface ValidatedOptions {
@@ -59,7 +71,7 @@ export interface ValidatedOptions {
     readonly scope: string;
   };
   readonly owner: Omit<NormalizedWorkbenchOwnerInput, 'storage'>;
-  readonly storage: StoragePersistence;
+  readonly storage: OwnerStorageConfig;
 }
 
 export interface ValidatedUrlContext {
@@ -76,59 +88,45 @@ export function validateWorkbenchOptions(
   const workers = record(deployment.workers, 'deployment.workers');
   const serviceWorker = record(deployment.serviceWorker, 'deployment.serviceWorker');
   const wasm = record(deployment.wasm, 'deployment.wasm');
-  const acquisition = record(root.packageAcquisition, 'packageAcquisition');
-  if (Reflect.ownKeys(acquisition).includes('snapshotUrl')) {
-    throw new TypeError(
-      'packageAcquisition.snapshotUrl is retired; trusted snapshots belong to Playground definitions',
-    );
-  }
+  const packageAcquisition = normalizeWorkbenchPackageAcquisition(
+    root.packageAcquisition,
+    (value, field, pathBase) => httpEndpointUrl(value, field, urlContext.apiBaseUrl, { pathBase }),
+  );
   const storage = record(root.storage, 'storage');
 
-  const timeoutValue = deployment.previewProbeTimeoutMs;
   const previewProbeTimeoutMs =
-    timeoutValue === undefined
-      ? DEFAULT_READY_TIMEOUT_MS
-      : positiveFinite(timeoutValue, 'deployment.previewProbeTimeoutMs');
-
-  // ADR-0360: same positive-finite authority as its preview-timeout sibling.
-  // Left ABSENT when unset — the owner owns the one shipped default, so no
-  // second copy of 60 000 ms can drift here.
-  const silenceValue = deployment.ownerOperationSilenceTimeoutMs;
-  const ownerOperationSilenceTimeoutMs =
-    silenceValue === undefined
-      ? undefined
-      : positiveFinite(silenceValue, 'deployment.ownerOperationSilenceTimeoutMs');
-
-  const eddyValue = acquisition.eddy;
-  let eddy: NormalizedWorkbenchOwnerInput['packageAcquisition']['eddy'];
-  if (eddyValue !== undefined) {
-    const input = record(eddyValue, 'packageAcquisition.eddy');
-    const hasExplicitBundleBase = input.bundleBaseUrl !== undefined;
-    const resolverUrl = httpEndpointUrl(
-      input.resolverUrl,
-      'packageAcquisition.eddy.resolverUrl',
-      urlContext.apiBaseUrl,
-      { pathBase: !hasExplicitBundleBase },
-    );
-    const presetPins = stringMap(input.presetPins, 'packageAcquisition.eddy.presetPins');
-    eddy = Object.freeze({
-      resolverUrl,
-      bundleBaseUrl: !hasExplicitBundleBase
-        ? resolverUrl
-        : httpEndpointUrl(
-            input.bundleBaseUrl,
-            'packageAcquisition.eddy.bundleBaseUrl',
-            urlContext.apiBaseUrl,
-            { pathBase: true },
-          ),
-      presetPins,
-    });
-  }
+    timeoutBudget(deployment.previewProbeTimeoutMs, 'deployment.previewProbeTimeoutMs') ??
+    DEFAULT_READY_TIMEOUT_MS;
+  // Preserve absence: each existing owner retains its shipped default (ADR-0410).
+  const ownerOperationSilenceTimeoutMs = timeoutBudget(
+    deployment.ownerOperationSilenceTimeoutMs,
+    'deployment.ownerOperationSilenceTimeoutMs',
+  );
+  const ownerStartupTimeoutMs = timeoutBudget(
+    deployment.ownerStartupTimeoutMs,
+    'deployment.ownerStartupTimeoutMs',
+  );
+  const projectFileCommitTimeoutMs = timeoutBudget(
+    deployment.projectFileCommitTimeoutMs,
+    'deployment.projectFileCommitTimeoutMs',
+  );
+  const playgroundRequestTimeoutMs = timeoutBudget(
+    deployment.playgroundRequestTimeoutMs,
+    'deployment.playgroundRequestTimeoutMs',
+  );
+  const ioOverrides = [
+    ownerStartupTimeoutMs,
+    projectFileCommitTimeoutMs,
+    playgroundRequestTimeoutMs,
+    ownerOperationSilenceTimeoutMs,
+  ].filter((value): value is number => value !== undefined);
+  const ioReportTimeoutMs = ioOverrides.length === 0 ? undefined : Math.max(...ioOverrides);
 
   const persistence = storage.persistence;
   if (persistence !== 'required' && persistence !== 'preferred' && persistence !== 'ephemeral') {
     throw new TypeError('storage.persistence must be required, preferred, or ephemeral');
   }
+  const namespace = validateOwnerStorageNamespace(storage.namespace);
 
   const serviceWorkerUrl = riftyServiceWorkerUrl(
     serviceWorker.url,
@@ -145,10 +143,18 @@ export function validateWorkbenchOptions(
   if (!clientUrl.href.startsWith(serviceWorkerScope)) {
     throw new TypeError('deployment.serviceWorker.scope must contain the Workbench document URL');
   }
+  const prefixValue = deployment.previewPrefix;
+  const previewPrefix = prefixValue === undefined ? undefined : normalizePreviewPrefix(prefixValue);
+  if (
+    previewPrefix !== undefined &&
+    !new URL(previewPrefix, clientUrl).href.startsWith(serviceWorkerScope)
+  ) {
+    throw new TypeError('deployment.previewPrefix must be within deployment.serviceWorker.scope');
+  }
 
   return Object.freeze({
     serviceWorker: Object.freeze({
-      url: serviceWorkerUrl,
+      url: configurePreviewServiceWorkerUrl(serviceWorkerUrl, previewPrefix),
       scope: serviceWorkerScope,
     }),
     owner: Object.freeze({
@@ -176,19 +182,19 @@ export function validateWorkbenchOptions(
           sqlite: wasmAssetUrl(wasm.sqlite, 'deployment.wasm.sqlite', urlContext),
         }),
         previewProbeTimeoutMs,
+        ...(previewPrefix === undefined ? {} : { previewPrefix }),
         ...(ownerOperationSilenceTimeoutMs === undefined ? {} : { ownerOperationSilenceTimeoutMs }),
+        ...(ownerStartupTimeoutMs === undefined ? {} : { ownerStartupTimeoutMs }),
+        ...(projectFileCommitTimeoutMs === undefined ? {} : { projectFileCommitTimeoutMs }),
+        ...(playgroundRequestTimeoutMs === undefined ? {} : { playgroundRequestTimeoutMs }),
+        ...(ioReportTimeoutMs === undefined ? {} : { ioReportTimeoutMs }),
       }),
-      packageAcquisition: Object.freeze({
-        registryUrl: httpEndpointUrl(
-          acquisition.registryUrl,
-          'packageAcquisition.registryUrl',
-          urlContext.apiBaseUrl,
-          { pathBase: true },
-        ),
-        ...(eddy === undefined ? {} : { eddy }),
-      }),
+      packageAcquisition,
     }),
-    storage: persistence,
+    storage: Object.freeze({
+      persistence,
+      ...(namespace === undefined ? {} : { namespace }),
+    }),
   });
 }
 
@@ -335,27 +341,13 @@ function hasQueryDelimiter(url: URL): boolean {
   return beforeFragment.includes('?');
 }
 
-function positiveFinite(value: unknown, path: string): number {
+function timeoutBudget(value: unknown, path: string): number | undefined {
+  if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     throw new TypeError(`${path} must be a positive finite number`);
   }
-  return value;
-}
-
-function stringMap(value: unknown, path: string): Readonly<Record<string, string>> {
-  if (value === undefined) return Object.freeze({});
-  const input = record(value, path);
-  const result: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(input)) {
-    if (key.length === 0 || typeof entry !== 'string' || entry.trim().length === 0) {
-      throw new TypeError(`${path}.${key || '<empty>'} must be a non-empty string`);
-    }
-    Object.defineProperty(result, key, {
-      value: entry,
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
+  if (value > MAX_NATIVE_TIMEOUT_MS) {
+    throw new TypeError(`${path} must be greater than 0 and at most ${MAX_NATIVE_TIMEOUT_MS}ms`);
   }
-  return Object.freeze(result);
+  return Math.ceil(value);
 }

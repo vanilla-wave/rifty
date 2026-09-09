@@ -51,8 +51,8 @@ const NON_PROD_RE = /\.(?:test|spec|fault|contract)\.[cm]?[jt]sx?$|\.d\.ts$/;
 export const BASELINE = [
   { file: 'packages/shell/src/commands/git.ts', max: 3064 },
   { file: 'packages/runtime-js/src/module-loader/function-import-routing.ts', max: 2806 },
-  { file: 'packages/workbench/src/workers/playground-project-authority.ts', max: 2697 },
   { file: 'packages/kernel/src/process-manager.ts', max: 2392 },
+  { file: 'packages/workbench/src/workers/playground-project-authority.ts', max: 2356 },
   { file: 'tools/node-parity-runner/src/run-in-rifty.ts', max: 2069 },
   { file: 'packages/runtime-js/src/builtins/vm/membrane.ts', max: 2058 },
   { file: 'packages/runtime-js/src/module-loader/cjs.ts', max: 2052 },
@@ -62,40 +62,36 @@ export const BASELINE = [
   { file: 'packages/io/src/streams/readable.ts', max: 1667 },
   { file: 'packages/runtime-js/src/builtins/fs.ts', max: 1648 },
   { file: 'packages/runtime-js/src/module-loader/esm.ts', max: 1568 },
-  { file: 'packages/workbench/src/workers/package-acquisition-authority.ts', max: 1565 },
   { file: 'apps/playground/src/glue/ts-ls-monaco-providers.ts', max: 1414 },
   { file: 'packages/ts-language-service/src/service.ts', max: 1377 },
-  { file: 'packages/workbench/src/workbench/workbench-browser-owner.ts', max: 1284 },
+  { file: 'packages/workbench/src/workers/package-acquisition-authority.ts', max: 1374 },
   { file: 'apps/playground/src/components/editor-host-core.ts', max: 1270 },
   { file: 'tools/compat-matrix-generator/cli.js', max: 1269 },
   { file: 'packages/runtime-js/src/builtins/process.ts', max: 1226 },
-  // Re-pinned after PR #249 (d34577d54) landed the watchdog rework at 1215 with
-  // the pin unbumped — CI runs no file-size gate, so pr:check went red repo-wide.
-  { file: 'packages/vfs/src/opfs-sync.ts', max: 1215 },
   {
     file: 'packages/workbench/src/workbench/internal/playground-session-tools-transport.ts',
     max: 1191,
   },
+  { file: 'packages/workbench/src/workbench/workbench-browser-owner.ts', max: 1190 },
+  { file: 'packages/vfs/src/opfs-sync.ts', max: 1190 },
   { file: 'packages/shell/src/shell.ts', max: 1144 },
   { file: 'packages/npm-client/src/internal/shadow/planner.ts', max: 1123 },
   { file: 'packages/git/src/git.ts', max: 1118 },
   { file: 'packages/workbench/src/workbench/internal/typescript-relay-client.ts', max: 1083 },
   { file: 'packages/net/src/cross-realm/preview-port.ts', max: 1067 },
   { file: 'apps/playground/src/components/FileExplorer.tsx', max: 1043 },
-  { file: 'packages/workbench/src/glue/npm-shell-command.ts', max: 1043 },
+  { file: 'packages/workbench/src/glue/npm-shell-command.ts', max: 1042 },
   { file: 'packages/runtime-js/src/builtins/vm/rewrite-engine.ts', max: 1021 },
   { file: 'packages/runtime-js/src/builtins/fs-streams.ts', max: 1016 },
   { file: 'packages/workbench/src/glue/pty-client.ts', max: 1012 },
   { file: 'packages/net/src/http/server.ts', max: 1010 },
-  { file: 'packages/workbench/src/glue/install-stamp-authority.ts', max: 1005 },
   { file: 'packages/net/src/http/upgrade-socket.ts', max: 976 },
   { file: 'apps/playground/src/templates/socket-lab.ts', max: 968 },
   { file: 'packages/runtime-js/src/module-loader/resolver.ts', max: 953 },
+  { file: 'packages/workbench/src/glue/install-stamp-authority.ts', max: 904 },
   { file: 'packages/ts-language-service/src/worker/protocol.ts', max: 890 },
-  { file: 'apps/playground/public/sw.js', max: 879 },
   { file: 'packages/workbench/src/workers/workbench-project-vfs.ts', max: 875 },
   { file: 'packages/runtime-js/src/builtins/crypto.ts', max: 874 },
-  { file: 'packages/workbench/src/workers/owner-package-state.ts', max: 863 },
   { file: 'packages/io/src/streams/writable.ts', max: 802 },
 ];
 
@@ -115,6 +111,8 @@ export function measureFiles(root, rel, out = []) {
     }
     if (!PROD_RE.test(e.name) || NON_PROD_RE.test(e.name)) continue;
     const abs = join(root, child);
+    // ADR-0016: generated bundle; its TypeScript inputs and generator remain measured.
+    if (relative(root, abs).split('\\').join('/') === 'apps/playground/public/sw.js') continue;
     out.push({
       file: relative(root, abs).split('\\').join('/'),
       lines: readFileSync(abs, 'utf8').split('\n').length,

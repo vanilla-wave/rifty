@@ -1,15 +1,22 @@
-import quickjsWasmUrl from '@jitl/quickjs-wasmfile-release-sync/wasm?url';
 import { createSandbox } from '@riftydev/sdk';
-import serviceWorkerUrl from '@riftydev/service-worker/sw?worker&url';
 import { type PreviewHandle, openWorkbench, projects } from '@riftydev/workbench';
-import devServerWorkerUrl from '@riftydev/workbench/dev-server-worker?worker&url';
-import noCoiToolchainWorkerUrl from '@riftydev/workbench/no-coi-toolchain-worker?worker&url';
-import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
-import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
 import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
-import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&url';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import kernelWorkerUrl from './kernel-worker-entry.ts?worker&url';
+import { type SnapshotProof, runSnapshotProof as proveSnapshot } from './snapshot-proof';
+
+import { proveCopiedToolchain } from './copied-worker-proof';
+import { proveSnapshotApplication } from './snapshot-application-proof';
+import { type SnapshotOnlyAcceptance, openSnapshotOnlyAcceptance } from './snapshot-only-proof';
+
+const assetUrl = (name: string): string => new URL(`./rifty/${name}`, document.baseURI).href;
+const quickjsWasmUrl = assetUrl('quickjs.wasm');
+const sqlWasmUrl = assetUrl('sql-wasm.wasm');
+const ownerWorkerUrl = assetUrl('owner-worker.js');
+const kernelWorkerUrl = assetUrl('kernel-worker.js');
+const nodeWorkerUrl = assetUrl('node-worker.js');
+const devServerWorkerUrl = assetUrl('dev-server-worker.js');
+const typescriptWorkerUrl = assetUrl('typescript-worker.js');
+const noCoiToolchainWorkerUrl = assetUrl('no-coi-toolchain-worker.js');
+const serviceWorkerUrl = assetUrl('sw.js');
 
 export interface PackedWorkbenchAcceptance {
   readonly previewUrl: string;
@@ -23,6 +30,9 @@ export interface PackedWorkbenchAcceptance {
     readonly sqlite: string;
   };
   writeMessage(message: string): Promise<void>;
+  runSnapshotProof(assetUrl: string): Promise<SnapshotProof>;
+  proveCopiedAssets(): Promise<void>;
+  proveSnapshotApplication(assetUrl: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -35,6 +45,7 @@ interface PackedWorkbenchDiagnostics {
 declare global {
   interface Window {
     __RIFTY_PACKED_WORKBENCH__: Promise<PackedWorkbenchAcceptance>;
+    __RIFTY_PACKED_SNAPSHOT_ONLY__: Promise<SnapshotOnlyAcceptance>;
     __RIFTY_PACKED_WORKBENCH_DIAGNOSTICS__: PackedWorkbenchDiagnostics;
   }
 }
@@ -79,14 +90,15 @@ console.log('packed-sqlite-' + row.answer)
 db.close()
 `;
 
-async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
-  const workbench = await openWorkbench({
+function workbenchOptions() {
+  return {
     deployment: {
       workers: {
         owner: ownerWorkerUrl,
         kernel: kernelWorkerUrl,
         node: nodeWorkerUrl,
         devServer: devServerWorkerUrl,
+        typescript: typescriptWorkerUrl,
       },
       serviceWorker: { url: serviceWorkerUrl, scope: '/' },
       wasm: { sqlite: sqlWasmUrl },
@@ -95,8 +107,12 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     packageAcquisition: {
       registryUrl: new URL('/npm-registry/', globalThis.location.href).href,
     },
-    storage: { persistence: 'ephemeral' },
-  });
+    storage: { persistence: 'ephemeral' as const },
+  };
+}
+
+async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
+  const workbench = await openWorkbench(workbenchOptions());
   diagnostics.stage = 'opening project';
   const project = await workbench.openProject(
     projects.vite({
@@ -175,6 +191,15 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     noCoiToolchainWorkerUrl,
     typescriptWorkerUrl,
     hostWasm: Object.freeze({ quickjs: quickjsWasmUrl, sqlite: sqlWasmUrl }),
+    proveCopiedAssets(): Promise<void> {
+      return proveCopiedToolchain(noCoiToolchainWorkerUrl);
+    },
+    proveSnapshotApplication(assetUrl: string): Promise<void> {
+      return proveSnapshotApplication(workbenchOptions(), assetUrl);
+    },
+    runSnapshotProof(assetUrl: string): Promise<SnapshotProof> {
+      return proveSnapshot(workbenchOptions(), assetUrl);
+    },
     async writeMessage(message: string): Promise<void> {
       const current = await project.files.readFile('/src/message.ts');
       await project.files.writeFile(
@@ -191,9 +216,24 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
   });
 }
 
-const acceptance = openAcceptance().catch((error: unknown) => {
-  status.textContent = error instanceof Error ? error.message : String(error);
-  throw error;
-});
-void acceptance.catch(() => {});
-window.__RIFTY_PACKED_WORKBENCH__ = acceptance;
+if (new URL(location.href).searchParams.has('snapshot-only')) {
+  const strict = openSnapshotOnlyAcceptance(workbenchOptions())
+    .then((opened) => {
+      previewFrame.src = opened.previewUrl;
+      status.textContent = 'ready';
+      return opened;
+    })
+    .catch((error: unknown) => {
+      status.textContent = error instanceof Error ? error.message : String(error);
+      throw error;
+    });
+  void strict.catch(() => {});
+  window.__RIFTY_PACKED_SNAPSHOT_ONLY__ = strict;
+} else {
+  const acceptance = openAcceptance().catch((error: unknown) => {
+    status.textContent = error instanceof Error ? error.message : String(error);
+    throw error;
+  });
+  void acceptance.catch(() => {});
+  window.__RIFTY_PACKED_WORKBENCH__ = acceptance;
+}
