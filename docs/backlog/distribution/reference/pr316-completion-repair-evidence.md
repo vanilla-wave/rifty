@@ -153,3 +153,9 @@ Thus all62 current-tree cases covered, including native crash/reopen, exact cust
 namespace/default isolation, IO fencing and strict all-or-error preload.
 Fixture standalone tsc/Biome/diff-check PASS. This is PR-4 carrier reconciliation
 with ADR-0411, not a change to preservation criteria or a product bypass.
+
+No-COI regression battery: 20/20 PASS, 33.2s on Chromium148.0.7778.96
+(/tmp/rifty316-fix-no-coi.log): warm-open Vite/explicit cached repair,
+install dedup, reported native persistence failures, unreadable preload plus
+queued requests, native exact-byte reload and stream visibility vs Node24.16.0.
+Command: `RIFTY_NO_COI_PORT=5611 RIFTY_NO_COI_ORACLE_PORT=5612 RIFTY_NO_COI_RESOURCE_PORT=5613 pnpm exec playwright test tests/no-coi/no-coi-warm-open.spec.ts tests/no-coi/no-coi-install-dedup.spec.ts tests/no-coi/no-coi-persistence.fault.spec.ts tests/no-coi/no-coi-preload-failure.spec.ts tests/no-coi/no-coi-opfs-reload.spec.ts tests/no-coi/no-coi-stream-visibility.spec.ts --config playwright.no-coi.config.ts --project=chromium`.
