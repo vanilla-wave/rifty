@@ -128,3 +128,12 @@ Actual real producer/MemoryFS probe proves it exists and isInstallStampPath=fals
 /tmp/rifty-316-i6-review-directory-oracle-red.log. Correction adds only that
 expected path; payload/file criteria and accepted empty-directory contract stand.
 No production change or new user choice. Same reviewer verifies the correction.
+
+During implementation the same reviewer independently confirmed ORACLE-2:
+private owner.openProject(named) requires the named catalog ref active; the
+fixture had left fresh Scratch active. Exact BASE/current guard bytes match;
+real owner/ms probe refuses direct open, then catalog.activate permits existing
+provenance with zero snapshot requests and unchanged named bytes. Artifacts
+/tmp/rifty-316-i6-review-active-owner.test.ts/.log and
+/tmp/rifty-316-i6-review-unactivated-catalog.log. Correction adds only the existing
+public activate call before named reopen; no activation guard or behavior changed.

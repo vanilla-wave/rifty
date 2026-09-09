@@ -327,6 +327,7 @@ describe('I6 catalog-owned orphan Scratch retention', () => {
       expect(selected.record.id).toBe(stableId);
       expectRecovery(await selected.api.exportRetainedScratch(stableId));
       expectOrdinaryTree(treeAt(restarted.fs.durableSnapshot(), selected.root));
+      await restarted.catalog.activate({ kind: 'project', id: 'saved-project' });
       namedOpened = await restarted.owner.openProject(named);
       expect(namedOpened.acquisition).toMatchObject({
         kind: 'ready',
