@@ -67,6 +67,8 @@ reflection behavior retains its existing tests.
 
 ## Decisions
 
+- ready-verdict: 2026-09-09 — Contract+RED @ 0d11806a11a37c9bb1ae5cad985d1b7308196c04; reference/workbench-operation-budgets-contract-red.json.
+
 - 2026-09-09 — pickup: ADR-0410 configures existing owners, partially supersedes ADR-0360 numeric/page-only and fixed file-budget clauses; native range decision and source/native REDs recorded in reference/workbench-operation-budgets-evidence.md.
 - 2026-09-07 — finding draft; observable scope is settled by goal I7; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit goal production fault tier; existing owners, no new coordinator.
