@@ -16,7 +16,7 @@ import {
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
 import ts from 'typescript';
@@ -31,6 +31,7 @@ import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
+import { importProduceDepSnapshot } from './workbench-packed-host-produce.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const surfaceOnly = process.argv.includes('--surface-only');
@@ -828,6 +829,74 @@ function publishedExportTarget(value) {
   return value.import ?? value.default ?? null;
 }
 
+async function importInstalledPackageExport(consumerRoot, name, subpath = '.') {
+  const installedRoot = await findInstalledPackage(name, consumerRoot);
+  const manifest = await readJson(resolve(installedRoot, 'package.json'));
+  const target = publishedExportTarget(manifest.exports?.[subpath]);
+  if (typeof target !== 'string') {
+    throw new Error(`installed ${name} is missing export ${subpath}`);
+  }
+  return import(pathToFileURL(resolve(installedRoot, target)).href);
+}
+
+async function writePackedHostViteSnapshot(consumerRoot, registryOptions) {
+  const registryPackages = await browserRegistryPackages(registryOptions);
+  const registry = await startBrowserRegistry(registryPackages);
+  try {
+    const { produceDepSnapshot } = await importProduceDepSnapshot(
+      await findInstalledPackage('@riftydev/workbench', consumerRoot),
+    );
+    const { RegistryClient } = await importInstalledPackageExport(
+      consumerRoot,
+      '@riftydev/npm-client',
+    );
+    const compressed = await readFile(viteSnapshot);
+    const snapshot = JSON.parse(String(await gunzipAsync(compressed)));
+    if (typeof snapshot.packageJsonText !== 'string') {
+      throw new Error('Committed Vite snapshot is missing packageJsonText');
+    }
+    const packageManifest = JSON.parse(snapshot.packageJsonText);
+    const baked = await produceDepSnapshot({
+      templateId: snapshot.templateId,
+      packageJsonText: snapshot.packageJsonText,
+      packageLockText: JSON.stringify({
+        name: packageManifest.name,
+        lockfileVersion: 3,
+        requires: true,
+        packages: {
+          '': {
+            name: packageManifest.name,
+            version: packageManifest.version,
+            dependencies: packageManifest.dependencies,
+          },
+        },
+      }),
+      registry: new RegistryClient({
+        baseUrl: registry.origin,
+        fetch: (input, init) => fetch(input, init),
+      }),
+    });
+    const publicDir = resolve(consumerRoot, 'public/snapshots');
+    await mkdir(publicDir, { recursive: true });
+    await writeFile(resolve(publicDir, 'vite-deps.tar'), baked.tarBytes);
+    await writeFile(
+      resolve(publicDir, 'manifest.json'),
+      `${JSON.stringify(
+        {
+          snapshotId: baked.snapshotId,
+          assetUrl: 'snapshots/vite-deps.tar',
+          templateId: snapshot.templateId,
+          packageJsonText: snapshot.packageJsonText,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  } finally {
+    await registry.close();
+  }
+}
+
 async function javascriptFiles(root) {
   const files = [];
   const pending = [root];
@@ -987,22 +1056,21 @@ function assertHmrProof(proof) {
   }
 }
 
-async function runChromiumJourney(consumerRoot, registryPackages) {
-  const registry = await startBrowserRegistry(registryPackages);
+async function runChromiumJourney(consumerRoot) {
   const previewPort = await reserveLoopbackPort();
   const previewOrigin = `http://127.0.0.1:${previewPort}`;
+  const packedHostOrigin = `${previewOrigin}/sandbox/`;
   const preview = startProcess(
     resolve(consumerRoot, 'node_modules/.bin/vite'),
     ['preview', '--host', '127.0.0.1', '--port', String(previewPort), '--strictPort'],
     {
       cwd: consumerRoot,
-      env: { RIFTY_PACKED_CONSUMER_REGISTRY_TARGET: registry.origin },
     },
   );
   let browser;
   let browserResource;
   try {
-    await waitForHttp(previewOrigin, preview, 60_000);
+    await waitForHttp(packedHostOrigin, preview, 60_000);
     const { chromium } = await import('@playwright/test');
     const browserLaunch = chromium.launch({ headless: true, timeout: 10_000 });
     browserResource = resources.register(async () => {
@@ -1023,7 +1091,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     const context = await browser.newContext({ serviceWorkers: 'allow' });
     const blockedUrls = [];
     const observedUrls = [];
-    const allowedOrigins = new Set([previewOrigin, registry.origin]);
+    const allowedOrigins = new Set([previewOrigin]);
     context.on('request', (request) => observedUrls.push(request.url()));
     await context.route('**/*', async (route) => {
       const url = new URL(route.request().url());
@@ -1040,7 +1108,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     const pageConsole = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     page.on('console', (message) => pageConsole.push(`[${message.type()}] ${message.text()}`));
-    await page.goto(previewOrigin, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.goto(packedHostOrigin, { waitUntil: 'domcontentloaded', timeout: 60_000 });
     let bootWaitError = null;
     try {
       await page.waitForFunction(
@@ -1089,6 +1157,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         sqliteProof: opened.sqliteProof,
         companionLoaded: opened.companionLoaded,
         sdkLoaded: opened.sdkLoaded,
+        orphanDownloaded: opened.orphanDownloaded,
         noCoiToolchainWorkerUrl: opened.noCoiToolchainWorkerUrl,
         typescriptWorkerUrl: opened.typescriptWorkerUrl,
         hostWasm: opened.hostWasm,
@@ -1110,6 +1179,28 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     }
     if (!acceptance.sqliteProof.includes('packed-sqlite-42')) {
       throw new Error(`Packed Workbench sqlite proof was lost: ${acceptance.sqliteProof}`);
+    }
+    if (acceptance.orphanDownloaded !== 'orphan bytes') {
+      throw new Error(
+        `Packed host orphan download drifted: ${JSON.stringify(acceptance.orphanDownloaded)}`,
+      );
+    }
+    if (!new URL(acceptance.previewUrl, previewOrigin).pathname.startsWith('/sandbox/preview/')) {
+      throw new Error(
+        `Packed host preview is not under /sandbox/preview: ${acceptance.previewUrl}`,
+      );
+    }
+    const registryHits = observedUrls.filter((url) => {
+      try {
+        return new URL(url).pathname.includes('npm-registry');
+      } catch {
+        return false;
+      }
+    });
+    if (registryHits.length > 0) {
+      throw new Error(
+        `Snapshot-only packed host requested a registry:\n${registryHits.join('\n')}`,
+      );
     }
     const hostWasmUrls = [
       assertHostAsset(acceptance.hostWasm.quickjs, previewOrigin, 'copied runtime QuickJS'),
@@ -1204,31 +1295,18 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         `Packed Workbench Chromium attempted external URLs:\n${blockedUrls.join('\n')}`,
       );
     }
-    for (const name of ['vite', 'esbuild-wasm']) {
-      for (const kind of ['packument', 'tarball']) {
-        if (
-          !registry.responses.some(
-            (response) => response.packageName === name && response.kind === kind,
-          )
-        ) {
-          throw new Error(`Packed Workbench missed real ${name} ${kind} response`);
-        }
-      }
-    }
-    if (registry.responses.some((response) => response.packageName === '@esbuild/wasi-preview1')) {
-      throw new Error('Packed Workbench requested the retired @esbuild/wasi-preview1 alias');
-    }
     await context.close();
-    console.log('Packed Workbench Chromium passed: Vite 7.3.6 preview + native HMR + sqlite');
+    console.log(
+      'Packed Workbench Chromium passed: snapshot-only /sandbox/ Vite preview + native HMR + sqlite + orphan',
+    );
   } catch (error) {
     throw new Error(
-      `${error instanceof Error ? error.stack : String(error)}\nPacked consumer preview output:\n${preview.output()}\nRegistry requests:\n${registry.requests.join('\n')}`,
+      `${error instanceof Error ? error.stack : String(error)}\nPacked consumer preview output:\n${preview.output()}`,
     );
   } finally {
     await runCleanups('Packed consumer browser cleanup failed', [
       () => browserResource?.cleanup(),
       () => preview.stop(),
-      () => registry.close(),
     ]);
   }
 }
@@ -1332,15 +1410,15 @@ async function main() {
         `Packed toolchain surface passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, strict TypeScript + generic SDK/Worker graphs`,
       );
     } else {
-      await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
-      await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
-      await stat(resolve(consumerRoot, 'dist/index.html'));
-      const registryPackages = await browserRegistryPackages({
+      await writePackedHostViteSnapshot(consumerRoot, {
         packageRoot: browserPackageRoot,
         tarballRoot: browserTarballRoot,
         npmCacheRoot: browserPackCacheRoot,
       });
-      await runChromiumJourney(consumerRoot, registryPackages);
+      await run('npm', ['run', 'typecheck'], { cwd: consumerRoot, timeoutMs: 180_000 });
+      await run('npm', ['run', 'build'], { cwd: consumerRoot, timeoutMs: 300_000 });
+      await stat(resolve(consumerRoot, 'dist/index.html'));
+      await runChromiumJourney(consumerRoot);
       console.log(
         `Packed Workbench consumer passed: ${workspaceTarballs.size} first-party + ${externalTarballs.size} external tarballs, packed TypeScript/build, fresh Chromium`,
       );

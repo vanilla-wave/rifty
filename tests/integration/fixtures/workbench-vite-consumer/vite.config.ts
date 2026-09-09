@@ -39,6 +39,7 @@ function copyWorkbenchRuntime(): void {
 copyWorkbenchRuntime();
 
 export default defineConfig({
+  base: '/sandbox/',
   server: {
     headers: crossOriginIsolationHeaders,
     proxy: registryProxy,

@@ -67,6 +67,7 @@ owners. Hostile-code isolation.
 
 ## Decisions
 
+- 2026-09-09 — Acc 9 FIX: produce imports `./dep-snapshot` from a packed workbench tarball (not a file-URL re-export); packed consumer serves the document under `/sandbox/`, restores a produced Vite snapshot snapshot-only, and downloads a planted orphan on that host.
 - 2026-09-09 — ready-verdict: Contract+RED PASS @ 6df8f51ed2cde6d17d5e9bab278ea53d27ca3e05
 - 2026-09-09 — Contract+RED reception: Acc 5 drives `runWorkbenchOwner` initialize→install (`proofTimeoutMs`) and races inspect-reject against the installer call (owner loop does not settle); Acc 9 replaces fixture token-grep with executed produce/orphan carriers. Trace: I7, I1 packed residual, scenario step 7.
 - 2026-09-09 — ADR-0408: three optional duration budgets; omitted keeps 30 s/60 s owners; silence stays ADR-0360; catalog owner RPCs stay silence; no new coordinator.

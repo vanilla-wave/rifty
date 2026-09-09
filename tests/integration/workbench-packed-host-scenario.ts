@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { RegistryClient } from '@riftydev/npm-client';
 import { MemoryFsSync, resetSyncMirror } from '@riftydev/vfs/internal';
 import { createPlaygroundProjectCatalog } from '../../packages/workbench/src/workbench/internal/playground-project-catalog.ts';
 import { definePlaygroundProject } from '../../packages/workbench/src/workbench/internal/playground-project-definition.ts';
+import { validateWorkbenchOptions } from '../../packages/workbench/src/workbench/internal/workbench-options.ts';
 import type {
   PlaygroundProjectCatalog,
   VitePlaygroundPlan,
@@ -15,15 +15,20 @@ import type { ProjectDefinition } from '../../packages/workbench/src/workbench/p
 import { createOwnerVfsAuthorityComposition } from '../../packages/workbench/src/workers/owner-vfs-authority.ts';
 import { createPlaygroundProjectAuthority } from '../../packages/workbench/src/workers/playground-project-authority.ts';
 import { PACKED_HOST_COMPOSITION } from './fixtures/workbench-vite-consumer/src/packed-host-composition.ts';
+import { importProduceDepSnapshot } from './workbench-packed-host-produce.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const workbenchDepSnapshot = resolve(repoRoot, 'packages/workbench/src/dep-snapshot.ts');
+const workbenchRoot = resolve(repoRoot, 'packages/workbench');
 const encoder = new TextEncoder();
 const SCRATCH_TREE = '/.rifty/workbench/v1/projects/scratch/tree';
 const ORPHAN_BYTES = encoder.encode('orphan bytes');
 const CAPTURED_URL_CONTEXT = Object.freeze({
-  apiBaseUrl: 'https://playground.invalid/app/',
-  clientUrl: 'https://playground.invalid/app/index.html',
+  apiBaseUrl: 'https://playground.invalid/sandbox/',
+  clientUrl: 'https://playground.invalid/sandbox/',
+});
+const PACKED_HOST_URL_CONTEXT = Object.freeze({
+  apiBaseUrl: new URL('https://playground.invalid/sandbox/'),
+  clientUrl: new URL('https://playground.invalid/sandbox/'),
 });
 
 interface ProducedSnapshot {
@@ -63,51 +68,107 @@ function run(command: string, args: readonly string[], cwd: string): Promise<str
         resolveRun(stdout);
         return;
       }
-      rejectRun(new Error(`${command} ${args.join(' ')} failed (${String(code)}): ${stderr}`));
+      rejectRun(
+        new Error(
+          `${command} ${args.join(' ')} failed (${String(code)}): ${stderr || stdout}`.trim(),
+        ),
+      );
     });
   });
 }
 
+function excludeWorkbenchPackExtras(source: string): boolean {
+  const rel = relative(workbenchRoot, source);
+  if (rel === '') return true;
+  const top = rel.split(sep)[0];
+  return top !== 'node_modules' && top !== 'dist';
+}
+
+function admittedPackedHost(): PackedHostOrphanProof['host'] {
+  const admitted = validateWorkbenchOptions(
+    {
+      deployment: {
+        workers: {
+          owner: '/sandbox/runtime/owner-worker.js',
+          kernel: '/sandbox/runtime/kernel-worker.js',
+          node: '/sandbox/runtime/node-worker.js',
+          devServer: '/sandbox/runtime/dev-server-worker.js',
+        },
+        serviceWorker: {
+          url: '/sandbox/runtime/sw.js',
+          scope: PACKED_HOST_COMPOSITION.scope,
+        },
+        wasm: { sqlite: '/sandbox/runtime/sqlite.wasm' },
+        previewPrefix: PACKED_HOST_COMPOSITION.previewPrefix,
+        ownerStartupTimeoutMs: PACKED_HOST_COMPOSITION.ownerStartupTimeoutMs,
+        projectFileTimeoutMs: PACKED_HOST_COMPOSITION.projectFileTimeoutMs,
+        sessionToolsTimeoutMs: PACKED_HOST_COMPOSITION.sessionToolsTimeoutMs,
+      },
+      packageAcquisition: {},
+      storage: {
+        persistence: 'required',
+        namespace: PACKED_HOST_COMPOSITION.namespace,
+      },
+    },
+    PACKED_HOST_URL_CONTEXT,
+  );
+  const scopePath = new URL(admitted.serviceWorker.scope).pathname;
+  const previewPrefix = admitted.owner.deployment.previewPrefix;
+  if (scopePath !== '/sandbox/' || previewPrefix !== '/sandbox/preview') {
+    throw new Error(
+      `admitted packed-host composition drifted: ${JSON.stringify({ scopePath, previewPrefix })}`,
+    );
+  }
+  if (Object.hasOwn(admitted.owner.packageAcquisition, 'registryUrl')) {
+    throw new Error('admitted packed-host composition is not snapshot-only');
+  }
+  return Object.freeze({
+    scope: '/sandbox/',
+    previewPrefix: '/sandbox/preview',
+    snapshotOnly: true,
+  });
+}
+
 export async function produceFromInstalledWorkbenchTarball(): Promise<ProducedSnapshot> {
-  const temp = await mkdtemp(join(tmpdir(), 'rifty-packed-produce-'));
+  const temp = await mkdtemp(join(repoRoot, 'tests/integration/.tmp-packed-produce-'));
   try {
     const stage = join(temp, 'stage');
     const tarballRoot = join(temp, 'tarballs');
     const extracted = join(temp, 'extracted');
-    await mkdir(stage);
     await mkdir(tarballRoot);
     await mkdir(extracted);
-    await writeFile(
-      join(stage, 'package.json'),
-      JSON.stringify({
-        name: '@riftydev/workbench',
-        version: '0.1.0',
-        type: 'module',
-        exports: { './dep-snapshot': './dep-snapshot.mjs' },
-      }),
+    await cp(workbenchRoot, stage, { recursive: true, filter: excludeWorkbenchPackExtras });
+    const manifest = JSON.parse(await readFile(join(stage, 'package.json'), 'utf8')) as {
+      files?: readonly string[];
+      publishConfig?: unknown;
+      dependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+    };
+    const { publishConfig: _publishConfig, ...packable } = manifest;
+    const stagedManifest = {
+      ...packable,
+      files: ['src', 'CHANGELOG.md'],
+    };
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies'] as const) {
+      const deps = stagedManifest[field];
+      if (deps === undefined) continue;
+      for (const [name, specifier] of Object.entries(deps)) {
+        if (specifier.startsWith('workspace:')) deps[name] = '0.1.0';
+      }
+    }
+    await writeFile(join(stage, 'package.json'), `${JSON.stringify(stagedManifest, null, 2)}\n`);
+    const before = new Set(await readdir(tarballRoot));
+    await run('npm', ['pack', '--ignore-scripts', '--pack-destination', tarballRoot], stage);
+    const created = (await readdir(tarballRoot)).filter(
+      (entry) => entry.endsWith('.tgz') && !before.has(entry),
     );
-    await writeFile(
-      join(stage, 'dep-snapshot.mjs'),
-      `export { produceDepSnapshot } from ${JSON.stringify(pathToFileURL(workbenchDepSnapshot).href)};\n`,
-    );
-    const packed = await run(
-      'npm',
-      ['pack', '--ignore-scripts', '--pack-destination', tarballRoot],
-      stage,
-    );
-    const tarballName = packed.trim().split('\n').at(-1);
-    if (tarballName === undefined || tarballName.length === 0) {
-      throw new Error('npm pack did not emit a workbench tarball');
+    const tarballName = created[0];
+    if (created.length !== 1 || tarballName === undefined) {
+      throw new Error(`packing workbench created ${String(created.length)} tarballs`);
     }
     await run('tar', ['-xzf', join(tarballRoot, tarballName), '-C', extracted], temp);
-    const api = (await import(pathToFileURL(join(extracted, 'package/dep-snapshot.mjs')).href)) as {
-      produceDepSnapshot(input: {
-        readonly templateId: string;
-        readonly packageJsonText: string;
-        readonly packageLockText: string;
-        readonly registry: RegistryClient;
-      }): Promise<{ readonly snapshotId: string; readonly tarBytes: Uint8Array }>;
-    };
+    const api = await importProduceDepSnapshot(join(extracted, 'package'));
     const packageJsonText = JSON.stringify({ name: 'packed-host-caller', version: '1.0.0' });
     const baked = await api.produceDepSnapshot({
       templateId: 'packed-host',
@@ -155,6 +216,7 @@ function definition(): ProjectDefinition<unknown> {
 }
 
 export async function provePackedHostOrphanRetain(): Promise<PackedHostOrphanProof> {
+  const host = admittedPackedHost();
   const fs = new MemoryFsSync();
   fs.mkdirSync(`${SCRATCH_TREE}/src`, { recursive: true });
   fs.writeFileSync(`${SCRATCH_TREE}/user.txt`, ORPHAN_BYTES);
@@ -184,14 +246,7 @@ export async function provePackedHostOrphanRetain(): Promise<PackedHostOrphanPro
     const downloaded = new TextDecoder('utf-8', { fatal: true }).decode(
       await catalog.readRetainedOrphanFile(id, 'user.txt'),
     );
-    return {
-      downloaded,
-      host: {
-        scope: PACKED_HOST_COMPOSITION.scope,
-        previewPrefix: PACKED_HOST_COMPOSITION.previewPrefix,
-        snapshotOnly: PACKED_HOST_COMPOSITION.snapshotOnly,
-      },
-    };
+    return { downloaded, host };
   } finally {
     await owner.close();
     resetSyncMirror();

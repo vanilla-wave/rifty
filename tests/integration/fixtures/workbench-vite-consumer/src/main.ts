@@ -1,13 +1,14 @@
 import { createSandbox } from '@riftydev/sdk';
-import { type PreviewHandle, openWorkbench, projects } from '@riftydev/workbench';
+import type { PreviewHandle } from '@riftydev/workbench';
 import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
-import { PACKED_HOST_COMPOSITION } from './packed-host-composition.ts';
+import { PACKED_HOST_COMPOSITION } from './packed-host-composition';
 
 export interface PackedWorkbenchAcceptance {
   readonly previewUrl: string;
   readonly sqliteProof: string;
   readonly companionLoaded: boolean;
   readonly sdkLoaded: boolean;
+  readonly orphanDownloaded: string;
   readonly noCoiToolchainWorkerUrl: string;
   readonly typescriptWorkerUrl: string;
   readonly hostWasm: {
@@ -22,6 +23,13 @@ interface PackedWorkbenchDiagnostics {
   stage: string;
   terminalOutput: string;
   sqliteOutput: string;
+}
+
+interface PackedHostSnapshotManifest {
+  readonly snapshotId: string;
+  readonly assetUrl: string;
+  readonly templateId: string;
+  readonly packageJsonText: string;
 }
 
 declare global {
@@ -39,15 +47,15 @@ function requiredElement<T extends Element>(selector: string): T {
   return element;
 }
 
-const ownerWorkerUrl = '/runtime/owner-worker.js';
-const kernelWorkerUrl = '/runtime/kernel-worker.js';
-const nodeWorkerUrl = '/runtime/node-worker.js';
-const devServerWorkerUrl = '/runtime/dev-server-worker.js';
-const typescriptWorkerUrl = '/runtime/typescript-worker.js';
-const noCoiToolchainWorkerUrl = '/runtime/no-coi-toolchain-worker.js';
-const serviceWorkerUrl = '/runtime/sw.js';
-const sqliteWasmUrl = '/runtime/sqlite.wasm';
-const quickjsWasmUrl = '/runtime/quickjs.wasm';
+const ownerWorkerUrl = `${import.meta.env.BASE_URL}runtime/owner-worker.js`;
+const kernelWorkerUrl = `${import.meta.env.BASE_URL}runtime/kernel-worker.js`;
+const nodeWorkerUrl = `${import.meta.env.BASE_URL}runtime/node-worker.js`;
+const devServerWorkerUrl = `${import.meta.env.BASE_URL}runtime/dev-server-worker.js`;
+const typescriptWorkerUrl = `${import.meta.env.BASE_URL}runtime/typescript-worker.js`;
+const noCoiToolchainWorkerUrl = `${import.meta.env.BASE_URL}runtime/no-coi-toolchain-worker.js`;
+const serviceWorkerUrl = `${import.meta.env.BASE_URL}runtime/sw.js`;
+const sqliteWasmUrl = `${import.meta.env.BASE_URL}runtime/sqlite.wasm`;
+const quickjsWasmUrl = `${import.meta.env.BASE_URL}runtime/quickjs.wasm`;
 
 const status = requiredElement<HTMLParagraphElement>('#status');
 const previewLink = requiredElement<HTMLAnchorElement>('#preview-link');
@@ -81,14 +89,53 @@ console.log('packed-sqlite-' + row.answer)
 db.close()
 `;
 
+async function loadPackedHostSnapshot(): Promise<PackedHostSnapshotManifest> {
+  const response = await fetch(new URL('snapshots/manifest.json', document.baseURI));
+  if (!response.ok) {
+    throw new Error(`Packed host snapshot manifest ${response.status}`);
+  }
+  const manifest = (await response.json()) as PackedHostSnapshotManifest;
+  if (
+    typeof manifest.snapshotId !== 'string' ||
+    typeof manifest.assetUrl !== 'string' ||
+    typeof manifest.templateId !== 'string' ||
+    typeof manifest.packageJsonText !== 'string'
+  ) {
+    throw new Error('Packed host snapshot manifest is incomplete');
+  }
+  return manifest;
+}
+
+async function plantPackedHostOrphan(): Promise<void> {
+  const encoder = new TextEncoder();
+  const origin = await navigator.storage.getDirectory();
+  const namespaced = await origin.getDirectoryHandle(PACKED_HOST_COMPOSITION.namespace, {
+    create: true,
+  });
+  let tree = namespaced;
+  for (const segment of ['.rifty', 'workbench', 'v1', 'projects', 'scratch', 'tree']) {
+    tree = await tree.getDirectoryHandle(segment, { create: true });
+  }
+  const file = await tree.getFileHandle('user.txt', { create: true });
+  const writer = await file.createWritable();
+  await writer.write(encoder.encode('orphan bytes'));
+  await writer.close();
+}
+
 async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
-  const workbench = await openWorkbench({
+  diagnostics.stage = 'planting orphan Scratch';
+  await plantPackedHostOrphan();
+  diagnostics.stage = 'loading produced snapshot manifest';
+  const snapshot = await loadPackedHostSnapshot();
+  diagnostics.stage = 'opening Playground Workbench';
+  const workbench = await openPlaygroundWorkbench({
     deployment: {
       workers: {
         owner: ownerWorkerUrl,
         kernel: kernelWorkerUrl,
         node: nodeWorkerUrl,
         devServer: devServerWorkerUrl,
+        typescript: typescriptWorkerUrl,
       },
       serviceWorker: { url: serviceWorkerUrl, scope: PACKED_HOST_COMPOSITION.scope },
       wasm: { sqlite: sqliteWasmUrl },
@@ -104,20 +151,45 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
       namespace: PACKED_HOST_COMPOSITION.namespace,
     },
   });
-  diagnostics.stage = 'opening project';
-  const project = await workbench.openProject(
-    projects.vite({
-      id: 'packed-vite-consumer',
-      viteVersion: '7.3.6',
-      files: {
-        '/index.html':
-          '<div id="app">booting</div><script type="module" src="/src/main.ts"></script>',
-        '/src/main.ts': projectMain,
-        '/src/message.ts': 'export const message = "packed-consumer-ready";\n',
-        '/sqlite-proof.cjs': sqliteProofSource,
+  diagnostics.stage = 'defining snapshot project';
+  const definition = workbench.playground.define({
+    kind: 'vite',
+    id: 'scratch',
+    starterId: 'packed-host',
+    templateId: snapshot.templateId,
+    files: {
+      '/package.json': snapshot.packageJsonText,
+      '/index.html':
+        '<div id="app">booting</div><script type="module" src="/src/main.ts"></script>',
+      '/src/main.ts': projectMain,
+      '/src/message.ts': 'export const message = "packed-consumer-ready";\n',
+      '/sqlite-proof.cjs': sqliteProofSource,
+    },
+    port: 5173,
+    firstMaterialization: {
+      kind: 'snapshot',
+      snapshot: {
+        snapshotId: snapshot.snapshotId,
+        assetUrl: snapshot.assetUrl,
+        templateId: snapshot.templateId,
       },
-    }),
+    },
+  });
+  diagnostics.stage = 'retaining planted orphan';
+  await workbench.playground.catalog.createScratch({ definition });
+  const orphans = await workbench.playground.catalog.listRetainedOrphans();
+  const orphanId = orphans[0]?.id;
+  if (orphanId === undefined) {
+    throw new Error('Packed host did not retain planted orphan Scratch');
+  }
+  const orphanDownloaded = new TextDecoder('utf-8', { fatal: true }).decode(
+    await workbench.playground.catalog.readRetainedOrphanFile(orphanId, 'user.txt'),
   );
+  if (orphanDownloaded !== 'orphan bytes') {
+    throw new Error(`Packed host orphan download drifted: ${JSON.stringify(orphanDownloaded)}`);
+  }
+  diagnostics.stage = 'opening project';
+  const project = await workbench.openProject(definition);
   diagnostics.stage = 'starting project';
   const run = project.run();
   let terminalOutput = '';
@@ -179,6 +251,7 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     sqliteProof: sqliteOutput,
     companionLoaded: typeof openPlaygroundWorkbench === 'function',
     sdkLoaded: typeof createSandbox === 'function',
+    orphanDownloaded,
     noCoiToolchainWorkerUrl,
     typescriptWorkerUrl,
     hostWasm: Object.freeze({ quickjs: quickjsWasmUrl, sqlite: sqliteWasmUrl }),
