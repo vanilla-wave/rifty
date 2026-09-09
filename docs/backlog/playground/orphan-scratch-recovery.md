@@ -87,6 +87,8 @@ I5 preview prefix and I7 operation budgets remain separate goal obligations.
 
 ## Decisions
 
+- ready-verdict: 2026-09-09 — Contract+RED @ 5f9c7a1b5cbefa71780db8f76f3363f98f98cb43; reference/orphan-scratch-recovery-contract-red.json.
+
 - 2026-09-09 — pickup: ADR-0406 repairs captured cold-cache byte fabrication; ADR-0407 uses the existing catalog pointer/roles and distinct bounded recovery download. Existing vfs/opfs-preload-failure-empty-bytes is a required prerequisite consumed by this unit.
 - 2026-09-07 — finding draft; observable scope is settled by goal I6; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.
