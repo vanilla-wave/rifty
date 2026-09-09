@@ -4,6 +4,8 @@
 
 ### Added
 
+- OPFS paired installation accepts a captured per-instance IO report timeout; omission keeps30s, timeout retains native lanes/path fences and late completion heals without resend (ADR-0410).
+
 - OPFS initialization accepts a captured native root; paired installation uses the same handle for both surfaces. Conflicting async re-init rejects; omission preserves origin storage (ADR-0402).
 
 ### Fixed

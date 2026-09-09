@@ -18,11 +18,11 @@ import {
   exact,
   exactMatch,
   invalid,
+  nativeTimerDelay,
   nonEmptyString,
   optionalKeys,
   own,
   port,
-  positiveFinite,
   progressCount,
   record,
   string,
@@ -62,6 +62,8 @@ export interface WorkbenchOwnerBootConfig {
     readonly wasm: { readonly sqlite: string };
     readonly previewProbeTimeoutMs: number;
     readonly previewPrefix?: string;
+    readonly ownerStartupTimeoutMs?: number;
+    readonly ioReportTimeoutMs?: number;
   };
   readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
   readonly storage: OwnerStorageConfig;
@@ -232,7 +234,11 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   const deployment = record(config.deployment, 'owner boot deployment');
   exact(
     deployment,
-    optionalKeys(deployment, ['workers', 'wasm', 'previewProbeTimeoutMs'], ['previewPrefix']),
+    optionalKeys(
+      deployment,
+      ['workers', 'wasm', 'previewProbeTimeoutMs'],
+      ['previewPrefix', 'ownerStartupTimeoutMs', 'ioReportTimeoutMs'],
+    ),
     'owner boot deployment',
   );
   const rawPrefix = deployment.previewPrefix;
@@ -248,10 +254,17 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   );
   const wasm = record(deployment.wasm, 'owner boot wasm');
   exact(wasm, ['sqlite'], 'owner boot wasm');
-  const previewProbeTimeoutMs = positiveFinite(
+  const previewProbeTimeoutMs = nativeTimerDelay(
     deployment.previewProbeTimeoutMs,
     'owner boot preview proof timeout',
   );
+
+  const ownerStartupTimeoutMs = own(deployment, 'ownerStartupTimeoutMs')
+    ? nativeTimerDelay(deployment.ownerStartupTimeoutMs, 'owner boot startup timeout')
+    : undefined;
+  const ioReportTimeoutMs = own(deployment, 'ioReportTimeoutMs')
+    ? nativeTimerDelay(deployment.ioReportTimeoutMs, 'owner boot IO report timeout')
+    : undefined;
 
   const packageAcquisition = inspectNormalizedWorkbenchPackageAcquisition(
     config.packageAcquisition,
@@ -286,6 +299,8 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     }),
     previewProbeTimeoutMs,
     ...(previewPrefix === undefined ? {} : { previewPrefix }),
+    ...(ownerStartupTimeoutMs === undefined ? {} : { ownerStartupTimeoutMs }),
+    ...(ioReportTimeoutMs === undefined ? {} : { ioReportTimeoutMs }),
   });
   let legacyWorkspacePrefix: string | undefined;
   if (own(config, 'legacyWorkspacePrefix')) {

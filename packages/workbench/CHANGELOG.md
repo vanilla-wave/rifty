@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Configure effective owner startup/storage-proof, project-file observation/durability and Playground request budgets through public deployment options; preserve omitted defaults, uniform catalog silence and applied/unknown settlement (ADR-0410).
+- Reject invalid or overflowing deployment wait budgets before effects; bound at2,147,483,647ms and round positive fractions upward, including existing preview/silence settings.
+
 - Add deployment.previewPrefix for scoped copied-SW HTTP/iframe/HMR routing, with immutable configuration proof and preserved default routes (ADR-0409).
 
 - Retain unjournaled orphan Scratch bytes through the existing catalog transaction, open fresh Scratch, and expose non-consuming public list/export across persistent reopen (ADR-0407).

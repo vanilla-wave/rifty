@@ -227,7 +227,10 @@ export class OpfsDrainScheduler {
   private readonly hooks: DrainSchedulerHooks;
   readonly dirHandles = new DrainDirHandleCache();
 
-  constructor(hooks: DrainSchedulerHooks) {
+  constructor(
+    hooks: DrainSchedulerHooks,
+    readonly reportTimeoutMs = PERSIST_OPERATION_REPORT_TIMEOUT_MS,
+  ) {
     this.hooks = hooks;
   }
 
@@ -380,7 +383,7 @@ export class OpfsDrainScheduler {
       op.settleReporting();
       this.reportBlockedDependents(op);
       this.reportCapacityStarved();
-    }, PERSIST_OPERATION_REPORT_TIMEOUT_MS);
+    }, this.reportTimeoutMs);
     const finish = (succeeded: boolean): void => {
       clearTimeout(timer);
       this.settle(op, succeeded);

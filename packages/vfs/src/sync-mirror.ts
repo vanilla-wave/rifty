@@ -143,7 +143,9 @@ export function installMemoryFs(): MemoryBackend {
  */
 export async function installOpfsFs(
   root?: FileSystemDirectoryHandle,
+  options: { readonly ioReportTimeoutMs?: number } = {},
 ): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }> {
+  const ioReportTimeoutMs = options.ioReportTimeoutMs;
   if (root === undefined && !OpfsVfs.isSupported()) {
     throw new VfsError('EPERM', '/', 'OPFS is not available in this environment');
   }
@@ -154,7 +156,7 @@ export async function installOpfsFs(
   // and boot preload route through OPFS. Passing the structural
   // `PairedAsyncSurface` (which `OpfsVfs` satisfies) avoids a reverse import of
   // `OpfsVfs` into `opfs-sync.ts`.
-  const fsSync = await OpfsFsSync.init(vfs, mount);
+  const fsSync = await OpfsFsSync.init(vfs, mount, { ioReportTimeoutMs });
   setSyncMirror(fsSync, { async: vfs });
   return { vfs, fsSync };
 }

@@ -190,14 +190,13 @@ export function startBrowserWorkspaceOwner(
   dependencies: BrowserOwnerDependencies,
 ): RawWorkspaceOwnerHandle {
   const deployment = input.deployment;
+  const { previewPrefix, ownerStartupTimeoutMs, ioReportTimeoutMs } = deployment;
   const worker = dependencies.spawnOwner(input);
-  const ownerStderrDecoder = new TextDecoder();
+  const stderrDecoder = new TextDecoder();
   let ownerStderr = '';
   worker.stderr().on('data', (chunk: unknown) => {
     if (!(chunk instanceof Uint8Array)) return;
-    ownerStderr = `${ownerStderr}${ownerStderrDecoder.decode(chunk, { stream: true })}`.slice(
-      -16_384,
-    );
+    ownerStderr = `${ownerStderr}${stderrDecoder.decode(chunk, { stream: true })}`.slice(-16_384);
   });
   const silenceBudgetMs =
     deployment.ownerOperationSilenceTimeoutMs ?? OWNER_OPERATION_SILENCE_TIMEOUT_MS;
@@ -474,7 +473,6 @@ export function startBrowserWorkspaceOwner(
           return;
         case 'workbench:durability-progress':
           // Owner-level: the first-open drain predates project tokens (ADR-0359).
-          // ADR-0360: arrival is the liveness proof the deadline measures.
           rearmSilenceDeadlines();
           publishHealth(
             Object.freeze({
@@ -530,7 +528,7 @@ export function startBrowserWorkspaceOwner(
       (normal
         ? new ClosedHandleError('Workbench owner')
         : new Error(
-            `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} (code ${String(code)}, signal ${String(signal)})${ownerStderr === '' ? '' : `\n${ownerStderr}${ownerStderrDecoder.decode()}`}`,
+            `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} (code ${String(code)}, signal ${String(signal)})${ownerStderr === '' ? '' : `\n${ownerStderr}${stderrDecoder.decode()}`}`,
           ));
     readyState.reject(exitError);
     rejectPending(exitError);
@@ -551,9 +549,9 @@ export function startBrowserWorkspaceOwner(
       }),
       wasm: Object.freeze({ sqlite: deployment.wasm.sqlite }),
       previewProbeTimeoutMs: deployment.previewProbeTimeoutMs,
-      ...(deployment.previewPrefix === undefined
-        ? {}
-        : { previewPrefix: deployment.previewPrefix }),
+      ...(previewPrefix === undefined ? {} : { previewPrefix }),
+      ...(ownerStartupTimeoutMs === undefined ? {} : { ownerStartupTimeoutMs }),
+      ...(ioReportTimeoutMs === undefined ? {} : { ioReportTimeoutMs }),
     }),
     packageAcquisition: input.packageAcquisition,
     storage: input.storage,
@@ -738,7 +736,8 @@ export function startBrowserWorkspaceOwner(
         !exited &&
         (activeProject === null || activeProject.token === opened.projectToken),
       generateRequestId: dependencies.operationId,
-      commitTimeoutMs: PROJECT_VFS_COMMIT_TIMEOUT_MS,
+      commitTimeoutMs: deployment.projectFileCommitTimeoutMs ?? PROJECT_VFS_COMMIT_TIMEOUT_MS,
+      durabilityAckTimeoutMs: deployment.projectFileCommitTimeoutMs,
       reportProtocolError: failInvariant,
       onDurabilityState(state) {
         if (disconnected || exited || activeProject?.token !== opened.projectToken) return;
@@ -1110,6 +1109,7 @@ export function startBrowserWorkspaceOwner(
                   },
                   subscribe: (listener) => state.transport.subscribePlaygroundTools(listener),
                   generateRequestId: dependencies.operationId,
+                  requestTimeoutMs: deployment.playgroundRequestTimeoutMs,
                 });
               state.lifecycle = Object.freeze({
                 tools: core.tools,

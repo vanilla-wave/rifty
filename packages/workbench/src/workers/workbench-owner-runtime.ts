@@ -271,6 +271,8 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
 
   const storageAuthority = await installWorkbenchOwnerStorageAuthority(config.storage.persistence, {
     namespace: config.storage.namespace,
+    proofTimeoutMs: config.deployment.ownerStartupTimeoutMs,
+    ioReportTimeoutMs: config.deployment.ioReportTimeoutMs,
   });
   const storage = storageAuthority.snapshot;
   const ownerComposition: OwnerVfsAuthorityComposition = createOwnerVfsAuthorityComposition(

@@ -77,6 +77,43 @@ scope deployments that do not open preview. Initial iframe navigation must be
 inside SW scope; this option does not rewrite new out-of-scope document
 navigations. See ADR-0409 and the packed consumer's `sandbox/` entry.
 
+## Operation budgets
+
+Both entrypoints accept these `deployment` options, in milliseconds:
+
+| Option | Omitted default | Bounds |
+|---|---|---|
+| `ownerStartupTimeoutMs` | 30,000 | Owner readiness, including storage mount/preload/catalog; each storage proof step uses the same budget. |
+| `projectFileCommitTimeoutMs` | 60,000 per phase; durability acknowledgment 35,000 | File reflection/durability after an applied result, plus its durability acknowledgment and explicit recovery wait. |
+| `playgroundRequestTimeoutMs` | 60,000 | Playground SCM/archive/durability/close requests, measured from request send. |
+| `ownerOperationSilenceTimeoutMs` | 60,000 | Catalog and other owner-operation silence; real durability progress rearms it, ordinary traffic does not. |
+| `previewProbeTimeoutMs` | 3,000 | SW control and advertised-preview HTTP proof; independent of operation budgets. |
+
+Values must be finite numbers, greater than 0 and at most 2,147,483,647. Positive
+fractions round upward. Invalid values reject before deployment effects. For
+example, a slow host can set startup 90,000, file 95,000, Playground 100,000 and
+owner silence 105,000 without patching package output.
+
+Startup measurement begins after lease/SW control admission. File waits before
+an applied acknowledgment retain their existing settlement semantics. Tools
+that require pending document saves wait for them before sending their request.
+These options are not global open/close or guest execution time limits; physical
+exit observation still has its independent 30,000 budget. Snapshot acquisition
+retains its existing read/byte limits, and TypeScript/PTY policies are unchanged.
+
+An explicit file budget also replaces its shorter 35,000 acknowledgment wait.
+The shared native OPFS report wait uses the largest explicit startup/file/
+Playground/owner-silence override; with none supplied it stays 30,000. Preview
+budget is excluded. This shared value is captured per owner storage instance;
+individual outer budgets keep their own start/reset rules.
+
+A timeout never proves that an admitted mutation did not apply. Existing
+applied/unknown results remain, mutations are not retried, and late completion
+cannot rewrite a settled rejection. Native OPFS reporting timeout keeps the
+physical write's lane/path fence until it finishes; late success can heal its
+failure report. Owner-silence expiry retains the existing owner termination
+policy. See ADR-0410/0360/0358.
+
 ## Persistent storage
 
 Set `storage: { persistence: 'required', namespace: 'my-workbench' }` to mount

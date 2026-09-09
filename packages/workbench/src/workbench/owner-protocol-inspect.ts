@@ -82,9 +82,12 @@ export function port(value: unknown, label: string): number {
   return number;
 }
 
-export function positiveFinite(value: unknown, label: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw invalid(label);
-  return value;
+export const MAX_NATIVE_TIMEOUT_MS = 2_147_483_647;
+
+export function nativeTimerDelay(value: unknown, label: string): number {
+  const delay = dimension(value, label);
+  if (delay > MAX_NATIVE_TIMEOUT_MS) throw invalid(label);
+  return delay;
 }
 
 export function progressCount(value: unknown, label: string): number {

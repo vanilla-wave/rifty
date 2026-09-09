@@ -1,44 +1,13 @@
 /// <reference lib="webworker" />
 /**
- * `OpfsFsSync` — synchronous {@link FsSync} backed by OPFS via
- * `FileSystemSyncAccessHandle` (ADR-0013). Worker realm only; main-thread
- * construction throws `NotImplementedError`.
+ * Worker-only synchronous OPFS mirror (ADR-0013/0072). Content and directory
+ * reads use memory preloaded by {@link init}; mutations enqueue OPFS
+ * write-through. {@link flush} reports durability before a reload.
  *
- * Scope: all seven `FsSync` methods are implemented. File **content** I/O
- * goes through a synchronous in-memory content cache with async OPFS
- * write-through (ADR-0072): `writeFileSync` updates the cache immediately
- * and enqueues an async `OpfsVfs.writeFile`; `readFileBytesSync` serves the
- * cache, which {@link init} preloads from OPFS at boot so reads after a page
- * reload return the persisted bytes synchronously. This replaces the earlier
- * `FileSystemSyncAccessHandle`-on-the-hot-path design (ADR-0013), which
- * couldn't service a sync read/write on a brand-new path without an async
- * handle open mid-call. The handle machinery (`openSync`/`ensureHandle`) is
- * retained but off the read/write hot path. Callers can drain the
- * write-through deterministically via {@link flush} before a reload.
- *
- * Directory-shape ops (`readdirSync`, `mkdirSync`, `rmSync`, `renameSync`)
- * read/write an in-memory directory tree mirror that is **seeded** at boot
- * from the OPFS root and kept in sync as the page runs. Persistence of
- * directory-shape mutations back to OPFS happens via async helpers
- * (`getDirectoryHandle`/`removeEntry`) tracked in the same `flush` queue; if
- * the page is closed before a flush completes, the on-disk tree is slightly
- * behind the in-memory mirror — acceptable for a dev runtime.
- *
- * Warm index (ADR-0014): {@link init} walks the OPFS tree and caches
- * `{ kind, size, children? }` so `existsSync`/`statSync`/`readdirSync`
- * see the same tree the async {@link OpfsVfs} sees. `writeFileSync`
- * mutates the cache in place; async writes through the paired async
- * surface make it stale until {@link refreshIndex} is called.
- *
- * Handle lifecycle: a `Map<path, FileSystemSyncAccessHandle>` opens
- * lazily on `openSync(path)` and is reused (browsers serialise handle
- * access). No cross-instance eviction — Worker owns its filesystem
- * view for life.
- *
- * atime/mtime side-table (ADR-0029): `FileSystemSyncAccessHandle`
- * exposes no mtime mutation; `utimes` records into an in-memory map and
- * `statSync` prefers it over the default `0`. Not persisted across page
- * reloads.
+ * The warm index (ADR-0014) tracks kind/size/children. Writes through the paired
+ * async surface require {@link refreshIndex}; sync mutations update it locally.
+ * Sync-access handles open lazily and remain owned by this instance.
+ * atime/mtime overrides are memory-only (ADR-0029), lost on reload.
  */
 
 import { NotImplementedError, VfsError } from './errors.ts';
@@ -46,7 +15,6 @@ import type { FsSync } from './fs-sync.ts';
 import {
   type FlushProgressSnapshot,
   OpfsDrainScheduler,
-  PERSIST_OPERATION_REPORT_TIMEOUT_MS,
   type PersistOperation,
 } from './opfs-drain-scheduler.ts';
 import { assertNotCrswapReserved, isCrswapArtifactName } from './opfs-errors.ts';
@@ -206,24 +174,7 @@ export class OpfsFsSync implements FsSync {
    * its drain-scoped dir-handle cache. The ledger stays HERE (single ledger
    * owner); the scheduler reports timeouts/blocked fences via these hooks.
    */
-  private readonly scheduler = new OpfsDrainScheduler({
-    onReportTimeout: (operation) => {
-      this.recordOperationFailure(
-        operation,
-        new Error(
-          `OPFS ${operation.op} did not settle within ${PERSIST_OPERATION_REPORT_TIMEOUT_MS}ms`,
-        ),
-      );
-    },
-    onBlockedBehindTimeout: (operation, blocker) => {
-      this.recordOperationFailure(
-        operation,
-        new Error(
-          `OPFS ${operation.op} blocked behind timed out ${blocker.op} ${blocker.paths[0] ?? '/'}`,
-        ),
-      );
-    },
-  });
+  private readonly scheduler: OpfsDrainScheduler;
   /**
    * Paired async OPFS surface used for content write-through, content
    * preload, and durable file-bearing structural moves/deletes. `null` when
@@ -261,7 +212,11 @@ export class OpfsFsSync implements FsSync {
    * inject only a fake root keep compiling and behaving identically; when
    * omitted, sync writes stay in-cache only (no OPFS persistence).
    */
-  constructor(root: FileSystemDirectoryHandle, paired?: PairedAsyncSurface) {
+  constructor(
+    root: FileSystemDirectoryHandle,
+    paired?: PairedAsyncSurface,
+    options: { readonly ioReportTimeoutMs?: number } = {},
+  ) {
     if (!OpfsFsSync.isSupported()) {
       throw new NotImplementedError(
         'OpfsFsSync',
@@ -270,6 +225,27 @@ export class OpfsFsSync implements FsSync {
     }
     this.root = root;
     this.asyncSurface = paired ?? null;
+    this.scheduler = new OpfsDrainScheduler(
+      {
+        onReportTimeout: (operation) => {
+          this.recordOperationFailure(
+            operation,
+            new Error(
+              `OPFS ${operation.op} did not settle within ${this.scheduler.reportTimeoutMs}ms`,
+            ),
+          );
+        },
+        onBlockedBehindTimeout: (operation, blocker) => {
+          this.recordOperationFailure(
+            operation,
+            new Error(
+              `OPFS ${operation.op} blocked behind timed out ${blocker.op} ${blocker.paths[0] ?? '/'}`,
+            ),
+          );
+        },
+      },
+      options.ioReportTimeoutMs,
+    );
     // Seed root so `readdirSync('/')` works before `refreshIndex` runs.
     this.index.set('/', { kind: 'dir', size: 0, children: new Set() });
   }
@@ -278,7 +254,9 @@ export class OpfsFsSync implements FsSync {
   static async init(
     paired?: PairedAsyncSurface,
     root?: FileSystemDirectoryHandle,
+    options: { readonly ioReportTimeoutMs?: number } = {},
   ): Promise<OpfsFsSync> {
+    const ioReportTimeoutMs = options.ioReportTimeoutMs;
     if (!OpfsFsSync.isSupported()) {
       throw new NotImplementedError(
         'OpfsFsSync',
@@ -292,7 +270,7 @@ export class OpfsFsSync implements FsSync {
       }
       dir = await navigator.storage.getDirectory();
     }
-    const instance = new OpfsFsSync(dir, paired);
+    const instance = new OpfsFsSync(dir, paired, { ioReportTimeoutMs });
     await instance.refreshIndex();
     await instance.preloadContent();
     return instance;

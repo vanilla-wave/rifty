@@ -35,6 +35,7 @@ export interface WorkbenchOwnerStorageOptions {
   readonly namespace?: string;
   readonly installers?: WorkbenchOwnerStorageInstallers;
   readonly proofTimeoutMs?: number;
+  readonly ioReportTimeoutMs?: number;
   readonly createProofId?: () => string;
 }
 
@@ -45,16 +46,19 @@ function defaultProofId(): string {
   return globalThis.crypto.randomUUID();
 }
 
-function defaultInstallers(namespace: string | undefined): WorkbenchOwnerStorageInstallers {
+function defaultInstallers(
+  namespace: string | undefined,
+  ioReportTimeoutMs: number | undefined,
+): WorkbenchOwnerStorageInstallers {
   return Object.freeze({
     openMemory: () => {
       installMemoryFs();
     },
     openOpfs: async () => {
-      if (namespace === undefined) return installOpfsFs();
+      if (namespace === undefined) return installOpfsFs(undefined, { ioReportTimeoutMs });
       const origin = await navigator.storage.getDirectory();
       const root = await origin.getDirectoryHandle(namespace, { create: true });
-      return installOpfsFs(root);
+      return installOpfsFs(root, { ioReportTimeoutMs });
     },
   });
 }
@@ -158,7 +162,7 @@ export async function installWorkbenchOwnerStorageAuthority(
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new RangeError('Workbench OPFS proof timeout must be positive');
   }
-  const installers = options.installers ?? defaultInstallers(namespace);
+  const installers = options.installers ?? defaultInstallers(namespace, options.ioReportTimeoutMs);
   const createProofId = options.createProofId ?? defaultProofId;
   let openedOpfs: OpfsInstallation | undefined;
   const snapshot = await selectOwnerStorage(policy, {

@@ -14,6 +14,7 @@ import {
   type OwnerStoragePersistence,
   validateOwnerStorageNamespace,
 } from '../../workers/owner-storage.ts';
+import { MAX_NATIVE_TIMEOUT_MS } from '../owner-protocol-inspect.ts';
 import type { WorkbenchOwnerStartInput } from '../workbench-owner-port.ts';
 import {
   type WorkbenchPackageAcquisition,
@@ -53,6 +54,12 @@ export interface WorkbenchOptions {
      * the owner's shipped 60 000 ms.
      */
     readonly ownerOperationSilenceTimeoutMs?: number;
+    /** Owner readiness/storage proof after SW admission; omission keeps 30,000 ms. */
+    readonly ownerStartupTimeoutMs?: number;
+    /** Post-applied file observation and durability ACK; omission keeps 60,000/35,000 ms. */
+    readonly projectFileCommitTimeoutMs?: number;
+    /** Non-TS Playground requests from send, after save admission; default 60,000 ms. */
+    readonly playgroundRequestTimeoutMs?: number;
   };
   readonly packageAcquisition: WorkbenchPackageAcquisition;
   readonly storage: OwnerStorageConfig;
@@ -87,20 +94,33 @@ export function validateWorkbenchOptions(
   );
   const storage = record(root.storage, 'storage');
 
-  const timeoutValue = deployment.previewProbeTimeoutMs;
   const previewProbeTimeoutMs =
-    timeoutValue === undefined
-      ? DEFAULT_READY_TIMEOUT_MS
-      : positiveFinite(timeoutValue, 'deployment.previewProbeTimeoutMs');
-
-  // ADR-0360: same positive-finite authority as its preview-timeout sibling.
-  // Left ABSENT when unset — the owner owns the one shipped default, so no
-  // second copy of 60 000 ms can drift here.
-  const silenceValue = deployment.ownerOperationSilenceTimeoutMs;
-  const ownerOperationSilenceTimeoutMs =
-    silenceValue === undefined
-      ? undefined
-      : positiveFinite(silenceValue, 'deployment.ownerOperationSilenceTimeoutMs');
+    timeoutBudget(deployment.previewProbeTimeoutMs, 'deployment.previewProbeTimeoutMs') ??
+    DEFAULT_READY_TIMEOUT_MS;
+  // Preserve absence: each existing owner retains its shipped default (ADR-0410).
+  const ownerOperationSilenceTimeoutMs = timeoutBudget(
+    deployment.ownerOperationSilenceTimeoutMs,
+    'deployment.ownerOperationSilenceTimeoutMs',
+  );
+  const ownerStartupTimeoutMs = timeoutBudget(
+    deployment.ownerStartupTimeoutMs,
+    'deployment.ownerStartupTimeoutMs',
+  );
+  const projectFileCommitTimeoutMs = timeoutBudget(
+    deployment.projectFileCommitTimeoutMs,
+    'deployment.projectFileCommitTimeoutMs',
+  );
+  const playgroundRequestTimeoutMs = timeoutBudget(
+    deployment.playgroundRequestTimeoutMs,
+    'deployment.playgroundRequestTimeoutMs',
+  );
+  const ioOverrides = [
+    ownerStartupTimeoutMs,
+    projectFileCommitTimeoutMs,
+    playgroundRequestTimeoutMs,
+    ownerOperationSilenceTimeoutMs,
+  ].filter((value): value is number => value !== undefined);
+  const ioReportTimeoutMs = ioOverrides.length === 0 ? undefined : Math.max(...ioOverrides);
 
   const persistence = storage.persistence;
   if (persistence !== 'required' && persistence !== 'preferred' && persistence !== 'ephemeral') {
@@ -164,6 +184,10 @@ export function validateWorkbenchOptions(
         previewProbeTimeoutMs,
         ...(previewPrefix === undefined ? {} : { previewPrefix }),
         ...(ownerOperationSilenceTimeoutMs === undefined ? {} : { ownerOperationSilenceTimeoutMs }),
+        ...(ownerStartupTimeoutMs === undefined ? {} : { ownerStartupTimeoutMs }),
+        ...(projectFileCommitTimeoutMs === undefined ? {} : { projectFileCommitTimeoutMs }),
+        ...(playgroundRequestTimeoutMs === undefined ? {} : { playgroundRequestTimeoutMs }),
+        ...(ioReportTimeoutMs === undefined ? {} : { ioReportTimeoutMs }),
       }),
       packageAcquisition,
     }),
@@ -317,9 +341,13 @@ function hasQueryDelimiter(url: URL): boolean {
   return beforeFragment.includes('?');
 }
 
-function positiveFinite(value: unknown, path: string): number {
+function timeoutBudget(value: unknown, path: string): number | undefined {
+  if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     throw new TypeError(`${path} must be a positive finite number`);
   }
-  return value;
+  if (value > MAX_NATIVE_TIMEOUT_MS) {
+    throw new TypeError(`${path} must be greater than 0 and at most ${MAX_NATIVE_TIMEOUT_MS}ms`);
+  }
+  return Math.ceil(value);
 }
