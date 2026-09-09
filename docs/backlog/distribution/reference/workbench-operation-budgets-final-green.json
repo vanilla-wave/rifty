@@ -1,0 +1,212 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS (advisory NOTES only) — I7 budgets and Acc 9 packed-host composition are delivered; not a whole-goal merge.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "445c13f70191252a579d8a9713b183fd958ead0e",
+  "unit_goal_source": "docs/backlog/distribution/workbench-operation-budgets.md (status ready, challenge 2026-09-09 clear, ready-verdict Contract+RED PASS @ 6df8f51ed2cde6d17d5e9bab278ea53d27ca3e05) against BASE f57c2c809 (I5 Final+GREEN + rechart); HEAD 445c13f70191252a579d8a9713b183fd958ead0e; range git diff f57c2c809...445c13f70; ADR-0408 docs/adr/playground/0408-public-workbench-duration-budgets-use-existing-deadline-owners.md; goal I7 + I1 packed residual + User scenario step 7 docs/backlog/epics/self-hosted-snapshot-workbench/goal.md",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Omitted deployment.ownerStartupTimeoutMs / projectFileTimeoutMs / sessionToolsTimeoutMs keep today's 30 000 ms owner ready/close/exit and OPFS proof, and 60 000 ms VFS commit and session-tools request budgets. Existing owner-port hung-ready and browser-owner silence/commit defaults stay.",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0408",
+      "status": "weak",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:127",
+      "note": "Omitted case only asserts the three keys are absent on admitted owner input. Owners then use ?? 30_000 / 60_000. Existing hung-ready uses runAllTimers and does not pin 30 000. Advisory under REV-4."
+    },
+    {
+      "row": "Acceptance 2: The three positive options are valid Workbench admission and appear on owner.start input (absent when omitted, like silence).",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Invalid values (0, -1, Infinity, NaN, '80') throw TypeError naming deployment.<option> before owner start / SW register.",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.fault.test.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: ownerStartupTimeoutMs: 80 rejects hung owner-ready (and hung close/exit observe) at 80 ms, not 30 000 ms; ownerStartupTimeoutMs: 60 000 is still pending at 30 000 ms.",
+      "source": "acceptance",
+      "trace": "I7 + scenario + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:147",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: The same public startup budget is the OPFS proof timeout: owner initialize admits deployment.ownerStartupTimeoutMs and runWorkbenchOwner passes that number as proofTimeoutMs into installWorkbenchOwnerStorageAuthority.",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-owner-startup-budget.contract.test.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: projectFileTimeoutMs: 80 is the VFS commit budget startBrowserWorkspaceOwner uses; a hung commit rejects at 80 ms. projectFileTimeoutMs: 120 000 is still pending at 60 000 ms.",
+      "source": "acceptance",
+      "trace": "I7 + scenario + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2720",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: sessionToolsTimeoutMs: 80 is the session-tools request budget the browser owner passes; a hung SCM/archive request rejects at 80 ms. sessionToolsTimeoutMs: 120 000 is still pending at 60 000 ms.",
+      "source": "acceptance",
+      "trace": "I7 + scenario + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2829",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: A duration timeout still kills/rejects without claiming the admitted mutation did not apply (applied/unknown/death stay; no hidden retry).",
+      "source": "acceptance",
+      "trace": "I7 + scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-owner-port.test.ts:137",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: Packed host from an installed workbench tarball: CI calls produceDepSnapshot from @riftydev/workbench/dep-snapshot, copies dist/runtime/, opens under /sandbox/ with snapshot-only, storage.namespace, previewPrefix: '/sandbox/preview', and the public budgets; Chromium edits/builds the real Vite project and preview/HMR resolve under that prefix; planted orphan Scratch remains downloadable.",
+      "source": "acceptance",
+      "trace": "I7 + I1 + scenario",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1111",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: corrupt-input × invalid duration — TypeError naming deployment.<option> before owner start.",
+      "source": "fault-matrix",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.fault.test.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: sibling-drift × raised startup — ready, close/exit, and OPFS proof share the one public ms.",
+      "source": "fault-matrix",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:147",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: sibling-drift × raised file or tools — commit / session-tools request use the public ms, not 60 000.",
+      "source": "fault-matrix",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2775",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: unbounded-read × hung ready/proof/commit/tools — reject at the public budget; no hang.",
+      "source": "fault-matrix",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:147",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: provenance-lie × duration timeout — timeout does not claim not-applied; peer death/unknown stay.",
+      "source": "fault-matrix",
+      "trace": "I7 + scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/vfs-commit-coordinator.ts:27",
+      "note": ""
+    },
+    {
+      "row": "Public API: WorkbenchOptions.deployment.ownerStartupTimeoutMs? / projectFileTimeoutMs? / sessionToolsTimeoutMs?",
+      "source": "public-api",
+      "trace": "Acceptance 2 → I7 → ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/workbench-options.ts:52",
+      "note": ""
+    },
+    {
+      "row": "Public API: WorkbenchOwnerStartInput.deployment.ownerStartupTimeoutMs? / projectFileTimeoutMs? / sessionToolsTimeoutMs? on owner.start input",
+      "source": "public-api",
+      "trace": "Acceptance 2 → I7 → ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-owner-port.ts:84",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:127",
+          "evidence": "pnpm exec vitest run packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts — 6 passed. The omitted case expects the three keys toBeUndefined. Existing hung-ready uses runAllTimersAsync without pinning 30000.",
+          "summary": "Acceptance 1 states the omitted-case numbers exactly (30 000 / 60 000), but no carrier pins them. An implementation that honors the three options while shifting an omitted default would survive. Advisory REV-4 / REV-3.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/integration/workbench-packed-consumer.mjs:1111",
+          "evidence": "HEAD 445c13f70 serves packedHostOrigin /sandbox/, vite base: '/sandbox/', importProduceDepSnapshot, orphanDownloaded, npm-registry abort, /sandbox/preview HMR. packed-host-scenario.contract.test.ts: 2 passed. Packed-consumer Chromium passed in the implementer session (81s) on the Acc 9 tree immediately before the lint-equivalent commit; this review did not re-execute that lane.",
+          "summary": "Acc 9 /sandbox/ + installed-tarball produce + OPFS orphan + snapshot-only wiring is in 445c13f70 and discriminates the prior blockers. Chromium was not re-executed in the independent review.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2769",
+          "evidence": "expect(failureMessage(outcome())).toMatch(/80ms/) versus session-tools sibling asserting the full message shape.",
+          "summary": "The commit-budget reject still asserts only /80ms/ while its session-tools sibling asserts the full message shape.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/workbench-packed-host-scenario.ts:148",
+          "evidence": "produceFromInstalledWorkbenchTarball packs source (publishConfig stripped). Chromium writePackedHostViteSnapshot imports produceDepSnapshot from npm-installed @riftydev/workbench dist export and rejects file: re-exports.",
+          "summary": "The always-on Acc 9 produce helper packs source, not the published dist export. The packed-consumer Chromium lane is the published-tarball produce. Not a Fidelity fake.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
