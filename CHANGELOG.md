@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Add manual `rifty-release` skill for GitHub Releases with a three-line release summary.
+
 - Snapshot producer acquisition joins the exact install-tree gate contexts; claim/sibling writes remain refused. Legacy reload tests now require explicit recovery; budget tests await real IPC completion.
 - Close self-hosted snapshot Workbench I1–I8 after independent composed Vite/native proof; no required residuals. CLOSE now requires proof of accepted transitions on the same real program/state.
 
