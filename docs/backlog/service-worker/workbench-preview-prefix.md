@@ -56,6 +56,7 @@ Workbench owners.
 
 ## Decisions
 
+- 2026-09-09 — ready-verdict: Contract+RED PASS @ 339a503ed (advisory concerns only).
 - 2026-09-09 — ADR-0405: optional `deployment.previewPrefix`; omitted = `/preview`; one io authority; SW ready may carry the prefix; `SW_ROUTING_VERSION` 6→7; no guest rewrite.
 - 2026-09-07 — finding draft; observable scope is settled by goal I5; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.

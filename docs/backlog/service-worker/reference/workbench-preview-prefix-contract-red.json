@@ -1,0 +1,189 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (advisory concerns only) — proceed to implementation, not a merge approval. The two prior blockers at 66ef84bb5 do not reproduce: Acc 6 now fails on advertised `/preview/43872/` under a live `/sandbox/` Chromium page and SW scope, and `SW_ROUTING_VERSION` is pinned at 7 while protocol.ts is still '6'. An io-parse-only mutant greens the old in-page parse and leaves Acc 6 red.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "339a503ed84694189ddc7c3c0334e9721c7f58d8",
+  "unit_goal_source": "docs/backlog/service-worker/workbench-preview-prefix.md (status ready, challenge 2026-09-09) against BASE b7b504b51 (I6 Final+GREEN + rechart); HEAD 339a503ed84694189ddc7c3c0334e9721c7f58d8; ADR-0405 docs/adr/service-worker/0405-host-selected-preview-prefix-uses-the-one-io-addressing-authority.md; goal I5 + User scenario step 3 docs/backlog/epics/self-hosted-snapshot-workbench/goal.md; evidence docs/backlog/service-worker/reference/workbench-preview-prefix-evidence.md",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:5",
+      "summary": "This slice is Contract+RED only; host-selected preview prefix under a non-root SW scope is not yet implemented."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/distribution/workbench-operation-budgets.md",
+      "summary": "Public effective boot/file/tool budgets without hidden shorter sibling deadlines remain; packed /sandbox/ composition of the whole scenario stays I7."
+    },
+    {
+      "clause": "I1 (packed residual)",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:8",
+      "summary": "Packed produce/restore from an installed tarball inside the composed packed-host proof remains after the sealed producer landed."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Omitted deployment.previewPrefix keeps today's /preview/<port>/ parse, registry URLs, and SW match.",
+      "source": "acceptance",
+      "trace": "I5+ADR-0405",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: deployment.previewPrefix: '/sandbox/preview' is valid Workbench admission when SW scope contains it (scope /sandbox/ or /).",
+      "source": "acceptance",
+      "trace": "I5+ADR-0405",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Invalid prefix spelling ('', 'preview', '/sandbox/preview/', '//x', '/a/../b', '/a//b', '\\\\x') throws TypeError / deployment.previewPrefix before SW register.",
+      "source": "acceptance",
+      "trace": "I5+ADR-0405",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-preview-prefix.fault.test.ts:41",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: Prefix outside SW scope (scope: '/sandbox/', previewPrefix: '/preview') throws TypeError / deployment.previewPrefix before SW register.",
+      "source": "acceptance",
+      "trace": "I5+scenario+ADR-0405",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-preview-prefix.fault.test.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: With prefix /sandbox/preview, parsePreviewPath / matchPreviewUrl / preview-registry emit and match /sandbox/preview/<port>/ (and rest paths); /preview/<port>/ and /api/preview/<port>/ are not that prefix.",
+      "source": "acceptance",
+      "trace": "I5+ADR-0405",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: Real Chromium: page under /sandbox/, SW scope /sandbox/, prefix /sandbox/preview — iframe navigation, a preview asset, a root-relative guest request, and HMR use the prefixed URL; an unrelated origin path outside the scope is not a preview route.",
+      "source": "acceptance",
+      "trace": "I5+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-preview-prefix.spec.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: corrupt-input × invalid prefix — TypeError naming deployment.previewPrefix before SW register.",
+      "source": "fault-matrix",
+      "trace": "I5+ADR-0405",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-preview-prefix.fault.test.ts:41",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: corrupt-input × prefix outside SW scope — same loud throw before register; register not called.",
+      "source": "fault-matrix",
+      "trace": "I5+ADR-0405",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-preview-prefix.fault.test.ts:53",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: sibling-drift × prefix — io parse, SW match, and registry URL share one prefix.",
+      "source": "fault-matrix",
+      "trace": "I5+ADR-0405",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix.contract.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Public API: optional deployment.previewPrefix (omitted = /preview); invalid or out-of-scope values throw TypeError naming deployment.previewPrefix.",
+      "source": "public-api",
+      "trace": "ADR-0405",
+      "status": "pass",
+      "citation": "docs/adr/service-worker/0405-host-selected-preview-prefix-uses-the-one-io-addressing-authority.md:22",
+      "note": ""
+    },
+    {
+      "row": "Public API: parsePreviewPath(path, prefix?) and previewDocumentPath(prefix, port) are the only builders/parsers; PREVIEW_PREFIX_RE remains the default prefix regex.",
+      "source": "public-api",
+      "trace": "ADR-0405",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Public API: SW_ROUTING_VERSION 6→7 for the host-selected prefix addressing shape.",
+      "source": "public-api",
+      "trace": "ADR-0405",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix.contract.test.ts:26",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/workbench-preview-prefix.spec.ts:191",
+          "evidence": "Acc 6 HMR conjunct is `iframeBody.includes('data-rifty-ws-bridge')`. packages/net/src/cross-realm/preview-html-inject.ts:8 still remaps guest port from `/preview/<port>/`. No executed mutant that injects the marker on a prefixed document while leaving ADR-0189 remap on `/preview/`. REV-4: without that artifact Acc 6 stays pass; the exactness is advisory.",
+          "summary": "Acc 6's HMR probe is the HTML injection marker, not a prefixed WebSocket remap. A later impl could inject the marker and still remap from `/preview/`.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workbench/workbench-preview-prefix.fault.test.ts:53",
+          "evidence": "Fault tests call only validateWorkbenchOptions and assert TypeError / deployment.previewPrefix. They do not spy navigator.serviceWorker.register. Vitest 2.1.9: both invalid and out-of-scope cases failed with 'expected function to throw an error, but it didn't' — unimplemented admission, not a register observation.",
+          "summary": "The fault-matrix 'register not called' outcome is implied by a validate-time throw, not directly asserted.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/service-worker/tests/preview-routing-docs.test.ts:19",
+          "evidence": "pnpm exec vitest run packages/service-worker/tests/preview-routing-docs.test.ts — 2 passed; expect(SW_ROUTING_VERSION).toBe('6') is still green. The Acc 5/ADR-0405 carrier is packages/service-worker/tests/preview-prefix.contract.test.ts:27, which failed expected '7' received '6'. The old pin is not a carrier for 7; implementers must update it when bumping.",
+          "summary": "Existing ADR-0189 docs pin still expects SW_ROUTING_VERSION '6' and will go red when the addressing bump lands.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
