@@ -1,25 +1,20 @@
 ---
 name: rifty-release
-description: Релиз через GitHub Releases и краткий отчёт о новом и исправленном.
+description: Publish a GitHub Release and summarize new capabilities and fixes.
 disable-model-invocation: true
 ---
 
-Сделай релиз через релизы GitHub. Вызов скилла разрешает публикацию.
+Make a release through GitHub Releases. Invoking this skill authorizes publication.
 
-1. Прочитай `docs/public/publishing.md` и `.github/workflows/release.yml`.
-   Выбери SHA актуальной основной ветки с зелёным CI и свободный стабильный
-   тег `vX.Y.Z`: версия пользователя, иначе следующий SemVer по изменениям.
-2. По diff и CHANGELOG от предыдущего релиза до этого SHA составь заметки:
-   «Новое» и «Исправлено», по одной короткой строке; пустая категория — «—».
-3. Создай и отправь тег выбранного SHA. Опубликуй GitHub Release через
+1. Read `docs/public/publishing.md` and `.github/workflows/release.yml`.
+   Select an up-to-date default-branch SHA with green CI and an unused stable
+   `vX.Y.Z` tag: the user's version, otherwise the next SemVer justified by changes.
+2. Read the diff and CHANGELOGs from the previous release to that SHA. Write
+   concise bullet lists grouped under "New" and "Fixed", each bullet describing
+   one user-visible capability or fix. Omit empty groups; use the user's language.
+3. Create and push the tag at the selected SHA. Publish the GitHub Release with
    `gh release create <tag> --verify-tag --title <tag> --notes-file <file>`.
-4. Проверь опубликованный Release и успешное завершение `release.yml`
-   именно для этого тега и SHA. При сбое сообщи этап и ссылку на ошибку.
+4. Verify the published Release and successful `release.yml` completion for
+   that exact tag and SHA. On failure, report the failed step and error link.
 
-После успеха — только:
-
-```text
-Релиз: <ссылка>
-Новое: <кратко>
-Исправлено: <кратко>
-```
+After success, return the release version/link and those bullet lists. Keep it brief.
