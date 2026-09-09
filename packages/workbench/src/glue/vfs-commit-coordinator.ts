@@ -21,6 +21,7 @@ export class VfsCommitTimeoutError extends Error {
   readonly operationId: string;
   readonly stage: VfsCommitStage;
   readonly ack: HostCommitAck;
+  readonly timeoutMs: number;
 
   constructor(ack: HostCommitAck, stage: VfsCommitStage, timeoutMs: number) {
     super(
@@ -30,6 +31,7 @@ export class VfsCommitTimeoutError extends Error {
     this.operationId = ack.operationId;
     this.stage = stage;
     this.ack = ack;
+    this.timeoutMs = timeoutMs;
   }
 }
 

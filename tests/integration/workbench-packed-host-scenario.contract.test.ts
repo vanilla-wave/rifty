@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   produceFromInstalledWorkbenchTarball,
   provePackedHostOrphanRetain,
-} from './workbench-packed-host-scenario.mjs';
+} from './workbench-packed-host-scenario.ts';
 
 describe('packed host scenario composition (I7 + I1 residual)', () => {
   it('produces a dep snapshot from the installed workbench tarball', async () => {

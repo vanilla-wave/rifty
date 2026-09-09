@@ -1,6 +1,7 @@
 import { createSandbox } from '@riftydev/sdk';
 import { type PreviewHandle, openWorkbench, projects } from '@riftydev/workbench';
 import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
+import { PACKED_HOST_COMPOSITION } from './packed-host-composition.ts';
 
 export interface PackedWorkbenchAcceptance {
   readonly previewUrl: string;
@@ -89,14 +90,19 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
         node: nodeWorkerUrl,
         devServer: devServerWorkerUrl,
       },
-      serviceWorker: { url: serviceWorkerUrl, scope: '/' },
+      serviceWorker: { url: serviceWorkerUrl, scope: PACKED_HOST_COMPOSITION.scope },
       wasm: { sqlite: sqliteWasmUrl },
       previewProbeTimeoutMs: 30_000,
+      previewPrefix: PACKED_HOST_COMPOSITION.previewPrefix,
+      ownerStartupTimeoutMs: PACKED_HOST_COMPOSITION.ownerStartupTimeoutMs,
+      projectFileTimeoutMs: PACKED_HOST_COMPOSITION.projectFileTimeoutMs,
+      sessionToolsTimeoutMs: PACKED_HOST_COMPOSITION.sessionToolsTimeoutMs,
     },
-    packageAcquisition: {
-      registryUrl: new URL('/npm-registry/', globalThis.location.href).href,
+    packageAcquisition: {},
+    storage: {
+      persistence: 'required',
+      namespace: PACKED_HOST_COMPOSITION.namespace,
     },
-    storage: { persistence: 'ephemeral' },
   });
   diagnostics.stage = 'opening project';
   const project = await workbench.openProject(

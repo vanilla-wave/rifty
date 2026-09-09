@@ -123,6 +123,18 @@ export function validateWorkbenchOptions(
     silenceValue === undefined
       ? undefined
       : positiveFinite(silenceValue, 'deployment.ownerOperationSilenceTimeoutMs');
+  const ownerStartupTimeoutMs =
+    deployment.ownerStartupTimeoutMs === undefined
+      ? undefined
+      : positiveFinite(deployment.ownerStartupTimeoutMs, 'deployment.ownerStartupTimeoutMs');
+  const projectFileTimeoutMs =
+    deployment.projectFileTimeoutMs === undefined
+      ? undefined
+      : positiveFinite(deployment.projectFileTimeoutMs, 'deployment.projectFileTimeoutMs');
+  const sessionToolsTimeoutMs =
+    deployment.sessionToolsTimeoutMs === undefined
+      ? undefined
+      : positiveFinite(deployment.sessionToolsTimeoutMs, 'deployment.sessionToolsTimeoutMs');
 
   const eddyValue = acquisition.eddy;
   if (eddyValue !== undefined && !Reflect.ownKeys(acquisition).includes('registryUrl')) {
@@ -209,6 +221,9 @@ export function validateWorkbenchOptions(
         previewProbeTimeoutMs,
         ...(ownerOperationSilenceTimeoutMs === undefined ? {} : { ownerOperationSilenceTimeoutMs }),
         ...(previewPrefix === undefined ? {} : { previewPrefix }),
+        ...(ownerStartupTimeoutMs === undefined ? {} : { ownerStartupTimeoutMs }),
+        ...(projectFileTimeoutMs === undefined ? {} : { projectFileTimeoutMs }),
+        ...(sessionToolsTimeoutMs === undefined ? {} : { sessionToolsTimeoutMs }),
       }),
       packageAcquisition: Object.freeze({
         ...(acquisition.registryUrl === undefined

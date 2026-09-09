@@ -161,7 +161,11 @@ export function createWorkbenchOwnerPort(
       } catch (error) {
         return Promise.reject(error);
       }
-      return admitWorkspaceOwner(raw, input.storage.persistence);
+      return admitWorkspaceOwner(
+        raw,
+        input.storage.persistence,
+        input.deployment.ownerStartupTimeoutMs ?? WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS,
+      );
     },
   });
 }
@@ -169,6 +173,7 @@ export function createWorkbenchOwnerPort(
 function admitWorkspaceOwner(
   raw: RawWorkspaceOwnerHandle,
   requestedPolicy: OwnerStoragePersistence,
+  lifecycleTimeoutMs: number,
 ): Promise<WorkbenchOwnerStartResult> {
   return new Promise<WorkbenchOwnerStartResult>((resolve, reject) => {
     let startupSettled = false;
@@ -176,14 +181,31 @@ function admitWorkspaceOwner(
       if (startupSettled) return;
       startupSettled = true;
       failAfterCleanup(
-        new Error(
-          `Workspace owner ready timed out after ${String(WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS)}ms`,
-        ),
+        new Error(`Workspace owner ready timed out after ${String(lifecycleTimeoutMs)}ms`),
       );
-    }, WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS);
+    }, lifecycleTimeoutMs);
 
     const failAfterCleanup = (failure: unknown): void => {
-      void cleanupRawOwner(raw, failure).then(resolve, reject);
+      if (
+        failure instanceof Error &&
+        failure.message.startsWith('Workspace owner ready timed out after ')
+      ) {
+        const leftover: unknown[] = [];
+        requestRawOwnerClose(raw, leftover);
+        if (leftover.length > 0) {
+          reject(
+            new AggregateError(
+              [failure, ...leftover],
+              'Workspace owner startup and cleanup failed',
+            ),
+          );
+          return;
+        }
+        reject(failure);
+        void observeRawOwnerClose(raw, leftover, lifecycleTimeoutMs);
+        return;
+      }
+      void cleanupRawOwner(raw, failure, lifecycleTimeoutMs).then(resolve, reject);
     };
 
     void raw.ready.then(
@@ -217,7 +239,7 @@ function admitWorkspaceOwner(
           return;
         }
 
-        resolve(Object.freeze({ owner: createSemanticOwner(raw), storage }));
+        resolve(Object.freeze({ owner: createSemanticOwner(raw, lifecycleTimeoutMs), storage }));
       },
       (failure: unknown) => {
         if (startupSettled) return;
@@ -244,7 +266,10 @@ function admitWorkspaceOwner(
   });
 }
 
-function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle {
+function createSemanticOwner(
+  raw: RawWorkspaceOwnerHandle,
+  lifecycleTimeoutMs: number,
+): WorkbenchOwnerHandle {
   let closePromise: Promise<void> | null = null;
 
   return Object.freeze({
@@ -273,7 +298,7 @@ function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle
     },
 
     close(): Promise<void> {
-      closePromise ??= closeRawOwner(raw);
+      closePromise ??= closeRawOwner(raw, lifecycleTimeoutMs);
       return closePromise;
     },
   });
@@ -282,17 +307,21 @@ function createSemanticOwner(raw: RawWorkspaceOwnerHandle): WorkbenchOwnerHandle
 async function cleanupRawOwner(
   raw: RawWorkspaceOwnerHandle,
   startupFailure: unknown,
+  lifecycleTimeoutMs: number,
 ): Promise<never> {
   const failures: unknown[] = [startupFailure];
   requestRawOwnerClose(raw, failures);
-  await observeRawOwnerClose(raw, failures);
+  await observeRawOwnerClose(raw, failures, lifecycleTimeoutMs);
   throwFailures(failures, 'Workspace owner startup and cleanup failed');
 }
 
-async function closeRawOwner(raw: RawWorkspaceOwnerHandle): Promise<void> {
+async function closeRawOwner(
+  raw: RawWorkspaceOwnerHandle,
+  lifecycleTimeoutMs: number,
+): Promise<void> {
   const failures: unknown[] = [];
   requestRawOwnerClose(raw, failures);
-  await observeRawOwnerClose(raw, failures);
+  await observeRawOwnerClose(raw, failures, lifecycleTimeoutMs);
   if (failures.length > 0) throwFailures(failures, 'Workspace owner close failed');
 }
 
@@ -307,23 +336,26 @@ function requestRawOwnerClose(raw: RawWorkspaceOwnerHandle, failures: unknown[])
 async function observeRawOwnerClose(
   raw: RawWorkspaceOwnerHandle,
   failures: unknown[],
+  lifecycleTimeoutMs: number,
 ): Promise<void> {
   try {
-    await observeRawOwnerLifecycle(raw.closed, 'exit');
+    await observeRawOwnerLifecycle(raw.closed, 'exit', lifecycleTimeoutMs);
   } catch (error) {
     failures.push(error);
   }
 }
 
-function observeRawOwnerLifecycle<T>(observation: Promise<T>, phase: 'ready' | 'exit'): Promise<T> {
+function observeRawOwnerLifecycle<T>(
+  observation: Promise<T>,
+  phase: 'ready' | 'exit',
+  lifecycleTimeoutMs: number,
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(
-        new Error(
-          `Workspace owner ${phase} timed out after ${String(WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS)}ms`,
-        ),
+        new Error(`Workspace owner ${phase} timed out after ${String(lifecycleTimeoutMs)}ms`),
       );
-    }, WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS);
+    }, lifecycleTimeoutMs);
     void observation.then(
       (value) => {
         clearTimeout(timer);

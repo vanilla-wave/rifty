@@ -182,6 +182,7 @@ export function createProjectContentTransport(
     currentOwnerEpoch: () => ownerEpoch,
     isAlive: () => closedError === null && options.isAlive(),
     generateBarrierId: options.generateRequestId,
+    durabilityAckTimeoutMs: options.commitTimeoutMs,
     ...(options.timers === undefined ? {} : { timers: options.timers }),
     reportProtocolError,
   });

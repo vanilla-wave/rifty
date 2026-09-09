@@ -233,10 +233,14 @@ export function projectFileFailure(
     context.operation === 'readFile' ||
     context.operation === 'readdir' ||
     context.operation === 'openDocument';
-  return new ProjectFileOperationError({
+  const failure = new ProjectFileOperationError({
     operation: context.operation,
     path: context.path,
     ...(context.targetPath === undefined ? {} : { targetPath: context.targetPath }),
     mutationOutcome: isRead ? null : appliedAck(error) === null ? 'unknown' : 'applied',
   });
+  if (error instanceof VfsCommitTimeoutError) {
+    failure.message = `${failure.message} after ${String(error.timeoutMs)}ms`;
+  }
+  return failure;
 }

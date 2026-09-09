@@ -8,7 +8,7 @@ user_story: As the Tracker plugin-sandbox embedder, I want to configure effectiv
 epic: self-hosted-snapshot-workbench
 blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, docs/backlog/distribution/reference/workbench-operation-budgets-evidence.md, ADR-0408, ADR-0360]
-code: [packages/workbench/src/workbench/workbench-owner-port.ts, packages/workbench/src/workers/workbench-owner-storage.ts, packages/workbench/src/workers/workbench-owner-runtime.ts, packages/workbench/src/workbench/workbench-browser-owner.ts, packages/workbench/src/workbench/internal/playground-session-tools-transport.ts, packages/workbench/src/workbench/internal/workbench-options.ts, tests/integration/workbench-packed-host-scenario.mjs]
+code: [packages/workbench/src/workbench/workbench-owner-port.ts, packages/workbench/src/workers/workbench-owner-storage.ts, packages/workbench/src/workers/workbench-owner-runtime.ts, packages/workbench/src/workbench/workbench-browser-owner.ts, packages/workbench/src/workbench/internal/playground-session-tools-transport.ts, packages/workbench/src/workbench/internal/workbench-options.ts, tests/integration/workbench-packed-host-scenario.ts]
 ---
 
 ## Context

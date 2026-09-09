@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Optional `deployment.ownerStartupTimeoutMs`, `projectFileTimeoutMs`, and
+  `sessionToolsTimeoutMs` set the existing owner ready/proof, VFS commit, and
+  session-tools request budgets; omitted keeps today's 30 s / 60 s owners
+  (ADR-0408).
+
 - Optional `deployment.previewPrefix` serves iframe preview, assets and HMR
   under a host-selected pathname inside the SW scope; omitted keeps `/preview`
   (ADR-0405).

@@ -560,6 +560,9 @@ export function startBrowserWorkspaceOwner(
       ...(input.deployment.previewPrefix === undefined
         ? {}
         : { previewPrefix: input.deployment.previewPrefix }),
+      ...(input.deployment.ownerStartupTimeoutMs === undefined
+        ? {}
+        : { ownerStartupTimeoutMs: input.deployment.ownerStartupTimeoutMs }),
     }),
     packageAcquisition: input.packageAcquisition,
     storage: input.storage,
@@ -743,7 +746,7 @@ export function startBrowserWorkspaceOwner(
         !exited &&
         (activeProject === null || activeProject.token === opened.projectToken),
       generateRequestId: dependencies.operationId,
-      commitTimeoutMs: PROJECT_VFS_COMMIT_TIMEOUT_MS,
+      commitTimeoutMs: input.deployment.projectFileTimeoutMs ?? PROJECT_VFS_COMMIT_TIMEOUT_MS,
       reportProtocolError: failInvariant,
       onDurabilityState(state) {
         if (disconnected || exited || activeProject?.token !== opened.projectToken) return;
@@ -1136,6 +1139,9 @@ export function startBrowserWorkspaceOwner(
                   },
                   subscribe: (listener) => state.transport.subscribePlaygroundTools(listener),
                   generateRequestId: dependencies.operationId,
+                  ...(input.deployment.sessionToolsTimeoutMs === undefined
+                    ? {}
+                    : { requestTimeoutMs: input.deployment.sessionToolsTimeoutMs }),
                 });
               state.lifecycle = Object.freeze({
                 tools: core.tools,
