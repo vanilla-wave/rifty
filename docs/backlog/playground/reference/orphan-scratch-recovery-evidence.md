@@ -120,3 +120,11 @@ Preparation total47cases:41semantic RED/6 GREEN; packed API absence is separate.
 New tests/fixtures only, with ADR and factual capture updates. No original
 product assertion changed. The existing coherence draft gains measured facts,
 keeps its unresolved user-action boundary, and is not silently added to I6.
+
+Independent Contract+RED at12893651c reproduced47cases=41RED/6GREEN and found
+one ORACLE-1: catalog expected directories omitted the ordinary empty parent
+node_modules/ms/node_modules, created above an excluded claim-shaped directory.
+Actual real producer/MemoryFS probe proves it exists and isInstallStampPath=false:
+/tmp/rifty-316-i6-review-directory-oracle-red.log. Correction adds only that
+expected path; payload/file criteria and accepted empty-directory contract stand.
+No production change or new user choice. Same reviewer verifies the correction.

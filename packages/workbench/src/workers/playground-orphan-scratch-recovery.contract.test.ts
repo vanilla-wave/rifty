@@ -109,6 +109,7 @@ beforeAll(async () => {
         'empty',
         'empty/child',
         'node_modules/ms/empty',
+        'node_modules/ms/node_modules',
       ]),
     ].sort(),
   );
