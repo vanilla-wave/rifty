@@ -15,12 +15,11 @@
  * into an instance for a backend.
  */
 
-import { VfsError } from './errors.ts';
 import type { FsSync } from './fs-sync.ts';
 import { MemoryBackend } from './memory-backend.ts';
 import { MemoryVfs } from './memory.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
-import { OpfsVfs } from './opfs.ts';
+import { OpfsVfs, acquireOpfsRoot } from './opfs.ts';
 import { joinPath, normalizeAbsolute } from './path.ts';
 import type { Vfs, VfsDirent } from './types.ts';
 
@@ -146,12 +145,8 @@ export async function installOpfsFs(
   options: { readonly ioReportTimeoutMs?: number } = {},
 ): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }> {
   const ioReportTimeoutMs = options.ioReportTimeoutMs;
-  if (root === undefined && !OpfsVfs.isSupported()) {
-    throw new VfsError('EPERM', '/', 'OPFS is not available in this environment');
-  }
-  const mount = root ?? (await navigator.storage.getDirectory());
-  const vfs = new OpfsVfs();
-  await vfs.init(mount);
+  const mount = root ?? (await acquireOpfsRoot());
+  const vfs = new OpfsVfs(mount);
   // Pair the async surface into the sync mirror (ADR-0072) so write-through
   // and boot preload route through OPFS. Passing the structural
   // `PairedAsyncSurface` (which `OpfsVfs` satisfies) avoids a reverse import of

@@ -42,10 +42,7 @@ const server = app.listen(4381, '127.0.0.1', () => {
     try {
       const project = fixture.currentProject();
       const firstInstall = await fixture.executeProjectLine('npm install');
-      const first = await fixture.executeProjectLineUntil(
-        'node proof.cjs',
-        '200 EXPRESS_REGISTRY_OK',
-      );
+      const first = await fixture.executeProjectLine('node proof.cjs');
       const notes = await project.files.readFile('/.vite/notes.txt');
       await project.files.writeFile(
         '/.vite/notes.txt',
@@ -67,10 +64,7 @@ const server = app.listen(4381, '127.0.0.1', () => {
       const reopened = new TextDecoder().decode(
         (await fixture.currentProject().files.readFile('/.vite/notes.txt')).bytes,
       );
-      const second = await fixture.executeProjectLineUntil(
-        'node proof.cjs',
-        '200 EXPRESS_REGISTRY_OK',
-      );
+      const second = await fixture.executeProjectLine('node proof.cjs');
       return {
         firstInstall,
         first,
@@ -86,8 +80,10 @@ const server = app.listen(4381, '127.0.0.1', () => {
     }
   }, sealedWorkbenchFixtureUrl);
   expect(result.firstInstall.exit).toBe(0);
+  expect(result.first.exit).toBe(0);
   expect(result.first.out).toContain('200 EXPRESS_REGISTRY_OK');
 
+  expect(result.second.exit).toBe(0);
   expect(result.second.out).toContain('200 EXPRESS_REGISTRY_OK');
   expect(result.install.exit).toBe(0);
   expect([result.first.out, result.second.out, result.install.out].join('\n')).not.toContain(

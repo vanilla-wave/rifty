@@ -74,6 +74,7 @@
 - **default-timeout-load-flake**: red main after green PRs, failure ≈5000ms with NO assertion diff → real-Worker test hit vitest's default `it()` timeout under higher CI parallelism → explicit generous `it()` timeout; keep inner protocol bounds (e.g. `waitReplyAsync(2000)`) as the correctness guard.
 - **count-ratchet-lossy**: count-only ratchet passes a same-count swap silently → a count is a lossy aggregate → carry an identity digest (hash of the sorted normalized-signature multiset) per allowlist entry.
 - **write-ack-not-durable**: sleep barriers "proving" persistence lie → write-ack means applied to owner memory; the OPFS write-through drains behind it → prove durability with an acked flush IPC (durable-or-throw flush), never a timeout.
+- **opfs-file-readback-race**: polling `getFile().arrayBuffer()` while a native writable is closing can throw `NotReadableError` on Linux — a fresh File can become stale before its read → await the actual flush/close acknowledgement before acquiring the readback File.
 
 ## Tooling wiring
 

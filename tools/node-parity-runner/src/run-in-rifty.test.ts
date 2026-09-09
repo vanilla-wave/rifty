@@ -338,6 +338,41 @@ describe('runInRifty', () => {
   );
 
   it(
+    'served eval still audits transient child-local source writes before parent stop',
+    async () => {
+      const source = "require('node:http').createServer((_q,r)=>r.end('audit')).listen(43153);";
+      await expect(
+        runInRifty(
+          {
+            kind: 'node-cli-eval',
+            code: '',
+            expectedPhysicalWorkers: 1,
+            nodeCliEval: {
+              sequential: [{ label: 'served-audit', nodeArgv: ['-e', source] }],
+              concurrent: [],
+            },
+          },
+          {
+            nodeCliEvalPreviewProbe: {
+              'served-audit': { port: 43153, status: 200, body: 'audit' },
+            },
+            nodeCliEvalVfsProbe: {
+              expectedGuestMutations: [],
+              fault: 'child-local-transient-source-file',
+            },
+          },
+        ),
+      ).rejects.toThrow(
+        `node-cli-eval VFS audit mismatch: ${JSON.stringify({
+          missing: [],
+          unexpected: nodeCliEvalTransientSourceCarrierMutations('child-local', source),
+        })}`,
+      );
+    },
+    REAL_WORKER_TEST_TIMEOUT_MS,
+  );
+
+  it(
     'consumes each concurrent eval launch scope when reporting and serving its preview',
     async () => {
       const firstSource =

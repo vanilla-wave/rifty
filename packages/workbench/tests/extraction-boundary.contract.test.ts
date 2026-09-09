@@ -342,7 +342,9 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0387: published dependency snapshot producer.
     // ADR-0394: snapshot overlay, claim reading and owner type/tree helpers.
     // ADR-0407: stored catalog schema/projection extracted without another state owner.
-    expect(packageProductionFiles).toHaveLength(152);
+    
+    // ADR-0392: shared claim guard, thin claim FS, install context and durable-equality adapter.
+    expect(packageProductionFiles).toHaveLength(156);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

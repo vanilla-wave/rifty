@@ -42,14 +42,8 @@ export type RuntimeEvent =
    * playground divergence panel (T16) subscribes via {@link RuntimeController.on}. */
   | { readonly type: 'diagnostic'; readonly payload: TelemetrySnapshot };
 
-/**
- * Per-call options for {@link RuntimeController.eval}. Optional today —
- * existing callers that pass a bare `code` string keep working.
- *
- * ADR-0019: `cwd` lets the host seed the per-Worker cwd cell before the
- * eval runs. When omitted the worker keeps whatever `process.cwd()`
- * already pointed to (default `/workspace`).
- */
+/** ADR-0019: seed Worker cwd before eval; omission preserves its current
+ * process.cwd() (initially `/workspace`). */
 export interface EvalOptions {
   readonly cwd?: string;
 }
@@ -75,6 +69,7 @@ export interface RuntimeController {
 
 export interface RuntimeToolchain {
   install(input: ToolchainInstallRequest): Promise<void>;
+  open(input: ToolchainInstallRequest): Promise<void>;
   runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
   startBin(input: ToolchainStartBinRequest): Promise<{ readonly port: number }>;
 }
@@ -485,18 +480,23 @@ function createRuntimeController(
   };
   if (!toolchainMode || toolchainReady === null) return controller;
 
+  async function activateToolchain(
+    op: 'install' | 'open',
+    input: ToolchainInstallRequest,
+  ): Promise<void> {
+    const validated = validateInstallRequest(input, `toolchain.${op}`);
+    await toolchainReady;
+    const result = await requestToolchain({ id: nextId++, op, input: validated });
+    if (!result.ok) throw deserializeError(result.error);
+    const value = exactInput(result.value, ['activationState'], `toolchain ${op} response`);
+    activationState = validateActivationState(
+      value.activationState,
+      `toolchain ${op} activation state`,
+    );
+  }
   const toolchain: RuntimeToolchain = {
-    async install(input) {
-      const validated = validateInstallRequest(input);
-      await toolchainReady;
-      const result = await requestToolchain({ id: nextId++, op: 'install', input: validated });
-      if (!result.ok) throw deserializeError(result.error);
-      const value = exactInput(result.value, ['activationState'], 'toolchain install response');
-      activationState = validateActivationState(
-        value.activationState,
-        'toolchain install activation state',
-      );
-    },
+    install: (input) => activateToolchain('install', input),
+    open: (input) => activateToolchain('open', input),
     async runBin(input) {
       const validated = validateRunBinRequest(input);
       await toolchainReady;
@@ -638,11 +638,14 @@ function absolutePath(value: unknown, label: string): string {
   return value;
 }
 
-function validateInstallRequest(input: ToolchainInstallRequest): ToolchainInstallRequest {
-  const record = exactInput(input, ['cwd', 'registryUrl'], 'toolchain.install input');
-  const cwd = absolutePath(record.cwd, 'toolchain.install cwd');
+function validateInstallRequest(
+  input: ToolchainInstallRequest,
+  label: string,
+): ToolchainInstallRequest {
+  const record = exactInput(input, ['cwd', 'registryUrl'], `${label} input`);
+  const cwd = absolutePath(record.cwd, `${label} cwd`);
   if (typeof record.registryUrl !== 'string' || record.registryUrl.length === 0) {
-    throw new TypeError('toolchain.install registryUrl must be a non-empty string');
+    throw new TypeError(`${label} registryUrl must be a non-empty string`);
   }
   return Object.freeze({ cwd, registryUrl: record.registryUrl });
 }

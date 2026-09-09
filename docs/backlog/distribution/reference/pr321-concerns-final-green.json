@@ -1,0 +1,87 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS at 5640f97da; PR-4 stream readback verification passes with criteria preserved. Merge after required CI passes on the eventual pushed HEAD.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5640f97da4c3c469780dadbadd69f11d02be0d5e",
+  "unit_goal_source": "Standalone user-authorized PR321 concern follow-up; raw input /tmp/wrap-up-pr321-review-concerns-2026-09-08.md; BASE 0e065420ca0e67ac55480c64c09e2c87a03fd970; existing baseline recovery-copy behavior and ADR-0377/0392/0393. Previous goal closed; no new goal contract.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Recovery snapshots retain exact owner bytes for structured clone; host copy budgets and same-OPFS restart byte omission remain unchanged.",
+      "source": "acceptance",
+      "trace": "ADR-0377 Decision 2 + named baseline recovery-copy behavior",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-dev-hmr.spec.ts:1298",
+      "note": ""
+    },
+    {
+      "row": "Reserved install authority cannot be forged through guest read aliases; privileged owner reads stay outside guest FsSync.",
+      "source": "acceptance",
+      "trace": "ADR-0392 reserved stamp ingress protection",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/install-claim-fs.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "Unreadable durable equality evidence takes ordinary write/heal/failure paths, including persistent quota failure and subsequent recovery.",
+      "source": "acceptance",
+      "trace": "ADR-0392 dirty/unknown paths retain ordinary write/heal/failure",
+      "status": "pass",
+      "citation": "tests/browser-unit/install-mirror-proof.spec.ts:37",
+      "note": ""
+    },
+    {
+      "row": "No-COI createReadStream observes synchronous writes during pending native persistence, matching the same consumer on real Node.",
+      "source": "acceptance",
+      "trace": "Named baseline behavior in user concern 2: immediate sync-write visibility through createReadStream",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-stream-visibility.spec.ts:115",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

@@ -22,8 +22,17 @@
 - Public `produceDependencySnapshot` bakes caller-pinned npm v3 locks into tar.gz and returns snapshot/runtime identities; packed Node/Chromium restore proof covers real package execution (ADR-0387).
 
 - Dependency snapshots support deterministic standard tar/gzip envelopes with disjoint payload/control paths, long UTF-8 names and empty directories; legacy v3 JSON/gzip remains readable (ADR-0386).
+- Recovery snapshots borrow owner bytes until structured clone; protected guest reads still copy, avoiding an extra full-tree snapshot copy.
+- No-COI read streams use the same guarded mirror as synchronous fs, so pending persistence cannot expose stale native bytes.
+
+- Explicit no-COI install skips only fresh, nonempty, durable-equal package bytes and verified recursive directories; dirty paths retain healing.
+
+- No-COI open activates saved adapters from stamp/lock authority; explicit install publishes durable claims through shared reserved-path guards.
+
+- Reject no-COI install/build when OPFS reports unhealed persistence failures.
 
 - Package preparation delegates to registry; ordinary `.vite` files survive snapshots/archives and generic diagnostics use Workbench provenance (ADR-0384).
+- Foreground node file/eval commands keep one drain through listen/close; last close exits naturally after referenced work, preserving previews (ADR-0385).
 
 - No-COI worker loads install/activation code on first install or restore; failed chunk fetch rejects that request while eval/fs remain usable.
 

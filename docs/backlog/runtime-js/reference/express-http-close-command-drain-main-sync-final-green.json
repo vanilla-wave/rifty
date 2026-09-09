@@ -1,0 +1,134 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: PR #318 integration is accepted; merge after updated remote CI and pass-binding succeed. No blocking findings or residuals.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "fb8efef81b9e81bca282cb5f2adc3fb6fc91a97e",
+  "unit_goal_source": "PR #318 — observed original baseline c31cd02ae (PR #314 df3cd222f): real Express 4.21.2 consumes its self-response and closes its last server; ordinary Workbench node command must naturally exit like Node v24.16.0. Integration BASE origin/main 169368aac5b59921f07982983cb9a4083fd9b83f; previously accepted product revision 3191bc4c8d1f70a67bbf1a5bf372eef123384f78, delivered tip cd0816251fe81686967f98ae63bb7fc797d09985. Independent /root/merge_review inspected raw PR body, baseline/diff, ADR-0385, prior RED/GREEN evidence and changed criteria under PR-4. Executed git diff --exit-code proves all packages/tools/tests/gates unchanged from the accepted revision; all integrated .agents/.claude/.gitignore files match main PR #320 exactly. REV-1/RDY-8 permit reuse of these unchanged product obligations and acceptance artifacts. Current /tmp/rifty-http-close-merge-pr-check.log proves 25/25 PASS (test:run 185.6s, parity 59.3s; no reruns); independent caller-owned keepalive Vitest rerun passed 2 tests, 24 filtered, 506ms. Clean tree and git diff --check verified.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Completed Express self-response and final server.close naturally settle the foreground command with Node stdout and exit 0.",
+      "source": "fault-matrix",
+      "trace": "scenario: original Express close/drain finding at c31cd02ae + ADR-0385",
+      "status": "pass",
+      "citation": "tests/e2e/http-close-command-drain.spec.ts:36",
+      "note": ""
+    },
+    {
+      "row": "Close followed by referenced timer, callback re-listen, or another live port must not exit or flush eval early.",
+      "source": "fault-matrix",
+      "trace": "ADR-0152 + ADR-0385",
+      "status": "pass",
+      "citation": "tests/e2e/http-close-command-drain.spec.ts:38; packages/runtime-js/src/internal/event-loop-keepalive.test.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Terminal error and explicit exit retain precedence over a live listening port.",
+      "source": "fault-matrix",
+      "trace": "ADR-0342 retained terminal precedence + ADR-0385",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:52; tests/e2e/http-close-command-drain.spec.ts:71",
+      "note": ""
+    },
+    {
+      "row": "File and eval foreground commands both naturally settle after final close.",
+      "source": "fault-matrix",
+      "trace": "scenario: original Express close/drain finding + ADR-0339 foreground eval lifecycle",
+      "status": "pass",
+      "citation": "tests/e2e/http-close-command-drain.spec.ts:36",
+      "note": ""
+    },
+    {
+      "row": "A delayed first listen keeps the existing foreground drain active until its final close.",
+      "source": "acceptance",
+      "trace": "ADR-0385: one foreground lifecycle remains active after listen",
+      "status": "pass",
+      "citation": "tests/e2e/http-close-command-drain.spec.ts:65",
+      "note": ""
+    },
+    {
+      "row": "DrainOptions.hasRef synchronously consults caller-owned handles; only zero runtime refs and a false query allow natural completion and one eval flush.",
+      "source": "public-api",
+      "trace": "ADR-0385 Decision: optional hasRef query + ADR-0339 deferred print",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Listening preview remains available, follows removal/re-listen, and port removal can precede process exit while another referenced handle remains.",
+      "source": "acceptance",
+      "trace": "ADR-0155 preview registry + ADR-0385 foreground lifecycle",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/node-program-lifecycle.test.ts:56; tests/e2e/generic-dev-server-lifecycle.spec.ts:67",
+      "note": ""
+    },
+    {
+      "row": "Eval first-terminal ownership, direct-terminal-before-drain and one-shot print remain intact after removal of the Workbench release-on-port handoff.",
+      "source": "acceptance",
+      "trace": "ADR-0342 retained runtime lease validation and terminal precedence + ADR-0339 correction",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/event-loop-keepalive.test.ts:178; packages/runtime-js/src/internal/event-loop-keepalive.test.ts:452; tests/e2e/cli-report.spec.ts:774",
+      "note": ""
+    },
+    {
+      "row": "Physical served eval retains the source-carrier VFS audit: a transient child-local source write/delete cannot pass as clean execution.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0339: source travels only in typed bootstrap; no workspace writes",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/src/run-in-rifty.test.ts:340",
+      "note": ""
+    },
+    {
+      "row": "Original registry/archive/reopen Express fixture naturally exits 0 on both executions without stop-after-response assistance.",
+      "source": "acceptance",
+      "trace": "scenario: original Express close/drain finding at c31cd02ae",
+      "status": "pass",
+      "citation": "tests/browser-unit/registry-package-ownership.spec.ts:42",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

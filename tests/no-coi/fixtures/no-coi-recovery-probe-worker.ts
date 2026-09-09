@@ -1,10 +1,17 @@
 /// <reference lib="webworker" />
 
 import type { ToolchainWorkerMessage } from '../../../packages/runtime-js/src/protocol.ts';
-import { syncMirror } from '../../../packages/vfs/src/index.ts';
+import { OpfsFsSync } from '../../../packages/vfs/src/index.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 const nativePost = self.postMessage.bind(self);
+const rawReads = new Map<string, Uint8Array>();
+const nativeRead = OpfsFsSync.prototype.readFileBytesSync;
+OpfsFsSync.prototype.readFileBytesSync = function (path) {
+  const bytes = nativeRead.call(this, path);
+  rawReads.set(path, bytes);
+  return bytes;
+};
 // Observe the real Worker/VFS at the outgoing structured-clone boundary.
 self.postMessage = (...args: Parameters<DedicatedWorkerGlobalScope['postMessage']>) => {
   const message = args[0] as ToolchainWorkerMessage;
@@ -15,9 +22,7 @@ self.postMessage = (...args: Parameters<DedicatedWorkerGlobalScope['postMessage'
       nativePost({
         type: 'recovery-probe',
         bytes: files.reduce((total, file) => total + file.data.byteLength, 0),
-        reusedMirrorBytes: files.every(
-          (file) => file.data === syncMirror().readFileBytesSync(file.path),
-        ),
+        reusedMirrorBytes: files.every((file) => file.data === rawReads.get(file.path)),
       });
     }
   }

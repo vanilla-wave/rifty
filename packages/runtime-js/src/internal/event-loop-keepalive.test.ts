@@ -21,6 +21,43 @@ afterEach(() => {
 });
 
 describe('event-loop keepalive', () => {
+  it('holds eval flush until caller-owned handles and timer refs both drain', async () => {
+    const queue: Array<() => void> = [];
+    let listening = true;
+    const flushed: string[] = [];
+    registerNodeEvalDrainLifecycle({
+      beforeExit: () => {
+        flushed.push('print');
+      },
+      projectUnhandled: (reason) => reason,
+      terminateUnhandled: (reason) => reason,
+    });
+    const options = {
+      hasRef: () => listening,
+      scheduleMacrotask: (cb: () => void) => queue.push(cb),
+    };
+    const drain = awaitDrain(options);
+    queue.shift()!();
+    expect(flushed).toEqual([]);
+    listening = false;
+    ref();
+    queue.shift()!();
+    expect(flushed).toEqual([]);
+    unref();
+    queue.shift()!();
+    await drain;
+    expect(flushed).toEqual(['print']);
+  });
+
+  it('a live caller-owned handle does not hide a terminal rejection', async () => {
+    const queue: Array<() => void> = [];
+    const options = { hasRef: () => true, scheduleMacrotask: (cb: () => void) => queue.push(cb) };
+    recordRejection(new Error('served failure'));
+    const drain = awaitDrain(options);
+    queue.shift()!();
+    await expect(drain).rejects.toThrow('served failure');
+  });
+
   it('ref/unref tracks active handles', () => {
     expect(activeRefs()).toBe(0);
     ref();

@@ -312,6 +312,8 @@ export const DEFAULT_DRAIN_CAP_MS = 30_000;
 
 export interface DrainOptions {
   capMs?: number;
+  /** Additional caller-owned handles (e.g. listening ports) that keep this realm alive. */
+  hasRef?: () => boolean;
   /** Schedule a check on the MACROTASK queue (seam for tests; defaults to setTimeout 0). */
   scheduleMacrotask?: (cb: () => void) => void;
   /** Monotonic clock (seam for tests; defaults to performance.now). */
@@ -407,7 +409,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
         });
         return;
       }
-      if (state.refCount <= 0) {
+      if (state.refCount <= 0 && !opts.hasRef?.()) {
         // TODO(backlog: runtime-js/late-unhandled-rejection-drain): cover a late
         // browser unhandledrejection task without a second drain owner.
         finish({ kind: 'resolved' });

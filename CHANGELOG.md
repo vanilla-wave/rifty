@@ -19,6 +19,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Workbench snapshot application preserves saved projects; catalog/claim helpers shrink oversized owners and lower their source ratchets (ADR-0394).
 
 - Publish Workbench runtime assets with exact compiler/WASM exceptions in the esbuild-retirement inventory; substituted esbuild bytes remain package-owned (ADR-0390/0391).
+- Claude shares `rifty-review-inline` with Codex via a skill symlink, replacing
+  the duplicate slash command; `disable-model-invocation: true` enforces manual
+  invocation in Claude. Codex keeps `allow_implicit_invocation: false`.
+
+- Physical Node parity workers use the same listener-aware foreground drain as Workbench (ADR-0385).
 
 - Process: replace empty-frontier refinement closure with one `RDY-6` check
   against raw user input, material reachable transitions and decision authority;

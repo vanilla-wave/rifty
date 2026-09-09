@@ -19,6 +19,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0276 | Semantic VFS replacements use applied owner evidence |
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
 | 0372 | Dedicated-Worker sync capability selects OPFS without COI |
+| 0393 | Single-pass honest OPFS preload |
 | 0402 | Mount Workbench namespaces through one captured OPFS root |
 | 0406 | Refuse unavailable OPFS cache bytes |
 
@@ -91,6 +92,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0381 | Browser scoped eval compiler distribution |
 | 0382 | Preserve tsconfig discovery through explicit compiler preload |
 | 0383 | No COI VM default and preboot worker selection |
+| 0385 | Keep one foreground drain across HTTP server close |
 
 ### runtime-wasi
 
@@ -324,6 +326,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0387 | Expose caller-pinned dependency snapshot production |
 | 0390 | Ship a copyable Workbench runtime asset closure |
 | 0391 | Attest copyable runtime asset exceptions to the esbuild retirement gate |
+| 0392 | Persisted no-COI warm activation and install-only durable equality |
 | 0394 | Apply dependency snapshots through catalog transactions and saved-state policy |
 | 0397 | Retire completed legacy migration receipts before catalog mutations |
 | 0398 | Select registry-free snapshot acquisition through the existing package owner |
@@ -407,6 +410,7 @@ superseded.
 | 0130 D4 generated direct-command selector | 0327 / note 2026-07-26 | exact script bytes select canonical direct entry versus installed `.bin`; no template-ID dispatch |
 | 0146 PTY-over-fork-IPC clause | 0326 / note 2026-07-26 | PTY frames use the private control lane on the same physical port |
 | 0150 P6b fork-control / all-node-server dedicated path clauses | 0326 + 0327 / note 2026-07-26 | private frames carry control; only canonical direct-entry scripts use the dedicated controller |
+| 0155 §2 permanent serve handoff; 0342 Workbench release-on-port | 0385 / note 2026-09-08 | one foreground drain follows listening ports through final close; runtime terminal precedence retained |
 | 0155 public `rifty:node-listening` clause | 0326 / note 2026-07-26 | typed private descendant control reports listening/removal/physical exit |
 | 0157 unconditional process IPC / `postListening` clauses | 0326 / note 2026-07-26 | public JSON IPC exists only for fork; private host adapter reports lifecycle |
 | 0162 worker-thread IPC lane clause | 0326 / note 2026-07-26 | worker threads keep structured clone and thread identity, outside the process table |

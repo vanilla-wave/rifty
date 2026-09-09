@@ -83,6 +83,12 @@ longer required and async-only `OpfsVfs.isSupported()` is insufficient. The
 realm split, paired backend, cache/preload/write-through and failure behavior
 remain unchanged.
 
+## Corrections (2026-09-08)
+
+ADR-0393 replaces empty-content fallback and memory fallback after failure reading
+an acquired OPFS tree. Eager preload uses one native traversal. Root-unavailable
+memory fallback, sync content cache and async write-through remain.
+
 ## Corrections (active)
 
 - 2026-09-09 — ADR-0406 replaces only missing-content empty success: indexed

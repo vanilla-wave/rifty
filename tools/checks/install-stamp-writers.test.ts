@@ -189,3 +189,26 @@ describe('install-stamp one-writer gate', () => {
     ).toEqual(['writeFileSync', 'writeFileSync']);
   });
 });
+
+describe('no-COI construction claim capability', () => {
+  it('admits only named privileged IO and keeps ordinary direct writes rejected', () => {
+    expect(
+      findInstallStampWriterViolations(
+        `
+      function writeInstallStampClaim(root, data) { raw.writeFileSync(installStampPath(root), data); }
+      function removeInstallStampClaim(root) { raw.rmSync(installStampPath(root)); }
+      function writeFileSync(root, data) { raw.writeFileSync(installStampPath(root), data); }
+    `,
+        'packages/workbench/src/workers/install-claim-fs.ts',
+      ).map((violation) => violation.operation),
+    ).toEqual(['writeFileSync']);
+    expect(
+      findInstallStampWriterViolations(
+        `
+      function writeInstallStampClaim(root, data) { raw.writeFileSync(installStampPath(root), data); }
+    `,
+        FILE,
+      ).map((violation) => violation.operation),
+    ).toEqual(['writeFileSync']);
+  });
+});

@@ -8,6 +8,7 @@ import ts from 'typescript';
 const CLAIM_FILE = '.rifty-install-stamp.json';
 const AUTHORITY = 'packages/workbench/src/glue/install-stamp-authority.ts';
 const OWNER_AUTHORITY = 'packages/workbench/src/workers/owner-vfs-authority.ts';
+const CLAIM_FS = 'packages/workbench/src/workers/install-claim-fs.ts';
 const OWNER_CLAIM_FLOW_CONTEXTS = new Set([
   '#readInstallStampClaim',
   '#writeInstallStampClaim',
@@ -390,10 +391,13 @@ function packageTreeMutationAllowed(file, node) {
 }
 
 function ownerContextAllowed(file, node, contexts) {
-  if (!file.endsWith(OWNER_AUTHORITY)) return false;
+  if (!file.endsWith(OWNER_AUTHORITY) && !file.endsWith(CLAIM_FS)) return false;
+  const allowed = file.endsWith(CLAIM_FS)
+    ? new Set([...contexts].map((name) => name.slice(1)))
+    : contexts;
   const enclosing = enclosingContexts(node);
   for (const context of enclosing) {
-    if (contexts.has(context)) return true;
+    if (allowed.has(context)) return true;
   }
   return false;
 }

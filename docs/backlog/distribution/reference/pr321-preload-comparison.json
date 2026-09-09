@@ -1,0 +1,262 @@
+{
+  "baseline": "9a6331194f4b67245c2ab118a72f93920da584c5",
+  "current": "0e065420ca0e67ac55480c64c09e2c87a03fd970",
+  "browser": "Chromium 148.0.7778.96",
+  "platform": "darwin arm64",
+  "order": ["current", "old", "old", "current", "current", "old"],
+  "snapshotSha256": {
+    "vite": "ca15c32367d7da791ea06e7eb16b8b42fbaaa4572990aef048d37c631656706c",
+    "vite8": "1ff7ddf781b0142cc385cf9acfe9c400c40f305b2aeddd3ee3c15bc00e5b6c0b"
+  },
+  "method": "Native persistent OPFS, raw snapshot bytes, complete byte-by-byte readback outside elapsed windows, same immutable tree per template; old full source modules from git show baseline with import locations rewritten only. Root and old metadata/content phases separated; current walk/content is one production phase. Snapshot decode/persist outside preload timings. No concurrent browser lanes.",
+  "summary": [
+    {
+      "template": "vite",
+      "oldMedianMs": 85.14499998092651,
+      "currentMedianMs": 70.19000005722046,
+      "medianDeltaPercent": -17.56415517887856,
+      "oldRangeMs": [75.21499991416931, 85.83000016212463],
+      "currentRangeMs": [69.17499995231628, 80.97500014305115]
+    },
+    {
+      "template": "vite8",
+      "oldMedianMs": 94.5699999332428,
+      "currentMedianMs": 97.70499992370605,
+      "medianDeltaPercent": 3.315004750635775,
+      "oldRangeMs": [92.20499992370605, 120.8050000667572],
+      "currentRangeMs": [83.32999992370605, 112.14500021934509]
+    }
+  ],
+  "measurements": [
+    {
+      "template": "vite",
+      "files": 250,
+      "dirs": 52,
+      "bytes": 23588143,
+      "decodeMs": 863.9000000953674,
+      "persistMs": 165.57999992370605,
+      "results": [
+        {
+          "variant": "current",
+          "elapsedMs": 70.19000005722046,
+          "phases": {
+            "rootMs": 0.15000009536743164,
+            "walkAndContentMs": 70.02500009536743
+          },
+          "counts": {
+            "root": 1,
+            "directory": 0,
+            "fileHandle": 0,
+            "getFile": 250,
+            "arrayBuffer": 250
+          },
+          "verifiedBytes": 23588143,
+          "proofMs": 22.255000114440918
+        },
+        {
+          "variant": "old",
+          "elapsedMs": 75.21499991416931,
+          "phases": {
+            "rootMs": 0.21499991416931152,
+            "walkMs": 31.805000066757202,
+            "contentMs": 42.99000000953674
+          },
+          "counts": {
+            "root": 2,
+            "directory": 1051,
+            "fileHandle": 250,
+            "getFile": 500,
+            "arrayBuffer": 250
+          },
+          "verifiedBytes": 23588143,
+          "proofMs": 30.259999990463257
+        },
+        {
+          "variant": "old",
+          "elapsedMs": 85.14499998092651,
+          "phases": {
+            "rootMs": 0.2950000762939453,
+            "walkMs": 39.579999923706055,
+            "contentMs": 42.72000002861023
+          },
+          "counts": {
+            "root": 2,
+            "directory": 1051,
+            "fileHandle": 250,
+            "getFile": 500,
+            "arrayBuffer": 250
+          },
+          "verifiedBytes": 23588143,
+          "proofMs": 25.31500005722046
+        },
+        {
+          "variant": "current",
+          "elapsedMs": 69.17499995231628,
+          "phases": {
+            "rootMs": 0.21500015258789062,
+            "walkAndContentMs": 68.95499992370605
+          },
+          "counts": {
+            "root": 1,
+            "directory": 0,
+            "fileHandle": 0,
+            "getFile": 250,
+            "arrayBuffer": 250
+          },
+          "verifiedBytes": 23588143,
+          "proofMs": 37.75
+        },
+        {
+          "variant": "current",
+          "elapsedMs": 80.97500014305115,
+          "phases": {
+            "rootMs": 0.22500014305114746,
+            "walkAndContentMs": 80.74499988555908
+          },
+          "counts": {
+            "root": 1,
+            "directory": 0,
+            "fileHandle": 0,
+            "getFile": 250,
+            "arrayBuffer": 250
+          },
+          "verifiedBytes": 23588143,
+          "proofMs": 19.950000047683716
+        },
+        {
+          "variant": "old",
+          "elapsedMs": 85.83000016212463,
+          "phases": {
+            "rootMs": 0.18499994277954102,
+            "walkMs": 30.53500008583069,
+            "contentMs": 54.99000000953674
+          },
+          "counts": {
+            "root": 2,
+            "directory": 1051,
+            "fileHandle": 250,
+            "getFile": 500,
+            "arrayBuffer": 250
+          },
+          "verifiedBytes": 23588143,
+          "proofMs": 20.274999856948853
+        }
+      ]
+    },
+    {
+      "template": "vite8",
+      "files": 363,
+      "dirs": 63,
+      "bytes": 41462722,
+      "decodeMs": 1538.965000152588,
+      "persistMs": 222.96000003814697,
+      "results": [
+        {
+          "variant": "current",
+          "elapsedMs": 83.32999992370605,
+          "phases": {
+            "rootMs": 0.125,
+            "walkAndContentMs": 83.20000004768372
+          },
+          "counts": {
+            "root": 1,
+            "directory": 0,
+            "fileHandle": 0,
+            "getFile": 363,
+            "arrayBuffer": 363
+          },
+          "verifiedBytes": 41462722,
+          "proofMs": 38.894999980926514
+        },
+        {
+          "variant": "old",
+          "elapsedMs": 92.20499992370605,
+          "phases": {
+            "rootMs": 0.25499987602233887,
+            "walkMs": 34.72500014305115,
+            "contentMs": 56.99500012397766
+          },
+          "counts": {
+            "root": 2,
+            "directory": 1559,
+            "fileHandle": 363,
+            "getFile": 726,
+            "arrayBuffer": 363
+          },
+          "verifiedBytes": 41462722,
+          "proofMs": 47.50999999046326
+        },
+        {
+          "variant": "old",
+          "elapsedMs": 120.8050000667572,
+          "phases": {
+            "rootMs": 0.21000003814697266,
+            "walkMs": 36.15000009536743,
+            "contentMs": 84.32499980926514
+          },
+          "counts": {
+            "root": 2,
+            "directory": 1559,
+            "fileHandle": 363,
+            "getFile": 726,
+            "arrayBuffer": 363
+          },
+          "verifiedBytes": 41462722,
+          "proofMs": 43.00499987602234
+        },
+        {
+          "variant": "current",
+          "elapsedMs": 97.70499992370605,
+          "phases": {
+            "rootMs": 0.28999996185302734,
+            "walkAndContentMs": 97.41499996185303
+          },
+          "counts": {
+            "root": 1,
+            "directory": 0,
+            "fileHandle": 0,
+            "getFile": 363,
+            "arrayBuffer": 363
+          },
+          "verifiedBytes": 41462722,
+          "proofMs": 69.12000012397766
+        },
+        {
+          "variant": "current",
+          "elapsedMs": 112.14500021934509,
+          "phases": {
+            "rootMs": 3.4800000190734863,
+            "walkAndContentMs": 108.6650002002716
+          },
+          "counts": {
+            "root": 1,
+            "directory": 0,
+            "fileHandle": 0,
+            "getFile": 363,
+            "arrayBuffer": 363
+          },
+          "verifiedBytes": 41462722,
+          "proofMs": 37.78499984741211
+        },
+        {
+          "variant": "old",
+          "elapsedMs": 94.5699999332428,
+          "phases": {
+            "rootMs": 0.2200000286102295,
+            "walkMs": 36.31500005722046,
+            "contentMs": 57.954999923706055
+          },
+          "counts": {
+            "root": 2,
+            "directory": 1559,
+            "fileHandle": 363,
+            "getFile": 726,
+            "arrayBuffer": 363
+          },
+          "verifiedBytes": 41462722,
+          "proofMs": 36.605000019073486
+        }
+      ]
+    }
+  ]
+}
