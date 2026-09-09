@@ -1,8 +1,8 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Contract+RED PASS after independently proven ORACLE-1 correction; proceed with I6 implementation, required GREEN acceptance and Final+GREEN; goal and merge are not complete.",
+  "merge_call": "Contract+RED PASS after independently verified ORACLE-1/2/3/4 preparation corrections; bind only committed preparation 841766eabbd1751bfaa34b6e6003c448ce318df6. Dirty I6 implementation remains outside this verdict and requires independent Final+GREEN.",
   "checkpoint": "Contract+RED",
-  "unit_goal_source": "docs/backlog/playground/orphan-scratch-recovery.md; BASE accepted I4 71d5837158953c2ac1f3ac53d712162c3ea04cd7; clean preparation HEAD 12893651c1c0528462cfd898d35fec5362cfe16e; fresh independent reviewer /root/orphan_recovery_contract_review; read-only tracked tree. RDY-6 reviewed final unit plus existing preload/coherence captures against accepted goal/scenario6, actual decision records and native evidence; separate original transcript unavailable, explicitly not inferred. No new user fork or scope weakening found. PR-4 inspected full BASE diff: production and original product assertions unchanged; packed new acceptance unconditional, old journeys/egress checks retained; malformed-journal refusal is an explicit new ADR0407 repair, never falsely reported baseline GREEN. Packed 74.25s run inspected as installed TS2339 API-absence evidence only, not semantic browser RED; production-size download and native retention transition reachability remain mandatory GREEN acceptance. REV-12 verification at clean HEAD 5f9c7a1b5cbefa71780db8f76f3363f98f98cb43: exact delta from 12893651c adds only ordinaryDirectories entry node_modules/ms/node_modules and eight factual evidence lines; production and all other criteria unchanged. ORACLE-1 history: initial executed /tmp/rifty-316-i6-review-directory-oracle-red.log showed actual ordinary claim-parent directory (isInstallStampPath=false) omitted from exact expected tree; accepted FIX, not dismissed/adjudicated. Same independent reviewer reran unchanged scratch oracle dynamically reading corrected real-producer fixture: /tmp/rifty-316-i6-review-directory-oracle-verified.log, Node24.16.0/Vitest2.1.9, 1PASS, expectedContainsParent=true, actualOrdinaryButMissingFromExpected=[]; targeted committed catalog rerun /tmp/rifty-316-i6-review-catalog-corrected-red.json/log remains 13cases=9semanticRED/4GREEN, no timeout/import/type failure. ORACLE-1 finding/residual cleared only after this proof. Earlier independent codec/native results remain valid because their files and production did not change.",
+  "unit_goal_source": "docs/backlog/playground/orphan-scratch-recovery.md; BASE accepted I4 71d5837158953c2ac1f3ac53d712162c3ea04cd7; clean preparation HEAD 12893651c1c0528462cfd898d35fec5362cfe16e; fresh independent reviewer /root/orphan_recovery_contract_review; read-only tracked tree. RDY-6 reviewed final unit plus existing preload/coherence captures against accepted goal/scenario6, actual decision records and native evidence; separate original transcript unavailable, explicitly not inferred. No new user fork or scope weakening found. PR-4 inspected full BASE diff: production and original product assertions unchanged; packed new acceptance unconditional, old journeys/egress checks retained; malformed-journal refusal is an explicit new ADR0407 repair, never falsely reported baseline GREEN. Packed 74.25s run inspected as installed TS2339 API-absence evidence only, not semantic browser RED; production-size download and native retention transition reachability remain mandatory GREEN acceptance. REV-12 verification at clean HEAD 5f9c7a1b5cbefa71780db8f76f3363f98f98cb43: exact delta from 12893651c adds only ordinaryDirectories entry node_modules/ms/node_modules and eight factual evidence lines; production and all other criteria unchanged. ORACLE-1 history: initial executed /tmp/rifty-316-i6-review-directory-oracle-red.log showed actual ordinary claim-parent directory (isInstallStampPath=false) omitted from exact expected tree; accepted FIX, not dismissed/adjudicated. Same independent reviewer reran unchanged scratch oracle dynamically reading corrected real-producer fixture: /tmp/rifty-316-i6-review-directory-oracle-verified.log, Node24.16.0/Vitest2.1.9, 1PASS, expectedContainsParent=true, actualOrdinaryButMissingFromExpected=[]; targeted committed catalog rerun /tmp/rifty-316-i6-review-catalog-corrected-red.json/log remains 13cases=9semanticRED/4GREEN, no timeout/import/type failure. ORACLE-1 finding/residual cleared only after this proof. Earlier independent codec/native results remain valid because their files and production did not change. REV-12 ORACLE-2 history and verification: later implementation exposed preparation fixture opening saved-project through private owner while fresh Scratch was still catalog.active. Independent actual lifecycle reproduced TypeError Project definition does not match the active catalog ref (/tmp/rifty-316-i6-review-unactivated-catalog.log). Independent real-owner/ms control /tmp/rifty-316-i6-review-active-owner.test.ts/log compared exact BASE/current private openProject guard bytes and proved direct refusal versus public catalog.activate then provenance existing, zero additional snapshot requests and unchanged named-tree bytes. Accepted exact test correction, never a guard change or weakened retention criterion. Inspected commit 0688d9df8056468b49d3b34d4c45d579bd4cd02a: only one await restarted.catalog.activate({kind:project,id:saved-project}) before named open plus nine evidence lines. Committed production remains BASE; working tree contains separate uncommitted I6 implementation. Same independent control rerun /tmp/rifty-316-i6-review-active-owner-verified.log is 1PASS, guard still byte-identical; corrected actual catalog suite /tmp/rifty-316-i6-review-oracle2-catalog-verified.json/log is 13GREEN including lifecycle. Those GREENs establish the fixture correction against current working implementation only, not implementation Final+GREEN. Historical semantic RED proof remains preparation evidence; the added activation follows its absent-retention baseline stopping point. Contract+RED target is committed preparation 0688d9df8056468b49d3b34d4c45d579bd4cd02a; no new scope, unresolved finding or unit residual. Modified public-facade key/type fixtures in the uncommitted tree are explicitly outside this correction and remain for independent Final PR-4 review. REV-12 ORACLE-3/4 history and verification: integrated implementation first exposed two observer defects, not proven product defects. ORACLE-3 broad npm-registry|eddy substring counted actual Vite /@fs/...eddy*.ts script imports. Independent public native probe /tmp/rifty-316-i6-review-browser-oracles.spec.ts/.config.ts/.log (Chromium148.0.7778.96,2PASS/5.7s) captured thirteen such script-only hits and zero configured API-path hits; positive /npm-registry[/ms] and /eddy[/bundle] controls discriminate acquisition. ORACLE-4 same actual native probe established missing raw=null, newly created/pre-close catalog raw=[], post-close real JSON, and nonempty malformed JSON refusal; original eager JSON.parse blocked custody observation before its pause. Accepted corrections keep pathname boundary detection with unchanged zero assertion, preserve raw null versus [] alongside nullable parsed pointer, and leave nonempty JSON.parse failure loud. Exact test-only commit 841766eabbd1751bfaa34b6e6003c448ce318df6 contains those observer changes, custody catalogBytes, one outer diagnostic stack field and fourteen evidence lines; no accepted assertions or product changes. Independent corrected committed public journey and actual retention-pointer-before-close kill/reopen both GREEN (2/2,5.3s), raw /tmp/rifty-316-i6-review-oracle34-verified.log. The before-close test actually paused, checked precommit source custody, killed its Worker, reopened actual owner and verified exact retained export/stable id/no duplicate; no error-as-success reinterpretation. Additional independent corrected observer probe /tmp/rifty-316-i6-review-native-catalog-observer-verified.log (1PASS,4.4s) executes the actual modified nativeCatalog against missing/created/before-close/valid-after-close/malformed native files: null and [] stay distinct, nonempty malformed still rejects. Inspected producer integrated37GREEN/25.8s record /tmp/rifty-316-i6-browser-integrated-final.log and verification.md as producer evidence, not an independently repeated whole-source Final. Committed production remains BASE while implementation is separately dirty. Latest Contract+RED binding target is preparation841766eabbd1751bfaa34b6e6003c448ce318df6; ORACLE-1/2 histories remain valid, no scope change, open finding or unit residual. Product malformed-recovery policy, source-class correctness, changed public-facade criteria, packed whole-I6 acceptance and complete implementation require independent Final+GREEN.",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -28,7 +28,7 @@
       "source": "acceptance",
       "trace": "I6+scenario6+ADR-0279+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:346; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:366; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:398; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:425",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:347; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:367; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:399; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:426",
       "note": ""
     },
     {
@@ -36,7 +36,7 @@
       "source": "acceptance",
       "trace": "I6+ADR-0279+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:457; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:501; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:184",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:458; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:502; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:185",
       "note": ""
     },
     {
@@ -44,7 +44,7 @@
       "source": "acceptance",
       "trace": "I6+scenario6+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:546; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:579; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:129; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:172; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:245",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:580; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:129; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:173; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246",
       "note": ""
     },
     {
@@ -60,7 +60,7 @@
       "source": "acceptance",
       "trace": "I6+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:95; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:279; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:579; tests/integration/fixtures/workbench-vite-consumer/src/orphan-scratch-recovery-proof.ts:180; docs/backlog/playground/reference/orphan-scratch-recovery-evidence.md:43",
+      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:95; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:279; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:580; tests/integration/fixtures/workbench-vite-consumer/src/orphan-scratch-recovery-proof.ts:180; docs/backlog/playground/reference/orphan-scratch-recovery-evidence.md:43",
       "note": ""
     },
     {
@@ -76,7 +76,7 @@
       "source": "acceptance",
       "trace": "I6+I4+ADR-0407+ADR-0402+ADR-0358",
       "status": "pass",
-      "citation": "tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:184; tests/browser-unit/fixtures/orphan-scratch-recovery-boundary.ts:10",
+      "citation": "tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:185; tests/browser-unit/fixtures/orphan-scratch-recovery-boundary.ts:10",
       "note": ""
     },
     {
@@ -92,7 +92,7 @@
       "source": "acceptance",
       "trace": "I6+ADR-0406+ADR-0407",
       "status": "pass",
-      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:86; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:184; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:264; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:245",
+      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:86; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:185; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:265; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:245",
       "note": ""
     },
     {
@@ -116,7 +116,7 @@
       "source": "fault-matrix",
       "trace": "I6+ADR-0406+ADR-0090",
       "status": "pass",
-      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:86; tests/browser-unit/opfs-preload-honesty.spec.ts:145; tests/browser-unit/opfs-preload-honesty.spec.ts:165; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:245",
+      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:86; tests/browser-unit/opfs-preload-honesty.spec.ts:145; tests/browser-unit/opfs-preload-honesty.spec.ts:165; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246",
       "note": ""
     },
     {
@@ -124,7 +124,7 @@
       "source": "fault-matrix",
       "trace": "I6+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:457; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:215",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:458; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:216",
       "note": ""
     },
     {
@@ -132,7 +132,7 @@
       "source": "fault-matrix",
       "trace": "I6+ADR-0279+ADR-0407",
       "status": "pass",
-      "citation": "tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:184; tests/browser-unit/fixtures/orphan-scratch-recovery-boundary.ts:10",
+      "citation": "tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:185; tests/browser-unit/fixtures/orphan-scratch-recovery-boundary.ts:10",
       "note": ""
     },
     {
@@ -140,7 +140,7 @@
       "source": "fault-matrix",
       "trace": "I6+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:398; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:425; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:546; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:223",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:399; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:426; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:223",
       "note": ""
     },
     {
@@ -156,7 +156,7 @@
       "source": "fault-matrix",
       "trace": "I6+ADR-0279+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:501; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:546; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:215",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:502; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:216",
       "note": ""
     },
     {
@@ -164,7 +164,7 @@
       "source": "fault-matrix",
       "trace": "I6+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:279; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:579; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:245",
+      "citation": "packages/workbench/src/workbench/internal/playground-scratch-recovery-archive.contract.test.ts:279; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:580; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246",
       "note": ""
     },
     {
@@ -172,7 +172,7 @@
       "source": "public-api",
       "trace": "I6+scenario6+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:200; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:546; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:172",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:200; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:173",
       "note": ""
     },
     {
@@ -180,7 +180,7 @@
       "source": "public-api",
       "trace": "I6+scenario6+ADR-0407",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:546; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:579; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:245",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:269; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:547; packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts:580; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246",
       "note": ""
     },
     {
@@ -242,5 +242,5 @@
       "findings": []
     }
   ],
-  "reviewed_sha": "5f9c7a1b5cbefa71780db8f76f3363f98f98cb43"
+  "reviewed_sha": "841766eabbd1751bfaa34b6e6003c448ce318df6"
 }
