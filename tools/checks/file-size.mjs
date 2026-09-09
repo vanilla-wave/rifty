@@ -90,7 +90,6 @@ export const BASELINE = [
   { file: 'packages/runtime-js/src/module-loader/resolver.ts', max: 953 },
   { file: 'packages/workbench/src/glue/install-stamp-authority.ts', max: 904 },
   { file: 'packages/ts-language-service/src/worker/protocol.ts', max: 890 },
-  { file: 'apps/playground/public/sw.js', max: 879 },
   { file: 'packages/workbench/src/workers/workbench-project-vfs.ts', max: 875 },
   { file: 'packages/runtime-js/src/builtins/crypto.ts', max: 874 },
   { file: 'packages/io/src/streams/writable.ts', max: 802 },
@@ -112,6 +111,8 @@ export function measureFiles(root, rel, out = []) {
     }
     if (!PROD_RE.test(e.name) || NON_PROD_RE.test(e.name)) continue;
     const abs = join(root, child);
+    // ADR-0016: generated bundle; its TypeScript inputs and generator remain measured.
+    if (relative(root, abs).split('\\').join('/') === 'apps/playground/public/sw.js') continue;
     out.push({
       file: relative(root, abs).split('\\').join('/'),
       lines: readFileSync(abs, 'utf8').split('\n').length,

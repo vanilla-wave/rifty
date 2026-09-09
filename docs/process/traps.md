@@ -81,3 +81,5 @@
 
 - **new-toplevel-dir-invisible**: a new top-level dir (e.g. `services/`) is silently ignored → workspace/arch/test/backlog tooling hardcodes `packages|apps|tools` → wire 6 spots: pnpm-workspace glob, vitest unit include, `check:arch` args, arch-boundaries sweep, arch-rules carve-out, backlog SCAN_ROOTS; not in `build:libs`; publish build = hand-written tsup config.
 - **pnpm-eats-double-dash**: `pnpm test:parity -- foo` drops the filter → pass args bare: `pnpm test:parity foo`.
+
+- **generated-sw-source-ratchet**: `apps/playground/public/sw.js` is the ADR-0016 bundle, not handwritten source. `check:file-size` excludes exactly that output (replaces its old879-line pin); TS inputs and `build/sw-plugin.ts` stay measured. Do not hand-edit/minify/split the bundle to satisfy a source line count. Verify canonical generator bytes and production runtime; this exclusion is not an artifact-drift check.
