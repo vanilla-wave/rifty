@@ -269,15 +269,12 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
   const config = firstMessage(await inbox.take(), ipc);
   if (config === null) return;
 
-  const storageAuthority = await installWorkbenchOwnerStorageAuthority(
-    config.storage.persistence,
-    {
-      ...(config.storage.namespace === undefined ? {} : { namespace: config.storage.namespace }),
-      ...(config.deployment.ownerStartupTimeoutMs === undefined
-        ? {}
-        : { proofTimeoutMs: config.deployment.ownerStartupTimeoutMs }),
-    },
-  );
+  const storageAuthority = await installWorkbenchOwnerStorageAuthority(config.storage.persistence, {
+    ...(config.storage.namespace === undefined ? {} : { namespace: config.storage.namespace }),
+    ...(config.deployment.ownerStartupTimeoutMs === undefined
+      ? {}
+      : { proofTimeoutMs: config.deployment.ownerStartupTimeoutMs }),
+  });
   const storage = storageAuthority.snapshot;
   const ownerComposition: OwnerVfsAuthorityComposition = createOwnerVfsAuthorityComposition(
     syncMirror(),

@@ -352,9 +352,7 @@ function observeRawOwnerLifecycle<T>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(
-        new Error(`Workspace owner ${phase} timed out after ${String(lifecycleTimeoutMs)}ms`),
-      );
+      reject(new Error(`Workspace owner ${phase} timed out after ${String(lifecycleTimeoutMs)}ms`));
     }, lifecycleTimeoutMs);
     void observation.then(
       (value) => {

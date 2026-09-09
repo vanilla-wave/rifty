@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -7,7 +7,10 @@ import { RegistryClient } from '@riftydev/npm-client';
 import { MemoryFsSync, resetSyncMirror } from '@riftydev/vfs/internal';
 import { createPlaygroundProjectCatalog } from '../../packages/workbench/src/workbench/internal/playground-project-catalog.ts';
 import { definePlaygroundProject } from '../../packages/workbench/src/workbench/internal/playground-project-definition.ts';
-import type { PlaygroundProjectCatalog, VitePlaygroundPlan } from '../../packages/workbench/src/workbench/playground.ts';
+import type {
+  PlaygroundProjectCatalog,
+  VitePlaygroundPlan,
+} from '../../packages/workbench/src/workbench/playground.ts';
 import type { ProjectDefinition } from '../../packages/workbench/src/workbench/public.ts';
 import { createOwnerVfsAuthorityComposition } from '../../packages/workbench/src/workers/owner-vfs-authority.ts';
 import { createPlaygroundProjectAuthority } from '../../packages/workbench/src/workers/playground-project-authority.ts';
@@ -97,9 +100,7 @@ export async function produceFromInstalledWorkbenchTarball(): Promise<ProducedSn
       throw new Error('npm pack did not emit a workbench tarball');
     }
     await run('tar', ['-xzf', join(tarballRoot, tarballName), '-C', extracted], temp);
-    const api = (await import(
-      pathToFileURL(join(extracted, 'package/dep-snapshot.mjs')).href
-    )) as {
+    const api = (await import(pathToFileURL(join(extracted, 'package/dep-snapshot.mjs')).href)) as {
       produceDepSnapshot(input: {
         readonly templateId: string;
         readonly packageJsonText: string;
