@@ -67,7 +67,7 @@ owners. Hostile-code isolation.
 
 ## Decisions
 
-- 2026-09-09 — Contract+RED reception: Acc 5 drives `runWorkbenchOwner` initialize→install (`proofTimeoutMs`); Acc 9 replaces fixture token-grep with executed produce/orphan carriers. Trace: I7, I1 packed residual, scenario step 7.
+- 2026-09-09 — Contract+RED reception: Acc 5 drives `runWorkbenchOwner` initialize→install (`proofTimeoutMs`) and races inspect-reject against the installer call (owner loop does not settle); Acc 9 replaces fixture token-grep with executed produce/orphan carriers. Trace: I7, I1 packed residual, scenario step 7.
 - 2026-09-09 — ADR-0408: three optional duration budgets; omitted keeps 30 s/60 s owners; silence stays ADR-0360; catalog owner RPCs stay silence; no new coordinator.
 - 2026-09-07 — finding draft; observable scope is settled by goal I7; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.

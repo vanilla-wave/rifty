@@ -52,11 +52,17 @@ describe('owner runtime startup budget (I7 Acc 5)', () => {
     await Promise.resolve();
     if (deliver === undefined) throw new Error('owner IPC receive was not installed');
     deliver({ type: 'workbench:initialize', config: bootConfig(80) });
-    try {
-      await running;
-    } catch {
-      // inspect rejects today; later setup may still throw after install
-    }
+    // Owner main loop only settles on shutdown; race inspect-reject against the
+    // installer call so the assertion still evaluates after initialize admits.
+    await Promise.race([
+      running.then(
+        () => undefined,
+        () => undefined,
+      ),
+      vi.waitFor(() => {
+        expect(installWorkbenchOwnerStorageAuthority.mock.calls.length).toBeGreaterThan(0);
+      }),
+    ]);
     expect(installWorkbenchOwnerStorageAuthority).toHaveBeenCalledWith(
       'ephemeral',
       expect.objectContaining({ proofTimeoutMs: 80 }),

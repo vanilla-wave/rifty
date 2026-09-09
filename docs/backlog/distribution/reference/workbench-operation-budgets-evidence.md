@@ -69,7 +69,9 @@ hung ready at 80 ms still uses hidden 30 000 ms
 raised startup 60 000 ms still dies at 30 000 ms
 initialize + ownerStartupTimeoutMs → TypeError Invalid owner boot deployment
 runWorkbenchOwner initialize→install: storage installer called 0 times
-  (inspect rejects extra ownerStartupTimeoutMs; proofTimeoutMs never passed)
+  (inspect rejects extra ownerStartupTimeoutMs; proofTimeoutMs never passed).
+  Assertion races inspect-reject against the installer call so it still
+  evaluates after initialize admits the field (owner loop does not settle).
 hung file durability at 80 ms still pending; raised 120 000 ms still dies at 60 000 ms
 hung session-tools at 80 ms still pending; raised 120 000 ms still dies at 60 000 ms
 produceFromInstalledWorkbenchTarball → not implemented
