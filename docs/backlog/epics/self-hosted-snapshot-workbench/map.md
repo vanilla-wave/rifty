@@ -2,9 +2,7 @@
 
 ## Items
 
-1. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
-   on the same static host (I5).
-2. `distribution/workbench-operation-budgets` — public effective boot/file/tool
+1. `distribution/workbench-operation-budgets` — public effective boot/file/tool
    budgets, then composed packed-host proof of the whole scenario including
    installed-tarball produce/restore (I7, remaining I1 packed residual).
 
@@ -27,8 +25,9 @@
   (ADR-0072/0279/0401/0403/0404); both storage children share those existing
   owners. I4 landed: optional `storage.namespace` bounds paired preload/writes.
   I6 landed: unjournaled Scratch is retained for download beside fresh Scratch.
-- Preview addressing: io preview-protocol and existing SW bridge; one prefix
-  authority across HTTP and HMR.
+- Preview addressing: io preview-protocol and existing SW bridge; I5 landed
+  optional `deployment.previewPrefix` as the one prefix authority across HTTP
+  and HMR (ADR-0405).
 - Timeouts: existing owner port, VFS commit coordinator and tool transport;
   configure their budgets without adding another timeout/retry coordinator.
 
