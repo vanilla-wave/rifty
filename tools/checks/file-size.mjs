@@ -68,11 +68,11 @@ export const BASELINE = [
   { file: 'apps/playground/src/components/editor-host-core.ts', max: 1270 },
   { file: 'tools/compat-matrix-generator/cli.js', max: 1269 },
   { file: 'packages/runtime-js/src/builtins/process.ts', max: 1226 },
-  { file: 'packages/workbench/src/workbench/workbench-browser-owner.ts', max: 1191 },
   {
     file: 'packages/workbench/src/workbench/internal/playground-session-tools-transport.ts',
     max: 1191,
   },
+  { file: 'packages/workbench/src/workbench/workbench-browser-owner.ts', max: 1190 },
   { file: 'packages/vfs/src/opfs-sync.ts', max: 1190 },
   { file: 'packages/shell/src/shell.ts', max: 1144 },
   { file: 'packages/npm-client/src/internal/shadow/planner.ts', max: 1123 },

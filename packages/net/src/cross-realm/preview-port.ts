@@ -1,17 +1,8 @@
 /**
- * Cross-realm preview-port bridge (ADR-0043, supersedes ADR-0025 for the
- * Real Vite path; streaming wire-frame added by ADR-0048).
- *
- * Bridges the page-realm `dispatchToPort()` to a Worker-realm HTTP-shape
- * listener over `BroadcastChannel`. Used when Real Vite runs in its own
- * kernel-spawned Worker (ADR-0011 phase 2+): the Service Worker still
- * forwards `/preview/<port>/*` fetches to the page; the page registers a port
- * handler that forwards over this bridge to the Worker.
- *
- * Transport choice: `BroadcastChannel` keeps the kernel API unchanged and
- * matches the HMR bridge's existing choice (ADR-0017 phase 1). The M12
- * rewrite (ADR-0017) will swap both this bridge and the HMR bridge to
- * dedicated `MessagePort`s with true pull-based backpressure.
+ * Page→Worker preview dispatch over BroadcastChannel (ADR-0043/0048).
+ * Preview prefix is HTTP routing metadata; run scope independently selects
+ * the owning responder (ADR-0409). M12 replaces this transport with
+ * MessagePorts and pull-based backpressure (ADR-0017).
  *
  * Scope today (ADR-0048):
  *  - Streaming responses: the worker drains `response.body` and posts ordered
@@ -20,18 +11,13 @@
  *    and concatenates on `end` (true end-to-end `ReadableStream` is M12,
  *    ADR-0017). The buffered `reply` frame is retained as the negotiated
  *    fallback for un-bumped peers and the null-body fast path.
- *  - No true cross-realm backpressure (M12).
- *  - Same-origin only (BroadcastChannel limit).
+ *  - Same-origin only; no cross-realm backpressure until M12.
  *
- * Versioning (ADR-0048, applying ADR-0040's split one layer down): the
- * page↔worker hop has its OWN version pin, {@link PREVIEW_PORT_FRAME_VERSION},
- * NOT `SW_FRAME_VERSION`. `SW_FRAME_VERSION` (owned by `@riftydev/service-worker`)
- * pins the SW↔page `SerializedResponse` hop; importing it here would be a
- * sibling/reverse import (CLAUDE.md hard rule) and would wrongly invalidate
- * every SW↔page peer for a change to a different hop.
+ * PREVIEW_PORT_FRAME_VERSION owns page↔Worker frames (ADR-0048/0040);
+ * SW_FRAME_VERSION independently owns the SW↔page hop.
  */
 
-import { NotImplementedError } from '@riftydev/io';
+import { DEFAULT_PREVIEW_PREFIX, NotImplementedError, normalizePreviewPrefix } from '@riftydev/io';
 import type { PortHandler } from '../registry.ts';
 import { channelNameFor } from '../ws/bridge.ts';
 import { injectPreviewWebSocketBridge } from './preview-html-inject.ts';
@@ -106,6 +92,8 @@ export type PreviewPortFrame =
       // worker responders carrying the same scope — stale same-port dev-server
       // workers can't race replies on the shared channel.
       readonly scope?: string;
+      /** HTTP injection metadata; omitted by old/live callers → `/preview/`. */
+      readonly previewPrefix?: string;
     }
   | {
       // ADR-0180: ownership probe. A realm receiving a `request` for a port it
@@ -322,7 +310,11 @@ export function serveCrossRealmPreview(
     }
 
     let response: Response;
+    let previewPrefix: string;
     try {
+      previewPrefix = normalizePreviewPrefix(
+        frame.previewPrefix === undefined ? DEFAULT_PREVIEW_PREFIX : frame.previewPrefix,
+      );
       response = await dispatch(new Request(frame.url, requestInit));
     } catch (err) {
       // Report on the legacy (version-unvalidated) `error` frame so even a
@@ -419,7 +411,7 @@ export function serveCrossRealmPreview(
           );
           return;
         }
-        injected = new TextEncoder().encode(injectPreviewWebSocketBridge(text));
+        injected = new TextEncoder().encode(injectPreviewWebSocketBridge(text, previewPrefix));
       } catch (err) {
         channel.postMessage({
           type: 'error',
@@ -676,9 +668,16 @@ interface Waiter {
 
 export function bridgeCrossRealmPreview(
   port: number,
-  opts: PreviewPortScopeOptions & { readonly timeoutMs?: number } = {},
+  opts: PreviewPortScopeOptions & {
+    readonly timeoutMs?: number;
+    readonly previewPrefix?: string;
+  } = {},
 ): CrossRealmPortHandler {
   const timeoutMs = opts.timeoutMs ?? 30_000;
+  const scope = opts.scope;
+  const previewPrefix = normalizePreviewPrefix(
+    opts.previewPrefix === undefined ? DEFAULT_PREVIEW_PREFIX : opts.previewPrefix,
+  );
   const channelName = channelNameFor(previewPortChannelUrl(port));
   const channel = new BroadcastChannel(channelName);
   const pending = new Map<string, Waiter>();
@@ -821,7 +820,8 @@ export function bridgeCrossRealmPreview(
       url,
       headers,
       body: bodyBytes,
-      ...(opts.scope === undefined ? {} : { scope: opts.scope }),
+      ...(scope === undefined ? {} : { scope }),
+      previewPrefix,
     };
     const promise = new Promise<Response>((resolve) => {
       const timer = setTimeout(() => {

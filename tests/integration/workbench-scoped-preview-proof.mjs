@@ -202,7 +202,7 @@ export async function provePackedScopedPreview({
         control: await proof.controlProof(),
       };
     });
-    const advertised = new URL(opened.previewUrl);
+    const advertised = new URL(opened.previewUrl, origin);
     assert.equal(advertised.origin, origin);
     assert.match(
       advertised.pathname,
@@ -266,7 +266,7 @@ export async function provePackedScopedPreview({
       opened.control,
       'actual controller prefix survives host reload and new public open',
     );
-    assert.equal(new URL(reopened.previewUrl).pathname, advertised.pathname);
+    assert.equal(new URL(reopened.previewUrl, origin).pathname, advertised.pathname);
     await guestFacts(page, 'scoped-vite-edited');
     await proveHmr(page, 'scoped-vite-reopened', { waitForHmrBridge, assertHmrProof });
     assert.deepEqual(await hostFacts(outside), outsideBefore);

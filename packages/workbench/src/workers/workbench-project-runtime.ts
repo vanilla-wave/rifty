@@ -54,6 +54,7 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly packageState: OwnerPackageState;
   readonly nodeEntryWorkerUrl: string;
   readonly devServerWorkerUrl: string;
+  readonly previewPrefix?: string;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   /** Project VFS owns package FIFO, semantic evidence, and reply publication. */
   readonly mutationGuard: VfsMutationGuard;
@@ -165,7 +166,7 @@ export function createWorkbenchProjectRuntime(
     }
     options.send(frame);
   };
-  const previews = createPreviewRegistry({ send });
+  const previews = createPreviewRegistry({ send, previewPrefix: options.previewPrefix });
   const serverRef: { current?: PtyServer } = {};
   let binSequence = 0;
   let nodeSequence = 0;

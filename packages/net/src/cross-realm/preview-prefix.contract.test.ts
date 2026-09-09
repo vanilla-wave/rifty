@@ -244,6 +244,16 @@ describe('configured preview prefix — HTML injection and real preview transpor
   const html =
     '<!doctype html><html><head><script type="module" src="/src/main.js"></script></head><body>app</body></html>';
 
+  it('injected default HTML script exchanges real guest WebSocket traffic', async () => {
+    await assertGuestSocket({
+      script: injectedScript(injectPreviewWebSocketBridge(html)),
+      page: 'http://preview.local:8080/preview/19312/',
+      port: 19312,
+      input: 'socket?defaultHtml=1',
+      guestPath: '/socket?defaultHtml=1',
+    });
+  });
+
   it('does not reuse a default or earlier prefix script for a later deployment', async () => {
     injectWithPrefix(html);
     const first = injectWithPrefix(html, '/sandbox/first/');

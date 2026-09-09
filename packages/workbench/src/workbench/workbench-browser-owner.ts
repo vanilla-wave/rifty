@@ -87,9 +87,7 @@ import {
 } from './workbench-owner-port.ts';
 
 const PROJECT_VFS_COMMIT_TIMEOUT_MS = 60_000;
-/** ADR-0360: shipped budget of owner durability-progress SILENCE, not of total
- *  operation duration. One authority for the default; hosts override it with
- *  `deployment.ownerOperationSilenceTimeoutMs`. */
+/** ADR-0360: only durability progress re-arms this owner-wide silence budget. */
 const OWNER_OPERATION_SILENCE_TIMEOUT_MS = 60_000;
 
 interface OpenedProject {
@@ -191,6 +189,7 @@ export function startBrowserWorkspaceOwner(
   input: WorkbenchOwnerStartInput,
   dependencies: BrowserOwnerDependencies,
 ): RawWorkspaceOwnerHandle {
+  const deployment = input.deployment;
   const worker = dependencies.spawnOwner(input);
   const ownerStderrDecoder = new TextDecoder();
   let ownerStderr = '';
@@ -201,7 +200,7 @@ export function startBrowserWorkspaceOwner(
     );
   });
   const silenceBudgetMs =
-    input.deployment.ownerOperationSilenceTimeoutMs ?? OWNER_OPERATION_SILENCE_TIMEOUT_MS;
+    deployment.ownerOperationSilenceTimeoutMs ?? OWNER_OPERATION_SILENCE_TIMEOUT_MS;
   const playgroundUrlContext = input.playgroundUrlContext;
   const companionMode = playgroundUrlContext !== undefined;
   const readyState = deferred<void>();
@@ -318,12 +317,7 @@ export function startBrowserWorkspaceOwner(
     pendingTimers.set(opId, timer);
   };
 
-  /**
-   * ADR-0360: a durability-progress frame proves the owner is alive and
-   * flushing, so it re-arms EVERY pending operation — they share one owner and
-   * one flush. Nothing else resets the deadline: an any-traffic reset would let
-   * a chatty transport mask a wedged flush forever (`unbounded-read`).
-   */
+  // One owner flush sustains every pending operation; unrelated traffic cannot re-arm it.
   const rearmSilenceDeadlines = (): void => {
     for (const [opId, operation] of pending) {
       const timer = pendingTimers.get(opId);
@@ -548,17 +542,18 @@ export function startBrowserWorkspaceOwner(
   const bootConfig: WorkbenchOwnerBootConfig = Object.freeze({
     deployment: Object.freeze({
       workers: Object.freeze({
-        kernel: input.deployment.workers.kernel,
-        node: input.deployment.workers.node,
-        devServer: input.deployment.workers.devServer,
-        ...(input.deployment.workers.typescript === undefined
+        kernel: deployment.workers.kernel,
+        node: deployment.workers.node,
+        devServer: deployment.workers.devServer,
+        ...(deployment.workers.typescript === undefined
           ? {}
-          : { typescript: input.deployment.workers.typescript }),
+          : { typescript: deployment.workers.typescript }),
       }),
-      wasm: Object.freeze({
-        sqlite: input.deployment.wasm.sqlite,
-      }),
-      previewProbeTimeoutMs: input.deployment.previewProbeTimeoutMs,
+      wasm: Object.freeze({ sqlite: deployment.wasm.sqlite }),
+      previewProbeTimeoutMs: deployment.previewProbeTimeoutMs,
+      ...(deployment.previewPrefix === undefined
+        ? {}
+        : { previewPrefix: deployment.previewPrefix }),
     }),
     packageAcquisition: input.packageAcquisition,
     storage: input.storage,
@@ -676,7 +671,8 @@ export function startBrowserWorkspaceOwner(
     const provePreviewControl = (signal: AbortSignal): Promise<void> =>
       proveRiftyServiceWorkerControl({
         container: dependencies.serviceWorker,
-        timeoutMs: input.deployment.previewProbeTimeoutMs,
+        timeoutMs: deployment.previewProbeTimeoutMs,
+        previewPrefix: deployment.previewPrefix,
         signal,
         timers: dependencies.timers,
       });
@@ -684,7 +680,12 @@ export function startBrowserWorkspaceOwner(
       subscribe: subscribeRawPreview,
       requestSnapshot: requestRawPreview,
       mountRoute: (entry) =>
-        dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
+        dependencies.mountPreview(
+          entry.port,
+          entry.ownerToken,
+          entry.previewScope,
+          deployment.previewPrefix,
+        ),
       proveServiceWorkerControl: provePreviewControl,
       onDegraded(error) {
         currentPreviewHealth = Object.freeze({
@@ -859,12 +860,10 @@ export function startBrowserWorkspaceOwner(
     const terminal = openTerminal();
     const previewReadiness = () =>
       createPreviewReadiness({
-        timeoutMs: input.deployment.previewProbeTimeoutMs,
+        timeoutMs: deployment.previewProbeTimeoutMs,
         subscribe: transport.previews.subscribeRouted,
         requestSnapshot: transport.previews.requestSnapshot,
-        // The registry admits only already-mounted, SW-control-proven routes.
-        // Readiness observes that authority, adds only HTTP proof, then composes
-        // the same route-operation barrier on run retirement.
+        // Mounted, SW-proven routes add HTTP proof and share retirement's route barrier.
         mountRoute: () => () => {},
         proveServiceWorkerControl: () => transport.previews.settleRoutes(),
         probe: async (url, signal) => {

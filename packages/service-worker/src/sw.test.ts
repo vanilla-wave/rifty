@@ -15,7 +15,7 @@ async function loadMessageListeners(): Promise<ScopeListener[]> {
       claim: vi.fn(async () => {}),
       matchAll: vi.fn(async () => []),
     },
-    location: { origin: 'https://workbench.invalid' },
+    location: { origin: 'https://workbench.invalid', href: 'https://workbench.invalid/sw.js' },
     registration: { scope: 'https://workbench.invalid/' },
   });
   await import('./sw.ts');
@@ -49,6 +49,7 @@ describe('service-worker control ping', () => {
       frameVersion: SW_FRAME_VERSION,
       routingVersion: SW_ROUTING_VERSION,
       from: 'service-worker',
+      previewPrefix: '/preview/',
     });
     expect(replyPort.close).toHaveBeenCalledTimes(1);
     expect(source.postMessage).not.toHaveBeenCalled();
@@ -73,6 +74,7 @@ describe('service-worker control ping', () => {
       frameVersion: SW_FRAME_VERSION,
       routingVersion: SW_ROUTING_VERSION,
       from: 'service-worker',
+      previewPrefix: '/preview/',
     });
   });
 });

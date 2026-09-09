@@ -4,7 +4,11 @@
  * Split out of open-workbench.ts under the file-size ratchet; keeping it whole
  * keeps a second, drifting option parser from appearing beside it.
  */
-import { DEFAULT_READY_TIMEOUT_MS } from '@riftydev/service-worker';
+import { normalizePreviewPrefix } from '@riftydev/io';
+import {
+  DEFAULT_READY_TIMEOUT_MS,
+  configurePreviewServiceWorkerUrl,
+} from '@riftydev/service-worker';
 import {
   type OwnerStorageConfig,
   type OwnerStoragePersistence,
@@ -35,6 +39,8 @@ export interface WorkbenchOptions {
     readonly wasm: {
       readonly sqlite: string;
     };
+    /** Preview pathname prefix within the SW scope; omission keeps /preview/. */
+    readonly previewPrefix?: string;
     /**
      * Budget for service-worker control and, once a matching preview is
      * advertised, its routed HTTP proof. Does not bound install/start silence
@@ -117,10 +123,18 @@ export function validateWorkbenchOptions(
   if (!clientUrl.href.startsWith(serviceWorkerScope)) {
     throw new TypeError('deployment.serviceWorker.scope must contain the Workbench document URL');
   }
+  const prefixValue = deployment.previewPrefix;
+  const previewPrefix = prefixValue === undefined ? undefined : normalizePreviewPrefix(prefixValue);
+  if (
+    previewPrefix !== undefined &&
+    !new URL(previewPrefix, clientUrl).href.startsWith(serviceWorkerScope)
+  ) {
+    throw new TypeError('deployment.previewPrefix must be within deployment.serviceWorker.scope');
+  }
 
   return Object.freeze({
     serviceWorker: Object.freeze({
-      url: serviceWorkerUrl,
+      url: configurePreviewServiceWorkerUrl(serviceWorkerUrl, previewPrefix),
       scope: serviceWorkerScope,
     }),
     owner: Object.freeze({
@@ -148,6 +162,7 @@ export function validateWorkbenchOptions(
           sqlite: wasmAssetUrl(wasm.sqlite, 'deployment.wasm.sqlite', urlContext),
         }),
         previewProbeTimeoutMs,
+        ...(previewPrefix === undefined ? {} : { previewPrefix }),
         ...(ownerOperationSilenceTimeoutMs === undefined ? {} : { ownerOperationSilenceTimeoutMs }),
       }),
       packageAcquisition,

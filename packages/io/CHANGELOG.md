@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,
+  `buildPreviewPath`, optional parser prefix; `/preview/` remains the default (ADR-0409).
+
 - Constructor initialization follows used exports; minified Buffer/EventEmitter/Stream retain Node names.
 
 ### Changed

@@ -190,7 +190,7 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
     }
     run = project.run();
     const preview = await run.ready;
-    const pathname = new URL(preview.url).pathname;
+    const pathname = new URL(preview.url, location.href).pathname;
     if (!/^\/sandbox\/p\/\d+\/$/.test(pathname))
       throw new Error(`Wrong public scoped preview URL: ${preview.url}`);
     const session = project;

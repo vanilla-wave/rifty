@@ -1,3 +1,4 @@
+import { buildPreviewPath } from '@riftydev/io';
 import { installedBinPreviewLabel } from '@riftydev/shadow-registry/runtime';
 import type {
   DevServerStatus,
@@ -11,6 +12,7 @@ const PREVIEW_SID = 'preview';
 
 export interface PreviewRegistryDeps {
   readonly send: (frame: OwnerToPageFrame) => void;
+  readonly previewPrefix?: string;
 }
 export type PreviewProducerOrigin =
   | { readonly kind: 'pty'; readonly admission: OwnerPtyRunAdmission }
@@ -87,6 +89,7 @@ interface DerivedDev {
  * pre-listen phase rides `devStarting`/`devBootFailed`; a listening port wins.
  */
 export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistry {
+  const previewPrefix = deps.previewPrefix;
   const previewIdentity = (origin: PreviewProducerOrigin) =>
     origin.kind === 'pty'
       ? {
@@ -152,7 +155,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     ...(d.sid === undefined ? {} : { sid: d.sid }),
     ...(d.cwd === undefined ? {} : { cwd: d.cwd }),
     ...(d.status === 'running' && d.port !== undefined
-      ? { port: d.port, url: `/preview/${d.port}/` }
+      ? { port: d.port, url: buildPreviewPath(d.port, previewPrefix) }
       : {}),
     ...(d.previewScope === undefined ? {} : { previewScope: d.previewScope }),
     ...(error === undefined ? {} : { error }),
@@ -184,7 +187,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
       dev = {
         entry: {
           port,
-          url: `/preview/${port}/`,
+          url: buildPreviewPath(port, previewPrefix),
           label: 'npm run dev',
           source: 'dev-server',
           sid: DEV_SID,
@@ -211,7 +214,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
         ports.map((port) => ({
           entry: {
             port,
-            url: `/preview/${port}/`,
+            url: buildPreviewPath(port, previewPrefix),
             label: installedBinPreviewLabel,
             source: 'preview' as const,
             sid: PREVIEW_SID,
@@ -244,7 +247,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
         entries: ports.map((port) => ({
           entry: {
             port,
-            url: `/preview/${port}/`,
+            url: buildPreviewPath(port, previewPrefix),
             label: `${labelBase} :${port}`,
             source: 'node' as const,
             sid,

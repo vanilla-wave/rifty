@@ -1,3 +1,4 @@
+import { normalizePreviewPrefix } from '@riftydev/io';
 import type { PtyPreview, PtyPreviewReq } from '../glue/pty-protocol.ts';
 import {
   type OwnerStorageConfig,
@@ -60,6 +61,7 @@ export interface WorkbenchOwnerBootConfig {
     };
     readonly wasm: { readonly sqlite: string };
     readonly previewProbeTimeoutMs: number;
+    readonly previewPrefix?: string;
   };
   readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
   readonly storage: OwnerStorageConfig;
@@ -228,7 +230,16 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   );
 
   const deployment = record(config.deployment, 'owner boot deployment');
-  exact(deployment, ['workers', 'wasm', 'previewProbeTimeoutMs'], 'owner boot deployment');
+  exact(
+    deployment,
+    optionalKeys(deployment, ['workers', 'wasm', 'previewProbeTimeoutMs'], ['previewPrefix']),
+    'owner boot deployment',
+  );
+  const rawPrefix = deployment.previewPrefix;
+  const previewPrefix = rawPrefix === undefined ? undefined : normalizePreviewPrefix(rawPrefix);
+  if (previewPrefix !== rawPrefix) {
+    throw invalid('owner boot previewPrefix');
+  }
   const workers = record(deployment.workers, 'owner boot workers');
   exact(
     workers,
@@ -274,6 +285,7 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
       sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm'),
     }),
     previewProbeTimeoutMs,
+    ...(previewPrefix === undefined ? {} : { previewPrefix }),
   });
   let legacyWorkspacePrefix: string | undefined;
   if (own(config, 'legacyWorkspacePrefix')) {

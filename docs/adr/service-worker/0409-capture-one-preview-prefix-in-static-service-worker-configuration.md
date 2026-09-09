@@ -44,7 +44,7 @@ Executed sources/results: docs/backlog/service-worker/reference/workbench-previe
   SW routing version becomes7, frame remains1 under ADR0031/0040 additive rule.
 - Canonical io parser/builder parameterize all preview registry URL producers,
   SW direct/referrer routing and injected WS prefix recognition. Existing /preview/
-  regex remains a default export. io exports normalizePreviewPrefix,
+  regex remains a default export. io exports DEFAULT_PREVIEW_PREFIX, normalizePreviewPrefix,
   previewPrefixPattern and buildPreviewPath; parsePreviewPath takes optional prefix.
   Guest localhost HTTP URLs, paths and query,
   root-relative guest WS and external native WS retain their current semantics.

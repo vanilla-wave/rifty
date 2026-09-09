@@ -56,6 +56,27 @@ Playground's `quickjs-kernel-worker-host.ts` is the reference composition.
 
 See ADR-0263 and ADR-0282.
 
+## Scoped preview
+
+Both entrypoints accept `deployment.previewPrefix`. For a page under `/sandbox/`,
+copy the published SW to `/sandbox/sw.js`, set `deployment.serviceWorker` to
+`{ url: '/sandbox/sw.js', scope: '/sandbox/' }`, and select
+`previewPrefix: '/sandbox/p/'`. Advertised iframe URLs then use
+`/sandbox/p/<port>/`; ordinary guest asset, API and HMR URLs stay unchanged.
+The copied SW's own directory permits this scope without a root allowance.
+
+An explicit prefix is an absolute pathname within the selected SW scope. Dot
+segments and Unicode/spaces normalize; query/fragment, backslash, ASCII controls
+and encoded separators reject before deployment effects. The host must serve
+the same copied SW bytes with its query intact: Workbench appends reserved
+`__rifty_preview_prefix` while preserving existing opaque query bytes. A reserved
+key collision rejects. The actual controller must prove the selected prefix.
+
+Omission keeps `/preview/` and the original SW URL, including existing narrow
+scope deployments that do not open preview. Initial iframe navigation must be
+inside SW scope; this option does not rewrite new out-of-scope document
+navigations. See ADR-0409 and the packed consumer's `sandbox/` entry.
+
 ## Persistent storage
 
 Set `storage: { persistence: 'required', namespace: 'my-workbench' }` to mount

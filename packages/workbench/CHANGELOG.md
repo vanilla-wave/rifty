@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add deployment.previewPrefix for scoped copied-SW HTTP/iframe/HMR routing, with immutable configuration proof and preserved default routes (ADR-0409).
+
 - Retain unjournaled orphan Scratch bytes through the existing catalog transaction, open fresh Scratch, and expose non-consuming public list/export across persistent reopen (ADR-0407).
 - Refuse directories at catalog/journal paths before recovery or cleanup; malformed storage cannot authorize fresh Scratch.
 

@@ -1,3 +1,5 @@
+import { DEFAULT_PREVIEW_PREFIX, previewPrefixPattern } from '@riftydev/io';
+
 export interface WebSocketBridgeInstrumentation {
   readonly eventPrefix?: string;
   readonly openFlag?: string;
@@ -8,7 +10,7 @@ export interface WebSocketBridgeClientScriptOptions {
   readonly bridgeHosts?: readonly string[];
   /**
    * ADR-0189 preview remap: derive the GUEST port from the page's
-   * `/preview/<port>/` pathname prefix and key the bridge discovery channel by
+   * configured preview pathname prefix and key the bridge discovery channel by
    * IT for any `ws:`/`wss:` URL whose hostname is loopback (`localhost`,
    * `127.0.0.1`) or the page's own hostname — regardless of the URL's port (a
    * stock dev client aims at `location.host`, the host page origin). The
@@ -16,6 +18,8 @@ export interface WebSocketBridgeClientScriptOptions {
    * path/protocols. Non-matching hosts keep the native WebSocket.
    */
   readonly previewPortFromPath?: boolean;
+  /** HTTP preview pathname prefix; defaults to `/preview/` (ADR-0409). */
+  readonly previewPrefix?: string;
   readonly instrumentation?: WebSocketBridgeInstrumentation;
 }
 
@@ -29,6 +33,9 @@ export interface WebSocketBridgeClientScriptOptions {
 export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOptions = {}): string {
   const bridgeHosts = [...new Set(opts.bridgeHosts ?? [])];
   const previewPortFromPath = opts.previewPortFromPath === true;
+  const previewPathPattern = previewPrefixPattern(
+    opts.previewPrefix === undefined ? DEFAULT_PREVIEW_PREFIX : opts.previewPrefix,
+  );
   const eventPrefix = opts.instrumentation?.eventPrefix ?? '';
   const openFlag = opts.instrumentation?.openFlag ?? '';
   const lastMessageFlag = opts.instrumentation?.lastMessageFlag ?? '';
@@ -41,6 +48,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
   var CHANNEL_PREFIX = 'rifty:ws:';
   var bridgeHosts = ${JSON.stringify(bridgeHosts)};
   var previewPortFromPath = ${JSON.stringify(previewPortFromPath)};
+  var previewPathPattern = ${previewPathPattern};
   var eventPrefix = ${JSON.stringify(eventPrefix)};
   var openFlag = ${JSON.stringify(openFlag)};
   var lastMessageFlag = ${JSON.stringify(lastMessageFlag)};
@@ -64,7 +72,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
   function previewPathPort() {
     if (!previewPortFromPath) return null;
     var pathname = (window.location && window.location.pathname) || '';
-    var m = /^\\/preview\\/(\\d+)(?:\\/|$)/.exec(pathname);
+    var m = previewPathPattern.exec(pathname);
     return m ? m[1] : null;
   }
   function isLoopbackHostname(hostname) {
@@ -103,7 +111,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
   }
   function guestFrameUrl(url) {
     // A page-origin URL (document-relative 'ws' resolved against the iframe's
-    // /preview/<port>/ base, or an explicit page-host URL) carries the HOST
+    // configured preview base, or an explicit page-host URL) carries the HOST
     // page's routing prefix — a path the guest never serves. Strip it, exactly
     // as the SW does for HTTP. Loopback URLs address the guest directly; their
     // path is literal.
@@ -116,11 +124,10 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       return url.href;
     }
     if (url.host !== pageHost) return url.href;
-    var prefix = '/preview/' + guestPort;
-    if (url.pathname !== prefix && url.pathname.indexOf(prefix + '/') !== 0) return url.href;
+    var match = previewPathPattern.exec(url.pathname);
+    if (!match || match[1] !== guestPort) return url.href;
     var clone = new URL(url.href);
-    var stripped = url.pathname.slice(prefix.length);
-    clone.pathname = stripped === '' ? '/' : stripped;
+    clone.pathname = match[2] || '/';
     return clone.href;
   }
   function makeCloseEvent(code, reason, wasClean) {
@@ -281,7 +288,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       }
       this.url = target.href;
       // .url reports the browser-resolved URL (native parity); the OPEN frame
-      // carries the guest-visible one (page /preview/<port>/ prefix stripped).
+      // carries the guest-visible one (configured preview prefix stripped).
       this.__frameUrl = guestFrameUrl(target);
       this.__frameOrigin = window.location.origin;
       this.protocol = '';
@@ -307,7 +314,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       this.__onMessage = (e) => this.__handleMessage(e);
       // Explicit bridgeHosts keep the legacy host+path / URL-port discovery
       // pair; the ADR-0189 preview remap keys discovery by the GUEST port from
-      // the /preview/<port>/ prefix (the URL port is the host page's origin).
+      // the preview prefix (the URL port is the host page's origin).
       var names;
       if (bridgeHosts.indexOf(target.hostname) !== -1) {
         names = [channelNameFor(target), portChannelNameFor(target)];

@@ -66,8 +66,12 @@ export {
   type BuiltinFactory,
 } from './builtin-registry.ts';
 export {
+  DEFAULT_PREVIEW_PREFIX,
   PREVIEW_PREFIX_RE,
   PREVIEW_LOCAL_HOST,
+  normalizePreviewPrefix,
+  previewPrefixPattern,
+  buildPreviewPath,
   synthesizePreviewUrl,
   parsePreviewPath,
 } from './preview-protocol.ts';

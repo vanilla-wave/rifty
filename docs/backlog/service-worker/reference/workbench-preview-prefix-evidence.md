@@ -58,3 +58,55 @@ actual bounded HTML-drain refusal are recorded in the verdict. Advisory NOTE:
 Final must inspect configured owner refusal wiring with inherited ambiguity/
 readiness/preview-client controls; no new binding owner. Full scoped guest/HMR/
 restart/reload acceptance remains mandatory GREEN, not claimed by this RED.
+
+## Implementation criteria verification
+
+Independent PR4 review approved three exact updates: routing pin6→7 under
+ADR0409; real SW-global fixture href plus default prefix in its two PONGs;
+replace one raw /preview/ substring assertion with real default HTML→JS→guest
+WebSocket exchange. All old placement/marker/body/port assertions remain.
+Raw /tmp/rifty-316-i5-criteria-verification.md and criteria-{current,proposed,mutant}.log:
+current20=16GREEN/4staleRED; exact scratch proposal21/21GREEN. Changing only
+HTML injection's default to /wrong-default/ leaves old11net cases GREEN but
+fails the new default-HTML exchange. This verifies judging criteria only, not
+Final+GREEN or packed acceptance.
+
+First full implementation packed run100.48s reached scoped Vite ready, then the
+new fixture wrongly parsed the public root-relative preview URL without a base.
+/tmp/rifty-316-i5-packed-green.log. Independent oracle verification approved
+exactly three test-only base arguments (browser location.href; helper origin).
+Readiness returns entry.url unchanged on baseline/current; original host assigns
+it directly to DOM href/src. Independent53readiness/registry GREEN plus native
+Chromium proved all6 actual registry URLs, baseless TypeError, correct native
+iframe resolution and preserved foreign-origin/wrong-prefix refusals.
+/tmp/rifty-316-i5-relative-preview-oracle.md. Public URL format and every
+origin/prefix/path assertion remain unchanged; this fixes preparation only.
+
+## Implementation GREEN
+
+Workbench public options/owner/control/registry185/185 GREEN; corrected criteria
+and real default HTML→WS21/21 GREEN. io/SW prefix+configured owner/query48/48
+GREEN; net prefix/transport/client GREEN. All four affected package typechecks
+passed. Raw /tmp/rifty-316-i5-workbench-green.log, -workbench-types.log and
+-criteria-integrated-green.log; agent-owned logs remain supporting history.
+
+Full current-source `node tests/integration/workbench-packed-consumer.mjs --keep`
+passed: root/strict journeys, real /sandbox/p/5173/ iframe/assets/API/HMR without
+reload, copied scoped SW without root allowance, actual native SW stop/restart
+and saved host reopen; outside host exact, zero registry/Eddy. Raw
+/tmp/rifty-316-i5-packed-green-kept.log (earlier similarly named log remains the
+failed relative-URL preparation run).
+
+Independent ADR0391 exact pin approval: workbench-preview-prefix-assets.md.
+TS worker stays10,022,664B; SHA388098a2582d8c679a98bcc0e0d94aa3c9b59a1fda779423e4992377c15edaf4,
+only46bytes in6hashed imports. All540graph inputs unchanged,40outputs matched,
+compiler/client/WASM pins unchanged. New emitted io preview-protocol input
+explains the former driver's same-input-set mapping failure; no new compiler
+or dependency. Applied only approved hash; exact inventory gate GREEN.
+Browser-owner source shrank1191→1190 under the ratchet; no ceiling raised.
+
+First pr:check24/25: lowering browser-owner size to1190 left its row above
+the1191 session-tools row. Existing ratchet sorted-order test reproduced in
+isolation; reordered metadata only,9/9 GREEN. The same gate's producer timeout
+passed its required isolated rerun; no deadline or behavior criteria changed.
+/tmp/rifty-316-i5-pr-check.log; /tmp/rifty-316-i5-ratchet-green.log.
