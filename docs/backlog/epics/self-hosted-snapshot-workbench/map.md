@@ -2,9 +2,6 @@
 
 ## Items
 
-1. `distribution/workbench-operation-budgets` — public effective boot/file/tool
-   budgets, then composed packed-host proof of the whole scenario (I7).
-
 ## Open questions
 
 - No currently identified observable forks after rounds 2/3. The user owns any

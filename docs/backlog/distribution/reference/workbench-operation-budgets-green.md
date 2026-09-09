@@ -76,3 +76,8 @@ reverted alone:10semanticRED; exact current file restored, then141/141GREEN.
 startup, complete nodemon journey38.3s, Hono/Koa, TypeScript F12/dependency
 Problems and webpack cold install/HMR/reload. Expected unavailable-route503s
 visible; no pageerror in this run. Historical I5 question remains a NOTE.
+
+Final source666b2687bff3d78147beac85319a898791872a4d: fullprcheck25/25,
+unit195.3s/parity61.5s. IndependentFinal32/32 verifies I7 AND allacceptedI1–I8;
+141unit+8native+175controls PASS/1existing skip, no required residuals.
+Exact binding: workbench-operation-budgets-final-green.json.
