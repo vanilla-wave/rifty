@@ -43,3 +43,18 @@ Two built HTML entries, copied scoped SW without root allowance, actual guest
 Vite build/assets/HTTP/HMR, controller/PONG/native stop-restart and saved reload
 remain required GREEN proof. Old SW root allowance is now path-specific only;
 no root header can conceal the selected scoped deployment.
+
+Independent Contract+RED accepted at8df45fadb:30/30 coverage, no blocker, one
+advisory concern. Retained installed consumer reached real Chromium after a
+type-annotation-only extension; emitted JS is byte-identical. Root/strict
+producer restore, application and Vite build/dev/HMR passed; scoped public open
+failed semantically because its SW URL lacked the reserved prefix query.
+/tmp/rifty-316-i5-review-packed-runtime-resume.log;
+/tmp/rifty-316-i5-review-packed-runtime-adaptation.txt. Initial scratch attempt
+used a stale npm lock endpoint; isolated temporary producer inputs resolved the
+harness error, no product edit. The committed typed fixture stays intact.
+Independent68=59RED/9GREEN,155baselineGREEN,nativeconfiguration/restartGREEN and
+actual bounded HTML-drain refusal are recorded in the verdict. Advisory NOTE:
+Final must inspect configured owner refusal wiring with inherited ambiguity/
+readiness/preview-client controls; no new binding owner. Full scoped guest/HMR/
+restart/reload acceptance remains mandatory GREEN, not claimed by this RED.

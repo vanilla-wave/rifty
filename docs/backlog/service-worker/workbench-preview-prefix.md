@@ -76,6 +76,8 @@ broader service-worker lifecycle backlog. I7 effective budgets remains on map.
 
 ## Decisions
 
+- ready-verdict: 2026-09-09 — Contract+RED @ 8df45fadbff842794142761ea78bc4adb5865522; reference/workbench-preview-prefix-contract-red.json.
+
 - 2026-09-09 — pickup: ADR-0409 captures one immutable prefix via static SW URL and existing owner/PONG/net frames; native query/scope probes and RED carriers in reference/workbench-preview-prefix-pickup.md and reference/workbench-preview-prefix-evidence.md. Contract+RED remains before implementation.
 
 - 2026-09-07 — finding draft; observable scope is settled by goal I5; carrier choices and Contract+RED remain at pickup.
