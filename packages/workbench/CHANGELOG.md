@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Retain unjournaled orphan Scratch bytes through the existing catalog transaction, open fresh Scratch, and expose non-consuming public list/export across persistent reopen (ADR-0407).
+- Refuse directories at catalog/journal paths before recovery or cleanup; malformed storage cannot authorize fresh Scratch.
 
 - Add optional literal `storage.namespace` to both entrypoints; paired OPFS preload/writes stay inside the selected directory, preserving default storage and the origin-wide lease (ADR-0402).
 

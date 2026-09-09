@@ -199,3 +199,46 @@ matches all40 current outputs to dist, and finds only hash-import worker drift;
 normalized compiler/client code, other compiler/WASM pins unchanged. Artifacts
 /tmp/rifty-316-i6-pin-reproducer.mjs/.log and /tmp/rifty-316-i6-pin-review.json.
 This is driver evidence for independent Final review, not an independent verdict.
+
+## Final review metadata-kind repair
+
+Independent Final at06b860a found I6-FINAL-1: a directory at migration-journal.json
+was treated as absent; real owner/Memory VFS admitted fresh Scratch and moved
+the orphan despite malformed metadata. Full verdict retained in
+reference/orphan-scratch-recovery-final-blocker.json.
+
+Fault class: corrupt-input/sibling-drift at the storage → catalog-startup
+boundary. catalog.json and migration-journal.json use the same presence-as-file
+classification; transaction.json already reads every present entry. One startup
+kind boundary must run before recovery/GC; JSON parsing still follows journal
+recovery, allowing its real precommit empty catalog file. Existing intent/ready
+markers test a positive proof, not absence of a catalog/journal; legacy-index
+discovery is outside this catalog metadata set and does not authorize removal
+of that legacy source. No new coordination or fault-axis exclusions.
+
+Driver RED on unchanged06b860a: six empty/populated metadata-directory cases,
+four semantic failures for catalog/migration, two transaction controls GREEN.
+Each also seeds an actual pending-stage sentinel and compares complete live
+and durable trees before/after owner admission.
+Command: pnpm exec vitest run --project unit
+packages/workbench/src/workers/playground-orphan-scratch-recovery.contract.test.ts
+-t 'metadata directory'; /tmp/rifty-316-i6-metadata-kind-red.log.
+
+Native RED on06b860a: four real empty/populated catalog/migration directories;
+public open incorrectly admitted all four. Complete selected OPFS tree equality,
+removal of only the test directory, retry/fresh/export/reopen controls all passed.
+/tmp/rifty-316-i6-metadata-directory-native-red.log; existing14 cases unchanged.
+Repair validates the three metadata entry kinds once before startup recovery/GC;
+JSON recovery ordering and valid precommit empty files remain unchanged.
+
+Repair GREEN: catalog19/19; native metadata4/4(8.4s), integrated41/41(50.1s),
+including all8 actual kills, cold-read refusal and namespace/application controls.
+Logs: /tmp/rifty-316-i6-metadata-kind-green.log,
+/tmp/rifty-316-i6-metadata-directory-native-green.log,
+/tmp/rifty-316-i6-metadata-native-integrated.log.
+Revert proof removes the single guard:4semanticRED/2transaction controlsGREEN;
+exact source restored:6/6GREEN. Script/JSON:
+/tmp/rifty-316-i6-metadata-revert-check.py/.json.
+Mandatory repaired packed consumer GREEN121.47s, all existing journeys retained:
+/tmp/rifty-316-i6-metadata-packed-green.log. Exact emitted inventory check GREEN;
+TypeScript-worker/compiler/WASM pins unchanged by this catalog-only repair.

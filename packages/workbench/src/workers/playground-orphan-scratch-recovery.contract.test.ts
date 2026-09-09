@@ -423,6 +423,44 @@ describe('I6 catalog-owned orphan Scratch retention', () => {
     },
   );
 
+  it.each(
+    ['catalog.json', 'migration-journal.json', 'transaction.json'].flatMap((name) =>
+      [false, true].map((populated) => ({ name, populated })),
+    ),
+  )(
+    'refuses metadata directory $name (populated=$populated) before recovery',
+    async ({ name, populated }) => {
+      const fs = await seedOrphan();
+      const path = `/.rifty/workbench/playground/${name}`;
+      fs.mkdirSync(path, { recursive: true });
+      if (populated) writeRaw(fs, `${path}/sentinel.bin`, binary);
+      writeRaw(
+        fs,
+        '/.rifty/workbench/playground/catalog-transactions/unknown/sentinel.bin',
+        binary,
+      );
+      await fs.flush();
+      const before = fs.durableSnapshot();
+      let admitted: Owner | undefined;
+      let failure: unknown;
+      try {
+        try {
+          admitted = await openSnapshotOnlyOwner(networkForSnapshot(), fs);
+        } catch (error) {
+          failure = error;
+        }
+        expect
+          .soft(failure, 'malformed metadata must reject owner admission')
+          .toBeInstanceOf(Error);
+        expect.soft(admitted).toBeUndefined();
+        expect.soft(fs.liveSnapshot()).toEqual(before);
+        expect.soft(fs.durableSnapshot()).toEqual(before);
+      } finally {
+        await admitted?.close();
+      }
+    },
+  );
+
   it('malformed journal never authorizes stealing an otherwise orphan-shaped source', async () => {
     const fs = await seedOrphan();
     writeRaw(fs, transactionFile, encoder.encode('{ invalid catalog transaction'));

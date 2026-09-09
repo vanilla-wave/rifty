@@ -36,6 +36,7 @@ import type {
 import type { ProjectTerminalSnapshot } from '../workbench/project-terminal-state.ts';
 import type { ProjectDefinition } from '../workbench/public.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import type { PackageAcquisitionAuthority } from './package-acquisition-authority.ts';
 import {
   type CatalogAdoption,
   type StoredCatalog,
@@ -50,8 +51,6 @@ import {
   publicSnapshot,
   validateStageId,
 } from './playground-catalog-records.ts';
-
-import type { PackageAcquisitionAuthority } from './package-acquisition-authority.ts';
 import {
   type TreeImage,
   type TreeImageFile,
@@ -1565,15 +1564,13 @@ export async function createPlaygroundProjectAuthority(
   options: PlaygroundProjectAuthorityOptions,
 ): Promise<PlaygroundProjectAuthority> {
   const { authority, installStampClaims, acquisition } = options;
-  await recoverStartupTransaction(authority, installStampClaims);
-  if (
-    !isFile(authority, TRANSACTION_FILE) &&
-    !isFile(authority, CATALOG_FILE) &&
-    !isFile(authority, MIGRATION_JOURNAL_FILE) &&
-    cleanupEmptyManagedParents(authority)
-  ) {
-    await flushRequired(authority);
+  for (const path of [CATALOG_FILE, MIGRATION_JOURNAL_FILE, TRANSACTION_FILE]) {
+    const stat = authority.statSyncOrNull(path);
+    if (stat !== null && !stat.isFile) {
+      throw new TypeError(`Playground metadata is not a file: ${path}`);
+    }
   }
+  await recoverStartupTransaction(authority, installStampClaims);
 
   let stored: StoredCatalog;
   let persistedCatalog = false;
@@ -1603,6 +1600,9 @@ export async function createPlaygroundProjectAuthority(
   } else {
     if (isFile(authority, MIGRATION_JOURNAL_FILE)) {
       throw new TypeError('legacy migration journal exists without its catalog');
+    }
+    if (!isFile(authority, TRANSACTION_FILE) && cleanupEmptyManagedParents(authority)) {
+      await flushRequired(authority);
     }
     stored = emptyCatalog();
     const prefix = options.legacyWorkspacePrefix;

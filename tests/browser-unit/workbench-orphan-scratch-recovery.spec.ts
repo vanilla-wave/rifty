@@ -286,3 +286,96 @@ test('native cold original read refusal preserves the only copy and a fresh owne
   expect(retainedMatches(await worker(page, { phase: 'verify' }))).toBe(id);
   expect(await outside(page)).toEqual(before);
 });
+
+for (const metadata of ['catalog.json', 'migration-journal.json'] as const) {
+  for (const nonempty of [false, true]) {
+    test(`native startup metadata directory ${metadata} (${nonempty ? 'nonempty' : 'empty'}) rejects without changing custody`, async ({
+      page,
+    }) => {
+      await prepare(page);
+      const external = await outside(page);
+      // Establish ordinary proof directories with a real healthy boot before comparing failed boots.
+      try {
+        await publicCall(page, 'open', recoveryNamespace);
+        expect(await publicCall(page, 'list')).toEqual([]);
+      } finally {
+        await publicCall(page, 'close');
+      }
+      await page.evaluate(
+        async ({ namespace, metadata, nonempty }) => {
+          let dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(namespace);
+          for (const part of ['.rifty', 'workbench', 'playground'])
+            dir = await dir.getDirectoryHandle(part, { create: true });
+          const malformed = await dir.getDirectoryHandle(metadata, { create: true });
+          if (nonempty) {
+            const writer = await (
+              await malformed.getFileHandle('sentinel.bin', { create: true })
+            ).createWritable();
+            await writer.write(new Uint8Array([77, 0, 128, 255]));
+            await writer.close();
+          }
+        },
+        { namespace: recoveryNamespace, metadata, nonempty },
+      );
+      const selectedTree = () =>
+        page.evaluate(
+          async ({ url, namespace }) =>
+            (await import(/* @vite-ignore */ url)).nativeTree(namespace),
+          { url: fixtureUrl, namespace: recoveryNamespace },
+        );
+      const before = await selectedTree();
+      let failure: unknown;
+      try {
+        await publicCall(page, 'open', recoveryNamespace);
+      } catch (error) {
+        failure = error;
+      } finally {
+        await publicCall(page, 'close');
+      }
+      console.log(
+        '[orphan-metadata-kind]',
+        JSON.stringify({
+          metadata,
+          nonempty,
+          rejected: failure instanceof Error,
+          error: failure instanceof Error ? failure.message : null,
+        }),
+      );
+      expect.soft(failure).toBeInstanceOf(Error);
+      expect(await selectedTree()).toEqual(before);
+      expect(await outside(page)).toEqual(external);
+      await page.evaluate(
+        async ({ namespace, metadata }) => {
+          let dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(namespace);
+          for (const part of ['.rifty', 'workbench', 'playground'])
+            dir = await dir.getDirectoryHandle(part);
+          await dir.removeEntry(metadata, { recursive: true });
+        },
+        { namespace: recoveryNamespace, metadata },
+      );
+      let records: { id: string }[] = [];
+      try {
+        await publicCall(page, 'open', recoveryNamespace);
+        expect(await publicCall(page, 'createFresh')).toEqual({
+          marker: 'fresh Scratch\n',
+          originalPresent: false,
+        });
+        records = await publicCall<{ id: string }[]>(page, 'list');
+        expect(records).toHaveLength(1);
+        if (records[0] === undefined) throw new Error('Retry did not retain original Scratch');
+        exportMatches(await publicCall<string>(page, 'download', records[0].id));
+      } finally {
+        await publicCall(page, 'close');
+      }
+      try {
+        await publicCall(page, 'open', recoveryNamespace);
+        expect(await publicCall(page, 'list')).toEqual(records);
+        if (records[0] === undefined) throw new Error('Retained retry record is absent');
+        exportMatches(await publicCall<string>(page, 'download', records[0].id));
+      } finally {
+        await publicCall(page, 'close');
+      }
+      expect(await outside(page)).toEqual(external);
+    });
+  }
+}
