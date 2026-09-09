@@ -32,6 +32,7 @@ import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
+import { provePackedScopedPreview } from './workbench-scoped-preview-proof.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const surfaceOnly = process.argv.includes('--surface-only');
@@ -1320,6 +1321,13 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     } finally {
       await strictContext.close();
     }
+    await provePackedScopedPreview({
+      browser,
+      origin: previewOrigin,
+      registryRequests: registry.requests,
+      waitForHmrBridge,
+      assertHmrProof,
+    });
     console.log(
       'Packed Workbench Chromium passed: registry Vite/HMR/sqlite and snapshot-only Vite',
     );

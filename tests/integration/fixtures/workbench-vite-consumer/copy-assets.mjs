@@ -20,4 +20,6 @@ for (const name of [
 }
 await mkdir('public', { recursive: true });
 await cp(source, resolve('public/rifty'), { recursive: true });
+await mkdir('public/sandbox', { recursive: true });
+await cp(new URL('sw.js', source), resolve('public/sandbox/sw.js'));
 console.log('Copied packed runtime asset closure; no Worker/SW compilation');
