@@ -242,3 +242,9 @@ exact source restored:6/6GREEN. Script/JSON:
 Mandatory repaired packed consumer GREEN121.47s, all existing journeys retained:
 /tmp/rifty-316-i6-metadata-packed-green.log. Exact emitted inventory check GREEN;
 TypeScript-worker/compiler/WASM pins unchanged by this catalog-only repair.
+
+Final repaired `pnpm pr:check`25/25 GREEN: unit188.9s/parity62.2s,
+/tmp/rifty-316-i6-metadata-pr-check.log. Independent Final on
+a7163a69274a9f4bade08366d5d8701f2646e5b6:23/23 PASS;69catalog cases, both original
+metadata-directory probes and18native cases independently GREEN.
+I6-FINAL-1 resolved; original finding retained as history. I5/I7 remain.
