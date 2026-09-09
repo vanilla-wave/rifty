@@ -35,6 +35,10 @@ export interface ScopedPreviewAcceptance {
   readonly previewUrl: string;
   readonly buildOutput: string;
   readonly storage: unknown;
+  readonly operationProof: {
+    readonly archivedSource: string;
+    readonly scmPaths: readonly string[];
+  };
   writeMessage(message: string): Promise<void>;
   controlProof(): Promise<ControllerProof>;
   close(): Promise<void>;
@@ -140,6 +144,10 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
       wasm: { sqlite: asset('sql-wasm.wasm') },
       previewPrefix: prefix,
       previewProbeTimeoutMs: 30_000,
+      ownerStartupTimeoutMs: 90_000,
+      projectFileCommitTimeoutMs: 95_000,
+      playgroundRequestTimeoutMs: 100_000,
+      ownerOperationSilenceTimeoutMs: 105_000,
     },
     packageAcquisition: { mode: 'snapshot-only' },
     storage: { persistence: 'required', namespace: 'packed-scoped-preview' },
@@ -180,6 +188,32 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
       preserveDirtySameStarter: true,
     });
     project = await workbench.openProject(definition);
+    const beforeBudgetWrite = await project.files.readFile('/src/message.ts');
+    const budgetSource = `${new TextDecoder().decode(beforeBudgetWrite.bytes)}\n// packed public operation budgets\n`;
+    await project.files.writeFile('/src/message.ts', new TextEncoder().encode(budgetSource), {
+      expectedVersion: beforeBudgetWrite.version,
+    });
+    const tools = workbench.playground.forSession(project);
+    await tools.awaitDurability();
+    const scm = await tools.scm.refresh();
+    const archive = JSON.parse(await tools.archive.export()) as {
+      readonly files: readonly {
+        readonly path: string;
+        readonly encoding: string;
+        readonly content: string;
+      }[];
+    };
+    const archivedMessage = archive.files.find((file) => file.path === 'src/message.ts');
+    if (archivedMessage?.encoding !== 'base64')
+      throw new Error('Budget archive omitted real edited source');
+    const archivedSource = new TextDecoder().decode(
+      Uint8Array.from(atob(archivedMessage.content), (char) => char.charCodeAt(0)),
+    );
+    if (archivedSource !== budgetSource)
+      throw new Error('Budget archive did not carry exact committed bytes');
+    const operationProof = { archivedSource, scmPaths: scm.changes.map((change) => change.path) };
+    if (!operationProof.scmPaths.includes('/src/message.ts'))
+      throw new Error('Budget SCM omitted actual edit');
     const buildOutput = await build(project);
     for (const [path, expected] of [
       ['/index.html', indexHtml],
@@ -199,6 +233,7 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
       previewUrl: preview.url,
       buildOutput,
       storage: workbench.snapshot().storage,
+      operationProof,
       controlProof,
       async writeMessage(message) {
         const before = await session.files.readFile('/src/message.ts');

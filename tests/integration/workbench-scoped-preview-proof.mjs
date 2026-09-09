@@ -199,6 +199,7 @@ export async function provePackedScopedPreview({
         previewUrl: proof.previewUrl,
         buildOutput: proof.buildOutput,
         storage: proof.storage,
+        operationProof: proof.operationProof,
         control: await proof.controlProof(),
       };
     });
@@ -215,6 +216,8 @@ export async function provePackedScopedPreview({
       backend: 'opfs',
       durability: 'durable',
     });
+    assert.match(opened.operationProof.archivedSource, /\/\/ packed public operation budgets/);
+    assert.ok(opened.operationProof.scmPaths.includes('/src/message.ts'));
     assert.equal(opened.control.scope, `${origin}/sandbox/`);
     assert.equal(opened.control.previewPrefix, prefix);
     const [legacyScript, scopedScript] = await Promise.all([
