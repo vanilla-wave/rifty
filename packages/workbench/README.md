@@ -72,6 +72,31 @@ creates no OPFS directory. Namespace open/proof failures reject required storage
 or appear in preferred storage's fallback reason. This is storage addressing;
 host-owned storage remains the host's responsibility. See ADR-0402.
 
+## Orphan Scratch recovery
+
+When `catalog.createScratch()` finds Scratch files without a catalog reference
+or valid recovery journal, it first retains ordinary bytes, then creates the
+requested fresh Scratch. Retained data survives persistent reopen. A failed
+preservation keeps the original; a later fresh-creation failure keeps the
+committed retention. Malformed journals remain preserved and report an error.
+
+```js
+for (const { id } of await workbench.playground.catalog.listRetainedScratch()) {
+  const recoveryJson = await workbench.playground.catalog.exportRetainedScratch(id);
+}
+```
+
+These calls need no live project session and do not consume retained data.
+The `rifty-scratch-recovery` JSON envelope carries relative paths, empty
+directories and base64 file bytes, including `node_modules`, build output and
+Git. Workbench private metadata and install claims are excluded; downloaded
+bytes carry no runnable project identity or install trust.
+
+Export bounds:16 MiB/file,32 MiB decoded total,48 Mi UTF-16 JSON units,
+10,000 files,20,000 visited entries,256 path segments. Overflow rejects while
+retained storage remains intact. Preservation copies files independently of
+these export allocation limits. See ADR-0406/0407.
+
 
 ## Registry policy
 

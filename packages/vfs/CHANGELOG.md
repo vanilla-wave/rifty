@@ -8,6 +8,8 @@
 
 ### Fixed
 
+- Refuse sync read/copy of indexed OPFS files without acquired content; genuine empty files remain valid. Native read failure cannot silently persist an empty replacement (ADR-0406).
+
 - **Dedicated Workers select OPFS from sync-access-handle capability, not
   COI (ADR-0372).** `detectVfsBackend()` now uses
   `OpfsFsSync.isSupported()` as the paired-backend authority. Capable

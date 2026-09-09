@@ -2,6 +2,14 @@ import { dirname } from '@riftydev/vfs';
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
 import { ProjectBusyError, ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import {
+  exportPlaygroundScratchRecoveryV1,
+  isScratchRecoveryOrdinaryPath,
+} from '../workbench/internal/playground-archive.ts';
+import {
+  inspectPlaygroundRetainedScratchId,
+  inspectPlaygroundRetainedScratchRecords,
+} from '../workbench/internal/playground-project-catalog.ts';
+import {
   type CapturedPlaygroundUrlContext,
   type InspectedPlaygroundProjectDefinition,
   inspectPlaygroundProjectDefinition,
@@ -17,6 +25,7 @@ import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectCatalog,
   PlaygroundProjectRef,
+  PlaygroundRetainedScratch,
 } from '../workbench/playground.ts';
 import { projectStorageSegment } from '../workbench/project-definition.ts';
 import type {
@@ -27,6 +36,21 @@ import type {
 import type { ProjectTerminalSnapshot } from '../workbench/project-terminal-state.ts';
 import type { ProjectDefinition } from '../workbench/public.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import {
+  type CatalogAdoption,
+  type StoredCatalog,
+  type StoredProject,
+  type StoredScratch,
+  assertRetainedScratchTransition,
+  booleanValue,
+  emptyCatalog,
+  exactObject,
+  nonEmpty,
+  parseStoredCatalog,
+  publicSnapshot,
+  validateStageId,
+} from './playground-catalog-records.ts';
+
 import type { PackageAcquisitionAuthority } from './package-acquisition-authority.ts';
 import {
   type TreeImage,
@@ -63,41 +87,10 @@ const CATALOG_FILE = `${PLAYGROUND_ROOT}/catalog.json`;
 const MIGRATION_JOURNAL_FILE = `${PLAYGROUND_ROOT}/migration-journal.json`;
 const TRANSACTION_FILE = `${PLAYGROUND_ROOT}/transaction.json`;
 const CATALOG_TRANSACTIONS_ROOT = `${PLAYGROUND_ROOT}/catalog-transactions`;
+const RETAINED_SCRATCH_ROOT = `${PLAYGROUND_ROOT}/retained-scratch`;
 const MIGRATION_INTENTS_ROOT = `${PLAYGROUND_ROOT}/migration-intents`;
 const PROMOTION_MARKER = 'migration-promotion.json';
 const LEGACY_INDEX_NAME = '.rifty-project-index.json';
-
-type CatalogAdoption =
-  | { readonly kind: 'pending-adoption'; readonly sourceRoot: string }
-  | {
-      readonly kind: 'adopted';
-      readonly definitionIdentity: string;
-      readonly baselineFingerprint: string;
-      readonly firstMaterialization?: 'pending';
-    };
-
-interface StoredScratch {
-  readonly starterId: string;
-  readonly dirty: boolean;
-  readonly editedAt: string;
-  readonly adoption: CatalogAdoption;
-}
-
-interface StoredProject {
-  readonly id: string;
-  readonly name: string;
-  readonly starterId: string;
-  readonly editedAt: string;
-  readonly adoption: CatalogAdoption;
-}
-
-interface StoredCatalog {
-  readonly version: 1;
-  readonly transactionId?: string;
-  readonly active: PlaygroundProjectRef | null;
-  readonly scratch: StoredScratch | null;
-  readonly projects: readonly StoredProject[];
-}
 
 type MigrationPhase =
   | { readonly kind: 'pending' }
@@ -145,7 +138,7 @@ interface InlineCatalogMutationTransaction {
 
 type StagedCatalogMutation =
   | {
-      readonly role: 'create' | 'replace' | 'remove' | 'overlay';
+      readonly role: 'create' | 'replace' | 'remove' | 'overlay' | 'retain-scratch';
       readonly id: string;
     }
   | {
@@ -178,7 +171,7 @@ interface LegacyPublicationTransaction {
 type DurableTransaction = CatalogMutationTransaction | LegacyPublicationTransaction;
 
 type CatalogMutationPlan =
-  | { readonly role: 'overlay'; readonly id: string }
+  | { readonly role: 'overlay' | 'retain-scratch'; readonly id: string }
   | {
       readonly role: 'create' | 'replace';
       readonly id: string;
@@ -248,6 +241,8 @@ export interface PlaygroundProjectAuthorityOptions {
 
 export interface PlaygroundProjectAuthority {
   catalogSnapshot(): PlaygroundCatalogSnapshot;
+  listRetainedScratch(): Promise<readonly PlaygroundRetainedScratch[]>;
+  exportRetainedScratch(id: string): Promise<string>;
   subscribeCatalog(listener: (snapshot: PlaygroundCatalogSnapshot) => void): () => void;
   createScratch(
     input: Parameters<PlaygroundProjectCatalog['createScratch']>[0],
@@ -275,41 +270,20 @@ export interface PlaygroundProjectAuthority {
   close(): Promise<void>;
 }
 
-function ownKeys(value: object): readonly string[] {
-  return Object.keys(value).sort(compareCodeUnits);
-}
-
-function exactObject(
-  value: unknown,
-  expected: readonly string[],
-  label: string,
-): Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  const record = value as Readonly<Record<string, unknown>>;
-  const actual = ownKeys(record);
-  const wanted = [...expected].sort(compareCodeUnits);
-  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
-    throw new TypeError(`${label} has invalid keys`);
-  }
-  return record;
-}
-
-function nonEmpty(value: unknown, label: string): string {
-  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
-    throw new TypeError(`${label} must be a non-empty NUL-free string`);
-  }
-  return value;
-}
-
-function booleanValue(value: unknown, label: string): boolean {
-  if (typeof value !== 'boolean') throw new TypeError(`${label} must be boolean`);
-  return value;
-}
-
 function projectContainer(id: string): string {
   return `${PROJECTS_ROOT}/${projectStorageSegment(id)}`;
+}
+
+function retainedScratchContainer(id: string): string {
+  return `${RETAINED_SCRATCH_ROOT}/${inspectPlaygroundRetainedScratchId(id)}`;
+}
+
+function requireOrphanScratchTree(authority: OwnerVfsAuthority): string {
+  const container = projectContainer('scratch');
+  const root = `${container}/tree`;
+  if (!isDirectory(authority, container) || !isDirectory(authority, root))
+    throw new TypeError('Orphan Scratch container/tree is not a directory');
+  return root;
 }
 
 function stageContainer(id: string, stageId: string): string {
@@ -344,13 +318,6 @@ function migrationPromoteIntent(id: string): string {
 
 function migrationCatalogMarkIntent(id: string): string {
   return `${MIGRATION_INTENTS_ROOT}/${projectStorageSegment(id)}.catalog-mark`;
-}
-
-function validateStageId(value: string): string {
-  if (typeof value !== 'string' || value.length === 0 || !/^[A-Za-z0-9-]+$/.test(value)) {
-    throw new TypeError('Playground migration stage id must be an alphanumeric token');
-  }
-  return value;
 }
 
 function metadataImage(id: string, identity: string, tree: TreeImage): TreeImage {
@@ -393,164 +360,6 @@ function definitionTree(id: string, definition: InspectedPlaygroundProjectDefini
     definition.identity,
     Object.freeze({ directories: Object.freeze([...directories]), files: Object.freeze(files) }),
   );
-}
-
-function parseAdoption(value: unknown, label: string): CatalogAdoption {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${label} must be an object`);
-  }
-  const kind = (value as Readonly<Record<string, unknown>>).kind;
-  if (kind === 'pending-adoption') {
-    const record = exactObject(value, ['kind', 'sourceRoot'], label);
-    return Object.freeze({
-      kind,
-      sourceRoot: nonEmpty(record.sourceRoot, `${label}.sourceRoot`),
-    });
-  }
-  if (kind === 'adopted') {
-    const record = exactObject(
-      value,
-      [
-        'kind',
-        'definitionIdentity',
-        'baselineFingerprint',
-        ...(Object.hasOwn(value, 'firstMaterialization') ? ['firstMaterialization'] : []),
-      ],
-      label,
-    );
-    if (
-      Object.hasOwn(record, 'firstMaterialization') &&
-      record.firstMaterialization !== 'pending'
-    ) {
-      throw new TypeError(`${label}.firstMaterialization is invalid`);
-    }
-    return Object.freeze({
-      kind,
-      definitionIdentity: nonEmpty(record.definitionIdentity, `${label}.definitionIdentity`),
-      baselineFingerprint: nonEmpty(record.baselineFingerprint, `${label}.baselineFingerprint`),
-      ...(record.firstMaterialization === 'pending'
-        ? { firstMaterialization: 'pending' as const }
-        : {}),
-    });
-  }
-  throw new TypeError(`${label}.kind is invalid`);
-}
-
-function parseActive(value: unknown, label: string): PlaygroundProjectRef | null {
-  if (value === null) return null;
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new TypeError(`${label} must be null or an object`);
-  }
-  const kind = (value as Readonly<Record<string, unknown>>).kind;
-  if (kind === 'scratch') {
-    exactObject(value, ['kind'], label);
-    return Object.freeze({ kind });
-  }
-  if (kind === 'project') {
-    const record = exactObject(value, ['kind', 'id'], label);
-    return Object.freeze({ kind, id: nonEmpty(record.id, `${label}.id`) });
-  }
-  throw new TypeError(`${label}.kind is invalid`);
-}
-
-function parseStoredCatalog(value: unknown): StoredCatalog {
-  const catalog = exactObject(
-    value,
-    [
-      'version',
-      'active',
-      'scratch',
-      'projects',
-      ...(value !== null && typeof value === 'object' && Object.hasOwn(value, 'transactionId')
-        ? ['transactionId']
-        : []),
-    ],
-    'catalog',
-  );
-  if (catalog.version !== 1) throw new TypeError('catalog.version must be 1');
-  const active = parseActive(catalog.active, 'catalog.active');
-  let scratch: StoredScratch | null = null;
-  if (catalog.scratch !== null) {
-    const value = exactObject(
-      catalog.scratch,
-      ['starterId', 'dirty', 'editedAt', 'adoption'],
-      'catalog.scratch',
-    );
-    scratch = Object.freeze({
-      starterId: nonEmpty(value.starterId, 'catalog.scratch.starterId'),
-      dirty: booleanValue(value.dirty, 'catalog.scratch.dirty'),
-      editedAt: nonEmpty(value.editedAt, 'catalog.scratch.editedAt'),
-      adoption: parseAdoption(value.adoption, 'catalog.scratch.adoption'),
-    });
-  }
-  if (!Array.isArray(catalog.projects)) throw new TypeError('catalog.projects must be an array');
-  const ids = new Set<string>();
-  const projects = catalog.projects.map((entry, index): StoredProject => {
-    const value = exactObject(
-      entry,
-      ['id', 'name', 'starterId', 'editedAt', 'adoption'],
-      `catalog.projects[${String(index)}]`,
-    );
-    const id = nonEmpty(value.id, `catalog.projects[${String(index)}].id`);
-    if (id === 'scratch' || ids.has(id))
-      throw new TypeError(`catalog project id is invalid: ${id}`);
-    ids.add(id);
-    return Object.freeze({
-      id,
-      name: nonEmpty(value.name, `catalog.projects[${String(index)}].name`),
-      starterId: nonEmpty(value.starterId, `catalog.projects[${String(index)}].starterId`),
-      editedAt: nonEmpty(value.editedAt, `catalog.projects[${String(index)}].editedAt`),
-      adoption: parseAdoption(value.adoption, `catalog.projects[${String(index)}].adoption`),
-    });
-  });
-  if (active?.kind === 'scratch' && scratch === null) {
-    throw new TypeError('catalog active Scratch is absent');
-  }
-  if (active?.kind === 'project' && !ids.has(active.id)) {
-    throw new TypeError(`catalog active project is absent: ${active.id}`);
-  }
-  return Object.freeze({
-    version: 1,
-    active,
-    scratch,
-    projects: Object.freeze(projects),
-    ...(Object.hasOwn(catalog, 'transactionId')
-      ? { transactionId: validateStageId(nonEmpty(catalog.transactionId, 'catalog.transactionId')) }
-      : {}),
-  });
-}
-
-function publicSnapshot(catalog: StoredCatalog): PlaygroundCatalogSnapshot {
-  return Object.freeze({
-    active:
-      catalog.active === null
-        ? null
-        : catalog.active.kind === 'scratch'
-          ? Object.freeze({ kind: 'scratch' as const })
-          : Object.freeze({ kind: 'project' as const, id: catalog.active.id }),
-    scratch:
-      catalog.scratch === null
-        ? null
-        : Object.freeze({
-            starterId: catalog.scratch.starterId,
-            dirty: catalog.scratch.dirty,
-            editedAt: catalog.scratch.editedAt,
-          }),
-    projects: Object.freeze(
-      catalog.projects.map((project) =>
-        Object.freeze({
-          id: project.id,
-          name: project.name,
-          starterId: project.starterId,
-          editedAt: project.editedAt,
-        }),
-      ),
-    ),
-  });
-}
-
-function emptyCatalog(): StoredCatalog {
-  return Object.freeze({ version: 1, active: null, scratch: null, projects: Object.freeze([]) });
 }
 
 function parseMigrationPhase(value: unknown, label: string): MigrationPhase {
@@ -800,6 +609,10 @@ function parseStagedCatalogMutation(value: unknown, index: number): StagedCatalo
     throw new TypeError(`${label} is invalid`);
   }
   const role = (value as Readonly<Record<string, unknown>>).role;
+  if (role === 'retain-scratch') {
+    const record = exactObject(value, ['role', 'id'], label);
+    return Object.freeze({ role, id: inspectPlaygroundRetainedScratchId(record.id) });
+  }
   if (role === 'create' || role === 'replace' || role === 'remove' || role === 'overlay') {
     const record = exactObject(value, ['role', 'id'], label);
     return Object.freeze({ role, id: nonEmpty(record.id, `${label}.id`) });
@@ -858,14 +671,23 @@ function parseTransaction(value: unknown): DurableTransaction {
         }
         ownedIds.add(mutation.id);
       }
+      const txId = validateStageId(nonEmpty(record.txId, 'staged catalog transaction id'));
+      const beforeCatalog =
+        record.beforeCatalog === null ? null : parseStoredCatalog(record.beforeCatalog);
+      const afterCatalog = parseStoredCatalog(record.afterCatalog);
+      for (const mutation of mutations) {
+        if (mutation.role !== 'retain-scratch') continue;
+        if (mutations.length !== 1)
+          throw new TypeError('Retained Scratch transaction must be separate');
+        assertRetainedScratchTransition(beforeCatalog, afterCatalog, mutation.id, txId);
+      }
       return Object.freeze({
         version: 2,
         kind,
-        txId: validateStageId(nonEmpty(record.txId, 'staged catalog transaction id')),
+        txId,
         phase: record.phase,
-        beforeCatalog:
-          record.beforeCatalog === null ? null : parseStoredCatalog(record.beforeCatalog),
-        afterCatalog: parseStoredCatalog(record.afterCatalog),
+        beforeCatalog,
+        afterCatalog,
         mutations: Object.freeze(mutations),
       });
     }
@@ -921,13 +743,22 @@ function assertCatalogMutationPreconditions(
   for (const plan of plans) {
     if (ids.has(plan.id)) throw new TypeError(`Catalog mutation id is duplicated: ${plan.id}`);
     ids.add(plan.id);
-    const target = authority.statSyncOrNull(projectContainer(plan.id));
-    if (plan.role === 'create' || plan.role === 'convert-scratch') {
+    const target = authority.statSyncOrNull(
+      plan.role === 'retain-scratch'
+        ? retainedScratchContainer(plan.id)
+        : projectContainer(plan.id),
+    );
+    if (
+      plan.role === 'create' ||
+      plan.role === 'convert-scratch' ||
+      plan.role === 'retain-scratch'
+    ) {
       if (target !== null)
         throw new TypeError(`Catalog mutation target already exists: ${plan.id}`);
     } else if (target === null || !target.isDirectory) {
       throw new TypeError(`Catalog mutation target is missing: ${plan.id}`);
     }
+    if (plan.role === 'retain-scratch') requireOrphanScratchTree(authority);
     if (plan.role === 'convert-scratch') {
       const scratch = authority.statSyncOrNull(projectContainer('scratch'));
       if (scratch === null || !scratch.isDirectory) {
@@ -975,6 +806,18 @@ async function prepareStagedCatalogMutation(
         plan.after,
       );
     }
+    if (plan.role === 'retain-scratch') {
+      await copyManagedTreeDurably(
+        authority,
+        claims,
+        requireOrphanScratchTree(authority),
+        `${retainedScratchContainer(plan.id)}/tree`,
+        {
+          copyClaims: false,
+          include: isScratchRecoveryOrdinaryPath,
+        },
+      );
+    }
     if (plan.role === 'convert-scratch') {
       await copyManagedTreeDurably(
         authority,
@@ -1012,7 +855,12 @@ async function applyStagedCatalogMutation(
   transaction: StagedCatalogMutationTransaction,
 ): Promise<void> {
   for (const [index, mutation] of transaction.mutations.entries()) {
-    if (mutation.role === 'convert-scratch' || mutation.role === 'overlay') continue;
+    if (
+      mutation.role === 'convert-scratch' ||
+      mutation.role === 'overlay' ||
+      mutation.role === 'retain-scratch'
+    )
+      continue;
     const target = projectContainer(mutation.id);
     await removeManagedTreeDurably(authority, claims, target);
     if (mutation.role !== 'remove') {
@@ -1045,8 +893,11 @@ async function rollbackStagedCatalogMutation(
     });
   }
   for (const [index, mutation] of transaction.mutations.entries()) {
-    if (mutation.role === 'convert-scratch') {
-      const target = projectContainer(mutation.id);
+    if (mutation.role === 'convert-scratch' || mutation.role === 'retain-scratch') {
+      const target =
+        mutation.role === 'retain-scratch'
+          ? retainedScratchContainer(mutation.id)
+          : projectContainer(mutation.id);
       if (authority.statSyncOrNull(target) !== null) {
         removeManagedTree(authority, claims, target);
       }
@@ -1079,13 +930,6 @@ async function rollbackStagedCatalogMutation(
     removeManagedTree(authority, claims, stageRoot);
   }
   authority.rmSync(TRANSACTION_FILE, { force: true });
-  if (
-    transaction.beforeCatalog === null &&
-    authority.statSyncOrNull(MIGRATION_JOURNAL_FILE) === null &&
-    isDirectory(authority, PLAYGROUND_ROOT)
-  ) {
-    removeManagedTree(authority, claims, PLAYGROUND_ROOT);
-  }
   cleanupEmptyManagedParents(authority);
   await flushRequired(authority);
 }
@@ -1095,12 +939,19 @@ async function finishStagedCatalogMutation(
   claims: InstallStampClaimIo,
   transaction: StagedCatalogMutationTransaction,
 ): Promise<void> {
+  for (const mutation of transaction.mutations) {
+    if (
+      mutation.role === 'retain-scratch' &&
+      !isDirectory(authority, `${retainedScratchContainer(mutation.id)}/tree`)
+    )
+      throw new TypeError(`Retained Scratch tree is missing: ${mutation.id}`);
+  }
   writeJson(authority, TRANSACTION_FILE, {
     ...transaction,
     phase: 'catalog-committed',
   });
   for (const mutation of transaction.mutations) {
-    if (mutation.role === 'convert-scratch') {
+    if (mutation.role === 'convert-scratch' || mutation.role === 'retain-scratch') {
       tombstoneManagedTree(authority, claims, projectContainer('scratch'));
     }
   }
@@ -1123,6 +974,7 @@ function cleanupEmptyManagedParents(
   ]);
   for (const path of [
     CATALOG_TRANSACTIONS_ROOT,
+    RETAINED_SCRATCH_ROOT,
     STAGES_ROOT,
     PROJECTS_ROOT,
     WORKBENCH_ROOT,
@@ -1585,14 +1437,7 @@ async function recoverInlineCatalogTransaction(
   if (catalog === null) authority.rmSync(CATALOG_FILE, { force: true });
   else writeJson(authority, CATALOG_FILE, catalog);
   authority.rmSync(TRANSACTION_FILE, { force: true });
-  if (
-    catalog === null &&
-    authority.statSyncOrNull(MIGRATION_JOURNAL_FILE) === null &&
-    isDirectory(authority, PLAYGROUND_ROOT)
-  ) {
-    authority.rmSync(PLAYGROUND_ROOT, { recursive: true, force: true });
-    cleanupEmptyManagedParents(authority);
-  }
+  cleanupEmptyManagedParents(authority);
   await flushRequired(authority);
 }
 
@@ -1631,23 +1476,13 @@ async function recoverStartupTransaction(
   authority: OwnerVfsAuthority,
   claims: InstallStampClaimIo,
 ): Promise<void> {
-  if (!isFile(authority, TRANSACTION_FILE)) {
+  if (authority.statSyncOrNull(TRANSACTION_FILE) === null) {
     await cleanupOrphanCatalogTransactionStages(authority, claims);
     return;
   }
-  let transaction: DurableTransaction;
-  try {
-    transaction = parseTransaction(readJson(authority, TRANSACTION_FILE, 'Playground transaction'));
-  } catch {
-    authority.rmSync(TRANSACTION_FILE, { force: true });
-    if (!isFile(authority, CATALOG_FILE) && !isFile(authority, MIGRATION_JOURNAL_FILE)) {
-      removeManagedTree(authority, claims, PLAYGROUND_ROOT);
-      cleanupEmptyManagedParents(authority);
-    }
-    await flushRequired(authority);
-    await cleanupOrphanCatalogTransactionStages(authority, claims);
-    return;
-  }
+  const transaction = parseTransaction(
+    readJson(authority, TRANSACTION_FILE, 'Playground transaction'),
+  );
   if (transaction.kind === 'legacy-publication') {
     await completeLegacyPublication(authority, transaction, false);
   } else if (transaction.version === 1) {
@@ -1885,12 +1720,7 @@ export async function createPlaygroundProjectAuthority(
     migration = next;
   };
 
-  const runCatalogMutation = async (
-    nextValue: StoredCatalog,
-    plans: readonly CatalogMutationPlan[],
-    beforeCatalogCommit?: () => Promise<void>,
-    afterRollback?: () => Promise<void>,
-  ): Promise<PlaygroundCatalogSnapshot> => {
+  const finishPendingCatalogCleanup = async (): Promise<void> => {
     if (pendingCatalogCleanup !== null) {
       await recoverStagedCatalogTransaction(
         authority,
@@ -1900,11 +1730,20 @@ export async function createPlaygroundProjectAuthority(
       );
       pendingCatalogCleanup = null;
     }
+  };
+
+  const runCatalogMutation = async (
+    nextValue: StoredCatalog,
+    plans: readonly CatalogMutationPlan[],
+    beforeCatalogCommit?: () => Promise<void>,
+    afterRollback?: () => Promise<void>,
+  ): Promise<PlaygroundCatalogSnapshot> => {
+    await finishPendingCatalogCleanup();
     assertCatalogMutationPreconditions(authority, plans);
     await retireCompletedMigrationRefs();
     const before = stored;
     const txId = validateStageId(options.createStageId());
-    const next = Object.freeze({ ...nextValue, transactionId: txId });
+    const next = parseStoredCatalog({ ...nextValue, transactionId: txId });
     const transaction: StagedCatalogMutationTransaction = Object.freeze({
       version: 2,
       kind: 'catalog-mutation',
@@ -2105,6 +1944,21 @@ export async function createPlaygroundProjectAuthority(
   const authorityApi: PlaygroundProjectAuthority = Object.freeze({
     catalogSnapshot: () => snapshot,
 
+    listRetainedScratch() {
+      return enqueue(async () =>
+        inspectPlaygroundRetainedScratchRecords(stored.retainedScratch ?? []),
+      );
+    },
+
+    exportRetainedScratch(value: string) {
+      return enqueue(async () => {
+        const id = inspectPlaygroundRetainedScratchId(value);
+        if (!stored.retainedScratch?.some((record) => record.id === id))
+          throw new TypeError(`Retained Scratch is absent: ${id}`);
+        return exportPlaygroundScratchRecoveryV1(authority, `${retainedScratchContainer(id)}/tree`);
+      });
+    },
+
     subscribeCatalog(listener: (value: PlaygroundCatalogSnapshot) => void) {
       if (typeof listener !== 'function')
         throw new TypeError('Catalog listener must be a function');
@@ -2119,6 +1973,21 @@ export async function createPlaygroundProjectAuthority(
         assertNoLiveProject();
         const definition = inspectDefinition(input.definition);
         if (definition.id !== 'scratch') throw projectDefinitionMismatch('scratch');
+        await finishPendingCatalogCleanup();
+        if (
+          stored.scratch === null &&
+          authority.statSyncOrNull(projectContainer('scratch')) !== null
+        ) {
+          requireOrphanScratchTree(authority);
+          const id = inspectPlaygroundRetainedScratchId(options.createStageId());
+          const retainedScratch = inspectPlaygroundRetainedScratchRecords([
+            ...(stored.retainedScratch ?? []),
+            { id },
+          ]);
+          await runCatalogMutation(changedCatalog(stored, { retainedScratch }), [
+            { role: 'retain-scratch', id },
+          ]);
+        }
         const existing = stored.scratch;
         if (existing !== null && definition.firstMaterialization.kind === 'snapshot') {
           const apply = definition.firstMaterialization.application?.mode === 'apply-snapshot';

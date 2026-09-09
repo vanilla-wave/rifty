@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retain unjournaled orphan Scratch bytes through the existing catalog transaction, open fresh Scratch, and expose non-consuming public list/export across persistent reopen (ADR-0407).
+
 - Add optional literal `storage.namespace` to both entrypoints; paired OPFS preload/writes stay inside the selected directory, preserving default storage and the origin-wide lease (ADR-0402).
 
 - Add snapshot-only acquisition without a registry URL/client or Eddy; required snapshots fail with public reasons, saved state keeps priority, and explicit npm calls retain local replay (ADR-0398).

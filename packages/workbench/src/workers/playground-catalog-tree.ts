@@ -122,13 +122,9 @@ function removeClaims(
   const walk = (directory: string): void => {
     for (const child of authority.readdirSync(directory)) {
       const path = `${directory}/${child.name}`;
-      if (child.isDirectory) walk(path);
-      else if (
-        child.name === INSTALL_CLAIM_NAME &&
-        directory.split('/').at(-1) === 'node_modules'
-      ) {
+      if (child.name === INSTALL_CLAIM_NAME && directory.split('/').at(-1) === 'node_modules') {
         claimRoots.push(dirname(directory));
-      }
+      } else if (child.isDirectory) walk(path);
     }
   };
   walk(root);

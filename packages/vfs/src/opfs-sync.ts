@@ -298,14 +298,8 @@ export class OpfsFsSync implements FsSync {
     return instance;
   }
 
-  /**
-   * Reads every known file's bytes from the paired async OPFS surface into
-   * the sync {@link content} cache so post-reload `readFileSync` serves the
-   * persisted bytes synchronously (ADR-0072). No-op without a paired
-   * surface. Failures per file are swallowed (the file stays out of the
-   * cache and reads as empty until a fresh write) so one unreadable entry
-   * never blocks boot.
-   */
+  /** Load indexed files from the pair; failures keep prior authoritative bytes
+   * or leave cold content unavailable (ADR-0072/0406). */
   async preloadContent(): Promise<void> {
     const surface = this.asyncSurface;
     if (!surface) return;
@@ -318,8 +312,7 @@ export class OpfsFsSync implements FsSync {
             const bytes = await surface.readFile(path);
             this.content.set(path, bytes);
           } catch {
-            // Unreadable at boot — leave uncached; a later sync read returns
-            // empty bytes, a later write re-establishes content.
+            // Keep prior authoritative bytes, if any; never invent cold content.
           }
         })(),
       );
@@ -603,11 +596,15 @@ export class OpfsFsSync implements FsSync {
       throw new VfsError('ENOENT', path);
     }
     if (entry.kind === 'dir') throw new VfsError('EISDIR', path);
-    // Content cache (ADR-0072) is authoritative for sync reads. The
-    // `?? new Uint8Array()` covers a file the boot preload couldn't read
-    // (e.g. transient OPFS error): empty read is the safe degenerate, not a
-    // thrown stub.
-    return this.content.get(normalized) ?? new Uint8Array();
+    return this.readCachedContent(normalized, path);
+  }
+
+  private readCachedContent(normalized: string, reportPath: string): Uint8Array {
+    const bytes = this.content.get(normalized);
+    if (bytes === undefined) {
+      throw new VfsError('EIO', reportPath, `OPFS content is unavailable: ${reportPath}`);
+    }
+    return bytes;
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
@@ -994,7 +991,7 @@ export class OpfsFsSync implements FsSync {
       throw new VfsError('ENOENT', dst);
     }
     if (parentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', dst);
-    const bytes = (this.content.get(s) ?? new Uint8Array()).slice();
+    const bytes = this.readCachedContent(s, src).slice();
     // writeFileSync updates content/index/attachChild + enqueues OPFS write-through.
     this.writeFileSync(d, bytes);
     // A copy is a new file → dst mtime = now (ADR-0090; OPFS mtime via side-table).

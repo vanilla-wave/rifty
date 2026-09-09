@@ -46,6 +46,7 @@ import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectCatalog,
   PlaygroundProjectOpenOptions,
+  PlaygroundRetainedScratch,
   PlaygroundScmSnapshot,
 } from './playground.ts';
 import { type PreviewAdvertisement, createPreviewReadiness } from './preview-readiness.ts';
@@ -114,6 +115,8 @@ type PendingOperation =
   | (Deferred<OpenedProject> & { readonly kind: 'open' })
   | (Deferred<OpenedPlaygroundProject> & { readonly kind: 'playground-open' })
   | (Deferred<PlaygroundCatalogSnapshot> & { readonly kind: 'playground-catalog' })
+  | (Deferred<readonly PlaygroundRetainedScratch[]> & { readonly kind: 'retained-scratch-list' })
+  | (Deferred<string> & { readonly kind: 'retained-scratch-export' })
   | (Deferred<void> & { readonly kind: 'close'; readonly projectToken: OwnerProjectToken })
   | (Deferred<void> & { readonly kind: 'delete'; readonly id: string });
 
@@ -386,6 +389,12 @@ export function startBrowserWorkspaceOwner(
         operation.resolve(currentCatalog());
         return;
       }
+      case 'workbench:playground-retained-scratch-listed':
+        takePending(message.opId, 'retained-scratch-list').resolve(message.records);
+        return;
+      case 'workbench:playground-retained-scratch-exported':
+        takePending(message.opId, 'retained-scratch-export').resolve(message.archiveJson);
+        return;
       case 'workbench:playground-project-opened': {
         const operation = takePending(message.opId, 'playground-open');
         operation.resolve(message);
@@ -973,6 +982,30 @@ export function startBrowserWorkspaceOwner(
   const catalog: PlaygroundProjectCatalog | undefined = companionMode
     ? Object.freeze({
         snapshot: currentCatalog,
+        listRetainedScratch() {
+          currentCatalog();
+          const opId = dependencies.operationId();
+          return request<readonly PlaygroundRetainedScratch[]>(
+            { ...deferred<readonly PlaygroundRetainedScratch[]>(), kind: 'retained-scratch-list' },
+            {
+              type: 'workbench:playground-catalog',
+              opId,
+              command: { kind: 'list-retained-scratch' },
+            },
+          );
+        },
+        exportRetainedScratch(id: string) {
+          currentCatalog();
+          const opId = dependencies.operationId();
+          return request<string>(
+            { ...deferred<string>(), kind: 'retained-scratch-export' },
+            {
+              type: 'workbench:playground-catalog',
+              opId,
+              command: { kind: 'export-retained-scratch', id },
+            },
+          );
+        },
         subscribe(listener: (snapshot: PlaygroundCatalogSnapshot) => void) {
           if (typeof listener !== 'function') {
             throw new TypeError('Catalog listener must be a function');

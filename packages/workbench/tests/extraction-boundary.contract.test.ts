@@ -341,7 +341,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0386: standard dependency snapshot tar codec.
     // ADR-0387: published dependency snapshot producer.
     // ADR-0394: snapshot overlay, claim reading and owner type/tree helpers.
-    expect(packageProductionFiles).toHaveLength(151);
+    // ADR-0407: stored catalog schema/projection extracted without another state owner.
+    expect(packageProductionFiles).toHaveLength(152);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

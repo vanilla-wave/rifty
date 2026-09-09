@@ -151,3 +151,51 @@ reached), prior I4 thirteen and old I8 three. Raw
 /tmp/rifty-316-i6-browser-integrated-final.log; full attribution
 /tmp/rifty-316-i6-browser-integrated-verification.md. Initial35/37 run/diagnostics
 are observer-failure history, not product defects or waived acceptance.
+
+## Integrated implementation proof
+
+- One OPFS cache-read helper replaces both empty fallbacks; metadata discovery,
+  prior cached bytes and native rename/drain policy stand. Native preload7/7
+  GREEN4.5s. Independent caller revert checks: read2RED, copy2RED, exact restored
+  source2GREEN; /tmp/rifty-316-i6-vfs-revert-check.json and caller logs. First
+  scratch matcher selected no tests; .no-tests-history logs are not evidence.
+- Catalog13new+321prior=334/334 GREEN; actual owner/package actor, durability
+  faults, malformed journal, >16MiB retention/public cap and named recovery.
+  /tmp/rifty-316-i6-catalog-implementation-evidence.json. Stored optional absence
+  and canonical before/after field order retained; no new state owner.
+- Codec13new+119prior=132/132 GREEN; /tmp/rifty-316-i6-codec-implementation.md.
+  Actual new envelope over measured Vite tree:267files/69dirs,23,601,962decodedB,
+  31,493,944JSON units, every input/decoded SHA256 equal;
+  /tmp/rifty-316-i6-actual-recovery-codec-proof.json. Same numeric limits.
+- Public/protocol47 tests and prior companion fixture18 GREEN. Strict wire
+  records are frozen/owned; existing pending map/FIFO handles read operations.
+  Legacy exact facade-key assertion adds only two declared public methods.
+  Two existing boundary fixtures gain unused throw-only methods for typing;
+  no recovery success is simulated. App fixture25/25 and App types GREEN.
+- VFS/control/extraction129passed/1 historical skip;
+  /tmp/rifty-316-i6-vfs-extraction-green.log. Whole source closure151→152 exactly
+  matches added catalog-records schema/projection module. Ratchets only decrease.
+- Native integration37/37 above plus old legacy-receipt before/after-close2/2
+  GREEN5.4s, /tmp/rifty-316-i6-legacy-receipt-green.log. Both legacy boundaries
+  preserve40 entries and reopen without fetching the unused snapshot again.
+- Mandatory `pnpm test:packed-consumer` GREEN88.92s;
+  /tmp/rifty-316-i6-packed-green.log. All prior registry Vite/HMR/sqlite and
+  strict snapshot/application/namespace journeys retained. New unconditional
+  proof seeds actual producer Vite payload plus preceding real browser build,
+  preserves/export/reopens full ordinary bytes and runs fresh ms against Node;
+  existing zero registry/Eddy checks include the whole recovery journey.
+
+First full pr:check24/25: old App test fixture lacked the new interface methods.
+Its only adjustment is two unused throw-only methods; assertions unchanged.
+First unit lane hit6 time-outs in3files, all passed its isolated rerun; no test
+deadline or product expectation changed. Raw /tmp/rifty-316-i6-pr-check.log.
+Final `pnpm pr:check`25/25 GREEN, unit184.9s/parity60.5s:
+/tmp/rifty-316-i6-pr-check-final.log.
+
+ADR-0391 exact TypeScript-worker pin follows tested dist at unchanged10,022,664B:
+0b8911fb915145165477c4083c8fde67be00cfc3a58abe89a39f33edef318004.
+Driver write:false baseline/current graph comparison reproduces prior I4 pin,
+matches all40 current outputs to dist, and finds only hash-import worker drift;
+normalized compiler/client code, other compiler/WASM pins unchanged. Artifacts
+/tmp/rifty-316-i6-pin-reproducer.mjs/.log and /tmp/rifty-316-i6-pin-review.json.
+This is driver evidence for independent Final review, not an independent verdict.

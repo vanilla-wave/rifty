@@ -384,6 +384,8 @@ describe('PlaygroundProjectCatalog public contract', () => {
       'activate',
       'createScratch',
       'delete',
+      'exportRetainedScratch',
+      'listRetainedScratch',
       'rename',
       'reset',
       'saveScratch',

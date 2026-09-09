@@ -1,5 +1,7 @@
 import type { FsSync } from '@riftydev/vfs';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
+import { isInstallStampPath } from '../../glue/install-stamp.ts';
+import type { PlaygroundScratchRecoveryArchiveV1 } from '../playground.ts';
 
 const MEBIBYTE = 1024 * 1024;
 const DERIVED_DIRECTORY_SEGMENTS = new Set(['node_modules', 'dist']);
@@ -140,8 +142,14 @@ function dataValue(record: Record<string, unknown>, key: string): unknown {
 function assertPortableRelativePath(
   path: string,
   limits: PlaygroundArchiveV1Limits,
+  literalPosix = false,
 ): readonly string[] {
-  if (path.length === 0 || path.startsWith('/') || path.includes('\\') || path.includes('\0')) {
+  if (
+    path.length === 0 ||
+    path.startsWith('/') ||
+    (!literalPosix && path.includes('\\')) ||
+    path.includes('\0')
+  ) {
     throw new TypeError(`Playground archive path is not normalized: ${JSON.stringify(path)}`);
   }
   const segments = path.split('/');
@@ -161,6 +169,15 @@ function assertPortableRelativePath(
 function excludedArchiveSegment(segments: readonly string[]): string | undefined {
   if (segments[0] === PRIVATE_ROOT_SEGMENT) return PRIVATE_ROOT_SEGMENT;
   return segments.find((segment) => DERIVED_DIRECTORY_SEGMENTS.has(segment));
+}
+
+/** Shared retention/export filter; callers own relative-path validation and byte budgets. */
+export function isScratchRecoveryOrdinaryPath(relative: string): boolean {
+  return (
+    relative !== PRIVATE_ROOT_SEGMENT &&
+    !relative.startsWith(`${PRIVATE_ROOT_SEGMENT}/`) &&
+    !isInstallStampPath(`/${relative}`)
+  );
 }
 
 function assertNoReservedSegment(segments: readonly string[]): void {
@@ -303,9 +320,23 @@ export function readBoundedPlaygroundArchiveTree(
   limits: PlaygroundArchiveV1Limits = PLAYGROUND_ARCHIVE_V1_LIMITS,
   reservedPolicy: 'exclude' | 'reject' = 'reject',
 ): readonly BoundedPlaygroundArchiveTreeFile[] {
+  return readBoundedArchiveTree(fs, rawRoot, limits, reservedPolicy).files;
+}
+
+function readBoundedArchiveTree(
+  fs: FsSync,
+  rawRoot: string,
+  limits: PlaygroundArchiveV1Limits,
+  policy: 'exclude' | 'reject' | 'scratch-recovery',
+): {
+  readonly files: readonly BoundedPlaygroundArchiveTreeFile[];
+  readonly directories: readonly string[];
+} {
   assertLimits(limits);
   const root = assertProjectRoot(fs, rawRoot, true);
   const files: BoundedPlaygroundArchiveTreeFile[] = [];
+  const directories: string[] = [];
+  const recovery = policy === 'scratch-recovery';
   const stack: DirectoryFrame[] = [directoryFrame(fs, root)];
   let traversalEntries = 0;
   let totalDecodedBytes = 0;
@@ -326,13 +357,15 @@ export function readBoundedPlaygroundArchiveTree(
 
     const path = childPath(frame.directory, child.name);
     const relative = relativePath(root, path);
-    const segments = assertPortableRelativePath(relative, limits);
-    const reserved = excludedArchiveSegment(segments) !== undefined;
-    if (reserved) {
-      if (reservedPolicy === 'exclude') continue;
+    const segments = assertPortableRelativePath(relative, limits, recovery);
+    if (recovery) {
+      if (!isScratchRecoveryOrdinaryPath(relative)) continue;
+    } else if (excludedArchiveSegment(segments) !== undefined) {
+      if (policy === 'exclude') continue;
       assertNoReservedSegment(segments);
     }
     if (child.isDirectory) {
+      if (recovery) directories.push(relative);
       stack.push(directoryFrame(fs, path));
       continue;
     }
@@ -370,7 +403,34 @@ export function readBoundedPlaygroundArchiveTree(
   }
 
   files.sort((left, right) => compareCodeUnits(left.path, right.path));
-  return Object.freeze(files);
+  return {
+    files: Object.freeze(files),
+    directories: Object.freeze(directories.sort(compareCodeUnits)),
+  };
+}
+
+/** Bounded, non-consuming recovery download; ordinary project bytes carry no install trust. */
+export function exportPlaygroundScratchRecoveryV1(
+  fs: FsSync,
+  rawRoot: string,
+  limits: PlaygroundArchiveV1Limits = PLAYGROUND_ARCHIVE_V1_LIMITS,
+): string {
+  const tree = readBoundedArchiveTree(fs, rawRoot, limits, 'scratch-recovery');
+  const json = JSON.stringify({
+    format: 'rifty-scratch-recovery',
+    version: 1,
+    root: '/',
+    directories: tree.directories,
+    files: tree.files.map(({ path, bytes }) => ({
+      path,
+      encoding: 'base64',
+      content: bytesToBase64(bytes),
+    })),
+  } satisfies PlaygroundScratchRecoveryArchiveV1);
+  if (json.length > limits.maxJsonCodeUnits) {
+    throw new RangeError('Playground archive JSON code-unit limit exceeded');
+  }
+  return json;
 }
 
 export function exportPlaygroundArchiveV1(

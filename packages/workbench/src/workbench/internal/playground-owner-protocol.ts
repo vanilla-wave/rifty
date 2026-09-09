@@ -1,6 +1,10 @@
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 import type { OwnerProjectToken } from '../owner-protocol.ts';
-import type { PlaygroundCatalogSnapshot, PlaygroundProjectRef } from '../playground.ts';
+import type {
+  PlaygroundCatalogSnapshot,
+  PlaygroundProjectRef,
+  PlaygroundRetainedScratch,
+} from '../playground.ts';
 import type {
   ProjectAcquisitionPlan,
   ProjectAcquisitionProvenance,
@@ -9,7 +13,11 @@ import {
   type ProjectTerminalSnapshot,
   ownProjectTerminalSnapshot,
 } from '../project-terminal-state.ts';
-import { inspectPlaygroundCatalogSnapshot } from './playground-project-catalog.ts';
+import {
+  inspectPlaygroundCatalogSnapshot,
+  inspectPlaygroundRetainedScratchId,
+  inspectPlaygroundRetainedScratchRecords,
+} from './playground-project-catalog.ts';
 import {
   type CapturedPlaygroundUrlContext,
   type InspectedPlaygroundProjectDefinition,
@@ -26,6 +34,8 @@ import {
 } from './playground-session-tools-transport.ts';
 
 export type PlaygroundCatalogCommand =
+  | { readonly kind: 'list-retained-scratch' }
+  | { readonly kind: 'export-retained-scratch'; readonly id: string }
   | {
       readonly kind: 'create-scratch';
       readonly definition: PlaygroundProjectDefinitionWire;
@@ -91,6 +101,16 @@ export type PlaygroundOwnerToPageMessage =
     }
   | { readonly type: 'workbench:playground-catalog-completed'; readonly opId: string }
   | {
+      readonly type: 'workbench:playground-retained-scratch-listed';
+      readonly opId: string;
+      readonly records: readonly PlaygroundRetainedScratch[];
+    }
+  | {
+      readonly type: 'workbench:playground-retained-scratch-exported';
+      readonly opId: string;
+      readonly archiveJson: string;
+    }
+  | {
       readonly type: 'workbench:playground-project-opened';
       readonly opId: string;
       readonly projectToken: OwnerProjectToken;
@@ -115,6 +135,8 @@ const OWNER_TYPES = new Set([
   'workbench:playground-ready',
   'workbench:playground-catalog-updated',
   'workbench:playground-catalog-completed',
+  'workbench:playground-retained-scratch-listed',
+  'workbench:playground-retained-scratch-exported',
   'workbench:playground-project-opened',
   'workbench:playground-project-tools',
 ]);
@@ -245,6 +267,13 @@ function catalogCommand(
   }
   const kind = Object.getOwnPropertyDescriptor(value, 'kind')?.value;
   switch (kind) {
+    case 'list-retained-scratch':
+      exactRecord(value, ['kind'], 'list-retained-scratch command');
+      return Object.freeze({ kind });
+    case 'export-retained-scratch': {
+      const command = exactRecord(value, ['kind', 'id'], 'export-retained-scratch command');
+      return Object.freeze({ kind, id: inspectPlaygroundRetainedScratchId(command.id) });
+    }
     case 'create-scratch': {
       const command = optionalRecord(
         value,
@@ -511,6 +540,25 @@ export function inspectPlaygroundOwnerToPageMessage(value: unknown): PlaygroundO
   if (type === 'workbench:playground-catalog-completed') {
     const message = exactRecord(value, ['type', 'opId'], 'Playground catalog completion');
     return Object.freeze({ type, opId: nonEmpty(message.opId, 'Playground catalog opId') });
+  }
+  if (type === 'workbench:playground-retained-scratch-listed') {
+    const message = exactRecord(value, ['type', 'opId', 'records'], 'Retained Scratch listing');
+    return Object.freeze({
+      type,
+      opId: nonEmpty(message.opId, 'Retained Scratch listing opId'),
+      records: inspectPlaygroundRetainedScratchRecords(message.records),
+    });
+  }
+  if (type === 'workbench:playground-retained-scratch-exported') {
+    const message = exactRecord(value, ['type', 'opId', 'archiveJson'], 'Retained Scratch export');
+    if (typeof message.archiveJson !== 'string') {
+      throw new TypeError('Retained Scratch export must be a string');
+    }
+    return Object.freeze({
+      type,
+      opId: nonEmpty(message.opId, 'Retained Scratch export opId'),
+      archiveJson: message.archiveJson,
+    });
   }
   if (type === 'workbench:playground-project-tools') {
     const message = exactRecord(

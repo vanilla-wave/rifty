@@ -439,6 +439,12 @@ function catalog(
       listener(snapshot);
       return () => {};
     },
+    listRetainedScratch: async () => {
+      throw new Error('Unexpected retained catalog operation at this fixture boundary');
+    },
+    exportRetainedScratch: async () => {
+      throw new Error('Unexpected retained catalog operation at this fixture boundary');
+    },
     createScratch: async () => snapshot,
     saveScratch: async () => snapshot,
     activate: async () => snapshot,
