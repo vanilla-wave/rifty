@@ -1,0 +1,197 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN CLOSE PASS (advisory NOTES only) — I1–I8 have executed carriers on this tree; packed-consumer Chromium was independently green; leftover child docs are delete-on-done paperwork, not product residuals.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "4f0e51f7373667e7b2bc10c1d8b9c141611ba45a",
+  "unit_goal_source": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md CLOSE of whole goal (PR #322, not #316; BASE origin/main merge-base 169368aac5b59921f07982983cb9a4083fd9b83f; product SHA 445c13f70191252a579d8a9713b183fd958ead0e; HEAD 4f0e51f7373667e7b2bc10c1d8b9c141611ba45a). Map ## Items empty. ADRs 0386/0389/0395/0396/0400/0401/0403/0404/0405/0408. Child dep-snapshot-tar.md remains on disk with Contract+RED only; codec+tests are in-tree and I1 ordinary-tar was executed here.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "I1 published produceDepSnapshot from an installed @riftydev/workbench tarball; packed consumer restores through public API without a rifty checkout.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:846",
+      "note": ""
+    },
+    {
+      "row": "I1 ordinary tools list/extract real tar entries; payload/ and rifty/ namespaces stay disjoint.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:154",
+      "note": ""
+    },
+    {
+      "row": "I2 consumer copies published dist/runtime; compiles no Worker/SW entries and writes no builtin-alias or QuickJS wrapper.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1017",
+      "note": ""
+    },
+    {
+      "row": "I3 snapshot-only: no registryUrl, zero registry requests; unrestorable snapshot fails before guest start; later npm install cannot network-install.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only.contract.test.ts:197",
+      "note": ""
+    },
+    {
+      "row": "I4 / User scenario 5: storage.namespace bounds OPFS; a new namespace starts empty; returning to the former setting reopens former projects.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/vfs/src/opfs-storage-namespace.contract.test.ts:168",
+      "note": ""
+    },
+    {
+      "row": "I5 previewPrefix inside non-root SW scope; iframe, assets, and HMR resolve under the prefix.",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1188",
+      "note": ""
+    },
+    {
+      "row": "I6 / User scenario 6: unjournaled orphan Scratch is retained and publicly downloadable beside a fresh Scratch.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/main.ts:185",
+      "note": ""
+    },
+    {
+      "row": "I6 failed preserve keeps only the original copy and does not claim a fresh Scratch.",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-orphan-scratch-recovery.fault.test.ts:75",
+      "note": ""
+    },
+    {
+      "row": "I7 / User scenario 7: public duration budgets on existing owners; raising a budget is not defeated by a hidden shorter sibling.",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:147",
+      "note": ""
+    },
+    {
+      "row": "I8 / User scenario 4: default initial-only saved-state priority; apply overwrite/error; identical bytes are not conflicts.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-application.contract.test.ts:299",
+      "note": ""
+    },
+    {
+      "row": "I8 incompatible saved state fails startup without mutating bytes.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1221",
+      "note": ""
+    },
+    {
+      "row": "User scenario 1–3 and 6–7 composed packed host: CI produce from installed tarball, copy runtime, snapshot-only /sandbox/ with prefix+namespace+budgets, Vite edit/build/preview/HMR, orphan download.",
+      "source": "acceptance",
+      "trace": "I1+I2+I3+I5+I6+I7",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1422",
+      "note": ""
+    },
+    {
+      "row": "Public API: produceDepSnapshot / restore / fetch / parse on sealed @riftydev/workbench/dep-snapshot.",
+      "source": "public-api",
+      "trace": "ADR-0389+I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/dep-snapshot.ts:7",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:127",
+          "evidence": "pnpm exec vitest run packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts --testNamePattern 'rejects hung owner ready|keeps owner ready pending' — 2 passed. Raised-budget discrimination is present (80 ms vs still-pending at 30 000). Omitted-default 30 000 / 60 000 numbers remain unpinned; owners use ?? 30_000 / 60_000. Advisory REV-4 / goal I7 NOTES.",
+          "summary": "I7 omitted defaults stay unpinned at 30 000 / 60 000; raising a budget is still discriminated. Advisory NOTE, not a missing I7 carrier.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/distribution/dep-snapshot-tar.md:1",
+          "evidence": "Codec+tests exist: packages/workbench/src/glue/dep-snapshot-tar.ts and dep-snapshot-tar.test.ts. Independent run: pnpm exec vitest run packages/workbench/src/glue/dep-snapshot-tar.test.ts — 22 passed, including 'writes deterministic standard tar entries ordinary tools extract' (tar -tzf / tar -xzf). Contract+RED JSON exists; no final-green JSON. Map ## Items is empty.",
+          "summary": "I1 codec child still on disk without Final+GREEN paperwork. Discriminating ordinary-tar carrier is in-tree and was executed; leftover doc is close.md delete-on-done, not a product residual.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/workbench-packed-host-scenario.ts:148",
+          "evidence": "Always-on helper packs source (publishConfig stripped). Independently executed packed-consumer imports produceDepSnapshot from the npm-installed ./dep-snapshot dist export and rejects file: re-exports (workbench-packed-host-produce.mjs:22-24). Not a Fidelity fake.",
+          "summary": "Always-on Acc 9 produce helper packs source while CI packed-consumer packs dist. The Chromium lane executed here is the published-tarball produce.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:3",
+          "evidence": "git diff 445c13f70191252a579d8a9713b183fd958ead0e HEAD is docs-only (final-green JSON, ledger, map Items emptied). Child unit markdown files remain under docs/backlog/{distribution,vfs,playground,service-worker}/. close.md step 4 is driver cleanup after this review.",
+          "summary": "Map items are empty; leftover slice contracts remain for delete-on-done. Not a changed destination.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/workbench-preview-prefix.spec.ts:193",
+          "evidence": "I5 slice Acc 6 HMR conjunct is an HTML marker. Independently executed packed-consumer Chromium asserted native Vite HMR under /sandbox/preview (workbench-packed-consumer.mjs:1188 pathname.startsWith('/sandbox/preview/'); :1247 writeMessage + assertHmrProof). Advisory leftover from I5 slice; composed host now carries the HMR clause.",
+          "summary": "I5 slice HMR probe was a marker, not a prefixed WS remap. Packed-consumer on this tree proved native HMR under /sandbox/preview.",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}

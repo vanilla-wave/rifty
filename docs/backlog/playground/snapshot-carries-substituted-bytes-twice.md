@@ -16,11 +16,10 @@ code:
 A snapshot must restore an exact tree AND let the next `npm install` replay
 with zero registry reads (ADR-0346). Today it buys the second guarantee by
 shipping the package's tarball beside the very files that tarball unpacks to,
-and stores both as base64 in JSON. The standard-container part was selected on 2026-09-07 and is now owned by
-docs/backlog/distribution/dep-snapshot-producer.md in
-docs/backlog/epics/self-hosted-snapshot-workbench/goal.md. It uses a browsable
-tar.gz with disjoint user/control namespaces; this is assigned work, not a
-claim that it has landed. This draft retains the independent question:
+and stores both as base64 in JSON. The standard-container part landed as
+ADR-0386 (deterministic tar.gz, disjoint payload/control namespaces) and
+ADR-0389 (published `@riftydev/workbench/dep-snapshot` producer). This draft
+retains the independent question:
 
 Is one representation of the package enough — replay reading its bytes back
    from the restored tree, or a digest-addressed slot both consumers share — or

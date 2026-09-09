@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Self-hosted Workbench: published tar.gz dependency snapshots, copyable
+  runtime assets, snapshot-only admission, host-selected storage/preview/budgets,
+  and orphan Scratch retain (ADR-0386–0408).
+
 - Claude shares `rifty-review-inline` with Codex via a skill symlink, replacing
   the duplicate slash command; `disable-model-invocation: true` enforces manual
   invocation in Claude. Codex keeps `allow_implicit_invocation: false`.
