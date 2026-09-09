@@ -80,6 +80,12 @@ export interface WorkbenchOwnerStartInput {
     readonly ownerOperationSilenceTimeoutMs?: number;
     /** ADR-0405: host-selected preview pathname; omitted keeps `/preview`. */
     readonly previewPrefix?: string;
+    /** ADR-0408: owner ready/close/exit and OPFS proof duration. */
+    readonly ownerStartupTimeoutMs?: number;
+    /** ADR-0408: project VFS commit/durability duration. */
+    readonly projectFileTimeoutMs?: number;
+    /** ADR-0408: session-tools SCM/archive/flush request duration. */
+    readonly sessionToolsTimeoutMs?: number;
   };
   readonly packageAcquisition: {
     readonly registryUrl?: string;

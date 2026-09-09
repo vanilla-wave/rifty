@@ -45,6 +45,21 @@ export interface WorkbenchOptions {
      * Must be contained in `serviceWorker.scope`.
      */
     readonly previewPrefix?: string;
+    /**
+     * ADR-0408: total-duration budget for owner ready, close/exit observe,
+     * and OPFS proof. Unset = the owners' shipped 30 000 ms.
+     */
+    readonly ownerStartupTimeoutMs?: number;
+    /**
+     * ADR-0408: total-duration budget for project VFS commit/durability.
+     * Unset = the commit owner's shipped 60 000 ms.
+     */
+    readonly projectFileTimeoutMs?: number;
+    /**
+     * ADR-0408: total-duration budget for Playground session-tools
+     * SCM/archive/durability-flush requests. Unset = 60 000 ms.
+     */
+    readonly sessionToolsTimeoutMs?: number;
   };
   readonly packageAcquisition: {
     readonly registryUrl?: string;

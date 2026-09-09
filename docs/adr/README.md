@@ -216,6 +216,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0360 | Owner operation deadline is a host-configurable budget of durability-progress silence |
 | 0403 | Retain downloadable orphan Scratch beside a fresh Scratch |
 | 0404 | Orphan retain pairs scratch replace so rollback restores the only copy |
+| 0408 | Public Workbench duration budgets use existing deadline owners |
 
 ### toolchain-build
 

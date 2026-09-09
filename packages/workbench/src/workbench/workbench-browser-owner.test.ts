@@ -211,6 +211,61 @@ function sentPlaygroundOf<T extends PageToPlaygroundOwnerMessage['type']>(
   );
 }
 
+async function ackCommitWithoutDurability(
+  worker: FakeOwnerWorker,
+  root: string,
+  projectToken: string,
+): Promise<void> {
+  const commit = sentOf(worker, 'workbench:project-vfs').find(
+    (message) => message.frame.type === 'rifty:owner-vfs-commit',
+  );
+  if (commit?.frame.type !== 'rifty:owner-vfs-commit') throw new Error('missing commit');
+  const request = commit.frame.request;
+  const ownerEpoch = `epoch:${projectToken}`;
+  worker.emit('message', {
+    type: 'workbench:project-vfs',
+    projectToken,
+    frame: {
+      type: 'rifty:owner-vfs-commit-ack',
+      operationId: request.operationId,
+      ok: true,
+      ack: {
+        operationId: request.operationId,
+        ownerEpoch,
+        treeRevision: 2,
+        versions: [{ path: `${root}/src/main.ts`, version: 'file-v2' }],
+      },
+    },
+  });
+  worker.emit('message', {
+    type: 'workbench:project-vfs',
+    projectToken,
+    frame: {
+      type: 'workbench:project-vfs-state',
+      fromTreeRevision: 1,
+      mutations: [],
+      frame: {
+        type: 'snapshot',
+        root,
+        ownerEpoch,
+        treeRevision: 2,
+        nodeModulesPresent: false,
+        entries: [
+          { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v2' },
+          {
+            path: `${root}/src/main.ts`,
+            kind: 'file',
+            size: 4,
+            content: encoder.encode('next'),
+            version: 'file-v2',
+          },
+        ],
+      },
+    },
+  });
+  await settleMicrotasks();
+}
+
 async function acceptOpenedProject(
   worker: FakeOwnerWorker,
   openRequest: Extract<PageToWorkbenchOwnerMessage, { readonly type: 'workbench:open-project' }>,
@@ -225,6 +280,74 @@ async function acceptOpenedProject(
     projectRoot,
   });
   await acceptProjectSnapshot(worker, projectToken, projectRoot, entries);
+}
+
+async function openCompanionForBudget(field: 'sessionToolsTimeoutMs', value: number) {
+  const worker = new FakeOwnerWorker();
+  const raw = startBrowserWorkspaceOwner(
+    {
+      ...companionInput,
+      deployment: { ...companionInput.deployment, [field]: value },
+    },
+    dependencies(worker),
+  );
+  void raw.closed.catch(() => {});
+  const companion = raw.playground;
+  if (companion === undefined) throw new Error('missing Playground companion handle');
+  worker.emit('message', {
+    type: 'workbench:owner-ready',
+    storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+  });
+  worker.emit('message', {
+    type: 'workbench:playground-ready',
+    catalog: {
+      active: { kind: 'scratch' },
+      scratch: {
+        starterId: 'vite',
+        dirty: false,
+        editedAt: '2026-07-16T12:00:00.000Z',
+      },
+      projects: [],
+    },
+  });
+  await raw.ready;
+  const opening = companion.openProject(
+    definePlaygroundProject(
+      {
+        kind: 'vite',
+        id: 'scratch',
+        starterId: 'vite',
+        templateId: 'vite',
+        files: { '/index.html': '<main>Companion</main>' },
+        firstMaterialization: { kind: 'install' },
+        port: 4173,
+      },
+      playgroundUrlContext,
+    ),
+  );
+  const openRequest = sentPlaygroundOf(worker, 'workbench:playground-open-project')[0];
+  if (openRequest === undefined) throw new Error('missing Playground open request');
+  worker.emit('message', {
+    type: 'workbench:playground-project-opened',
+    opId: openRequest.opId,
+    projectToken: 'playground-owner-token',
+    projectRoot: '/owner-born/playground/scratch',
+    acquisition: {
+      kind: 'install',
+      snapshotFailures: [
+        { snapshotId: `sha256:${'a'.repeat(64)}`, reason: 'snapshot unavailable' },
+      ],
+    },
+    runtime: { kind: 'vite', port: 4321 },
+    initialScmSnapshot: { history: [], changes: [] },
+  });
+  await acceptProjectSnapshot(
+    worker,
+    'playground-owner-token',
+    '/owner-born/playground/scratch',
+    [],
+  );
+  return { companion, project: await opening };
 }
 
 async function acceptProjectSnapshot(
@@ -2592,5 +2715,145 @@ describe('browser Workbench owner transport', () => {
     raw.close();
     worker.emit('exit', 0, null);
     await raw.closed;
+  });
+
+  it('rejects a hung project-file commit at deployment.projectFileTimeoutMs', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(
+      {
+        ...input,
+        deployment: { ...input.deployment, projectFileTimeoutMs: 80 },
+      },
+      dependencies(worker),
+    );
+    void raw.closed.catch(() => {});
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+    const root = '/owner-born/project-a';
+    const opening = raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/src/main.ts': 'initial' } }),
+      ),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', root, [
+      { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v1' },
+      {
+        path: `${root}/src/main.ts`,
+        kind: 'file',
+        size: 7,
+        content: encoder.encode('initial'),
+        version: 'file-v1',
+      },
+    ]);
+    const project = await opening;
+    const expectedVersion = project.files
+      .snapshot()
+      .entries.find((entry) => entry.path === '/src/main.ts')?.version;
+    if (expectedVersion === undefined) throw new Error('initial file version missing');
+    vi.useFakeTimers();
+    try {
+      const writing = project.files.writeFile('/src/main.ts', encoder.encode('next'), {
+        expectedVersion,
+      });
+      await ackCommitWithoutDurability(worker, root, 'owner-token-a');
+      const outcome = watch(writing);
+      void writing.catch(() => {});
+      await vi.advanceTimersByTimeAsync(80);
+      await settleMicrotasks();
+      expect(outcome().settled).toBe(true);
+      expect(failureMessage(outcome())).toMatch(/80ms/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a hung project-file commit pending at 60 000 ms when projectFileTimeoutMs is 120 000', async () => {
+    const worker = new FakeOwnerWorker();
+    const raw = startBrowserWorkspaceOwner(
+      {
+        ...input,
+        deployment: { ...input.deployment, projectFileTimeoutMs: 120_000 },
+      },
+      dependencies(worker),
+    );
+    void raw.closed.catch(() => {});
+    worker.emit('message', {
+      type: 'workbench:owner-ready',
+      storage: { policy: 'ephemeral', backend: 'memory', durability: 'ephemeral' },
+    });
+    await raw.ready;
+    const root = '/owner-born/project-a';
+    const opening = raw.openProject(
+      inspectProjectDefinition(
+        projects.vite({ id: 'project-a', files: { '/src/main.ts': 'initial' } }),
+      ),
+    );
+    const openRequest = sentOf(worker, 'workbench:open-project')[0];
+    if (openRequest === undefined) throw new Error('missing open request');
+    await acceptOpenedProject(worker, openRequest, 'owner-token-a', root, [
+      { path: `${root}/src`, kind: 'dir', size: 0, version: 'dir-v1' },
+      {
+        path: `${root}/src/main.ts`,
+        kind: 'file',
+        size: 7,
+        content: encoder.encode('initial'),
+        version: 'file-v1',
+      },
+    ]);
+    const project = await opening;
+    const expectedVersion = project.files
+      .snapshot()
+      .entries.find((entry) => entry.path === '/src/main.ts')?.version;
+    if (expectedVersion === undefined) throw new Error('initial file version missing');
+    vi.useFakeTimers();
+    try {
+      const writing = project.files.writeFile('/src/main.ts', encoder.encode('next'), {
+        expectedVersion,
+      });
+      await ackCommitWithoutDurability(worker, root, 'owner-token-a');
+      const outcome = watch(writing);
+      void writing.catch(() => {});
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settleMicrotasks();
+      expect(outcome().settled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a hung session-tools request at deployment.sessionToolsTimeoutMs', async () => {
+    const opened = await openCompanionForBudget('sessionToolsTimeoutMs', 80);
+    vi.useFakeTimers();
+    try {
+      const refresh = opened.companion.sessionTools(opened.project).tools.scm.refresh();
+      const outcome = watch(refresh);
+      void refresh.catch(() => {});
+      await vi.advanceTimersByTimeAsync(80);
+      await settleMicrotasks();
+      expect(outcome().settled).toBe(true);
+      expect(failureMessage(outcome())).toMatch(/session tools request .* timed out after 80ms/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps a hung session-tools request pending at 60 000 ms when sessionToolsTimeoutMs is 120 000', async () => {
+    const opened = await openCompanionForBudget('sessionToolsTimeoutMs', 120_000);
+    vi.useFakeTimers();
+    try {
+      const refresh = opened.companion.sessionTools(opened.project).tools.scm.refresh();
+      const outcome = watch(refresh);
+      void refresh.catch(() => {});
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settleMicrotasks();
+      expect(outcome().settled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

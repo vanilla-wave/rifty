@@ -29,7 +29,8 @@
   optional `deployment.previewPrefix` as the one prefix authority across HTTP
   and HMR (ADR-0405).
 - Timeouts: existing owner port, VFS commit coordinator and tool transport;
-  configure their budgets without adding another timeout/retry coordinator.
+  I7 compile (ADR-0408) exposes three optional duration budgets on those
+  owners; ADR-0360 silence stays separate. No new timeout/retry coordinator.
 
 ## Out of scope
 
