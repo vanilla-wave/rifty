@@ -1,0 +1,231 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS at 6df8f51ed — this is NOT a merge approval: the three budgets are unimplemented, 27 REDs are red by design, and merge requires the later Final+GREEN record plus the packed-consumer Chromium lane.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "6df8f51ed2cde6d17d5e9bab278ea53d27ca3e05",
+  "unit_goal_source": "docs/backlog/distribution/workbench-operation-budgets.md (status ready) against BASE f57c2c809 (I5 Final+GREEN + rechart); goal docs/backlog/epics/self-hosted-snapshot-workbench/goal.md I7 + I1, User scenario step 7; ADR-0408 docs/adr/playground/0408-public-workbench-duration-budgets-use-existing-deadline-owners.md; evidence docs/backlog/distribution/reference/workbench-operation-budgets-evidence.md",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I7 — public configuration controls the effective budgets for owner startup/storage proof, project-file commit/durability, and catalog/SCM/archive requests; raising a budget is not defeated by a hidden shorter sibling deadline",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:95",
+      "summary": "Not delivered at this checkpoint. Only the RED carriers and the two option TYPE declarations exist (packages/workbench/src/workbench/internal/workbench-options.ts:52-62, packages/workbench/src/workbench/workbench-owner-port.ts:84-88); validateWorkbenchOptions still drops the keys and runWorkbenchOwner still passes no proofTimeoutMs. Continues in this unit's IMPLEMENT stage."
+    },
+    {
+      "clause": "I1 packed residual — a packed consumer restores a producer-emitted snapshot through public API without a rifty checkout",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:71 + map.md:5",
+      "summary": "Carried by Acceptance 9 of this unit and still open: tests/integration/workbench-packed-host-scenario.mjs:14 and :31 throw honest not-implemented; the packed lane does not yet call produceDepSnapshot from an installed @riftydev/workbench/dep-snapshot tarball."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1 — omitted ownerStartupTimeoutMs / projectFileTimeoutMs / sessionToolsTimeoutMs keep today's 30 000 ms owner ready/close/exit and OPFS proof and 60 000 ms VFS commit and session-tools budgets; existing owner-port hung-ready and browser-owner silence/commit defaults stay",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:127",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2 — the three positive options are valid Workbench admission and appear on owner.start input, absent when omitted like silence",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3 — invalid values (0, -1, Infinity, NaN, '80') throw TypeError naming deployment.<option> before owner start / SW register",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.fault.test.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4 — ownerStartupTimeoutMs: 80 rejects hung owner-ready (and hung close/exit observe) at 80 ms not 30 000 ms; 60 000 is still pending at 30 000 ms",
+      "source": "acceptance",
+      "trace": "I7 + scenario step 7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:147,175,204",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5 — the same public startup budget is the OPFS proof timeout: owner initialize admits deployment.ownerStartupTimeoutMs and runWorkbenchOwner passes that number as proofTimeoutMs into installWorkbenchOwnerStorageAuthority",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:234 + packages/workbench/src/workers/workbench-owner-startup-budget.contract.test.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6 — projectFileTimeoutMs: 80 is the VFS commit budget startBrowserWorkspaceOwner uses, a hung commit rejects at 80 ms; 120 000 is still pending at 60 000 ms",
+      "source": "acceptance",
+      "trace": "I7 + scenario step 7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2720,2775",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7 — sessionToolsTimeoutMs: 80 is the session-tools request budget the browser owner passes, a hung SCM/archive request rejects at 80 ms; 120 000 is still pending at 60 000 ms",
+      "source": "acceptance",
+      "trace": "I7 + scenario step 7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2829,2845",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8 — a duration timeout still kills/rejects without claiming the admitted mutation did not apply (applied/unknown/death stay; no hidden retry)",
+      "source": "acceptance",
+      "trace": "I7 + scenario step 7",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-owner-port.test.ts:137 + packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:169",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9 — packed host from an installed workbench tarball: produceDepSnapshot from @riftydev/workbench/dep-snapshot, /sandbox/ snapshot-only open with namespace, previewPrefix /sandbox/preview and the public budgets; planted orphan Scratch remains downloadable",
+      "source": "acceptance",
+      "trace": "I7 + I1 + scenario step 7",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-host-scenario.contract.test.ts:8,16",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix — corrupt-input × invalid duration: TypeError naming deployment.<option> before owner start",
+      "source": "fault-matrix",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.fault.test.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix — sibling-drift × raised startup: ready, close/exit and OPFS proof share the one public ms",
+      "source": "fault-matrix",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:175,204 + packages/workbench/src/workers/workbench-owner-startup-budget.contract.test.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix — sibling-drift × raised file or tools: commit / session-tools request use the public ms, not 60 000",
+      "source": "fault-matrix",
+      "trace": "I7 + ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2775,2845",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix — unbounded-read × hung ready/proof/commit/tools: reject at the public budget, no hang",
+      "source": "fault-matrix",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:147 + packages/workbench/src/workbench/workbench-browser-owner.test.ts:2720,2829",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix — provenance-lie × duration timeout: timeout does not claim not-applied; peer death/unknown stay",
+      "source": "fault-matrix",
+      "trace": "I7 + scenario step 7",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-owner-port.test.ts:137 + packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:169",
+      "note": ""
+    },
+    {
+      "row": "Public API — WorkbenchOptions.deployment.ownerStartupTimeoutMs? / projectFileTimeoutMs? / sessionToolsTimeoutMs? (public via open-workbench.ts re-export of internal/workbench-options.ts)",
+      "source": "public-api",
+      "trace": "Acceptance 2 → I7 → ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/workbench-options.ts:52,57,62",
+      "note": ""
+    },
+    {
+      "row": "Public API — WorkbenchOwnerStartInput.deployment.ownerStartupTimeoutMs? / projectFileTimeoutMs? / sessionToolsTimeoutMs? on owner.start input",
+      "source": "public-api",
+      "trace": "Acceptance 2 → I7 → ADR-0408",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-owner-port.ts:84,86,88",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts:127",
+          "evidence": "$ pnpm exec vitest run <the five files>  →  'Test Files 5 failed (5) / Tests 27 failed | 29 passed (56)'. The only new green case is 'keeps omitted duration budgets off the admitted owner deployment'; it asserts undefined, not the 30 000/60 000 numbers.\n$ rg -ni 'commit.*timed out|timed out.*commit|commit budget|writeFile.*timeout' packages/workbench/src  →  'No matches found'.\n$ sed -n '135,152p' packages/workbench/src/workbench/workbench-owner-port.test.ts  →  the existing hung-ready case uses 'await vi.runAllTimersAsync()' and matches /owner.*ready.*timed out/i without pinning 30000.",
+          "summary": "Acceptance 1 states the omitted-case numbers exactly ('30 000 ms ... 60 000 ms'), but no carrier pins them: the existing owner-port hung-ready case runs all timers instead of asserting 30 000, and no test exercises the startBrowserWorkspaceOwner VFS-commit default at 60 000 with the option omitted (the new 120 000 cases all set the option). Only the ADR-0360 silence 60 000 default is pinned (workbench-browser-owner.test.ts:492,554,611). An implementation that honors the options but shifts an omitted default would survive. Advisory under REV-4 (no executed surviving-mutant artifact) and REV-3; suggest an omitted-case boundary assertion before Final+GREEN.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/integration/workbench-packed-host-scenario.contract.test.ts:9",
+          "evidence": "$ pnpm exec vitest run tests/integration/workbench-packed-host-scenario.contract.test.ts (as part of the five-file run)  →  'FAIL ... produces a dep snapshot from the installed workbench tarball / Error: packed produce from an installed @riftydev/workbench/dep-snapshot tarball is not implemented' and 'FAIL ... downloads planted orphan Scratch after packed-host reopen / Error: packed-host planted orphan Scratch download is not implemented'. Helper bodies: tests/integration/workbench-packed-host-scenario.mjs:14,31 (honest throws).",
+          "summary": "Acceptance 9's carriers now EXECUTE the produce/orphan helpers (the prior token-grep is gone) and fail for missing capability, which meets the Contract+RED bar. Advisory only: the assertions are literal ('orphan bytes', a fixed host object), so a literal-returning helper would satisfy them. Per REV-5 no imagined implementation is reviewed here; at Final+GREEN the packed-consumer Chromium lane, not these helpers, must close acceptance (AGENTS.md DoD: fakes and source greps do not close acceptance).",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2769",
+          "evidence": "$ pnpm exec vitest run ... workbench-browser-owner.test.ts  →  '× rejects a hung project-file commit at deployment.projectFileTimeoutMs 6ms' (RED today). Assertion body: expect(failureMessage(outcome())).toMatch(/80ms/), versus the session-tools sibling at :2839 which asserts /session tools request .* timed out after 80ms/.",
+          "summary": "The commit-budget reject asserts only /80ms/ while its session-tools sibling asserts the full message shape; matching the sibling would also strengthen the Acceptance 8 provenance-lie row on the commit path.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workbench/internal/workbench-options.ts:52",
+          "evidence": "$ git diff f57c2c809..6df8f51ed --stat  →  only workbench-options.ts (+15), workbench-owner-port.ts (+6) and tests/integration/workbench-packed-host-scenario.{mjs,d.ts} touch source; both .ts hunks are interface members plus doc comments, no validation or threading.\n$ pnpm exec vitest run ...  →  'admits the three public duration budgets on owner start input / AssertionError: expected undefined to be 80', i.e. validateWorkbenchOptions still drops all three keys.",
+          "summary": "The three options are already declared on the PUBLIC WorkbenchOptions type (re-exported via open-workbench.ts:35-39) while validateWorkbenchOptions silently drops them — a host could set them today and get no error and no effect. Correct and expected at Contract+RED (types-only, needed for RED compile, branch not merged), but this state must not reach main without Acceptance 2 and 3; flagged so the merge gate is not satisfied by the type surface alone.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/workbench-owner-startup-budget.contract.test.ts:56",
+          "evidence": "PROBE A (untracked scratch, since deleted) — real runWorkbenchOwner, committed Acc 5 test body copied verbatim, with vi.mock('../workbench/owner-protocol.ts') making inspectPageToWorkbenchOwnerMessage ADMIT deployment.ownerStartupTimeoutMs while runWorkbenchOwner still threads nothing:\n$ pnpm exec vitest run --reporter=verbose packages/workbench/src/workers/zz-probe-a-real-runtime.probe.test.ts\n  FAIL ... > passes initialize ownerStartupTimeoutMs to the storage installer\n  AssertionError: expected \"spy\" to be called with arguments: [ 'ephemeral', ObjectContaining{…} ]\n  1st spy call: Array [ \"ephemeral\", - ObjectContaining { \"proofTimeoutMs\": 80 }, + Object {} ]  Number of calls: 1\n  Test Files 1 failed (1) | Duration 1.32s (tests 58ms)\nPROBE B (untracked scratch, since deleted) — same committed body against a stand-in owner loop that admits the field and NEVER settles (only shutdown would settle it), parameterised on threading:\n$ pnpm exec vitest run --reporter=verbose packages/workbench/src/workers/zz-probe-b-threaded.probe.test.ts\n  × MUTANT (admits, does not thread proofTimeoutMs) must FAIL fast, not time out → 1st spy call Array [ \"ephemeral\", + Object {} ], Number of calls: 1\n  ✓ CORRECT (threads proofTimeoutMs) must PASS\n  Tests 1 failed | 1 passed (2) | Duration 299ms (tests 111ms)\n$ git status --porcelain  →  (empty; all three scratch files deleted)",
+          "summary": "The 2eee39b96 Acc 5 blocker is fixed and I verified it rather than reading the claim. With initialize admitting the budget, the committed body's Promise.race(running-catch, vi.waitFor(installer called)) resolves on the installer call in ~58-111 ms, so the toHaveBeenCalledWith assertion EVALUATES (no 5000 ms runner timeout) and fails precisely because proofTimeoutMs is absent, while a threaded implementation passes. Recorded as a concern-free confirmation, not a defect.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -67,6 +67,7 @@ owners. Hostile-code isolation.
 
 ## Decisions
 
+- 2026-09-09 — ready-verdict: Contract+RED PASS @ 6df8f51ed2cde6d17d5e9bab278ea53d27ca3e05
 - 2026-09-09 — Contract+RED reception: Acc 5 drives `runWorkbenchOwner` initialize→install (`proofTimeoutMs`) and races inspect-reject against the installer call (owner loop does not settle); Acc 9 replaces fixture token-grep with executed produce/orphan carriers. Trace: I7, I1 packed residual, scenario step 7.
 - 2026-09-09 — ADR-0408: three optional duration budgets; omitted keeps 30 s/60 s owners; silence stays ADR-0360; catalog owner RPCs stay silence; no new coordinator.
 - 2026-09-07 — finding draft; observable scope is settled by goal I7; carrier choices and Contract+RED remain at pickup.
