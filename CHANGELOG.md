@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Complete the self-hosted snapshot Workbench goal I1–I8; independent32/32 end-to-end review, durable API/ADR/evidence retained, completed backlog documents removed.
+
 - Workbench operation budgets reach existing startup/file/tool/native-IO deadlines; update the exact TypeScript-worker pin only for dependency import hashes (ADR-0410/0391).
 
 - Process: remove the generated App SW879-line pin and exclude only that bundle from source-size measurement (ADR-0016); all handwritten inputs/generator and unrelated public files retain their caps.

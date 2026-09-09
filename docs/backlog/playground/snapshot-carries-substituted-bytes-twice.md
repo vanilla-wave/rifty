@@ -4,7 +4,7 @@ status: draft
 title: Can a baked snapshot satisfy zero-read replay without shipping the same package bytes twice?
 created: 2026-08-31
 why: Snapshot replay retains both source tarballs and installed bytes; the independent saving from deduplicating the selected tar.gz representation remains unmeasured, so this question stays unscheduled.
-user_story: As a browser-IDE user opening an instant template, I want a smaller download with exact offline replay, but the benefit of deduplicating the forthcoming tar.gz beyond its container savings is not yet measured.
+user_story: As a browser-IDE user opening an instant template, I want a smaller download with exact offline replay, but the benefit of deduplicating the standard tar.gz beyond its container savings is not yet measured.
 sources: [PR-289, docs/adr/playground/0346-baked-dependency-snapshots-carry-replay-tarball-cache.md, docs/adr/npm-client/0371-registry-twins-carry-substituted-runtime-bytes-in-the-installed-tree.md, docs/backlog/playground/baked-snapshot-regeneration.md]
 code:
   - packages/workbench/src/glue/dep-snapshot.ts
@@ -16,11 +16,11 @@ code:
 A snapshot must restore an exact tree AND let the next `npm install` replay
 with zero registry reads (ADR-0346). Today it buys the second guarantee by
 shipping the package's tarball beside the very files that tarball unpacks to,
-and stores both as base64 in JSON. The standard-container part was selected on 2026-09-07 and is now owned by
-docs/backlog/distribution/reference/dep-snapshot-producer-evidence.md in
-docs/backlog/epics/self-hosted-snapshot-workbench/goal.md. It uses a browsable
-tar.gz with disjoint user/control namespaces; this is assigned work, not a
-claim that it has landed. This draft retains the independent question:
+and the legacy JSON baseline below stores both as base64. The selected standard
+container is delivered: browsable tar.gz with disjoint user/control namespaces
+(ADR-0386/0387; docs/backlog/distribution/reference/dep-snapshot-producer-evidence.md
+and docs/backlog/distribution/reference/self-hosted-snapshot-workbench-completion.md).
+This draft retains the independent, unmeasured deduplication question:
 
 Is one representation of the package enough — replay reading its bytes back
    from the restored tree, or a digest-addressed slot both consumers share — or
