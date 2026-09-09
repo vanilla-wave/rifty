@@ -1,3 +1,5 @@
+import { OpfsPreloadError } from '@riftydev/vfs';
+
 export type OwnerStoragePersistence = 'required' | 'preferred' | 'ephemeral';
 
 export interface OwnerStorageConfig {
@@ -70,7 +72,7 @@ export async function selectOwnerStorage<OpfsBackend>(
     await installers.proveOpfs(backend);
     return Object.freeze({ policy, backend: 'opfs', durability: 'durable' });
   } catch (error) {
-    if (policy === 'required') throw error;
+    if (policy === 'required' || error instanceof OpfsPreloadError) throw error;
     opfsFailure = error;
   }
 

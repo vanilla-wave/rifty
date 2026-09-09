@@ -3,6 +3,37 @@ import assert from 'node:assert/strict';
 const prefix = '/sandbox/p/';
 const hostApi = 'packed host root API\n';
 const hostFile = 'packed host static file\n';
+const messageSource = (message) => `export const message = ${JSON.stringify(message)};\n`;
+
+async function previewFacts(page) {
+  const facts = await page.evaluate(async () => {
+    const proof = await window.__RIFTY_PACKED_SCOPED_PREVIEW__;
+    return {
+      previewUrl: proof.previewUrl,
+      buildOutput: proof.buildOutput,
+      storage: proof.storage,
+      snapshotId: proof.snapshotId,
+      applicationMode: proof.applicationMode,
+      sources: await proof.readSources(),
+      control: await proof.controlProof(),
+    };
+  });
+  assert.match(facts.buildOutput, /built in|build completed/i, 'real scoped Vite build');
+  return facts;
+}
+
+async function closePreview(page) {
+  await page.evaluate(async () => {
+    await (await window.__RIFTY_PACKED_SCOPED_PREVIEW__).close();
+    document.querySelector('#preview').src = 'about:blank';
+  });
+}
+
+async function reopenPreview(page, url) {
+  await closePreview(page);
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  return previewFacts(page);
+}
 
 async function hostFacts(page) {
   return page.evaluate(async () => ({
@@ -93,6 +124,13 @@ async function proveHmr(page, message, { waitForHmrBridge, assertHmrProof }) {
     message,
   );
   await guestFacts(page, message);
+  assert.equal(
+    await page.evaluate(
+      async () => (await (await window.__RIFTY_PACKED_SCOPED_PREVIEW__).readSources()).message,
+    ),
+    messageSource(message),
+    'HMR edit commits exact source bytes',
+  );
   const proof = await app.evaluate(
     (_, key) => ({
       sentinel: globalThis.__riftyPackedHmrSentinel,
@@ -193,16 +231,12 @@ export async function provePackedScopedPreview({
       document: 'unrelated host document',
     });
     await page.goto(`${origin}/sandbox/`, { waitUntil: 'domcontentloaded' });
-    const opened = await page.evaluate(async () => {
-      const proof = await window.__RIFTY_PACKED_SCOPED_PREVIEW__;
-      return {
-        previewUrl: proof.previewUrl,
-        buildOutput: proof.buildOutput,
-        storage: proof.storage,
-        operationProof: proof.operationProof,
-        control: await proof.controlProof(),
-      };
-    });
+    const opened = await previewFacts(page);
+    assert.equal(opened.applicationMode, 'initial-deployment-only');
+    assert.equal(opened.sources.message, messageSource('scoped-vite-ready'));
+    const operationProof = await page.evaluate(async () =>
+      (await window.__RIFTY_PACKED_SCOPED_PREVIEW__).proveOperationBudgets(),
+    );
     const advertised = new URL(opened.previewUrl, origin);
     assert.equal(advertised.origin, origin);
     assert.match(
@@ -210,14 +244,16 @@ export async function provePackedScopedPreview({
       /^\/sandbox\/p\/\d+\/$/,
       'public scoped preview advertisement',
     );
-    assert.match(opened.buildOutput, /built in|build completed/i, 'real scoped Vite build');
     assert.deepEqual(opened.storage, {
       policy: 'required',
       backend: 'opfs',
       durability: 'durable',
     });
-    assert.match(opened.operationProof.archivedSource, /\/\/ packed public operation budgets/);
-    assert.ok(opened.operationProof.scmPaths.includes('/src/message.ts'));
+    assert.equal(
+      operationProof.archivedSource,
+      `${messageSource('scoped-vite-ready')}\n// packed public operation budgets\n`,
+    );
+    assert.ok(operationProof.scmPaths.includes('/src/message.ts'));
     assert.equal(opened.control.scope, `${origin}/sandbox/`);
     assert.equal(opened.control.previewPrefix, prefix);
     const [legacyScript, scopedScript] = await Promise.all([
@@ -247,12 +283,14 @@ export async function provePackedScopedPreview({
     });
     assert.deepEqual(await hostFacts(outside), outsideBefore);
     await proveHmr(page, 'scoped-vite-edited', { waitForHmrBridge, assertHmrProof });
+    const dependencyEdit = await page.evaluate(async () =>
+      (await window.__RIFTY_PACKED_SCOPED_PREVIEW__).editSnapshotDependency(),
+    );
+    assert.equal(dependencyEdit.original, opened.sources.vitePackageJson);
+    assert.notEqual(dependencyEdit.edited, dependencyEdit.original);
 
     // End all live Workbench/preview bindings before checking immutable SW restart configuration.
-    await page.evaluate(async () => {
-      await (await window.__RIFTY_PACKED_SCOPED_PREVIEW__).close();
-      document.querySelector('#preview').src = 'about:blank';
-    });
+    await closePreview(page);
     const restarted = await stopScopedServiceWorker(context, page, opened.control.scriptURL);
     assert.deepEqual(
       restarted.pong,
@@ -260,10 +298,16 @@ export async function provePackedScopedPreview({
       'native stopped/restarted SW retains its script-query configuration',
     );
     await page.reload({ waitUntil: 'domcontentloaded' });
-    const reopened = await page.evaluate(async () => {
-      const proof = await window.__RIFTY_PACKED_SCOPED_PREVIEW__;
-      return { previewUrl: proof.previewUrl, control: await proof.controlProof() };
-    });
+    const reopened = await previewFacts(page);
+    assert.equal(reopened.applicationMode, 'initial-deployment-only');
+    assert.deepEqual(
+      reopened.sources,
+      {
+        message: messageSource('scoped-vite-edited'),
+        vitePackageJson: dependencyEdit.edited,
+      },
+      'saved reopen retains exact edited source and snapshot dependency',
+    );
     assert.deepEqual(
       reopened.control,
       opened.control,
@@ -272,6 +316,62 @@ export async function provePackedScopedPreview({
     assert.equal(new URL(reopened.previewUrl, origin).pathname, advertised.pathname);
     await guestFacts(page, 'scoped-vite-edited');
     await proveHmr(page, 'scoped-vite-reopened', { waitForHmrBridge, assertHmrProof });
+
+    const applied = await reopenPreview(page, `${origin}/sandbox/?apply=1`);
+    assert.equal(applied.applicationMode, 'apply-snapshot');
+    assert.equal(applied.snapshotId, opened.snapshotId, 'explicit apply uses the same snapshotId');
+    assert.deepEqual(
+      applied.sources,
+      {
+        message: messageSource('scoped-vite-reopened'),
+        vitePackageJson: dependencyEdit.original,
+      },
+      'same-ID overwrite restores snapshot target and preserves unrelated edited source',
+    );
+    assert.deepEqual(applied.control, opened.control);
+    assert.equal(new URL(applied.previewUrl, origin).pathname, advertised.pathname);
+    await guestFacts(page, 'scoped-vite-reopened');
+    await proveHmr(page, 'scoped-vite-applied', { waitForHmrBridge, assertHmrProof });
+
+    const appliedReopened = await reopenPreview(page, `${origin}/sandbox/`);
+    assert.equal(appliedReopened.applicationMode, 'initial-deployment-only');
+    assert.deepEqual(
+      appliedReopened.sources,
+      {
+        message: messageSource('scoped-vite-applied'),
+        vitePackageJson: dependencyEdit.original,
+      },
+      'default reopen retains exact state after same-ID apply and HMR',
+    );
+    await guestFacts(page, 'scoped-vite-applied');
+
+    const freshApplied = await reopenPreview(page, `${origin}/sandbox/?fresh=1&apply=1`);
+    assert.equal(freshApplied.applicationMode, 'apply-snapshot');
+    assert.equal(freshApplied.snapshotId, opened.snapshotId);
+    assert.deepEqual(
+      freshApplied.sources,
+      {
+        message: messageSource('scoped-vite-ready'),
+        vitePackageJson: dependencyEdit.original,
+      },
+      'fresh apply starts from supplied files and the real dependency snapshot',
+    );
+    assert.deepEqual(freshApplied.control, opened.control);
+    assert.equal(new URL(freshApplied.previewUrl, origin).pathname, advertised.pathname);
+    await guestFacts(page, 'scoped-vite-ready');
+    await proveHmr(page, 'scoped-vite-fresh-applied', { waitForHmrBridge, assertHmrProof });
+
+    const freshReopened = await reopenPreview(page, `${origin}/sandbox/?fresh=1`);
+    assert.equal(freshReopened.applicationMode, 'initial-deployment-only');
+    assert.deepEqual(
+      freshReopened.sources,
+      {
+        message: messageSource('scoped-vite-fresh-applied'),
+        vitePackageJson: dependencyEdit.original,
+      },
+      'default reopen retains exact state after fresh apply and HMR',
+    );
+    await guestFacts(page, 'scoped-vite-fresh-applied');
     assert.deepEqual(await hostFacts(outside), outsideBefore);
     await outside.reload({ waitUntil: 'domcontentloaded' });
     assert.deepEqual(await hostFacts(outside), outsideBefore);
@@ -298,7 +398,7 @@ export async function provePackedScopedPreview({
     );
     assert.deepEqual(errors, [], 'scoped public browser errors');
     console.log(
-      `Packed scoped preview: /sandbox/ static SW, ${advertised.pathname}, real Vite build/assets/API/HMR, native SW version ${restarted.versionId} stop/restart+host reload; unchanged outside host; zero registry/Eddy`,
+      `Packed scoped preview: /sandbox/ static SW, ${advertised.pathname}, real Vite initial/edit/saved reopen/same-ID overwrite/fresh apply with build/assets/API/HMR/reopen, native SW version ${restarted.versionId} stop/restart; unchanged outside host; zero registry/Eddy`,
     );
   } finally {
     if (!page.isClosed())

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Share read-only installed-file preparation planners and explicit filesystem selection across finalizers, snapshot producers and source readiness validation.
+
 - Reuse an already-active esbuild adapter for the same filesystem and cwd after strict installed-byte validation; repeated install/open no longer restarts the service.
 
 - Vite action preparation rejects a missing/non-callable host keepalive tracker before adapter startup or CLI execution; informational and unrelated entries remain valid without it.

@@ -31,14 +31,19 @@ interface ControllerProof {
   readonly frameVersion: string;
   readonly routingVersion: string;
 }
+interface OperationProof {
+  readonly archivedSource: string;
+  readonly scmPaths: readonly string[];
+}
 export interface ScopedPreviewAcceptance {
   readonly previewUrl: string;
   readonly buildOutput: string;
   readonly storage: unknown;
-  readonly operationProof: {
-    readonly archivedSource: string;
-    readonly scmPaths: readonly string[];
-  };
+  readonly snapshotId: string;
+  readonly applicationMode: 'initial-deployment-only' | 'apply-snapshot';
+  readSources(): Promise<{ message: string; vitePackageJson: string }>;
+  proveOperationBudgets(): Promise<OperationProof>;
+  editSnapshotDependency(): Promise<{ original: string; edited: string }>;
   writeMessage(message: string): Promise<void>;
   controlProof(): Promise<ControllerProof>;
   close(): Promise<void>;
@@ -128,6 +133,8 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
   const metadata = await fetch('/producer-vite-snapshot.json');
   if (!metadata.ok) throw new Error(`Scoped producer metadata HTTP ${metadata.status}`);
   const snapshot = (await metadata.json()) as Snapshot;
+  const query = new URL(location.href).searchParams;
+  const applySnapshot = query.get('apply') === '1';
   const options: PlaygroundWorkbenchOptions = {
     deployment: {
       workers: {
@@ -150,7 +157,11 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
       ownerOperationSilenceTimeoutMs: 105_000,
     },
     packageAcquisition: { mode: 'snapshot-only' },
-    storage: { persistence: 'required', namespace: 'packed-scoped-preview' },
+    storage: {
+      persistence: 'required',
+      namespace:
+        query.get('fresh') === '1' ? 'packed-scoped-preview-fresh-apply' : 'packed-scoped-preview',
+    },
   };
   const workbench = await openPlaygroundWorkbench(options);
   let project: ProjectSession<PreviewHandle> | undefined;
@@ -176,6 +187,9 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
       },
       firstMaterialization: {
         kind: 'snapshot',
+        ...(applySnapshot
+          ? { application: { mode: 'apply-snapshot' as const, conflict: 'overwrite' as const } }
+          : {}),
         snapshot: {
           snapshotId: snapshot.snapshotId,
           templateId: snapshot.templateId,
@@ -188,32 +202,6 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
       preserveDirtySameStarter: true,
     });
     project = await workbench.openProject(definition);
-    const beforeBudgetWrite = await project.files.readFile('/src/message.ts');
-    const budgetSource = `${new TextDecoder().decode(beforeBudgetWrite.bytes)}\n// packed public operation budgets\n`;
-    await project.files.writeFile('/src/message.ts', new TextEncoder().encode(budgetSource), {
-      expectedVersion: beforeBudgetWrite.version,
-    });
-    const tools = workbench.playground.forSession(project);
-    await tools.awaitDurability();
-    const scm = await tools.scm.refresh();
-    const archive = JSON.parse(await tools.archive.export()) as {
-      readonly files: readonly {
-        readonly path: string;
-        readonly encoding: string;
-        readonly content: string;
-      }[];
-    };
-    const archivedMessage = archive.files.find((file) => file.path === 'src/message.ts');
-    if (archivedMessage?.encoding !== 'base64')
-      throw new Error('Budget archive omitted real edited source');
-    const archivedSource = new TextDecoder().decode(
-      Uint8Array.from(atob(archivedMessage.content), (char) => char.charCodeAt(0)),
-    );
-    if (archivedSource !== budgetSource)
-      throw new Error('Budget archive did not carry exact committed bytes');
-    const operationProof = { archivedSource, scmPaths: scm.changes.map((change) => change.path) };
-    if (!operationProof.scmPaths.includes('/src/message.ts'))
-      throw new Error('Budget SCM omitted actual edit');
     const buildOutput = await build(project);
     for (const [path, expected] of [
       ['/index.html', indexHtml],
@@ -233,8 +221,66 @@ async function openScopedPreview(): Promise<ScopedPreviewAcceptance> {
       previewUrl: preview.url,
       buildOutput,
       storage: workbench.snapshot().storage,
-      operationProof,
+      snapshotId: snapshot.snapshotId,
+      applicationMode: applySnapshot ? 'apply-snapshot' : 'initial-deployment-only',
       controlProof,
+      async readSources() {
+        return {
+          message: new TextDecoder().decode(
+            (await session.files.readFile('/src/message.ts')).bytes,
+          ),
+          vitePackageJson: new TextDecoder().decode(
+            (await session.files.readFile('/node_modules/vite/package.json')).bytes,
+          ),
+        };
+      },
+      async proveOperationBudgets() {
+        const before = await session.files.readFile('/src/message.ts');
+        const budgetSource = `${new TextDecoder().decode(before.bytes)}\n// packed public operation budgets\n`;
+        await session.files.writeFile('/src/message.ts', new TextEncoder().encode(budgetSource), {
+          expectedVersion: before.version,
+        });
+        const tools = workbench.playground.forSession(session);
+        await tools.awaitDurability();
+        const scm = await tools.scm.refresh();
+        const archive = JSON.parse(await tools.archive.export()) as {
+          readonly files: readonly {
+            readonly path: string;
+            readonly encoding: string;
+            readonly content: string;
+          }[];
+        };
+        const archivedMessage = archive.files.find((file) => file.path === 'src/message.ts');
+        if (archivedMessage?.encoding !== 'base64')
+          throw new Error('Budget archive omitted real edited source');
+        const archivedSource = new TextDecoder().decode(
+          Uint8Array.from(atob(archivedMessage.content), (char) => char.charCodeAt(0)),
+        );
+        if (archivedSource !== budgetSource)
+          throw new Error('Budget archive did not carry exact committed bytes');
+        const scmPaths = scm.changes.map((change) => change.path);
+        if (!scmPaths.includes('/src/message.ts'))
+          throw new Error('Budget SCM omitted actual edit');
+        return { archivedSource, scmPaths };
+      },
+      async editSnapshotDependency() {
+        const path = '/node_modules/vite/package.json';
+        const before = await session.files.readFile(path);
+        const original = new TextDecoder().decode(before.bytes);
+        const edited = `${JSON.stringify(
+          {
+            ...(JSON.parse(original) as Record<string, unknown>),
+            riftyPackedApplyMarker: 'saved dependency edit',
+          },
+          null,
+          2,
+        )}\n`;
+        await session.files.writeFile(path, new TextEncoder().encode(edited), {
+          expectedVersion: before.version,
+        });
+        await workbench.playground.forSession(session).awaitDurability();
+        return { original, edited };
+      },
       async writeMessage(message) {
         const before = await session.files.readFile('/src/message.ts');
         await session.files.writeFile(

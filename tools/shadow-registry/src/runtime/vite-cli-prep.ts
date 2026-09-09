@@ -1,4 +1,5 @@
-import { normalizePath, syncMirror } from '@riftydev/vfs';
+import { type FsSync, normalizePath, syncMirror } from '@riftydev/vfs';
+import type { InstalledFilePreparation } from './installed-files.ts';
 import {
   type PackageBinSpawnRequest,
   binNameOf,
@@ -53,17 +54,6 @@ export function viteCliPreparationFromArgs(options: {
       };
 }
 
-// Registry acquisition patches before promotion; trusted startup only validates.
-function installCliActionPatch(vitePackageRoot: string): boolean {
-  const fs = syncMirror();
-  const path = normalizePath(`${vitePackageRoot}/dist/node/cli.js`);
-  if (!fs.existsSync(path)) return false;
-  const source = dec.decode(fs.readFileBytesSync(path));
-  const prepared = applyViteCliActionPatch(source);
-  if (prepared !== source) fs.writeFileSync(path, enc.encode(prepared));
-  return true;
-}
-
 interface ViteRootWatchPatchSite {
   readonly path: string;
   readonly source: string;
@@ -73,8 +63,10 @@ function occurrences(source: string, needle: string): number {
   return source.split(needle).length - 1;
 }
 
-function rootWatchPatchSite(vitePackageRoot: string): ViteRootWatchPatchSite {
-  const fs = syncMirror();
+function rootWatchPatchSite(
+  vitePackageRoot: string,
+  fs: FsSync = syncMirror(),
+): ViteRootWatchPatchSite {
   const chunks = normalizePath(`${vitePackageRoot}${VITE_CHUNKS_SUFFIX}`);
   if (!fs.existsSync(chunks)) {
     throw new Error(`vite root watcher patch failed: missing chunks directory ${chunks}`);
@@ -99,14 +91,6 @@ function rootWatchPatchSite(vitePackageRoot: string): ViteRootWatchPatchSite {
   const site = sites[0];
   if (!site) throw new Error('vite root watcher patch failed: missing patch site');
   return site;
-}
-
-function installRootWatchPatch(vitePackageRoot: string): void {
-  const fs = syncMirror();
-  const { path, source } = rootWatchPatchSite(vitePackageRoot);
-  const prepared = applyViteRootWatchPatch(source);
-  if (prepared === source) return;
-  fs.writeFileSync(path, enc.encode(prepared));
 }
 
 function validateCliActionPatch(vitePackageRoot: string): void {
@@ -141,13 +125,33 @@ function vitePackageRoot(root: string, executedBinPath?: string): string {
   return `${nodeModules}/vite`;
 }
 
+/** Read-only Vite preparation shared by acquisition and snapshot source validation. */
+export function planViteCliAcquisitionFiles(
+  root: string,
+  executedBinPath?: string,
+  fs: FsSync = syncMirror(),
+): readonly InstalledFilePreparation[] {
+  const packageRoot = vitePackageRoot(root, executedBinPath);
+  const cliPath = normalizePath(`${packageRoot}/dist/node/cli.js`);
+  if (!fs.existsSync(cliPath)) return [];
+  const cliSource = dec.decode(fs.readFileBytesSync(cliPath));
+  const changes: InstalledFilePreparation[] = [];
+  const cli = applyViteCliActionPatch(cliSource);
+  if (cli !== cliSource) changes.push({ path: cliPath, bytes: enc.encode(cli) });
+  const site = rootWatchPatchSite(packageRoot, fs);
+  const watcher = applyViteRootWatchPatch(site.source);
+  if (watcher !== site.source) changes.push({ path: site.path, bytes: enc.encode(watcher) });
+  return changes;
+}
+
 /** Acquisition-adapter step: patch installed Vite before its stamp promotion. */
 export async function prepareViteCliAcquisitionFiles(
   root: string,
   executedBinPath?: string,
+  fs: FsSync = syncMirror(),
 ): Promise<void> {
-  const packageRoot = vitePackageRoot(root, executedBinPath);
-  if (installCliActionPatch(packageRoot)) installRootWatchPatch(packageRoot);
+  for (const change of planViteCliAcquisitionFiles(root, executedBinPath, fs))
+    fs.writeFileSync(change.path, change.bytes);
 }
 
 /** Reject an incomplete host capability before adapter startup or CLI execution. */

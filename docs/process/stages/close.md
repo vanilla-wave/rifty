@@ -6,6 +6,9 @@ proof; a green slice, source grep, warning or backlog entry is insufficient.
 
 1. An independent reviewer verifies the goal's end-to-end evidence (it may be
    the final slice reviewer when the same tree and complete goal were reviewed).
+   When accepted actions compose, prove their transition on the same representative
+   real program/state. Separate passing fixtures prove only their own clauses;
+   no full state cross-product is required.
    Reuse that result only for unchanged obligations and evidence. Unproven work
    stays open; a technical limit is not permission to drop a requirement.
 2. Resolve required open questions and residuals. A changed destination needs

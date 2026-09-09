@@ -1,5 +1,8 @@
 # PR316 — self-hosted snapshot Workbench acceptance
 
+The original completion below was reopened by executed Vite apply evidence.
+Current repair and remaining I3/I8 proof: docs/backlog/distribution/reference/pr316-completion-repair-evidence.md. The restored goal map remains active until independent Final+GREEN/CLOSE.
+
 Accepted destination and implementation reviewed at
 666b2687bff3d78147beac85319a898791872a4d. Independent Final32/32 proves the
 complete I1–I8 goal with no required residual:

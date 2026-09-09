@@ -26,6 +26,7 @@ import {
   inspectProjectDefinition,
   projects,
 } from '../../../packages/workbench/src/workbench/project-definition.ts';
+import { finalizePackageInstallFiles } from '../../../packages/workbench/src/workers/package-install-finalizer.ts';
 import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
 import { allProjectSpecs } from '../src/templates/registry.ts';
 import { assertRollupWasmNodeLockstep } from '../src/templates/rollup-lockstep.ts';
@@ -78,6 +79,7 @@ for (const spec of baked) {
   });
   const result = await install({ vfs, cwd: ROOT, registry });
   assertRollupWasmNodeLockstep(spec.id, result.lockfile);
+  await finalizePackageInstallFiles({ root: ROOT, fs: fsSync });
 
   const deps = await readEffectiveDeps(vfs, ROOT);
   if (!deps) throw new Error(`bake(${spec.id}): package.json unreadable after install`);

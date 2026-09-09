@@ -22,6 +22,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0393 | Single-pass honest OPFS preload |
 | 0402 | Mount Workbench namespaces through one captured OPFS root |
 | 0406 | Refuse unavailable OPFS cache bytes |
+| 0411 | Preserve acquired-tree preload failures in Workbench storage selection |
 
 ### kernel
 
@@ -331,6 +332,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0397 | Retire completed legacy migration receipts before catalog mutations |
 | 0398 | Select registry-free snapshot acquisition through the existing package owner |
 | 0410 | Configure existing Workbench operation deadlines end to end |
+| 0412 | Publish prepared dependency snapshot payloads |
 
 ## Superseded (removed)
 

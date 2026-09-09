@@ -46,3 +46,10 @@ preload/write-through, pairing and lifecycle remain. ADR-0090 copy/rename orderi
 and ADR-0358/0359 durability remain. Repeated preload with prior real cached bytes
 is a separate measured freshness/coherence case; no cache invalidation or live
 refresh guarantee is introduced. See vfs/opfs-sync-cross-realm-mirror-coherence.
+
+## Corrections (active)
+
+- 2026-09-09 — ADR-0411 supersedes only best-effort preload after integrating
+  ADR-0393: acquired-tree read failure rejects publication and cannot select
+  an empty preferred Workbench. Shared missing-cache EIO, copy/rename ordering
+  and write healing remain.

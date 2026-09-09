@@ -58,7 +58,7 @@ function run(page: Page, request: PreloadRequest): Promise<Record<string, unknow
 
 function controls(result: Record<string, unknown>) {
   expect(result.error).toBeUndefined();
-  expect(result.initialized).toBe(true);
+  expect(result.constructed).toBe(true);
   expect(result.initial).toMatchObject({ healthy: value([11, 22]), empty: value([]) });
   expect(result.native).toMatchObject({
     '/outside-sentinel.bin': [88, 0, 255],
@@ -83,16 +83,17 @@ test('genuine empty and binary content remain readable and copyable in a selecte
   expect(result.flush).toEqual({ total: 0, failures: [] });
 });
 
-for (const fault of ['preload', 'metadata-preload'] as const) {
-  test(`${fault}: unknown source bytes refuse read/copy/cp while native source and old target survive`, async ({
+for (const fault of ['getFile', 'arrayBuffer'] as const) {
+  test(`${fault}: rejected explicit preload leaves cold source unavailable to read/copy/cp and preserves native bytes`, async ({
     page,
   }) => {
     await seed(page);
     const result = await run(page, { fault, operation: 'copy' });
     console.log('[preload-honesty]', JSON.stringify({ fault, result }));
     controls(result);
-    expect(result.sourceSize).toBe(fault === 'preload' ? source.length : 0);
-    expect(result.denials).toBe(fault === 'preload' ? 1 : 2);
+    expect(result.preload).toMatchObject({ ok: false, error: { name: 'OpfsPreloadError' } });
+    expect(result.sourceSize).toBe(source.length);
+    expect(result.denials).toBe(1);
     expect.soft(result.initial).toMatchObject({ source: unavailable() });
     for (const operation of ['copyExisting', 'copyMissing', 'cp'])
       expect.soft(result[operation]).toMatchObject(unavailable());
@@ -131,6 +132,7 @@ for (const fault of ['preload', 'metadata-preload'] as const) {
     await seed(page);
     const result = await run(page, { fault, operation: 'retry' });
     controls(result);
+    expect(result.preload).toMatchObject({ ok: false, error: { name: 'OpfsPreloadError' } });
     expect.soft(result.initial).toMatchObject({ source: unavailable() });
     expect(result.afterRetry).toEqual(value(source));
     expect(result.native).toMatchObject({
@@ -146,9 +148,10 @@ test('uncached rename persists actual native bytes before removal while moved sy
   page,
 }) => {
   await seed(page);
-  const result = await run(page, { fault: 'preload', operation: 'rename' });
+  const result = await run(page, { fault: 'getFile', operation: 'rename' });
   console.log('[preload-honesty-rename]', JSON.stringify(result));
   controls(result);
+  expect(result.preload).toMatchObject({ ok: false, error: { name: 'OpfsPreloadError' } });
   expect(result.rename).toEqual({ ok: true, value: null });
   expect.soft(result.movedBeforeFlush).toMatchObject(unavailable('/moved-tree/z-user.bin'));
   expect.soft(result.movedAfterFlush).toMatchObject(unavailable('/moved-tree/z-user.bin'));
@@ -166,9 +169,10 @@ test('native read refusal during uncached rename keeps original bytes and report
   page,
 }) => {
   await seed(page);
-  const result = await run(page, { fault: 'metadata-preload', operation: 'rename-denied' });
+  const result = await run(page, { fault: 'getFile', operation: 'rename-denied' });
   console.log('[preload-honesty-rename-denied]', JSON.stringify(result));
   controls(result);
+  expect(result.preload).toMatchObject({ ok: false, error: { name: 'OpfsPreloadError' } });
   expect(result.rename).toEqual({ ok: true, value: null });
   expect(result.native).toMatchObject({
     '/preload-A/tree/z-user.bin': source,

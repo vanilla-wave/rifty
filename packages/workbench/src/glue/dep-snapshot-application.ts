@@ -1,6 +1,7 @@
 import { TARBALL_CACHE_ROOT } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
 import type { PersistFailureReport } from '@riftydev/vfs';
+import { assertPreparedDependencySnapshot } from './dep-snapshot-preparation.ts';
 import { type DepSnapshotV3, verifyDepSnapshotReplayCache } from './dep-snapshot.ts';
 import {
   type WorkspaceOverlayFs,
@@ -28,6 +29,7 @@ export async function prepareDepSnapshotApplication(
   },
 ) {
   await verifyDepSnapshotReplayCache(snapshot);
+  assertPreparedDependencySnapshot(snapshot);
   const project = decodeWorkspaceArchive(
     {
       version: 1,

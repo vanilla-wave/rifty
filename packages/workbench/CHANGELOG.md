@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Publish prepared dependency snapshots; reject unprepared apply sources before effects while preserving legacy initial restore and literal saved-file conflicts. Preserve acquired-tree preload failures under preferred storage.
+
 - Configure effective owner startup/storage-proof, project-file observation/durability and Playground request budgets through public deployment options; preserve omitted defaults, uniform catalog silence and applied/unknown settlement (ADR-0410).
 - Reject invalid or overflowing deployment wait budgets before effects; bound at2,147,483,647ms and round positive fractions upward, including existing preview/silence settings.
 

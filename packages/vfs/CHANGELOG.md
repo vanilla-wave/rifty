@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve selected roots and operation budgets through strict single-pass preload; acquired-tree failures remain distinct from unavailable roots (ADR-0411).
+
 ### Added
 
 - OPFS paired installation accepts a captured per-instance IO report timeout; omission keeps30s, timeout retains native lanes/path fences and late completion heals without resend (ADR-0410).

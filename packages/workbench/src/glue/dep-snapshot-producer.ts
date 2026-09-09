@@ -14,6 +14,7 @@ import {
   shadowSubstitutionPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
 import { createMemoryFs } from '@riftydev/vfs/internal';
+import { finalizePackageInstallFiles } from '../workers/package-install-finalizer.ts';
 import { DEFAULT_ASSET_MAX_BYTES, drainByteStreamBounded } from './bounded-asset-fetch.ts';
 import {
   buildDepSnapshot,
@@ -152,6 +153,7 @@ export async function produceDependencySnapshot(
     registry: createProxiedRegistryClient({ proxyPrefix: registryUrl }),
   });
   assertCallerPins(original, result);
+  await finalizePackageInstallFiles({ root: ROOT, fs: fsSync });
   const snapshot = buildDepSnapshot(fsSync, ROOT, {
     templateId: options.templateId,
     deps,

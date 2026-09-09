@@ -128,7 +128,9 @@ The name is one literal component: no empty/blank value, NUL, slash, backslash,
 `.` or `..`; other characters and spaces are preserved. Valid ephemeral mode
 creates no OPFS directory. Namespace open/proof failures reject required storage
 or appear in preferred storage's fallback reason. This is storage addressing;
-host-owned storage remains the host's responsibility. See ADR-0402.
+host-owned storage remains the host's responsibility. After a root is acquired,
+preload read failure rejects both required and preferred storage; it cannot
+open an empty memory project instead. See ADR-0402/0411.
 
 ## Orphan Scratch recovery
 
@@ -230,6 +232,10 @@ firstMaterialization: {
   application: { mode: 'apply-snapshot', conflict: 'overwrite' },
 }
 ```
+
+Producer payloads include the existing Vite and native-adaptation preparation.
+An older snapshot missing that preparation is rejected before explicit apply
+with a rebake reason; legacy initial restore remains supported (ADR-0412).
 
 Apply evaluates every request, including repeated snapshotId. Its default
 conflict policy is `error`: `SnapshotApplicationConflictError.conflictingPaths`

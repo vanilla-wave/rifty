@@ -1,10 +1,11 @@
 /// <reference lib="webworker" />
+import { OpfsFsSync, OpfsVfs } from '@riftydev/vfs';
 import { installOpfsFs } from '@riftydev/vfs/internal';
 
 declare const self: DedicatedWorkerGlobalScope;
 
 export interface PreloadRequest {
-  readonly fault: 'none' | 'preload' | 'metadata-preload';
+  readonly fault: 'none' | 'getFile' | 'arrayBuffer';
   readonly operation: 'copy' | 'retry' | 'rename' | 'rename-denied';
 }
 
@@ -35,26 +36,60 @@ async function probe(request: PreloadRequest): Promise<Record<string, unknown>> 
   const origin = await navigator.storage.getDirectory();
   const selected = await origin.getDirectoryHandle('preload-A');
   const nativeGetFile = FileSystemFileHandle.prototype.getFile;
+  const nativeArrayBuffer = Blob.prototype.arrayBuffer;
+  const sourceFiles = new WeakSet<Blob>();
   let attempts = 0;
   let denials = 0;
+  let deny = false;
   FileSystemFileHandle.prototype.getFile = async function () {
     const path = await selected.resolve(this);
     if (path?.join('/') === 'tree/z-user.bin') {
       attempts += 1;
-      if (request.fault === 'metadata-preload' || (request.fault === 'preload' && attempts === 2)) {
+      if (deny && request.fault === 'getFile') {
         denials += 1;
         throw new DOMException('controlled native source read refusal', 'NotAllowedError');
       }
+      const file = await nativeGetFile.call(this);
+      sourceFiles.add(file);
+      return file;
     }
     return nativeGetFile.call(this);
+  };
+  Blob.prototype.arrayBuffer = function () {
+    if (deny && request.fault === 'arrayBuffer' && sourceFiles.has(this)) {
+      denials += 1;
+      return Promise.reject(
+        new DOMException('controlled native source bytes refusal', 'NotAllowedError'),
+      );
+    }
+    return nativeArrayBuffer.call(this);
   };
   let pair: Awaited<ReturnType<typeof installOpfsFs>> | undefined;
   const result: Record<string, unknown> = {};
   try {
-    pair = await installOpfsFs(selected);
+    if (request.fault === 'none') {
+      pair = await installOpfsFs(selected);
+    } else {
+      const vfs = new OpfsVfs(selected);
+      const fsSync = new OpfsFsSync(selected, vfs);
+      pair = { vfs, fsSync };
+      await fsSync.refreshIndex();
+      // Real sync writes establish independent warm controls; source stays native-only.
+      for (const path of ['/tree/a-healthy.bin', '/tree/empty.bin', '/existing.bin'])
+        fsSync.writeFileSync(path, await vfs.readFile(path));
+      const setupFlush = await fsSync.flush();
+      if (setupFlush.total !== 0) throw new Error('Warm control setup did not persist');
+      deny = true;
+      try {
+        await fsSync.preloadContent();
+        result.preload = { ok: true };
+      } catch (error) {
+        result.preload = { ok: false, error: failure(error) };
+      }
+    }
     const fs = pair.fsSync;
     const read = (path: string) => attempt(() => Array.from(fs.readFileBytesSync(path)));
-    result.initialized = true;
+    result.constructed = true;
     result.sourceAttempts = attempts;
     result.denials = denials;
     result.sourceSize = fs.statSync('/tree/z-user.bin').size;
@@ -63,8 +98,7 @@ async function probe(request: PreloadRequest): Promise<Record<string, unknown>> 
       empty: read('/tree/empty.bin'),
       healthy: read('/tree/a-healthy.bin'),
     };
-    if (request.operation !== 'rename-denied')
-      FileSystemFileHandle.prototype.getFile = nativeGetFile;
+    if (request.operation !== 'rename-denied') deny = false;
     if (request.operation === 'copy') {
       result.copyExisting = attempt(() => {
         fs.copyFileSync('/tree/z-user.bin', '/existing.bin');
@@ -114,6 +148,7 @@ async function probe(request: PreloadRequest): Promise<Record<string, unknown>> 
     result.error = failure(error);
   } finally {
     FileSystemFileHandle.prototype.getFile = nativeGetFile;
+    Blob.prototype.arrayBuffer = nativeArrayBuffer;
     pair?.fsSync.closeAll();
   }
   const readNative = async (path: string) => {

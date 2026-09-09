@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Bake the existing installed-file preparation into dependency snapshot payloads.
+
 - Regenerate the copied App SW for scoped preview routing/protocol7 (ADR-0409).
 - Nodemon stop acceptance waits for foreground completion and a real output marker before counting further starts; HTTP absence alone does not settle admitted output.
 

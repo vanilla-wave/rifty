@@ -119,3 +119,45 @@ export async function denyNamespaceProofWrites(
   await page.route(ownerUrl, handler);
   return () => page.unroute(ownerUrl, handler);
 }
+
+/** Refuse reading one actual acquired-tree entry inside the selected owner Worker. */
+export async function denyNamespacePreloadReads(
+  page: Page,
+  namespace: string,
+  mode: 'getFile' | 'arrayBuffer',
+): Promise<() => Promise<void>> {
+  const ownerUrl = await page.evaluate(async () => {
+    const assetsUrl = '/src/browser-unit/workbench-vite-host-assets.ts';
+    const { workbenchViteHostAssets } = await import(/* @vite-ignore */ assetsUrl);
+    return new URL(workbenchViteHostAssets.workers.owner, location.href).href;
+  });
+  const target = `${namespace}/existing.bin`;
+  const nativeFault = `
+(() => {
+  const getFile = FileSystemFileHandle.prototype.getFile;
+  const arrayBuffer = Blob.prototype.arrayBuffer;
+  const deniedFiles = new WeakSet();
+  const fault = () => new DOMException(${JSON.stringify(`namespace-preload-denied:${mode}:${target}`)}, 'NotAllowedError');
+  FileSystemFileHandle.prototype.getFile = async function() {
+    const origin = await navigator.storage.getDirectory();
+    const path = await origin.resolve(this);
+    if (path !== null && path.join('/') === ${JSON.stringify(target)}) {
+      if (${JSON.stringify(mode)} === 'getFile') throw fault();
+      const file = await getFile.call(this);
+      deniedFiles.add(file);
+      return file;
+    }
+    return getFile.call(this);
+  };
+  Blob.prototype.arrayBuffer = function() {
+    return deniedFiles.has(this) ? Promise.reject(fault()) : arrayBuffer.call(this);
+  };
+})();
+`;
+  const handler = async (route: import('@playwright/test').Route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: `${nativeFault}\n${await response.text()}` });
+  };
+  await page.route(ownerUrl, handler);
+  return () => page.unroute(ownerUrl, handler);
+}
