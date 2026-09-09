@@ -1,0 +1,350 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Можно сливать после актуального CI: блокеров нет, I1–I8 завершены; C1 только advisory.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #316 completion repair against observed BASE 82fc9a08ad3cbd326b34bdd43d8d3f0ebb5d177a; docs/backlog/epics/self-hosted-snapshot-workbench/goal.md frozen accepted revision 666b2687bff3d78147beac85319a898791872a4d (current goal byte-identical); accepted main a1c9fdb612b78192310cf9ca414552fab7d9adf6 integrated by 6e0c2b9f9; reviewed clean c4899576401cf3c76b0d3eaad902c3b9f86084a8, including test-only CI criterion reconciliation.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Caller manifest/npm lock/configured registry produce compatible archive and machine identities; installed consumer restores it.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:28; tests/integration/workbench-packed-consumer.mjs:1161; packages/workbench/src/glue/dep-snapshot-producer.test.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Ordinary tar tools list/extract real entries; control/cache namespaces cannot collide with admitted payload paths.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-tar.test.ts:125; packages/workbench/src/glue/dep-snapshot-tar.test.ts:154; tests/integration/fixtures/workbench-vite-consumer/produce-snapshot.mjs:50",
+      "note": ""
+    },
+    {
+      "row": "Copied published Worker/SW/WASM closure boots real projects without consumer Worker compilation or builtin/bootstrap wrappers.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:6; tests/integration/workbench-packed-consumer.mjs:1198; tests/integration/workbench-scoped-preview-proof.mjs:232",
+      "note": ""
+    },
+    {
+      "row": "Public snapshot-only accepts no registry URL and makes zero registry/Eddy requests while real build/dev/HMR/local scripts run.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/internal/workbench-snapshot-only-options.contract.test.ts:41; tests/integration/workbench-packed-consumer.mjs:1227; tests/integration/workbench-scoped-preview-proof.mjs:381",
+      "note": ""
+    },
+    {
+      "row": "Needed unavailable, corrupt or incompatible snapshots fail before startup; package/terminal paths cannot silently install missing bytes.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:165; packages/workbench/src/workers/workbench-snapshot-only-terminal.contract.test.ts:77",
+      "note": ""
+    },
+    {
+      "row": "Valid saved state ignores unused changed snapshot assets; registry-enabled acquisition retains its explicit existing path.",
+      "source": "acceptance",
+      "trace": "I3 + I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:349; packages/workbench/src/workers/workbench-snapshot-only-acquisition.contract.test.ts:368; tests/integration/workbench-packed-consumer.mjs:1186",
+      "note": ""
+    },
+    {
+      "row": "Selected namespace bounds normal preload/writes; new roots start empty and former/default roots reopen with outside files untouched.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:57; tests/browser-unit/workbench-storage-namespace.spec.ts:23; tests/browser-unit/opfs-storage-namespace.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Non-root SW scope and host-selected prefix support actual iframe, assets/API/chunks and HMR without guest source URL changes.",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/integration/workbench-scoped-preview-proof.mjs:232; tests/integration/workbench-scoped-preview-proof.mjs:283; tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:202",
+      "note": ""
+    },
+    {
+      "row": "Scoped configuration survives native SW stop/restart and host reload; unrelated host routes remain intact.",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/integration/workbench-scoped-preview-proof.mjs:293; tests/integration/workbench-scoped-preview-proof.mjs:375",
+      "note": ""
+    },
+    {
+      "row": "Orphan ordinary bytes are publicly enumerated/downloaded byte-exactly across reopen while a fresh Scratch runs.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/orphan-scratch-recovery-proof.ts:65; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:129",
+      "note": ""
+    },
+    {
+      "row": "Crash/read/quota/pointer failures preserve the only orphan copy; recovery does not duplicate retention.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:186; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:217; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:246; tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts:292",
+      "note": ""
+    },
+    {
+      "row": "Public effective startup/storage-proof budgets preserve explicit ranges and omitted defaults.",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-operation-budget-options.contract.test.ts:75; packages/workbench/src/workbench/workbench-owner-startup-budget.contract.test.ts:82; tests/browser-unit/operation-storage-budget.spec.ts:46",
+      "note": ""
+    },
+    {
+      "row": "File budget reaches durability acknowledgement; timeout retains applied/failure distinction and never replays a mutation.",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:324; packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:347; packages/workbench/src/workbench/workbench-file-budget.contract.test.ts:382",
+      "note": ""
+    },
+    {
+      "row": "Catalog/SCM/archive/close budgets reach existing owners with real results; late/death handling and save admission preserve settlement.",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:276; packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:323; packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:378; packages/workbench/src/workbench/workbench-playground-budget.contract.test.ts:429; tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:237",
+      "note": ""
+    },
+    {
+      "row": "Raised applicable budgets are not cut off by shorter native IO siblings; reporting timeout keeps lanes/fences and late success heals exact bytes.",
+      "source": "acceptance",
+      "trace": "I7 + ADR-0410",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-budget-wire.contract.test.ts:46; tests/browser-unit/operation-storage-budget.spec.ts:107",
+      "note": ""
+    },
+    {
+      "row": "Initial-deployment-only is default; same or changed snapshot identity does not replace edited saved state.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:93; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:127; tests/integration/workbench-scoped-preview-proof.mjs:301",
+      "note": ""
+    },
+    {
+      "row": "Incompatible saved state refuses with reason and preserves all files without implicit reseed/install; an explicit host update remains possible.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:143; tests/e2e/owner-snapshot-restore-exec.spec.ts:147; tests/e2e/helpers/owner-reload-observer.ts:13; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:164",
+      "note": ""
+    },
+    {
+      "row": "Explicit apply evaluates same-ID payload; error defaults and reports literal byte/type/ancestor conflicts before zero payload changes.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:204; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:136",
+      "note": ""
+    },
+    {
+      "row": "Overwrite replaces conflicting targets/adds absent entries while retaining untargeted files with no package-specific policy.",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts:259; packages/workbench/src/workers/workbench-snapshot-application-manifest.contract.test.ts:1; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-application-proof.ts:176",
+      "note": ""
+    },
+    {
+      "row": "Snapshot validation/cache-proof precedes effects; interrupted overlay recovers previous or committed complete state.",
+      "source": "acceptance",
+      "trace": "I3 + I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:295; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:362; packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:391; tests/browser-unit/workbench-snapshot-application.spec.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Same real produced Vite composes initial/edit/saved-reopen/same-ID-overwrite/build/dev/HMR/reopen and fresh apply.",
+      "source": "acceptance",
+      "trace": "I1 + I2 + I3 + I5 + I8",
+      "status": "pass",
+      "citation": "tests/integration/workbench-scoped-preview-proof.mjs:283; tests/integration/workbench-scoped-preview-proof.mjs:320; tests/integration/workbench-scoped-preview-proof.mjs:350",
+      "note": ""
+    },
+    {
+      "row": "Editable archive restores Files/editor bytes immediately; explicit install and public durable Save re-establish dependency eligibility before reload without implicit recovery.",
+      "source": "acceptance",
+      "trace": "I3 + I8 + scenario 4",
+      "status": "pass",
+      "citation": "tests/e2e/workspace-archive.spec.ts:129; tests/e2e/workspace-archive.spec.ts:146; tests/e2e/workspace-archive.spec.ts:164; tests/e2e/workspace-archive.spec.ts:193",
+      "note": ""
+    },
+    {
+      "row": "Installed-file projection sibling-drift: both real producers emit startup-ready Vite and leave ambient owner bytes unchanged.",
+      "source": "fault-matrix",
+      "trace": "I1 + ADR-0412",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-preparation.contract.test.ts:38",
+      "note": ""
+    },
+    {
+      "row": "Source provenance/order: unprepared JSON/tar and each real emnapi form/location refuse before live payload/cache/claim effects; legacy initial restore works.",
+      "source": "fault-matrix",
+      "trace": "I3 + I8 + ADR-0412",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:211; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:379; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:408",
+      "note": ""
+    },
+    {
+      "row": "Source sibling-drift: fresh/same-ID prepared application keeps exact payload; unrelated malformed saved Vite remains untouched when ms is applied.",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:325; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:359",
+      "note": ""
+    },
+    {
+      "row": "Concurrent producers use private explicit filesystems through simultaneous registry awaits with no ambient filesystem swap.",
+      "source": "fault-matrix",
+      "trace": "I1 + ADR-0412",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-preparation.contract.test.ts:49; packages/workbench/src/glue/dep-snapshot-preparation.contract.test.ts:56",
+      "note": ""
+    },
+    {
+      "row": "Acquired-tree getFile/arrayBuffer refusal rejects required/preferred owners, preserves selected/outside native bytes and permits safe retry.",
+      "source": "fault-matrix",
+      "trace": "I4 + I8 + ADR-0411",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-preload-honesty.spec.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Cold-cache missing bytes cannot read/copy as empty; genuine empty/cp partial effects/rename custody/write healing stay honest.",
+      "source": "fault-matrix",
+      "trace": "ADR-0406 + ADR-0411",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-honesty.spec.ts:69; tests/browser-unit/opfs-preload-honesty.spec.ts:86; tests/browser-unit/opfs-preload-honesty.spec.ts:147; tests/browser-unit/opfs-preload-honesty.spec.ts:168",
+      "note": ""
+    },
+    {
+      "row": "produceDependencySnapshot publishes prepared payload through its existing public entry and preserves reproducible identities.",
+      "source": "public-api",
+      "trace": "I1 + ADR-0412",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-preparation.contract.test.ts:38; packages/workbench/src/glue/dep-snapshot-producer.test.ts:115; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:38",
+      "note": ""
+    },
+    {
+      "row": "planToolchainInstallFiles is read-only with explicit FsSync; generic finalization applies the same real hoisted/nested emnapi transforms.",
+      "source": "public-api",
+      "trace": "ADR-0412",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/installed-files.ts:51; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:408",
+      "note": ""
+    },
+    {
+      "row": "planInstalledConsumerFiles is read-only and selects explicit FsSync independently of the ambient owner.",
+      "source": "public-api",
+      "trace": "ADR-0412",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/vite-cli-prep.ts:129; packages/workbench/src/glue/dep-snapshot-preparation.contract.test.ts:38; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:325",
+      "note": ""
+    },
+    {
+      "row": "finalizeToolchainInstallFiles preserves generic-only no-COI behavior and supports explicit filesystem selection.",
+      "source": "public-api",
+      "trace": "ADR-0412",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/runtime/installed-files.ts:79; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:429; tests/no-coi/no-coi-warm-open.spec.ts:123",
+      "note": ""
+    },
+    {
+      "row": "Existing prepareInstalledConsumerFiles accepts explicit FsSync while retaining default ambient preparation behavior.",
+      "source": "public-api",
+      "trace": "ADR-0412",
+      "status": "weak",
+      "citation": "tools/shadow-registry/src/runtime/vite-cli-prep.ts:148; tests/integration/vite-cli-prep.test.ts:171",
+      "note": "C1 advisory: direct wrapper tests use the ambient/default filesystem; explicit-Fs isolation is exercised through the shared planner/producer. Forwarding is correct in current code, but a direct wrapper override regression is less directly protected. No incorrect current behavior or missing goal acceptance."
+    },
+    {
+      "row": "Merged OPFS init/selected-root/budget APIs retain strict single-pass publication and per-instance IO budget without origin remount.",
+      "source": "public-api",
+      "trace": "I4 + I7 + ADR-0411",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-preload-handles.spec.ts:1; tests/browser-unit/workbench-storage-namespace.spec.ts:23; tests/browser-unit/operation-storage-budget.spec.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Exact TypeScript-worker fingerprint changes only six emitted relative import basenames; compiler bytes/body and other pins remain fixed.",
+      "source": "frozen-artifact",
+      "trace": "I2 + ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tests/e2e-prod/typescript-starter-editor.spec.ts:32; /tmp/rifty316-fresh-static-proof.json:1",
+      "note": ""
+    },
+    {
+      "row": "Exact public-source closure count includes four accepted main owners and one readiness validator, while source closure equality remains enforced.",
+      "source": "frozen-artifact",
+      "trace": "I2 + ADR-0412",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:345",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/shadow-registry/src/runtime/vite-cli-prep.ts:148",
+          "summary": "C1: Optional direct coverage for prepareInstalledConsumerFiles explicit FsSync forwarding. Current wrapper is correct; existing direct Vite preparation tests use ambient FsSync, while producer/planner tests prove private-Fs isolation. Advisory only; no unit or goal residual.",
+          "authority": "",
+          "evidence": "Read current wrapper148–155 and all direct calls in tests/integration/vite-cli-prep.test.ts (default filesystem). Current full gate raw /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-pr-check-5H615o/test-run.json:87 Vite-preparation tests passed. Independent /tmp/rifty316-fresh-review-unit.log:24 passed, including actual producer/planner isolation. No wrapper-specific mutant executed; this is a coverage advisory, not a reproduced defect."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "c4899576401cf3c76b0d3eaad902c3b9f86084a8"
+}

@@ -222,3 +222,20 @@ Current pre-CI-reconciliation source gate:25/25 PASS,
 isolated rerun (unit259.3s/parity62.0s). Production App7/7 PASS3.1m,
 /tmp/rifty316-fix-prod.log. The subsequent changes above are test/observer/doc
 criteria only; production code is byte-identical to f2c4855d3.
+
+## Final verification
+
+Clean c4899576401cf3c76b0d3eaad902c3b9f86084a8: full prcheck25/25,
+unit198.3s/parity62.1s, no isolated retry. Raw JSON:10243 tests,
+10225PASS/0FAIL/18existing skipped. /tmp/rifty316-prcheck-landing.log and
+/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-pr-check-5H615o/test-run.json.
+
+Fresh independent pr316_final_review: accepted Final+GREEN and whole I1–I8
+completion, zero unit/goal residuals;35pass/1weak coverage. Independently executed
+24unit+37native+16budget PASS, inspected all50 copied assets and frozen goal,
+verified original/new criteria and counterfactual artifacts. C1 is advisory only:
+the correct existing Vite writer wrapper's optional explicit-Fs parameter has
+less direct coverage than the shared planner/producer. No product defect claimed.
+Same reviewer JSON with exact reviewed_sha:
+pr316-completion-final-green.json. Its raw audit log is
+/tmp/rifty316-fresh-review-evidence.md; completed goal history remains in git.

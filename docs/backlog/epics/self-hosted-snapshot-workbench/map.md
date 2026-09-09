@@ -2,8 +2,6 @@
 
 ## Items
 
-- PR #316 completion repair: prepared snapshot source, literal apply, composed Vite transitions and compatible main preload integration. Evidence: docs/backlog/distribution/reference/pr316-completion-repair-evidence.md. Owner: current driver; independent Final+GREEN and repeated CLOSE remain.
-
 ## Open questions
 
 - No currently identified observable forks after rounds 2/3. The user owns any
