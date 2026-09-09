@@ -1,9 +1,4 @@
-import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  type WorkbenchOwnerStorageInstallers,
-  installWorkbenchOwnerStorageAuthority,
-} from '../workers/workbench-owner-storage.ts';
 import {
   type WorkbenchOptions,
   validateUrlContext,
@@ -128,17 +123,6 @@ const BOOT_CONFIG = Object.freeze({
   storage: Object.freeze({ persistence: 'ephemeral' as const }),
 });
 
-function storageInstallers(): WorkbenchOwnerStorageInstallers {
-  const { vfs, fsSync } = createMemoryFs();
-  const opfsSync = Object.assign(fsSync, {
-    flush: async () => ({ failures: [], total: 0 }),
-  });
-  return {
-    openMemory: vi.fn(() => {}),
-    openOpfs: vi.fn(async () => ({ vfs, fsSync: opfsSync })),
-  };
-}
-
 describe('Workbench operation budgets (I7)', () => {
   it('keeps omitted duration budgets off the admitted owner deployment', () => {
     const admitted = admit(options().deployment);
@@ -247,7 +231,7 @@ describe('Workbench operation budgets (I7)', () => {
     }
   });
 
-  it('admits ownerStartupTimeoutMs on initialize and uses it as the OPFS proof budget', async () => {
+  it('admits ownerStartupTimeoutMs on initialize', () => {
     const inspected = inspectPageToWorkbenchOwnerMessage({
       type: 'workbench:initialize',
       config: {
@@ -264,22 +248,5 @@ describe('Workbench operation budgets (I7)', () => {
     const startupMs = (inspected.config.deployment as { readonly ownerStartupTimeoutMs?: number })
       .ownerStartupTimeoutMs;
     expect(startupMs).toBe(80);
-
-    const h = storageInstallers();
-    const opened = await h.openOpfs();
-    h.openOpfs = vi.fn(async () => ({
-      fsSync: opened.fsSync,
-      vfs: { ...opened.vfs, readFile: () => new Promise<Uint8Array>(() => {}) },
-    }));
-    const { snapshot } = await installWorkbenchOwnerStorageAuthority('preferred', {
-      installers: h,
-      proofTimeoutMs: startupMs,
-      createProofId: () => 'proof-budget',
-    });
-    expect(snapshot).toMatchObject({
-      policy: 'preferred',
-      backend: 'memory',
-      fallback: { reason: expect.stringMatching(/timed out after 80ms/) },
-    });
   });
 });

@@ -8,7 +8,7 @@ user_story: As the Tracker plugin-sandbox embedder, I want to configure effectiv
 epic: self-hosted-snapshot-workbench
 blocked_by: []
 sources: [docs/backlog/epics/self-hosted-snapshot-workbench/goal.md, docs/backlog/distribution/reference/embedder-gaps-evidence.md, docs/backlog/distribution/reference/workbench-operation-budgets-evidence.md, ADR-0408, ADR-0360]
-code: [packages/workbench/src/workbench/workbench-owner-port.ts, packages/workbench/src/workers/workbench-owner-storage.ts, packages/workbench/src/workbench/workbench-browser-owner.ts, packages/workbench/src/workbench/internal/playground-session-tools-transport.ts, packages/workbench/src/workbench/internal/workbench-options.ts]
+code: [packages/workbench/src/workbench/workbench-owner-port.ts, packages/workbench/src/workers/workbench-owner-storage.ts, packages/workbench/src/workers/workbench-owner-runtime.ts, packages/workbench/src/workbench/workbench-browser-owner.ts, packages/workbench/src/workbench/internal/playground-session-tools-transport.ts, packages/workbench/src/workbench/internal/workbench-options.ts, tests/integration/workbench-packed-host-scenario.mjs]
 ---
 
 ## Context
@@ -42,18 +42,18 @@ namespace, orphan retain, and those budgets.
 2. The three positive options are valid Workbench admission and appear on `owner.start` input (absent when omitted, like silence). Same contract file admission case. → I7 → ADR-0408
 3. Invalid values (`0`, `-1`, `Infinity`, `NaN`, `'80'`) throw `TypeError` naming `deployment.<option>` before owner start / SW register. `workbench-operation-budgets.fault.test.ts`. → I7 → ADR-0408
 4. `ownerStartupTimeoutMs: 80` rejects a hung owner-ready (and hung close/exit observe) at 80 ms, not 30 000 ms; `ownerStartupTimeoutMs: 60_000` is still pending at 30 000 ms. Same contract file plus owner-port delayed-boundary cases. → I7 → scenario → ADR-0408
-5. The same public startup budget is the OPFS proof timeout: owner initialize admits `deployment.ownerStartupTimeoutMs` and `installWorkbenchOwnerStorageAuthority` uses that number (preferred hang still falls back with a timeout reason naming it). `workbench-operation-budgets.contract.test.ts` proof case. → I7 → ADR-0408
+5. The same public startup budget is the OPFS proof timeout: owner initialize admits `deployment.ownerStartupTimeoutMs` and `runWorkbenchOwner` passes that number as `proofTimeoutMs` into `installWorkbenchOwnerStorageAuthority`. `workbench-operation-budgets.contract.test.ts` initialize case plus `workbench-owner-startup-budget.contract.test.ts` runtime install seam. → I7 → ADR-0408
 6. `projectFileTimeoutMs: 80` is the VFS commit budget `startBrowserWorkspaceOwner` uses; a hung commit rejects at 80 ms. `projectFileTimeoutMs: 120_000` is still pending at 60 000 ms. `workbench-browser-owner.test.ts` file-budget cases. → I7 → scenario → ADR-0408
 7. `sessionToolsTimeoutMs: 80` is the session-tools request budget the browser owner passes; a hung SCM/archive request rejects at 80 ms. `sessionToolsTimeoutMs: 120_000` is still pending at 60 000 ms. Same browser-owner file tools-budget cases. → I7 → scenario → ADR-0408
 8. A duration timeout still kills/rejects without claiming the admitted mutation did not apply (applied/unknown/death stay; no hidden retry). Existing owner-port hung-ready terminate case plus the short-budget reject messages. → I7 → scenario
-9. Packed host from an installed workbench tarball: CI calls `produceDepSnapshot` from `@riftydev/workbench/dep-snapshot`, copies `dist/runtime/`, opens under `/sandbox/` with snapshot-only, `storage.namespace`, `previewPrefix: '/sandbox/preview'`, and the public budgets; Chromium edits/builds the real Vite project and preview/HMR resolve under that prefix; planted orphan Scratch remains downloadable. `tests/integration/workbench-packed-host-scenario.contract.test.ts` plus packed-consumer lane. → I7 → I1 → scenario
+9. Packed host from an installed workbench tarball: CI calls `produceDepSnapshot` from `@riftydev/workbench/dep-snapshot`, copies `dist/runtime/`, opens under `/sandbox/` with snapshot-only, `storage.namespace`, `previewPrefix: '/sandbox/preview'`, and the public budgets; Chromium edits/builds the real Vite project and preview/HMR resolve under that prefix; planted orphan Scratch remains downloadable. `tests/integration/workbench-packed-host-scenario.contract.test.ts` (`produceFromInstalledWorkbenchTarball` + `provePackedHostOrphanRetain`) plus packed-consumer Chromium lane. → I7 → I1 → scenario
 
 ## Fault matrix
 
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
 | corrupt-input × invalid duration | `TypeError` naming `deployment.<option>` before owner start | `workbench-operation-budgets.fault.test.ts` | → I7 → ADR-0408 |
-| sibling-drift × raised startup | ready, close/exit, and OPFS proof share the one public ms | contract file startup + proof cases | → I7 → ADR-0408 |
+| sibling-drift × raised startup | ready, close/exit, and OPFS proof share the one public ms | contract file startup + owner-runtime install seam | → I7 → ADR-0408 |
 | sibling-drift × raised file or tools | commit / session-tools request use the public ms, not 60 000 | `workbench-browser-owner.test.ts` file/tools raise cases | → I7 → ADR-0408 |
 | unbounded-read × hung ready/proof/commit/tools | reject at the public budget; no hang | contract file delayed-boundary cases | → I7 |
 | provenance-lie × duration timeout | timeout does not claim not-applied; peer death/unknown stay | owner-port hung-ready terminate + short-budget reject | → I7 → scenario |
@@ -67,6 +67,7 @@ owners. Hostile-code isolation.
 
 ## Decisions
 
+- 2026-09-09 — Contract+RED reception: Acc 5 drives `runWorkbenchOwner` initialize→install (`proofTimeoutMs`); Acc 9 replaces fixture token-grep with executed produce/orphan carriers. Trace: I7, I1 packed residual, scenario step 7.
 - 2026-09-09 — ADR-0408: three optional duration budgets; omitted keeps 30 s/60 s owners; silence stays ADR-0360; catalog owner RPCs stay silence; no new coordinator.
 - 2026-09-07 — finding draft; observable scope is settled by goal I7; carrier choices and Contract+RED remain at pickup.
 - 2026-09-07 — inherit the goal's production fault tier for this boundary; use docs/process/rules/fault-classes.md and existing owners before adding coordination.

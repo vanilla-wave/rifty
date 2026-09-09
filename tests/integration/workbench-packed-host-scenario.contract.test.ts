@@ -1,25 +1,24 @@
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-
-const integrationRoot = dirname(fileURLToPath(import.meta.url));
-const consumerMain = resolve(integrationRoot, 'fixtures/workbench-vite-consumer/src/main.ts');
-const packedRunner = resolve(integrationRoot, 'workbench-packed-consumer.mjs');
+import {
+  produceFromInstalledWorkbenchTarball,
+  provePackedHostOrphanRetain,
+} from './workbench-packed-host-scenario.mjs';
 
 describe('packed host scenario composition (I7 + I1 residual)', () => {
-  it('produces from the installed workbench tarball and boots the composed host', () => {
-    const main = readFileSync(consumerMain, 'utf8');
-    const runner = readFileSync(packedRunner, 'utf8');
-    expect(runner).toMatch(/produceDepSnapshot/);
-    expect(runner).toMatch(/@riftydev\/workbench\/dep-snapshot/);
-    expect(main).toMatch(/produceDepSnapshot|snapshotId|dep-snapshot/);
-    expect(main).not.toMatch(/registryUrl/);
-    expect(main).toMatch(/scope:\s*['"]\/sandbox\//);
-    expect(main).toMatch(/previewPrefix:\s*['"]\/sandbox\/preview['"]/);
-    expect(main).toMatch(/namespace:/);
-    expect(main).toMatch(/ownerStartupTimeoutMs/);
-    expect(main).toMatch(/projectFileTimeoutMs/);
-    expect(main).toMatch(/sessionToolsTimeoutMs/);
+  it('produces a dep snapshot from the installed workbench tarball', async () => {
+    const baked = await produceFromInstalledWorkbenchTarball();
+    expect(baked.snapshotId).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(baked.tarBytes.byteLength).toBeGreaterThan(0);
+    expect(baked.entry).toBe('@riftydev/workbench/dep-snapshot');
+  });
+
+  it('downloads planted orphan Scratch after packed-host reopen', async () => {
+    const proof = await provePackedHostOrphanRetain();
+    expect(proof.downloaded).toBe('orphan bytes');
+    expect(proof.host).toMatchObject({
+      scope: '/sandbox/',
+      previewPrefix: '/sandbox/preview',
+      snapshotOnly: true,
+    });
   });
 });

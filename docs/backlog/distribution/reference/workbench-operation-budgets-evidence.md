@@ -51,15 +51,16 @@ tarball.
 
 ## I7 REDs
 
-Vitest 2.1.9, Node v24.16.0 — 25 failed | 29 passed (28 existing
+Vitest 2.1.9, Node v24.16.0 — 27 failed | 29 passed (28 existing
 browser-owner cases + omitted-budget admission). Failures are
-unimplemented public duration budgets and packed-host composition, not
-import/typecheck:
+unimplemented public duration budgets, the owner-runtime proof wiring
+seam, and packed-host produce/orphan carriers — not import/typecheck:
 
 ```text
 $ pnpm exec vitest run \
   packages/workbench/src/workbench/workbench-operation-budgets.contract.test.ts \
   packages/workbench/src/workbench/workbench-operation-budgets.fault.test.ts \
+  packages/workbench/src/workers/workbench-owner-startup-budget.contract.test.ts \
   packages/workbench/src/workbench/workbench-browser-owner.test.ts \
   tests/integration/workbench-packed-host-scenario.contract.test.ts
 admitted ownerStartupTimeoutMs / projectFileTimeoutMs / sessionToolsTimeoutMs → undefined
@@ -67,10 +68,19 @@ invalid 0/-1/Infinity/NaN/'80' → no TypeError
 hung ready at 80 ms still uses hidden 30 000 ms
 raised startup 60 000 ms still dies at 30 000 ms
 initialize + ownerStartupTimeoutMs → TypeError Invalid owner boot deployment
+runWorkbenchOwner initialize→install: storage installer called 0 times
+  (inspect rejects extra ownerStartupTimeoutMs; proofTimeoutMs never passed)
 hung file durability at 80 ms still pending; raised 120 000 ms still dies at 60 000 ms
 hung session-tools at 80 ms still pending; raised 120 000 ms still dies at 60 000 ms
-packed runner/fixture lack produceDepSnapshot, /sandbox/, snapshot-only, prefix, namespace, budgets
+produceFromInstalledWorkbenchTarball → not implemented
+provePackedHostOrphanRetain → not implemented
 ```
+
+Contract+RED reception 2026-09-09: Acc 5's first proof case called
+`installWorkbenchOwnerStorageAuthority` itself (already-green installer).
+The runtime seam test now drives `runWorkbenchOwner`. Acc 9's first
+carrier was a fixture/runner token grep; it now executes the packed-host
+produce and orphan functions.
 
 ## Challenge
 
