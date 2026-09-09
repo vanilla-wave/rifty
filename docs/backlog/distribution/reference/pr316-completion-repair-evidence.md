@@ -123,3 +123,33 @@ size ceiling, other compiler/WASM pin or inventory exception changed. Exact
 old/new diff: /tmp/rifty316-compiler-asset.diff; frozen old artifact:
 /tmp/rifty316-pre-repair-typescript-worker.js. This updates one fingerprint;
 the exact carrier gate rejected it before the update.
+
+PR-4 package acquisition gate: the new producer-owned preparation call is now
+allowed only in dep-snapshot-producer.ts / produceDependencySnapshot, matching
+ADR-0412 private-Fs acquisition. Claim writes retain their separate authority;
+sibling/top-level preparation and a same-named function in another module are
+still rejected. New positive/negative gate test: 1 RED before context registration;
+13/13 GREEN after, repository scan PASS. Logs:
+/tmp/rifty316-fix-producer-gate-red.log and
+/tmp/rifty316-fix-producer-gate-green.log. No broad source exclusion added.
+
+First full source gate: 24/25 PASS; test:run229.7s, parity62.8s.
+Only the producer's previously unregistered acquisition context failed;
+its independently exercised positive/negative gate repair is recorded above.
+Full output: /tmp/rifty316-fix-prcheck.log. This run is not called an overall PASS.
+
+## Native current-tree persistence
+
+`RIFTY_PLAYGROUND_PORT=5607 pnpm exec playwright test --config playwright.browser-unit.config.ts --workers=1 tests/browser-unit/opfs-storage-namespace.spec.ts tests/browser-unit/workbench-storage-namespace.spec.ts tests/browser-unit/workbench-web-lock.spec.ts tests/browser-unit/workbench-orphan-scratch-recovery.spec.ts tests/browser-unit/workbench-legacy-receipt.spec.ts tests/browser-unit/workbench-snapshot-application.spec.ts tests/browser-unit/operation-storage-budget.spec.ts tests/browser-unit/opfs-preload-honesty.spec.ts tests/browser-unit/opfs-preload-handles.spec.ts tests/browser-unit/install-mirror-proof.spec.ts tests/browser-unit/workbench-preload-honesty.spec.ts`
+
+Full62: 60 PASS/2 observer FAIL, 39.4s (/tmp/rifty316-fix-native-full.log).
+Both failures: strict preload rejected before the orphan fixture's old try/finally,
+so its reply lost deniedReads/custody. Native trace shows actual OpfsPreloadError;
+/tmp/rifty316-fix-orphan-observer-red-proof.json. Expanded only that fixture's
+observation/cleanup lifetime across initialization; all original assertions remain.
+Entire affected orphan spec: 18/18 PASS, 18.7s
+(/tmp/rifty316-fix-orphan-lifecycle-green.log); other44 passed and were not repeated.
+Thus all62 current-tree cases covered, including native crash/reopen, exact custody,
+namespace/default isolation, IO fencing and strict all-or-error preload.
+Fixture standalone tsc/Biome/diff-check PASS. This is PR-4 carrier reconciliation
+with ADR-0411, not a change to preservation criteria or a product bypass.

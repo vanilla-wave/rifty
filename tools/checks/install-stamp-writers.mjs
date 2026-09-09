@@ -28,6 +28,8 @@ const PACKAGE_TREE_HELPERS = new Set([
   'seedTemplateNodeModulesFiles',
 ]);
 const PACKAGE_TREE_CONTEXTS = new Map([
+  // ADR-0412: acquisition on the producer's private filesystem, before serialization.
+  ['packages/workbench/src/glue/dep-snapshot-producer.ts', new Set(['produceDependencySnapshot'])],
   [
     'packages/workbench/src/glue/project-deps.ts',
     new Set(['clearProjectTree', 'prepareProjectInstallTree', 'prepareEnsure', 'restoreSnapshot']),

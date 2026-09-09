@@ -98,6 +98,29 @@ describe('install-stamp one-writer gate', () => {
     ).toEqual(['clearProjectTree', 'finalizePackageInstallFiles', 'prepareProjectInstallTree']);
   });
 
+  it('allows producer acquisition but still rejects sibling preparation and forged claims', () => {
+    const source = `
+      async function produceDependencySnapshot() {
+        await finalizePackageInstallFiles({ root, fs: privateFs });
+        privateFs.writeFileSync(installStampPath(root), bytes);
+      }
+      async function reopen() { await finalizePackageInstallFiles({ root }); }
+      await finalizePackageInstallFiles({ root });
+    `;
+    expect(
+      findInstallStampWriterViolations(
+        source,
+        'packages/workbench/src/glue/dep-snapshot-producer.ts',
+      ).map((violation) => violation.operation),
+    ).toEqual(['writeFileSync', 'finalizePackageInstallFiles', 'finalizePackageInstallFiles']);
+    expect(operations(source)).toEqual([
+      'finalizePackageInstallFiles',
+      'writeFileSync',
+      'finalizePackageInstallFiles',
+      'finalizePackageInstallFiles',
+    ]);
+  });
+
   it('rejects both operands of move/copy mutations', () => {
     expect(
       operations(`

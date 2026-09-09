@@ -23,57 +23,62 @@ async function run(input: RecoveryRequest) {
   const boundary = await installNativeBoundary(input.fault, async (checkpoint) => {
     self.postMessage({ kind: 'paused', checkpoint, custody: await custody() });
   });
-  const root = await navigator.storage
-    .getDirectory()
-    .then((origin) => origin.getDirectoryHandle(recoveryNamespace));
-  const pair = await installOpfsFs(root);
-  const composition = createOwnerVfsAuthorityComposition(pair.fsSync, {
-    initialRoots: ['/', '/.rifty'],
-  });
-  const vfs = new SyncMirrorVfs();
-  setSyncMirror(composition.authority, { async: vfs });
-  const packages = createOwnerPackageState({
-    vfs,
-    fsSync: composition.authority,
-    installStampClaims: composition.installStampClaims,
-    flush: () => composition.authority.flush(),
-    nodeWorkerRuntimeEnv: {},
-    log: () => {},
-  });
-  const owner = await createPlaygroundProjectAuthority({
-    ...composition,
-    persistence: 'required',
-    now: () => '2026-09-09T00:00:00.000Z',
-    createStageId: () => crypto.randomUUID(),
-    acquisition: {
-      ensure: (request) =>
-        packages.activateAndEnsure(
-          workbenchFirstMaterializationPackageConfig(request, composition.authority),
-          request.snapshotAdmission,
-        ),
-    },
-    projectSave: packages,
-  });
-  const retained = owner as unknown as RetainedCatalog;
-  const origin = new URL(self.location.href).origin;
-  const definition = definePlaygroundProject(
-    {
-      kind: 'node-cli',
-      id: 'scratch',
-      starterId: 'orphan-fresh',
-      templateId: 'orphan-fresh',
-      entryPath: '/main.cjs',
-      files: {
-        '/package.json': '{"name":"orphan-fresh","private":true}',
-        '/main.cjs': 'console.log("fresh");\n',
-        '/fresh.txt': 'fresh Scratch\n',
-      },
-      firstMaterialization: { kind: 'install' },
-    },
-    { apiBaseUrl: `${origin}/`, clientUrl: `${origin}/unit-harness.html` },
-  );
+  let pair: Awaited<ReturnType<typeof installOpfsFs>> | undefined;
+  let packages: ReturnType<typeof createOwnerPackageState> | undefined;
+  let owner: Awaited<ReturnType<typeof createPlaygroundProjectAuthority>> | undefined;
   let outcome: Record<string, unknown>;
+  // Strict preload may reject before owner creation; still restore and observe custody.
   try {
+    const root = await navigator.storage
+      .getDirectory()
+      .then((origin) => origin.getDirectoryHandle(recoveryNamespace));
+    pair = await installOpfsFs(root);
+    const composition = createOwnerVfsAuthorityComposition(pair.fsSync, {
+      initialRoots: ['/', '/.rifty'],
+    });
+    const vfs = new SyncMirrorVfs();
+    setSyncMirror(composition.authority, { async: vfs });
+    packages = createOwnerPackageState({
+      vfs,
+      fsSync: composition.authority,
+      installStampClaims: composition.installStampClaims,
+      flush: () => composition.authority.flush(),
+      nodeWorkerRuntimeEnv: {},
+      log: () => {},
+    });
+    const packageState = packages;
+    owner = await createPlaygroundProjectAuthority({
+      ...composition,
+      persistence: 'required',
+      now: () => '2026-09-09T00:00:00.000Z',
+      createStageId: () => crypto.randomUUID(),
+      acquisition: {
+        ensure: (request) =>
+          packageState.activateAndEnsure(
+            workbenchFirstMaterializationPackageConfig(request, composition.authority),
+            request.snapshotAdmission,
+          ),
+      },
+      projectSave: packages,
+    });
+    const retained = owner as unknown as RetainedCatalog;
+    const origin = new URL(self.location.href).origin;
+    const definition = definePlaygroundProject(
+      {
+        kind: 'node-cli',
+        id: 'scratch',
+        starterId: 'orphan-fresh',
+        templateId: 'orphan-fresh',
+        entryPath: '/main.cjs',
+        files: {
+          '/package.json': '{"name":"orphan-fresh","private":true}',
+          '/main.cjs': 'console.log("fresh");\n',
+          '/fresh.txt': 'fresh Scratch\n',
+        },
+        firstMaterialization: { kind: 'install' },
+      },
+      { apiBaseUrl: `${origin}/`, clientUrl: `${origin}/unit-harness.html` },
+    );
     if (input.phase === 'victim') boundary.arm();
     const before = input.phase === 'victim' ? undefined : await retained.listRetainedScratch();
     if (input.phase !== 'export') await owner.createScratch({ definition });
@@ -97,9 +102,15 @@ async function run(input: RecoveryRequest) {
     };
   } finally {
     boundary.restore();
-    await owner.close();
-    await packages.quiesce();
-    pair.fsSync.closeAll();
+    try {
+      await owner?.close();
+    } finally {
+      try {
+        await packages?.quiesce();
+      } finally {
+        pair?.fsSync.closeAll();
+      }
+    }
   }
   return { ...outcome, deniedReads: boundary.deniedReads(), custody: await custody() };
 }
