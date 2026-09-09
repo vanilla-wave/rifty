@@ -6,10 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- Snapshot producer acquisition joins the exact install-tree gate contexts; claim/sibling writes remain refused.
+- Snapshot producer acquisition joins the exact install-tree gate contexts; claim/sibling writes remain refused. Legacy reload tests now require explicit recovery; budget tests await real IPC completion.
 - Complete PR316 acceptance on one real Vite across saved reopen, same-ID apply and fresh apply; CLOSE now distinguishes composed transitions from separate passing fixtures. Reconcile main strict OPFS preload with namespace/budget deployment.
 
-- Complete the self-hosted snapshot Workbench goal I1–I8; independent32/32 end-to-end review, durable API/ADR/evidence retained, completed backlog documents removed.
+- Deliver self-hosted snapshot Workbench I1–I8; published assets/producer, literal snapshot application and preserved saved-state boundaries. Composed completion proof replaces the earlier invalidated closure claim.
 
 - Workbench operation budgets reach existing startup/file/tool/native-IO deadlines; update the exact TypeScript-worker pin only for dependency import hashes (ADR-0410/0391).
 

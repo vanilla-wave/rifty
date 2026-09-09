@@ -159,3 +159,66 @@ No-COI regression battery: 20/20 PASS, 33.2s on Chromium148.0.7778.96
 install dedup, reported native persistence failures, unreadable preload plus
 queued requests, native exact-byte reload and stream visibility vs Node24.16.0.
 Command: `RIFTY_NO_COI_PORT=5611 RIFTY_NO_COI_ORACLE_PORT=5612 RIFTY_NO_COI_RESOURCE_PORT=5613 pnpm exec playwright test tests/no-coi/no-coi-warm-open.spec.ts tests/no-coi/no-coi-install-dedup.spec.ts tests/no-coi/no-coi-persistence.fault.spec.ts tests/no-coi/no-coi-preload-failure.spec.ts tests/no-coi/no-coi-opfs-reload.spec.ts tests/no-coi/no-coi-stream-visibility.spec.ts --config playwright.no-coi.config.ts --project=chromium`.
+
+## Full CI discoveries and criterion verification
+
+CI34400839393 on c51ebfca0: unit failed three SCM observer assertions in
+workbench-playground-budget.contract.test.ts; light6 failed FAST reload in
+owner-snapshot-restore-exec.spec.ts147; light8 failed archive reload in
+workspace-archive.spec.ts164. Other17 checks passed. Raw failed jobs:
+/tmp/rifty316-ci-all-failed.log. None was dismissed as a flake or omitted.
+
+I7 observer: the fixed25 native-immediate iterations were not an acknowledgement
+of real Git/owner completion. Isolated15/15 passed; a physically valid50ms native
+Worker/IPC request delay reproduced the same missing-response error (1RED).
+Seventeen old drain calls now await actual admission/held response/delivery or
+settlement. Real owner and Git remain; fake-clock deadline values/payload/death
+assertions stay unchanged. Updated16/16 PASS; changing only testT90000 to60000
+kills pending-at70000, then restored16/16 PASS. Logs:
+/tmp/rifty316-budget-isolated-baseline.log,
+/tmp/rifty316-budget-observer-red.log,
+/tmp/rifty316-budget-clock-counterfactual.log,
+/tmp/rifty316-budget-final-green.log. Sweep found this fixed25tick observer only
+in that file; stream/storage drains elsewhere are different operations.
+
+Independent PR-4 ruling by pr316_final_review against frozen goalI8/scenario4
+and original user round2: old FAST reload required automatic rebuild/alwaysLIVE,
+including loss of newly installed ms. That contradicts the accepted preserve/
+refuse policy for incompatible saved state. CI screencast and local unchanged
+case reproduce the exact Saved-project incompatibility reason; ordinary cowsay
+switch and durable reload already pass. Artifacts:
+/tmp/rifty316-light6-175737.jpeg and /tmp/rifty316-ci-light6-local.log.
+
+Corrected FAST carrier retains the entire cowsay/switch/durable-reload positive
+and immediate reload after the install summary, before promotion completion.
+Only the next real owner script is held after old-owner termination. Native
+catalog/project trees are captured before startup, including claims, journals,
+.git, bytes and empty directories; the separate storage-proof nonce and page
+terminal history are outside those retained project scopes. Matching durable
+claim requires actual LIVE plus original marker/manifest/cowsay. Absent/pending/
+incompatible receipt requires the exact refusal, retained chooser/catalog and
+zero byte/type/path changes or configured snapshot/registry/Eddy requests.
+Corrected1/1 PASS39.6s with absent receipt and1252 unchanged entries:
+/tmp/rifty316-ci-light6-corrected.log. Disabling only saved-mode admission yields
+wrong automatic recovery/LIVE and semanticRED; exact source restored in finally.
+/tmp/rifty316-ci-light6-counterfactual.log and -counterfactual-trace.zip retain
+that execution. This is not an OR(success,any-error) assertion.
+
+Independent PR-4 ruling for archive reload: editable export excludes dependencies;
+replacement import removes the old tree/claim. Actual light8 trace contains
+Saved-project incompatibility for Scratch, after immediate import/editor proof
+passed. The old unconditional reopen criterion cannot authorize implicit install.
+Explicit terminal npm install, exact zero exit history and public Save now precede
+reload; all prior immediate archive/source/transient-removal and subsequent
+reload/editor/empty-archive assertions remain. Raw CI trace:
+/tmp/rifty316-light8.trace. No product recovery policy was changed for either test.
+
+Corrected archive e2e: 1/1 PASS,20.6s overall (actual scenario13.6s),
+/tmp/rifty316-ci-light8-corrected.log.
+Command: `RIFTY_PLAYGROUND_PORT=5643 pnpm exec playwright test tests/e2e/workspace-archive.spec.ts --project=chromium-light --workers=1 --trace=retain-on-failure`.
+
+Current pre-CI-reconciliation source gate:25/25 PASS,
+/tmp/rifty316-fix-prcheck-final.log; one producer timeout passed the prescribed
+isolated rerun (unit259.3s/parity62.0s). Production App7/7 PASS3.1m,
+/tmp/rifty316-fix-prod.log. The subsequent changes above are test/observer/doc
+criteria only; production code is byte-identical to f2c4855d3.

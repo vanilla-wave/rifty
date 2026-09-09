@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { setImmediate as nativeImmediate } from 'node:timers';
+import { setImmediate as nativeImmediate, setTimeout as nativeTimeout } from 'node:timers';
 import { type WorkerProcessHandle, clearKernelDispatcher } from '@riftydev/kernel';
 import { syncMirror } from '@riftydev/vfs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -77,15 +77,25 @@ class LocalOwnerWorker extends EventEmitter {
     this.killed = true;
     this.emit('peererror', error);
   }
-  release() {
-    for (const message of this.held.splice(0)) nativeImmediate(() => this.emit('message', message));
+  async release() {
+    await Promise.all(
+      this.held.splice(0).map(
+        (message) =>
+          new Promise<void>((resolve) =>
+            nativeImmediate(() => {
+              this.emit('message', message);
+              resolve();
+            }),
+          ),
+      ),
+    );
   }
 }
 function watch<T>(promise: Promise<T>) {
   const result: { state: 'pending' | 'fulfilled' | 'rejected'; value?: T; error?: unknown } = {
     state: 'pending',
   };
-  void promise.then(
+  const settled = promise.then(
     (value) => {
       result.state = 'fulfilled';
       result.value = value;
@@ -95,10 +105,7 @@ function watch<T>(promise: Promise<T>) {
       result.error = error;
     },
   );
-  return result;
-}
-async function drain() {
-  for (let i = 0; i < 25; i++) await new Promise<void>((resolve) => nativeImmediate(resolve));
+  return Object.assign(result, { settled });
 }
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -156,7 +163,7 @@ async function boot(budget?: number, silence?: number) {
     worker.hold = () => false;
     worker.holdPage = () => false;
     worker.releasePage();
-    worker.release();
+    await worker.release();
     raw.close();
     if (worker.killed) worker.send({ type: 'workbench:shutdown' });
     await worker.lifetime;
@@ -209,10 +216,23 @@ const calls = [
   },
   { kind: 'close', result: 'closed', invoke: (h: Harness) => h.lifecycle.close() },
 ] as const;
+function holdOwnerResponse(worker: LocalOwnerWorker, matches: (message: OwnerMessage) => boolean) {
+  // Actual IPC completion, independent of native Git scheduling and the fake request clock.
+  return new Promise<void>((resolve) => {
+    worker.hold = (message) => {
+      if (!matches(message)) return false;
+      resolve();
+      return true;
+    };
+  });
+}
 function holdToolResponses(worker: LocalOwnerWorker) {
-  worker.hold = (message) =>
-    message.type === 'workbench:playground-project-tools' &&
-    message.frame.type === 'workbench:playground-session-tools-response';
+  return holdOwnerResponse(
+    worker,
+    (message) =>
+      message.type === 'workbench:playground-project-tools' &&
+      message.frame.type === 'workbench:playground-session-tools-response',
+  );
 }
 function toolRequests(worker: LocalOwnerWorker) {
   return worker.received.filter(
@@ -256,19 +276,47 @@ describe('public Playground request budget with real owner composition', () => {
   it('omitted T preserves the 60000 request default and ignores the late actual response', async () => {
     const h = await open();
     fakeClock();
-    holdToolResponses(h.worker);
+    const responseReady = holdToolResponses(h.worker);
     const outcome = watch(h.lifecycle.tools.scm.refresh());
-    await drain();
+    await responseReady;
     expect(heldResult(h.worker).type).toBe('scm:snapshot');
     await vi.advanceTimersByTimeAsync(59_999);
     expect(outcome.state).toBe('pending');
     await vi.advanceTimersByTimeAsync(2);
     expect(outcome.state).toBe('rejected');
     expect(String(outcome.error)).toContain('timed out after 60000ms');
-    h.worker.release();
-    await drain();
+    await h.worker.release();
     expect(outcome.state).toBe('rejected');
     expect(h.worker.killed).toBe(false);
+  });
+
+  it('waits for native owner scheduling without consuming the fake request budget', async () => {
+    const h = await open(90_000);
+    fakeClock();
+    const responseReady = holdToolResponses(h.worker);
+    h.worker.holdPage = (message) => message.type === 'workbench:playground-project-tools';
+    const started = Date.now();
+    const outcome = watch(h.lifecycle.tools.scm.refresh());
+    const delivered = new Promise<void>((resolve) =>
+      nativeTimeout(() => {
+        h.worker.releasePage();
+        resolve();
+      }, 50),
+    );
+    try {
+      await responseReady;
+      expect(heldResult(h.worker).type).toBe('scm:snapshot');
+      expect(Date.now()).toBe(started);
+      expect(vi.getTimerCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(70_000);
+      expect(outcome.state).toBe('pending');
+      await h.worker.release();
+      await outcome.settled;
+      expect(outcome.state).toBe('fulfilled');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      await delivered;
+    }
   });
 
   // I7 / sibling-drift: public normalization and the actual browser composition must reach T.
@@ -277,17 +325,17 @@ describe('public Playground request budget with real owner composition', () => {
     async ({ invoke, result }) => {
       const h = await open(90_000);
       fakeClock();
-      holdToolResponses(h.worker);
+      const responseReady = holdToolResponses(h.worker);
       const outcome = watch<unknown>(invoke(h));
-      await drain();
+      await responseReady;
       expect(h.worker.held).toHaveLength(1);
       expect(heldResult(h.worker).type).toBe(result);
       const ownerResult = heldResult(h.worker);
       expect(vi.getTimerCount()).toBe(1);
       await vi.advanceTimersByTimeAsync(70_000);
       expect.soft(outcome.state).toBe('pending');
-      h.worker.release();
-      await drain();
+      await h.worker.release();
+      await outcome.settled;
       expect.soft(outcome.state).toBe('fulfilled');
       if (ownerResult.type === 'scm:snapshot')
         expect.soft(outcome.value).toEqual(ownerResult.snapshot);
@@ -305,9 +353,9 @@ describe('public Playground request budget with real owner composition', () => {
     async ({ invoke, result }) => {
       const h = await open(1_000);
       fakeClock();
-      holdToolResponses(h.worker);
+      const responseReady = holdToolResponses(h.worker);
       const outcome = watch<unknown>(invoke(h));
-      await drain();
+      await responseReady;
       expect(heldResult(h.worker).type).toBe(result);
       await vi.advanceTimersByTimeAsync(999);
       expect(outcome.state).toBe('pending');
@@ -316,8 +364,8 @@ describe('public Playground request budget with real owner composition', () => {
       expect.soft(outcome.error).toBeInstanceOf(Error);
       expect.soft(String(outcome.error)).toContain('timed out after 1000ms');
       expect(h.worker.killed).toBe(false);
-      h.worker.release();
-      await drain();
+      await h.worker.release();
+      await outcome.settled;
       expect.soft(outcome.state).toBe('rejected');
       // A request timeout leaves the real owner/catalog alive, including close.
       expect(await h.companion.catalog.listRetainedScratch()).toEqual([]);
@@ -336,12 +384,21 @@ describe('public Playground request budget with real owner composition', () => {
     if (!file) throw new Error('missing source');
     file.content = btoa(next);
     fakeClock();
-    h.worker.holdPage = (message) =>
-      message.type === 'workbench:playground-project-tools' &&
-      message.frame.type === 'workbench:playground-session-tools-request' &&
-      message.frame.operation.type === 'archive:import';
+    const responseReady = holdToolResponses(h.worker);
+    const admitted = new Promise<void>((resolve) => {
+      h.worker.holdPage = (message) => {
+        if (
+          message.type !== 'workbench:playground-project-tools' ||
+          message.frame.type !== 'workbench:playground-session-tools-request' ||
+          message.frame.operation.type !== 'archive:import'
+        )
+          return false;
+        resolve();
+        return true;
+      };
+    });
     const outcome = watch(h.lifecycle.tools.archive.import(JSON.stringify(initialArchive)));
-    await drain();
+    await admitted;
     expect(h.worker.heldPage).toHaveLength(1);
     expect(
       new TextDecoder().decode(syncMirror().readFileBytesSync(`${h.projectRoot}/src/main.ts`)),
@@ -350,7 +407,9 @@ describe('public Playground request budget with real owner composition', () => {
     expect.soft(outcome.state).toBe('rejected');
     const timeout = outcome.error;
     h.worker.releasePage();
-    await drain();
+    await responseReady;
+    expect(heldResult(h.worker).type).toBe('archive:import');
+    await h.worker.release();
     expect(
       new TextDecoder().decode(syncMirror().readFileBytesSync(`${h.projectRoot}/src/main.ts`)),
     ).toBe(next);
@@ -372,21 +431,24 @@ describe('public Playground request budget with real owner composition', () => {
     const document = await h.session.documents.open('/src/main.ts');
     document.replace('export const value = "saved";\n');
     fakeClock();
-    h.worker.hold = (message) =>
-      message.type === 'workbench:project-vfs' &&
-      message.frame.type === 'rifty:owner-vfs-commit-ack';
+    const responseReady = holdOwnerResponse(
+      h.worker,
+      (message) =>
+        message.type === 'workbench:project-vfs' &&
+        message.frame.type === 'rifty:owner-vfs-commit-ack',
+    );
     const saved = watch(document.save());
     const archive = watch(h.lifecycle.tools.archive.export());
     const closed = watch(h.lifecycle.close());
-    await drain();
+    await responseReady;
     expect(h.worker.held).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(70_000);
     expect(saved.state).toBe('pending');
     expect(archive.state).toBe('pending');
     expect(closed.state).toBe('pending');
     expect(toolRequests(h.worker)).toHaveLength(0);
-    h.worker.release();
-    await drain();
+    await h.worker.release();
+    await Promise.all([saved.settled, archive.settled, closed.settled]);
     expect(saved.state).toBe('fulfilled');
     expect(archive.state).toBe('fulfilled');
     expect(closed.state).toBe('fulfilled');
@@ -410,18 +472,17 @@ describe('public Playground request budget with real owner composition', () => {
   it('owner death settles admitted requests without waiting for T or accepting late success', async () => {
     const h = await open(90_000);
     fakeClock();
-    holdToolResponses(h.worker);
+    const responseReady = holdToolResponses(h.worker);
     const outcome = watch(h.lifecycle.tools.scm.refresh());
-    await drain();
+    await responseReady;
     expect(heldResult(h.worker).type).toBe('scm:snapshot');
     h.worker.die(new Error('native owner worker died'));
-    await drain();
+    await outcome.settled;
     expect(outcome.state).toBe('rejected');
     expect(String(outcome.error)).toContain('native owner worker died');
     expect(String(outcome.error)).not.toContain('timed out');
     const failure = outcome.error;
-    h.worker.release();
-    await drain();
+    await h.worker.release();
     expect(outcome.error).toBe(failure);
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -430,15 +491,18 @@ describe('public Playground request budget with real owner composition', () => {
   it('catalog S=90000 survives an actual catalog completion delayed to 70000 independently of T=1000', async () => {
     const h = await boot(1_000, 90_000);
     fakeClock();
-    h.worker.hold = (message) => message.type === 'workbench:playground-catalog-completed';
+    const responseReady = holdOwnerResponse(
+      h.worker,
+      (message) => message.type === 'workbench:playground-catalog-completed',
+    );
     const outcome = watch(h.companion.catalog.createScratch({ definition: definition() }));
-    await drain();
+    await responseReady;
     expect(h.worker.held).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(70_000);
     expect(outcome.state).toBe('pending');
-    h.worker.release();
-    await drain();
+    await h.worker.release();
+    await outcome.settled;
     expect(outcome.state).toBe('fulfilled');
     expect(outcome.value?.scratch).not.toBeNull();
     expect(h.worker.killed).toBe(false);
@@ -448,9 +512,12 @@ describe('public Playground request budget with real owner composition', () => {
   it('catalog short S kills the owner while preserving already applied Scratch bytes', async () => {
     const h = await boot(90_000, 1_000);
     fakeClock();
-    h.worker.hold = (message) => message.type === 'workbench:playground-catalog-completed';
+    const responseReady = holdOwnerResponse(
+      h.worker,
+      (message) => message.type === 'workbench:playground-catalog-completed',
+    );
     const outcome = watch(h.companion.catalog.createScratch({ definition: definition() }));
-    await drain();
+    await responseReady;
     expect(h.worker.held).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(1_001);
     expect(outcome.state).toBe('rejected');
@@ -461,8 +528,7 @@ describe('public Playground request budget with real owner composition', () => {
       'export const value = 1;\n',
     );
     const failure = outcome.error;
-    h.worker.release();
-    await drain();
+    await h.worker.release();
     expect(outcome.error).toBe(failure);
   });
 });
