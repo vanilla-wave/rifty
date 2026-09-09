@@ -101,3 +101,25 @@ corruption/caps/replay, overlay interruption, namespace and orphan preservation
 carriers remain obligations and run in the full/source or native suite. The
 projection row alone excludes transport loss/duplicate/reorder; native persistence
 retains its full fault surface. This repair creates no new concurrency authority.
+
+## Packed composition and emitted criteria
+
+`node tests/integration/workbench-packed-consumer.mjs --keep`: PASS on Chromium
+148.0.7778.96; 15 first-party + 83 external tarballs; fresh offline consumer
+install, TypeScript and production build; public producer CLI and ordinary tar
+restoration. Expanded scoped proof: 6 actual build/dev opens, 4 HMR edits,
+3 durable default reopens, same-ID overwrite and fresh apply; literal Vite
+package edit restored by overwrite, unrelated project edits retained. Existing
+asset/API/query/SW-stop-restart/outside-host and zero registry/Eddy assertions
+remain. Output: /tmp/rifty316-fix-packed-green.log. Consumer retained under
+/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-workbench-packed-consumer-ZqzsmR/consumer.
+
+PR-4 emitted compiler inventory: typescript-worker.js remains exactly 10,022,664
+bytes. Old SHA cddf156d671c4b39abeae202b84cd907b6d936974e9537481da6a30773b07e58;
+new SHA 3587a112e6f0bbae3bb9ca4565404c8ce572a5cbb146440ee2e7a4ecf7b02cf6.
+Byte comparison is identical after replacing only emitted relative chunk and
+module-loader import basenames (six changed references). No compiler body,
+size ceiling, other compiler/WASM pin or inventory exception changed. Exact
+old/new diff: /tmp/rifty316-compiler-asset.diff; frozen old artifact:
+/tmp/rifty316-pre-repair-typescript-worker.js. This updates one fingerprint;
+the exact carrier gate rejected it before the update.
