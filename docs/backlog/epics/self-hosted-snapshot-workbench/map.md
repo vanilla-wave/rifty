@@ -2,9 +2,7 @@
 
 ## Items
 
-1. `service-worker/workbench-preview-prefix` — scoped iframe/assets/HMR routing
-   on the same static host (I5).
-2. `distribution/workbench-operation-budgets` — public effective boot/file/tool
+1. `distribution/workbench-operation-budgets` — public effective boot/file/tool
    budgets, then composed packed-host proof of the whole scenario (I7).
 
 ## Open questions

@@ -89,3 +89,8 @@ the replaced classification/pin. Independent ruling:
 workbench-preview-prefix-generated-criterion.md. Future artifact provenance
 is not certified by this size exception; canonical builds and source review
 remain required. Existing generated-sw-js-still-tracked-in-vcs draft is separate.
+
+Final source7f967cb546f51101397b99948575f18577680248: `pnpm pr:check`25/25,
+unit211.5s/parity61.1s (`/tmp/rifty-316-i5-app-pr-check-final.log`). Independent
+Final41/41 accepted with the historical pageerror NOTE; no unit residual.
+Review binding: workbench-preview-prefix-final-green.json. I7 remains on map.

@@ -1,0 +1,396 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/service-worker/workbench-preview-prefix.md; I5/scenario3 + ADR-0409; BASE accepted I6 a7163a69274a9f4bade08366d5d8701f2646e5b6; clean reviewed HEAD 7f967cb546f51101397b99948575f18577680248. Prior independent handwritten-source assessment at be8254b28683778925bdfd26a13b52df7446e4c0 reused; subsequent generated-App-SW/criteria/capture delta independently verified. Ratified goal/recorded decisions authoritative; separate verbatim user transcript unavailable.",
+  "overall_verdict": "concern",
+  "merge_call": "I5 Final+GREEN accepted with one report-only historical pageerror NOTE; full final gate25/25 and App7/7 GREEN. Continue I7/composed goal proof; no merge/publish action authorized by this verdict.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I7 + scenario7; composed final goal acceptance",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/map.md:7",
+      "summary": "Public effective owner/storage/file/catalog/SCM/archive budgets and composed final packed-host proof remain linked work; this I5 slice does not close the goal."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: both public entrypoints validate one canonical scoped prefix before deployment effects; omitted configuration preserves default/narrow Node admission and opaque SW URL.",
+      "source": "acceptance",
+      "trace": "I5 + scenario3 + ADR-0263",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:30; packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:40; packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:51; packages/workbench/src/workbench/open-workbench.ts:162; packages/workbench/src/workbench/internal/browser-playground-workbench-composition.ts:66",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: copied SW captures exact query configuration; collision/duplicate/malformed input rejects; native restart and host reload preserve configuration.",
+      "source": "acceptance",
+      "trace": "I5 + I2 + scenario2/3",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:85; packages/service-worker/tests/preview-prefix-query-refusal.test.ts:11; tests/integration/workbench-scoped-preview-proof.mjs:107; tests/integration/workbench-scoped-preview-proof.mjs:253",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: existing transferred-port current-controller/version proof also verifies actual prefix at boot and mount; wrong controller is refused and replacement followed.",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0031 + ADR-0040",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:106; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:113; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:124; packages/workbench/src/workbench/open-workbench.ts:193; packages/workbench/src/workbench/workbench-browser-owner.ts:671; tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: canonical io addressing drives every registry producer, SW direct/referrer and WS extraction; guest localhost/path/query/decimal-port and unrelated host behavior retain baseline.",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0036 + ADR-0189 + ADR-0278",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:14; packages/io/src/preview-prefix.contract.test.ts:30; packages/workbench/src/workbench/preview-prefix-registry.contract.test.ts:9; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:132; packages/net/src/cross-realm/preview-prefix.contract.test.ts:162; tests/integration/workbench-scoped-preview-proof.mjs:189",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: Request and dispatchStruct carry optional defaulted prefix into actual HTML/WS injection; guest relative/root paths, external WS, response encoding/headers/length, deadline, idempotence and owner refusal remain.",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0189 + ADR-0040",
+      "status": "pass",
+      "citation": "packages/net/src/cross-realm/preview-prefix.contract.test.ts:162; packages/net/src/cross-realm/preview-prefix.contract.test.ts:222; packages/net/src/cross-realm/preview-prefix.contract.test.ts:247; packages/net/src/cross-realm/preview-prefix.contract.test.ts:257; packages/net/src/cross-realm/preview-prefix.contract.test.ts:279; packages/net/src/cross-realm/preview-port.test.ts:945; packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:92",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: mandatory snapshot-only packed /sandbox/ host with selected namespace and copied scoped SW runs real produced Vite edit/build/dev, absolute module/CSS/API/chunk and HMR without source edits or iframe reload.",
+      "source": "acceptance",
+      "trace": "I1 + I2 + I3 + I4 + I5 + scenario3",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1324; tests/integration/workbench-scoped-preview-proof.mjs:160; tests/integration/workbench-scoped-preview-proof.mjs:18; tests/integration/workbench-scoped-preview-proof.mjs:72; tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:123",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: exact unrelated host documents/API/static bytes and configured missing/ambiguous/not-ready owner, controller/version and preview-client admission refusal.",
+      "source": "acceptance",
+      "trace": "I5 + scenario3 + ADR-0160",
+      "status": "pass",
+      "citation": "tests/integration/workbench-scoped-preview-proof.mjs:189; tests/integration/workbench-scoped-preview-proof.mjs:237; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:115; packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:92; packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:106; packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:121; packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:142; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:161",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: mandatory root packed/default callers remain valid; public copied-query/scope docs; non-root fixture has no hidden root SW allowance.",
+      "source": "acceptance",
+      "trace": "I2 + I5 + scenario2/3",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:940; packages/net/src/cross-realm/preview-prefix.contract.test.ts:247; packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:30; tests/integration/workbench-scoped-preview-proof.mjs:219; packages/workbench/README.md:59; packages/service-worker/README.md:29",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: native Chromium scope/query/controller/restart oracle and actual packed Vite HTTP/WS behavior provide separate reference and product proof.",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "docs/backlog/service-worker/reference/workbench-preview-prefix-pickup.md:24; docs/backlog/service-worker/reference/workbench-preview-prefix-pickup.md:282; tests/integration/workbench-scoped-preview-proof.mjs:107; tests/integration/workbench-scoped-preview-proof.mjs:160",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: existing HTTP body/status/header and generic WS semantics retain Node/native reference controls; no additional framework or document-rewrite promise.",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0189",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/http/server-buffered.case.ts:1; tools/node-parity-runner/cases/http/server-host-rawheaders.case.ts:1; packages/net/src/cross-realm/preview-prefix.contract.test.ts:112; packages/net/src/cross-realm/preview-prefix.contract.test.ts:279; packages/net/src/ws/browser-client-script.test.ts:83; tests/e2e/preview-websocket-bridge.spec.ts:19",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input \u00d7 options/script-query/route: canonical normalization and loud type/path/scope/duplicate/collision refusal before effects.",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0263",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:35; packages/io/src/preview-prefix.contract.test.ts:44; packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:51; packages/service-worker/tests/preview-prefix-query-refusal.test.ts:20; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:150",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift \u00d7 registry/SW/referrer/HTTP/WS: one io pathname authority shared by all producers and both request paths.",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0036",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/preview-prefix-registry.contract.test.ts:9; packages/io/src/preview-prefix.contract.test.ts:64; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:132; packages/net/src/cross-realm/preview-prefix.contract.test.ts:279",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache/provenance-lie \u00d7 controller config: PONG reports captured configuration, never requested-prefix echo; stale controller cannot prove replacement.",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0031 + ADR-0040",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:115; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:113; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:124; tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:48",
+      "note": ""
+    },
+    {
+      "row": "torn-state \u00d7 SW update/restart/reload: immutable script URL restores prefix, existing controllerchange/proof admits replacement without replay state.",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:123; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:124; tests/integration/workbench-scoped-preview-proof.mjs:107; tests/integration/workbench-scoped-preview-proof.mjs:253",
+      "note": ""
+    },
+    {
+      "row": "observable-order \u00d7 invalid config/preview readiness: validation precedes effects; existing proof deadline and owner dispatch ordering remain.",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0263",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:51; packages/workbench/src/workbench/open-workbench.ts:162; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:124; packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:106",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key \u00d7 shared port/owner: unchanged real bindings reject ambiguous owners and preserve admitted ownership; no added coordinator.",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0160",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:92; packages/service-worker/tests/preview-handshake-sw.test.ts:445; packages/service-worker/tests/preview-handshake-sw.test.ts:615; packages/service-worker/tests/preview-handshake-sw.test.ts:906; packages/service-worker/tests/preview-handshake-sw.test.ts:981",
+      "note": ""
+    },
+    {
+      "row": "false-fallback \u00d7 unrelated host/referrer/WS: native unrelated routes, no default-root or guest-rewrite fallback.",
+      "source": "fault-matrix",
+      "trace": "I5 + scenario3",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:115; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:132; packages/io/src/preview-prefix.contract.test.ts:25; packages/net/src/cross-realm/preview-prefix.contract.test.ts:222; tests/integration/workbench-scoped-preview-proof.mjs:189; tests/integration/workbench-scoped-preview-proof.mjs:237",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read \u00d7 HTML response/proof: retain body/control deadlines; no new read or retry loop.",
+      "source": "fault-matrix",
+      "trace": "I5 + ADR-0189",
+      "status": "pass",
+      "citation": "packages/net/src/cross-realm/preview-port.test.ts:945; packages/net/src/cross-realm/preview-port.ts:401; packages/net/src/cross-realm/preview-prefix.contract.test.ts:279; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:113; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:124",
+      "note": ""
+    },
+    {
+      "row": "WorkbenchOptions.deployment.previewPrefix for openWorkbench.",
+      "source": "public-api",
+      "trace": "Acceptance 1 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:30; packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:40; packages/workbench/src/workbench/workbench-preview-prefix.contract.test.ts:51; packages/workbench/src/workbench/open-workbench.ts:162",
+      "note": ""
+    },
+    {
+      "row": "Inherited deployment.previewPrefix for openPlaygroundWorkbench.",
+      "source": "public-api",
+      "trace": "Acceptance 1 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/playground.ts:357; packages/workbench/src/workbench/internal/browser-playground-workbench-composition.ts:66; tests/integration/fixtures/workbench-vite-consumer/src/scoped-preview-proof.ts:127",
+      "note": ""
+    },
+    {
+      "row": "io DEFAULT_PREVIEW_PREFIX exports the preserved /preview/ default.",
+      "source": "public-api",
+      "trace": "Acceptance 1 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/io/src/preview-protocol.ts:16; packages/io/src/index.ts:69; packages/io/src/preview-prefix.contract.test.ts:30; packages/io/src/preview-prefix.contract.test.ts:64; packages/net/src/cross-realm/preview-prefix.contract.test.ts:247",
+      "note": ""
+    },
+    {
+      "row": "io normalizePreviewPrefix canonical pathname validator.",
+      "source": "public-api",
+      "trace": "Acceptance 1 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:35; packages/io/src/preview-prefix.contract.test.ts:44",
+      "note": ""
+    },
+    {
+      "row": "io buildPreviewPath with optional default prefix.",
+      "source": "public-api",
+      "trace": "Acceptance 4 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:64; packages/workbench/src/workbench/preview-prefix-registry.contract.test.ts:9",
+      "note": ""
+    },
+    {
+      "row": "io previewPrefixPattern safely transports literal canonical prefix to generated WS.",
+      "source": "public-api",
+      "trace": "Acceptance 4 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:64; packages/net/src/cross-realm/preview-prefix.contract.test.ts:162",
+      "note": ""
+    },
+    {
+      "row": "io parsePreviewPath additive optional prefix retains decimal/default semantics.",
+      "source": "public-api",
+      "trace": "Acceptance 4 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/io/src/preview-prefix.contract.test.ts:14; packages/io/src/preview-prefix.contract.test.ts:25; packages/io/src/preview-prefix.contract.test.ts:30",
+      "note": ""
+    },
+    {
+      "row": "service-worker configurePreviewServiceWorkerUrl preserves opaque bytes and refuses explicit reserved collisions.",
+      "source": "public-api",
+      "trace": "Acceptance 2 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:85; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:93; packages/service-worker/tests/preview-prefix-query-refusal.test.ts:11; packages/service-worker/tests/preview-prefix-query-refusal.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "service-worker previewPrefixFromServiceWorkerUrl defaults or decodes exactly one valid reserved field.",
+      "source": "public-api",
+      "trace": "Acceptance 2 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:85; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:101; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:150; packages/service-worker/tests/preview-prefix-query-refusal.test.ts:28",
+      "note": ""
+    },
+    {
+      "row": "SwPongFrame optional prefix defaults to /preview/ and reports the static SW actual configuration.",
+      "source": "public-api",
+      "trace": "Acceptance 3 + I5 + ADR-0031 + ADR-0040 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/service-worker/src/sw.test.ts:47; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:115; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:137; packages/workbench/src/workbench/service-worker-preview-prefix-control.contract.test.ts:151",
+      "note": ""
+    },
+    {
+      "row": "SW_ROUTING_VERSION becomes 7; additive SW frame version stays 1.",
+      "source": "public-api",
+      "trace": "Acceptance 3 + I5 + ADR-0040 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:156; packages/service-worker/tests/preview-routing-docs.test.ts:18",
+      "note": ""
+    },
+    {
+      "row": "matchPreviewUrl accepts optional canonical prefix.",
+      "source": "public-api",
+      "trace": "Acceptance 4 + I5 + ADR-0036 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:115; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:132; packages/service-worker/src/preview-bridge.ts:109",
+      "note": ""
+    },
+    {
+      "row": "createPreviewInterceptor and MessageHandlerHooks capture configured prefix before listener installation.",
+      "source": "public-api",
+      "trace": "Acceptance 4 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:24; packages/service-worker/tests/preview-prefix-owner-refusal.test.ts:92; packages/service-worker/src/preview-bridge.ts:236",
+      "note": ""
+    },
+    {
+      "row": "installPreviewInterceptor accepts captured static prefix with preserved default.",
+      "source": "public-api",
+      "trace": "Acceptance 2 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:115; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:144; packages/service-worker/src/sw.ts:24",
+      "note": ""
+    },
+    {
+      "row": "bridgeCrossRealmPreview additive captured prefix covers Request and dispatchStruct, preserving run scope/frame2.",
+      "source": "public-api",
+      "trace": "Acceptance 5 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/net/src/cross-realm/preview-prefix.contract.test.ts:279",
+      "note": ""
+    },
+    {
+      "row": "webSocketBridgeClientScript optional prefix handles relative/root/loopback WS and preserves default/external-native behavior.",
+      "source": "public-api",
+      "trace": "Acceptance 5 + I5 + ADR-0189 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/net/src/cross-realm/preview-prefix.contract.test.ts:162; packages/net/src/cross-realm/preview-prefix.contract.test.ts:212; packages/net/src/cross-realm/preview-prefix.contract.test.ts:222; packages/net/src/cross-realm/preview-prefix.contract.test.ts:247",
+      "note": ""
+    },
+    {
+      "row": "Native query/controller/restart oracle retains opaque query and discriminates stale actual configuration.",
+      "source": "frozen-artifact",
+      "trace": "Parity 1 + I5 + ADR-0409",
+      "status": "pass",
+      "citation": "docs/backlog/service-worker/reference/workbench-preview-prefix-pickup.md:24; tests/integration/workbench-scoped-preview-proof.mjs:107",
+      "note": ""
+    },
+    {
+      "row": "Native scope oracle distinguishes controlled root-absolute subresources from new out-of-scope document navigations.",
+      "source": "frozen-artifact",
+      "trace": "Parity 1 + I5 + scenario3 + ADR-0409",
+      "status": "pass",
+      "citation": "docs/backlog/service-worker/reference/workbench-preview-prefix-pickup.md:282; tests/integration/workbench-scoped-preview-proof.mjs:18; tests/integration/workbench-scoped-preview-proof.mjs:189",
+      "note": ""
+    },
+    {
+      "row": "Exact static-PONG and routing pin criteria reflect actual default capture and routing7/frame1.",
+      "source": "frozen-artifact",
+      "trace": "Acceptance 3 + I5 + ADR-0031 + ADR-0040 + ADR-0409",
+      "status": "pass",
+      "citation": "packages/service-worker/src/sw.test.ts:47; packages/service-worker/src/sw.test.ts:74; packages/service-worker/tests/preview-routing-docs.test.ts:18; packages/service-worker/tests/preview-prefix-configuration.contract.test.ts:156",
+      "note": ""
+    },
+    {
+      "row": "Exact TypeScript-worker fingerprint update at unchanged 10022664 bytes preserves compiler/client graph and copied published asset proof.",
+      "source": "frozen-artifact",
+      "trace": "Acceptance 6 + I2 + ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; docs/backlog/service-worker/reference/workbench-preview-prefix-assets.md:3; tests/integration/workbench-packed-consumer.mjs:1324; tests/integration/workbench-scoped-preview-proof.mjs:219",
+      "note": ""
+    },
+    {
+      "row": "Delta: generated App public/sw.js carries canonical routing7/configuration while remaining the self-contained output of sw.ts.",
+      "source": "frozen-artifact",
+      "trace": "Acceptance 8 + I5 + ADR-0016 + ADR-0409",
+      "status": "pass",
+      "citation": "apps/playground/public/sw.js:1; apps/playground/build/sw-plugin.ts:75; docs/backlog/service-worker/reference/workbench-preview-prefix-app-proof.md:11; docs/backlog/service-worker/reference/workbench-preview-prefix-generated-criterion.md:17",
+      "note": ""
+    },
+    {
+      "row": "Delta: Fullstack nodemon teardown oracle waits for exact foreground close and a real standalone same-terminal output marker before retaining every old count/API/route/process/launch-fault assertion.",
+      "source": "frozen-artifact",
+      "trace": "Acceptance 8 + I5 + ADR-0327 + ADR-0333",
+      "status": "pass",
+      "citation": "tests/e2e/fullstack-demo.spec.ts:235; tests/e2e/fullstack-demo.spec.ts:246; docs/backlog/service-worker/reference/workbench-preview-prefix-nodemon-oracle.md:29; docs/backlog/service-worker/reference/workbench-preview-prefix-nodemon-oracle.md:61",
+      "note": ""
+    },
+    {
+      "row": "Delta: remove the obsolete generated-App-SW879-line pin and exclude only that artifact; existing handwritten/unrelated-public source criteria remain.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0016",
+      "status": "pass",
+      "citation": "tools/checks/file-size.mjs:114; tools/checks/file-size.test.ts:55; docs/backlog/service-worker/reference/workbench-preview-prefix-generated-criterion.md:6",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/kernel/recursive-worker-cancellation-pageerror.md:12",
+          "authority": "",
+          "summary": "NOTE: one original production Playwright process.reserve pageerror remains untraced and captured as a question. Neither baseline reproduction nor repair nor creator-realm propagation is established. Current I5/App acceptance and deterministic real Worker/Workbench cancellation controls pass; retain the owner/trigger and reopen required work if actual delivered-behavior violation is demonstrated. Qualify the draft title as reported pageerror, not established creator propagation.",
+          "evidence": "Original /tmp/rifty-316-i5-app-prod-isolated.log:26; current /tmp/rifty-316-i5-app-prod-final.log:7/7GREEN; tracked workbench-preview-prefix-nodemon-diagnosis.md retains all original/diagnostic outcomes. Own integrated verification confirms5core lifecycle files byte-identical to acceptedI6; /tmp/rifty-316-i5-final-verify-integrated.json. Installed Playwright1.60 coreBundle.js:36419 maps Worker Runtime.exceptionThrown to PageError, so event naming alone does not attribute the realm. Own actual attached Chromium148 blobWorker control, after successful worker.evaluate, has creatorpreventDefault=true, creator-global errors[], live worker/main and pageErrors[]; /tmp/rifty-316-i5-final-playwright-pageerror-attached.json. This control does not reproduce or explain the original event. Initial exploratory assertion expecting automationErrors1 failed and is retained in /tmp/rifty-316-i5-final-playwright-pageerror-native.log, not counted as product RED."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "7f967cb546f51101397b99948575f18577680248"
+}

@@ -1,7 +1,7 @@
 ---
 area: kernel
 status: draft
-title: Investigate creator pageerror during recursive nodemon cancellation
+title: Investigate reported pageerror during recursive nodemon cancellation
 created: 2026-09-09
 why: One production Ctrl-C replay logged a Playwright pageerror although the corresponding terminal reservation refusal is contained in deterministic Worker and Workbench probes.
 sources: [ADR-0333, ADR-0347, docs/backlog/service-worker/reference/workbench-preview-prefix-app-proof.md]
@@ -46,3 +46,9 @@ Dedup: queued-process-kill-cancellation is same-realm queued admission, explicit
 not this recursive Worker path. Kernel/distribution backlog, traps and declined
 concepts contain no matching captured creator-error question. Evidence and
 commands remain in the discovering PR's reference record.
+
+Final review: Playwright Worker Runtime.exceptionThrown can be forwarded to its
+PageError channel; the event name alone does not identify the failing realm. An
+independently attached native Worker control with creator preventDefault produced
+no pageerror. It does not reproduce or explain the original; keep the question,
+not an established creator-propagation defect.
