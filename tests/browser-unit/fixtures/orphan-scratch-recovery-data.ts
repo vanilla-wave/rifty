@@ -115,10 +115,17 @@ export async function nativeTree(path: string): Promise<NativeTree | null> {
   return { directories: directories.sort(), files };
 }
 
-export async function nativeCatalog(): Promise<Record<string, unknown> | null> {
+export async function nativeCatalog(): Promise<{
+  readonly raw: readonly number[] | null;
+  readonly value: Record<string, unknown> | null;
+}> {
   const tree = await nativeTree(`${recoveryNamespace}/.rifty/workbench/playground`);
-  const bytes = tree?.files['catalog.json'];
-  return bytes === undefined
-    ? null
-    : (JSON.parse(new TextDecoder().decode(new Uint8Array(bytes))) as Record<string, unknown>);
+  const raw = tree?.files['catalog.json'] ?? null;
+  // Native getFileHandle creates a zero-byte placeholder before the first atomic close.
+  // Preserve that observation separately; production recovery still sees the real bytes.
+  if (raw === null || raw.length === 0) return { raw, value: null };
+  return {
+    raw,
+    value: JSON.parse(new TextDecoder().decode(new Uint8Array(raw))) as Record<string, unknown>,
+  };
 }

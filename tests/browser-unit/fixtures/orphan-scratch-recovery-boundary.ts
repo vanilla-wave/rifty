@@ -26,7 +26,7 @@ export type NativeFault =
   | 'source-read';
 
 export async function custody() {
-  const catalog = await nativeCatalog();
+  const { raw: catalogBytes, value: catalog } = await nativeCatalog();
   const selected = await navigator.storage
     .getDirectory()
     .then((root) => root.getDirectoryHandle(recoveryNamespace));
@@ -42,7 +42,12 @@ export async function custody() {
   } catch (error) {
     if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
   }
-  return { catalog, source: await nativeTree(`${recoveryNamespace}${orphanRoot}`), retained };
+  return {
+    catalog,
+    catalogBytes,
+    source: await nativeTree(`${recoveryNamespace}${orphanRoot}`),
+    retained,
+  };
 }
 
 /** Intercepts native file close/remove/read only; all catalog/VFS operations remain real. */

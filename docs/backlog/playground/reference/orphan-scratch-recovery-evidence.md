@@ -137,3 +137,17 @@ provenance with zero snapshot requests and unchanged named bytes. Artifacts
 /tmp/rifty-316-i6-review-active-owner.test.ts/.log and
 /tmp/rifty-316-i6-review-unactivated-catalog.log. Correction adds only the existing
 public activate call before named reopen; no activation guard or behavior changed.
+
+Same reviewer independently confirmed native observer corrections ORACLE-3/4:
+actual /@fs/...eddy*.ts script loads are not acquisition API requests; match
+configured /npm-registry or /eddy pathname boundaries, keeping zero assertion.
+Native first getFileHandle creates raw[] before close; observer now keeps raw
+null versus[] and parsedpointer=null only for those unpublished states. Nonempty
+malformed JSON remains loud. Two actual Chromium probes PASS5.7s:
+/tmp/rifty-316-i6-review-browser-oracles.spec.ts/.config.ts/.log.
+Product recovery semantics unchanged. Corrected isolated2cases GREEN5.4s, then
+37/37 native integration GREEN25.8s: preload7, orphan14 (all8 kill boundaries
+reached), prior I4 thirteen and old I8 three. Raw
+/tmp/rifty-316-i6-browser-integrated-final.log; full attribution
+/tmp/rifty-316-i6-browser-integrated-verification.md. Initial35/37 run/diagnostics
+are observer-failure history, not product defects or waived acceptance.

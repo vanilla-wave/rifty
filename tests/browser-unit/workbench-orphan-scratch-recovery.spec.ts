@@ -133,7 +133,8 @@ test('public orphan preserve/fresh/list/export/reopen keeps exact ordinary bytes
   const before = await outside(page);
   const acquisition: string[] = [];
   page.on('request', (request) => {
-    if (/npm-registry|eddy/.test(request.url())) acquisition.push(request.url());
+    const pathname = new URL(request.url()).pathname;
+    if (/^\/(?:npm-registry|eddy)(?:\/|$)/.test(pathname)) acquisition.push(request.url());
   });
   let id: string;
   try {

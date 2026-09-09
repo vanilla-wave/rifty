@@ -112,6 +112,7 @@ self.onmessage = (event: MessageEvent<RecoveryRequest>) => {
         kind: 'completed',
         ok: false,
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
       }),
   );
 };
