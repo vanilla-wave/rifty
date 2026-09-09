@@ -4,6 +4,10 @@
 
 ### Changed
 
+- **`SW_ROUTING_VERSION` 6 → 7:** host-selected preview prefix (ADR-0405).
+  `matchPreviewUrl` and `rifty:preview:ready` take an optional `previewPrefix`
+  (absent = `/preview`); the SW matches with that prefix.
+
 - **`SW_ROUTING_VERSION` 5 → 6:** the upstream URL the SW forwards for `/preview/<port>/*`
   now carries `Host: localhost:<port>` (was `preview.local:<port>`) — see
   `@riftydev/io` `synthesizePreviewUrl` (ADR-0189 D3). A stale SW + new page (or vice

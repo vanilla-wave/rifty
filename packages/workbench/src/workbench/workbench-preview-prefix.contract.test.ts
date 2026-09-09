@@ -42,13 +42,8 @@ describe('Workbench preview prefix admission (I5)', () => {
         previewPrefix: '/sandbox/preview',
       },
     };
-    const admitted = validateWorkbenchOptions(withPrefix, SANDBOX_CONTEXT) as {
-      readonly previewPrefix?: string;
-      readonly owner: { readonly deployment: { readonly previewPrefix?: string } };
-    };
-    expect(admitted.previewPrefix ?? admitted.owner.deployment.previewPrefix).toBe(
-      '/sandbox/preview',
-    );
+    const admitted = validateWorkbenchOptions(withPrefix, SANDBOX_CONTEXT);
+    expect(admitted.owner.deployment.previewPrefix).toBe('/sandbox/preview');
 
     const rootScoped = {
       ...options('/'),
@@ -57,12 +52,7 @@ describe('Workbench preview prefix admission (I5)', () => {
         previewPrefix: '/sandbox/preview',
       },
     };
-    const rootAdmitted = validateWorkbenchOptions(rootScoped, ROOT_CONTEXT) as {
-      readonly previewPrefix?: string;
-      readonly owner: { readonly deployment: { readonly previewPrefix?: string } };
-    };
-    expect(rootAdmitted.previewPrefix ?? rootAdmitted.owner.deployment.previewPrefix).toBe(
-      '/sandbox/preview',
-    );
+    const rootAdmitted = validateWorkbenchOptions(rootScoped, ROOT_CONTEXT);
+    expect(rootAdmitted.owner.deployment.previewPrefix).toBe('/sandbox/preview');
   });
 });

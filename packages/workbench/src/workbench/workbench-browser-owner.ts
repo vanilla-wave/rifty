@@ -557,6 +557,9 @@ export function startBrowserWorkspaceOwner(
         sqlite: input.deployment.wasm.sqlite,
       }),
       previewProbeTimeoutMs: input.deployment.previewProbeTimeoutMs,
+      ...(input.deployment.previewPrefix === undefined
+        ? {}
+        : { previewPrefix: input.deployment.previewPrefix }),
     }),
     packageAcquisition: input.packageAcquisition,
     storage: input.storage,
@@ -682,7 +685,12 @@ export function startBrowserWorkspaceOwner(
       subscribe: subscribeRawPreview,
       requestSnapshot: requestRawPreview,
       mountRoute: (entry) =>
-        dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
+        dependencies.mountPreview(
+          entry.port,
+          entry.ownerToken,
+          entry.previewScope,
+          input.deployment.previewPrefix,
+        ),
       proveServiceWorkerControl: provePreviewControl,
       onDegraded(error) {
         currentPreviewHealth = Object.freeze({

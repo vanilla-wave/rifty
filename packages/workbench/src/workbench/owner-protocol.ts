@@ -51,6 +51,7 @@ export interface WorkbenchOwnerBootConfig {
     };
     readonly wasm: { readonly sqlite: string };
     readonly previewProbeTimeoutMs: number;
+    readonly previewPrefix?: string;
   };
   readonly packageAcquisition: {
     readonly registryUrl?: string;
@@ -229,7 +230,11 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   );
 
   const deployment = record(config.deployment, 'owner boot deployment');
-  exact(deployment, ['workers', 'wasm', 'previewProbeTimeoutMs'], 'owner boot deployment');
+  exact(
+    deployment,
+    optionalKeys(deployment, ['workers', 'wasm', 'previewProbeTimeoutMs'], ['previewPrefix']),
+    'owner boot deployment',
+  );
   const workers = record(deployment.workers, 'owner boot workers');
   exact(
     workers,
@@ -295,6 +300,9 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
       sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm'),
     }),
     previewProbeTimeoutMs,
+    ...(own(deployment, 'previewPrefix')
+      ? { previewPrefix: nonEmptyString(deployment.previewPrefix, 'owner boot previewPrefix') }
+      : {}),
   });
   const frozenAcquisition = Object.freeze({
     ...(own(packageAcquisition, 'registryUrl')

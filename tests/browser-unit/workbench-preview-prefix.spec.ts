@@ -95,7 +95,7 @@ test('prefixed iframe, asset, root-relative fetch and HMR under /sandbox/ (I5)',
             "import http from 'node:http';",
             'const html =',
             `  '<!doctype html><html><body><p>${iframeMarker}</p>' +`,
-            "  '<script>fetch(\"/asset.txt\").then((r)=>r.text()).then((t)=>{' +",
+            '  \'<script>fetch("/asset.txt").then((r)=>r.text()).then((t)=>{\' +',
             "  'document.body.dataset.rootRelative=t;}).catch(()=>{});</script>' +",
             "  '</body></html>';",
             'http',
@@ -152,7 +152,9 @@ test('prefixed iframe, asset, root-relative fetch and HMR under /sandbox/ (I5)',
         ]);
         const live = previews
           .snapshot()
-          .find((entry: { readonly port: number; readonly url?: string }) => entry.port === previewPort);
+          .find(
+            (entry: { readonly port: number; readonly url?: string }) => entry.port === previewPort,
+          );
         const prefixed = `/sandbox/preview/${String(previewPort)}/`;
         const iframe = document.createElement('iframe');
         iframe.src = prefixed;

@@ -61,6 +61,7 @@ export interface ReadyClientsRegistry {
       routingVersion?: unknown;
       ownerToken?: unknown;
       ports?: unknown;
+      previewPrefix?: unknown;
     },
   ): void;
   /**
@@ -82,6 +83,9 @@ const defaultLogger: ReadyClientsLogger = {
     console.warn(msg);
   },
 };
+
+/** Last ready-frame prefix (ADR-0405); absent field keeps `/preview`. */
+export let lastReadyPreviewPrefix: string | undefined;
 
 /**
  * Build a fresh registry. Each interceptor instance gets its own — never
@@ -211,6 +215,8 @@ export function createReadyClientsRegistry(
         ? data.ports.filter((p): p is number => Number.isInteger(p))
         : [];
       if (type === SW_PREVIEW_READY) {
+        lastReadyPreviewPrefix =
+          typeof data.previewPrefix === 'string' ? data.previewPrefix : undefined;
         if (typeof data.ownerToken === 'string' && data.ownerToken.length > 0) {
           ownerTokens.set(clientId, data.ownerToken);
         }

@@ -78,6 +78,8 @@ export interface WorkbenchOwnerStartInput {
     /** ADR-0360: host budget of owner durability-progress SILENCE per
      *  operation; unset = the shipped default at the transport. */
     readonly ownerOperationSilenceTimeoutMs?: number;
+    /** ADR-0405: host-selected preview pathname; omitted keeps `/preview`. */
+    readonly previewPrefix?: string;
   };
   readonly packageAcquisition: {
     readonly registryUrl?: string;

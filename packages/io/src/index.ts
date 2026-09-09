@@ -11,8 +11,8 @@
  *   - `node:` builtin registry (`registerBuiltin` / `loadBuiltin` /
  *     `isBuiltinSpecifier` / `listBuiltins`) — see ADR-0035.
  *   - Preview-protocol addressing primitives (`PREVIEW_PREFIX_RE`,
- *     `PREVIEW_LOCAL_HOST`, `synthesizePreviewUrl`, `parsePreviewPath`) —
- *     see ADR-0036.
+ *     `PREVIEW_LOCAL_HOST`, `synthesizePreviewUrl`, `parsePreviewPath`,
+ *     `previewDocumentPath`) — see ADR-0036 / ADR-0405.
  *
  * Higher layers re-export these through their Node-shape adapters (e.g.
  * `runtime-js/src/builtins/{events,buffer,stream}.ts`).
@@ -70,4 +70,5 @@ export {
   PREVIEW_LOCAL_HOST,
   synthesizePreviewUrl,
   parsePreviewPath,
+  previewDocumentPath,
 } from './preview-protocol.ts';

@@ -46,15 +46,22 @@ export function synthesizePreviewUrl(path: string, port?: number): string {
 }
 
 /**
- * Parse a pathname against {@link PREVIEW_PREFIX_RE}. Returns `null` for a
- * non-preview path; otherwise `port` (decimal int) and `rest` after the prefix.
- * `rest` is `/` for the bare `/preview/<port>` form, matching what the SW needs
- * to synthesise an upstream URL.
+ * Parse a pathname against a host-selected prefix (default `/preview`).
+ * Returns `null` for a non-preview path; otherwise `port` and `rest` after
+ * `<prefix>/<port>`. `rest` is `/` for the bare `<prefix>/<port>` form.
+ * Omitted/`/preview` keeps {@link PREVIEW_PREFIX_RE} as the default regex.
  */
-export function parsePreviewPath(path: string): { port: number; rest: string } | null {
-  const m = PREVIEW_PREFIX_RE.exec(path);
-  if (!m) return null;
-  const port = Number.parseInt(m[1]!, 10);
-  const rest = m[2] ?? '/';
-  return { port, rest };
+export function parsePreviewPath(
+  path: string,
+  prefix = '/preview',
+): { port: number; rest: string } | null {
+  if (path !== prefix && !path.startsWith(`${prefix}/`)) return null;
+  const matched = /^\/(\d+)(\/.*)?$/.exec(path.slice(prefix.length));
+  if (!matched) return null;
+  return { port: Number.parseInt(matched[1]!, 10), rest: matched[2] ?? '/' };
+}
+
+/** Document URL for a preview port under a validated prefix. */
+export function previewDocumentPath(prefix: string, port: number): string {
+  return `${prefix}/${String(port)}/`;
 }

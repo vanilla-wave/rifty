@@ -64,7 +64,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
   function previewPathPort() {
     if (!previewPortFromPath) return null;
     var pathname = (window.location && window.location.pathname) || '';
-    var m = /^\\/preview\\/(\\d+)(?:\\/|$)/.exec(pathname);
+    var m = /(?:^|\\/)preview\\/(\\d+)(?:\\/|$)/.exec(pathname);
     return m ? m[1] : null;
   }
   function isLoopbackHostname(hostname) {

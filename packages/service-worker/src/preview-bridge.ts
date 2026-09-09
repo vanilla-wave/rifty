@@ -64,6 +64,7 @@ import {
   type SerializedResponse,
   type SwProtocolVersionMismatchError,
 } from './protocol.ts';
+import { lastReadyPreviewPrefix } from './ready-clients.ts';
 import { routePreview } from './route-preview.ts';
 
 export { canTransferReadableStream, packSerializedResponse } from './body-transport.ts';
@@ -95,6 +96,7 @@ const MAX_PREVIEW_FRAME_CONTEXTS = 256;
 export interface PreviewBridgeOptions {
   readonly ports?: readonly number[];
   readonly ownerToken?: string;
+  readonly previewPrefix?: string;
 }
 
 /**
@@ -106,8 +108,11 @@ export interface PreviewBridgeOptions {
  * and host primitives live in `@riftydev/io/preview-protocol` (ADR-0036). This
  * wrapper preserves the historical `{port, path}` shape SW callers use.
  */
-export function matchPreviewUrl(pathname: string): { port: number; path: string } | null {
-  const parsed = parsePreviewPath(pathname);
+export function matchPreviewUrl(
+  pathname: string,
+  prefix?: string,
+): { port: number; path: string } | null {
+  const parsed = parsePreviewPath(pathname, prefix);
   if (!parsed) return null;
   return { port: parsed.port, path: parsed.rest };
 }
@@ -139,11 +144,15 @@ interface PreviewFrameContext {
   readonly copiedTopLevel: boolean;
 }
 
-function matchPreviewReferrer(request: Request, origin: string): { port: number } | null {
+function matchPreviewReferrer(
+  request: Request,
+  origin: string,
+  prefix?: string,
+): { port: number } | null {
   if (!request.referrer) return null;
   const referrer = new URL(request.referrer);
   if (referrer.origin !== origin) return null;
-  return matchPreviewUrl(referrer.pathname);
+  return matchPreviewUrl(referrer.pathname, prefix);
 }
 
 function rememberPreviewFrameContext(
@@ -267,7 +276,7 @@ export function createPreviewInterceptor(
     const url = new URL(event.request.url);
     const scopeOrigin = getScopeOrigin(scope, url);
     const sameOrigin = url.origin === scopeOrigin;
-    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
+    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname, lastReadyPreviewPrefix) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
     const knownPreviewContext = event.clientId
       ? previewFrameContexts.get(event.clientId)
@@ -303,7 +312,7 @@ export function createPreviewInterceptor(
       let context = frameClientId ? previewFrameContexts.get(frameClientId) : undefined;
       let port = context?.port;
       if (port === undefined) {
-        port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
+        port = matchPreviewReferrer(event.request, scopeOrigin, lastReadyPreviewPrefix)?.port;
         if (port !== undefined && frameClientId) {
           context = { port, copiedTopLevel: false };
           rememberPreviewFrameContext(
@@ -461,6 +470,7 @@ function postHandshake(
     routingVersion: string;
     ports?: number[];
     ownerToken?: string;
+    previewPrefix?: string;
   } = {
     type,
     frameVersion: SW_FRAME_VERSION,
@@ -471,6 +481,9 @@ function postHandshake(
   }
   if (opts.ownerToken) {
     message.ownerToken = opts.ownerToken;
+  }
+  if (opts.previewPrefix !== undefined) {
+    message.previewPrefix = opts.previewPrefix;
   }
   controller.postMessage(message);
 }

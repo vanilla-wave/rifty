@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Preview WebSocket remap reads the guest port from a `/preview/<port>/`
+  segment anywhere in the iframe path, so `/sandbox/preview/<port>/` remaps
+  (ADR-0405 / ADR-0189).
+
 ### Added
 
 - **Causal resident port ownership (ADR-0378).** Loader-local `node:http` and

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Optional `deployment.previewPrefix` serves iframe preview, assets and HMR
+  under a host-selected pathname inside the SW scope; omitted keeps `/preview`
+  (ADR-0405).
+
 - Unjournaled orphan Scratch bytes are retained for public catalog
   download while `createScratch` opens a fresh starter; a failed preserve
   leaves the only copy (ADR-0403, ADR-0404).

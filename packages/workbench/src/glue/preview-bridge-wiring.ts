@@ -42,6 +42,7 @@ export interface PlaygroundPreviewBridgeOptions {
    * `setupPreviewBridge`'s `PreviewBridgeOptions.ports`.
    */
   readonly ports?: readonly number[];
+  readonly previewPrefix?: string;
 }
 
 export function mountPlaygroundPreviewBridge(

@@ -63,6 +63,8 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
   /** Raw project-local PTY frames; lifetime owner wraps tokens outside this module. */
   readonly send: (frame: OwnerToPageFrame) => void;
+  /** ADR-0405: host-selected preview pathname; omitted keeps `/preview`. */
+  readonly previewPrefix?: string;
 }
 
 export interface WorkbenchProjectRuntime {
@@ -165,7 +167,10 @@ export function createWorkbenchProjectRuntime(
     }
     options.send(frame);
   };
-  const previews = createPreviewRegistry({ send });
+  const previews = createPreviewRegistry({
+    send,
+    ...(options.previewPrefix === undefined ? {} : { previewPrefix: options.previewPrefix }),
+  });
   const serverRef: { current?: PtyServer } = {};
   let binSequence = 0;
   let nodeSequence = 0;

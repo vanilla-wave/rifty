@@ -40,6 +40,11 @@ export interface WorkbenchOptions {
      * the owner's shipped 60 000 ms.
      */
     readonly ownerOperationSilenceTimeoutMs?: number;
+    /**
+     * ADR-0405: host-selected preview pathname. Omitted keeps `/preview`.
+     * Must be contained in `serviceWorker.scope`.
+     */
+    readonly previewPrefix?: string;
   };
   readonly packageAcquisition: {
     readonly registryUrl?: string;
@@ -155,6 +160,7 @@ export function validateWorkbenchOptions(
   if (!clientUrl.href.startsWith(serviceWorkerScope)) {
     throw new TypeError('deployment.serviceWorker.scope must contain the Workbench document URL');
   }
+  const previewPrefix = parseDeploymentPreviewPrefix(deployment.previewPrefix, serviceWorkerScope);
 
   return Object.freeze({
     serviceWorker: Object.freeze({
@@ -187,6 +193,7 @@ export function validateWorkbenchOptions(
         }),
         previewProbeTimeoutMs,
         ...(ownerOperationSilenceTimeoutMs === undefined ? {} : { ownerOperationSilenceTimeoutMs }),
+        ...(previewPrefix === undefined ? {} : { previewPrefix }),
       }),
       packageAcquisition: Object.freeze({
         ...(acquisition.registryUrl === undefined
@@ -207,6 +214,36 @@ export function validateWorkbenchOptions(
       ...(admittedNamespace === undefined ? {} : { namespace: admittedNamespace }),
     }),
   });
+}
+
+function parseDeploymentPreviewPrefix(value: unknown, scopeHref: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== 'string' ||
+    value.includes('\\') ||
+    !value.startsWith('/') ||
+    value.endsWith('/') ||
+    value.includes('//')
+  ) {
+    throw new TypeError('deployment.previewPrefix must be an absolute pathname');
+  }
+  const segments = value.slice(1).split('/');
+  if (
+    segments.length === 0 ||
+    segments.some(
+      (segment) => segment === '.' || segment === '..' || !/^[A-Za-z0-9._-]+$/.test(segment),
+    )
+  ) {
+    throw new TypeError('deployment.previewPrefix must be an absolute pathname');
+  }
+  const scopePath = new URL(scopeHref).pathname;
+  const scopeDir = scopePath.endsWith('/') ? scopePath : `${scopePath}/`;
+  if (scopePath !== '/' && !value.startsWith(scopeDir) && value !== scopePath.replace(/\/$/, '')) {
+    throw new TypeError(
+      'deployment.previewPrefix must be contained in deployment.serviceWorker.scope',
+    );
+  }
+  return value;
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {

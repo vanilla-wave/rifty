@@ -467,6 +467,9 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
               packageState,
               nodeEntryWorkerUrl: config.deployment.workers.node,
               devServerWorkerUrl: config.deployment.workers.devServer,
+              ...(config.deployment.previewPrefix === undefined
+                ? {}
+                : { previewPrefix: config.deployment.previewPrefix }),
               nodeWorkerRuntimeEnv,
               mutationGuard: vfs.mutationGuard,
               publicationBarrier: vfs.publicationBarrier,

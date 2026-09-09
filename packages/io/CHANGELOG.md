@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- `parsePreviewPath` accepts an optional prefix (omitted = `/preview`);
+  `previewDocumentPath` builds `<prefix>/<port>/` (ADR-0405).
+
 - Constructor initialization follows used exports; minified Buffer/EventEmitter/Stream retain Node names.
 
 ### Changed

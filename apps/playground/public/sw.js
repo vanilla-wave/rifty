@@ -1,7 +1,7 @@
 // Generated from packages/service-worker/src/sw.ts — do not edit. Source of truth: ADR 0016.
 // ../../packages/service-worker/src/protocol.ts
 var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "6";
+var SW_ROUTING_VERSION = "7";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";
@@ -55,17 +55,15 @@ function createControlPingHandler(warn = (message) => console.warn(message)) {
 }
 
 // ../../packages/io/src/preview-protocol.ts
-var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
 function synthesizePreviewUrl(path, port) {
   const host = port === void 0 ? "localhost" : `localhost:${port}`;
   return `http://${host}${path}`;
 }
-function parsePreviewPath(path) {
-  const m = PREVIEW_PREFIX_RE.exec(path);
-  if (!m) return null;
-  const port = Number.parseInt(m[1], 10);
-  const rest = m[2] ?? "/";
-  return { port, rest };
+function parsePreviewPath(path, prefix = "/preview") {
+  if (path !== prefix && !path.startsWith(`${prefix}/`)) return null;
+  const matched = /^\/(\d+)(\/.*)?$/.exec(path.slice(prefix.length));
+  if (!matched) return null;
+  return { port: Number.parseInt(matched[1], 10), rest: matched[2] ?? "/" };
 }
 
 // ../../packages/service-worker/src/owner-resolver.ts
@@ -97,6 +95,7 @@ var defaultLogger = {
     console.warn(msg);
   }
 };
+var lastReadyPreviewPrefix;
 function createReadyClientsRegistry(logger = defaultLogger) {
   const ready = /* @__PURE__ */ new Set();
   const waiters = /* @__PURE__ */ new Map();
@@ -208,6 +207,7 @@ function createReadyClientsRegistry(logger = defaultLogger) {
       }
       const ports = Array.isArray(data.ports) ? data.ports.filter((p) => Number.isInteger(p)) : [];
       if (type === SW_PREVIEW_READY) {
+        lastReadyPreviewPrefix = typeof data.previewPrefix === "string" ? data.previewPrefix : void 0;
         if (typeof data.ownerToken === "string" && data.ownerToken.length > 0) {
           ownerTokens.set(clientId, data.ownerToken);
         }
@@ -722,8 +722,8 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
 
 // ../../packages/service-worker/src/preview-bridge.ts
 var MAX_PREVIEW_FRAME_CONTEXTS = 256;
-function matchPreviewUrl(pathname) {
-  const parsed = parsePreviewPath(pathname);
+function matchPreviewUrl(pathname, prefix) {
+  const parsed = parsePreviewPath(pathname, prefix);
   if (!parsed) return null;
   return { port: parsed.port, path: parsed.rest };
 }
@@ -733,11 +733,11 @@ function isPreviewFrameRequest(request) {
 function isTopLevelPreviewNavigation(request) {
   return request.mode === "navigate" && request.destination === "document";
 }
-function matchPreviewReferrer(request, origin) {
+function matchPreviewReferrer(request, origin, prefix) {
   if (!request.referrer) return null;
   const referrer = new URL(request.referrer);
   if (referrer.origin !== origin) return null;
-  return matchPreviewUrl(referrer.pathname);
+  return matchPreviewUrl(referrer.pathname, prefix);
 }
 function rememberPreviewFrameContext(contexts, docClients, clientId, context) {
   if (!clientId) return;
@@ -787,7 +787,7 @@ function createPreviewInterceptor(scope, hooks = {}) {
     const url = new URL(event.request.url);
     const scopeOrigin = getScopeOrigin(scope, url);
     const sameOrigin = url.origin === scopeOrigin;
-    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
+    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname, lastReadyPreviewPrefix) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
     const knownPreviewContext = event.clientId ? previewFrameContexts.get(event.clientId) : void 0;
     const knownPreviewClient = knownPreviewContext !== void 0;
@@ -814,7 +814,7 @@ function createPreviewInterceptor(scope, hooks = {}) {
       let context = frameClientId ? previewFrameContexts.get(frameClientId) : void 0;
       let port = context?.port;
       if (port === void 0) {
-        port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
+        port = matchPreviewReferrer(event.request, scopeOrigin, lastReadyPreviewPrefix)?.port;
         if (port !== void 0 && frameClientId) {
           context = { port, copiedTopLevel: false };
           rememberPreviewFrameContext(
