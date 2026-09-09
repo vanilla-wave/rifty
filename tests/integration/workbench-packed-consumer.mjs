@@ -946,6 +946,10 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     cwd: consumerRoot,
     timeoutMs: 120_000,
   });
+  await run('node', ['prepare-orphan-payload.mjs'], {
+    cwd: consumerRoot,
+    timeoutMs: 120_000,
+  });
   const previewPort = await reserveLoopbackPort();
   const previewOrigin = `http://127.0.0.1:${previewPort}`;
   const preview = startProcess(
@@ -1292,6 +1296,9 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
       );
       await strictPage.evaluate(async () =>
         (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveStorageNamespaces(),
+      );
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveOrphanScratchRecovery(),
       );
       assert.equal(
         registry.requests.length,

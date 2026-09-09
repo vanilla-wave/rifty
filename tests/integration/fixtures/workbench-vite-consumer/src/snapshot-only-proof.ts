@@ -3,6 +3,7 @@ import {
   type PlaygroundWorkbenchOptions,
   openPlaygroundWorkbench,
 } from '@riftydev/workbench/playground';
+import { captureBuiltFiles, proveOrphanScratchRecovery } from './orphan-scratch-recovery-proof';
 import { proveSnapshotApplication } from './snapshot-application-proof';
 import { proveStorageNamespaces } from './storage-namespace-proof';
 
@@ -18,6 +19,7 @@ export interface SnapshotOnlyAcceptance {
   writeMessage(message: string): Promise<void>;
   closeAndProveSavedState(): Promise<void>;
   proveStorageNamespaces(): Promise<void>;
+  proveOrphanScratchRecovery(): Promise<void>;
 }
 
 async function command(project: ProjectSession<PreviewHandle>, line: string) {
@@ -129,6 +131,7 @@ if (import.meta.hot) import.meta.hot.accept('./message.ts', (module) => render(m
   const html = new TextDecoder().decode((await project.files.readFile('/dist/index.html')).bytes);
   if (!html.includes('/assets/') || html.includes('/src/main.ts'))
     throw new Error(`Snapshot build did not emit real bundled output: ${html}`);
+  const builtFiles = await captureBuiltFiles(project);
   const run = project.run();
   let output = '';
   const detach = run.terminal.attach((chunk) => {
@@ -152,6 +155,7 @@ if (import.meta.hot) import.meta.hot.accept('./message.ts', (module) => render(m
       );
     },
     proveStorageNamespaces: () => proveStorageNamespaces(strict),
+    proveOrphanScratchRecovery: () => proveOrphanScratchRecovery(strict, builtFiles),
     async closeAndProveSavedState() {
       try {
         await run.close();

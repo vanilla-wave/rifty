@@ -55,3 +55,14 @@ to weigh at compile time: epoch/generation stamp in OPFS checked at flush
 boundaries; Web-Lock-tenure assertion inside OpfsFsSync init; or a recorded
 ADR accepting single-owner-per-origin as a contract with a loud runtime
 guard.
+
+## Additional observation
+
+2026-09-09: a serialized same-pair variant also reproduces. Native preload caches
+A; actual paired async write persists B; refreshIndex then refused preload leaves
+prior real cache A; copy writes A. Successful retry loads B. Native8-case artifact
+/tmp/rifty-316-i6-preload-decision-probe/result.json; interpretation in
+../playground/reference/orphan-scratch-recovery-pickup.md. No Workbench user-action
+path established: its owner uses the sync authority. This remains freshness/
+coherence scope; ADR-0406 only refuses content never acquired, without invalidating
+current authoritative writes or claiming atomic live refresh.

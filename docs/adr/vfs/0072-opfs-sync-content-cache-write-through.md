@@ -82,3 +82,9 @@ dedicated-Worker `OpfsFsSync.isSupported()` is authoritative, so COI is no
 longer required and async-only `OpfsVfs.isSupported()` is insufficient. The
 realm split, paired backend, cache/preload/write-through and failure behavior
 remain unchanged.
+
+## Corrections (active)
+
+- 2026-09-09 — ADR-0406 replaces only missing-content empty success: indexed
+  uncached read/copy raises EIO. Existing cache/preload/write-through, pairing,
+  lifecycle and backend-selector decisions remain.

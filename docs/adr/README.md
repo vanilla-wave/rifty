@@ -20,6 +20,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
 | 0372 | Dedicated-Worker sync capability selects OPFS without COI |
 | 0402 | Mount Workbench namespaces through one captured OPFS root |
+| 0406 | Refuse unavailable OPFS cache bytes |
 
 ### kernel
 
@@ -214,6 +215,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0355 | Webpack starter trusts the exact deployed hostname |
 | 0359 | Durability-drain progress as a health-event kind on the workbench owner port |
 | 0360 | Owner operation deadline is a host-configurable budget of durability-progress silence |
+| 0407 | Retain orphan Scratch bytes in catalog transactions |
 
 ### toolchain-build
 
