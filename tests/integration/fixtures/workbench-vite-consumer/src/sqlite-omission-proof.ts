@@ -105,6 +105,7 @@ require('./recursive.cjs')().then(proof => {
     const command = terminal.run('node terminal.cjs');
     try {
       const exit = await command.exited;
+      await command.close();
       if (exit.code !== 0 || !output.includes(expected))
         throw new Error(`No-SQLite recursive Node proof: ${JSON.stringify({ exit, output })}`);
     } finally {
