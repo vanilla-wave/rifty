@@ -31,7 +31,7 @@ and accepted invalid write data/path. Real MemoryFsSync; only flush external
 storage boundary controlled.
 
 `RIFTY_NO_COI_PORT=5511 RIFTY_NO_COI_ORACLE_PORT=5512 RIFTY_NO_COI_RESOURCE_PORT=5513 pnpm exec playwright test --config playwright.no-coi.config.ts tests/no-coi/no-coi-agent-sdk.spec.ts`:
-3/3 fail specifically `Missing public sandbox.project method`, after real
+5/5 fail specifically `Missing public sandbox.project method`, after real
 Worker boot. No import/typecheck/harness failure. Scenarios shared with packed
 consumer at tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts.
 
@@ -39,4 +39,19 @@ consumer at tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agen
 
 Goal/map restate the reviewed drafts. Combined Contract+RED checks final FIT,
 public shape, both units and RED carriers. Shared storage/command policy owns
-one FsSync view; no queue, retry, journal or independent host admission.
+one permanent FsSync view; no queue, retry, journal or independent host admission.
+
+## Pickup carrier correction
+
+Read-only inventory: tools/shadow-registry/src/runtime/runtime-adapters.ts checks
+FsSync identity plus cwd; runtime/generated/esbuild-runtime.js refuses second
+startup. Its callback FS captures physical paths. Per-call virtual namespaces
+would change that identity. ADR-0418 therefore uses ordinary physical absolute
+VFS paths for files and commands, with relative paths/cwd anchored at root.
+This was agent-owned API design; #325/#326 required agreement, not a virtual
+filesystem root. Permanent policy wrapper precedes loader/adapter capture.
+
+Independent review `/root/contract_review` confirmed 12/14 unit RED, 5/5 browser
+RED and native OPFS reachability: held createWritable keeps the raw write
+pending; rejected QuotaExceededError currently resolves while bytes are visible.
+No blockers; concerns require the final revised shape check before IMPLEMENT.

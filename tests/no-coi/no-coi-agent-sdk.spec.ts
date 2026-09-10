@@ -102,13 +102,13 @@ test('project mutation and command report a native OPFS write failure', async ({
       const project = sandbox.project({ root: '/quota' });
       let fileError: { name: string; effects?: unknown } | undefined;
       try {
-        await project.fs.writeFile('/fault.txt', 'file');
+        await project.fs.writeFile('fault.txt', 'file');
       } catch (error) {
         const e = error as Error & { effects?: unknown };
         fileError = { name: e.name, effects: e.effects };
       }
       const command = await project.run('echo command > fault.txt').completion;
-      const content = await project.fs.readFile('/fault.txt', 'utf8');
+      const content = await project.fs.readFile('fault.txt', 'utf8');
       return { fileError, command, content };
     } finally {
       sandbox.dispose();
@@ -172,10 +172,14 @@ for (const scenario of [
       for (const key of ['missing', 'removed'])
         expect(observed[key]).toMatchObject({ code: 'ENOENT' });
     } else if (scenario === 'agentCommandsScenario') {
-      expect(observed.first).toMatchObject({ status: 'exited', exitCode: 0, stdout: '/src\n' });
-      expect(observed.next).toMatchObject({ status: 'exited', stdout: '/\n\n' });
+      expect(observed.first).toMatchObject({
+        status: 'exited',
+        exitCode: 0,
+        stdout: '/commands/src\n',
+      });
+      expect(observed.next).toMatchObject({ status: 'exited', stdout: '/commands\n\n' });
       expect(observed.failed.exitCode).not.toBe(0);
-      expect(observed.afterFailed.stdout).toBe('/\n');
+      expect(observed.afterFailed.stdout).toBe('/commands\n');
       expect(observed.output).toMatchObject({ status: 'exited', stdout: 'AC', stderr: 'B' });
       expect(observed.events).toEqual(['stdout:A', 'stderr:B', 'stdout:C', 'complete']);
       for (const key of ['guestDenied', 'redirectDenied', 'background', 'executionDenied'])
@@ -201,7 +205,7 @@ for (const scenario of [
       expect(observed).toMatchObject({
         same: true,
         effect: 'applied\n',
-        next: { stdout: '/\nnext\n' },
+        next: { stdout: '/stop\nnext\n' },
       });
       expect(observed.terminated).toMatchObject({
         status: 'cancelled',

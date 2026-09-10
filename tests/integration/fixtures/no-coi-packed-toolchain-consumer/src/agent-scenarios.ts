@@ -58,20 +58,20 @@ async function errorOf(call: () => Promise<unknown>) {
 
 export async function agentFilesScenario(sandbox: AgentSandbox) {
   await sandbox.fs.writeFile('/agent/locked/keep.txt', 'keep');
-  const project = sandbox.project({ root: '/agent', readonlyPaths: ['/locked'] });
-  const mkdir = await project.fs.mkdir('/src/deep', { recursive: true });
-  await project.fs.writeFile('/src/deep/a.txt', 'hello');
-  const stat = await project.fs.stat('/src/deep/a.txt');
-  const list = await project.fs.readdir('/src/deep');
-  const rename = await project.fs.rename('/src/deep/a.txt', '/src/deep/b.txt');
-  const content = await project.fs.readFile('/src/deep/b.txt', 'utf8');
+  const project = sandbox.project({ root: '/agent', readonlyPaths: ['locked'] });
+  const mkdir = await project.fs.mkdir('src/deep', { recursive: true });
+  await project.fs.writeFile('src/deep/a.txt', 'hello');
+  const stat = await project.fs.stat('src/deep/a.txt');
+  const list = await project.fs.readdir('src/deep');
+  const rename = await project.fs.rename('src/deep/a.txt', 'src/deep/b.txt');
+  const content = await project.fs.readFile('src/deep/b.txt', 'utf8');
   const raw = await sandbox.fs.readFile('/agent/src/deep/b.txt', 'utf8');
-  const denied = await errorOf(() => project.fs.writeFile('/locked/keep.txt', 'changed'));
-  const deniedMove = await errorOf(() => project.fs.rename('/locked', '/moved'));
-  const missing = await errorOf(() => project.fs.stat('/absent'));
-  const rm = await project.fs.rm('/src', { recursive: true });
-  const removed = await errorOf(() => project.fs.readFile('/src/deep/b.txt', 'utf8'));
-  const retained = await project.fs.readFile('/locked/keep.txt', 'utf8');
+  const denied = await errorOf(() => project.fs.writeFile('locked/keep.txt', 'changed'));
+  const deniedMove = await errorOf(() => project.fs.rename('locked', 'moved'));
+  const missing = await errorOf(() => project.fs.stat('absent'));
+  const rm = await project.fs.rm('src', { recursive: true });
+  const removed = await errorOf(() => project.fs.readFile('src/deep/b.txt', 'utf8'));
+  const retained = await project.fs.readFile('locked/keep.txt', 'utf8');
   await sandbox.runtime.eval("process.chdir('/agent'); 42");
   await sandbox.fs.writeFile('raw-root.txt', 'root');
   const rawAnchored = await sandbox.fs.readFile('/raw-root.txt', 'utf8');
@@ -97,7 +97,7 @@ export async function agentCommandsScenario(sandbox: AgentSandbox) {
   await sandbox.fs.writeFile('/commands/locked/keep.txt', 'keep');
   await sandbox.fs.writeFile(
     '/commands/edit.cjs',
-    "require('node:fs').writeFileSync('/locked/keep.txt', 'bad')",
+    "require('node:fs').writeFileSync('/commands/locked/keep.txt', 'bad')",
   );
   await sandbox.fs.writeFile(
     '/commands/out.cjs',
@@ -107,7 +107,7 @@ export async function agentCommandsScenario(sandbox: AgentSandbox) {
     '/commands/package.json',
     '{"name":"agent","scripts":{"build":"echo built > build.txt"}}',
   );
-  const project = sandbox.project({ root: '/commands', readonlyPaths: ['/locked'] });
+  const project = sandbox.project({ root: '/commands', readonlyPaths: ['locked'] });
   const first = await project.run('cd src && pwd && echo saved > effect.txt', {
     env: { RUN_VALUE: 'first' },
   }).completion;
@@ -120,16 +120,16 @@ export async function agentCommandsScenario(sandbox: AgentSandbox) {
   const output = await streamed.completion;
   events.push('complete');
   const guestDenied = await project.run('node edit.cjs').completion;
-  const redirectDenied = await project.run('echo bad > /locked/keep.txt').completion;
+  const redirectDenied = await project.run('echo bad > locked/keep.txt').completion;
   const background = await project.run('echo escaped > background.txt &').completion;
-  const backgroundFile = await errorOf(() => project.fs.readFile('/background.txt', 'utf8'));
+  const backgroundFile = await errorOf(() => project.fs.readFile('background.txt', 'utf8'));
   const restricted = sandbox.project({ root: '/commands', allowedCommands: ['echo'] });
   const executionDenied = await restricted.run('echo before && touch forbidden.txt').completion;
-  const forbidden = await errorOf(() => project.fs.readFile('/forbidden.txt', 'utf8'));
+  const forbidden = await errorOf(() => project.fs.readFile('forbidden.txt', 'utf8'));
   const npm = await project.run('npm run build').completion;
-  const built = await project.fs.readFile('/build.txt', 'utf8');
-  const retained = await project.fs.readFile('/locked/keep.txt', 'utf8');
-  const effect = await project.fs.readFile('/src/effect.txt', 'utf8');
+  const built = await project.fs.readFile('build.txt', 'utf8');
+  const retained = await project.fs.readFile('locked/keep.txt', 'utf8');
+  const effect = await project.fs.readFile('src/effect.txt', 'utf8');
   return {
     first,
     next,
@@ -166,7 +166,7 @@ export async function agentStopScenario(sandbox: AgentSandbox) {
   const overlap = await project.run('echo intruder').completion;
   const stopped = await slow.stop();
   const same = stopped === (await slow.completion);
-  const effect = await project.fs.readFile('/src/applied.txt', 'utf8');
+  const effect = await project.fs.readFile('src/applied.txt', 'utf8');
   const next = await project.run('pwd && echo next').completion;
   const hard = project.run('node spin.cjs');
   let spinning!: () => void;

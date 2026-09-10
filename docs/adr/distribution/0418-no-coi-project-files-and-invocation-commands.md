@@ -19,8 +19,9 @@ Reference/RED: docs/backlog/distribution/reference/pr-331-implementation-evidenc
    no/yes/unknown application and failed/unknown persistence. A flush checks
    PersistFailureReport.total; no reply is proof of no effect.
 2. ToolchainSandbox.project({root, readonlyPaths?, allowedCommands?}) binds an
-   immutable file/command namespace. Public / maps to root; calls default cwd /
-   and env {}. This is project configuration, not a persistent Shell instance.
+   immutable file/command configuration. Relative file paths/cwd anchor at root;
+   absolute paths retain their VFS meaning. Calls default cwd root and env {}.
+   Root is a path origin, not a filesystem jail. This is project configuration, not a persistent Shell instance.
    project.fs uses the same operations; readonly applies to ordinary guest FS,
    builtin mutations and redirections, including destructive protected ancestors.
 3. project.run(command, {cwd?, env?}) returns an invocation handle: onOutput,
@@ -41,7 +42,7 @@ Reference/RED: docs/backlog/distribution/reference/pr-331-implementation-evidenc
    limits; filesystem receipts must not leave stale rename/remove snapshot entries.
 6. Console eval prints expression values and returns value undefined. It does not
    gain structured evaluation or Stop. During an owned command, eval/raw FS cannot
-   enter its temporary project namespace. Existing resident-concurrency rejection
+   enter its active command policy/output context. Existing resident-concurrency rejection
    remains in force.
 
 ## Mechanism sweep and alternatives
@@ -51,11 +52,17 @@ Reference/RED: docs/backlog/distribution/reference/pr-331-implementation-evidenc
 - Per-call Worker: killed by ADR-0376 and the required shared file authority;
   native busy-Worker probe proves a new realm is necessary only on forced Stop.
 - Host-only filtering plus Shell mutationGuard: killed by the ordinary Node
-  write scenario; node:fs resolves syncMirror directly. One scoped FsSync view
-  wraps the existing install-claim mirror and ProjectTerminalFsSync.
+  write scenario; node:fs resolves syncMirror directly. One permanent FsSync policy view
+  wraps the existing install-claim mirror before loaders/adapters capture it.
 - Full Workbench facade: killed by no-COI topology (ADR-0375/0377).
 - Signal then immediate terminal result: killed by pending handler/flush Stop
   scenario. Existing awaitAbortSettlement plus physical replacement owns the edge.
+
+- Per-call virtual root/syncMirror replacement: rejected at PICKUP. Existing
+  esbuild runtime captures physical FsSync/cwd and refuses a second start
+  (runtime-adapters.ts:108, generated/esbuild-runtime.js:1960). Keeping the same
+  physical paths and mirror preserves the adapter authority and Node ancestor
+  lookup. This changes our proposed carrier, not the accepted user scenario.
 
 ## Consequences
 
