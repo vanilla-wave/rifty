@@ -41,7 +41,7 @@ function presetPins(value: unknown): Readonly<Record<string, string>> | undefine
 }
 
 /** Vite/bundler deployment boundary; semantic App code receives no worker URLs. */
-export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
+export function playgroundWorkbenchOptions() {
   const resolverUrl = getResolverUrl();
   const bundleBaseUrl = getEddyBundleBaseUrl();
   const pins = presetPins(import.meta.env.VITE_RIFTY_EDDY_PINS);
@@ -71,7 +71,7 @@ export function playgroundWorkbenchOptions(): PlaygroundWorkbenchOptions {
           }),
     }),
     storage: Object.freeze({ persistence: 'preferred' as const }),
-  });
+  }) satisfies PlaygroundWorkbenchOptions;
 }
 
 export interface OpenedPlaygroundAppWorkbench {
