@@ -61,3 +61,13 @@ Without the transform, the same new file passes2/2. Production code unchanged.
 
 `pnpm exec vitest run packages/workbench/src/workers/playground-npm-catalog.fault.test.ts packages/workbench/src/workers/owner-package-state.test.ts packages/workbench/src/workers/playground-project-catalog.contract.test.ts`:
 74/74 pass, 3 files; both new fault cases and retained baseline.
+
+## Final verification
+
+At `57aacb699c24a470b11e10e74333ff8b4359cd99`, full `pnpm pr:check`
+passes25/25; test:run208.4s, parity63.3s, no isolation retry.
+Fresh read-only reviewer `/root/catalog_final_review` independently repeats
+GREEN74/74 and mutant RED2/2, and inspects the full gate log.
+Final+GREEN: 2/2 coverage, no findings; retained in
+`pr323-catalog-reflection-final-green.json`. Existing #323 delivery evidence
+keeps its earlier SHA boundary; only this proof follow-up is newly reviewed.
