@@ -181,3 +181,17 @@ The reviewer checked original issues, the full final draft set and evidence.
 This historical pass certified the initial draft while cwd/env was unanswered;
 it does not cover the subsequent user answer or revised command scope. A fresh
 check of the amended final draft set is required before refinement completion.
+
+## Final written-result check after user answer
+
+Fresh read-only `/root/sdk_methods_final`: docs Final+GREEN PASS at
+`cab32293352e759d7c16cfe2f315da2cd722e464`, all eight axes, no findings.
+Record: `issues325-326-methods-final-green.json`; `blockers.mjs` exit 0.
+The reviewer read original issues, the verbatim conditional answer, active
+authorities and the full final draft set independently; no omitted material
+user fork found. Method selection and state semantics are attributed to their
+respective owners. Legacy preview remains outside this refinement's closure.
+
+After the answer, `pnpm pr:check`: docs-only 20/20 PASS; source lanes skipped
+as listed above. Refine preparation is complete; both items remain draft for
+PICKUP API/reference/RED work. No SDK implementation or acceptance is claimed.
