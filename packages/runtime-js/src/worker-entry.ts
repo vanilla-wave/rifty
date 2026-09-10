@@ -23,6 +23,7 @@ import { resolveVmEngineName, setVmEngineOverride } from './builtins/vm/engine-c
 import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from './builtins/web-globals.ts';
 import {
+  isSandboxToolchainRealm,
   isSandboxToolchainResidentTransitionActive,
   sandboxToolchainWebAssembly,
 } from './internal/sandbox-toolchain-realm.ts';
@@ -126,7 +127,9 @@ const boot = (async () => {
   let backend: 'opfs' | 'memory';
   let reason: string | undefined;
   try {
-    backend = await initBackend(startup.storage);
+    backend = await initBackend(
+      startup.storage ?? (isSandboxToolchainRealm() ? { persistence: 'preferred' } : undefined),
+    );
   } catch (err) {
     if (err instanceof OpfsPreloadError || startup.storage?.persistence === 'required') throw err;
     // OPFS init failed for this realm — degrade to in-memory so the runtime still

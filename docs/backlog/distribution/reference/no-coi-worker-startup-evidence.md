@@ -21,3 +21,9 @@ and all negative payload criteria. Protocol v4 rejects old workers that could
 ignore storage metadata. Second full run exposed old test labeling v4 as future;
 isolated host.test.ts reproduced its 5000ms timeout. Update invalid future fixture
 to v10, keeping real v3 rejection in startup fault suite. No timeout increase.
+
+Final+GREEN first review found omitted-storage silent fallback when the native
+sync OPFS API is absent. Native regression RED confirmed; toolchain default now
+selects preferred through the same VFS options path as explicit configuration.
+Generic unconfigured runtime remains unchanged. Regression also covers required
+rejection and explicit ephemeral without a fallback reason.

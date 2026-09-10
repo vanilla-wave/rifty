@@ -2,6 +2,40 @@ import { expect, test } from '@playwright/test';
 
 const root = process.cwd().replaceAll('\\', '/');
 
+test('omitted storage reports the same unavailable-OPFS fallback as preferred', async ({
+  page,
+}) => {
+  await page.goto('/no-coi-harness.html');
+  const result = await page.evaluate(async (root) => {
+    const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+    const observations = [];
+    for (const persistence of [undefined, 'preferred', 'required', 'ephemeral']) {
+      try {
+        const sandbox = await createSandbox({
+          requireCrossOriginIsolation: false,
+          skipServiceWorker: true,
+          ...(persistence === undefined ? {} : { storage: { persistence } }),
+          toolchain: {
+            workerUrl: `/@fs${root}/tests/no-coi/fixtures/no-coi-unavailable-storage-worker.ts`,
+          },
+        });
+        observations.push(sandbox.vfs);
+        sandbox.dispose();
+      } catch (error) {
+        observations.push({ error: (error as Error).message });
+      }
+    }
+    return observations;
+  }, root);
+  const fallback = { backend: 'memory', reason: 'OPFS is unavailable in this realm' };
+  expect(result).toEqual([
+    fallback,
+    fallback,
+    { error: expect.stringContaining('OPFS is unavailable') },
+    { backend: 'memory' },
+  ]);
+});
+
 test('SDK namespace scopes native preload, writes and restart; omission keeps origin root', async ({
   page,
 }) => {
