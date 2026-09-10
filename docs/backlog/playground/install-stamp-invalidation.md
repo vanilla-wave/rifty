@@ -57,3 +57,13 @@ Full evidence and dispositions: `reference/project-open-ide-boundaries-refine.md
 Removing only the saved-open guard would move the failure into child admission.
 Runtime reconstruction, real browser/Node proof and minimal mechanism selection
 remain agent-owned pickup work; no new coordinator is prescribed.
+
+## Pickup notes
+
+Fold in directly related stale comments/ADR pointers while changing the open
+boundary. The `installStampSatisfied*` helpers have no external production
+callers in the 2026-09-10 scan; inspect before retirement. Async `readInstallStamp`
+is LIVE (`no-coi-toolchain-worker.ts:115`, `install-stamp-reading.ts:93`) and is
+not a dead-export candidate. No-COI installer trust remains an installer-boundary
+consumer; the old single-instance inventory must not justify deleting it.
+Full report disposition: `reference/fs-dirty-stamp-findings-disposition.md`.

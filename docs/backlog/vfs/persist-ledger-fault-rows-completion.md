@@ -1,17 +1,21 @@
 ---
 area: vfs
-status: ready
+status: draft
 title: Persist-ledger fault rows — complete the matrix (rename stage, mid-queue, consumer-visible)
 created: 2026-07-05
 why: "#107 proved the ledger on write/mkdir/rm and the stamp gate; the remaining rows are unpinned — rename's quota-stage, one-op-fails-mid-queue isolation, and the consumer-visible degradation (tarball-cache put, learned-pins write) are expected-honest but untested"
 user_story: As a developer on a quota-squeezed disk, I want every persistence consumer to degrade the way #107 promised (live session works, durability refused loudly, benign caches just re-learn), but today those rows are asserted only at the ledger layer, not at the consumers
 epic: fault-honest-opfs-persistence
-code: [packages/vfs/src/opfs-sync.ts, packages/npm-client/src/tarball-cache.ts, apps/playground/src/glue/eddy-learned-pins.ts]
+sources: [docs/backlog/playground/reference/project-open-ide-boundaries-refine.md]
+blocked_by: [playground/install-stamp-invalidation]
+code: [packages/vfs/src/opfs-sync.ts, packages/npm-client/src/tarball-cache.ts, packages/workbench/src/glue/eddy-learned-pins.ts]
 ---
 
 ## Context
 
-Test-completion item: each row pins EXISTING expected behavior. A failing row stays
+Test-completion item: storage rows pin existing expected behavior; the saved-open
+consumer consequence now follows the 2026-09-10 user amendment and needs new RED.
+A failing row stays
 inside this planned contract's normal RED→implementation lane; it does not
 trigger `rifty-fix`. Rows came from the #107 retro + explorer sweep;
 expected-green is NOT assumed — that's what the pins are for.
@@ -22,7 +26,7 @@ One fault test per row (RED-checked by reverting the behavior under pin where fe
 
 - rename quota-stage: persist failure at the file-move stage of a rename → recorded per affected path; heal on later success (#107 healed source-gone and dest cases; the MOVE-stage failure row is the gap).
 - mid-queue isolation: op N fails, ops N+1… on OTHER paths still persist and heal — one path's failure doesn't taint the queue.
-- consumer: tarball-cache put persist failure → install completes live, stamp refused (ledger gate), next boot re-installs — asserted end-to-end through npm-shell, not just at the vfs layer.
+- consumer: tarball-cache put persist failure → install completes live, stamp refused (ledger gate); next readable saved open preserves files/terminal without implicit install, and the user can explicitly retry install — asserted end-to-end through the real owner/npm-shell, not just at the vfs layer.
 - consumer: learned-pins write persist failure → no stamp revoke (foreign-path scoping, pinned in #107 at the vfs layer — extend the assert to the consumer), pin silently re-learned on the next install.
 
 ## Parity cases
@@ -42,3 +46,5 @@ None (browser storage boundary) — honest-outcome contract per `docs/process/fa
 ## Decisions
 
 - Injection via an OpfsFsSync fail-persist-by-predicate seam (the fault-tier decorator shape, `docs/backlog/process-meta/fault-tier.md`) — consumers stay real, only the storage boundary is faulted (AGENTS.md §Fidelity: mock only unavoidable boundaries).
+- re-cut: 2026-09-10 — fork: apply user «да, ок, ровно поведение node» to this overlapping saved-open consequence; no automatic install merely because proof is absent. Demote for new consumer RED, preserve storage-failure rows — trace: scenario.
+- 2026-09-10 — prior consumer row: "consumer: tarball-cache put persist failure → install completes live, stamp refused (ledger gate), next boot re-installs — asserted end-to-end through npm-shell, not just at the vfs layer."

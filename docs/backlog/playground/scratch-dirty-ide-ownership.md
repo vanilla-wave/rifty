@@ -47,3 +47,11 @@ filesystem/operation facts without deciding whether a Scratch is unsaved.
 
 Source and dispositions: `reference/project-open-ide-boundaries-refine.md`.
 No new listener, journal, lock or coordination mechanism is selected here.
+
+## Pickup notes
+
+The original wrap-up's nine-kind taxonomy, no-op `dependency`, unused producer
+kinds and transit `treeRevision` are cleanup candidates within this ownership
+work, not new user choices. Validate current consumers first; preserve the
+separate VFS revision/publication contract and baseline clean/dirty semantics.
+Disposition of the full report: `reference/fs-dirty-stamp-findings-disposition.md`.

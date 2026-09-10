@@ -20,7 +20,7 @@ A developer runs `npm install lodash` in an already saved snapshot-created Vite 
 ## Items
 
 - `vfs/iso-git-ref-torn-write-rows` (ready) — torn object/ref writes: repo opens clean after any single persist failure + reload.
-- `vfs/persist-ledger-fault-rows-completion` (ready) — pin the missing ledger rows: rename quota-stage, mid-queue isolation, consumer-visible tarball-put/pins-write degradation.
+- `vfs/persist-ledger-fault-rows-completion` (draft) — pin the missing ledger rows: rename quota-stage, mid-queue isolation, consumer-visible tarball-put/pins-write degradation; saved-open consequence follows the accepted npm amendment and needs new RED.
 - `playground/install-stamp-invalidation` (draft) — readable saved files and terminal open independently of install trust; commands fail at actual dependency use.
 - `playground/reload-crash-consistency-fault-e2e` (draft) — Playwright kills/reloads mid-install / mid-restore / mid-commit / mid-save → honest project after reopen; new npm row awaits RED.
 
