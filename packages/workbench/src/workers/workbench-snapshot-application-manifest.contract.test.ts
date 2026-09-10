@@ -115,10 +115,7 @@ async function seed(endpoint: Endpoint, state: ManifestState) {
       const definition = savedSnapshotDefinition(id, fixture.descriptor);
       await h.catalog.saveScratch({ id, name: 'Named manifest target', definition });
       opened = await h.owner.openProject(definition);
-      expect(opened.acquisition).toMatchObject({
-        kind: 'ready',
-        provenance: { outcome: 'existing' },
-      });
+      expect(opened.acquisition).toMatchObject({ kind: 'saved' });
     }
     const sourceRoot = opened.projectRoot;
     const prior = readInstallStampSync(h.authority, sourceRoot);
@@ -254,10 +251,7 @@ describe('I8 snapshot application treats saved package.json as an ordinary paylo
               { packageJsonText: initializerManifest },
             ),
           );
-          expect(opened.acquisition).toMatchObject({
-            kind: 'ready',
-            provenance: { outcome: 'existing' },
-          });
+          expect(opened.acquisition).toMatchObject({ kind: 'saved' });
           expect(network.requests, 'default reopen uses CURRENT manifest, not initializer').toEqual(
             [],
           );

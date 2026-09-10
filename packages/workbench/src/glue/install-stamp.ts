@@ -173,10 +173,7 @@ export function isInstallStampPath(path: string): boolean {
   return normalized === suffix || normalized.endsWith(suffix) || normalized.includes(`${suffix}/`);
 }
 
-/** ADR-0307: true iff `path` is STRICTLY below a `node_modules` segment at any
- * depth — an extraneous-write location that never affects claims or Scratch
- * dirty. The tree directory itself (last segment `node_modules`) is not
- * "inside": destroying/moving it stays a tree mutation. */
+/** Strictly below a node_modules segment; the tree directory itself is excluded. */
 export function isInsideInstallTree(path: string): boolean {
   const segments = normalizePath(path).split('/').filter(Boolean);
   const index = segments.indexOf('node_modules');

@@ -779,8 +779,7 @@ export function startBrowserWorkspaceOwner(
         try {
           listener(currentOperationalHealth);
           listener(currentPreviewHealth);
-        } catch {
-        }
+        } catch {}
         return () => operationalHealthListeners.delete(listener);
       },
       subscribePlaygroundTools(listener) {
@@ -1170,8 +1169,7 @@ export function startBrowserWorkspaceOwner(
       if (invariantHealth !== null) {
         try {
           listener(invariantHealth);
-        } catch {
-        }
+        } catch {}
       }
       return () => healthListeners.delete(listener);
     },

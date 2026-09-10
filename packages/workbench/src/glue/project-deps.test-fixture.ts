@@ -54,7 +54,7 @@ export function createTestProjectPackageAcquisitionAuthority(
       }
     },
     adapter: {
-      readTrustedPackageLock: async (project) => {
+      readPackageLock: async (project) => {
         const path = `${project.root}/package-lock.json`;
         if (!(await opts.vfs.exists(path))) return { lockfileVersion: 3, packages: {} };
         return JSON.parse(await opts.vfs.readFileText(path)) as unknown;

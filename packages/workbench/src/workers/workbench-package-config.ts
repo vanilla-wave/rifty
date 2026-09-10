@@ -225,12 +225,14 @@ export function workbenchFirstMaterializationPackageConfig(
       ? (snapshotAdmission.preflightRoot ?? projectRoot)
       : projectRoot;
   const packageJsonBytes =
-    snapshotAdmission?.mode === 'apply'
+    snapshotAdmission?.mode === 'apply' || snapshotAdmission?.mode === 'saved'
       ? definition.files['/package.json']
       : fs.readFileBytesSync(`${currentRoot}/package.json`);
   if (packageJsonBytes === undefined)
     throw new TypeError('Playground definition is missing normalized /package.json');
-  const config = workbenchPackageConfig(definition, projectRoot, { packageJsonBytes });
+  const config = workbenchPackageConfig(definition, projectRoot, {
+    packageJsonBytes,
+  });
   if (!Object.hasOwn(config, 'firstMaterialization')) {
     throw new TypeError('Playground definition is missing first-materialization metadata');
   }

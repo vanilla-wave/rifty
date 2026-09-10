@@ -1,3 +1,7 @@
+import {
+  createPlaygroundNpmObserver,
+  playgroundInitialInstallFinalizer,
+} from './playground-package-mutations.ts';
 /// <reference lib="webworker" />
 
 import { makeGit, vfsToGitFs } from '@riftydev/git';
@@ -311,7 +315,9 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
           projectOpenOperation,
         ),
       }),
-    amendGeneratedBaseline,
+    ...(config.playgroundUrlContext === undefined
+      ? {}
+      : { finalizeFirstInstall: playgroundInitialInstallFinalizer(amendGeneratedBaseline) }),
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
     ...(acquisition.mode === 'snapshot-only'
@@ -472,7 +478,11 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
             createWorkbenchProjectRuntime({
               projectRoot,
               packageConfig: workbenchPackageConfig(input.definition, projectRoot, {
-                packageJsonBytes: authority.readFileBytesSync(`${projectRoot}/package.json`),
+                packageJsonBytes:
+                  (input.materialized.acquisition as { kind?: string } | undefined)?.kind ===
+                  'saved'
+                    ? (input.definition.files['/package.json'] as Uint8Array)
+                    : authority.readFileBytesSync(`${projectRoot}/package.json`),
               }),
               authority,
               packageState,
@@ -484,7 +494,12 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
               publicationBarrier: vfs.publicationBarrier,
               ...(input.recordMutation === undefined
                 ? {}
-                : { recordMutation: input.recordMutation }),
+                : {
+                    observeNpmOperation: createPlaygroundNpmObserver(
+                      authority,
+                      input.recordMutation,
+                    ),
+                  }),
               send(frame) {
                 const output: WorkbenchOwnerProjectRuntimeOutput =
                   frame.type === 'pty:preview'

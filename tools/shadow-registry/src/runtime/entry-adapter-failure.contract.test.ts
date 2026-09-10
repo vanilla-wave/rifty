@@ -2,7 +2,7 @@ import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { afterEach, expect, it } from 'vitest';
 import { ESBUILD_ALIAS_MAIN } from '../internal/catalog-source.ts';
 import { preparePackageEntryRuntime } from './entry-preparation.ts';
-import { activatePackageRuntimeAdapters, ESBUILD_RUNTIME_ADAPTER_ID } from './runtime-adapters.ts';
+import { ESBUILD_RUNTIME_ADAPTER_ID, activatePackageRuntimeAdapters } from './runtime-adapters.ts';
 
 const prior = Object.getOwnPropertyDescriptor(globalThis, '__riftyShadowRegistry');
 afterEach(() => {

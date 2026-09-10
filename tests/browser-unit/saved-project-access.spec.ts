@@ -153,6 +153,7 @@ test('saved snapshot files and real Node terminal survive a malformed lock and m
       await second.close();
     }
   }, snapshot);
+  console.log('[pr323-saved-access]', JSON.stringify(result));
   expect(result.preservedLock).toBe('not JSON');
   expect(result.local.exit).toBe(0);
   expect(result.local.out).toContain('local source ran');

@@ -20,7 +20,17 @@ afterEach(() => {
 });
 
 describe('PR323 readable saved projects are independent of install certification', () => {
-  it.each(['absent', 'pending', 'incompatible', 'malformed-lock', 'missing-package'] as const)(
+  it.each([
+    'absent',
+    'pending',
+    'incompatible',
+    'malformed-lock',
+    'missing-lock',
+    'invalid-shadow',
+    'invalid-manifest',
+    'missing-manifest',
+    'missing-package',
+  ] as const)(
     '%s: preserves saved bytes and admits a child without automatic acquisition',
     async (fault) => {
       const network = installSnapshotNetwork(fixture);
@@ -59,6 +69,21 @@ describe('PR323 readable saved projects are independent of install certification
       }
       if (fault === 'malformed-lock')
         storage.writeFileSync(`${root}/package-lock.json`, encoder.encode('not JSON'));
+      if (fault === 'missing-lock') storage.rmSync(`${root}/package-lock.json`, {});
+      if (fault === 'invalid-shadow')
+        storage.writeFileSync(
+          `${root}/package-lock.json`,
+          encoder.encode(
+            JSON.stringify({
+              lockfileVersion: 3,
+              packages: {},
+              rifty: { shadowSubstitutions: { protocol: 'invalid', applied: [{}] } },
+            }),
+          ),
+        );
+      if (fault === 'invalid-manifest')
+        storage.writeFileSync(`${root}/package.json`, encoder.encode('not JSON'));
+      if (fault === 'missing-manifest') storage.rmSync(`${root}/package.json`, {});
       if (fault === 'missing-package')
         storage.rmSync(`${root}/node_modules/ms`, { recursive: true });
       await storage.flush();

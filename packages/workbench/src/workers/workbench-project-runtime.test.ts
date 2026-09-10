@@ -25,7 +25,6 @@ import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { createNoShadowInstallResultFixture } from './install-result.test-fixture.ts';
 import {
   type OwnerPackageConfig,
-  type OwnerPackageMutationKind,
   type OwnerPackageState,
   createOwnerPackageState,
 } from './owner-package-state.ts';
@@ -33,6 +32,10 @@ import {
   type OwnerVfsAuthority,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import {
+  type PlaygroundPackageMutationKind as OwnerPackageMutationKind,
+  createPlaygroundNpmObserver,
+} from './playground-package-mutations.ts';
 import {
   type WorkbenchProjectRuntime,
   createWorkbenchProjectRuntime,
@@ -741,7 +744,9 @@ async function harness(
     nodeWorkerRuntimeEnv,
     mutationGuard,
     publicationBarrier,
-    ...(recordMutation === undefined ? {} : { recordMutation }),
+    ...(recordMutation === undefined
+      ? {}
+      : { observeNpmOperation: createPlaygroundNpmObserver(authority, recordMutation) }),
     send: (frame: OwnerToPageFrame) => {
       frames.push(frame);
       onSend?.(frame, () => {
@@ -2556,7 +2561,7 @@ describe('Workbench project runtime', () => {
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm-mutations' });
 
     expect(createNpmCommand).toHaveBeenCalledWith(expect.any(Function), {
-      recordMutation,
+      observeOperation: expect.any(Function),
       mapInvocationContext: expect.any(Function),
     });
     await h.runtime.close();

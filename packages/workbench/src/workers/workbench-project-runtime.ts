@@ -26,8 +26,8 @@ import {
   createOwnerChildNodeExecutor,
 } from './owner-child-node-executor.ts';
 import type {
+  OwnerNpmCommandOptions,
   OwnerPackageConfig,
-  OwnerPackageMutationKind,
   OwnerPackageState,
 } from './owner-package-state.ts';
 import { createOwnerProcessListCommand } from './owner-process-list-command.ts';
@@ -60,8 +60,8 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly mutationGuard: VfsMutationGuard;
   /** Owner-applied VFS state must precede every observable PTY completion. */
   readonly publicationBarrier: () => Promise<void>;
-  /** Companion metadata reflection for terminal package mutations. */
-  readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
+  /** Optional consumer of real npm invocation facts. */
+  readonly observeNpmOperation?: OwnerNpmCommandOptions['observeOperation'];
   /** Raw project-local PTY frames; lifetime owner wraps tokens outside this module. */
   readonly send: (frame: OwnerToPageFrame) => void;
 }
@@ -290,7 +290,9 @@ export function createWorkbenchProjectRuntime(
       },
       {
         mapInvocationContext: namespace.toOwnerContext,
-        ...(options.recordMutation === undefined ? {} : { recordMutation: options.recordMutation }),
+        ...(options.observeNpmOperation === undefined
+          ? {}
+          : { observeOperation: options.observeNpmOperation }),
       },
     );
     shell.registerCommand('npm', async (args, ctx) => {

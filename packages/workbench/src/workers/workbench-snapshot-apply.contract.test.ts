@@ -51,7 +51,7 @@ async function seed(endpoint: Endpoint = 'scratch') {
     const definition = savedSnapshotDefinition(id, first.descriptor);
     await h.catalog.saveScratch({ id, name: 'Snapshot apply', definition });
     const saved = await h.owner.openProject(definition);
-    expect(saved.acquisition).toMatchObject({ kind: 'ready', provenance: { outcome: 'existing' } });
+    expect(saved.acquisition).toMatchObject({ kind: 'saved' });
     await saved.close();
   }
   const root = `/.rifty/workbench/v1/projects/${id}/tree`;

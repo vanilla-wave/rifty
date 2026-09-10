@@ -53,8 +53,10 @@ describe('snapshot first acquisition admission survives the catalog lifetime', (
       } catch (error) {
         failure = error;
       }
-      expect.soft(failure).toBeInstanceOf(Error);
-      expect.soft(opened).toBeUndefined();
+      expect
+        .soft(failure, 'ADR-0415 saved access does not consume new acquisition')
+        .toBeUndefined();
+      expect.soft(opened?.acquisition).toEqual({ kind: 'saved' });
       expect.soft(network.requests).toEqual([]);
       expect.soft(reopened.fs.liveSnapshot()).toEqual(before);
       expect.soft(reopened.fs.durableSnapshot()).toEqual(before);
@@ -167,8 +169,10 @@ describe('snapshot first acquisition admission survives the catalog lifetime', (
       } catch (error) {
         failure = error;
       }
-      expect.soft(failure).toBeInstanceOf(Error);
-      expect.soft(opened).toBeUndefined();
+      expect
+        .soft(failure, 'ADR-0415 saved access does not consume new acquisition')
+        .toBeUndefined();
+      expect.soft(opened?.acquisition).toEqual({ kind: 'saved' });
       expect.soft(network.requests).toEqual([]);
       expect.soft(reopened.fs.liveSnapshot()).toEqual(before);
       expect.soft(reopened.fs.durableSnapshot()).toEqual(before);
@@ -210,10 +214,7 @@ describe('snapshot first acquisition admission survives the catalog lifetime', (
     let opened: OpenedPlaygroundProject | undefined;
     try {
       opened = await reopened.owner.openProject(definition);
-      expect(opened.acquisition).toMatchObject({
-        kind: 'ready',
-        provenance: { outcome: 'existing' },
-      });
+      expect(opened.acquisition).toMatchObject({ kind: 'saved' });
       expect(network.requests).toEqual([]);
       expect(reopened.fs.durableSnapshot()).toEqual(before);
       await opened.close();

@@ -148,10 +148,7 @@ describe('I3 owner policy without a registry capability', () => {
       const before = h.fs.durableSnapshot();
       network.requests.length = 0;
       const warm = await h.owner.openProject(definition);
-      expect(warm.acquisition).toMatchObject({
-        kind: 'ready',
-        provenance: { outcome: 'existing' },
-      });
+      expect(warm.acquisition).toMatchObject({ kind: 'saved' });
       assertTrusted(h, warm.projectRoot);
       expect(network.requests).toEqual([]);
       expect(h.fs.liveSnapshot()).toEqual(before);
@@ -398,10 +395,7 @@ describe('I3 owner policy without a registry capability', () => {
     let applied: OpenedPlaygroundProject | undefined;
     try {
       saved = await restarted.owner.openProject(savedSnapshotDefinition('saved-project', changed));
-      expect(saved.acquisition).toMatchObject({
-        kind: 'ready',
-        provenance: { outcome: 'existing' },
-      });
+      expect(saved.acquisition).toMatchObject({ kind: 'saved' });
       assertTrusted(restarted, saved.projectRoot);
       expect(network.requests).toEqual([]);
       expect(restarted.fs.liveSnapshot()).toEqual(before);
@@ -441,7 +435,9 @@ describe('I3 owner policy without a registry capability', () => {
     const restarted = await openSnapshotOnlyOwner(network, storage.restartFromDurableState());
     const before = restarted.fs.durableSnapshot();
     try {
-      await expect(restarted.owner.openProject(definition)).rejects.toThrow(/saved|trusted|stamp/i);
+      const saved = await restarted.owner.openProject(definition);
+      expect(saved.acquisition).toEqual({ kind: 'saved' });
+      await saved.close();
       expect(network.requests).toEqual([]);
       expect(restarted.fs.liveSnapshot()).toEqual(before);
       expect(restarted.fs.durableSnapshot()).toEqual(before);

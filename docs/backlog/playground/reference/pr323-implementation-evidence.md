@@ -53,3 +53,19 @@ Fresh reviewer `/root/saved_dirty_contract`: Contract+RED accepted, 8/8 coverage
 Author native oracle, Node v24.16.0: temporary package manifest names ms2.0.0, package-lock is `not JSON`; `node local.cjs` exit0/output `local source ran`; `node main.cjs` missing ms exit1/MODULE_NOT_FOUND; `npm install --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org` exit0; rerun main exit0/output2000, regenerated lockfileVersion3.
 
 Real companion Reset/PageStore browser: 1 RED at page dirty true instead of false, after ownerDirty=false and /note.txt deletion passed. No direct Scratch Reset button is claimed by this carrier; it exercises the public companion operation and the actual page store. Ordered authoritative catalog publication needs no optimistic dirty override; pending-starter protection stays.
+
+## Saved access / dirty GREEN
+
+- Saved access/entry adapter/realm: 10 unit tests pass; extended missing-lock, invalid shadow and missing/malformed manifest cases pass (9 saved cases).
+- `saved-project-access.spec.ts`, `saved-project-adapter-use.spec.ts`, `saved-project-interrupted-install.spec.ts`, `scratch-reset-page-state.spec.ts`: 4 browser tests pass. Partial lodash/LICENSE1952 bytes survive page death; explicit retry runs lodash.chunk. Malformed-lock explicit npm repair runs ms with output2000. Damaged esbuild permits independent Node and fails only at use.
+- Snapshot suites: 97/97 pass. Only saved-open result/refusal assertions changed under ADR-0415; real snapshot apply validation, rollback fences, recovery, byte identity and failure assertions retained. Saved result is `kind:saved`, without installation provenance.
+- Dirty baseline: original first-install and mutation assertions retained by composing the real companion observer; VFS now forwards raw intents and companion suppresses extraneous-tree dirty. The initial clean-baseline eligibility moved into companion finalization.
+- Reset retains the legacy optimistic writer's still-unacknowledged edit only; authoritative dirty acknowledges it, then Reset clean wins. Existing pending-starter transition remains. One existing page store, no new queue/epoch/persisted owner; pending source marker replaces the overbroad dirty override.
+
+## Required npm repair discovery
+
+Actual saved browser path exposed the old syntactically corrupt-lock install refusal. Native npm artifact above contradicts it; independent `/root/decision_323` confirmed ADR-0023 already requires missing/unparseable lock → resolve. All 3 reader consumers inspected: installer and source integrity lookup share the parse miss, snapshot producer independently requires non-null v3 before network. No new mode/reader or ADR supersession needed. Catch only JSON.parse; preserve I/O, legacy-v1/v2 and parsed shadow/replay errors. The original syntax-error assertion is replaced with successful-write/failure-preservation/I/O proofs; strict snapshot producer regression added. 98 focused unit tests pass after this repair.
+
+## Related inventory
+
+`readInstallStamp` async readers stay live. Rechecked convenience stamp predicates have no production caller (tests only); retained because deleting their tests is unnecessary to the requested boundary. `treeRevision` remains real VFS/publication evidence; dirty classification has no independent durable revision owner. Existing pure path predicates remain shared facts, while companion owns their dirty meaning.

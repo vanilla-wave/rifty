@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { bakeApplicationPackage } from './fixtures/snapshot-application-package.ts';
 import { expect, test } from '@playwright/test';
 import type * as PublicWorkbench from '../../apps/playground/src/browser-unit/workbench-playground-entry.ts';
 import type * as HostAssets from '../../apps/playground/src/browser-unit/workbench-vite-host-assets.ts';
 import { gotoHarness } from './fixtures.ts';
+import type { bakeApplicationPackage } from './fixtures/snapshot-application-package.ts';
 
 test('public Workbench reports actual first-open persistence and clears it at settlement', async ({
   page,

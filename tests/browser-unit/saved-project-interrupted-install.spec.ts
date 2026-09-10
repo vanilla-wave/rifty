@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type * as Companion from '../../apps/playground/src/browser-unit/workbench-playground-entry.ts';
 import type * as Assets from '../../apps/playground/src/browser-unit/workbench-vite-host-assets.ts';
-import type * as Fixture from './fixtures/sealed-playground-workbench.ts';
 import { gotoHarness, sealedWorkbenchFixtureUrl } from './fixtures.ts';
+import type * as Fixture from './fixtures/sealed-playground-workbench.ts';
 
 const ownerModuleUrl = `/@fs${process.cwd()}/tests/browser-unit/fixtures/interrupted-install-owner.ts?worker&url`;
 

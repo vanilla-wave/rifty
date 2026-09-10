@@ -61,6 +61,7 @@ export interface ProjectSnapshotFailure {
 
 /** Owner-born package decision consumed once the default terminal exists. */
 export type ProjectAcquisitionPlan =
+  | { readonly kind: 'saved' }
   | { readonly kind: 'ready'; readonly provenance: ProjectAcquisitionProvenance }
   | { readonly kind: 'install'; readonly snapshotFailures: readonly ProjectSnapshotFailure[] };
 

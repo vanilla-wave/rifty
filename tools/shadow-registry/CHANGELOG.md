@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Report unavailable runtime adapters at package use, preserving independent Node entry and strict explicit adapter activation; failed slots cannot expose a stale successful esbuild handle.
+
 - Share read-only installed-file preparation planners and explicit filesystem selection across finalizers, snapshot producers and source readiness validation.
 
 - Reuse an already-active esbuild adapter for the same filesystem and cwd after strict installed-byte validation; repeated install/open no longer restarts the service.

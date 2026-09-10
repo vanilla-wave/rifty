@@ -1,3 +1,4 @@
+import type { VfsMutationIntent } from '@riftydev/vfs';
 import {
   ClosedHandleError,
   ProjectBusyError,
@@ -95,6 +96,7 @@ export interface WorkbenchOwnerProjectRuntimeInput {
   readonly recordMutation?: (
     kind: PlaygroundProjectMutationKind,
     treeRevision: number,
+    intents?: readonly VfsMutationIntent[],
   ) => Promise<void>;
 }
 
@@ -159,10 +161,7 @@ type PlaygroundCatalogMessage = Extract<
   { readonly type: 'workbench:playground-catalog' }
 >;
 
-/**
- * Single owner-side lifecycle chokepoint. Bootstrap owns initialization and the
- * physical process; this controller owns every subsequent project transition.
- */
+/** Project lifetime/correlation owner; bootstrap initializes the physical worker. */
 export function createWorkbenchOwnerController(
   dependencies: WorkbenchOwnerControllerDependencies,
 ): WorkbenchOwnerController {
@@ -408,11 +407,12 @@ export function createWorkbenchOwnerController(
           projectRoot,
           acquisition,
         }),
-        recordMutation: (kind, treeRevision) =>
+        recordMutation: (kind, treeRevision, intents) =>
           playground.authority.recordMutation({
             kind,
             project: authorityProject,
             treeRevision,
+            ...(intents === undefined ? {} : { intents }),
           }),
         emit(output) {
           if (project === null) throw new ClosedHandleError('Workbench project output');

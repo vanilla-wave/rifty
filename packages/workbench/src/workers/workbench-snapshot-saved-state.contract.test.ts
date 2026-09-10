@@ -74,7 +74,7 @@ async function seed(endpoint: Endpoint, edited: boolean) {
   if (endpoint === 'named') {
     await h.catalog.saveScratch({ id, name: 'Saved snapshot', definition });
     const saved = await h.owner.openProject(definition);
-    expect(saved.acquisition).toMatchObject({ kind: 'ready', provenance: { outcome: 'existing' } });
+    expect(saved.acquisition).toMatchObject({ kind: 'saved' });
     await saved.close();
     expect(network.requests).toEqual([snapshotAssetUrl]);
   }
@@ -122,9 +122,7 @@ describe('I8 default snapshot application keeps saved state', () => {
           failure = error;
         }
         expect.soft(failure, 'saved project must open despite the unused asset').toBeUndefined();
-        expect
-          .soft(opened?.acquisition)
-          .toMatchObject({ kind: 'ready', provenance: { outcome: 'existing' } });
+        expect.soft(opened?.acquisition).toMatchObject({ kind: 'saved' });
         expect.soft(network.requests, 'unused snapshot must never be fetched').toEqual([]);
         expect
           .soft(reopened.catalog.snapshot(), 'saved catalog provenance must remain unchanged')
@@ -148,7 +146,7 @@ describe('I8 default snapshot application keeps saved state', () => {
     ['named', 'pending'],
     ['named', 'incompatible'],
   ] as const)(
-    '%s consumed saved state with %s claim fails before acquisition or writes',
+    '%s consumed saved state with %s claim opens without acquisition or writes',
     async (endpoint, claimState) => {
       const { h, network, id, root } = await seed(endpoint, true);
       if (claimState === 'pending') {
@@ -190,10 +188,8 @@ describe('I8 default snapshot application keeps saved state', () => {
         } catch (error) {
           failure = error;
         }
-        expect
-          .soft(failure, 'saved-state incompatibility must reject startup')
-          .toBeInstanceOf(Error);
-        expect.soft(opened, 'no session is admitted for incompatible saved state').toBeUndefined();
+        expect.soft(failure, 'ADR-0415: install proof cannot reject saved access').toBeUndefined();
+        expect.soft(opened?.acquisition).toEqual({ kind: 'saved' });
         expect
           .soft(network.requests, 'saved-state miss cannot trigger snapshot or registry arrival')
           .toEqual([]);

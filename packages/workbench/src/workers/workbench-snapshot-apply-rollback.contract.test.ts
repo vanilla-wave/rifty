@@ -80,10 +80,7 @@ async function seedSavedState() {
     const definition = savedSnapshotDefinition(id, original.descriptor);
     await h.catalog.saveScratch({ id, name: 'Rollback project', definition });
     opened = await h.owner.openProject(definition);
-    expect(opened.acquisition).toMatchObject({
-      kind: 'ready',
-      provenance: { outcome: 'existing' },
-    });
+    expect(opened.acquisition).toMatchObject({ kind: 'saved' });
     await opened.close();
     opened = undefined;
     expect(network.requests).toEqual([original.descriptor.assetUrl]);
@@ -357,9 +354,7 @@ describe('I8 explicit snapshot rollback restores same-owner saved admission', ()
         expect
           .soft(warmFailure, 'same owner must reconcile old claim AND prior manifest configuration')
           .toBeUndefined();
-        expect
-          .soft(warm?.acquisition)
-          .toMatchObject({ kind: 'ready', provenance: { outcome: 'existing' } });
+        expect.soft(warm?.acquisition).toMatchObject({ kind: 'saved' });
         expect
           .soft(network.requests, 'warm rollback admission must not fetch the unavailable asset')
           .toEqual([]);
@@ -489,10 +484,7 @@ describe('I8 explicit snapshot rollback restores same-owner saved admission', ()
             assetUrl: 'https://host.test/unavailable-after-recovery.tar.gz',
           }),
         );
-        expect(opened.acquisition).toMatchObject({
-          kind: 'ready',
-          provenance: { outcome: 'existing' },
-        });
+        expect(opened.acquisition).toMatchObject({ kind: 'saved' });
         expect(recoveredNetwork.requests).toEqual([]);
         expectRollback(recovered.fs.durableSnapshot(), before.tree, original);
       } finally {

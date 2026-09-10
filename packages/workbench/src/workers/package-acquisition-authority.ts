@@ -1,7 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import {
   type ShadowSubstitutionPlan,
-  planAppliedShadowSubstitutions,
   planShadowSubstitutionsFromLockfile,
 } from '@riftydev/npm-client/internal';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
@@ -51,6 +50,11 @@ import {
 } from './package-acquisition-types.ts';
 
 export * from './package-acquisition-types.ts';
+import {
+  type PublishedPackageTree,
+  composePackageTreeAncestry,
+  readSavedPackageTree,
+} from './package-runtime-trees.ts';
 
 interface CommandQueueEntry {
   readonly kind: 'command';
@@ -81,24 +85,6 @@ const EMPTY_SHADOW_PLAN = planShadowSubstitutionsFromLockfile({
   lockfileVersion: 3,
   packages: {},
 });
-
-type PublishedPackageTree =
-  | Readonly<{
-      kind: 'installed';
-      project: PackageAcquisitionProject;
-      packageJsonText: string;
-      plan: ShadowSubstitutionPlan;
-      /** A manifest-only edit preserves the live tree, not its durable install claim. */
-      proof: 'claim' | 'owner-runtime';
-    }>
-  | Readonly<{
-      kind: 'empty';
-      project: PackageAcquisitionProject;
-      packageJsonText: string;
-      plan: ShadowSubstitutionPlan;
-    }>;
-
-type PublishedPackageTreeEntry = readonly [root: string, tree: PublishedPackageTree];
 
 function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -141,7 +127,10 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   readonly #observe?: (event: AcquisitionObservation) => void;
   readonly #queue: QueueEntry[] = [];
   readonly #terminalActivity = new Map<string, string>();
-  readonly #knownProjects = new Map<string, PackageAcquisitionProject>();
+  readonly #knownProjects = new Map<
+    string,
+    { readonly project: PackageAcquisitionProject; readonly saved: boolean }
+  >();
   readonly #packageTrees = new Map<string, PublishedPackageTree>();
   readonly #admissionWaiters = new Set<AdmissionWaiter>();
   #draining = false;
@@ -158,12 +147,17 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   }
 
   knownProjects(): readonly PackageAcquisitionProject[] {
-    return [...this.#knownProjects.values()];
+    return [...this.#knownProjects.values()].map(({ project }) => project);
   }
 
   #rememberProject(project: PackageAcquisitionProject): void {
     const root = normalizeSchedulingRoot(project.root);
-    this.#knownProjects.set(root, { ...project, root });
+    const previous = this.#knownProjects.get(root);
+    const saved =
+      previous?.saved === true &&
+      previous.project.projectId === project.projectId &&
+      previous.project.slug === project.slug;
+    this.#knownProjects.set(root, { project: { ...project, root }, saved });
   }
 
   #invalidatePackageTrees(root: string): void {
@@ -242,6 +236,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     canonicalRoot: string,
     published: PublishedPackageTree,
   ): Promise<void> {
+    if (published.kind === 'saved') return;
     if (published.kind === 'empty') {
       const attest = this.#adapter.attestEmptyPackageTree;
       const trusted =
@@ -269,52 +264,6 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     }
     this.#packageTrees.delete(canonicalRoot);
     throw new Error(`package tree readiness is not trusted for ${canonicalRoot}`);
-  }
-
-  async #composePackageTreeAncestry(ancestry: readonly PublishedPackageTreeEntry[]): Promise<
-    Readonly<{
-      plan: ShadowSubstitutionPlan;
-      runtimeBindings: readonly Readonly<{ adapterId: string; packagePath: string }>[];
-    }>
-  > {
-    const substitutions: ShadowSubstitutionPlan['substitutions'][number][] = [];
-    const claimedInstallPaths = new Set<string>();
-    const claimedAdapters = new Set<string>();
-    const runtimeBindings: Array<Readonly<{ adapterId: string; packagePath: string }>> = [];
-    for (const [root, published] of ancestry) {
-      for (const binding of published.plan.bindings) {
-        if (claimedAdapters.has(binding.adapterId)) continue;
-        claimedAdapters.add(binding.adapterId);
-        runtimeBindings.push(
-          Object.freeze({
-            adapterId: binding.adapterId,
-            packagePath: normalizePath(`${root}/${binding.packagePath}`),
-          }),
-        );
-      }
-      for (const substitution of published.plan.substitutions) {
-        const installPath = substitution.materialization.installPath;
-        if (claimedInstallPaths.has(installPath)) continue;
-        claimedInstallPaths.add(installPath);
-        substitutions.push(substitution);
-      }
-    }
-
-    const nearest = ancestry[0];
-    if (nearest === undefined) throw new Error('package tree ancestry is empty');
-    const exactPublished = ancestry.find(
-      ([, published]) =>
-        published.plan.substitutions.length === substitutions.length &&
-        published.plan.substitutions.every(
-          (substitution, index) => substitution === substitutions[index],
-        ),
-    )?.[1];
-    const plan =
-      exactPublished?.plan ??
-      (substitutions.length === 0
-        ? nearest[1].plan
-        : planAppliedShadowSubstitutions(substitutions));
-    return Object.freeze({ plan, runtimeBindings: Object.freeze(runtimeBindings) });
   }
 
   async quiesce(): Promise<void> {
@@ -562,13 +511,15 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
   }
 
   async #captureChildAdmission(lookupPath: string): Promise<PackageTreeAdmission> {
-    const ancestry = [...this.#packageTrees.entries()]
-      .filter(([publishedRoot]) => pathContains(publishedRoot, lookupPath))
-      .sort(([left], [right]) => right.length - left.length || left.localeCompare(right));
     const knownAncestry = [...this.#knownProjects.entries()]
       .filter(([knownRoot]) => pathContains(knownRoot, lookupPath))
       .sort(([left], [right]) => right.length - left.length || left.localeCompare(right));
-    for (const [knownRoot, knownProject] of knownAncestry) {
+    for (const [knownRoot, known] of knownAncestry) {
+      const knownProject = known.project;
+      if (known.saved) {
+        this.#packageTrees.set(knownRoot, await readSavedPackageTree(knownProject, this.#adapter));
+        continue;
+      }
       const published = this.#packageTrees.get(knownRoot);
       if (published === undefined) {
         throw new Error(`package tree readiness is not published for ${knownRoot}`);
@@ -583,6 +534,9 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
         throw new Error(`package tree readiness is not trusted for ${knownRoot}`);
       }
     }
+    const ancestry = [...this.#packageTrees.entries()]
+      .filter(([publishedRoot]) => pathContains(publishedRoot, lookupPath))
+      .sort(([left], [right]) => right.length - left.length || left.localeCompare(right));
     const nearest = ancestry[0];
     if (nearest === undefined) {
       throw new Error(`package tree readiness is not published for ${lookupPath}`);
@@ -591,7 +545,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       await this.#assertPackageTreeAdmission(canonicalRoot, published);
     }
     const [canonicalRoot, published] = nearest;
-    const composed = await this.#composePackageTreeAncestry(ancestry);
+    const composed = await composePackageTreeAncestry(ancestry);
     return Object.freeze({
       root: canonicalRoot,
       project: published.project,
@@ -715,12 +669,9 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
     const admission = command.snapshotAdmission;
     try {
       if (admission?.mode === 'saved') {
-        const provenance = await this.#trustedProvenance(command.to, command.packageJsonText);
-        if (provenance === null)
-          throw new Error(
-            `Saved project is incompatible with current install trust: ${command.to.projectId}`,
-          );
-        return Object.freeze({ kind: 'ready', provenance: Object.freeze(provenance) });
+        const root = normalizeSchedulingRoot(command.to.root);
+        this.#knownProjects.set(root, { project: { ...command.to, root }, saved: true });
+        return Object.freeze({ kind: 'saved' });
       }
       if (admission?.mode === 'apply')
         return await this.#applySnapshot(command, admission, registration.restore);
@@ -975,7 +926,7 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       existing.status === 'trusted' &&
       existing.stamp.installArtifactIdentity === project.identity
     ) {
-      const readLockfile = this.#adapter.readTrustedPackageLock;
+      const readLockfile = this.#adapter.readPackageLock;
       if (readLockfile === undefined) {
         throw new NotImplementedError('package-acquisition.trusted-lockfile');
       }

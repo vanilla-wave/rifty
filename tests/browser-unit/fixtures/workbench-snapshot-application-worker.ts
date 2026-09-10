@@ -3,7 +3,10 @@
 import { RegistryClient } from '@riftydev/npm-client';
 import { type FsSync, OpfsFsSync, OpfsVfs } from '@riftydev/vfs';
 import { setSyncMirror } from '@riftydev/vfs/internal';
-import { isInstallStampPath } from '../../../packages/workbench/src/glue/install-stamp.ts';
+import {
+  installStampSatisfied,
+  isInstallStampPath,
+} from '../../../packages/workbench/src/glue/install-stamp.ts';
 import { SyncMirrorVfs } from '../../../packages/workbench/src/glue/sync-mirror-vfs.ts';
 import { definePlaygroundProject } from '../../../packages/workbench/src/workbench/internal/playground-project-definition.ts';
 import { createOwnerPackageState } from '../../../packages/workbench/src/workers/owner-package-state.ts';
@@ -172,7 +175,10 @@ async function run(input: Input) {
     definition: definition('saved-opfs'),
   });
   const warm = await owner.openProject(definition('saved-opfs'));
-  if (warm.acquisition.kind !== 'ready' || warm.acquisition.provenance.outcome !== 'existing') {
+  if (
+    warm.acquisition.kind !== 'saved' ||
+    (await installStampSatisfied(vfs, projectRoot, 'saved-opfs')) === null
+  ) {
     throw new Error('named snapshot seed was not trusted before the fault');
   }
   const referenceIndex = [...composition.authority.readFileBytesSync(indexPath)];

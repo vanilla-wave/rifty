@@ -56,8 +56,8 @@ import {
 } from '../glue/project-boot-policy.ts';
 import { scratchDisplayName } from '../glue/project-display-name.ts';
 import type { ActiveId, ProjectIndex } from '../glue/project-index.ts';
-import type { ScmResourceRow } from '../glue/scm-status.ts';
 import { withProjectOpenProgress } from '../glue/project-open-progress.ts';
+import type { ScmResourceRow } from '../glue/scm-status.ts';
 import type { StarterGroup } from '../glue/starter.ts';
 import { starterById } from '../glue/starter.ts';
 import { pathFromTerminalFileLink } from '../glue/terminal-links.ts';

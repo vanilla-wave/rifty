@@ -84,7 +84,7 @@ export interface NpmShellCommandDeps {
   /** Translate a fully parsed terminal invocation into the owner's storage namespace. */
   readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
   /** Reflect one exact invocation's generated Starter Git baseline outcome. */
-  readonly observeGeneratedBaseline?: (clean: boolean) => void;
+  readonly observeInitialInstall?: (clean: boolean) => void;
   /** Pre-install tree preparation (e.g. the from-scratch clean-start
    *  clear/reseed) — runs INSIDE the owner acquisition FIFO, before any
    *  read or mutation of this install: a preparation that deletes/reseeds the
@@ -324,7 +324,7 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
       );
     }
     if (sub === 'install' || sub === 'i' || sub === 'add') {
-      return runInstall(args.slice(1), ctx, deps, packages, deps.observeGeneratedBaseline);
+      return runInstall(args.slice(1), ctx, deps, packages, deps.observeInitialInstall);
     }
     if (sub === 'run' || sub === 'run-script') {
       return runPackageScript(args.slice(1), ctx, deps);
@@ -631,7 +631,7 @@ async function runInstall(
   ctx: CommandContext,
   deps: NpmShellCommandDeps,
   packages: PackageAcquisitionAuthority,
-  onGeneratedBaseline?: (clean: boolean) => void,
+  onInitialInstall?: (clean: boolean) => void,
 ): Promise<number> {
   const parsed = parseNpmInstallRequest(specs);
   if (parsed.status === 'rejected') {
@@ -654,7 +654,7 @@ async function runInstall(
       },
       argv: specs,
       context: ctx,
-      ...(onGeneratedBaseline === undefined ? {} : { onGeneratedBaseline }),
+      ...(onInitialInstall === undefined ? {} : { onInitialInstall }),
       onPromotion: (result) => reportInstallStampPromotion(ctx, result),
     });
     return 0;

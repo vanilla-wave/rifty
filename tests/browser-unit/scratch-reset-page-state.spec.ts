@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
-import type * as Fixture from './fixtures/sealed-playground-workbench.ts';
 import type * as PageStore from '../../apps/playground/src/glue/page-store.ts';
 import { bootOwner, closeOwner, gotoHarness, sealedWorkbenchFixtureUrl } from './fixtures.ts';
+import type * as Fixture from './fixtures/sealed-playground-workbench.ts';
 
 test('real companion Scratch Reset replaces the page dirty flag and discard guard', async ({
   page,

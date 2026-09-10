@@ -1,5 +1,11 @@
+import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
-import { type PackageRuntimeBinding, activatePackageRuntimeAdapters } from './runtime-adapters.ts';
+import { publishRuntimeEsbuildFailure } from './realm.ts';
+import {
+  ESBUILD_RUNTIME_ADAPTER_ID,
+  type PackageRuntimeBinding,
+  activatePackageRuntimeAdapters,
+} from './runtime-adapters.ts';
 import { planViteNodeEntryEdge as planNodeEntryIntegration } from './vite-node-entry-edge.ts';
 
 /** Privileged generic entry preparation over strict ready bindings and adapter ids. */
@@ -31,11 +37,20 @@ export async function preparePackageEntryRuntime(
         }
       : planNodeEntryIntegration(options);
   if (integration.activateRuntimeAdapters) {
-    await activatePackageRuntimeAdapters({
-      bindings: options.runtimeBindings,
-      fs: options.fs,
-      cwd: options.root,
-    });
+    if (
+      !options.runtimeBindings.some((binding) => binding.adapterId === ESBUILD_RUNTIME_ADAPTER_ID)
+    ) {
+      publishRuntimeEsbuildFailure(new NotImplementedError('runtime-adapter.esbuild.unavailable'));
+    }
+    try {
+      await activatePackageRuntimeAdapters({
+        bindings: options.runtimeBindings,
+        fs: options.fs,
+        cwd: options.root,
+      });
+    } catch (error) {
+      publishRuntimeEsbuildFailure(error);
+    }
   }
   await integration.complete();
 }

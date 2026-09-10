@@ -12,10 +12,7 @@ interface RegistryRealm {
 interface GlobalWithRegistry {
   __riftyShadowRegistry?: RegistryRealm;
 }
-export function publishRuntimeEsbuild(
-  outer: RuntimeEsbuildCjsOuter,
-  binding?: RuntimeEsbuildBinding,
-): void {
+function registryRealm(): RegistryRealm {
   const global = globalThis as GlobalWithRegistry;
   if (global.__riftyShadowRegistry === undefined) {
     Object.defineProperty(globalThis, '__riftyShadowRegistry', {
@@ -27,8 +24,33 @@ export function publishRuntimeEsbuild(
   }
   const realm = global.__riftyShadowRegistry;
   if (realm === undefined) throw new Error('registry realm publication failed');
-  realm.esbuild = outer;
+  return realm;
+}
+export function publishRuntimeEsbuild(
+  outer: RuntimeEsbuildCjsOuter,
+  binding?: RuntimeEsbuildBinding,
+): void {
+  const realm = registryRealm();
+  Object.defineProperty(realm, 'esbuild', {
+    value: outer,
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  });
   realm.esbuildBinding = binding;
+}
+
+/** Preserve the original capability failure until the actual package entry reads its slot. */
+export function publishRuntimeEsbuildFailure(error: unknown): void {
+  const realm = registryRealm();
+  realm.esbuildBinding = undefined;
+  Object.defineProperty(realm, 'esbuild', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      throw error;
+    },
+  });
 }
 export function readRuntimeEsbuild(): RuntimeEsbuildCjsOuter | null {
   return (globalThis as GlobalWithRegistry).__riftyShadowRegistry?.esbuild ?? null;
@@ -38,8 +60,8 @@ export function readRuntimeEsbuild(): RuntimeEsbuildCjsOuter | null {
 export function runtimeEsbuildBindingMatches(fs: FsSync, cwd: string): boolean {
   const realm = (globalThis as GlobalWithRegistry).__riftyShadowRegistry;
   return (
-    realm?.esbuild !== undefined &&
-    realm.esbuildBinding?.fs === fs &&
-    realm.esbuildBinding.cwd === cwd
+    realm?.esbuildBinding?.fs === fs &&
+    realm.esbuildBinding.cwd === cwd &&
+    realm.esbuild !== undefined
   );
 }

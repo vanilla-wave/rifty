@@ -17,10 +17,27 @@ import type {
   PackageFifoReservation,
 } from './package-acquisition-authority.ts';
 
-export type OwnerPackageMutationKind = 'dependency' | 'package-manifest' | 'package-lock';
+export interface OwnerInitialInstall {
+  readonly kind: 'terminal-install' | 'ensure';
+  readonly root: string;
+  readonly packageSpecs: readonly string[];
+  readonly initialPackageJson: string;
+  readonly priorPackageJson: Uint8Array | null;
+  readonly priorPackageLock: Uint8Array | null;
+  readonly lockfile: Uint8Array;
+}
+
+export interface OwnerNpmOperation {
+  readonly args: readonly string[];
+  readonly cwd: string;
+  readonly project?: { readonly root: string; readonly packageJson: string };
+  readonly firstMaterialization: boolean;
+  initialInstallFinalized(): boolean;
+  execute(): Promise<ShellCommandResult>;
+}
 
 export interface OwnerNpmCommandOptions {
-  readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
+  readonly observeOperation?: (operation: OwnerNpmOperation) => Promise<ShellCommandResult>;
   readonly mapInvocationContext?: (context: CommandContext) => CommandContext;
 }
 
@@ -49,8 +66,8 @@ export interface OwnerPackageStateOptions {
   readonly registry?: RegistryClient;
   /** Test seam at the external registry/install boundary. */
   readonly install?: InstallFn;
-  /** Fold one exact first-install lock into the fresh Starter Git baseline. */
-  readonly amendGeneratedBaseline?: (root: string, lockfile: Uint8Array) => Promise<boolean>;
+  /** Optional consumer finalization, settled within the first installation. */
+  readonly finalizeFirstInstall?: (input: OwnerInitialInstall) => Promise<boolean>;
   readonly resolverUrl?: () => string | undefined;
   readonly resolverBundleBaseUrl?: () => string | undefined;
   readonly resolverPin?: (templateId: string) => string | undefined;

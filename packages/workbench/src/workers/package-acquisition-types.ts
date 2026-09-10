@@ -93,7 +93,7 @@ export interface TerminalInstallCommand {
   /** Present for the real npm shell adapter; authority tests may omit it. */
   readonly context?: CommandContext;
   /** Invocation-local reflection of the generated Starter Git baseline outcome. */
-  readonly onGeneratedBaseline?: (clean: boolean) => void;
+  readonly onInitialInstall?: (clean: boolean) => void;
   readonly onPromotion?: (result: InstallStampPromotionResult) => void;
 }
 
@@ -250,8 +250,8 @@ export interface PackageAcquisitionAdapter {
     readonly knownProjects: readonly PackageAcquisitionProject[];
   }): Promise<SnapshotApplicationPlan>;
   snapshotManifestApplied?(project: PackageAcquisitionProject, packageJsonText: string): void;
-  /** Exact lockfile for a stamp-trusted tree, decoded once at trusted admission. */
-  readTrustedPackageLock?(project: PackageAcquisitionProject): Promise<unknown>;
+  /** Existing lockfile bytes; install/runtime admission own their separate validation. */
+  readPackageLock?(project: PackageAcquisitionProject): Promise<unknown>;
   /** Prove the exact manifest still names a physically absent package tree.
    * Sampled at the FIFO head both before publication and before child spawn. */
   attestEmptyPackageTree?(input: {

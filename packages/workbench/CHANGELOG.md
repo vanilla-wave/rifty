@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Open saved projects and Node commands independently of install claims; retain snapshot transactions and bind runtime adapters only from usable existing provenance. Keep Scratch dirty classification in the companion (ADR-0414/0415).
+
 - Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
 
 - Publish prepared dependency snapshots; reject unprepared apply sources before effects while preserving legacy initial restore and literal saved-file conflicts. Preserve acquired-tree preload failures under preferred storage.
