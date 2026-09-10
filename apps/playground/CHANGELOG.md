@@ -2398,7 +2398,7 @@
   (fast). Switching projects clears the terminal first. Template switcher groups
   presets under "Instant start" / "From scratch" with kind pills. Stamp
   invalidation is provisional —
-  `docs/backlog/playground/install-stamp-invalidation.md`.
+  `docs/adr/playground/0415-open-saved-projects-independently-of-installation-proof.md`.
 
 ### Changed
 

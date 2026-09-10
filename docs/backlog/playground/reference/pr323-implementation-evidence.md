@@ -27,10 +27,9 @@ authority already publishes snapshots. Reuse those owners. Capture open id at
 flush creation; unscoped/retired frames cannot contribute public open progress.
 No new correlation ledger, FIFO, subscriber service or public operation handle.
 
-## Remaining proof
+## Preparation boundary
 
-Implementation GREEN, full browser Reset/interrupted-install/adapter-use proof,
-independent Final+GREEN, `pnpm pr:check` and PR CI remain required.
+At RED capture, implementation and final proof were pending. Later sections record the completed product verification; remote CI is reported on PR #323.
 
 ## Progress GREEN
 
@@ -86,3 +85,24 @@ CI on e9a5ec7d5 passed Node parity, no-COI, production/hosted and most e2e. Its 
 - Existing UI fast-reload test still expected global rejection on absent claim. ADR-0415 criterion now asserts the actual workspace, preserved marker/manifest, independent Node output/exit0 and zero acquisition. Real UI run passed with trusted=false, claim absent and1251 persisted entries.
 - Producer native-source tar/wasm case hit only CI's default5000ms timeout, no failed content assertion. Isolated real run1587ms passed; use a case-local30000ms budget, keep all content/provenance assertions.
 - `pnpm pr:check` passed25/25 on2c4db7231 (full test:run196.7s; parity62.9s). After this CI-discovered repair the complete gate is rerun. Final compiler SHA6c72156491edd98ea9022742da6eeb43467ca28b69f4e55c5ba7a457be0d9eae; normalized import-specifier comparison still proves identical compiler payload.
+
+## Product closure
+
+Final+GREEN at3436067941a7004e6e2f7d4cf6797e3bffdd2566:27/27 coverage, zero blockers;
+fresh `/root/final_323` independently ran327 unit tests,18 browser checks and1 UI
+check, native npm oracle and exact compiler/tarball validation. Full
+`pnpm pr:check`25/25 passed on that exact code.
+
+Verified Final+GREEN at516b4dc14f9323236701df4155220f6dd1856cc7 is retained in
+`pr323-final-green.json`:27/27 coverage, zero blockers/concerns. The only later
+source delta updates comments; reviewer independently confirmed identical
+TypeScript5.9.3 comment-stripped output (14640 bytes). Earlier executed tests
+remain attributed to343606794; the verified record includes docs cleanup.
+
+The sole NOTE is resolved: DEC-2 reviewer explicitly identified ADR-0135 §5 and
+its corresponding Consequences saved-open reinstall implication; ADR-0415 and
+the reciprocal correction now name them. No product/scope change.
+
+Completed four item documents removed; broader OPFS/TrustedState goals remain
+open for their own remaining obligations. Raw refinement records remain history.
+Remote push/readiness/CI state stays authoritative on GitHub, not this document.

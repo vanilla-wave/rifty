@@ -20,11 +20,12 @@ A developer runs `npm install lodash` in an already saved snapshot-created Vite 
 ## Items
 
 - `vfs/iso-git-ref-torn-write-rows` (ready) — torn object/ref writes: repo opens clean after any single persist failure + reload.
-- `vfs/persist-ledger-fault-rows-completion` (draft) — pin the missing ledger rows: rename quota-stage, mid-queue isolation, consumer-visible tarball-put/pins-write degradation; saved-open consequence follows the accepted npm amendment and needs new RED.
-- `playground/install-stamp-invalidation` (draft) — readable saved files and terminal open independently of install trust; commands fail at actual dependency use.
-- `playground/reload-crash-consistency-fault-e2e` (draft) — Playwright kills/reloads mid-install / mid-restore / mid-commit / mid-save → honest project after reopen; new npm row awaits RED.
+- `vfs/persist-ledger-fault-rows-completion` (draft) — pin the missing ledger rows: rename quota-stage, mid-queue isolation, consumer-visible tarball-put/pins-write degradation; saved-open authority is ADR-0415; consumer-specific fault rows still need proof.
+- `playground/reload-crash-consistency-fault-e2e` (draft) — Playwright kills/reloads mid-install / mid-restore / mid-commit / mid-save → honest project after reopen; npm open/retry/preview carrier exists in PR #323; remaining crash rows stay open.
 
 ## Decisions
 
 - amend: 2026-09-10 — user: «да, ок, ровно поведение node» to the concrete saved Vite → interrupted `npm install lodash` → reopen files/terminal without auto-install scenario; replaces automatic npm rerun and all-or-nothing npm-tree implications, preserves own transaction recovery and no false completion claims. Raw exchange and probe: `docs/backlog/playground/reference/project-open-ide-boundaries-refine.md`.
 - 2026-09-10 — original npm clause: "A developer runs `npm install` in a vite preset and closes the tab before it finishes: reopening shows no stamp, install re-runs to completion (npm parity — rerun just works)." Ordinary metadata/Git/save guarantees are not weakened by the npm amendment.
+
+- 2026-09-10 — PR #323 delivers saved-open access, interrupted npm retry and live Vite preview; reuse `tests/browser-unit/saved-project-interrupted-install.spec.ts` and `docs/backlog/playground/reference/pr323-final-green.json`. Remaining Git/save/storage-consumer obligations above are unchanged.

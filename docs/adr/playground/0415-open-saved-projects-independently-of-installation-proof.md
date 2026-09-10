@@ -12,6 +12,10 @@ Independent DEC-2 review: `/root/decision_323`, 2026-09-10.
 
 ## Decision
 
+- Supersede ADR-0135 decision 5's forced fresh worker install and corresponding
+  Consequences recovery clause only for ordinary saved opening; setup kinds and
+  first materialization remain unchanged.
+
 - Supersede ADR-0394 decision 2's rejection of saved projects on missing/pending/
   incompatible install trust; its corresponding Consequences clause follows.
 - Supersede ADR-0307 request-identity-drift and ADR-0261 miss/reload/copy reinstall

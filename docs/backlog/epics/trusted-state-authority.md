@@ -70,8 +70,8 @@ items here.
   real `fs` has none; heavy scripts keep exact Node semantics).
 - Multi-tab implementation itself (its epic consumes this primitive).
 - Changing any user-visible install/reload behavior — the consolidation is
-  behavior-preserving relative to the accepted reopen amendment; its implementation
-  belongs to `playground/install-stamp-invalidation`, not the generic extraction.
+  behavior-preserving relative to the accepted reopen amendment, implemented by
+  ADR-0415 and PR #323; generic extraction inherits that baseline.
 
 ## Decisions
 

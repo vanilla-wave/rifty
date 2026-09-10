@@ -3,15 +3,20 @@ area: playground
 status: draft
 title: Reload crash-consistency fault e2e — kill the page at the worst moment, reopen honest
 created: 2026-07-05
-why: every persistence layer is (or is being) fault-proven in isolation, but no test ever closes/reloads the real page mid-operation — the end-to-end axis (torn-state at the orchestration layer, lying status indicators) has zero coverage
+why: npm page-death/reopen/retry is now proven; remaining restore, Git and editor-save crash rows and their UI indicators still need end-to-end coverage
 user_story: As a developer, I want to close or reload the tab mid `npm install` / mid `git commit` / mid editor save and reopen to an honest project, but today nothing proves the reopened state isn't a half-tree presented as installed or a stale saved-indicator
 epic: fault-honest-opfs-persistence
-blocked_by: [vfs/iso-git-ref-torn-write-rows, playground/install-stamp-invalidation]
+blocked_by: [vfs/iso-git-ref-torn-write-rows]
 sources: [docs/backlog/playground/reference/project-open-ide-boundaries-refine.md]
 code: [packages/workbench/src/glue/project-deps.ts, packages/workbench/src/workers/package-acquisition-authority.ts, tests/browser-unit]
 ---
 
 ## Context
+
+PR #323 already proves the npm row: real Vite, page death after native lodash
+persistence, saved files/terminal with zero acquisition, explicit retry and live
+preview (`tests/browser-unit/saved-project-interrupted-install.spec.ts`). Reuse
+that carrier; remaining crash/UI rows stay open.
 
 Playwright can inject the REAL fault — `page.close()` / `page.reload()` at a chosen mid-operation moment — no mocks, no seams. Rows assert the reopened page, not internals. Existing reload e2e covers the happy path (dev-server relaunch, LIVE pill); this item adds the crash rows. Timing: anchor each kill on an observable mid-marker (terminal output, request count), never a sleep — flaky-kill = useless row.
 
@@ -27,7 +32,7 @@ One e2e row each (RED first where the row fails):
 
 ## Parity cases
 
-- npm/Node: after interrupted install, independent local source still runs; using a missing package fails at that use. Explicitly re-running install reconciles the tree. Full native interruption/retry and browser proof remain for pickup; the smaller native probe is in the referenced evidence.
+- npm/Node: after interrupted install, independent local source still runs; using a missing package fails at that use. Explicitly re-running install reconciles the tree. The native local-source/missing-module/explicit-repair oracle and real browser interruption/retry are recorded in `reference/pr323-implementation-evidence.md`; remaining native crash probes are assessed at pickup.
 - git: per `vfs/iso-git-ref-torn-write-rows` (real-git recovery observables) — this item consumes them at the e2e level.
 
 ## Fault matrix

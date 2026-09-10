@@ -7,14 +7,13 @@ why: "#107 proved the ledger on write/mkdir/rm and the stamp gate; the remaining
 user_story: As a developer on a quota-squeezed disk, I want every persistence consumer to degrade the way #107 promised (live session works, durability refused loudly, benign caches just re-learn), but today those rows are asserted only at the ledger layer, not at the consumers
 epic: fault-honest-opfs-persistence
 sources: [docs/backlog/playground/reference/project-open-ide-boundaries-refine.md]
-blocked_by: [playground/install-stamp-invalidation]
 code: [packages/vfs/src/opfs-sync.ts, packages/npm-client/src/tarball-cache.ts, packages/workbench/src/glue/eddy-learned-pins.ts]
 ---
 
 ## Context
 
 Test-completion item: storage rows pin existing expected behavior; the saved-open
-consumer consequence now follows the 2026-09-10 user amendment and needs new RED.
+consumer consequence follows ADR-0415 (PR #323); these consumer-specific fault injections still need RED.
 A failing row stays
 inside this planned contract's normal RED→implementation lane; it does not
 trigger `rifty-fix`. Rows came from the #107 retro + explorer sweep;
