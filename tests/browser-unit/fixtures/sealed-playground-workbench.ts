@@ -162,7 +162,7 @@ async function templateSpec(
   return (await import(/* @vite-ignore */ url)).VITE8_TEMPLATE;
 }
 
-async function projectPlan(options: SealedWorkbenchBootOptions): Promise<PlaygroundProjectPlan> {
+export async function projectPlan(options: SealedWorkbenchBootOptions): Promise<PlaygroundProjectPlan> {
   if (options.plan !== undefined) return options.plan;
   const spec = await templateSpec(options.template);
   const starterId = options.starter ?? options.workspaceId;

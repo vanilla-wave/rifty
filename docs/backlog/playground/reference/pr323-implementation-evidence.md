@@ -38,3 +38,10 @@ independent Final+GREEN, `pnpm pr:check` and PR CI remain required.
 - Public real snapshot/OPFS progress: 1 browser test passes.
 - `RIFTY_PLAYGROUND_PORT=56323 pnpm exec playwright test --project=chromium-light project-opening-progress.spec.ts --workers=1`: 1 passed; actual Vite first-open UI, geometry and screenshot inspected. Screenshot shows `Preparing instant project Project files Saving 1/302 operations`; completion removes the indication.
 - Exact public type fixture gains the additive ADR-0413 field; no assertion removed. Source-size and backlog gates pass.
+
+## Saved-open browser RED
+
+- `RIFTY_PLAYGROUND_PORT=56323 pnpm exec playwright test --config playwright.browser-unit.config.ts saved-project-interrupted-install.spec.ts saved-project-adapter-use.spec.ts --workers=1`: 2 failed. Actual saved Vite runs local Node first; real `npm install lodash` is killed with the page only after a native OPFS close of lodash/LICENSE. Its fresh owner fails at saved-open trust. Separately, saved Vite with corrupted esbuild WASM opens but unrelated `node local.cjs` exits 1.
+- `saved-project-access.spec.ts`: fresh public owner refuses named saved project after actual file API edits to lock/dependency; RED is saved install trust, after the complete save/mutation/close preparation.
+- `entry-adapter-failure.contract.test.ts`: 2 REDs, missing/corrupt WASM blocks unrelated Node entry; explicit adapter activation remains correctly strict.
+- New tar fixture: real lodash 4.17.21 from npm registry; upstream metadata/integrity committed. Test boundary is native OPFS close, never a fake installer/owner. Initial fixture import and public CAS/path errors were corrected before claiming these REDs.

@@ -42,12 +42,16 @@ files; missing dependencies fail when used. The user may explicitly rerun
 
 ## Decisions
 
+- 2026-09-10 — pickup: ADR-0415, existing package FIFO/reservation retained; no saved-open stamp promotion or automatic acquisition.
+
 - 2026-09-10 — user: «да, ок, ровно поведение node», answering the exact Vite → interrupted `npm install lodash` → reopen files/terminal without auto-install scenario recorded in `reference/project-open-ide-boundaries-refine.md`.
 - 2026-09-10 — reframe this existing draft: tree surveillance/automatic healing is not the requested outcome; retain the filename for incoming references.
 - 2026-09-10 — before implementation, supersede the conflicting saved-open clause of ADR-0394 and review ADR-0261/0307/0309 admission clauses via DEC-2; this draft does not itself repeal those ADRs.
 - 2026-09-10 — preserve baseline dirty meanings and storage recovery; no new user policy inferred from the ownership change.
 
 ## Challenge
+
+challenge: 2026-09-10 — clear; original selected scenario and independent DEC-2 review retained in ADR-0415.
 
 2026-09-10 — fresh read-only `/root/review_open_boundary`:
 
@@ -67,3 +71,32 @@ is LIVE (`no-coi-toolchain-worker.ts:115`, `install-stamp-reading.ts:93`) and is
 not a dead-export candidate. No-COI installer trust remains an installer-boundary
 consumer; the old single-instance inventory must not justify deleting it.
 Full report disposition: `reference/fs-dirty-stamp-findings-disposition.md`.
+
+## Reference contract
+
+Node v24.16.0: the executed local-source/missing-require probe in
+`reference/project-open-ide-boundaries-refine.md`. Node has no project-wide
+install-certification precondition. Snapshot validation is Rifty's own baseline.
+
+## Acceptance
+
+1. Reopen snapshot-created Scratch and named saved projects with absent, pending or incompatible claims, changed manifests or malformed/missing locks: preserved files and terminal remain usable without implicit acquisition or writes to the saved tree. → scenario
+2. Local Node scripts run independently of install certification. Missing packages fail at use; only validated existing shadow data grants runtime bindings; unavailable adapters fail at their consumer, not unrelated Node entry. → scenario
+3. After an interrupted real npm installation has begun changing saved state, a fresh owner opens it; explicit npm install may complete and the installed package runs. → scenario
+4. Own transaction recovery, snapshot apply/commit/rollback, unreadable-storage failure and Save rebind guarantees retain their existing baseline. → scenario
+
+## Parity cases
+
+1. Existing local source runs with a manifest naming an unavailable dependency and a malformed lock; missing require returns MODULE_NOT_FOUND. Native v24.16.0 artifact above; real Workbench browser terminal is the delivery carrier. → scenario
+
+## Fault matrix
+
+- torn-state × npm install/owner death | readable retained files and terminal; no false install proof or automatic healing | saved-project-access contract + browser interrupted install → scenario
+- corrupt-input × manifest/lock/adapter | files remain accessible; dependency/adapter error at use | saved-project-access + entry-adapter-failure contract + browser commands → scenario
+- quota-perm-fail × own snapshot/catalog transaction | existing failure and recovery preserve committed state | workbench-snapshot-apply-rollback and workbench-snapshot-application browser suites → scenario
+
+## Out of scope
+
+No-COI explicit toolchain activation policy (ADR-0392), partial recovery of
+unreadable OPFS, performance profiling/optimization, new generic TrustedState.
+Unsupported capabilities retain loud failures.
