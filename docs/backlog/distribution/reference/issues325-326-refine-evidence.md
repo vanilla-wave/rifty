@@ -146,3 +146,12 @@ and native browser probe above are research, not product acceptance.
 
 Initial gate failures: source JSON formatting (fixed), sandbox `tsx` IPC EPERM
 (rerun with escalation), missing build outputs (built). No criterion weakened.
+
+## Final written-result check
+
+Fresh read-only `/root/sdk_refine_final`, no inherited author/critic context:
+docs Final+GREEN PASS at `f2bb7365e3f305c857dd7180b85c2de65d3b784b`.
+Record: `issues325-326-refine-final-green.json`; `blockers.mjs` exit 0.
+The reviewer checked original issues, the full final draft set and evidence.
+This certifies accurate preparation, not settled cwd/env scope, ready contracts
+or shipped SDK behavior. The user question remains pending.
