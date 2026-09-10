@@ -60,8 +60,8 @@ describe('node-entry host bootstrap config', () => {
     resetNodeEntryWorkerUrl();
   });
 
-  it('uses the one atomic node-entry v3 wire contract', () => {
-    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v3');
+  it('uses the one atomic node-entry v4 wire contract', () => {
+    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v4');
   });
 
   it('snapshots host runtime values out of band from the guest environment', () => {
@@ -120,7 +120,7 @@ describe('node-entry host bootstrap config', () => {
     expect(entry).toMatchObject({
       kind: 'url',
       bootstrap: {
-        protocol: 'rifty.node-entry/v3',
+        protocol: 'rifty.node-entry/v4',
         payload: {
           launch: {
             kind: 'eval',
@@ -469,9 +469,9 @@ describe('node-entry host bootstrap config', () => {
     expect(() => readNodeEntryBootstrap()).toThrow(/protocol/i);
   });
 
-  it('does not read or fall back to the retired node-entry v2 protocol', () => {
+  it.each(['v2', 'v3'])('does not read or fall back to retired node-entry %s', (version) => {
     publishKernelEntryBootstrap({
-      protocol: 'rifty.node-entry/v2',
+      protocol: `rifty.node-entry/${version}`,
       payload: {
         hostRuntime: HOST_RUNTIME,
         launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
@@ -479,7 +479,7 @@ describe('node-entry host bootstrap config', () => {
     });
 
     expect(readNodeEntryBootstrapIfPresent()).toBeNull();
-    expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v3.*v2/i);
+    expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v4/i);
   });
 
   it.each([

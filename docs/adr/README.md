@@ -223,6 +223,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0413 | Expose project opening persistence through Workbench health |
 | 0414 | Keep Scratch mutation policy in the companion |
 | 0415 | Open saved projects independently of installation proof |
+| 0416 | Optional Workbench SQLite deployment asset |
 
 ### toolchain-build
 

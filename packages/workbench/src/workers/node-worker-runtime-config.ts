@@ -4,7 +4,7 @@ import { configureNodeEntryWorker } from '@riftydev/runtime-js/builtins/node-ent
 export interface NodeWorkerRuntimeConfig {
   readonly kernelWorkerUrl: string;
   readonly nodeEntryWorkerUrl: string;
-  readonly sqliteWasmUrl: string;
+  readonly sqliteWasmUrl?: string;
 }
 
 function objectRecord(value: unknown, owner: string): Record<string, unknown> {
@@ -29,7 +29,7 @@ function exactFields(
 }
 
 function nonEmptyString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.length === 0) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
     throw new TypeError(`${field} must be a non-empty string`);
   }
   return value;
@@ -41,11 +41,21 @@ export function snapshotNodeWorkerRuntimeConfig(
   owner: string,
 ): NodeWorkerRuntimeConfig {
   const record = objectRecord(value, owner);
-  exactFields(record, ['kernelWorkerUrl', 'nodeEntryWorkerUrl', 'sqliteWasmUrl'], owner);
+  exactFields(
+    record,
+    [
+      'kernelWorkerUrl',
+      'nodeEntryWorkerUrl',
+      ...(Object.prototype.hasOwnProperty.call(record, 'sqliteWasmUrl') ? ['sqliteWasmUrl'] : []),
+    ],
+    owner,
+  );
   return Object.freeze({
     kernelWorkerUrl: nonEmptyString(record.kernelWorkerUrl, `${owner}.kernelWorkerUrl`),
     nodeEntryWorkerUrl: nonEmptyString(record.nodeEntryWorkerUrl, `${owner}.nodeEntryWorkerUrl`),
-    sqliteWasmUrl: nonEmptyString(record.sqliteWasmUrl, `${owner}.sqliteWasmUrl`),
+    ...(record.sqliteWasmUrl === undefined
+      ? {}
+      : { sqliteWasmUrl: nonEmptyString(record.sqliteWasmUrl, `${owner}.sqliteWasmUrl`) }),
   });
 }
 
@@ -55,7 +65,7 @@ function required(
   owner: string,
 ): string {
   const value = env[key];
-  if (typeof value !== 'string' || value.length === 0) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
     throw new Error(`${owner}: missing required node worker runtime env ${key}`);
   }
   return value;
@@ -69,7 +79,9 @@ export function buildNodeWorkerRuntimeEnv(
   const env = {
     RIFTY_KERNEL_WORKER_URL: snapshot.kernelWorkerUrl,
     RIFTY_NODE_ENTRY_WORKER_URL: snapshot.nodeEntryWorkerUrl,
-    RIFTY_SQLITE_WASM_URL: snapshot.sqliteWasmUrl,
+    ...(snapshot.sqliteWasmUrl === undefined
+      ? {}
+      : { RIFTY_SQLITE_WASM_URL: snapshot.sqliteWasmUrl }),
   };
   readNodeWorkerRuntimeConfig(env, 'node-worker-runtime-config');
   return Object.freeze(env);
@@ -83,7 +95,9 @@ export function readNodeWorkerRuntimeConfig(
   return {
     kernelWorkerUrl: required(env, 'RIFTY_KERNEL_WORKER_URL', owner),
     nodeEntryWorkerUrl: required(env, 'RIFTY_NODE_ENTRY_WORKER_URL', owner),
-    sqliteWasmUrl: required(env, 'RIFTY_SQLITE_WASM_URL', owner),
+    ...(env.RIFTY_SQLITE_WASM_URL === undefined
+      ? {}
+      : { sqliteWasmUrl: required(env, 'RIFTY_SQLITE_WASM_URL', owner) }),
   };
 }
 

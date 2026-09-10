@@ -76,3 +76,7 @@ wins after a drain has started.
 
 Specifies the eval role omitted by ADR-0155 and preserves ADR-0152/0157,
 ADR-0267, ADR-0326, ADR-0325, ADR-0332, and ADR-0334.
+
+## Corrections (active)
+
+2026-09-10 — ADR-0416: Node entry now uses v4 for optional SQLite host configuration; eval semantics unchanged.

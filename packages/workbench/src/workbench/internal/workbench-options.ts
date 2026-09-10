@@ -37,8 +37,9 @@ export interface WorkbenchOptions {
       readonly url: string;
       readonly scope: string;
     };
-    readonly wasm: {
-      readonly sqlite: string;
+    readonly wasm?: {
+      /** Optional lazy SQLite asset; omission fails only when SQLite is used. */
+      readonly sqlite?: string;
     };
     /** Preview pathname prefix within the SW scope; omission keeps /preview/. */
     readonly previewPrefix?: string;
@@ -87,7 +88,7 @@ export function validateWorkbenchOptions(
   const deployment = record(root.deployment, 'deployment');
   const workers = record(deployment.workers, 'deployment.workers');
   const serviceWorker = record(deployment.serviceWorker, 'deployment.serviceWorker');
-  const wasm = record(deployment.wasm, 'deployment.wasm');
+  const wasm = deployment.wasm === undefined ? {} : record(deployment.wasm, 'deployment.wasm');
   const packageAcquisition = normalizeWorkbenchPackageAcquisition(
     root.packageAcquisition,
     (value, field, pathBase) => httpEndpointUrl(value, field, urlContext.apiBaseUrl, { pathBase }),
@@ -179,7 +180,9 @@ export function validateWorkbenchOptions(
               }),
         }),
         wasm: Object.freeze({
-          sqlite: wasmAssetUrl(wasm.sqlite, 'deployment.wasm.sqlite', urlContext),
+          ...(wasm.sqlite === undefined
+            ? {}
+            : { sqlite: wasmAssetUrl(wasm.sqlite, 'deployment.wasm.sqlite', urlContext) }),
         }),
         previewProbeTimeoutMs,
         ...(previewPrefix === undefined ? {} : { previewPrefix }),

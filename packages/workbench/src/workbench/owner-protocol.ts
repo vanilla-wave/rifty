@@ -59,7 +59,7 @@ export interface WorkbenchOwnerBootConfig {
       readonly devServer: string;
       readonly typescript?: string;
     };
-    readonly wasm: { readonly sqlite: string };
+    readonly wasm: { readonly sqlite?: string };
     readonly previewProbeTimeoutMs: number;
     readonly previewPrefix?: string;
     readonly ownerStartupTimeoutMs?: number;
@@ -237,8 +237,8 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     deployment,
     optionalKeys(
       deployment,
-      ['workers', 'wasm', 'previewProbeTimeoutMs'],
-      ['previewPrefix', 'ownerStartupTimeoutMs', 'ioReportTimeoutMs'],
+      ['workers', 'previewProbeTimeoutMs'],
+      ['wasm', 'previewPrefix', 'ownerStartupTimeoutMs', 'ioReportTimeoutMs'],
     ),
     'owner boot deployment',
   );
@@ -253,8 +253,8 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
     optionalKeys(workers, ['kernel', 'node', 'devServer'], ['typescript']),
     'owner boot workers',
   );
-  const wasm = record(deployment.wasm, 'owner boot wasm');
-  exact(wasm, ['sqlite'], 'owner boot wasm');
+  const wasm = deployment.wasm === undefined ? {} : record(deployment.wasm, 'owner boot wasm');
+  exact(wasm, optionalKeys(wasm, [], ['sqlite']), 'owner boot wasm');
   const previewProbeTimeoutMs = nativeTimerDelay(
     deployment.previewProbeTimeoutMs,
     'owner boot preview proof timeout',
@@ -296,7 +296,9 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
         : {}),
     }),
     wasm: Object.freeze({
-      sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm'),
+      ...(wasm.sqlite === undefined
+        ? {}
+        : { sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm') }),
     }),
     previewProbeTimeoutMs,
     ...(previewPrefix === undefined ? {} : { previewPrefix }),
