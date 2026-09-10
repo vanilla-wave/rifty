@@ -61,3 +61,29 @@ await writeFile(
   }),
 );
 console.log('Packed Vite producer: caller npm lock, Vite 7.3.6 tar.gz and identities');
+
+const updatedManifest = JSON.stringify({ ...JSON.parse(packageJsonText), version: '1.0.1' });
+const originalLock = JSON.parse(packageLockText);
+const updatedLock = JSON.stringify({
+  ...originalLock,
+  version: '1.0.1',
+  packages: {
+    ...originalLock.packages,
+    '': { ...originalLock.packages[''], version: '1.0.1' },
+  },
+});
+const updated = await produceDependencySnapshot({
+  packageJsonText: updatedManifest,
+  packageLockText: updatedLock,
+  registryUrl,
+  templateId,
+});
+await writeFile(resolve('dist/producer-vite-update.tar.gz'), updated.archive);
+await writeFile(
+  resolve('dist/producer-vite-update.json'),
+  JSON.stringify({
+    snapshotId: updated.snapshotId,
+    installArtifactIdentity: updated.installArtifactIdentity,
+    templateId,
+  }),
+);

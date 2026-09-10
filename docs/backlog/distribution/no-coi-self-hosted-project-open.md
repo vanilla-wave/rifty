@@ -17,32 +17,62 @@ trusted stamp and eagerly activates adapters. User rejected install-status
 admission, including the proposed incomplete-install-required recovery. Exact
 answer, native Node probe and independent decision check are in refine evidence.
 
-## Question
+## Reference contract
 
-First establish ordinary saved open with missing/pending/legacy proof and
-missing/corrupt lock: source and independent Node execution remain available;
-dependency/adapter errors happen at use, with no fake capabilities. Preserve
-network-free/nonmutating open and existing registry-backed install behavior.
+ADR-0417; Node v24.16.0 local-source/absent-dependency probe in
+`docs/backlog/distribution/reference/no-coi-project-open-refine.md`.
+Existing producer/archive, replay checks, generic conflict overlay and
+`preparePackageEntryRuntime` remain semantic owners. API: ADR-0420.
+Real ms 2.0.0 output is executed against native Node by the browser test's producer
+fixture; packed acceptance uses pinned real Vite 7.3.6 and native npm lock.
 
-Then expose explicit application of the existing producer archive without a
-browser registry/dummy URL. Reuse validation, bounded acquisition, replay cache
-and payload overlay; no host parser, new installer, catalog wrapper or saved
-completion ledger. Host calls application for initial creation or update; open
-never infers an application from missing installation proof.
+## Acceptance
 
-Default conflicts fail before effects; force overwrites conflicting targets
-(including replaced-directory descendants), retaining other paths. Apply reports
-its own settled success/failure; interruption may leave partial dependency files
-without blocking ordinary open or forcing retry. Input validation and actual
-storage recovery remain. ADR-0417 supersedes the narrower SDK gate policy.
+1. Packed producer → public SDK/copied Worker applies the archive and builds
+   real Vite without browser registry/Eddy requests or dummy URLs. → I3
+2. Public application validates required input (missing/corrupt/wrong identity,
+   template/runtime compatibility and bounded size), including forced/same-ID
+   application, without hidden network-install fallback. → I3, I5
+3. Ordinary saved open ignores missing/pending/legacy install proof and
+   missing/corrupt lock; local Node source remains runnable and absent dependency
+   errors occur at use. Open neither rewrites files nor fetches artifacts. → I4
+4. Valid saved adapter facts activate the real adapter; unusable facts grant no
+   capability. Actual adapter corruption/missing bytes fail at use without
+   blocking local source or readable saved state. → I4
+5. Default payload conflicts fail before cache/payload mutation; force replaces
+   targeted files/directories and replaced-directory descendants, preserving
+   unrelated source/dependency paths. Repeated/same-ID apply fully validates. → I5
+6. Explicit changed-artifact application updates dependencies; saved source edits
+   survive and real Vite rebuilds. No freshness inference in ordinary open. → I4, I5
+7. Application success follows actual writes/persistence. Native quota rejects;
+   tab death during application leaves readable source/independent Node access,
+   dependency failure at use and optional explicit reapply. No completion gate,
+   automatic retry or rollback promise. → I6
 
-PICKUP prepares traceable fault rows and REDs, including genuine native interrupted
-apply → page recreation → local Node success/missing dependency failure → explicit
-reapply. Packed producer/SDK/copied-worker Vite build, saved edits, same-ID force,
-changed artifact and invalid-input/OPFS failure cases are required acceptance,
-not claimed results of this refinement.
+## Fault matrix
+
+- corrupt-input × source/application | reject without payload/cache mutation, force cannot bypass | no-coi-snapshot-application + existing helper validation suites → I3, I5
+- unbounded-read × asset acquisition | existing 128MiB and stall bounds, visible failure | native oversized input + dep-snapshot/bounded-asset-fetch tests → I3
+- poisoned-cache × replay | exact existing source/replay/runtime checks retained | dep-snapshot replay tests + public input pipeline → I3, I5
+- torn-state × saved open | no install-status admission; local Node survives, dependency errors at use | no-coi-saved-access + packed invalid-lock → I4, I6
+- corrupt-input × adapter facts/payload | no fake capability or eager open refusal | packed invalid-lock/interruption + entry-adapter-failure contracts → I4
+- observable-order × default conflict | unchanged native tree before/after rejection | native same-ID/directory/changed-artifact cases → I5
+- quota-perm-fail × application | operation rejects, ordinary access survives | native quota + packed Vite quota → I6
+- torn-state × tab death | no false success, recreated page reads source, use fails, explicit force reapplies | native interrupted application + packed Vite interruption → I6
+- concurrent-same-key × toolchain operation | existing Worker busy/resident owner retained | existing lifecycle tests and apply admission → ADR-0376, ADR-0417
+
+## Challenge
+
+challenge: 2026-09-11 — clear
+
+Unchanged ready goal premise and ADR-0417. Existing shared application helper and
+point-of-use adapter preparation remove the need for a second install protocol.
+
+## Out of scope
+
+Goal map exclusions. No changes to Workbench catalog transactions or rollback.
 
 ## Decisions
 
-- 2026-09-10 — re-cut: prior grouping draft becomes this goal child; storage/deadline obligations move to no-coi-worker-startup, without weakening #328/#329.
-- 2026-09-10 — user rejects persisted install-status admission; ADR-0417 replaces the earlier proposed forced-retry/rollback fork.
+- 2026-09-11 — ADR-0420 records public request shapes and shared application/adapter owners.
+- 2026-09-11 — Contract+RED evidence: docs/backlog/distribution/reference/no-coi-self-hosted-project-open-evidence.md.

@@ -4,7 +4,7 @@ import { serializePackageJson } from '@riftydev/npm-client';
 import { produceDependencySnapshot } from '../../../packages/workbench/src/glue/dep-snapshot-producer.ts';
 
 /** Real producer and upstream ms tarball; only HTTP delivery is controlled. */
-export async function bakeApplicationPackage() {
+export async function bakeApplicationPackage(version = '1.0.0') {
   const root = new URL('../../integration/fixtures/registry/', import.meta.url);
   const metadata = JSON.parse(await readFile(new URL('ms-2.0.0.json', root), 'utf8')) as {
     readonly name: string;
@@ -15,7 +15,7 @@ export async function bakeApplicationPackage() {
   const bytes = new Uint8Array(await readFile(new URL('ms-2.0.0.tgz', root)));
   const manifest = {
     name: 'opfs-snapshot-application',
-    version: '1.0.0',
+    version,
     dependencies: { ms: '2.0.0' },
   };
   const manifestText = serializePackageJson(manifest);
@@ -64,5 +64,5 @@ export async function bakeApplicationPackage() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  console.log(JSON.stringify(await bakeApplicationPackage()));
+  console.log(JSON.stringify(await bakeApplicationPackage(process.argv[2])));
 }
