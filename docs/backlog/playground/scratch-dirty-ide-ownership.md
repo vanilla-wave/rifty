@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Keep Scratch dirty policy within the IDE companion
 created: 2026-09-10
 why: project VFS and npm command handling currently classify changes according to Scratch dirty semantics
@@ -35,6 +35,8 @@ filesystem/operation facts without deciding whether a Scratch is unsaved.
   boundary proposal does not claim that Reset has been fixed.
 
 ## Decisions
+
+ready-verdict: 2026-09-10 — Contract+RED @ b8741c2885562e1aebecdfa8b1855f805cd275d0; reference/pr323-saved-dirty-contract-red.json (dirty ownership baseline + RDY-6; Reset baseline/RED).
 
 - 2026-09-10 — pickup: behavior-preserving ownership follows existing baseline (RDY-8); observed page reconciliation uses its executed RED; ADR-0414 adds the owner boundary.
 

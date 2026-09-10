@@ -1,0 +1,98 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted with one advisory NOTE; implementation may proceed. RDY-6 final dirty scope matches original user answers and existing baseline. Final+GREEN and delivery gates remain required; this is not merge approval.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "b8741c2885562e1aebecdfa8b1855f805cd275d0",
+  "unit_goal_source": "docs/backlog/playground/install-stamp-invalidation.md at b8741c2885562e1aebecdfa8b1855f805cd275d0; BASE 3e574deb2. Fresh independent reviewer /root/saved_dirty_contract explicitly inspected saved-project-access.contract.test.ts from 685fa16c3e1a24a0fc9d3fdf5b8271e6f1ef99f9 as well. Related RDY-6 written-result check only: docs/backlog/playground/scratch-dirty-ide-ownership.md. Raw sources: docs/backlog/playground/reference/project-open-ide-boundaries-refine.md and docs/backlog/playground/reference/fs-dirty-stamp-findings-disposition.md; ADR-0414/0415, retained ADR-0278/0307/0394 clauses, observed Reset baseline and existing RED. Dirty ownership is a baseline-preserving refactor, not a new-behavior Contract+RED unit. Parent-created untracked scratch-reset-page-state.spec.ts was not included in the reviewed revision.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: readable snapshot-created Scratch and named saved projects reopen independently of install claims, preserving files and terminal without implicit acquisition or saved-tree writes.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/saved-project-access.contract.test.ts:23; tests/browser-unit/saved-project-access.spec.ts:63; tests/browser-unit/saved-project-interrupted-install.spec.ts:119",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: independent local Node runs; missing packages and unavailable adapters fail at use; only validated shadow data grants bindings.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/saved-project-access.spec.ts:138; tests/browser-unit/saved-project-adapter-use.spec.ts:22; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13; packages/workbench/src/workers/saved-project-access.contract.test.ts:71; packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: after real npm has changed durable saved state and the page dies, a fresh owner opens; explicit install completes and the installed package runs.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/saved-project-interrupted-install.spec.ts:98; tests/browser-unit/saved-project-interrupted-install.spec.ts:124; tests/browser-unit/fixtures/interrupted-install-owner.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: retain own recovery, snapshot apply/commit/rollback, unreadable-storage refusal and Save rebind baseline.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:306; packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:391; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:362; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1244; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1465; tests/browser-unit/workbench-snapshot-application.spec.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: native local source runs with an unavailable declared dependency and malformed lock; missing require returns MODULE_NOT_FOUND; real Workbench terminal carries the browser result.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/playground/reference/project-open-ide-boundaries-refine.md:34; tests/browser-unit/saved-project-access.spec.ts:138",
+      "note": ""
+    },
+    {
+      "row": "Fault: torn-state × npm install/owner death preserves readable files and terminal without false installation proof or automatic healing.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/saved-project-interrupted-install.spec.ts:98; packages/workbench/src/workers/saved-project-access.contract.test.ts:37; packages/workbench/src/workers/saved-project-access.contract.test.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Fault: corrupt-input × manifest/lock/adapter keeps files accessible and moves dependency/adapter errors to use.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/saved-project-access.contract.test.ts:37; tests/browser-unit/saved-project-access.spec.ts:111; tests/browser-unit/saved-project-adapter-use.spec.ts:22; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Fault: quota-perm-fail × own snapshot/catalog transaction preserves committed state through existing failure and recovery.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:306; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1991; tests/browser-unit/workbench-snapshot-application.spec.ts:28",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/saved-project-access.contract.test.ts:23",
+          "summary": "The input table has no separate missing-lock case; its malformed lock contains no shadow substitutions. A focused missing-lock/corrupt-shadow-provenance case would make the new runtime reconstruction boundary easier to verify. Existing carriers discriminate the accepted scenario; no surviving mutant was executed, so coverage remains pass under REV-4/REV-5.",
+          "authority": "",
+          "evidence": "Fresh execution at reviewed SHA, Node v24.16.0 / Vitest 2.1.9 / Playwright 1.60.0: pnpm exec vitest run packages/workbench/src/workers/saved-project-access.contract.test.ts tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts => 6 failed, 1 passed: absent/pending/incompatible/malformed-lock saved opens reject at package-acquisition-authority.ts:720; missing-package baseline passes; missing/corrupt WASM rejects unrelated preparePackageEntryRuntime at line 30. RIFTY_PLAYGROUND_PORT=56324 pnpm exec playwright test --config playwright.browser-unit.config.ts saved-project-access.spec.ts saved-project-adapter-use.spec.ts saved-project-interrupted-install.spec.ts --workers=1 => 3 expected failures: named saved trust refusal; local Node exit 1 from eager WASM size validation; interrupted real npm prints local exit 0 and persistedBytes 1952, then the fresh owner refuses saved-interrupted. Node reference probe from project-open-ide-boundaries-refine.md was rerun: localSource=existing local source ran, missingRequireExit=1, missingRequireError=MODULE_NOT_FOUND. No import/type/harness failure was counted as RED. Retained baseline: pnpm exec vitest run packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts packages/workbench/src/workers/workbench-snapshot-apply.contract.test.ts packages/workbench/src/workers/playground-project-catalog.contract.test.ts => 76 passed. RIFTY_PLAYGROUND_PORT=56324 pnpm exec playwright test --config playwright.browser-unit.config.ts workbench-snapshot-application.spec.ts --workers=1 => 3 passed, before-close rollback and after-close commit, zero acquisition requests. pnpm exec vitest run apps/playground/src/glue/page-store-reset.contract.test.ts => existing observed-defect RED, expected false received true at line 19. These are preparation artifacts, not delivered GREEN."
+        }
+      ]
+    },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Open readable saved projects without certifying their install
 created: 2026-06-12
 why: absent or incompatible install trust currently blocks access to readable saved files and the terminal
@@ -41,6 +41,8 @@ files; missing dependencies fail when used. The user may explicitly rerun
   ownership is captured separately in `scratch-dirty-ide-ownership.md`.
 
 ## Decisions
+
+ready-verdict: 2026-09-10 — Contract+RED @ b8741c2885562e1aebecdfa8b1855f805cd275d0; reference/pr323-saved-dirty-contract-red.json (dirty ownership baseline + RDY-6; Reset baseline/RED).
 
 - 2026-09-10 — pickup: ADR-0415, existing package FIFO/reservation retained; no saved-open stamp promotion or automatic acquisition.
 

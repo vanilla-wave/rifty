@@ -45,3 +45,11 @@ independent Final+GREEN, `pnpm pr:check` and PR CI remain required.
 - `saved-project-access.spec.ts`: fresh public owner refuses named saved project after actual file API edits to lock/dependency; RED is saved install trust, after the complete save/mutation/close preparation.
 - `entry-adapter-failure.contract.test.ts`: 2 REDs, missing/corrupt WASM blocks unrelated Node entry; explicit adapter activation remains correctly strict.
 - New tar fixture: real lodash 4.17.21 from npm registry; upstream metadata/integrity committed. Test boundary is native OPFS close, never a fake installer/owner. Initial fixture import and public CAS/path errors were corrected before claiming these REDs.
+
+## Remaining-unit preparation
+
+Fresh reviewer `/root/saved_dirty_contract`: Contract+RED accepted, 8/8 coverage, no blockers; same final draft read certifies dirty scope attribution. Real interrupted install preserved 1952 lodash/LICENSE bytes before page death. Retained baseline 76 unit + 3 OPFS browser tests green.
+
+Author native oracle, Node v24.16.0: temporary package manifest names ms2.0.0, package-lock is `not JSON`; `node local.cjs` exit0/output `local source ran`; `node main.cjs` missing ms exit1/MODULE_NOT_FOUND; `npm install --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org` exit0; rerun main exit0/output2000, regenerated lockfileVersion3.
+
+Real companion Reset/PageStore browser: 1 RED at page dirty true instead of false, after ownerDirty=false and /note.txt deletion passed. No direct Scratch Reset button is claimed by this carrier; it exercises the public companion operation and the actual page store. Ordered authoritative catalog publication needs no optimistic dirty override; pending-starter protection stays.
