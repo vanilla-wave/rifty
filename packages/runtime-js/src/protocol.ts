@@ -60,6 +60,24 @@ export interface ToolchainInstallRequest {
   readonly registryUrl: string;
 }
 
+export interface ToolchainOpenRequest {
+  readonly cwd: string;
+  /** Legacy caller shape; saved opening performs no acquisition. */
+  readonly registryUrl?: string;
+}
+
+export interface ToolchainSnapshotSource {
+  readonly assetUrl: string;
+  readonly snapshotId: string;
+  readonly templateId: string;
+}
+
+export interface ToolchainApplySnapshotRequest {
+  readonly cwd: string;
+  readonly snapshot: ToolchainSnapshotSource;
+  readonly force?: boolean;
+}
+
 export interface ToolchainRunBinRequest {
   readonly cwd: string;
   readonly binPath: string;
@@ -89,7 +107,12 @@ export interface ToolchainActivationState {
 
 export type ToolchainRequest =
   | { readonly id: number; readonly op: 'install'; readonly input: ToolchainInstallRequest }
-  | { readonly id: number; readonly op: 'open'; readonly input: ToolchainInstallRequest }
+  | { readonly id: number; readonly op: 'open'; readonly input: ToolchainOpenRequest }
+  | {
+      readonly id: number;
+      readonly op: 'apply-snapshot';
+      readonly input: ToolchainApplySnapshotRequest;
+    }
   | { readonly id: number; readonly op: 'run-bin'; readonly input: ToolchainRunBinRequest }
   | { readonly id: number; readonly op: 'start-bin'; readonly input: ToolchainStartBinRequest }
   | { readonly id: number; readonly op: 'restore'; readonly input: ToolchainActivationState };

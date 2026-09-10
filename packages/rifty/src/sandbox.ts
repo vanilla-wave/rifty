@@ -8,10 +8,13 @@ import {
 } from '@riftydev/runtime-js';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import {
+  type ToolchainApplySnapshotRequest,
   type ToolchainInstallRequest,
+  type ToolchainOpenRequest,
   type ToolchainRunBinRequest,
   type ToolchainRuntimeController,
   type ToolchainRuntimeOptions,
+  type ToolchainSnapshotSource,
   captureRuntimeStartupOptions,
   spawnToolchainRuntime,
 } from '@riftydev/runtime-js/internal';
@@ -99,10 +102,15 @@ export interface SandboxStartBinInput {
   readonly port: number;
 }
 
+export type SandboxSnapshotSource = ToolchainSnapshotSource;
+export type SandboxApplySnapshotInput = ToolchainApplySnapshotRequest;
+
 export interface SandboxToolchain {
   install(input: ToolchainInstallRequest): Promise<void>;
-  /** Activate a compatible saved installation; never reinstall or repair files. */
-  open(input: ToolchainInstallRequest): Promise<void>;
+  /** Open saved files without installation admission or acquisition. */
+  open(input: ToolchainOpenRequest): Promise<void>;
+  /** Explicitly validate/apply the published producer archive; default conflicts reject. */
+  applySnapshot(input: SandboxApplySnapshotInput): Promise<void>;
   runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
   startBin(input: SandboxStartBinInput): Promise<SandboxResidentBin>;
 }
@@ -493,6 +501,10 @@ async function bootToolchainSandbox(
   };
 
   const toolchain: SandboxToolchain = {
+    async applySnapshot(input) {
+      assertOperable();
+      await current.toolchain.applySnapshot(input);
+    },
     async open(input) {
       assertOperable();
       await current.toolchain.open(input);

@@ -51,12 +51,6 @@ function installationSlug(registryUrl: string): string {
   return JSON.stringify(['rifty.no-coi-install/v1', registryUrl]);
 }
 
-function installRequired(reason: string): Error {
-  const error = new Error(`Explicit toolchain.install required: ${reason}`);
-  error.name = 'SandboxInstallRequiredError';
-  return error;
-}
-
 function post(message: ToolchainResult): void {
   self.postMessage({ type: 'toolchain-result', result: message });
 }
@@ -134,35 +128,18 @@ async function installManifest(input: Extract<ToolchainRequest, { op: 'install' 
 }
 
 async function openInstallation(input: Extract<ToolchainRequest, { op: 'open' }>['input']) {
-  await flushMirror();
-  const checked = await installContext.stamps.check({
-    root: input.cwd,
-    slug: installationSlug(input.registryUrl),
+  const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
+  const bindings = await prepareSavedToolchain(input.cwd);
+  return activationSnapshot(input.cwd, bindings);
+}
+
+async function applySnapshot(input: Extract<ToolchainRequest, { op: 'apply-snapshot' }>['input']) {
+  const { applyNoCoiSnapshot } = await import('./no-coi-snapshot-application.ts');
+  const bindings = await applyNoCoiSnapshot(input, {
+    fs: syncMirror(),
+    flush: () => installContext.fs.flush(),
   });
-  if (checked.status !== 'trusted')
-    throw installRequired('saved installation authority is missing or incompatible');
-  const { planShadowSubstitutionsFromLockfile } = await import('@riftydev/npm-client/internal');
-  let plan: ReturnType<typeof planShadowSubstitutionsFromLockfile>;
-  try {
-    plan = planShadowSubstitutionsFromLockfile(
-      JSON.parse(
-        new TextDecoder().decode(syncMirror().readFileBytesSync(`${input.cwd}/package-lock.json`)),
-      ),
-    );
-  } catch (error) {
-    throw installRequired(
-      `saved lockfile activation is incompatible: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  const bindings = Object.freeze(
-    plan.bindings.map((binding) =>
-      Object.freeze({
-        adapterId: binding.adapterId,
-        packagePath: `${input.cwd}/${binding.packagePath}`,
-      }),
-    ),
-  );
-  const { activateWorkbenchRuntimeAdapters } = await import('./workbench-runtime-adapters.ts');
+  const { activateWorkbenchRuntimeAdapters } = await import('./no-coi-toolchain-install.ts');
   await activateWorkbenchRuntimeAdapters({ bindings, fs: syncMirror(), cwd: input.cwd });
   return activationSnapshot(input.cwd, bindings);
 }
@@ -182,6 +159,8 @@ function processExitCode(error: unknown): number | null {
 async function runInstalledBin(
   input: Extract<ToolchainRequest, { op: 'run-bin' }>['input'],
 ): Promise<{ readonly exitCode: number }> {
+  const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
+  await prepareSavedToolchain(input.cwd, input);
   const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
   process.argv = ['node', input.binPath, ...input.args];
   process.exitCode = undefined;
@@ -221,6 +200,8 @@ async function startInstalledBin(
     throw error;
   }
   try {
+    const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
+    await prepareSavedToolchain(input.cwd, input);
     const started = await startResidentNodeEntry({
       vfs: syncMirror(),
       entryPath: input.binPath,
@@ -243,7 +224,7 @@ async function startInstalledBin(
 
 async function restoreActivation(state: ToolchainActivationState): Promise<void> {
   if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
-  const { activateWorkbenchRuntimeAdapters } = await import('./no-coi-toolchain-install.ts');
+  const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
   if (runtimeBackend === 'memory' || runtimeBackend !== state.vfsBackend) {
     const fs = syncMirror();
     const suffix = `/node_modules/${INSTALL_STAMP_BASENAME}`;
@@ -267,11 +248,7 @@ async function restoreActivation(state: ToolchainActivationState): Promise<void>
     }
     await flushMirror();
   }
-  await activateWorkbenchRuntimeAdapters({
-    bindings: state.bindings,
-    fs: syncMirror(),
-    cwd: state.cwd,
-  });
+  await prepareSavedToolchain(state.cwd);
 }
 
 async function dispatch(
@@ -284,13 +261,18 @@ async function dispatch(
 > {
   if (
     residentPort !== null &&
-    (request.op === 'install' || request.op === 'open' || request.op === 'run-bin')
+    (request.op === 'install' ||
+      request.op === 'open' ||
+      request.op === 'apply-snapshot' ||
+      request.op === 'run-bin')
   ) {
     throw new NotImplementedError(
       'sandbox.toolchain.resident-concurrency',
       'install/open/runBin while a resident bin is active is not supported',
     );
   }
+  if (request.op === 'apply-snapshot')
+    return { activationState: await applySnapshot(request.input) };
   if (request.op === 'open') return { activationState: await openInstallation(request.input) };
   if (request.op === 'install') {
     return { activationState: await installManifest(request.input) };

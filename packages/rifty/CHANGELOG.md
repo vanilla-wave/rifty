@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add explicit applySnapshot with validated input/conflict force and registry-free ordinary saved open; interrupted applications never impose install-status admission (ADR-0417/0420).
+
 - Expose captured no-COI storage namespace/policy and startupTimeoutMs; report fallback reason and preserve configuration on restart (ADR-0419).
 
 - No-COI toolchain protocol is now v3. Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.

@@ -1,14 +1,6 @@
-import { type ToolchainSandbox, createSandbox } from '@riftydev/sdk';
+import { type SandboxSnapshotSource, type ToolchainSandbox, createSandbox } from '@riftydev/sdk';
 
-interface Snapshot {
-  readonly assetUrl: string;
-  readonly snapshotId: string;
-  readonly templateId: string;
-}
-type SnapshotToolchain = ToolchainSandbox['toolchain'] & {
-  applySnapshot(input: { cwd: string; snapshot: Snapshot; force?: boolean }): Promise<void>;
-  open(input: { cwd: string }): Promise<void>;
-};
+type Snapshot = SandboxSnapshotSource;
 let sandbox: ToolchainSandbox;
 let output = '';
 let held = false;
@@ -73,7 +65,7 @@ const api = {
       await sandbox.fs.writeFile(`/project${path}`, content);
   },
   apply(snapshot: Snapshot, force = false) {
-    return (sandbox.toolchain as SnapshotToolchain).applySnapshot({
+    return sandbox.toolchain.applySnapshot({
       cwd: '/project',
       snapshot,
       force,
@@ -91,7 +83,7 @@ const api = {
     );
   },
   state: () => ({ held, applyState }),
-  open: () => (sandbox.toolchain as SnapshotToolchain).open({ cwd: '/project' }),
+  open: () => sandbox.toolchain.open({ cwd: '/project' }),
   write: (path: string, content: string) => sandbox.fs.writeFile(`/project${path}`, content),
   read: (path: string) => sandbox.fs.readFile(`/project${path}`, 'utf8'),
   async evaluate(source: string) {

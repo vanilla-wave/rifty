@@ -5,7 +5,8 @@ for (const state of ['missing', 'pending', 'legacy', 'corrupt-lock', 'missing-lo
   test(`ordinary saved access ignores ${state} installation proof`, async ({ page, context }) => {
     const requests: string[] = [];
     context.on('request', (request) => {
-      if (/unused-registry|eddy/.test(request.url())) requests.push(request.url());
+      if (/\/unused-registry(?:\/|$)|\/eddy(?:\/|$)|registry\.npmjs\.org/.test(request.url()))
+        requests.push(request.url());
     });
     await page.goto('/no-coi-harness.html');
     const result = await page.evaluate(

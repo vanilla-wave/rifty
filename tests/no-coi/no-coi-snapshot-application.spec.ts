@@ -13,7 +13,7 @@ let first: Awaited<ReturnType<typeof bakeApplicationPackage>>;
 let updated: typeof first;
 let nativeMsOutput: string;
 test.beforeAll(() => {
-  const bake = (version: string) =>
+  const bake = (version: string, msVersion = '2.0.0') =>
     JSON.parse(
       execFileSync(
         process.execPath,
@@ -24,12 +24,13 @@ test.beforeAll(() => {
             new URL('../browser-unit/fixtures/snapshot-application-package.ts', import.meta.url),
           ),
           version,
+          msVersion,
         ],
         { encoding: 'utf8', timeout: 30_000 },
       ),
     );
   first = bake('1.0.0');
-  updated = bake('1.0.1');
+  updated = bake('1.0.1', '2.1.3');
   const native = mkdtempSync(join(tmpdir(), 'rifty-sdk-ms-reference-'));
   try {
     execFileSync('tar', [
@@ -40,7 +41,10 @@ test.beforeAll(() => {
     ]);
     nativeMsOutput = execFileSync(
       process.execPath,
-      ['-e', `console.log(require(${JSON.stringify(join(native, 'package'))})('2 days'))`],
+      [
+        '-e',
+        `process.stdout.write(String(require(${JSON.stringify(join(native, 'package'))})('2 days')) + '\\n')`,
+      ],
       { encoding: 'utf8' },
     );
     console.log(`[snapshot-reference] ${process.version}: ${nativeMsOutput.trim()}`);
@@ -52,6 +56,20 @@ test.beforeAll(() => {
 function descriptor(snapshot = first, assetUrl = '/snapshot.tar.gz') {
   return { assetUrl, snapshotId: snapshot.snapshotId, templateId: 'opfs-ms' };
 }
+
+test('snapshot application retains resident operation admission', async ({ page, context }) => {
+  let fetches = 0;
+  context.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/snapshot.tar.gz') fetches++;
+  });
+  await serve(context);
+  await boot(page);
+  await invoke(page, 'write', ['/project/source.txt', 'unchanged']);
+  await invoke(page, 'startLocalServer');
+  await expect(invoke(page, 'apply', [descriptor(), true])).rejects.toThrow(/resident-concurrency/);
+  expect(fetches).toBe(0);
+  await invoke(page, 'dispose');
+});
 async function invoke<T = unknown>(
   page: Page,
   method: string,
@@ -128,12 +146,22 @@ test('producer application, saved edits, same-ID conflicts/force and explicit ch
 }) => {
   const network: string[] = [];
   context.on('request', (request) => {
-    if (/npm-registry|eddy/.test(request.url())) network.push(request.url());
+    if (/\/npm-registry(?:\/|$)|\/eddy(?:\/|$)|registry\.npmjs\.org/.test(request.url()))
+      network.push(request.url());
   });
   await serve(context);
   await boot(page);
   await invoke(page, 'write', ['/project/source.txt', 'source survives']);
   await invoke(page, 'apply', [descriptor()]);
+  const appliedTree = await tree(page);
+  await context.unroute('**/snapshot.tar.gz');
+  await context.route('**/snapshot.tar.gz', (route) =>
+    route.fulfill({ body: 'corrupted same-ID source' }),
+  );
+  await expect(invoke(page, 'apply', [descriptor(), true])).rejects.toThrow(/snapshot.*mismatch/i);
+  expect(await tree(page)).toEqual(appliedTree);
+  await context.unroute('**/snapshot.tar.gz');
+  await serve(context);
   const result = await invoke(page, 'evaluate', [
     "console.log(require('/project/node_modules/ms')('2 days'));void 0",
   ]);
@@ -177,24 +205,46 @@ test('producer application, saved edits, same-ID conflicts/force and explicit ch
     '1.0.1',
   );
   expect(await invoke(page, 'read', ['/project/source.txt'])).toBe('source survives');
+  expect(
+    JSON.parse(await invoke<string>(page, 'read', ['/project/node_modules/ms/package.json']))
+      .version,
+  ).toBe('2.1.3');
   expect(network).toEqual([]);
   await invoke(page, 'dispose');
 });
 
-for (const fault of ['missing', 'corrupt', 'wrong-id', 'wrong-template', 'oversized'] as const) {
+for (const fault of [
+  'missing',
+  'corrupt',
+  'wrong-id',
+  'wrong-template',
+  'oversized',
+  'incompatible-runtime',
+  'malformed-envelope',
+] as const) {
   test(`required ${fault} input fails without writes or acquisition fallback, also with force`, async ({
     page,
     context,
   }) => {
     const requests: string[] = [];
     context.on('request', (request) => {
-      if (/npm-registry|eddy/.test(request.url())) requests.push(request.url());
+      if (/\/npm-registry(?:\/|$)|\/eddy(?:\/|$)|registry\.npmjs\.org/.test(request.url()))
+        requests.push(request.url());
     });
     await context.route('**/snapshot.tar.gz', (route) =>
       route.fulfill({
         status: fault === 'missing' ? 404 : 200,
         headers: fault === 'oversized' ? { 'content-length': String(129 * 1024 * 1024) } : {},
-        body: fault === 'corrupt' ? Buffer.from([0, 1, 2]) : Buffer.from(first.archive),
+        body:
+          fault === 'corrupt'
+            ? Buffer.from([0, 1, 2])
+            : Buffer.from(
+                fault === 'incompatible-runtime'
+                  ? first.incompatible.archive
+                  : fault === 'malformed-envelope'
+                    ? first.malformed.archive
+                    : first.archive,
+              ),
       }),
     );
     await boot(page);
@@ -202,6 +252,11 @@ for (const fault of ['missing', 'corrupt', 'wrong-id', 'wrong-template', 'oversi
     const before = await tree(page);
     const input = {
       ...descriptor(),
+      ...(fault === 'incompatible-runtime'
+        ? { snapshotId: first.incompatible.snapshotId }
+        : fault === 'malformed-envelope'
+          ? { snapshotId: first.malformed.snapshotId }
+          : {}),
       ...(fault === 'wrong-id' ? { snapshotId: `sha256:${'0'.repeat(64)}` } : {}),
       ...(fault === 'wrong-template' ? { templateId: 'different' } : {}),
     };
@@ -247,6 +302,7 @@ test('tab death during native application leaves readable source; explicit reapp
   await expect
     .poll(() => invoke(page, 'state'))
     .toEqual({ held: true, applicationState: 'pending' });
+  await expect(invoke(page, 'apply', [descriptor(), true])).rejects.toThrow(/already active/);
   await page.close();
   const reopened = await context.newPage();
   await boot(reopened);
@@ -260,6 +316,9 @@ test('tab death during native application leaves readable source; explicit reapp
     await invoke(reopened, 'evaluate', ["require('/project/node_modules/ms')('2 days')"]),
   ).toMatchObject({ result: { ok: false } });
   await invoke(reopened, 'apply', [descriptor(), true]);
+  await invoke(reopened, 'dispose');
+  await boot(reopened);
+  await invoke(reopened, 'open');
   expect(
     await invoke(reopened, 'evaluate', [
       "console.log(require('/project/node_modules/ms')('2 days'));void 0",

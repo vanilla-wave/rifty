@@ -4,7 +4,9 @@ import {
   exactInput,
   validateActivationState,
   validateInstallRequest,
+  validateOpenRequest,
   validateRunBinRequest,
+  validateSnapshotRequest,
   validateStartBinRequest,
 } from './internal/toolchain-input.ts';
 import {
@@ -21,8 +23,10 @@ import type {
   SerializedRuntimeError,
   TelemetrySnapshot,
   ToolchainActivationState,
+  ToolchainApplySnapshotRequest,
   ToolchainHostMessage,
   ToolchainInstallRequest,
+  ToolchainOpenRequest,
   ToolchainRequest,
   ToolchainResult,
   ToolchainRunBinRequest,
@@ -83,7 +87,8 @@ export interface RuntimeController {
 
 export interface RuntimeToolchain {
   install(input: ToolchainInstallRequest): Promise<void>;
-  open(input: ToolchainInstallRequest): Promise<void>;
+  open(input: ToolchainOpenRequest): Promise<void>;
+  applySnapshot(input: ToolchainApplySnapshotRequest): Promise<void>;
   runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
   startBin(input: ToolchainStartBinRequest): Promise<{ readonly port: number }>;
 }
@@ -506,12 +511,22 @@ function createRuntimeController(
   if (!toolchainMode || toolchainReady === null) return controller;
 
   async function activateToolchain(
-    op: 'install' | 'open',
-    input: ToolchainInstallRequest,
+    op: 'install' | 'open' | 'apply-snapshot',
+    input: ToolchainInstallRequest | ToolchainOpenRequest | ToolchainApplySnapshotRequest,
   ): Promise<void> {
-    const validated = validateInstallRequest(input, `toolchain.${op}`);
+    const id = nextId++;
+    const request: ToolchainRequest =
+      op === 'apply-snapshot'
+        ? { id, op, input: validateSnapshotRequest(input as ToolchainApplySnapshotRequest) }
+        : op === 'open'
+          ? { id, op, input: validateOpenRequest(input) }
+          : {
+              id,
+              op,
+              input: validateInstallRequest(input as ToolchainInstallRequest, 'toolchain.install'),
+            };
     await toolchainReady;
-    const result = await requestToolchain({ id: nextId++, op, input: validated });
+    const result = await requestToolchain(request);
     if (!result.ok) throw deserializeError(result.error);
     const value = exactInput(result.value, ['activationState'], `toolchain ${op} response`);
     activationState = validateActivationState(
@@ -522,6 +537,7 @@ function createRuntimeController(
   const toolchain: RuntimeToolchain = {
     install: (input) => activateToolchain('install', input),
     open: (input) => activateToolchain('open', input),
+    applySnapshot: (input) => activateToolchain('apply-snapshot', input),
     async runBin(input) {
       const validated = validateRunBinRequest(input);
       await toolchainReady;

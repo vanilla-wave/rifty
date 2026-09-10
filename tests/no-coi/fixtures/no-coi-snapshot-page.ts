@@ -41,10 +41,7 @@ export async function apply(
   snapshot: { assetUrl: string; snapshotId: string; templateId: string },
   force = false,
 ) {
-  const toolchain = sandbox.toolchain as ToolchainSandbox['toolchain'] & {
-    applySnapshot(input: { cwd: string; snapshot: typeof snapshot; force: boolean }): Promise<void>;
-  };
-  await toolchain.applySnapshot({ cwd: '/project', snapshot, force });
+  await sandbox.toolchain.applySnapshot({ cwd: '/project', snapshot, force });
 }
 export function beginApply(snapshot: { assetUrl: string; snapshotId: string; templateId: string }) {
   applicationState = 'pending';
@@ -66,10 +63,10 @@ export async function applied() {
   return application;
 }
 export async function open(registryUrl?: string) {
-  const toolchain = sandbox.toolchain as ToolchainSandbox['toolchain'] & {
-    open(input: { cwd: string; registryUrl?: string }): Promise<void>;
-  };
-  await toolchain.open({ cwd: '/project', ...(registryUrl === undefined ? {} : { registryUrl }) });
+  await sandbox.toolchain.open({
+    cwd: '/project',
+    ...(registryUrl === undefined ? {} : { registryUrl }),
+  });
 }
 export function write(path: string, value: string) {
   return sandbox.fs.writeFile(path, value);
@@ -84,4 +81,18 @@ export async function evaluate(source: string) {
 }
 export function dispose() {
   sandbox.dispose();
+}
+
+export async function startLocalServer() {
+  const binPath = '/project/node_modules/.bin/local-server';
+  await sandbox.fs.writeFile(
+    '/project/node_modules/local-server/package.json',
+    '{"name":"local-server","type":"commonjs"}',
+  );
+  await sandbox.fs.writeFile(
+    '/project/node_modules/local-server/cli.js',
+    "require('node:http').createServer((req,res)=>res.end('ready')).listen(5188);",
+  );
+  await sandbox.fs.writeFile(binPath, "#!/usr/bin/env node\nimport('../local-server/cli.js');\n");
+  return sandbox.toolchain.startBin({ cwd: '/project', binPath, args: [], port: 5188 });
 }

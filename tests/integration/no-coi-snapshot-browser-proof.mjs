@@ -86,6 +86,10 @@ export async function provePackedNoCoiSnapshots(root) {
       await assert.rejects(invoke(page, 'apply', changed), /conflict/iu);
       await invoke(page, 'apply', changed, true);
       assert.equal(JSON.parse(await invoke(page, 'read', '/package.json')).version, '1.0.1');
+      assert.equal(
+        JSON.parse(await invoke(page, 'read', '/node_modules/ms/package.json')).version,
+        '2.0.0',
+      );
       build = await invoke(page, 'build');
       assert.equal(build.exitCode, 0);
       assert.match(build.js, /packed-sdk-saved-edit/u);
@@ -97,7 +101,14 @@ export async function provePackedNoCoiSnapshots(root) {
       const local = await invoke(page, 'evaluate', "require('/project/local.cjs');void 0");
       assert.equal(local.result.ok, true);
       assert.match(local.output, /packed-sdk-independent-source/u);
-      await assert.rejects(invoke(page, 'build'), /adapter|esbuild|runtime/iu);
+      const invalidLockBuild = await invoke(page, 'build').then(
+        (result) => ({ result }),
+        (error) => ({ error: String(error) }),
+      );
+      if ('result' in invalidLockBuild) {
+        assert.notEqual(invalidLockBuild.result.exitCode, 0, JSON.stringify(invalidLockBuild));
+        assert.match(invalidLockBuild.result.output, /adapter|esbuild|runtime/iu);
+      } else assert.match(invalidLockBuild.error, /adapter|esbuild|runtime/iu);
       assert.equal(await invoke(page, 'read', '/package-lock.json'), '{broken');
       await invoke(page, 'apply', changed, true);
       assert.equal((await invoke(page, 'build')).exitCode, 0);

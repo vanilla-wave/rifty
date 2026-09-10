@@ -1,11 +1,10 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Apply dependency snapshots and open actual saved no-COI files
 created: 2026-09-10
 why: SDK lacks the published snapshot consumer and refuses saved activation based on installation proof
 epic: no-coi-self-hosted-project
-blocked_by: [distribution/no-coi-worker-startup]
 sources: [https://github.com/vanilla-wave/rifty/issues/327, docs/backlog/distribution/reference/no-coi-project-open-refine.md, ADR-0417]
 code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/workbench/src/workers/no-coi-install-context.ts, packages/workbench/src/glue/dep-snapshot-application.ts]
 ---
@@ -73,6 +72,10 @@ point-of-use adapter preparation remove the need for a second install protocol.
 Goal map exclusions. No changes to Workbench catalog transactions or rollback.
 
 ## Decisions
+
+ready-verdict: 2026-09-11 — Contract+RED @ 5de9c1cfc34d7de865ca0a847dba8518098995a9
+
+re-cut: 2026-09-11 — startup implementation is available; combine its remaining Final+GREEN verification with whole-goal acceptance, preserving all startup obligations and finding history — trace: none
 
 - 2026-09-11 — ADR-0420 records public request shapes and shared application/adapter owners.
 - 2026-09-11 — Contract+RED evidence: docs/backlog/distribution/reference/no-coi-self-hosted-project-open-evidence.md.

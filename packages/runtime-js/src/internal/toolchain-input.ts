@@ -1,7 +1,9 @@
 import { normalizePath } from '@riftydev/vfs';
 import type {
   ToolchainActivationState,
+  ToolchainApplySnapshotRequest,
   ToolchainInstallRequest,
+  ToolchainOpenRequest,
   ToolchainRunBinRequest,
   ToolchainStartBinRequest,
 } from '../protocol.ts';
@@ -68,6 +70,66 @@ export function validateInstallRequest(
     throw new TypeError(`${label} registryUrl must be a non-empty string`);
   }
   return Object.freeze({ cwd, registryUrl: record.registryUrl });
+}
+
+function optionalInput(
+  input: unknown,
+  required: readonly string[],
+  optional: readonly string[],
+  label: string,
+) {
+  const fields = optional.filter(
+    (key) => input !== null && typeof input === 'object' && Object.hasOwn(input, key),
+  );
+  return exactInput(input, [...required, ...fields], label);
+}
+
+export function validateOpenRequest(input: ToolchainOpenRequest): ToolchainOpenRequest {
+  const record = optionalInput(input, ['cwd'], ['registryUrl'], 'toolchain.open input');
+  const cwd = absolutePath(record.cwd, 'toolchain.open cwd');
+  if (
+    record.registryUrl !== undefined &&
+    (typeof record.registryUrl !== 'string' || record.registryUrl.length === 0)
+  )
+    throw new TypeError('toolchain.open registryUrl must be a non-empty string');
+  return Object.freeze({
+    cwd,
+    ...(typeof record.registryUrl === 'string' ? { registryUrl: record.registryUrl } : {}),
+  });
+}
+
+export function validateSnapshotRequest(
+  input: ToolchainApplySnapshotRequest,
+): ToolchainApplySnapshotRequest {
+  const record = optionalInput(
+    input,
+    ['cwd', 'snapshot'],
+    ['force'],
+    'toolchain.applySnapshot input',
+  );
+  const cwd = absolutePath(record.cwd, 'toolchain.applySnapshot cwd');
+  if (record.force !== undefined && typeof record.force !== 'boolean')
+    throw new TypeError('toolchain.applySnapshot force must be boolean');
+  const source = exactInput(
+    record.snapshot,
+    ['assetUrl', 'snapshotId', 'templateId'],
+    'toolchain.applySnapshot snapshot',
+  );
+  for (const key of ['assetUrl', 'templateId']) {
+    if (typeof source[key] !== 'string' || source[key].trim().length === 0)
+      throw new TypeError(`toolchain.applySnapshot ${key} must be a non-empty string`);
+  }
+  if (typeof source.snapshotId !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(source.snapshotId))
+    throw new TypeError('toolchain.applySnapshot snapshotId must be a sha256 identity');
+  return Object.freeze({
+    cwd,
+    force: record.force === true,
+    snapshot: Object.freeze({
+      assetUrl: source.assetUrl as string,
+      snapshotId: source.snapshotId,
+      templateId: source.templateId as string,
+    }),
+  });
 }
 
 function validateBinInput(
