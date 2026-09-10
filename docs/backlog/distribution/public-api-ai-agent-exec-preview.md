@@ -31,16 +31,24 @@ then submits another command. The host identifies each invocation's output,
 exit/failure/cancellation and possible file effects, including forced Worker
 replacement. A failed command must not poison the next successful command.
 
-## Question
+Each invocation is a method call, not a persistent shell session. `cd src`
+affects subsequent segments of that same command (`cd src && npm run build`),
+but a later call takes cwd/env from its own input/configured defaults, never
+the preceding command. A run handle owns only output, Stop and completion.
+Filesystem effects persist; independent shell state does not mean a fresh JS
+realm or rollback of project files.
 
-Round 1: after `cd src`, does a separate `pwd`/build use persistent session
-cwd/env or receive its own explicit cwd/env? User answer pending. Both existing
-Shell sessions and per-call runBin are real precedents; neither decides this
-new surface. This fork blocks readiness, not the independent #325 write-up.
+## Scope
+
+User's conditional choice: ordinary methods have no retained shell state;
+a shell instance would retain it. The driver selects ordinary methods, with
+existing Shell as their internal interpreter. No public long-lived shell
+instance is proposed. Exact method/handle names remain PICKUP API design.
 
 ## Acceptance
 
 - Public invocation completion/stop/output exposes unambiguous stdout, stderr, exit/failure and cancellation for the actual command; no private eval globals or control files. → scenario
+- Separate method calls do not inherit cwd/env changes, after success, failure or Stop; within-call Shell sequencing still works and applied filesystem effects remain. → scenario
 - Stop retains ownership until execution settles or the old Worker is terminated. Next run cannot receive old output/results or claim that still-running work is finished. → scenario
 - Applied file effects are reported honestly; cancellation promises no rollback. Failed flush, unacknowledged writes and necessary Worker replacement are explicit; no hidden replay. → scenario
 - Existing Shell is usable through the SDK Worker with project root and host-supplied execution/write policy. File tools, builtins/redirections and ordinary installed Node programs agree on paths and readonly constraints; no hostile-code containment claim. → scenario
@@ -66,7 +74,8 @@ message loss/replay/reorder is excluded, not an excuse for another queue.
 - 2026-09-10 — reuse one authoritative no-COI Worker/VFS and existing Shell; API shape and any widened admission seam need ADR/reference/RED preparation at PICKUP.
 - 2026-09-10 — #326 permits necessary whole-Worker replacement and explicitly rejects cancellation-as-rollback; existing recovery limits remain honest.
 - 2026-09-10 — background support need not expand Shell syntax; prohibiting jobs cannot be implemented by ignoring trailing `&`.
-- 2026-09-10 — shell cwd/env lifetime remains the live user fork; no default selected.
+- 2026-09-10 — user: ordinary methods must not retain state, shell instances must; driver selects method calls with invocation-only handles, no public persistent shell instance (source: reference/issues325-326-refine-evidence.md).
+- 2026-09-10 — no-COI concern retains #326's operation-constraint boundary: ordinary policy checks, cooperative settlement or explicit whole-Worker termination; no hostile-JS security or per-run realm-isolation claim.
 - rejected route: expose full Workbench controllers — violates the no-COI scenario (ADR-0375/0377).
 - rejected route: signal followed by immediate success, while handler keeps running — violates Stop settlement in the scenario.
 

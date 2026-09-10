@@ -113,7 +113,8 @@ result-size limit. No clone API is selected for delivery.
 | New command while resident Vite exists | Existing explicit resident-concurrency failure retained; coexistence not promised by these issues | Existing baseline + ADR-0377; preview is legacy separate scope |
 | Host prohibits background work | Prohibition must work before background launch; if allowed, ownership cannot end while late job effects/output escape | #326 execution policy and per-invocation settlement |
 | Stop hard-kills single Worker | Realm replacement and uncertain writes must be visible; preview reload/memory recovery retain existing limits | #326 expressly allows necessary replacement; ADR-0377 |
-| `cd src`; next independent command | Persistent cwd/env or explicit per-call state changes target execution | User round 1 pending; no default inferred |
+| `cd src`; next independent command | Within-call cwd/env changes apply; separate method calls use their own inputs/configured defaults | User conditional answer below; driver selects methods, not shell instances |
+| Method calls after success/failure/Stop | No inherited shell cwd/env; real file effects persist, one Worker/VFS remains | User's methods condition + #326 effects + ADR-0375/0377; no new realm-isolation promise |
 | Policy updates mid-call, exact API shape, serialization, owner admission mechanics | Agent designs scoped options and admission using existing authorities; no second scheduler prescribed | PICKUP, DEC-1, fault-classes Class-kill |
 
 ## Early Challenge
@@ -134,7 +135,31 @@ reach and background ownership. Early Challenge is not the final draft check.
 
 Round 1 asks whether separate calls preserve shell cwd/env or receive explicit
 per-call cwd/env, with the latter recommended for independent agent actions.
-Answer pending. Dependent command semantics remain draft.
+
+User answer, verbatim:
+
+> А какой интерфейс для пользователя будет? Если просто методы - то надо без сохранения, если даем что-то типа "инстанса шела", то надо сохранять. Но как будто в no COI тире опасно шел давать
+
+Attribution: the user supplies a conditional scope rule, not unconditional
+approval of a shell session. The driver chooses ordinary methods and
+invocation-only handles; therefore shell cwd/env are not inherited between
+calls. A command may still sequence `cd src && npm run build` internally.
+Public names/signatures shown in conversation are illustrative, not a frozen
+API. File effects and the existing shared runtime persist; this choice does
+not authorize a new Worker for every command.
+
+The no-COI concern does not introduce a hostile-JavaScript containment request:
+#326 already excludes that claim. Existing Shell is an internal interpreter;
+no long-lived shell object is offered. A non-cooperative guest still requires
+explicit whole-Worker termination, with uncertain/unflushed file effects
+reported. Readonly and command restrictions remain operation policy, not
+security isolation. No new product probe is claimed for this scope decision.
+
+Checked frontier: the sole early-critic fork is resolved by this conditional
+answer and selected interface kind. Method names, fixed defaults, policy
+encoding and settlement mechanism remain agent-owned PICKUP work. General
+structured eval remains optional per #325; the legacy preview question stays
+outside #325/#326 rather than being claimed resolved.
 
 ## Preparation checks
 
@@ -147,11 +172,12 @@ and native browser probe above are research, not product acceptance.
 Initial gate failures: source JSON formatting (fixed), sandbox `tsx` IPC EPERM
 (rerun with escalation), missing build outputs (built). No criterion weakened.
 
-## Final written-result check
+## Initial written-result check
 
 Fresh read-only `/root/sdk_refine_final`, no inherited author/critic context:
 docs Final+GREEN PASS at `f2bb7365e3f305c857dd7180b85c2de65d3b784b`.
 Record: `issues325-326-refine-final-green.json`; `blockers.mjs` exit 0.
 The reviewer checked original issues, the full final draft set and evidence.
-This certifies accurate preparation, not settled cwd/env scope, ready contracts
-or shipped SDK behavior. The user question remains pending.
+This historical pass certified the initial draft while cwd/env was unanswered;
+it does not cover the subsequent user answer or revised command scope. A fresh
+check of the amended final draft set is required before refinement completion.
