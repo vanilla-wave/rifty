@@ -64,7 +64,7 @@ export async function proveSqliteOmission(
       },
     },
     id: 'scratch',
-    entryPath: '/server.cjs',
+    entryPath: '/server.mjs',
     port: 3459,
     files: {
       '/package.json': snapshot.packageJsonText,
@@ -78,12 +78,13 @@ parentPort.postMessage({
   nested: execSync('node sqlite-leaf.cjs', { env: {} }).toString().trim(),
 });`,
       '/recursive.cjs': recursive,
-      '/terminal.cjs':
-        "require('./recursive.cjs')().then(proof => console.log(JSON.stringify(proof)));",
-      '/server.cjs': `
-require('./recursive.cjs')().then(proof => {
-  require('node:http').createServer((req, res) => res.end(JSON.stringify(proof))).listen(3459);
-});`,
+      '/terminal.mjs':
+        "import prove from './recursive.cjs'; console.log(JSON.stringify(await prove()));",
+      '/server.mjs': `
+import prove from './recursive.cjs';
+import { createServer } from 'node:http';
+const proof = await prove();
+createServer((req, res) => res.end(JSON.stringify(proof))).listen(3459);`,
     },
   });
   await workbench.playground.catalog.createScratch({ definition });
@@ -102,7 +103,7 @@ require('./recursive.cjs')().then(proof => {
     output += chunk;
   });
   try {
-    const command = terminal.run('node terminal.cjs');
+    const command = terminal.run('node terminal.mjs');
     try {
       const exit = await command.exited;
       await command.close();

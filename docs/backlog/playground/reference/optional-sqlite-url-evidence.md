@@ -47,3 +47,13 @@ alignment. The host now uses `satisfies`, preserving its actual SQLite field.
 Full-suite SAB race test hit its 30s real-worker lifecycle under load 21.9 on
 12 CPUs; isolated rerun passed (70ms). Zero Vitest timeout classifications;
 one lifecycle timeout. No production/test-budget change for that transient.
+
+
+Packed fixture corrections after optional boot first succeeded: snapshot-only
+cannot request even an empty install, so the Node helper consumes the existing
+produced Vite snapshot with its matching manifest/template identity. A CJS
+`prove().then(console.log)` attempt exited 0 without output, including after
+terminal close; no diagnosed product cause. Its exact historical fixture and
+parent-lifetime question stay in `runtime-js/worker-threads-kernel-run-to-completion-exit.md`.
+The configuration proof now explicitly awaits the Worker result in ESM, as the
+existing recursive browser suite does; no keepalive/sleep workaround.
