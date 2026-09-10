@@ -9,6 +9,17 @@ sources: [https://github.com/vanilla-wave/rifty/issues/326, docs/backlog/distrib
 code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/shell/src/shell.ts]
 ---
 
+## Reference contract
+
+ADR-0418 fixes the additive public shape. Node/VFS and native Worker evidence,
+RED commands and shared packed-consumer scenarios:
+`docs/backlog/distribution/reference/pr-331-implementation-evidence.md`.
+
+## Challenge
+
+challenge: 2026-09-10 — clear; unchanged accepted premise/scope reused from
+`docs/backlog/distribution/reference/issues325-326-methods-final-green.json`.
+
 ## Context
 
 #326 is a static published-0.7.0 audit, not a reproduced regression. The checked
