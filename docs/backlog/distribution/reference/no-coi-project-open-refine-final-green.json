@@ -1,0 +1,64 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: PR #332 docs-only refinement and RDY-6 final written-result review may land. No SDK implementation or goal completion certified.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5bc41b01e3def0919f28c38c5320adbd58e88837",
+  "unit_goal_source": "Reviewer /root/refine_final, fresh read-only depth-1 context; actual diff 2c7f9bbf4..5bc41b01e3def0919f28c38c5320adbd58e88837 (all 13 documentation files). Unit = PR #332 integration issue assessment/grouping plus first-group refinement, not implementation of docs/backlog/epics/no-coi-self-hosted-project/goal.md. Compared original issue bodies #325\u2013329 in /tmp/rifty-integration-issues.json, exact original grouping request, first-group refine request and installation-status rejection, previous raw project-open-ide-boundaries-refine evidence, final goal/map/children, initial triage and second-group drafts, ADR-0392/0394/0398/0415 and ADR-0417 scoped corrections. RDY-6 action/transition/default/exclusion check found no omitted material user choice: explicit first/update application versus ordinary saved access; same-ID reapply; force replaces directory descendants while preserving unrelated paths; partial apply permits independent Node use without completion ledger; retained Workbench rollback/storage recovery; namespace default/required/preferred behavior and startup/restart/close boundaries. Second-group structured-eval choice remains explicitly unresolved, as capture permits. Coverage is empty because no implemented product public API, traced implementation acceptance/fault row or frozen oracle changes in this docs unit; I1\u2013I6 are future product obligations, not passing runtime coverage. Independently executed git diff --check 2c7f9bbf4..HEAD, node tools/backlog/check.mjs (301 items, 16 epics, invalid 0, OK), node tools/refs/check.mjs (264 ADRs/index rows, OK). Read actual /tmp/rifty-startup-refine-reference.log: 3 files/26 tests passed; this is existing Workbench reference behavior only. Native Node v24.16.0 command/output is preserved and explicitly bounded: invalid lock/absent dependency, local command success, dependency require MODULE_NOT_FOUND, no npm interruption or browser proof. Goal reviewed as draft; only status flip to ready after PASS is bookkeeping; children remain draft pending PICKUP/Contract+RED. Read actual final driver log /tmp/rifty-refine-pr-check-final.log: pnpm pr:check passed docs-only 20/20; classifier skipped typecheck, build:libs, check:arch, test:run and test:parity. These skipped lanes are not claimed GREEN.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1/I2",
+      "location": "docs/backlog/distribution/no-coi-worker-startup.md:1",
+      "summary": "Product implementation and Contract+RED/native browser proof of selected storage and effective startup budget remain in linked draft child; not authorized by refine request."
+    },
+    {
+      "clause": "I3/I4/I5/I6",
+      "location": "docs/backlog/distribution/no-coi-self-hosted-project-open.md:1",
+      "summary": "Product implementation and Contract+RED/packed Vite/native interruption proof for explicit snapshot application and ordinary saved access remain in linked draft child; not authorized by refine request."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

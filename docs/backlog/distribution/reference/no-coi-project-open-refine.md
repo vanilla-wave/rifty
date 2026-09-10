@@ -142,3 +142,16 @@ lock/adapter bytes, with actual adapter use failing explicitly. No fake adapter.
 The new ADR supersedes only SDK gate/certification clauses in ADR-0392 and the
 corresponding retained exception in ADR-0415. ADR-0394 Workbench catalog policy and
 ADR-0398 registry absence/local replay remain active.
+
+## Final written-result check
+
+Fresh read-only `/root/refine_final` reviewed all 13 actual documentation files at
+`5bc41b01e3def0919f28c38c5320adbd58e88837` against raw sources and user answers:
+PASS, no findings; exact verdict in `no-coi-project-open-refine-final-green.json`.
+Goal promoted ready after review; children remain draft. SDK implementation and
+I1–I6 browser proof remain future work, not completed refinement checks.
+
+`pnpm pr:check`: docs-only 20/20 pass. Source lanes typecheck, build:libs,
+check:arch, test:run, test:parity skipped by classifier. Initial sandbox attempt
+failed four tsx checks on local IPC permission and the missing dist gate; unchanged
+build:libs completed, elevated pr:check passed. No gate changes or test weakening.

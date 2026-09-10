@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Open and build self-hosted no-COI projects without host patches or installation-status gates
 created: 2026-09-10
 value: an existing application can use CI-baked dependencies, scoped persistent storage and ordinary saved files through the published SDK
@@ -93,3 +93,8 @@ Revised independent `/root/sdk_open_decision` verdict, verbatim:
 - rejected route: replace SDK with public Workbench — violates no-COI Outcome; Workbench still requires COI.
 - rejected route: private archive extraction/global storage overrides/dist timer patch — violates published-SDK Outcome.
 - rejected route: saved completion receipt or auto-recovery gate — violates I4/I6 and the user's round 1 decision.
+
+Final written-result review: `/root/refine_final` at
+`5bc41b01e3def0919f28c38c5320adbd58e88837`, PASS;
+`docs/backlog/distribution/reference/no-coi-project-open-refine-final-green.json`.
+Ready destination only; children require PICKUP/Contract+RED before implementation.
