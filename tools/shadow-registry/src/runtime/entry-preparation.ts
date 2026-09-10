@@ -5,6 +5,7 @@ import {
   ESBUILD_RUNTIME_ADAPTER_ID,
   type PackageRuntimeBinding,
   activatePackageRuntimeAdapters,
+  assertPackageRuntimeBindings,
 } from './runtime-adapters.ts';
 import { planViteNodeEntryEdge as planNodeEntryIntegration } from './vite-node-entry-edge.ts';
 
@@ -37,6 +38,8 @@ export async function preparePackageEntryRuntime(
         }
       : planNodeEntryIntegration(options);
   if (integration.activateRuntimeAdapters) {
+    // Bootstrap binding shape is an invariant; only activation failures defer to a consumer.
+    assertPackageRuntimeBindings({ bindings: options.runtimeBindings, cwd: options.root });
     if (
       !options.runtimeBindings.some((binding) => binding.adapterId === ESBUILD_RUNTIME_ADAPTER_ID)
     ) {

@@ -1,5 +1,4 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import type * as Companion from '../../apps/playground/src/browser-unit/workbench-playground-entry.ts';
@@ -22,15 +21,6 @@ test('saved snapshot files and real Node terminal survive a malformed lock and m
       { encoding: 'utf8' },
     ),
   ) as Awaited<ReturnType<typeof bakeApplicationPackage>>;
-  const upstream = JSON.parse(
-    readFileSync(
-      new URL('../integration/fixtures/registry/ms-2.0.0.json', import.meta.url),
-      'utf8',
-    ),
-  ) as { dist: { upstreamTarball: string; upstreamIntegrity: string } };
-  const tarball = readFileSync(
-    new URL('../integration/fixtures/registry/ms-2.0.0.tgz', import.meta.url),
-  );
   let requests = 0;
   await page.route('**/pr323-snapshot.tar.gz', (route) => {
     requests++;
@@ -43,21 +33,14 @@ test('saved snapshot files and real Node terminal survive a malformed lock and m
         name: 'ms',
         'dist-tags': { latest: '2.0.0' },
         versions: {
-          '2.0.0': {
-            name: 'ms',
-            version: '2.0.0',
-            dist: {
-              tarball: upstream.dist.upstreamTarball,
-              integrity: upstream.dist.upstreamIntegrity,
-            },
-          },
+          '2.0.0': snapshot.packageManifest,
         },
       },
     });
   });
   await page.route('**/ms-2.0.0.tgz', (route) => {
     requests++;
-    return route.fulfill({ body: tarball });
+    return route.fulfill({ body: Buffer.from(snapshot.packageTarball) });
   });
   await gotoHarness(page);
   const result = await page.evaluate(async (snapshot) => {

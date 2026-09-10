@@ -426,7 +426,7 @@ export function createWorkbenchHealthAuthority(
       },
     }),
     projectOpen(progress: WorkbenchProjectOpenProgress | undefined): void {
-      if (closed) return;
+      if (closed || (progress === undefined && projectOpen === undefined)) return;
       projectOpen =
         progress === undefined
           ? undefined

@@ -69,3 +69,10 @@ Actual saved browser path exposed the old syntactically corrupt-lock install ref
 ## Related inventory
 
 `readInstallStamp` async readers stay live. Rechecked convenience stamp predicates have no production caller (tests only); retained because deleting their tests is unnecessary to the requested boundary. `treeRevision` remains real VFS/publication evidence; dirty classification has no independent durable revision owner. Existing pure path predicates remain shared facts, while companion owns their dirty meaning.
+
+## Full-gate preparation findings
+
+- Source-grep heuristic falsely tainted browser results: its 400-character binding window combined execFileSync of the fixture producer .ts with a nearby readFileSync of registry JSON/tar. Fixture producer now returns the same real replay metadata/tar bytes; all browser assertions and the detector/allowlist are unchanged. Gate returns74 existing assertions.
+- Built TypeScript asset has unchanged 10,022,664 bytes/213,023 lines. Compared against the exact pinned baseline SHA3587a112e6f0bbae3bb9ca4565404c8ce572a5cbb146440ee2e7a4ecf7b02cf6: eight import specifiers differ (shared chunks and dynamic module-loader), all other bytes identical. New SHA6c72156491edd98ea9022742da6eeb43467ca28b69f4e55c5ba7a457be0d9eae; update only exact artifact pin, preserve 2MB ceiling/negative payload tests (ADR-0391).
+
+- Full `test:run` initial run: four failed files, zero Vitest timeouts; automatic isolated rerun reproduced all four. The source inventory/saved result expectations follow the approved modules/result. Actual regressions fixed: clearing absent progress emits no duplicate healthy event; malformed bootstrap bindings remain strict before guest imports, while validated adapter activation failures defer. Isolated six-file verification123/123 passes, including negative carrier tests. Final rebuilt TypeScript asset SHA6c72156491edd98ea9022742da6eeb43467ca28b69f4e55c5ba7a457be0d9eae; payload comparison still exact apart from import fingerprints.

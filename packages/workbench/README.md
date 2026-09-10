@@ -218,10 +218,12 @@ resolved URLs retain their location. Compressed and decoded archives keep the
 existing 128 MiB limit.
 
 Playground snapshot plans default to `initial-deployment-only`. After initial
-admission, saved files and their current install trust win even when the host
-supplies another snapshotId; unused asset bytes are not fetched. Incompatible
-saved state fails with files retained. Explicit catalog Reset still reseeds the
-whole project.
+admission, existing saved files win even when the host supplies another
+snapshotId; unused asset bytes are not fetched. Missing/pending/incompatible
+install claims do not block files, terminals or independent Node commands.
+Dependency/adapter errors appear at use; explicit `npm install` can finish an
+interrupted install. Own storage recovery and snapshot commit guarantees remain.
+Explicit catalog Reset still reseeds the whole project (ADR-0415).
 
 For a selected update, define/open the project with:
 
@@ -243,3 +245,20 @@ contains project-rooted paths, with no partial payload writes. Equal bytes and
 compatible directories coexist. `overwrite` replaces conflicting targets;
 untargeted source and local dependency files remain. Metadata/replay cache stays
 outside the project payload. See ADR-0394.
+
+## Opening progress
+
+`workbench.health` reports optional `projectOpen` before a session exists:
+
+```js
+const unsubscribe = workbench.health.subscribe(({ projectOpen }) => {
+  if (projectOpen?.persistence) {
+    const { persisted, total } = projectOpen.persistence;
+    console.log(`Saving ${persisted}/${total} operations`);
+  }
+});
+```
+
+Counts describe one real persistence drain, not files/bytes or whole-open percent.
+A completed drain can precede further preparation. `projectOpen` disappears when
+the open settles or the owner closes/fails; unrelated drains are excluded (ADR-0413).

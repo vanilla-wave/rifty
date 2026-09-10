@@ -69,11 +69,7 @@ async function startGeneratedEsbuildRuntime(
   return generated.startEsbuildRuntime({ wasm, fs: options.fs, cwd: options.cwd });
 }
 
-async function activateEsbuild(
-  binding: PackageRuntimeBinding,
-  fs: FsSync,
-  cwd: string,
-): Promise<void> {
+function assertEsbuildPackagePath(binding: PackageRuntimeBinding, cwd: string): void {
   const packagePath = binding.packagePath;
   const normalizedCwd = normalizePath(cwd);
   const packageRoot = packagePath.endsWith(ESBUILD_RUNTIME_PACKAGE_SUFFIX)
@@ -89,6 +85,15 @@ async function activateEsbuild(
   ) {
     throw new TypeError(`runtime-adapter.esbuild packagePath is not admitted: ${packagePath}`);
   }
+}
+
+async function activateEsbuild(
+  binding: PackageRuntimeBinding,
+  fs: FsSync,
+  cwd: string,
+): Promise<void> {
+  const packagePath = binding.packagePath;
+  const normalizedCwd = normalizePath(cwd);
   const wasmPath = `${packagePath}/esbuild.wasm`;
   const bytes = fs.readFileBytesSync(wasmPath);
   if (bytes.byteLength !== ESBUILD_WASM_BYTES) {
@@ -107,11 +112,10 @@ async function activateEsbuild(
   publishRuntimeEsbuild(outer, { fs, cwd: normalizedCwd });
 }
 
-export async function activatePackageRuntimeAdapters(options: {
+export function assertPackageRuntimeBindings(options: {
   readonly bindings: readonly PackageRuntimeBinding[];
-  readonly fs: FsSync;
   readonly cwd: string;
-}): Promise<void> {
+}): void {
   const activated = new Set<string>();
   for (const binding of options.bindings) {
     if (activated.has(binding.adapterId)) {
@@ -122,6 +126,15 @@ export async function activatePackageRuntimeAdapters(options: {
       throw new NotImplementedError(`runtime-adapter.${binding.adapterId}`);
     }
   }
+  for (const binding of options.bindings) assertEsbuildPackagePath(binding, options.cwd);
+}
+
+export async function activatePackageRuntimeAdapters(options: {
+  readonly bindings: readonly PackageRuntimeBinding[];
+  readonly fs: FsSync;
+  readonly cwd: string;
+}): Promise<void> {
+  assertPackageRuntimeBindings(options);
   for (const binding of options.bindings) {
     await activateEsbuild(binding, options.fs, options.cwd);
   }

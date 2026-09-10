@@ -329,10 +329,7 @@ describe('I6 catalog-owned orphan Scratch retention', () => {
       expectOrdinaryTree(treeAt(restarted.fs.durableSnapshot(), selected.root));
       await restarted.catalog.activate({ kind: 'project', id: 'saved-project' });
       namedOpened = await restarted.owner.openProject(named);
-      expect(namedOpened.acquisition).toMatchObject({
-        kind: 'ready',
-        provenance: { outcome: 'existing' },
-      });
+      expect(namedOpened.acquisition).toEqual({ kind: 'saved' });
       expect(treeAt(restarted.fs.durableSnapshot(), namedRoot)).toEqual(namedBefore);
       expect(network.requests).toEqual([snapshot.descriptor.assetUrl]);
       expect(restarted.authority.readFileBytesSync(`${unknownRetainedRoot}/sentinel.bin`)).toEqual(
