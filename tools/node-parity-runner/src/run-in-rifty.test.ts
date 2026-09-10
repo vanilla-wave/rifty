@@ -448,7 +448,7 @@ describe('runInRifty', () => {
   );
 
   it.each<readonly [label: string, fault: NodeCliEvalBootstrapFault, expectedError: RegExp]>([
-    ['wrong protocol', 'wrong-protocol', /protocol.*v3.*v2/iu],
+    ['wrong protocol', 'wrong-protocol', /protocol.*v4.*v2/iu],
     ['missing source', 'missing-source', /missing field.*source/iu],
     ['missing print', 'missing-print', /missing field.*print/iu],
     ['missing execArgv', 'missing-exec-argv', /missing field.*execArgv/iu],

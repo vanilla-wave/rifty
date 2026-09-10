@@ -28,3 +28,22 @@ An earlier harness compile failure used a nonexistent public Node factory;
 corrected to the existing companion before this runtime RED and checkpoint.
 
 `pnpm test:parity sqlite`: 5/5 baseline cases match Node v24.16.0.
+
+## Implementation checks
+
+Targeted GREEN: six suites, 222/222 tests. The packed consumer now supplies
+statically typed omitted wasm / empty wasm options; no reflective type escape.
+Its direct sql.js dependency was removed; assets come from Workbench dist.
+
+Judging-criteria changes: old protocol assertions move to node-entry v4 and
+dev-server v2 per ADR-0416; retired v2/v3/v1 rejection remains explicit.
+The copied TypeScript worker retains 10,022,664 bytes and references the newly
+named shared runtime chunks; only its exact SHA-256 inventory pin changes.
+Lexical compiler and WASM pins, payload-negative tests and ceilings unchanged.
+
+First `pnpm pr:check`: type narrowing in Playground's concrete configured host,
+asset fingerprint and one remaining parity-harness v3 error regex required
+alignment. The host now uses `satisfies`, preserving its actual SQLite field.
+Full-suite SAB race test hit its 30s real-worker lifecycle under load 21.9 on
+12 CPUs; isolated rerun passed (70ms). Zero Vitest timeout classifications;
+one lifecycle timeout. No production/test-budget change for that transient.
