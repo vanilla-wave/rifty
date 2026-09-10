@@ -66,3 +66,24 @@ fixture now updates only scripts.dev through versioned public project.files
 before starting the Node server. Bounded packed-asset diagnostic then reached
 port 3459, served the exact recursive proof, closed, and completed Vite startup.
 Full packed acceptance is rerun separately, without diagnostic instrumentation.
+
+
+## Final GREEN
+
+Reviewed product/test tree: `ca574a4c5f5a9905b22b2b6bdbf45b894fac1034`.
+
+- `node tests/integration/workbench-packed-consumer.mjs`: PASS; 15 first-party +
+  83 external tarballs, consumer TypeScript/build, fresh Chromium. Configured
+  SQLite CREATE/INSERT/SELECT and exact host asset request passed; after removing
+  sql-wasm.wasm, fresh-context Node/recursive/dev-server errors, Vite build/dev/HMR,
+  zero SQLite/guest-fallback/registry/Eddy requests, saved-state and scoped-preview
+  journeys all passed. No diagnostic instrumentation in this run.
+- `pnpm pr:check`: 25/25 PASS on final tree; test:run 200.5s, parity 61.9s;
+  no isolated reruns. Prior full GREEN also retained the unchanged product baseline.
+- Independent reviewer: 232/232 targeted + negative-gate tests, both exact
+  TypeScript-worker hashes reproduced; normalized emitted imports alone differ.
+- Production Chromium CI: SUCCESS on source-identical `0668a927b`,
+  [job](https://github.com/vanilla-wave/rifty/actions/runs/34485844878/job/102899917053).
+- Final+GREEN: 12/12 coverage PASS; no unit residuals. Required review records
+  survive completed-contract cleanup. The separately captured CJS question is
+  unresolved, outside the SQLite configuration result.
