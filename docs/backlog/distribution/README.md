@@ -16,7 +16,8 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | file | status | epic | gist |
 |---|---|---|---|
 | `public-api-ai-agent-contract-snapshot-restore.md` | parked | SDK API | residual disk-state snapshot/restore/fork API after ADR-0131 FS slice |
-| `public-api-ai-agent-exec-preview.md` | parked | SDK API | residual streamed exec + preview URL API after ADR-0131 FS slice |
+| `public-api-ai-agent-exec-preview.md` | draft | SDK API | #326 cancellable no-COI commands; legacy preview question retained |
+| `no-coi-project-files.md` | draft | SDK API | #325 structured project FS; explicit console-eval contract |
 | `workbench-controllers.md` | ready | embeddable-dev-loop | build deep project sessions in safe slices; Playground dogfood, then mechanical package extraction + packed Chromium proof |
 | `workbench-guest-vfs-namespace.md` | draft | embeddable-dev-loop | decide one honest guest root; prevent active programs from reaching retained project/owner storage |
 | `react-bindings.md` | ready | embeddable-dev-loop | `@riftydev/react` provider + Terminal/Preview/Editor/FileTree/CapabilitiesGate atoms, headless+themeable (DD-4) |
