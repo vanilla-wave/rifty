@@ -550,7 +550,7 @@ export function startBrowserWorkspaceOwner(
           ? {}
           : { typescript: deployment.workers.typescript }),
       }),
-      wasm: Object.freeze({ sqlite: deployment.wasm.sqlite }),
+      wasm: Object.freeze({ ...deployment.wasm }),
       previewProbeTimeoutMs: deployment.previewProbeTimeoutMs,
       ...(previewPrefix === undefined ? {} : { previewPrefix }),
       ...(ownerStartupTimeoutMs === undefined ? {} : { ownerStartupTimeoutMs }),

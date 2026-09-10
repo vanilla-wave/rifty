@@ -5,6 +5,7 @@ import {
 } from '@riftydev/workbench/playground';
 import { captureBuiltFiles, proveOrphanScratchRecovery } from './orphan-scratch-recovery-proof';
 import { proveSnapshotApplication } from './snapshot-application-proof';
+import { proveSqliteOmission } from './sqlite-omission-proof';
 import { proveStorageNamespaces } from './storage-namespace-proof';
 
 interface Snapshot {
@@ -92,6 +93,7 @@ export async function openSnapshotOnlyAcceptance(
   } finally {
     await unavailable.close();
   }
+  await proveSqliteOmission(strict, snapshot);
   const workbench = await openPlaygroundWorkbench(strict);
   const definition = workbench.playground.define({
     kind: 'npm-dev-server',

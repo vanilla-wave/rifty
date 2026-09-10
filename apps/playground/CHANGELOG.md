@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retain the concrete Playground SQLite asset type when validating against optional Workbench deployment options.
+
 - Clear authoritative Scratch Reset dirty state while retaining pending optimistic edit/starter protection; preserve editor, terminal, npm and Git classifications.
 
 - Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).

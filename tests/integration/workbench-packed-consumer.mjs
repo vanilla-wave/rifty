@@ -1220,6 +1220,10 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     }
     await context.close();
     registry.deny();
+    // A fresh browser context cannot reuse SQLite; the deployed asset is absent too.
+    const sqliteAsset = resolve(consumerRoot, 'dist/rifty/sql-wasm.wasm');
+    const sqliteBytes = await readFile(sqliteAsset);
+    await rm(sqliteAsset);
     const strictBefore = registry.requests.length;
     const strictContext = await browser.newContext({ serviceWorkers: 'allow' });
     const strictRequests = [];
@@ -1314,12 +1318,20 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         [],
         'no implicit registry/Eddy/unused snapshot routes',
       );
+      assert.deepEqual(
+        strictRequests.filter((url) =>
+          /(?:sql-wasm|guest-sqlite-must-not-load)\.wasm$/.test(new URL(url).pathname),
+        ),
+        [],
+        'no SQLite request without deployment.wasm.sqlite',
+      );
       assert.deepEqual(strictErrors, [], 'snapshot-only public browser errors');
       console.log(
         'Packed snapshot-only: producer Vite npm build/dev/HMR, local script, refused required install and persistent saved-state proof; zero registry/Eddy requests',
       );
     } finally {
       await strictContext.close();
+      await writeFile(sqliteAsset, sqliteBytes);
     }
     await provePackedScopedPreview({
       browser,

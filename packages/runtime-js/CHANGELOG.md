@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Migrate Node entry bootstrap to v4 for optional host SQLite configuration; reject prior versions atomically (ADR-0416).
+
 - Reject unreadable acquired OPFS preload through Worker-error settlement, including pending eval/fs calls; unavailable-root memory fallback stays intact.
 
 - Toolchain protocol v3 adds validated open activation and composes the guarded Worker filesystem before module loading.
