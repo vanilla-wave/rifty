@@ -112,6 +112,20 @@ createServer((req, res) => res.end(JSON.stringify(proof))).listen(3459);`,
     } finally {
       await command.close();
     }
+    const packageJson = await project.files.readFile('/package.json');
+    const manifest = JSON.parse(new TextDecoder().decode(packageJson.bytes)) as {
+      scripts?: Record<string, string>;
+    };
+    await project.files.writeFile(
+      '/package.json',
+      new TextEncoder().encode(
+        JSON.stringify({
+          ...manifest,
+          scripts: { ...manifest.scripts, dev: 'node server.mjs' },
+        }),
+      ),
+      { expectedVersion: packageJson.version },
+    );
     const run = project.run();
     try {
       const preview = await run.ready;

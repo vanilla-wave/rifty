@@ -53,7 +53,16 @@ Packed fixture corrections after optional boot first succeeded: snapshot-only
 cannot request even an empty install, so the Node helper consumes the existing
 produced Vite snapshot with its matching manifest/template identity. A CJS
 `prove().then(console.log)` attempt exited 0 without output, including after
-terminal close; no diagnosed product cause. Its exact historical fixture and
+`await command.close()`; no diagnosed product cause. Its exact historical fixture and
 parent-lifetime question stay in `runtime-js/worker-threads-kernel-run-to-completion-exit.md`.
 The configuration proof now explicitly awaits the Worker result in ESM, as the
 existing recursive browser suite does; no keepalive/sleep workaround.
+
+
+A subsequent ESM fixture wait was traced to the restored manifest's
+`dev: vite --port 5173` while its node-server plan awaited port 3459. Terminal
+exit/close and the full recursive SQLite result had already completed. The
+fixture now updates only scripts.dev through versioned public project.files
+before starting the Node server. Bounded packed-asset diagnostic then reached
+port 3459, served the exact recursive proof, closed, and completed Vite startup.
+Full packed acceptance is rerun separately, without diagnostic instrumentation.

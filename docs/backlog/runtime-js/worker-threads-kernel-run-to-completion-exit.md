@@ -59,8 +59,8 @@ it changes kernel public behavior (same gate as
 
 Does a pending kernel Worker message keep its CJS parent alive? During optional
 SQLite acceptance, the packed CJS parent started execSync + a Worker, then used
-`prove().then(console.log)`. It exited 0 with empty output, also after awaited
-terminal close. Cause is unproven; do not equate it with the child-exit issue.
+`prove().then(console.log)`. It exited 0 with empty output, also after
+`await command.close()`. Cause is unproven; do not equate it with the child-exit issue.
 Exact attempted fixture: git `c689192c5`,
 `tests/integration/fixtures/workbench-vite-consumer/src/sqlite-omission-proof.ts`;
 run `node tests/integration/workbench-packed-consumer.mjs` at that revision.
