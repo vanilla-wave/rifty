@@ -93,8 +93,8 @@ fresh `/root/final_323` independently ran327 unit tests,18 browser checks and1 U
 check, native npm oracle and exact compiler/tarball validation. Full
 `pnpm pr:check`25/25 passed on that exact code.
 
-Verified Final+GREEN at516b4dc14f9323236701df4155220f6dd1856cc7 is retained in
-`pr323-final-green.json`:27/27 coverage, zero blockers/concerns. The only later
+Comment delta verified at516b4dc14f9323236701df4155220f6dd1856cc7:
+27/27 coverage, zero blockers/concerns. The only later
 source delta updates comments; reviewer independently confirmed identical
 TypeScript5.9.3 comment-stripped output (14640 bytes). Earlier executed tests
 remain attributed to343606794; the verified record includes docs cleanup.
@@ -122,3 +122,8 @@ is legitimate. Exact cache equality, zero registry requests, lockfile/cache
 provenance and the separate10000ms stalled-asset guard remain unchanged.
 Specific CPU/scheduler delay is unproven; load variance is an inference.
 This does not resolve the separate local pr:check starvation backlog.
+
+After the budget change, the full file passed27/27 (replay1218ms).
+Independent Final+GREEN at9c9f442301fa373b8052468683850f0dde90a674 is retained in
+`pr323-final-green.json`:27/27 coverage, zero findings; exact comparison proves
+the single outer timeout change. Earlier proof keeps its original SHA limits.
