@@ -106,3 +106,19 @@ the reciprocal correction now name them. No product/scope change.
 Completed four item documents removed; broader OPFS/TrustedState goals remain
 open for their own remaining obligations. Raw refinement records remain history.
 Remote push/readiness/CI state stays authoritative on GitHub, not this document.
+
+## Tar replay runner budget
+
+CI34429171805 at47ffa8bf6:17 lanes passed; unit had exactly1 failure among10247
+executed tests. The unchanged real LightningCSS tar-envelope replay reached
+the runner's5000ms cap (5002ms), with no assertion mismatch. The preceding
+CI34425567139 ran the same case successfully in4653ms. Mandatory whole-file
+isolation passed27/27; case1273ms. Independent reviewer isolation passed1723ms.
+
+The fixture is3821302 compressed bytes,16236499 extracted bytes, including
+15850559 WASM bytes. Independent PR-4 review compared the baseline test/codec
+and ADR-0386/0387: no5s product acceptance; a case-local30000ms execution budget
+is legitimate. Exact cache equality, zero registry requests, lockfile/cache
+provenance and the separate10000ms stalled-asset guard remain unchanged.
+Specific CPU/scheduler delay is unproven; load variance is an inference.
+This does not resolve the separate local pr:check starvation backlog.

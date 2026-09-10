@@ -357,7 +357,7 @@ describe('dep snapshot (ADR-0135)', () => {
       version: LIGHTNING_VERSION,
       transport: 'cache',
     });
-  });
+  }, 30_000); // Real 16 MB tar/codec replay; CI's default 5 s budget is insufficient.
 
   it.each(['missing', 'corrupt'])(
     '[fault: poisoned-cache] rejects %s tar replay closure before mutation',
