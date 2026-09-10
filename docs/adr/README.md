@@ -336,6 +336,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0398 | Select registry-free snapshot acquisition through the existing package owner |
 | 0410 | Configure existing Workbench operation deadlines end to end |
 | 0412 | Publish prepared dependency snapshot payloads |
+| 0417 | Open no-COI projects without installation status |
 
 ## Superseded (removed)
 
