@@ -40,11 +40,15 @@ remains. No fictitious time estimate or whole-open percentage.
 
 ## Decisions
 
+- 2026-09-10 — pickup: ADR-0413; owner existing opId/health stream reuse; no new coordination mechanism.
+
 - 2026-09-10 — user: «Да, оформить прогресс (рекомендую)» to the explicit separate visible-first-open-progress question; raw source in `reference/fs-dirty-stamp-findings-disposition.md`.
 - 2026-09-10 — user: «ничего не нужно, со скоростью отдельно разберемся(вроде даже есть ПР с планом)»; latency investigation/optimization excluded, progress remains selected.
 - 2026-09-10 — exact public API and UI carrier are agent-owned; ADR-0359's owner-port-only reach requires the appropriate DEC-2 revision before implementation. No separate progress coordinator is prescribed.
 
 ## Challenge
+
+challenge: 2026-09-10 — clear; selected observability outcome reused; DEC-2 alternatives in ADR-0413.
 
 2026-09-10 — fresh read-only `/root/audit_refine_frontier`:
 
@@ -54,3 +58,20 @@ remains. No fictitious time estimate or whole-open percentage.
 
 This is a newly chosen observable surface, not a mechanical regression repair.
 Probe UI/public reach and counters at pickup; old drain timings are not its RED.
+
+## Acceptance
+
+1. Public Workbench health and Playground show real persistence operation counts before a first snapshot project has a session; source files actually persist. → scenario
+2. Unknown phases remain preparing; one completed drain never means a completed open. The display clears on the actual success/failure/close. → scenario
+3. Background/previous operation progress is excluded using the existing open lifetime; stdout/stderr, snapshot commit and recovery retain their baseline. → scenario
+
+## Fault matrix
+
+- observable-order × first open | real pre-session counts, then settled result | `public-project-open-progress.spec.ts` → scenario
+- concurrent-same-key × old/background drain | no progress attributed to a different open | owner opId + public lifecycle regression → scenario
+- quota-perm-fail / peer death × open | existing rejection; progress clears, no successful-open indication | public lifecycle regression + existing snapshot failure suites → scenario
+
+## Out of scope
+
+Latency profiling/optimization; synthetic percentages/ETA; new recovery policy.
+Unsupported storage/runtime capabilities retain loud failures.

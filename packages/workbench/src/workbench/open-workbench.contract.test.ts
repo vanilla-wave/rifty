@@ -399,9 +399,15 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
     deleteProject: vi.fn((id: string) => ownerDeleteProjectImplementation(id)),
     close: vi.fn(() => ownerCloseImplementation()),
   };
+  let ownerHealthListener: Parameters<OwnerHandle['subscribeHealth']>[0] | undefined;
   const ownerHandle: OwnerHandle = {
     closed: ownerClosed.promise,
-    subscribeHealth: () => () => {},
+    subscribeHealth: (listener) => {
+      ownerHealthListener = listener;
+      return () => {
+        ownerHealthListener = undefined;
+      };
+    },
     // The inspected definition carries TReady only as a phantom; the test
     // boundary records an erased call, then restores that same phantom here.
     openProject<TReady>(definition: InspectedProjectDefinition<TReady>) {
@@ -434,6 +440,13 @@ function harness(sharedLocks = new ExclusiveLockHost()) {
 
   return {
     open: createOpenWorkbench(dependencies),
+    emitOwnerHealth(
+      event: Parameters<Parameters<OwnerHandle['subscribeHealth']>[0]>[0] & {
+        readonly projectOpen?: boolean;
+      },
+    ): void {
+      ownerHealthListener?.(event);
+    },
     capabilities,
     locks: sharedLocks,
     clock,
@@ -1361,4 +1374,59 @@ describe('openWorkbench storage fault contract', () => {
     expect(h.owner.start.mock.calls[1]?.[0]).toEqual(h.owner.start.mock.calls[0]?.[0]);
     await retried.close();
   });
+});
+
+describe('PR323 public opening progress lifetime', () => {
+  it.each(['success', 'failure', 'close', 'owner-death'] as const)(
+    '%s clears progress without calling a completed drain a completed open',
+    async (outcome) => {
+      const h = harness();
+      const gate = deferred<ProjectSession<unknown>>();
+      const session = createTestSession<unknown>();
+      h.setOwnerOpenProjectImplementation(() => gate.promise);
+      const workbench = await h.open(validOptions());
+      const opening = workbench.openProject(definition('progress'));
+      const progress = () =>
+        (
+          workbench.health.snapshot() as unknown as {
+            projectOpen?: { projectId: string; persistence?: { persisted: number; total: number } };
+          }
+        ).projectOpen;
+      h.emitOwnerHealth({ kind: 'durability-progress', persisted: 7, total: 8 });
+      expect(progress()?.persistence).toBeUndefined();
+      h.emitOwnerHealth({ kind: 'durability-progress', persisted: 2, total: 8, projectOpen: true });
+      expect(progress()).toEqual({
+        projectId: 'progress',
+        persistence: { persisted: 2, total: 8 },
+      });
+      h.emitOwnerHealth({ kind: 'durability-progress', persisted: 8, total: 8, projectOpen: true });
+      expect(progress()?.projectId).toBe('progress');
+      if (outcome === 'success') {
+        gate.resolve(session.session);
+        const project = await opening;
+        expect(progress()).toBeUndefined();
+        await project.close();
+      } else if (outcome === 'failure' || outcome === 'owner-death') {
+        const failure = new Error('open storage failure');
+        if (outcome === 'owner-death') {
+          h.failOwnerClosed(failure);
+          await Promise.resolve();
+          expect(progress()).toBeUndefined();
+        }
+        gate.reject(failure);
+        await expect(opening).rejects.toBe(failure);
+        expect(progress()).toBeUndefined();
+      } else {
+        const closing = workbench.close();
+        expect(progress()).toBeUndefined();
+        gate.resolve(session.session);
+        await expect(opening).rejects.toBeInstanceOf(ClosedHandleError);
+        await closing;
+        return;
+      }
+      h.emitOwnerHealth({ kind: 'durability-progress', persisted: 9, total: 9, projectOpen: true });
+      expect(progress()).toBeUndefined();
+      await workbench.close();
+    },
+  );
 });

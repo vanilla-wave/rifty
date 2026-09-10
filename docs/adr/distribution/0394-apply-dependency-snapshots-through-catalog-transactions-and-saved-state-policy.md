@@ -96,3 +96,7 @@ never ran. Hosts use explicit apply or Reset after an incompatible saved state;
 intentional first-party starter replacement uses Reset. Existing registry install
 mode remains. Conflict and OPFS crash proofs accompany both pending and saved
 transitions; no new package compatibility, latency or archive-size promise.
+
+## Corrections (active)
+
+2026-09-10 — ADR-0415 supersedes only the reach/saved-open clauses named there; other decisions remain active.
