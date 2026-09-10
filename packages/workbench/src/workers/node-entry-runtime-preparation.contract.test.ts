@@ -5,7 +5,8 @@ import { prepareNodeEntryRuntime } from './node-entry-runtime-preparation.ts';
 const previousRuntimeRoot = Object.getOwnPropertyDescriptor(globalThis, '__riftyShadowRegistry');
 
 afterEach(() => {
-  if (previousRuntimeRoot === undefined) Reflect.deleteProperty(globalThis, '__riftyShadowRegistry');
+  if (previousRuntimeRoot === undefined)
+    Reflect.deleteProperty(globalThis, '__riftyShadowRegistry');
   else Object.defineProperty(globalThis, '__riftyShadowRegistry', previousRuntimeRoot);
 });
 

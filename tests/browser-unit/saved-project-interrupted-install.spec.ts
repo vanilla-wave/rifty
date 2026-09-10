@@ -107,9 +107,32 @@ test('saved Vite opens after a page dies during real npm install lodash and expl
     try {
       const savedLicense = await project.files.readFile('/node_modules/lodash/LICENSE');
       const missing = await run('node -e "require(\'lodash\')"');
+      const reopenArrivals = await (
+        globalThis as unknown as { pr323BeforeExplicitInstall(): Promise<string[]> }
+      ).pr323BeforeExplicitInstall();
       const install = await run('npm install lodash');
       const repaired = await run('node -e "console.log(require(\'lodash\').chunk([1,2,3],2))"');
-      return { local, savedBytes: savedLicense.bytes.byteLength, missing, install, repaired };
+      const server = project.run();
+      let previewStatus: number;
+      let servedByVite: boolean;
+      try {
+        const preview = (await server.ready) as { readonly url: string };
+        const response = await fetch(new URL(preview.url, location.href));
+        previewStatus = response.status;
+        servedByVite = (await response.text()).includes('/@vite/client');
+      } finally {
+        await server.close();
+      }
+      return {
+        local,
+        savedBytes: savedLicense.bytes.byteLength,
+        missing,
+        install,
+        repaired,
+        reopenArrivals,
+        previewStatus,
+        servedByVite,
+      };
     } finally {
       await terminal.close();
       await project.close();
@@ -126,7 +149,12 @@ test('saved Vite opens after a page dies during real npm install lodash and expl
   await page.close();
   const fresh = await context.newPage();
   await gotoHarness(fresh);
+  const beforeReopen = arrivals.length;
+  await fresh.exposeFunction('pr323BeforeExplicitInstall', () => arrivals.slice(beforeReopen));
   const recovered = await fresh.evaluate(prepare, { fixtureUrl: sealedWorkbenchFixtureUrl });
+  expect(recovered.reopenArrivals).toEqual([]);
+  expect(recovered.previewStatus).toBe(200);
+  expect(recovered.servedByVite).toBe(true);
   expect(recovered.local.exit).toBe(0);
   expect(recovered.local.out).toContain('retained local source');
   expect(recovered.savedBytes).toBe(victim.paused?.persistedBytes);
