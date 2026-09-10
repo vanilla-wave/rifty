@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Include the esbuild runtime-service-refs patch in generated compatibility inventory (ADR-0421).
+
 - Add manual `rifty-release` skill for GitHub Releases with concise capability and fix bullet lists.
 
 - Snapshot producer acquisition joins the exact install-tree gate contexts; claim/sibling writes remain refused. Legacy reload tests now require explicit recovery; budget tests await real IPC completion.

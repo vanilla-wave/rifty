@@ -114,3 +114,9 @@ exact current-protocol acceptance is unchanged. No product error hidden.
   live context/dispose included; no artificial keepalive interval.
 - Isolated host protocol correction:32/32 PASS. Earlier other9 files:257 PASS;
   final combined full gate remains required before independent Final+GREEN.
+
+Generated artifacts: full `pnpm snapshots:bake` rebuilt Vite/Vite8/TypeScript
+archives; `check:snapshot-artifact-drift` PASS. Compatibility renderer now admits
+the 13 declared unique patches (adds runtime-service-refs); generated matrix
+records acquire-time cwd and upstream refs. No old patch or capability gap was
+removed. These two pre-generation reds require a clean full gate rerun.
