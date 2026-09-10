@@ -98,10 +98,7 @@ for (const scenario of [
       }),
     );
     expect(result.paused.boundary).toBe(scenario.boundary);
-    expect(result.fresh.acquisition).toMatchObject({
-      kind: 'ready',
-      provenance: { outcome: 'existing' },
-    });
+    expect(result.fresh.acquisition).toMatchObject({ kind: 'saved' });
     expect(result.fresh.requests).toEqual([]);
     expect(result.fresh.journalPresent).toBe(false);
     expect(result.fresh.current).toEqual(result.fresh.recovered);

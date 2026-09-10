@@ -344,7 +344,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0407: stored catalog schema/projection extracted without another state owner.
     // ADR-0392: shared claim guard, thin claim FS, install context and durable-equality adapter.
     // ADR-0412: source-only dependency snapshot preparation validation.
-    expect(packageProductionFiles).toHaveLength(157);
+    // ADR-0414/0415: companion package policy and pure package-runtime tree composition.
+    expect(packageProductionFiles).toHaveLength(159);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

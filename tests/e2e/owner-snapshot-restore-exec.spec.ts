@@ -3,7 +3,6 @@ import {
   hasMatchingDurableClaim,
   nativeProjectState,
   prepareOwnerReloadObservation,
-  retainedChanges,
 } from './helpers/owner-reload-observer.ts';
 import {
   expectTerminalContains,
@@ -14,6 +13,7 @@ import {
   runTerminalLineSettled,
   selectPreset,
   terminalBuffer,
+  terminalHistoryExitCode,
 } from './helpers/playground.ts';
 
 async function saveScratchAs(page: Page, name: string): Promise<void> {
@@ -70,7 +70,7 @@ async function switchToSavedProject(page: Page, name: string): Promise<void> {
  *      owner restores the durable active-project tree.
  *   5. The current package.json still names cowsay, `cowsay` draws AGAIN, and
  *      `cat data.txt` returns the marker. A later interrupted install either
- *      retains matching durable trust or refuses saved startup without changing bytes (I8).
+ *      preserves readable files/terminal independently of trust (ADR-0415).
  *
  * Requires cross-origin isolation (owner is SAB-IPC-gated); the harness serves
  * COOP/COEP. Chromium-only, matching the other owner specs.
@@ -164,33 +164,25 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
         }),
       );
       observation.resume();
+      await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
+        timeout: 60_000,
+      });
+      await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
+      if (trusted) await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 120_000 });
+      const after = await nativeProjectState(page, projectName);
+      expect(after.marker).toBe(before.marker);
+      expect(after.manifest).toBe(before.manifest);
+      await openShellTerminal(page);
+      const localLine = `node -e "console.log('local-after-' + 'fast-reload')"`;
+      await runTerminalLineSettled(page, localLine, 30_000);
+      await expectTerminalContains(page, 'local-after-fast-reload', 20_000);
+      expect(await terminalHistoryExitCode(page, localLine)).toBe(0);
       if (trusted) {
-        await expect(page.locator('.rf-app[data-workspace-owner="workspace"]')).toBeVisible({
-          timeout: 60_000,
-        });
-        await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0);
-        await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 120_000 });
-        const after = await nativeProjectState(page, projectName);
-        expect(after.marker).toBe(before.marker);
-        expect(after.manifest).toBe(before.manifest);
-        await openShellTerminal(page);
         await runTerminalLineSettled(page, 'cowsay after-fast-reload', 30_000);
         await expectTerminalContains(page, '< after-fast-reload >', 30_000);
-        await runTerminalLineSettled(page, 'cat data.txt', 30_000);
-        await expectTerminalContains(page, marker, 20_000);
-      } else {
-        await expect(page.locator('.rf-toast[data-tone="error"]')).toHaveText(
-          `Project reopen failed: Saved project is incompatible with current install trust: ${before.projectId}`,
-          { timeout: 60_000 },
-        );
-        await expect(
-          page.locator('.rf-app[data-workspace-owner="chooser"][data-project-index="ready"]'),
-        ).toBeVisible();
-        await expect(page.locator('[data-testid="launcher"]')).toBeVisible();
-        await expect(page.getByText(/LIVE :/)).toHaveCount(0);
-        const after = await nativeProjectState(page, projectName);
-        expect(retainedChanges(before, after)).toEqual({ total: 0, sample: [] });
       }
+      await runTerminalLineSettled(page, 'cat data.txt', 30_000);
+      await expectTerminalContains(page, marker, 20_000);
       expect(observation.requests).toEqual({ total: 0, sample: [] });
     } finally {
       await observation.close();

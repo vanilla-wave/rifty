@@ -1,4 +1,9 @@
-import { dirname } from '@riftydev/vfs';
+import { type VfsMutationIntent, dirname } from '@riftydev/vfs';
+import {
+  type PlaygroundProjectMutationKind,
+  playgroundMutationIsDirty,
+} from './playground-package-mutations.ts';
+export type { PlaygroundProjectMutationKind } from './playground-package-mutations.ts';
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
 import { ProjectBusyError, ProjectDefinitionMismatchError } from '../workbench/errors.ts';
 import {
@@ -205,17 +210,6 @@ interface LegacyIndex {
   readonly projects: readonly LegacyIndexProject[];
 }
 
-export type PlaygroundProjectMutationKind =
-  | 'guest'
-  | 'scm'
-  | 'archive'
-  | 'file'
-  | 'package-manifest'
-  | 'package-lock'
-  | 'seed'
-  | 'dependency'
-  | 'reserved-authority';
-
 export interface OpenedPlaygroundProject {
   readonly projectKey: string;
   readonly projectRoot: string;
@@ -262,6 +256,7 @@ export interface PlaygroundProjectAuthority {
   ): Promise<OpenedPlaygroundProject>;
   recordMutation(input: {
     readonly kind: PlaygroundProjectMutationKind;
+    readonly intents?: readonly VfsMutationIntent[];
     readonly project: OpenedPlaygroundProject;
     readonly treeRevision: number;
   }): Promise<void>;
@@ -2320,13 +2315,7 @@ export async function createPlaygroundProjectAuthority(
         ) {
           throw new RangeError('Mutation tree revision is invalid');
         }
-        const dirty =
-          input.kind === 'guest' ||
-          input.kind === 'scm' ||
-          input.kind === 'archive' ||
-          input.kind === 'file' ||
-          input.kind === 'package-manifest' ||
-          input.kind === 'package-lock';
+        const dirty = playgroundMutationIsDirty(input.kind, input.intents);
         if (!dirty || live.id !== 'scratch' || stored.scratch === null || stored.scratch.dirty) {
           return;
         }

@@ -219,7 +219,7 @@ async function seedWarmOwner(
   const root = initial.projectRoot;
   await initial.close();
   const warm = await owner.openProject(definition);
-  expect(warm.acquisition).toMatchObject({ kind: 'ready', provenance: { outcome: 'existing' } });
+  expect(warm.acquisition).toMatchObject({ kind: 'saved' });
   await warm.close();
   expect(network.requests).toEqual([valid.descriptor.assetUrl]);
   expect(decoder.decode(composition.authority.readFileBytesSync(`${root}/package.json`))).toBe(

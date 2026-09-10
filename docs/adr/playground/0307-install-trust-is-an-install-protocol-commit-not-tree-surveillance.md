@@ -99,3 +99,7 @@ it is an infidelity, not extra safety.
 - Follow-up: the claim gains a lockfile hash for the at-open compare (v4-shaped
   field); the oracle slice owns that change with RED/GREEN on the claim-churn
   scenario.
+
+## Corrections (active)
+
+2026-09-10 — ADR-0415 supersedes only the reach/saved-open clauses named there; other decisions remain active.

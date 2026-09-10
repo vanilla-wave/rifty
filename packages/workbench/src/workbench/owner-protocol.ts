@@ -149,6 +149,7 @@ export type WorkbenchOwnerToPageMessage =
    * is owner-scoped and the first-open drain predates any project token. */
   | {
       readonly type: 'workbench:durability-progress';
+      readonly opId?: string;
       readonly persisted: number;
       readonly total: number;
     }
@@ -390,11 +391,22 @@ export function inspectWorkbenchOwnerToPageMessage(value: unknown): WorkbenchOwn
       });
     }
     case 'workbench:durability-progress': {
-      exact(message, ['type', 'persisted', 'total'], 'durability-progress message');
+      exact(
+        message,
+        optionalKeys(message, ['type', 'persisted', 'total'], ['opId']),
+        'durability-progress message',
+      );
       const persisted = progressCount(message.persisted, 'durability-progress persisted');
       const total = progressCount(message.total, 'durability-progress total');
       if (persisted > total) throw invalid('durability-progress counts');
-      return Object.freeze({ type: message.type, persisted, total });
+      return Object.freeze({
+        type: message.type,
+        persisted,
+        total,
+        ...(own(message, 'opId')
+          ? { opId: nonEmptyString(message.opId, 'durability-progress opId') }
+          : {}),
+      });
     }
     case 'workbench:failure': {
       exact(message, optionalKeys(message, ['type', 'error'], ['opId']), 'failure message');

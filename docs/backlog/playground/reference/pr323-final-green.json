@@ -1,0 +1,270 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS at9c9f44230: blockers0, concerns0, coverage27/27. Case-local tar replay runner budget independently accepted under PR-4; assertions and runtime guards unchanged. Driver retains real gate/remote CI completion responsibility; no merge requested.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "9c9f442301fa373b8052468683850f0dde90a674",
+  "unit_goal_source": "Final CI-discovery delta verification by fresh-to-implementation reviewer /root/final_323 at9c9f442301fa373b8052468683850f0dde90a674; read-only, no children or repository edits. Four named contracts temporarily restored in this reviewed commit are byte-exact to516b4dc14 and remain the reviewed authority; subsequent delete-on-done docs commit is permitted by REV8. All27 prior coverage rows retained.\n\nHistorical product and documentation verification evidence (original SHA boundaries retained verbatim; these earlier tests were not rerun at9c9f44230):\nVerification checkpoint /root/final_323 at516b4dc14f9323236701df4155220f6dd1856cc7. Named contracts are read from this commit; their working-tree deletions are reviewed completion cleanup. Existing prior report /private/tmp/rifty-pr323-final-green.json is unchanged.\n\nHistorical full-product review and executed proof at3436067941a7004e6e2f7d4cf6797e3bffdd2566 (not re-executed or relabelled as516b4dc14):\nFresh independent read-only reviewer /root/final_323; no children; entire 108-file diff BASE b4058f421b1e30faae15fcf08e8604784ad97e8f..3436067941a7004e6e2f7d4cf6797e3bffdd2566 inspected, including changed tests/gates/oracles under PR-4.\nCurrent contracts: docs/backlog/playground/install-stamp-invalidation.md; docs/backlog/playground/scratch-dirty-ide-ownership.md; docs/backlog/playground/project-open-persistence-progress.md. Reset observed baseline: docs/backlog/playground/scratch-reset-keeps-page-dirty.md. Accepted goal is PR323 saved files/terminal access, IDE-owned existing Scratch dirty classification plus Reset, real first-open persistence progress; unrelated OPFS and TrustedState epics are not declared complete.\nRaw user answers inspected in docs/backlog/playground/reference/project-open-ide-boundaries-refine.md and fs-dirty-stamp-findings-disposition.md. Preparation inspected: pr323-progress-contract-red.json at685fa16c3e1a24a0fc9d3fdf5b8271e6f1ef99f9; pr323-saved-dirty-contract-red.json atb8741c2885562e1aebecdfa8b1855f805cd275d0; observed Reset RED and implementation evidence. ADR0413/0414/0415 and retained storage/install/companion clauses inspected.\nExecuted at exact reviewed HEAD: pnpm exec vitest run saved-project-access.contract.test.ts page-store-reset.contract.test.ts open-workbench.contract.test.ts workbench-browser-owner.test.ts owner-package-state.test.ts workbench-project-vfs.test.ts installer-lockfile.test.ts dep-snapshot-malformed-lock.contract.test.ts entry-adapter-failure.contract.test.ts realm.test.ts using their repository paths: exit0,204/204,10 files; raw /private/tmp/rifty-pr323-reviewer-unit.log.\nExecuted: pnpm exec vitest run extraction-boundary.contract.test.ts playground-project-catalog.contract.test.ts workbench-snapshot-apply-rollback.contract.test.ts workbench-snapshot-legacy-application.contract.test.ts package-acquisition-project-save.test.ts node-entry-runtime-preparation.contract.test.ts dep-snapshot-producer.test.ts page-store.test.ts esbuild-legacy-retirement.test.ts using repository paths: exit0,123/123,9 files,29.14s; raw /private/tmp/rifty-pr323-reviewer-retained.log. Real producer native tar/wasm case1696ms; only its timeout changed to30000ms, all content/provenance assertions retained. Closure is exactly159 reachable production files; negative renamed/gzip/base64/WASM/2MB payload gates pass.\nExecuted elevated from first attempt, dedicated port56324: RIFTY_PLAYGROUND_PORT=56324 pnpm exec playwright test --config playwright.browser-unit.config.ts public-project-open-progress.spec.ts saved-project-access.spec.ts saved-project-adapter-use.spec.ts saved-project-interrupted-install.spec.ts scratch-reset-page-state.spec.ts --workers=1: exit0,7/7,19.3s; raw /private/tmp/rifty-pr323-reviewer-browser.log. Local Node exit0; missing ms exit1/MODULE_NOT_FOUND; explicit npm exit0 then ms output2000. Missing/corrupt esbuild and invalid shadow provenance do not block unrelated Node. Native OPFS after-close preserves1952 lodash/LICENSE bytes before real page death; fresh owner has zero acquisition, explicit retry runs lodash.chunk and real Vite preview200 with /@vite/client. Real companion Reset clears owner/page dirty and discard guard.\nExecuted: RIFTY_PLAYGROUND_PORT=56324 pnpm exec playwright test --project=chromium-light project-opening-progress.spec.ts --workers=1: exit0,1/1,8.2s; raw /private/tmp/rifty-pr323-reviewer-ui.log. Screenshot visually inspected: Preparing instant project / Project files / Saving1/302 operations; geometry and actual settlement checked. This is actual Playground UI, not only SDK harness.\nExecuted: RIFTY_PLAYGROUND_PORT=56324 pnpm exec playwright test --config playwright.browser-unit.config.ts workbench-snapshot-application.spec.ts workbench-legacy-receipt.spec.ts workbench-playground-companion.spec.ts --workers=1: exit0,11/11,14.3s; raw /private/tmp/rifty-pr323-reviewer-baseline-browser.log. Actual OPFS before/after-close recovery, zero reopened acquisition, exact bytes, real companion Node/SCM/TypeScript retained.\nExecuted native oracle: Nodev24.16.0,npm11.17.0; temporary project with real ms2.0.0 local tarball dependency and package-lock.json=not JSON. node local.cjs exit0/local source ran; node main.cjs exit1/MODULE_NOT_FOUND; npm install --offline --ignore-scripts --no-audit --no-fund exit0/added1 package; rerun main exit0/2000; generated lockfileVersion3. Local tarball avoids network and independently confirms syntactically malformed-lock repair. Committed browser carrier separately uses registry replay; original author registry oracle retains its stated scope.\nExecuted node:crypto comparison against original compiler bytes in t3code-beeb450f: both10022664 bytes,213024 split lines; baseline SHA2563587a112e6f0bbae3bb9ca4565404c8ce572a5cbb146440ee2e7a4ecf7b02cf6, current6c72156491edd98ea9022742da6eeb43467ca28b69f4e55c5ba7a457be0d9eae. Only lines5,8,9,21,23,24,25,211002 differ, all chunk/module-loader import specifiers; other bytes exact. lodash318961-byte tarball SHA512 matches committed npm metadata integrity.\nAuthor raw exact-HEAD full gate independently inspected: /private/tmp/rifty-pr323-prcheck-reviewed.log, pnpm pr:check exit0,25/25, test:run197.5s,parity62.1s. Prior failed logs retain their own earlier-tree limits; current reviewer runs supersede the relevant repaired paths. Reviewer did not rerun the entire full gate or claim current remote CI green; push/CI remains driver responsibility. Final git status clean and HEAD unchanged.\n\nIndependent final verification delta: git diff343606794..HEAD contains only packages/workbench/src/glue/install-stamp.ts comments: completed TODO removed, certified seed reuse distinguished from ordinary saved access under ADR0415. No runtime statement/type/import changes. Executed TypeScript5.9.3 transpileModule on both full source versions with ESNext target/module and removeComments:true: exact output equality=true,14640 bytes,SHA25648901104dccf875296588051134f6a114758915683dba82057b934ee0b8f89ae. Earlier327 unit/18 browser/1 UI/native/hash proof remains valid for identical executable product behavior; none is claimed rerun at this revision.\nInspected every current working-tree documentation delta: ADR0135 decision5 backlink plus dated reciprocal correction; ADR0415 explicitly supersedes forced saved-open install and corresponding Consequences, retaining setup kinds/first materialization/no per-file surveillance. The prior sole NOTE is resolved. Completed four contract deletions preserve their exact reviewed contracts in git and retained raw/refinement/Final+GREEN evidence; active broader OPFS/TrustedState and crash/storage-consumer obligations remain explicitly open, with delivered npm carrier reused. Changelog backlink updated. Scoped reference search of current ADR/epic/active consumer sources found no removed-contract reference; historical reference records intentionally remain. git diff HEAD tracked paths are docs or CHANGELOG only. No source/docs were edited by reviewer.\nDriver reports current lint/backlog/refs/diff checks green and current full gate still running at /private/tmp/rifty-pr323-prcheck-closure.log; reviewer does not claim that run or remote CI finished. Earlier exact343 full gate25/25 remains the completed full-gate evidence. Documentation cleanup was uncommitted at this verification; reviewed_sha binds the exact executable revision and REV8 permits subsequent documentation-only commits.\n\nNew PR-4 delta: inspected git diff516b4dc14..9c9f44230 across packages, apps/playground/src, tests, tools, .github. Only executable/test-source change is packages/workbench/src/glue/dep-snapshot.test.ts:360, adding30000ms outer Vitest timeout to the existing real LightningCSS tar-envelope replay case. All production runtime bytes are unchanged since516. Executed byte comparison: replace that one timeout/comment line with prior closing line and the entire test file equals516 exactly; every assertion, neighbouring fault case and10000ms stalled-asset guard remains intact. Executed git-show/readFile byte comparisons of install-stamp-invalidation, project-open-persistence-progress, scratch-dirty-ide-ownership and scratch-reset-keeps-page-dirty contracts: all4 true.\nIndependent bounded ruling before author edit: ADR0386/0387 require deterministic validated tar/replay semantics, not a5s whole-case latency bound. Read complete test and fixture pipeline: real MemoryVFS install, validate/build snapshot, tar encode/decode, exact replay-cache equality, restore, real npm offline lockfile replay, zero registry requests, resolution=lockfile, package transport=cache. Measured committed gzip fixture3821302 bytes,19 extracted files/16236499 bytes,largest WASM15850559 bytes. No fixture shrink/mock, assertion deletion or runtime deadline increase selected.\nInspected raw CI evidence /private/tmp/rifty-pr323-ci-unit.log:1131: identical case GREEN4653ms on earlier e9a5ec7d5; /private/tmp/rifty-pr323-ci-final-unit.log:1135,2399: same case timeout5002ms against5000ms on47ffa8bf6, sole failure among10247 executed tests, no content assertion mismatch. Git diff e9a5ec7d5..47ffa8bf6 for this test/dep-snapshot.ts/dep-snapshot-tar.ts is empty. Author mandatory file isolation /private/tmp/rifty-pr323-ci-final-unit-isolated.log:27/27 pass,case1273ms. Reviewer independently executed unchanged exact47ffa case using pnpm exec vitest run packages/workbench/src/glue/dep-snapshot.test.ts -t matching full case name: exit0,1723ms,raw /private/tmp/rifty-pr323-timeout-reviewer-isolated.log. Budget headroom is demonstrably fragile; exact CPU/scheduler delay remains unproven, load variance is an inference.\nScope distinction verified: docs/backlog/process-meta/pr-check-vitest-resource-starvation.md constrains repair of local nested12-command-pool/cross-worktree starvation and worker-count/telemetry. Current .github/workflows/ci.yml:76-102 runs pnpm test:run alone in a separate ubuntu matrix runner; no overlapping local pr:check build/parity pool. This change does not close or override that backlog. Case-local30000ms is legitimate for existing16MB CPU/allocation/replay work; preserve actual bounded-asset-fetch10000ms header/body no-progress guards and128MiB caps. Additional same-SHA CI rerun is not necessary to justify this criterion calibration.\nPost-change author full-file proof inspected: /private/tmp/rifty-pr323-tar-timeout-green.log, pnpm exec vitest run packages/workbench/src/glue/dep-snapshot.test.ts:27/27 pass,case1218ms,file3702ms,total4.23s on the new-budget tree. Reviewer inspected actual committed patch and unchanged assertions; this is author execution evidence, not a claim reviewer reran all327 original tests. Current full pr:check was running at verification; driver reports all17 other CI lanes succeeded on47ffa but reviewer does not claim new-HEAD CI or full gate complete.\nDocumentation changes since516 are previously inspected ADR0135/0415 attribution and completion references plus accurately scoped tar-budget evidence. Restored contracts are a review-time source carrier, with unchanged obligation content and remaining broader goal work still visible. Final reviewed working tree clean at9c9f442301fa373b8052468683850f0dde90a674.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Saved Acceptance1: Scratch/named saved files and terminal survive absent/pending/incompatible claims, changed manifests, malformed/missing locks without acquisition or saved-tree writes.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/saved-project-access.contract.test.ts:23; tests/browser-unit/saved-project-access.spec.ts:63; packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:146",
+      "note": ""
+    },
+    {
+      "row": "Saved Acceptance2: independent local Node runs; missing dependency/adapter fails at use; only validated shadow data grants bindings.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/saved-project-access.spec.ts:124; tests/browser-unit/saved-project-adapter-use.spec.ts:12; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13; packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts:32",
+      "note": ""
+    },
+    {
+      "row": "Saved Acceptance3: real interrupted npm mutates durable state; fresh owner opens; explicit retry installs runnable package.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/saved-project-interrupted-install.spec.ts:98; tests/browser-unit/saved-project-interrupted-install.spec.ts:149; tests/browser-unit/fixtures/interrupted-install-owner.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Saved Acceptance4: preserve own recovery, snapshot apply/commit/rollback, unreadable-storage rejection and Save rebind.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:306; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1244; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1465; tests/browser-unit/workbench-snapshot-application.spec.ts:28; tests/browser-unit/workbench-legacy-receipt.spec.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Saved Parity1: malformed lock/unavailable declared dependency permits local source; missing require returns MODULE_NOT_FOUND.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/playground/reference/project-open-ide-boundaries-refine.md:34; tests/browser-unit/saved-project-access.spec.ts:138",
+      "note": ""
+    },
+    {
+      "row": "Saved fault torn-state × npm/owner death: readable files/terminal, no false installation proof or automatic healing.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/saved-project-interrupted-install.spec.ts:149; packages/workbench/src/workers/saved-project-access.contract.test.ts:92",
+      "note": ""
+    },
+    {
+      "row": "Saved fault corrupt-input × manifest/lock/adapter: files accessible, dependency/adapter errors at consumer.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/saved-project-access.contract.test.ts:23; tests/browser-unit/saved-project-adapter-use.spec.ts:12; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Saved fault quota/permission × own snapshot/catalog transaction: recovery retains committed state.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1552; packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:306; tests/browser-unit/workbench-snapshot-application.spec.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Dirty Acceptance1: companion owns install-tree, generated first-arrival and manifest/lock policy; generic VFS/npm provide facts, no second owner/journal.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-project-vfs.test.ts:225; packages/workbench/src/workers/owner-package-state.test.ts:287; packages/workbench/src/workers/playground-package-mutations.ts:27",
+      "note": ""
+    },
+    {
+      "row": "Dirty Acceptance2: retain editor/guest/npm/SCM/import, seed/initial dependency/extraneous node_modules exclusions, same-starter preservation and durable settlement.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1113; packages/workbench/src/workers/playground-project-catalog.contract.test.ts:647; packages/workbench/src/workers/owner-package-state.test.ts:287; packages/workbench/src/workers/workbench-project-vfs.test.ts:225; tests/browser-unit/workbench-playground-companion.spec.ts:126",
+      "note": ""
+    },
+    {
+      "row": "Dirty Acceptance3: authoritative Reset clears UNSAVED/discard guard; pending starter transition remains protected.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "apps/playground/src/glue/page-store-reset.contract.test.ts:23; apps/playground/src/glue/page-store.test.ts:98; tests/browser-unit/scratch-reset-page-state.spec.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Dirty fault sibling-drift × editor/guest/npm/SCM/import: one companion policy keeps existing classifications.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1113; packages/workbench/src/workers/owner-package-state.test.ts:287; packages/workbench/src/workers/workbench-project-vfs.test.ts:225",
+      "note": ""
+    },
+    {
+      "row": "Dirty fault observable-order × Reset/catalog: authoritative clean replaces dirty, pending starter protected.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "apps/playground/src/glue/page-store-reset.contract.test.ts:5; apps/playground/src/glue/page-store.test.ts:98; tests/browser-unit/scratch-reset-page-state.spec.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Dirty fault quota/permission × catalog reflection: settlement fails instead of reporting false durable state.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-project-catalog.contract.test.ts:1552; packages/workbench/src/workers/workbench-project-vfs.test.ts:179",
+      "note": ""
+    },
+    {
+      "row": "Progress Acceptance1: public Workbench and Playground show real pre-session persistence operation counts; source files persist.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/public-project-open-progress.spec.ts:47; tests/e2e/project-opening-progress.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Progress Acceptance2: unknown phases preparing; completed drain is not completed open; success/failure/close clears display.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1379; tests/e2e/project-opening-progress.spec.ts:31",
+      "note": ""
+    },
+    {
+      "row": "Progress Acceptance3: previous/background progress excluded; stdout/stderr and snapshot commit/recovery retain baseline.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2598; packages/workbench/src/workbench/open-workbench.contract.test.ts:1379; tests/browser-unit/workbench-playground-companion.spec.ts:488; tests/browser-unit/workbench-snapshot-application.spec.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Progress fault observable-order × first open: real pre-session counts followed by actual settlement.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/public-project-open-progress.spec.ts:47; packages/workbench/src/workbench/open-workbench.contract.test.ts:1379",
+      "note": ""
+    },
+    {
+      "row": "Progress fault concurrent-same-key × previous/background drain: stale open id cannot contribute to next open.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:2598; packages/workbench/src/workbench/open-workbench.contract.test.ts:1395",
+      "note": ""
+    },
+    {
+      "row": "Progress fault quota/permission/peer death: existing rejection, progress cleared, no success indication.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1409; packages/workbench/src/workers/workbench-snapshot-apply-rollback.contract.test.ts:306",
+      "note": ""
+    },
+    {
+      "row": "WorkbenchHealthSnapshot.projectOpen adds pre-session project id and optional operation counts.",
+      "source": "public-api",
+      "trace": "ADR-0413",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-health-authority.contract.test.ts:36; tests/browser-unit/public-project-open-progress.spec.ts:47; packages/workbench/src/workbench/open-workbench.contract.test.ts:1379",
+      "note": ""
+    },
+    {
+      "row": "WorkbenchProjectOpenProgress is exported through the package public index with readonly projectId/persistence.",
+      "source": "public-api",
+      "trace": "ADR-0413",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/public.ts:30; packages/workbench/src/workbench/health.ts:23; packages/workbench/src/workbench/workbench-health-authority.contract.test.ts:36",
+      "note": ""
+    },
+    {
+      "row": "install treats syntactically unparseable lock as resolve miss; I/O/parsed replay errors remain strict and failure preserves invalid bytes.",
+      "source": "public-api",
+      "trace": "ADR-0023 + scenario",
+      "status": "pass",
+      "citation": "packages/npm-client/src/installer-lockfile.test.ts:63; tests/browser-unit/saved-project-access.spec.ts:124",
+      "note": ""
+    },
+    {
+      "row": "produceDependencySnapshot still requires valid caller v3 lock before network, despite shared npm reader repair.",
+      "source": "public-api",
+      "trace": "ADR-0412",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-malformed-lock.contract.test.ts:6; packages/workbench/src/glue/dep-snapshot-producer.test.ts:264",
+      "note": ""
+    },
+    {
+      "row": "Published TypeScript compiler exact hash pin retains same payload, unchanged 2MB rule and negative unknown-payload gates.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:51; tests/browser-unit/workbench-playground-companion.spec.ts:1509",
+      "note": ""
+    },
+    {
+      "row": "Committed lodash4.17.21 fixture is real npm tarball with matching upstream integrity, used by real interrupted installation.",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/lodash-4.17.21.json:1; tests/browser-unit/saved-project-interrupted-install.spec.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Changed exact source closure count159 includes only the two required companion/runtime tree modules; whole closure and import boundaries retained.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0414 + ADR-0415",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:317; packages/workbench/tests/extraction-boundary.contract.test.ts:347",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

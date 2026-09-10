@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Clear authoritative Scratch Reset dirty state while retaining pending optimistic edit/starter protection; preserve editor, terminal, npm and Git classifications.
+
+- Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
+
 - Bake the existing installed-file preparation into dependency snapshot payloads.
 
 - Regenerate the copied App SW for scoped preview routing/protocol7 (ADR-0409).
@@ -2394,7 +2398,7 @@
   (fast). Switching projects clears the terminal first. Template switcher groups
   presets under "Instant start" / "From scratch" with kind pills. Stamp
   invalidation is provisional —
-  `docs/backlog/playground/install-stamp-invalidation.md`.
+  `docs/adr/playground/0415-open-saved-projects-independently-of-installation-proof.md`.
 
 ### Changed
 

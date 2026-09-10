@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { publishRuntimeEsbuild, readRuntimeEsbuild } from './realm.ts';
+import { clearRuntimeEsbuild, publishRuntimeEsbuild, readRuntimeEsbuild } from './realm.ts';
 const RUNTIME_JS_ROOT_KEY = '__riftyShadowRegistry';
 type MaybeGlobal = { __riftyShadowRegistry?: Record<string, unknown>; __riftyEsbuild?: unknown };
 function withClean(run: () => void): void {
@@ -45,5 +45,17 @@ describe('esbuild public seam', () => {
       expect(first).toEqual({ version: 'first' });
       expect(second).toEqual({ version: 'second' });
     });
+  });
+});
+
+it('withdraws a previous runtime without publishing an absent adapter slot', () => {
+  withClean(() => {
+    clearRuntimeEsbuild();
+    expect(Reflect.has(globalThis, RUNTIME_JS_ROOT_KEY)).toBe(false);
+    publishRuntimeEsbuild(Object.freeze({ version: 'prior' }));
+    clearRuntimeEsbuild();
+    const realm = (globalThis as MaybeGlobal)[RUNTIME_JS_ROOT_KEY];
+    expect(realm !== undefined && Reflect.has(realm, 'esbuild')).toBe(false);
+    expect(readRuntimeEsbuild()).toBeNull();
   });
 });

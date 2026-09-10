@@ -1,8 +1,7 @@
 /**
  * Install stamp (ADR-0135): `<root>/node_modules/.rifty-install-stamp.json`
- * marks "this node_modules was installed for project SLUG". The worker bootstrap
- * skips its `install()` when the stamp's slug matches the project being booted —
- * that skip is what makes a re-opened project fast.
+ * marks "this node_modules was installed for project SLUG". It certifies seed
+ * reuse; ordinary saved opening needs no install certification (ADR-0415).
  *
  * Reuse key = the project SLUG (preset id), NOT the dep set: two projects can
  * share dependencies (e.g. `project-files` and `real-vite` both run `vite`) yet
@@ -15,7 +14,6 @@
  * Every transition is owned by `install-stamp-authority.ts`; pending stamps
  * never satisfy reuse and are promoted only after a clean durability proof.
  */
-// TODO(backlog: playground/install-stamp-invalidation)
 import {
   type PersistFailureReport,
   type Vfs,
@@ -36,8 +34,8 @@ export interface InstallStamp {
   /** Exact installer/shim/generated-runtime policy that produced the tree. */
   readonly installArtifactIdentity: string;
   /** ADR-0307: sha256 hex over the exact `package-lock.json` bytes at trust
-   * time; absent iff no lockfile existed then. Compared at open — drift is a
-   * miss that runs real arrival. */
+   * time; absent iff no lockfile existed then. Compared for certified reuse;
+   * ordinary saved opening does not require this proof (ADR-0415). */
   readonly lockfileSha256?: string;
   /** package.json effective request: dependencies ∪ devDependencies ∪
    *  optionalDependencies (secondary freshness guard alongside the slug). */
@@ -67,7 +65,7 @@ export function lockfilePath(root: string): string {
 
 const LOCKFILE_SHA256_RE = /^[0-9a-f]{64}$/;
 
-/** ADR-0307 at-open compare: absent hash requires absent lockfile; a recorded
+/** ADR-0307 certified-reuse compare: absent hash requires absent lockfile; a recorded
  * hash requires the exact current bytes. Sync so every realm (owner boot gate,
  * sync check, async predicates) applies the SAME compare — webcrypto would
  * fork the sync realms onto a weaker existence-only check. */
@@ -173,10 +171,7 @@ export function isInstallStampPath(path: string): boolean {
   return normalized === suffix || normalized.endsWith(suffix) || normalized.includes(`${suffix}/`);
 }
 
-/** ADR-0307: true iff `path` is STRICTLY below a `node_modules` segment at any
- * depth — an extraneous-write location that never affects claims or Scratch
- * dirty. The tree directory itself (last segment `node_modules`) is not
- * "inside": destroying/moving it stays a tree mutation. */
+/** Strictly below a node_modules segment; the tree directory itself is excluded. */
 export function isInsideInstallTree(path: string): boolean {
   const segments = normalizePath(path).split('/').filter(Boolean);
   const index = segments.indexOf('node_modules');

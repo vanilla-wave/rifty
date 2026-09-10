@@ -118,11 +118,13 @@ export function createPageStore(): PageStore {
   const [cat, setCat] = createSignal<string | null>(null);
   const [toast, setToast] = createSignal<Toast | null>(null);
   let pendingScratchStarter: string | null = null;
+  let pendingScratchEdit: string | null = null;
 
   // Fresh, unedited scratch from a Starter (baseline re-seed is owner-side; the
   // page only mirrors the index shape). Closes the launcher, drops any menu/dialog.
   function createScratch(starterId: string): void {
     pendingScratchStarter = starterId;
+    pendingScratchEdit = null;
     setScratch({ starter: starterId, dirty: false, editedAt: 'no edits yet' });
     setActiveId('scratch');
     setLauncherOpen(false);
@@ -168,13 +170,12 @@ export function createPageStore(): PageStore {
     }
     doSwitch(id);
   }
-  // Dirty binds to REAL owner file-writes (§57). App calls markDirty() from the
-  // owner onFileWritten callback (editor + shell + file-tree), never a UI counter.
-  // Named projects autosave; only the unnamed scratch goes dirty.
+  // Legacy optimistic writer; active App receives authoritative catalog snapshots.
   function markDirty(): void {
     if (activeId() === 'scratch') {
       const s = scratch();
       if (s && !s.dirty) {
+        pendingScratchEdit = s.starter;
         setScratch({ ...s, dirty: true, editedAt: 'edited just now' });
       }
       return;
@@ -220,6 +221,7 @@ export function createPageStore(): PageStore {
     finishIntent(intent, { kind: 'info', text: `Renamed to ${trimmed}` });
   }
   function confirmReset(id: ActiveId, intent: ResetDialog): void {
+    pendingScratchEdit = null;
     const s = scratch();
     if (id === 'scratch' && s) {
       setScratch({ ...s, dirty: false, editedAt: 'no edits yet' });
@@ -276,13 +278,6 @@ export function createPageStore(): PageStore {
         index.activeId === 'scratch' &&
         incoming !== null &&
         incoming.starter !== pendingScratchStarter;
-      const keepLocalDirty =
-        activeId() === 'scratch' &&
-        localScratch?.dirty === true &&
-        index.activeId === 'scratch' &&
-        incoming !== null &&
-        incoming.dirty === false &&
-        incoming.starter === localScratch.starter;
       setActiveId(index.activeId);
       setProjects(index.projects);
       if (index.activeId !== 'scratch' || incoming?.starter === pendingScratchStarter) {
@@ -299,7 +294,12 @@ export function createPageStore(): PageStore {
       // stale scratch publications until the owner catches up to that starter.
       if (incoming === null && index.activeId === 'scratch' && scratch() !== null) return;
       if (keepPendingScratchStarter) return;
-      if (keepLocalDirty) {
+      if (incoming?.starter === pendingScratchEdit && incoming.dirty) pendingScratchEdit = null;
+      if (
+        index.activeId === 'scratch' &&
+        incoming?.starter === pendingScratchEdit &&
+        !incoming.dirty
+      ) {
         setScratch({
           ...incoming,
           dirty: true,
@@ -307,6 +307,7 @@ export function createPageStore(): PageStore {
         });
         return;
       }
+      pendingScratchEdit = null;
       setScratch(incoming);
     },
     pickStarter,

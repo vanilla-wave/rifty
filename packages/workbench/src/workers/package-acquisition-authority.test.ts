@@ -136,7 +136,7 @@ async function writeInstalledTree(vfs: MemoryVfs, packageJsonText = PACKAGE_JSON
 
 function adapterWith(overrides: Partial<PackageAcquisitionAdapter>): PackageAcquisitionAdapter {
   return {
-    readTrustedPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
+    readPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
     planSnapshotRestore: async () => ({ status: 'rejected', reason: 'snapshot unavailable' }),
     install: async () => {
       throw new Error('unexpected install');
@@ -1327,7 +1327,7 @@ describe('package-acquisition authority', () => {
     const authority = createPackageAcquisitionAuthority({
       stamps: createInstallStampAuthority({ vfs }),
       adapter: adapterWith({
-        readTrustedPackageLock: async () => {
+        readPackageLock: async () => {
           trustedReads += 1;
           return liveLockfile;
         },

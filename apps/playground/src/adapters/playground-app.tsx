@@ -56,8 +56,8 @@ import {
 } from '../glue/project-boot-policy.ts';
 import { scratchDisplayName } from '../glue/project-display-name.ts';
 import type { ActiveId, ProjectIndex } from '../glue/project-index.ts';
+import { withProjectOpenProgress } from '../glue/project-open-progress.ts';
 import type { ScmResourceRow } from '../glue/scm-status.ts';
-import { withSlowProgress } from '../glue/slow-progress.ts';
 import type { StarterGroup } from '../glue/starter.ts';
 import { starterById } from '../glue/starter.ts';
 import { pathFromTerminalFileLink } from '../glue/terminal-links.ts';
@@ -220,6 +220,10 @@ export function App(props: AppProps) {
   const [paletteData, setPaletteData] = createSignal<readonly PaletteItem[]>([]);
   const [projectBusy, setProjectBusy] = createSignal(false);
   const [instantPrepareLabel, setInstantPrepareLabel] = createSignal<string>();
+  const [instantPersistence, setInstantPersistence] = createSignal<{
+    readonly persisted: number;
+    readonly total: number;
+  }>();
   const [workbenchReady, setWorkbenchReady] = createSignal(false);
   const [bound, setBound] = createSignal<BoundProject>();
   const [sessions, setSessions] = createSignal<readonly TerminalSessionSnapshot[]>([]);
@@ -558,9 +562,7 @@ export function App(props: AppProps) {
     const mirror = createPlaygroundProjectMirror(context.session.files);
     const documents = createPlaygroundDocumentWriter(context.session.documents);
     try {
-      // The editor bytes and the first-write CAS base are the same Document
-      // capture. Eager source-file loading already happened here; use that read
-      // to establish provenance instead of sampling a handle on first write.
+      // Bind first-write CAS to the same Document capture as the editor bytes.
       await Promise.all(
         mirror.filePaths().map(async (path) => mirror.admitFile(await documents.open(path))),
       );
@@ -675,13 +677,13 @@ export function App(props: AppProps) {
       return context;
     })();
     try {
-      if (instantPreset?.setup !== 'instant') return await work;
-      return await withSlowProgress(work, {
-        delayMs: 250,
-        onSlow: () => setInstantPrepareLabel(instantPreset.label),
+      return await withProjectOpenProgress(work, {
+        health: props.workbench.health,
+        label: instantPreset?.setup === 'instant' ? instantPreset.label : undefined,
+        setLabel: setInstantPrepareLabel,
+        setPersistence: setInstantPersistence,
       });
     } finally {
-      setInstantPrepareLabel(undefined);
       setProjectBusy(false);
     }
   }
@@ -844,9 +846,7 @@ export function App(props: AppProps) {
 
   function onPickStarter(starterId: string): void {
     const current = bound()?.context.plan;
-    // Same-starter re-pick preserves the dirty scratch (createScratch guard +
-    // owner preserveDirtySameStarter), so a discard prompt would lie — only a
-    // pick that really replaces the draft asks.
+    // Same-starter re-pick preserves dirty Scratch; prompt only for replacement.
     if (store.dirty() && current?.id === 'scratch' && current.starterId !== starterId) {
       store.openDialog({ kind: 'switch', pendingStarter: starterId });
       return;
@@ -1795,6 +1795,7 @@ export function App(props: AppProps) {
         activeId={store.activeId()}
         ownerBlocked={projectAdmissionBlocked()}
         instantPrepareLabel={instantPrepareLabel()}
+        persistenceProgress={instantPersistence()}
         storage={store.storage()}
         menuFor={store.menuFor()}
         q={store.q()}

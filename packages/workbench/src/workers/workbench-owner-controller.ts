@@ -1,3 +1,4 @@
+import type { VfsMutationIntent } from '@riftydev/vfs';
 import {
   ClosedHandleError,
   ProjectBusyError,
@@ -95,10 +96,12 @@ export interface WorkbenchOwnerProjectRuntimeInput {
   readonly recordMutation?: (
     kind: PlaygroundProjectMutationKind,
     treeRevision: number,
+    intents?: readonly VfsMutationIntent[],
   ) => Promise<void>;
 }
 
 export interface WorkbenchOwnerControllerDependencies {
+  readonly setProjectOpenOperation?: (opId: string | undefined) => void;
   readonly materializer?: ProjectMaterializer;
   readonly createProject: (
     input: WorkbenchOwnerProjectRuntimeInput,
@@ -158,10 +161,7 @@ type PlaygroundCatalogMessage = Extract<
   { readonly type: 'workbench:playground-catalog' }
 >;
 
-/**
- * Single owner-side lifecycle chokepoint. Bootstrap owns initialization and the
- * physical process; this controller owns every subsequent project transition.
- */
+/** Project lifetime/correlation owner; bootstrap initializes the physical worker. */
 export function createWorkbenchOwnerController(
   dependencies: WorkbenchOwnerControllerDependencies,
 ): WorkbenchOwnerController {
@@ -295,6 +295,15 @@ export function createWorkbenchOwnerController(
     send({ type: 'workbench:project-vfs', projectToken: project.token, frame: output.frame });
   };
 
+  const duringOpen = async (opId: string, operation: () => Promise<void>): Promise<void> => {
+    dependencies.setProjectOpenOperation?.(opId);
+    try {
+      await operation();
+    } finally {
+      dependencies.setProjectOpenOperation?.(undefined);
+    }
+  };
+
   const performOpen = async (message: OpenMessage): Promise<void> => {
     try {
       if (shutdownRequested) throw closedOwnerError();
@@ -398,11 +407,12 @@ export function createWorkbenchOwnerController(
           projectRoot,
           acquisition,
         }),
-        recordMutation: (kind, treeRevision) =>
+        recordMutation: (kind, treeRevision, intents) =>
           playground.authority.recordMutation({
             kind,
             project: authorityProject,
             treeRevision,
+            ...(intents === undefined ? {} : { intents }),
           }),
         emit(output) {
           if (project === null) throw new ClosedHandleError('Workbench project output');
@@ -672,7 +682,7 @@ export function createWorkbenchOwnerController(
         return performPlaygroundTools(message.frame, project);
       }
       return message.type === 'workbench:playground-open-project'
-        ? enqueue(() => performPlaygroundOpen(message))
+        ? enqueue(() => duringOpen(message.opId, () => performPlaygroundOpen(message)))
         : enqueue(() => performPlaygroundCatalog(message));
     }
     let message: PageToWorkbenchOwnerMessage;
@@ -715,7 +725,7 @@ export function createWorkbenchOwnerController(
       return rejectImmediately(new TypeError('Workbench owner is already initialized'));
     }
     if (message.type === 'workbench:open-project') {
-      return enqueue(() => performOpen(message));
+      return enqueue(() => duringOpen(message.opId, () => performOpen(message)));
     }
     if (message.type === 'workbench:delete-project') {
       return enqueue(() => performDelete(message));

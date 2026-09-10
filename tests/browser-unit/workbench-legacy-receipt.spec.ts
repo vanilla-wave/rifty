@@ -88,8 +88,7 @@ for (const boundary of ['before-close', 'after-close'] as const) {
     expect(result.paused.requests).toEqual([assetUrl]);
     expect(result.fresh.requests).toEqual([]);
     expect(result.fresh.acquisition).toMatchObject({
-      kind: 'ready',
-      provenance: { outcome: 'existing' },
+      kind: 'saved',
     });
     expect(result.fresh.transactionPresent).toBe(false);
     expect(result.paused.before.some((row) => row.path === transactionFile)).toBe(false);

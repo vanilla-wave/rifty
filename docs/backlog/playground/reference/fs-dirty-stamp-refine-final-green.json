@@ -1,0 +1,53 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: docs-only refinement complete; user attribution and full written scope verified under RDY-6. No implementation approval or product proof is claimed.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "65babed3b70945205088a4ad320a48781c1cb901",
+  "unit_goal_source": "PR #323 docs-only completion, BASE 7b8312d8b; fresh read-only reviewer /root/final_full_refine. Raw source /tmp/wrap-up-fs-dirty-stamp-2026-08-30.md plus exact user exchanges in docs/backlog/playground/reference/project-open-ide-boundaries-refine.md and docs/backlog/playground/reference/fs-dirty-stamp-findings-disposition.md. Final related set reviewed together: playground/{install-stamp-invalidation,scratch-dirty-ide-ownership,scratch-reset-keeps-page-dirty,project-open-persistence-progress,reload-crash-consistency-fault-e2e}, epics/{trusted-state-authority,fault-honest-opfs-persistence}, vfs/{persist-ledger-fault-rows-completion,trusted-state-primitive}, and source/probe references under docs/backlog/. Checked actual source and ADR-0278/0307/0359/0394 premises, original clauses at BASE, provided docs-only pr:check 20/20 log, and git diff --check. Source and test oracles unchanged since e5122ed5f39ecf4eb411419b03c390306d381ebc. Missing browser/RED/API/ADR preparation remains explicitly assigned to future pickup; no broader goal completion asserted.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

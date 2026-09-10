@@ -32,6 +32,7 @@ export type {
   WorkbenchHealth,
   WorkbenchHealthIssue,
   WorkbenchHealthSnapshot,
+  WorkbenchProjectOpenProgress,
   WorkbenchRecoveryScope,
 } from './health.ts';
 export type {

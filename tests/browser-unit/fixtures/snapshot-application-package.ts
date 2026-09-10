@@ -7,6 +7,9 @@ import { produceDependencySnapshot } from '../../../packages/workbench/src/glue/
 export async function bakeApplicationPackage() {
   const root = new URL('../../integration/fixtures/registry/', import.meta.url);
   const metadata = JSON.parse(await readFile(new URL('ms-2.0.0.json', root), 'utf8')) as {
+    readonly name: string;
+    readonly version: string;
+    readonly main: string;
     readonly dist: { readonly upstreamTarball: string; readonly upstreamIntegrity: string };
   };
   const bytes = new Uint8Array(await readFile(new URL('ms-2.0.0.tgz', root)));
@@ -42,7 +45,19 @@ export async function bakeApplicationPackage() {
       }),
       registryUrl: 'https://registry.test',
     });
-    return { archive: [...produced.archive], snapshotId: produced.snapshotId, manifestText };
+    return {
+      archive: [...produced.archive],
+      snapshotId: produced.snapshotId,
+      manifestText,
+      packageManifest: {
+        ...metadata,
+        dist: {
+          tarball: metadata.dist.upstreamTarball,
+          integrity: metadata.dist.upstreamIntegrity,
+        },
+      },
+      packageTarball: [...bytes],
+    };
   } finally {
     globalThis.fetch = priorFetch;
   }

@@ -272,9 +272,7 @@ describe('I8 snapshot policy preserves pending legacy adoption', () => {
         reopened = await restarted.owner.openProject(
           savedSnapshotDefinition(h.id, fixture.descriptor),
         );
-        expect
-          .soft(reopened.acquisition)
-          .toMatchObject({ kind: 'ready', provenance: { outcome: 'existing' } });
+        expect.soft(reopened.acquisition).toMatchObject({ kind: 'saved' });
         expect.soft(h.network.requests).toEqual([]);
         expectRetainedFiles({ ...h, ...restarted }, reopened.projectRoot);
         expect.soft(restarted.authority.existsSync(h.sourceRoot)).toBe(false);
@@ -408,10 +406,7 @@ describe('I8 legacy projects remain usable after adoption', () => {
             packageJsonText: replacement.payload.packageJsonText,
           }),
         );
-        expect(opened.acquisition).toMatchObject({
-          kind: 'ready',
-          provenance: { outcome: 'existing' },
-        });
+        expect(opened.acquisition).toMatchObject({ kind: 'saved' });
         expect(h.network.requests).toEqual([]);
         expect(restarted.catalog.snapshot()).toEqual(catalogBefore);
         expect(projectTree(restarted.fs.liveSnapshot(), root)).toEqual(before);
@@ -493,10 +488,7 @@ describe('I8 legacy projects remain usable after adoption', () => {
         opened = await restarted.owner.openProject(
           savedSnapshotDefinition(savedId, fixture.descriptor),
         );
-        expect(opened.acquisition).toMatchObject({
-          kind: 'ready',
-          provenance: { outcome: 'existing' },
-        });
+        expect(opened.acquisition).toMatchObject({ kind: 'saved' });
         expect(h.network.requests).toEqual([]);
         expect(restarted.catalog.snapshot()).toEqual(catalogBefore);
         expect(projectTree(restarted.fs.liveSnapshot(), root)).toEqual(before);
@@ -762,10 +754,7 @@ describe('ADR-0397 completed migration receipt retirement', () => {
             assetUrl: 'https://host.test/unused-after-retirement-failure.tar.gz',
           }),
         );
-        expect(opened.acquisition).toMatchObject({
-          kind: 'ready',
-          provenance: { outcome: 'existing' },
-        });
+        expect(opened.acquisition).toMatchObject({ kind: 'saved' });
         expect(network.requests).toEqual([]);
         expect(h.fs.liveSnapshot()).toEqual(before.tree);
         expect(h.fs.durableSnapshot()).toEqual(before.tree);
@@ -864,18 +853,14 @@ describe('I8 real saved trust replaces legacy snapshot-initializer identity reje
         } catch (error) {
           failure = error;
         }
-        if (claimState === 'trusted') {
-          expect(failure).toBeUndefined();
-          expect(opened?.acquisition).toMatchObject({
-            kind: 'ready',
-            provenance: { outcome: 'existing' },
-          });
-          const stamp = readInstallStampSync(h.authority, saved.root);
-          expect(stamp !== null && stampTrusted(stamp)).toBe(true);
-        } else {
-          expect(failure).toBeInstanceOf(Error);
-          expect(opened).toBeUndefined();
-        }
+        expect(
+          failure,
+          'ADR-0415 saved access is independent of the install claim',
+        ).toBeUndefined();
+        expect(opened?.acquisition).toEqual({ kind: 'saved' });
+        const stamp = readInstallStampSync(h.authority, saved.root);
+        if (claimState === 'trusted') expect(stamp !== null && stampTrusted(stamp)).toBe(true);
+        else expect(stamp).toBeNull();
         expect(network.requests).toEqual([]);
         expect(h.catalog.snapshot()).toEqual(catalogBefore);
         expect(h.fs.liveSnapshot()).toEqual(before);
@@ -1055,10 +1040,7 @@ it('ADR-0397 unproved retirement compensation fences the owner until fresh durab
           assetUrl: 'https://host.test/unused-after-receipt-recovery.tar.gz',
         }),
       );
-      expect(reopened.acquisition).toMatchObject({
-        kind: 'ready',
-        provenance: { outcome: 'existing' },
-      });
+      expect(reopened.acquisition).toMatchObject({ kind: 'saved' });
       expect(recoveredNetwork.requests).toEqual([]);
       expect(recovered.fs.liveSnapshot()).toEqual(before.tree);
       expect(recovered.fs.durableSnapshot()).toEqual(before.tree);

@@ -21,9 +21,9 @@ export async function readExistingLockfile(vfs: Vfs, cwd: string): Promise<Lockf
   let parsed: { lockfileVersion?: unknown; packages?: unknown };
   try {
     parsed = JSON.parse(text);
-  } catch (parseError) {
-    const message = parseError instanceof Error ? parseError.message : String(parseError);
-    throw new Error(`lockfile corrupt at ${path}: ${message}`, { cause: parseError });
+  } catch {
+    // npm install resolves afresh for JSON syntax failure (ADR-0023); I/O remains outside this catch.
+    return null;
   }
   // v1 (npm 5/6) and v2 (npm 7) have a different shape than v3. Returning
   // null would trigger a fresh resolve that overwrites the user's lockfile

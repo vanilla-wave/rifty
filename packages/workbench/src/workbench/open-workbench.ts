@@ -147,7 +147,11 @@ interface TrackedProject<TReady> extends ActiveProject {
 
 type ProjectOperation =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'opening'; readonly ownerPromise: Promise<CloseableProject> }
+  | {
+      readonly kind: 'opening';
+      readonly projectId: string;
+      readonly ownerPromise: Promise<CloseableProject>;
+    }
   | { readonly kind: 'active'; readonly project: ActiveProject }
   | { readonly kind: 'deleting'; readonly ownerPromise: Promise<void> }
   | { readonly kind: 'closing'; readonly promise: Promise<void> }
@@ -260,15 +264,30 @@ function createWorkbench(
 
   const reportUnexpectedOwnerExit = (): void => {
     if (ownerCloseAdmitted || state.kind === 'closed') return;
+    healthAuthority.projectOpen(undefined);
     healthAuthority.owner.unavailable({ summary: 'Workbench owner exited unexpectedly' });
   };
   void owner.closed.then(reportUnexpectedOwnerExit, reportUnexpectedOwnerExit);
   const unsubscribeOwnerHealth = owner.subscribeHealth((event) => {
     if (event.kind === 'fatal-invariant') {
+      healthAuthority.projectOpen(undefined);
       healthAuthority.invariant.fatal({ summary: event.summary });
       return;
     }
-    if (event.kind === 'durability-progress' || state.kind !== 'active') return; // ADR-0359 reach
+    if (event.kind === 'durability-progress') {
+      if (
+        event.projectOpen &&
+        state.kind === 'opening' &&
+        healthAuthority.health.snapshot().disposition === 'healthy'
+      ) {
+        healthAuthority.projectOpen({
+          projectId: state.projectId,
+          persistence: { persisted: event.persisted, total: event.total },
+        });
+      }
+      return;
+    }
+    if (state.kind !== 'active') return;
     if (event.status === 'healthy') {
       state.project.healthGeneration.reporter.clear('persistence');
       return;
@@ -387,17 +406,22 @@ function createWorkbench(
         ? owner.openProject(inspected)
         : openOwnerProject({ owner, definition, inspected });
     });
-    const opening = { kind: 'opening', ownerPromise } as const;
+    const opening = { kind: 'opening', projectId: inspected.id, ownerPromise } as const;
     state = opening;
+    healthAuthority.projectOpen({ projectId: inspected.id });
     const result = ownerPromise.then(
       (session) => {
         if (state !== opening) throw new ClosedHandleError('Workbench project open');
         const tracked = trackSession(session, inspected.id);
         state = { kind: 'active', project: tracked };
+        healthAuthority.projectOpen(undefined);
         return tracked.session;
       },
       (error: unknown) => {
-        if (state === opening) state = { kind: 'idle' };
+        if (state === opening) {
+          state = { kind: 'idle' };
+          healthAuthority.projectOpen(undefined);
+        }
         throw error;
       },
     );
@@ -443,6 +467,7 @@ function createWorkbench(
       const completion = deferred<void>();
       const promise = completion.promise;
       state = { kind: 'closing', promise };
+      healthAuthority.projectOpen(undefined);
       void promise.catch(() => {});
 
       const finishTerminalClose = (activeClose: Promise<void> | null): void => {

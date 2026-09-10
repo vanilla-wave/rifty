@@ -1,3 +1,7 @@
+import {
+  createPlaygroundNpmObserver,
+  playgroundInitialInstallFinalizer,
+} from './playground-package-mutations.ts';
 /// <reference lib="webworker" />
 
 import { makeGit, vfsToGitFs } from '@riftydev/git';
@@ -123,6 +127,7 @@ const DURABILITY_PROGRESS_MIN_INTERVAL_MS = 200;
  */
 function createDurabilityProgressForwarder(
   send: (message: WorkbenchOwnerToPageMessage) => void,
+  opId?: string,
 ): (snapshot: { readonly persisted: number; readonly total: number }) => void {
   let lastForwardedAt = 0;
   let lastPersisted = -1;
@@ -140,6 +145,7 @@ function createDurabilityProgressForwarder(
     try {
       send({
         type: 'workbench:durability-progress',
+        ...(opId === undefined ? {} : { opId }),
         persisted: snapshot.persisted,
         total: snapshot.total,
       });
@@ -297,15 +303,21 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     starterInitialOids,
     async () => assertCleanDurability(await authority.flush()),
   );
+  let projectOpenOperation: string | undefined;
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
     installStampClaims,
     flush: () =>
       authority.flush({
-        onProgress: createDurabilityProgressForwarder((message) => sendOwnerMessage(ipc, message)),
+        onProgress: createDurabilityProgressForwarder(
+          (message) => sendOwnerMessage(ipc, message),
+          projectOpenOperation,
+        ),
       }),
-    amendGeneratedBaseline,
+    ...(config.playgroundUrlContext === undefined
+      ? {}
+      : { finalizeFirstInstall: playgroundInitialInstallFinalizer(amendGeneratedBaseline) }),
     nodeWorkerRuntimeEnv,
     log: (line) => globalThis.process.stdout.write(line),
     ...(acquisition.mode === 'snapshot-only'
@@ -432,6 +444,9 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         });
 
   const controller = createWorkbenchOwnerController({
+    setProjectOpenOperation: (opId) => {
+      projectOpenOperation = opId;
+    },
     ...(materializer === undefined ? {} : { materializer }),
     closeAuthority,
     ...(companionController === undefined ? {} : { playground: companionController }),
@@ -463,7 +478,11 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
             createWorkbenchProjectRuntime({
               projectRoot,
               packageConfig: workbenchPackageConfig(input.definition, projectRoot, {
-                packageJsonBytes: authority.readFileBytesSync(`${projectRoot}/package.json`),
+                packageJsonBytes:
+                  (input.materialized.acquisition as { kind?: string } | undefined)?.kind ===
+                  'saved'
+                    ? (input.definition.files['/package.json'] as Uint8Array)
+                    : authority.readFileBytesSync(`${projectRoot}/package.json`),
               }),
               authority,
               packageState,
@@ -475,7 +494,12 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
               publicationBarrier: vfs.publicationBarrier,
               ...(input.recordMutation === undefined
                 ? {}
-                : { recordMutation: input.recordMutation }),
+                : {
+                    observeNpmOperation: createPlaygroundNpmObserver(
+                      authority,
+                      input.recordMutation,
+                    ),
+                  }),
               send(frame) {
                 const output: WorkbenchOwnerProjectRuntimeOutput =
                   frame.type === 'pty:preview'

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Prove npm fails when Scratch catalog dirty persistence hits quota or permission errors, retaining the prior catalog across reload; the regression kills swallowed reflection errors.
+
+- Open saved projects and Node commands independently of install claims; retain snapshot transactions and bind runtime adapters only from usable existing provenance. Keep Scratch dirty classification in the companion (ADR-0414/0415).
+
+- Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
+
 - Publish prepared dependency snapshots; reject unprepared apply sources before effects while preserving legacy initial restore and literal saved-file conflicts. Preserve acquired-tree preload failures under preferred storage.
 
 - Configure effective owner startup/storage-proof, project-file observation/durability and Playground request budgets through public deployment options; preserve omitted defaults, uniform catalog silence and applied/unknown settlement (ADR-0410).

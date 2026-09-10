@@ -3,11 +3,7 @@ import {
   planShadowSubstitutionsFromLockfile,
   shadowSubstitutionPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
-import {
-  type CommandContext,
-  type ShellCommandResult,
-  shellCommandExitCode,
-} from '@riftydev/shell';
+import type { CommandContext } from '@riftydev/shell';
 import { normalizePath } from '@riftydev/vfs';
 import {
   type DepSnapshotV3,
@@ -87,13 +83,6 @@ function hasFirstMaterialization(
   config: OwnerPackageConfig,
 ): config is FirstMaterializationOwnerPackageConfig {
   return Object.hasOwn(config, 'firstMaterialization');
-}
-
-function isBareInstallCommand(args: readonly string[]): boolean {
-  const subcommand = args[0];
-  if (subcommand !== 'install' && subcommand !== 'i' && subcommand !== 'add') return false;
-  const parsed = parseNpmInstallRequest(args.slice(1));
-  return parsed.status === 'ready' && parsed.request.packageSpecs.length === 0;
 }
 
 function decodeChunk(chunk: string | Uint8Array): string {
@@ -273,7 +262,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         if (configured?.cfg.root === project.root && configured.slug === project.slug)
           configured = updated;
       },
-      readTrustedPackageLock: async (project) => packageLockValue(options.fsSync, project.root),
+      readPackageLock: async (project) => packageLockValue(options.fsSync, project.root),
       attestEmptyPackageTree: async ({ project, packageJsonText }) => {
         const root = normalizePath(project.root);
         return (
@@ -410,16 +399,23 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         const consumesFirstMaterialization =
           firstMaterializationKey !== null &&
           firstMaterializationPhases.get(firstMaterializationKey) === 'deferred';
-        const generatedBaselineEligible =
-          consumesFirstMaterialization &&
-          request.type === 'terminal-install' &&
-          parsed.request.packageSpecs.length === 0 &&
-          config !== undefined &&
-          optionalFile(options.fsSync, `${request.project.root}/package-lock.json`) === null &&
-          equalOptionalBytes(
-            optionalFile(options.fsSync, `${request.project.root}/package.json`),
-            enc.encode(config.cfg.packageJson),
-          );
+        const initialInstall =
+          consumesFirstMaterialization && config !== undefined
+            ? {
+                kind: request.type,
+                root: request.project.root,
+                packageSpecs: parsed.request.packageSpecs,
+                initialPackageJson: config.cfg.packageJson,
+                priorPackageLock: optionalFile(
+                  options.fsSync,
+                  `${request.project.root}/package-lock.json`,
+                ),
+                priorPackageJson: optionalFile(
+                  options.fsSync,
+                  `${request.project.root}/package.json`,
+                ),
+              }
+            : undefined;
         if (consumesFirstMaterialization) {
           firstMaterializationPhases.set(firstMaterializationKey, 'consuming');
         }
@@ -450,12 +446,14 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
               options.fsSync,
               `${request.project.root}/package-lock.json`,
             );
-            const folded =
-              generatedBaselineEligible &&
+            const finalized =
+              initialInstall !== undefined &&
               generatedLockfile !== null &&
-              (await options.amendGeneratedBaseline?.(request.project.root, generatedLockfile)) ===
-                true;
-            if (request.type === 'terminal-install') request.onGeneratedBaseline?.(folded);
+              (await options.finalizeFirstInstall?.({
+                ...initialInstall,
+                lockfile: generatedLockfile,
+              })) === true;
+            if (request.type === 'terminal-install') request.onInitialInstall?.(finalized);
             firstMaterializationPhases.delete(firstMaterializationKey);
           }
           if ('status' in installed) return installed;
@@ -712,7 +710,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     reassertTemplateNodeModules,
     createNpmCommand: (runScript, commandOptions = {}) => {
       return async (args, context) => {
-        let generatedBaselineClean = false;
+        let initialInstallFinalized = false;
         const command = createNpmShellCommand({
           ...baseNpmDeps,
           packageAcquisitionAuthority: packages,
@@ -720,79 +718,25 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
           ...(commandOptions.mapInvocationContext === undefined
             ? {}
             : { mapInvocationContext: commandOptions.mapInvocationContext }),
-          observeGeneratedBaseline: (clean) => {
-            generatedBaselineClean = clean;
+          observeInitialInstall: (finalized) => {
+            initialInstallFinalized = finalized;
           },
         });
         const config = configured;
-        const reflectionContext = commandOptions.mapInvocationContext?.(context) ?? context;
-        if (
-          config === undefined ||
-          normalizePath(reflectionContext.cwd) !== normalizePath(config.cfg.root) ||
-          commandOptions.recordMutation === undefined
-        ) {
-          return command(args, context);
-        }
-
-        const key = configKey(config.cfg.root, config.slug);
-        const packageJsonPath = normalizePath(`${config.cfg.root}/package.json`);
-        const packageLockPath = normalizePath(`${config.cfg.root}/package-lock.json`);
-        const priorTreeRevision = options.fsSync.treeRevision;
-        const priorPackageJson = optionalFile(options.fsSync, packageJsonPath);
-        const priorPackageLock = optionalFile(options.fsSync, packageLockPath);
-        const firstDependencyArrival =
-          firstMaterializationPhases.has(key) &&
-          isBareInstallCommand(args) &&
-          priorPackageLock === null &&
-          equalOptionalBytes(priorPackageJson, enc.encode(config.cfg.packageJson));
-        let result: ShellCommandResult | undefined;
-        let commandFailure: unknown;
-        try {
-          result = await command(args, context);
-        } catch (error) {
-          commandFailure = error;
-        }
-
-        let recordFailure: unknown;
-        try {
-          const treeRevision = options.fsSync.treeRevision;
-          if (treeRevision > priorTreeRevision) {
-            const commandSucceeded =
-              commandFailure === undefined &&
-              result !== undefined &&
-              shellCommandExitCode(result) === 0;
-            if (firstDependencyArrival && commandSucceeded && generatedBaselineClean) {
-              await commandOptions.recordMutation('dependency', treeRevision);
-            } else {
-              const packageJsonChanged = !equalOptionalBytes(
-                priorPackageJson,
-                optionalFile(options.fsSync, packageJsonPath),
-              );
-              const packageLockChanged = !equalOptionalBytes(
-                priorPackageLock,
-                optionalFile(options.fsSync, packageLockPath),
-              );
-              if (packageJsonChanged) {
-                await commandOptions.recordMutation('package-manifest', treeRevision);
-              }
-              if (packageLockChanged) {
-                await commandOptions.recordMutation('package-lock', treeRevision);
-              }
-            }
-          }
-        } catch (error) {
-          recordFailure = error;
-        }
-
-        if (commandFailure !== undefined && recordFailure !== undefined) {
-          throw new AggregateError(
-            [commandFailure, recordFailure],
-            'npm command and package mutation reflection failed',
-          );
-        }
-        if (commandFailure !== undefined) throw commandFailure;
-        if (recordFailure !== undefined) throw recordFailure;
-        return result as ShellCommandResult;
+        const execute = () => Promise.resolve(command(args, context));
+        if (commandOptions.observeOperation === undefined) return execute();
+        return commandOptions.observeOperation({
+          args,
+          cwd: (commandOptions.mapInvocationContext?.(context) ?? context).cwd,
+          ...(config === undefined
+            ? {}
+            : { project: { root: config.cfg.root, packageJson: config.cfg.packageJson } }),
+          firstMaterialization:
+            config !== undefined &&
+            firstMaterializationPhases.has(configKey(config.cfg.root, config.slug)),
+          initialInstallFinalized: () => initialInstallFinalized,
+          execute,
+        });
       };
     },
   };

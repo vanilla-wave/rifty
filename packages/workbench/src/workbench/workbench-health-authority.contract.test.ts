@@ -34,6 +34,10 @@ type ExpectedHealthIssue =
     };
 
 type ExpectedHealthSnapshot = {
+  readonly projectOpen?: {
+    readonly projectId: string;
+    readonly persistence?: { readonly persisted: number; readonly total: number };
+  };
   readonly disposition: 'healthy' | 'degraded' | 'unavailable' | 'fatal';
   readonly issues: readonly WorkbenchHealthIssue[];
 };

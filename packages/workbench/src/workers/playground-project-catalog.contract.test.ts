@@ -134,7 +134,7 @@ interface ProjectSavePackageAuthority extends PackageAcquisitionAuthority {
 
 function catalogPackageAdapter(): PackageAcquisitionAdapter {
   return {
-    readTrustedPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
+    readPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
     planSnapshotRestore: async () => ({ status: 'rejected', reason: 'not requested' }),
     install: async () => {
       throw new Error('catalog Save contract must not run package acquisition');

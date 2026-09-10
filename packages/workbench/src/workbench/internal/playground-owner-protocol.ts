@@ -488,6 +488,10 @@ function acquisition(value: unknown): ProjectAcquisitionPlan {
     throw new TypeError('Playground acquisition must be an object');
   }
   const kind = Object.getOwnPropertyDescriptor(value, 'kind')?.value;
+  if (kind === 'saved') {
+    exactRecord(value, ['kind'], 'saved acquisition');
+    return Object.freeze({ kind });
+  }
   if (kind === 'ready') {
     const record = exactRecord(value, ['kind', 'provenance'], 'ready acquisition');
     return Object.freeze({ kind, provenance: provenance(record.provenance) });

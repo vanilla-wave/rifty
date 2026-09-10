@@ -220,6 +220,9 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0359 | Durability-drain progress as a health-event kind on the workbench owner port |
 | 0360 | Owner operation deadline is a host-configurable budget of durability-progress silence |
 | 0407 | Retain orphan Scratch bytes in catalog transactions |
+| 0413 | Expose project opening persistence through Workbench health |
+| 0414 | Keep Scratch mutation policy in the companion |
+| 0415 | Open saved projects independently of installation proof |
 
 ### toolchain-build
 

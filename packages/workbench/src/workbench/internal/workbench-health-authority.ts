@@ -3,6 +3,7 @@ import type {
   WorkbenchHealth,
   WorkbenchHealthIssue,
   WorkbenchHealthSnapshot,
+  WorkbenchProjectOpenProgress,
   WorkbenchRecoveryScope,
 } from '../health.ts';
 
@@ -79,6 +80,7 @@ export interface WorkbenchHealthAuthority {
   readonly invariant: {
     fatal(input: WorkbenchFatalHealthInput): void;
   };
+  projectOpen(progress: WorkbenchProjectOpenProgress | undefined): void;
   openGeneration(id: string): WorkbenchHealthGeneration;
   close(): void;
 }
@@ -138,6 +140,7 @@ export function createWorkbenchHealthAuthority(
   let fatalIssue: FatalIssueRecord | null = null;
   let activeGeneration: GenerationState | null = null;
   let closed = false;
+  let projectOpen: WorkbenchProjectOpenProgress | undefined;
 
   const assertAuthorityOpen = (): void => {
     if (closed) throw new ClosedHandleError('Workbench health');
@@ -171,6 +174,7 @@ export function createWorkbenchHealthAuthority(
     return Object.freeze({
       disposition,
       issues: Object.freeze(issues),
+      ...(generation === null && projectOpen !== undefined ? { projectOpen } : {}),
     });
   };
 
@@ -421,6 +425,19 @@ export function createWorkbenchHealthAuthority(
         publish();
       },
     }),
+    projectOpen(progress: WorkbenchProjectOpenProgress | undefined): void {
+      if (closed || (progress === undefined && projectOpen === undefined)) return;
+      projectOpen =
+        progress === undefined
+          ? undefined
+          : Object.freeze({
+              projectId: progress.projectId,
+              ...(progress.persistence === undefined
+                ? {}
+                : { persistence: Object.freeze({ ...progress.persistence }) }),
+            });
+      publish();
+    },
     openGeneration,
     close(): void {
       if (closed) return;
