@@ -22,7 +22,7 @@ contains no bundler query imports or App policy.
 
 ## Static runtime assets
 
-Copy the entire published `dist/assets/` directory, including opaque JS chunks:
+Copy the published `dist/assets/` directory, including all opaque JS chunks:
 
 ```js
 import { cp } from 'node:fs/promises';
@@ -33,8 +33,12 @@ await cp(new URL('./assets/', import.meta.resolve('@riftydev/workbench')),
 
 Use ordinary served URLs in `deployment.workers`: `owner-worker.js`,
 `kernel-worker.js`, `node-worker.js`, `dev-server-worker.js`,
-`typescript-worker.js`. Set `deployment.serviceWorker.url` to `sw.js` and
-`deployment.wasm.sqlite` to `sql-wasm.wasm`. The optional SDK toolchain URL is
+`typescript-worker.js`. Set `deployment.serviceWorker.url` to `sw.js`. For SQLite,
+set `deployment.wasm.sqlite` to the copied `sql-wasm.wasm`; no host `sql.js`
+dependency is needed. Without SQLite, omit `deployment.wasm` (or use `wasm: {}`)
+and exclude `sql-wasm.wasm` from the deployed copy. Ordinary Node/Vite programs
+start without it; `DatabaseSync` use reports the missing option. Supplied empty
+or malformed URLs still fail validation. The optional SDK toolchain URL is
 `no-coi-toolchain-worker.js`. The kernel resolves its `quickjs.wasm` sibling;
 copy one complete package build. No host Worker/SW bundling or builtin aliases.
 

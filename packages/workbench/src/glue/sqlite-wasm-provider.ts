@@ -26,8 +26,9 @@ export function fetchWasmBytesSync(url: string): Uint8Array {
   return bytes;
 }
 
-export function installSqliteWasmSyncProvider(url: string): void {
-  if (typeof url !== 'string' || url.length === 0) {
+export function installSqliteWasmSyncProvider(url: string | undefined): void {
+  if (url === undefined) return;
+  if (typeof url !== 'string' || url.trim().length === 0) {
     throw new Error('node:sqlite wasm URL must be non-empty');
   }
   setSqliteEngineSyncProvider(() => fetchWasmBytesSync(url));

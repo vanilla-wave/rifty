@@ -40,7 +40,10 @@ module.exports = async function prove() {
 `;
 
 export async function proveSqliteOmission(options: PlaygroundWorkbenchOptions): Promise<void> {
-  const workbench = await openPlaygroundWorkbench(options);
+  const workbench = await openPlaygroundWorkbench({
+    ...options,
+    deployment: { ...options.deployment, wasm: {} },
+  });
   const definition = workbench.playground.define({
     kind: 'node-server',
     starterId: 'packed-no-sqlite',

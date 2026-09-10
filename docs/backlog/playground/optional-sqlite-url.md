@@ -43,6 +43,8 @@ unsupported operations keep their loud throws and compat entries (ADR-0065).
 
 ## Decisions
 
+ready-verdict: 2026-09-10 — Contract+RED @ 18ffa13020f531b1031e9ccf639e7867b8f1f9e1
+
 - User authority: #281 + implementation handoff; explicit optionality, strict supplied values, unchanged configured behavior. No new observable policy fork.
 - ADR-0416; independent DEC-2 check sqlite_decision, 2026-09-10.
 - Evidence: reference/optional-sqlite-url-evidence.md; new host option behavior has no real-Node option oracle.

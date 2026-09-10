@@ -16,3 +16,15 @@ no Node parity claim about this option. Existing real SQLite acceptance retained
 sqlite rejected as non-empty, host snapshot required sqliteWasmUrl, provider
 rejected undefined. Supplied whitespace also exposed missing trimming at host
 metadata/provider validation. The configured real sql.js SELECT returned 42.
+
+Full contract RED (six suites): 45 failed / 177 passed. Independent reviewer
+reproduced the same split (41+4 failed / 120+57 passed), Node v24.16.0,
+Vitest v2.1.9. Protocol assertions intentionally advance with ADR-0416.
+
+`node tests/integration/workbench-packed-consumer.mjs`: real packed browser
+configured Vite/SQLite and snapshot restore passed; fresh context without the
+SQLite file failed `page.evaluate: TypeError: deployment.wasm must be an object`.
+An earlier harness compile failure used a nonexistent public Node factory;
+corrected to the existing companion before this runtime RED and checkpoint.
+
+`pnpm test:parity sqlite`: 5/5 baseline cases match Node v24.16.0.

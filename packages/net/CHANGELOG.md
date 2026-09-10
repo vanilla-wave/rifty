@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Name Workbench deployment.wasm.sqlite in the uninitialized SQLite error while retaining direct engine initialization guidance.
+
 ### Added
 
 - **Configured preview prefix (ADR-0409).** `bridgeCrossRealmPreview` and

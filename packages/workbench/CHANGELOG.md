@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Make deployment.wasm/sqlite optional; preserve absence through recursive workers, reject malformed supplied values, and skip the SQLite provider without a URL (ADR-0416).
+
 - Prove npm fails when Scratch catalog dirty persistence hits quota or permission errors, retaining the prior catalog across reload; the regression kills swallowed reflection errors.
 
 - Open saved projects and Node commands independently of install claims; retain snapshot transactions and bind runtime adapters only from usable existing provenance. Keep Scratch dirty classification in the companion (ADR-0414/0415).

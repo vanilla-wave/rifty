@@ -79,7 +79,7 @@ export interface WorkbenchOwnerStartInput {
       readonly typescript?: string;
     };
     readonly wasm: {
-      readonly sqlite: string;
+      readonly sqlite?: string;
     };
     readonly previewProbeTimeoutMs: number;
     readonly previewPrefix?: string;
