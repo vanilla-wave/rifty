@@ -40,6 +40,10 @@ test('agent project runs and rebuilds installed Vite with its file policy', asyn
   expect(observed.result.firstOutput.join('\n')).toContain('agent-first-build');
   expect(observed.result.output.join('\n')).toContain('agent-edited-build');
   expect(observed.result.output.join('\n')).not.toContain('agent-first-build');
+  expect(observed.result.stopped.status).toBe('cancelled');
+  expect(observed.result.afterStop).toMatchObject({ status: 'exited', exitCode: 0 });
+  expect(observed.result.afterStopOutput.join('\n')).toContain('agent-after-stop');
+  expect(observed.result.afterStopOutput.join('\n')).not.toContain('agent-edited-build');
   expect(observed.result.forbidden.exitCode).not.toBe(0);
   expect(observed.result.retained).toBe('keep');
   expect(observed.result.next).toMatchObject({

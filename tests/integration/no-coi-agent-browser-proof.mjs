@@ -95,6 +95,11 @@ export async function provePackedAgent(root, registryUrl) {
           assert(value.firstOutput.join('\n').includes('agent-first-build'));
           assert(value.output.join('\n').includes('agent-edited-build'));
           assert(!value.output.join('\n').includes('agent-first-build'));
+          assert.equal(value.stopped.status, 'cancelled');
+          assert.equal(value.afterStop.status, 'exited');
+          assert.equal(value.afterStop.exitCode, 0);
+          assert(value.afterStopOutput.join('\n').includes('agent-after-stop'));
+          assert(!value.afterStopOutput.join('\n').includes('agent-edited-build'));
           assert.notEqual(value.forbidden.exitCode, 0);
           assert.equal(value.retained, 'keep');
           assert.equal(value.next.status, 'exited');

@@ -120,3 +120,12 @@ archives; `check:snapshot-artifact-drift` PASS. Compatibility renderer now admit
 the 13 declared unique patches (adds runtime-service-refs); generated matrix
 records acquire-time cwd and upstream refs. No old patch or capability gap was
 removed. These two pre-generation reds require a clean full gate rerun.
+
+Goal composition proof: the same installed Vite7.3.6 project now executes build,
+edit/rebuild, a real buildStart plugin waiting for SIGINT, Stop, source edit and
+a new npm build with a distinct output marker. Source browser PASS (14.6s).
+The shared packed scenario carries the same transition; final packed rerun follows.
+
+The full gate completed with unit and parity PASS; its only two reds were the
+pre-generation compatibility/snapshot checks above. Both artifacts are now
+regenerated and committed; rerun the complete command on the final revision.

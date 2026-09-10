@@ -47,6 +47,44 @@ export async function agentInstalledBuildScenario(sandbox: ToolchainSandbox, reg
   if (rebuild.exitCode !== 0)
     throw new Error(`installed npm build failed: ${JSON.stringify(rebuild)}`);
   const output = await readBuild();
+  await project.fs.writeFile(
+    'vite.config.js',
+    `export default {
+      build: { minify: false, sourcemap: false },
+      plugins: [{ name: 'agent-stop-proof', async buildStart() {
+        await new Promise(resolve => {
+          process.once('SIGINT', resolve);
+          console.log('agent-build-awaiting-stop');
+        });
+      }}],
+    };`,
+  );
+  let entered!: () => void;
+  const entrance = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const cancellable = project.run('vite build');
+  const detach = cancellable.onOutput(({ chunk }) => {
+    if (chunk.includes('agent-build-awaiting-stop')) entered();
+  });
+  await Promise.race([
+    entrance,
+    cancellable.completion.then((result) => {
+      throw new Error(`Vite finished before its Stop boundary: ${JSON.stringify(result)}`);
+    }),
+  ]);
+  const stopped = await cancellable.stop();
+  detach();
+  await project.fs.writeFile(
+    'vite.config.js',
+    'export default { build: { minify: false, sourcemap: false } };',
+  );
+  await project.fs.writeFile(
+    'src/main.js',
+    "document.querySelector('#app').textContent = 'agent-after-stop';",
+  );
+  const afterStop = await project.run('npm run build').completion;
+  const afterStopOutput = await readBuild();
   const forbidden = await project.run('vite build --outDir locked').completion;
   const retained = await project.fs.readFile('locked/keep.txt', 'utf8');
   const next = await project.run('pwd && echo after-build').completion;
@@ -56,6 +94,9 @@ export async function agentInstalledBuildScenario(sandbox: ToolchainSandbox, reg
     firstOutput,
     rebuild,
     output,
+    stopped,
+    afterStop,
+    afterStopOutput,
     forbidden,
     retained,
     next,
