@@ -20,6 +20,7 @@ through native Worker.name. VFS already mounts a selected native directory.
   acquired preload failures always reject (ADR-0411). Return fallback reason.
 - Extend `initBackend` with optional storage configuration; one shared namespace
   validator serves Workbench and runtime. Generic unconfigured boot unchanged.
+- Protocol v4 rejects older workers that cannot honor preboot storage configuration.
 - Existing host handshake timer owns construction/import/hydration/readiness,
   including replacement Workers on SDK restart. Deadline tears down peer and
   settles every pending call. Close/dispose has the same terminal ownership.

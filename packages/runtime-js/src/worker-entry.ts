@@ -28,7 +28,7 @@ import {
 } from './internal/sandbox-toolchain-realm.ts';
 import { composeRuntimeWorkerFs } from './internal/worker-fs-composition.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
-import { vmEngineFromWorkerName } from './internal/worker-vm-engine.ts';
+import { runtimeWorkerOptionsFromName } from './internal/worker-startup-options.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
 import { installConsole } from './repl/console.ts';
@@ -39,7 +39,8 @@ import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
-const selectedVmEngine = vmEngineFromWorkerName(self.name);
+const startup = runtimeWorkerOptionsFromName(self.name);
+const selectedVmEngine = startup.vmEngine;
 if (selectedVmEngine !== undefined) setVmEngineOverride(selectedVmEngine);
 
 installProcessGlobals();
@@ -123,14 +124,15 @@ async function handleEval(req: EvalRequest): Promise<EvalResult> {
 // e2e) lands on the wired backend.
 const boot = (async () => {
   let backend: 'opfs' | 'memory';
+  let reason: string | undefined;
   try {
-    backend = await initBackend();
+    backend = await initBackend(startup.storage);
   } catch (err) {
-    if (err instanceof OpfsPreloadError) throw err;
+    if (err instanceof OpfsPreloadError || startup.storage?.persistence === 'required') throw err;
     // OPFS init failed for this realm — degrade to in-memory so the runtime still
     // boots (mirrors the playground bootstrap fallback). Persistence is lost but
     // eval keeps working.
-    const reason = err instanceof Error ? err.message : String(err);
+    reason = err instanceof Error ? err.message : String(err);
     post({ type: 'stderr', chunk: `[rifty] VFS backend init failed, using memory: ${reason}\n` });
     installMemoryFs();
     backend = 'memory';
@@ -166,11 +168,12 @@ const boot = (async () => {
   (self as unknown as { __riftyImport: typeof replImport }).__riftyImport = replImport;
 
   installConsole(sink);
-  return { backend, loader };
+  return { backend, loader, ...(reason === undefined ? {} : { reason }) };
 })();
 
 /** Selected backend after the runtime Worker has one authoritative VFS. */
 export const runtimeWorkerBackend: Promise<'opfs' | 'memory'> = boot.then(({ backend }) => backend);
+export const runtimeWorkerStorage = boot.then(({ backend, reason }) => ({ backend, reason }));
 
 self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   const msg = event.data;

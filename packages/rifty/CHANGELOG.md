@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Expose captured no-COI storage namespace/policy and startupTimeoutMs; report fallback reason and preserve configuration on restart (ADR-0419).
+
 - No-COI toolchain protocol is now v3. Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.
 
 - Add toolchain.open({cwd, registryUrl}) for compatible saved installations; preserve dependency edits and require explicit install for missing/incompatible proof.

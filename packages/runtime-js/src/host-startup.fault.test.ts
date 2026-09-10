@@ -57,6 +57,33 @@ it('a configured startup budget can exceed the former 10s deadline', async () =>
   runtime.dispose();
 });
 
+it('the largest native timer budget stays pending past the old deadline', async () => {
+  const runtime = boot(2_147_483_647);
+  const result = runtime.toolchainReady.then(
+    () => 'ready',
+    () => 'rejected',
+  );
+  await vi.advanceTimersByTimeAsync(20_000);
+  Peer.latest.ready();
+  expect(await result).toBe('ready');
+  runtime.dispose();
+});
+
+it('rejects a pre-configuration worker before accepting its storage', async () => {
+  const runtime = boot(10_000);
+  const peer = Peer.latest;
+  const rejected = expect(runtime.toolchainReady).rejects.toThrow(/invalid readiness/);
+  peer.emit({ type: 'ready' });
+  peer.emit({
+    type: 'toolchain-ready',
+    protocol: 'rifty.sandbox-toolchain/v3',
+    vfsBackend: 'opfs',
+  });
+  await rejected;
+  expect(peer.terminated).toBe(true);
+  runtime.dispose();
+});
+
 it('timeout terminates the worker and rejects every queued startup call without revival', async () => {
   const runtime = boot(50);
   const peer = Peer.latest;

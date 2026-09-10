@@ -345,11 +345,16 @@ self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?
 });
 
 void import('@riftydev/runtime-js/worker')
-  .then(({ runtimeWorkerBackend }) => runtimeWorkerBackend)
-  .then((vfsBackend) => {
+  .then(({ runtimeWorkerStorage }) => runtimeWorkerStorage)
+  .then(({ backend: vfsBackend, reason }) => {
     runtimeBackend = vfsBackend;
     installFetchKeepalive();
-    self.postMessage({ type: 'toolchain-ready', protocol: SANDBOX_TOOLCHAIN_PROTOCOL, vfsBackend });
+    self.postMessage({
+      type: 'toolchain-ready',
+      protocol: SANDBOX_TOOLCHAIN_PROTOCOL,
+      vfsBackend,
+      ...(reason === undefined ? {} : { vfsReason: reason }),
+    });
   });
 
 function installToolchainCloseSignal(): void {

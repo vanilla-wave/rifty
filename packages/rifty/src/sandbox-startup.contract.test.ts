@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { createSandbox } from './index.ts';
+import { type ToolchainCreateSandboxOptions, createSandbox } from './index.ts';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -12,9 +12,11 @@ it.each([
   { storage: { namespace: 42 } },
   { storage: { persistence: 'unknown' } },
   { storage: null },
-  ...[0, -1, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31, '1000'].map((startupTimeoutMs) => ({
-    startupTimeoutMs,
-  })),
+  ...[0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31, '1000'].map(
+    (startupTimeoutMs) => ({
+      startupTimeoutMs,
+    }),
+  ),
 ])('invalid public boot option rejects before effects: %j', async (extra) => {
   const WorkerBoundary = vi.fn(() => {
     throw new Error('Worker effect');
@@ -26,7 +28,9 @@ it.each([
     toolchain: { workerUrl: '/worker.js' },
     ...extra,
   };
-  await expect(createSandbox(options, { registerSw })).rejects.toThrow(/storage|startupTimeoutMs/);
+  await expect(
+    createSandbox(options as unknown as ToolchainCreateSandboxOptions, { registerSw }),
+  ).rejects.toThrow(/storage|startupTimeoutMs/);
   expect(WorkerBoundary).not.toHaveBeenCalled();
   expect(registerSw).not.toHaveBeenCalled();
 });

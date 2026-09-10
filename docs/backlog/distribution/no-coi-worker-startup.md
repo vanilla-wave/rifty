@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Configure no-COI worker storage and effective startup budget
 created: 2026-09-10
 why: SDK embedders must currently override storage globals and patch the fixed handshake deadline
@@ -61,6 +61,8 @@ Snapshot/apply/run deadlines and namespace migration: goal map exclusions.
 No new lock, ledger or coordinator; native worker total-inflight-loss model.
 
 ## Decisions
+
+ready-verdict: 2026-09-10 — Contract+RED @ 22d73bcfd300115c4d8813794521f8f296dd82d9
 
 - 2026-09-10 — ADR-0419 selects configuration metadata and the existing handshake timer; no extra timer owner.
 - 2026-09-10 — RED artifacts: docs/backlog/distribution/reference/no-coi-worker-startup-evidence.md.

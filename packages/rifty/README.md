@@ -103,6 +103,8 @@ Install `@riftydev/workbench`, bundle its
 const sandbox = await createSandbox({
   requireCrossOriginIsolation: false,
   toolchain: { workerUrl: toolchainWorkerUrl },
+  storage: { namespace: 'my-project', persistence: 'required' },
+  startupTimeoutMs: 30_000,
 });
 await sandbox.fs.writeFile('/project/package.json', manifest);
 await sandbox.toolchain.install({ cwd: '/project', registryUrl: '/npm-registry' });
@@ -130,6 +132,20 @@ await sandbox.restart({
 console.log(sandbox.capabilityReport);
 ```
 
+`storage` defaults to preferred OPFS at the origin root. `namespace` selects one
+literal native directory before preload; omission keeps existing origin-root
+files. Empty, dot, slash, backslash and NUL components reject before effects.
+`required` rejects unavailable OPFS; `preferred` exposes a memory fallback through
+`sandbox.vfs.reason`; `ephemeral` selects memory. Unreadable saved preload always
+rejects. Required persistence is not browser eviction protection or storage isolation.
+
+`startupTimeoutMs` defaults to 10000; positive integer through 2147483647.
+It covers Worker construction/import, native VFS hydration and runtime readiness,
+including restart. Expiry or Worker close rejects startup and terminates the
+Worker. Service-worker registration, guest execution and snapshot/install work
+have separate lifetimes. Startup configuration is captured before effects;
+restart retains it.
+
 On a later page load, recreate the sandbox and call
 `await sandbox.toolchain.open({ cwd: '/project', registryUrl: '/npm-registry' })`
 before `runBin` or `startBin`. Open validates the saved installation and activates
@@ -140,7 +156,7 @@ an error with `name === "SandboxInstallRequiredError"`; saved bytes stay intact.
 Install once after an upgrade from SDK 0.6 installations, which did not record this proof.
 
 Update the SDK and self-hosted toolchain Worker together: this API uses protocol
-v3; an older Worker is rejected during handshake. Serialized SDK errors are
+v4; an older Worker is rejected during handshake. Serialized SDK errors are
 ordinary `Error` objects: branch on `error.name`, including
 `SandboxInstallRequiredError` and `SandboxPersistenceError`, rather than `instanceof`
 a named SDK error class.

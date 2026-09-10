@@ -10,3 +10,14 @@ Timer sweep: `runtime-js/src/host.ts` has one 10000ms handshake deadline. SDK
 restart calls the same spawn owner. VFS native acquisition/preload has no shorter
 timer. OPFS persistence scheduler's reporting budget is a later mutation budget,
 not a startup preload timer. No new coordination mechanism.
+
+Independent reviewer rerun: native suite 4 expected RED (namespace, required, 11s preload, 5000ms timeout); native close and 2 existing unreadable-preload cases GREEN. Contract+RED PASS; NOTE timer fractional/upper-bound coverage retained.
+
+Implementation checks: native Chromium 7/7 GREEN (initial/restart 11s preload,
+A/B/default native roots, required/preferred, timeout/close, unreadable preload).
+First full pr:check: unit+parity GREEN, one emitted TypeScript worker pin drift;
+size remains 10022664, startup tokens absent; update exact SHA only, keep ceiling
+and all negative payload criteria. Protocol v4 rejects old workers that could
+ignore storage metadata. Second full run exposed old test labeling v4 as future;
+isolated host.test.ts reproduced its 5000ms timeout. Update invalid future fixture
+to v10, keeping real v3 rejection in startup fault suite. No timeout increase.

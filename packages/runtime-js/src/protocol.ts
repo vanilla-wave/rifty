@@ -107,7 +107,7 @@ export type ToolchainResult =
     }
   | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
 
-export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v3' as const;
+export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v4' as const;
 
 /** `node:vm` sandbox engine (ADR-0142): the real-realm QuickJS engine (default
  * after the T17 cutover) or the opt-in hardened-rewrite engine. */
@@ -144,6 +144,7 @@ export type ToolchainWorkerMessage =
       readonly type: 'toolchain-ready';
       readonly protocol: typeof SANDBOX_TOOLCHAIN_PROTOCOL;
       readonly vfsBackend: 'opfs' | 'memory';
+      readonly vfsReason?: string;
     }
   | { readonly type: 'toolchain-terminal'; readonly reason: 'closed' }
   | { readonly type: 'toolchain-result'; readonly result: ToolchainResult };

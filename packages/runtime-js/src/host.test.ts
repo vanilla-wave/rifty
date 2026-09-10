@@ -311,7 +311,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         'later version',
         () => ({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v4',
+          protocol: 'rifty.sandbox-toolchain/v10',
           vfsBackend: 'memory',
         }),
       ],

@@ -23,7 +23,13 @@ export {
 } from './path.ts';
 export { syncMirror, asyncVfs } from './sync-mirror.ts';
 export type { FsSync } from './sync-mirror.ts';
-export { detectVfsBackend, initBackend } from './boot.ts';
+export {
+  detectVfsBackend,
+  initBackend,
+  captureVfsStorageOptions,
+  validateStorageNamespace,
+} from './boot.ts';
+export type { VfsStorageOptions } from './boot.ts';
 export {
   guardVfsMutations,
   type VfsMutationGuard,
