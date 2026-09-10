@@ -1,13 +1,14 @@
 ---
 area: playground
-status: ready
+status: draft
 title: Reload crash-consistency fault e2e — kill the page at the worst moment, reopen honest
 created: 2026-07-05
 why: every persistence layer is (or is being) fault-proven in isolation, but no test ever closes/reloads the real page mid-operation — the end-to-end axis (torn-state at the orchestration layer, lying status indicators) has zero coverage
 user_story: As a developer, I want to close or reload the tab mid `npm install` / mid `git commit` / mid editor save and reopen to an honest project, but today nothing proves the reopened state isn't a half-tree presented as installed or a stale saved-indicator
 epic: fault-honest-opfs-persistence
-blocked_by: [vfs/iso-git-ref-torn-write-rows]
-code: [apps/playground/src/glue/project-deps.ts, apps/playground/tests]
+blocked_by: [vfs/iso-git-ref-torn-write-rows, playground/install-stamp-invalidation]
+sources: [docs/backlog/playground/reference/project-open-ide-boundaries-refine.md]
+code: [packages/workbench/src/glue/project-deps.ts, packages/workbench/src/workers/package-acquisition-authority.ts, tests/browser-unit]
 ---
 
 ## Context
@@ -18,7 +19,7 @@ Playwright can inject the REAL fault — `page.close()` / `page.reload()` at a c
 
 One e2e row each (RED first where the row fails):
 
-- kill mid `npm install` → reopen: no stamp, install re-runs to completion, preview goes LIVE (npm parity: rerun just works; no half-tree trusted).
+- kill mid `npm install` in a saved snapshot-created Vite project → reopen: preserved files and terminal are accessible, with zero implicit install/restore; commands fail on missing dependencies when used. An explicit user `npm install` completes and the subsequently launched preview goes LIVE; partial install is never presented as complete.
 - kill mid snapshot-restore → reopen: restore redone cleanly (stamp written only post-restore — pinned by observation, not code reading).
 - kill mid `git commit` → reopen: repo opens clean per `vfs/iso-git-ref-torn-write-rows` observables (`git log`/`status` clean at either state).
 - kill mid editor save → reopen: file content = saved or prior version, editor dirty/saved indicator matches the actual content — never «saved» over lost bytes.
@@ -26,7 +27,7 @@ One e2e row each (RED first where the row fails):
 
 ## Parity cases
 
-- npm: killing `npm install` mid-run in real Node then re-running completes normally — our rerun row matches that observable.
+- npm/Node: after interrupted install, independent local source still runs; using a missing package fails at that use. Explicitly re-running install reconciles the tree. Full native interruption/retry and browser proof remain for pickup; the smaller native probe is in the referenced evidence.
 - git: per `vfs/iso-git-ref-torn-write-rows` (real-git recovery observables) — this item consumes them at the e2e level.
 
 ## Fault matrix
@@ -43,5 +44,7 @@ One e2e row each (RED first where the row fails):
 ## Decisions
 
 - Fault injection = real page close/reload only — no storage mocks (AGENTS.md §Fidelity).
-- Recovery UX = silent redo on next boot (npm/git parity); no new UI. A row demanding UI would be a scope change → back to refine.
+- Saved npm recovery UX = open actual saved files and terminal, with no automatic install/restore; user explicitly re-runs install. Existing own snapshot/catalog recovery and Git/save rows remain unchanged.
 - Lane: chromium-heavy (serial) — kill-timing rows must not share workers (e2e two-lane precedent).
+- re-cut: 2026-09-10 — fork: user «да, ок, ровно поведение node» accepts the concrete interrupted-install reopen scenario in `reference/project-open-ide-boundaries-refine.md`; replace automatic npm rerun, demote to draft for missing new RED and linked implementation — trace: scenario.
+- 2026-09-10 — pre-amendment row: "kill mid `npm install` → reopen: no stamp, install re-runs to completion, preview goes LIVE (npm parity: rerun just works; no half-tree trusted)."

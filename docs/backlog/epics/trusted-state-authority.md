@@ -26,7 +26,8 @@ claim transitions — internal serialization (no TOCTOU by construction),
 durable-proof inside promote/demote (drain + full-ledger check; an unproven
 revocation aborts loudly), byte-exact input identity (never a lossy
 aggregate), epoch fencing (supersedes the generation/promotionId zoo), honest
-resting state on death anywhere (pending/absent → redo work). The claim stays
+resting state on death anywhere (pending/absent cannot certify completion;
+redo occurs on an explicit install or required own-transaction recovery). The claim stays
 a real, cat-able file — deleting it with the tree is honest revocation, never
 hidden state. Enforcement is mechanical, not reviewer vigilance: an
 arch/source-grep gate makes the authority the only writer of claim paths, and
@@ -43,9 +44,12 @@ chain+CAS and the multi-tab plane-ownership story are the named candidates.
 ## User scenario
 
 A developer runs `npm install cowsay && npm run dev`, reloads mid-drain,
-switches projects and back, or fires installs from two terminals — every
-reopened tree either reuses a PROVEN install or honestly re-installs; never a
-silently broken project. A contributor adding the next install-adjacent
+switches projects and back, or fires installs from two terminals — no incomplete
+install is presented as proven. Readable saved files and terminal remain
+accessible without implicit install, even with pending/absent trust; commands
+use the saved files and fail at actual missing-dependency use. The user may
+explicitly rerun install. Own catalog/snapshot transaction recovery keeps its
+existing guarantees. A contributor adding the next install-adjacent
 feature (`npm uninstall`, `npm ci`, a build-cache validity marker) calls
 `demote/promote` on the authority and inherits every guarantee — instead of
 adding an eighth guard and five review rounds.
@@ -66,4 +70,10 @@ items here.
   real `fs` has none; heavy scripts keep exact Node semantics).
 - Multi-tab implementation itself (its epic consumes this primitive).
 - Changing any user-visible install/reload behavior — the consolidation is
-  behavior-preserving by contract.
+  behavior-preserving relative to the accepted reopen amendment; its implementation
+  belongs to `playground/install-stamp-invalidation`, not the generic extraction.
+
+## Decisions
+
+- amend: 2026-09-10 — user: «да, ок, ровно поведение node» on the saved Vite → interrupted install → reopen files/terminal without auto-install scenario. Align this epic's overlapping wording; do not reopen the decision or weaken proof before claiming a completed install. Source: `docs/backlog/playground/reference/project-open-ide-boundaries-refine.md`.
+- 2026-09-10 — original overlapping clause: "every reopened tree either reuses a PROVEN install or honestly re-installs". Generic TrustedState still waits for a second real consumer; the amendment does not authorize speculative extraction.

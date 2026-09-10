@@ -1,0 +1,53 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Docs-only refinement можно принимать: источники и amendment совпадают с ответом пользователя; Node probe повторён, pr:check 20/20 по предоставленному логу. Реализация, полный interruption/retry/browser proof и ADR-изменения остаются pickup.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "b89f7043bc49b588236c6d8514156d3f102bc448",
+  "unit_goal_source": "PR #323 docs-only refinement since accepted BASE a6e6cb6da; RDY-6 final written-result check by fresh read-only reviewer /root/final_open_boundaries. Original user input and exact Vite/lodash scenario plus answer «да, ок, ровно поведение node» read in docs/backlog/playground/reference/project-open-ide-boundaries-refine.md and checked against the separately supplied raw request. Final set reviewed together: playground/install-stamp-invalidation.md, scratch-dirty-ide-ownership.md, reload-crash-consistency-fault-e2e.md, epics/fault-honest-opfs-persistence.md and that reference record, all under docs/backlog/. Relevant ADR-0278/0307/0394 and cited current source checked. Prior critic used as evidence only. User confirmation supports accessible files/terminal and explicit install; original ownership direction preserves dirty semantics, off-editor writes and existing storage recovery. Native v24.16.0 probe independently repeated: malformed lock plus absent declared package still permits local source; missing require exits 1 with MODULE_NOT_FOUND. It does not execute npm interruption, Vite or browser UI, as the capture explicitly states. No product implementation requested or reviewed; new promises stay draft with ADR resolution and real discriminating proof pending. Existing OPFS goal is not declared complete.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
