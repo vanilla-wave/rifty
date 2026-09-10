@@ -217,7 +217,9 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
 }
 
 if (new URL(location.href).searchParams.has('snapshot-only')) {
-  const strict = openSnapshotOnlyAcceptance(workbenchOptions())
+  const options = workbenchOptions();
+  Reflect.deleteProperty(options.deployment, 'wasm');
+  const strict = openSnapshotOnlyAcceptance(options)
     .then((opened) => {
       previewFrame.src = opened.previewUrl;
       status.textContent = 'ready';
