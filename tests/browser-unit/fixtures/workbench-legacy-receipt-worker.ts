@@ -1,3 +1,4 @@
+import { installStampSatisfied } from '../../../packages/workbench/src/glue/install-stamp.ts';
 /// <reference lib="webworker" />
 
 import { RegistryClient } from '@riftydev/npm-client';
@@ -239,7 +240,10 @@ async function run(input: LegacyReceiptInput): Promise<ReceiptSeed | ReceiptReco
   const recovered = tree(authority);
   const opened = await owner.openProject(definition(false));
   const acquisition = opened.acquisition;
-  if (acquisition.kind !== 'ready' || acquisition.provenance.outcome !== 'existing') {
+  if (
+    acquisition.kind !== 'saved' ||
+    (await installStampSatisfied(vfs, projectRoot, targetId)) === null
+  ) {
     throw new Error('legacy target does not retain real saved trust');
   }
   if (input.phase === 'verify') {

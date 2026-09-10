@@ -76,3 +76,13 @@ Actual saved browser path exposed the old syntactically corrupt-lock install ref
 - Built TypeScript asset has unchanged 10,022,664 bytes/213,023 lines. Compared against the exact pinned baseline SHA3587a112e6f0bbae3bb9ca4565404c8ce572a5cbb146440ee2e7a4ecf7b02cf6: eight import specifiers differ (shared chunks and dynamic module-loader), all other bytes identical. New SHA6c72156491edd98ea9022742da6eeb43467ca28b69f4e55c5ba7a457be0d9eae; update only exact artifact pin, preserve 2MB ceiling/negative payload tests (ADR-0391).
 
 - Full `test:run` initial run: four failed files, zero Vitest timeouts; automatic isolated rerun reproduced all four. The source inventory/saved result expectations follow the approved modules/result. Actual regressions fixed: clearing absent progress emits no duplicate healthy event; malformed bootstrap bindings remain strict before guest imports, while validated adapter activation failures defer. Isolated six-file verification123/123 passes, including negative carrier tests. Final rebuilt TypeScript asset SHA6c72156491edd98ea9022742da6eeb43467ca28b69f4e55c5ba7a457be0d9eae; payload comparison still exact apart from import fingerprints.
+
+## CI reception
+
+CI on e9a5ec7d5 passed Node parity, no-COI, production/hosted and most e2e. Its remaining failures were reproduced/handled in-session:
+
+- Empty binding sets incorrectly exposed an esbuild slot; actual Vite8 build/preview without esbuild expected no slot. New unit RED true≠false; clear a previous slot without creating one when absent. Two real Vite8 browser variants now pass; strict forged binding and failure-at-use assertions remain.
+- Legacy receipt fixture now separately asserts real install trust, while open returns saved; both native before/after-close recovery cases pass without extra snapshot requests.
+- Existing UI fast-reload test still expected global rejection on absent claim. ADR-0415 criterion now asserts the actual workspace, preserved marker/manifest, independent Node output/exit0 and zero acquisition. Real UI run passed with trusted=false, claim absent and1251 persisted entries.
+- Producer native-source tar/wasm case hit only CI's default5000ms timeout, no failed content assertion. Isolated real run1587ms passed; use a case-local30000ms budget, keep all content/provenance assertions.
+- `pnpm pr:check` passed25/25 on2c4db7231 (full test:run196.7s; parity62.9s). After this CI-discovered repair the complete gate is rerun. Final compiler SHA6c72156491edd98ea9022742da6eeb43467ca28b69f4e55c5ba7a457be0d9eae; normalized import-specifier comparison still proves identical compiler payload.

@@ -52,6 +52,13 @@ export function publishRuntimeEsbuildFailure(error: unknown): void {
     },
   });
 }
+export function clearRuntimeEsbuild(): void {
+  const realm = (globalThis as GlobalWithRegistry).__riftyShadowRegistry;
+  if (realm === undefined) return;
+  Reflect.deleteProperty(realm, 'esbuild');
+  Reflect.deleteProperty(realm, 'esbuildBinding');
+}
+
 export function readRuntimeEsbuild(): RuntimeEsbuildCjsOuter | null {
   return (globalThis as GlobalWithRegistry).__riftyShadowRegistry?.esbuild ?? null;
 }

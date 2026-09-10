@@ -1,6 +1,5 @@
-import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
-import { publishRuntimeEsbuildFailure } from './realm.ts';
+import { clearRuntimeEsbuild, publishRuntimeEsbuildFailure } from './realm.ts';
 import {
   ESBUILD_RUNTIME_ADAPTER_ID,
   type PackageRuntimeBinding,
@@ -43,7 +42,7 @@ export async function preparePackageEntryRuntime(
     if (
       !options.runtimeBindings.some((binding) => binding.adapterId === ESBUILD_RUNTIME_ADAPTER_ID)
     ) {
-      publishRuntimeEsbuildFailure(new NotImplementedError('runtime-adapter.esbuild.unavailable'));
+      clearRuntimeEsbuild();
     }
     try {
       await activatePackageRuntimeAdapters({

@@ -261,7 +261,8 @@ describe('public caller-pinned dependency snapshot producer', () => {
         join(root, 'payload/node_modules/lightningcss-wasm/node_modules/napi-wasm/package.json'),
       ),
     ).toEqual(expected);
-  });
+    // Real tar/wasm production is CPU/I/O work; the CI default 5s is not an acceptance bound.
+  }, 30_000);
   it('rejects a manifest/lock request mismatch', async () => {
     const produce = producer();
     const { options } = await inputs();

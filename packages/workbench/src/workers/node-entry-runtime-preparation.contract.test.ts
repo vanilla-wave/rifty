@@ -25,6 +25,8 @@ describe('node-entry runtime preparation', () => {
     });
 
     expect(read).not.toHaveBeenCalled();
+    const runtime = (globalThis as { __riftyShadowRegistry?: object }).__riftyShadowRegistry;
+    expect(runtime !== undefined && Reflect.has(runtime, 'esbuild')).toBe(false);
   });
 
   it('rejects a forged bootstrap binding before guest import can begin', async () => {
