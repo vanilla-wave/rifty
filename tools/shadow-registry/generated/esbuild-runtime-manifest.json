@@ -73,6 +73,7 @@
     "node-callback-fs",
     "channel-has-fs",
     "runtime-default-wd",
+    "runtime-service-refs",
     "transform-temp-fs",
     "native-validation-provenance",
     "native-target-errno",
@@ -93,9 +94,9 @@
       "beforeSha256": "b55bfd86796b039b02b024e24284f44b28227777306aec6311696113081601cf",
       "outputSpan": {
         "start": 0,
-        "end": 201
+        "end": 227
       },
-      "afterSha256": "63e9601574fd96cb9ed85da80067e3116f8904d5b0585dcfbade1bd60bfb8558"
+      "afterSha256": "07b0b7a5b587f215b3bc3576142f76e33b3607d260fb767b508ae253b3332285"
     },
     {
       "id": "inline-worker-startup",
@@ -106,10 +107,10 @@
       },
       "beforeSha256": "d67e208a24f70dc8c12faf971f9fd767ca0f294479cb69b1e37a9f800a5ec373",
       "outputSpan": {
-        "start": 77840,
-        "end": 78457
+        "start": 77970,
+        "end": 78693
       },
-      "afterSha256": "87cfaa231b745737a58e92e572a1cc10883620ebce32347f1d4a92ff9b6c24ac"
+      "afterSha256": "21f996694885de9e726f22b040982065c64740530d4ac2f433922cb8b26d32cc"
     },
     {
       "id": "node-callback-fs",
@@ -120,8 +121,8 @@
       },
       "beforeSha256": "dffa5cb40d56a4d55e5887e4ee943c8f2af2bf3c063c68a0080ac35761f497c3",
       "outputSpan": {
-        "start": 106786,
-        "end": 107071
+        "start": 107022,
+        "end": 107307
       },
       "afterSha256": "7f5aecf872b7ea3a733b0d0ca11e154edcf981fed5461223a43d13126c684cc4"
     },
@@ -134,8 +135,8 @@
       },
       "beforeSha256": "a11e6a2c0f9a2f509ccdbbb8f3ebeb3a5ccc40bd458b23e18b1b2a9b8b3aad50",
       "outputSpan": {
-        "start": 132981,
-        "end": 133045
+        "start": 133217,
+        "end": 133281
       },
       "afterSha256": "919a1e63f741633fd88b9b7460a5d514543c70acab49a9308642e731bc82e035"
     },
@@ -148,10 +149,66 @@
       },
       "beforeSha256": "635695deb81580a53e50be785a980ed76413111ae16ee74303af1fefc298dcd2",
       "outputSpan": {
-        "start": 133459,
-        "end": 133832
+        "start": 133695,
+        "end": 134068
       },
       "afterSha256": "8654a83cede45c3a20170d0e8ea67a495dc3b4c1ffbe052f14d25ce1b290dcb9"
+    },
+    {
+      "id": "runtime-service-refs",
+      "hunk": "build",
+      "inputSpan": {
+        "start": 36714,
+        "end": 36799
+      },
+      "beforeSha256": "042bd30d3756b8df803e8ce66051ce4279157bdf9bef25c930bcee289d3b0855",
+      "outputSpan": {
+        "start": 38163,
+        "end": 38274
+      },
+      "afterSha256": "9a7a23a7c827701615d1b1716e3447cb4b591cedb29daebb876345e694a9a9c9"
+    },
+    {
+      "id": "runtime-service-refs",
+      "hunk": "transform",
+      "inputSpan": {
+        "start": 37589,
+        "end": 37670
+      },
+      "beforeSha256": "23c1dc831571c5af2c2c59f44a6939bc1a380ebc12c5df1fe77b54a72ead4eb5",
+      "outputSpan": {
+        "start": 39064,
+        "end": 39171
+      },
+      "afterSha256": "9dc7b0698f50cbfef637a49a707b3bca73f826865d723b94a5078c817e24a2bd"
+    },
+    {
+      "id": "runtime-service-refs",
+      "hunk": "format",
+      "inputSpan": {
+        "start": 40716,
+        "end": 40794
+      },
+      "beforeSha256": "e64dca13010a9151ac484c989bdcc60d096ab0a75fb8cbf72c113dbf5e000ecb",
+      "outputSpan": {
+        "start": 42217,
+        "end": 42321
+      },
+      "afterSha256": "e8ff7c5e1fa68309bdef5550d9a8a9b236aa86cf64879163eac778f0a45d591d"
+    },
+    {
+      "id": "runtime-service-refs",
+      "hunk": "analyze",
+      "inputSpan": {
+        "start": 41846,
+        "end": 41925
+      },
+      "beforeSha256": "951050a48e2617db1ba87ffbbe528e1a4facf6270856e2e54464b1e11d5b1746",
+      "outputSpan": {
+        "start": 43373,
+        "end": 43478
+      },
+      "afterSha256": "5353b7d39faa4e9f0b2a9b177fea5bfab2456ddc1ae70301e039ad3e689405b2"
     },
     {
       "id": "transform-temp-fs",
@@ -162,8 +219,8 @@
       },
       "beforeSha256": "93502bc608b5cf4577b6ba82805e20054bde959cf8503c3285301e4e657c5022",
       "outputSpan": {
-        "start": 134169,
-        "end": 134201
+        "start": 134405,
+        "end": 134437
       },
       "afterSha256": "29ce1a5cd7101e607e12f68a4a8b1aba641cf502bcab0ca6bea301140769f4ac"
     },
@@ -176,8 +233,8 @@
       },
       "beforeSha256": "6fc635322cef6ea6e624c3af409903e5991829c564e9921030db35aaa312caf9",
       "outputSpan": {
-        "start": 15494,
-        "end": 16369
+        "start": 15520,
+        "end": 16395
       },
       "afterSha256": "f15c9566f2075fdcda3528252deff378d3dc596b131dbaa3ed1ffd30b3ed29d8"
     },
@@ -190,8 +247,8 @@
       },
       "beforeSha256": "f86d59879d2c7cd32de0304cd96f5ff8cc9b89881e8eff0ab3be69f7b9c4accd",
       "outputSpan": {
-        "start": 18525,
-        "end": 18630
+        "start": 18551,
+        "end": 18656
       },
       "afterSha256": "bfed8fc44a8e0eadcc791dda1c5d8faad3a3792c0c378ad4f879a1904adb9957"
     },
@@ -204,8 +261,8 @@
       },
       "beforeSha256": "30a9c0835d95f46eb75d364a986b6c993acd21cefd37e18b775c3402397f36c3",
       "outputSpan": {
-        "start": 18756,
-        "end": 18858
+        "start": 18782,
+        "end": 18884
       },
       "afterSha256": "45443d2719b0101c3b553eb311f775100608841150d803f96ed566716c5468e0"
     },
@@ -218,8 +275,8 @@
       },
       "beforeSha256": "8b3086124a8618199dfc290861403a027524f8c90ebc344d6a32c4d47e1a878f",
       "outputSpan": {
-        "start": 67216,
-        "end": 67445
+        "start": 67346,
+        "end": 67575
       },
       "afterSha256": "3279a30298d94650d5323317baa9b0a8e7a81be9c48c85dcdb6b205e5b0ec05d"
     },
@@ -232,8 +289,8 @@
       },
       "beforeSha256": "13920f33e035aaf552bbad146be7936c727c1703b80c7c95b894e59ac6f2bdb7",
       "outputSpan": {
-        "start": 34401,
-        "end": 34768
+        "start": 34427,
+        "end": 34794
       },
       "afterSha256": "2c56aeff29bab755996c2136580bfff0e20a4b65d674b8087aa1c52d40f50d58"
     },
@@ -246,8 +303,8 @@
       },
       "beforeSha256": "ad8f0f05d643b95959f665d263610ec8417418fa077baa4dae548bdf0d99c886",
       "outputSpan": {
-        "start": 69849,
-        "end": 70053
+        "start": 69979,
+        "end": 70183
       },
       "afterSha256": "911c9764bf98a2b376db8d2827e6fb240a1b6abfdaa7630d24a36a944cee6580"
     },
@@ -260,8 +317,8 @@
       },
       "beforeSha256": "72d0b69b6a6d2054d5fc81c3ec99e3c5bb52131be6a96680cdc55855598685b3",
       "outputSpan": {
-        "start": 76968,
-        "end": 77839
+        "start": 77098,
+        "end": 77969
       },
       "afterSha256": "1b68eb0255bf4c8c653fc30d5d3957d1c83a2a45532fb8dcc3968a30f234a160"
     },
@@ -274,8 +331,8 @@
       },
       "beforeSha256": "54c551581891aad879b3c6c08a848bc221ef0de2b21b6542f641f1d246c38853",
       "outputSpan": {
-        "start": 74368,
-        "end": 76967
+        "start": 74498,
+        "end": 77097
       },
       "afterSha256": "50ff40fda97bb55460d9cafab77afcec3d3a0f43b2ce1e1c6e9352930520256e"
     },
@@ -288,8 +345,8 @@
       },
       "beforeSha256": "990615b3a057d4cee9cce673ec0f1c458d9304b6440f3ad208caacd56cb82c18",
       "outputSpan": {
-        "start": 43542,
-        "end": 43718
+        "start": 43672,
+        "end": 43848
       },
       "afterSha256": "9e370fb451dd96dad21217ca858d3cf51be7827600a1e135fbfde379cc23cd15"
     },
@@ -302,8 +359,8 @@
       },
       "beforeSha256": "514b704899b121b4cf37820d5d7095be155d8e17ccae2fc216db3712930bcebc",
       "outputSpan": {
-        "start": 43719,
-        "end": 43719
+        "start": 43849,
+        "end": 43849
       },
       "afterSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
@@ -316,8 +373,8 @@
       },
       "beforeSha256": "9f817b54cfac68e662a2f3b160a8bc0ab93298d28eee5bd295ec570c29bde487",
       "outputSpan": {
-        "start": 49815,
-        "end": 50830
+        "start": 49945,
+        "end": 50960
       },
       "afterSha256": "4c9104fd421e472788394b7d414afc3bb642855486ac9f35c25333b4cd7164e7"
     },
@@ -330,8 +387,8 @@
       },
       "beforeSha256": "5dee07657cec1701ad9b045bd6c5937f321a1ade3aec25599a23243001b2fc9e",
       "outputSpan": {
-        "start": 50831,
-        "end": 50842
+        "start": 50961,
+        "end": 50972
       },
       "afterSha256": "abd94a156ada91ea32eb4823cfcf5ee7c06b374dc9d953025fe15dac0cc43985"
     },
@@ -344,8 +401,8 @@
       },
       "beforeSha256": "ae762ee19b8fddfba267aa27d367f1d2033a3f6aaf205739b26eee1fb32e214a",
       "outputSpan": {
-        "start": 46016,
-        "end": 46229
+        "start": 46146,
+        "end": 46359
       },
       "afterSha256": "0f0a0bbff4b9f1d2ed629ee55eebd20ce917c55f3b1220b324420c939685d975"
     },
@@ -358,16 +415,16 @@
       },
       "beforeSha256": "a17a367c63c545b531020840e99aa71de577b741cc2bfeb6c14a35e405d7bdbd",
       "outputSpan": {
-        "start": 135004,
-        "end": 135142
+        "start": 135240,
+        "end": 135400
       },
-      "afterSha256": "1a09c2217985927952a7bfa5d010ab9cd50111653dd08a8fe5595934de7009bd"
+      "afterSha256": "998e6ab9be3aaf7e281ded200c88fa52bdb0539022db82796c6e65c747d76b21"
     }
   ],
   "output": {
     "path": "tools/shadow-registry/src/runtime/generated/esbuild-runtime.js",
     "format": "esm",
-    "bytes": 135144,
-    "sha256": "7acc5cd6f0e111810d3505c0959ec2fb5767f25af8dd2c5919a5b36d4f4da553"
+    "bytes": 135402,
+    "sha256": "861f57235acf3609ee15d0a8d7ac9529166d72ce866e8f15a6658722ec70573d"
   }
 }

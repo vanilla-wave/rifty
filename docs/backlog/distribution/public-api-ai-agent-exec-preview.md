@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Cancellable no-COI agent commands and legacy preview question
 created: 2026-06-12
 why: An agent must stop a command, observe its own output and file effects, then safely submit the next action through the no-COI SDK
@@ -80,6 +80,8 @@ message loss/replay/reorder is excluded, not an excuse for another queue.
 | malformed root/policy or readonly mutation via shell/guest | Consistent rejection at the operation boundary, without silently bypassing policy | → scenario |
 
 ## Decisions
+
+ready-verdict: 2026-09-10 — Contract+RED @ 110c8ecf940f95cd6b0a89b9ab8d39dc4d5a9027
 
 - re-cut: 2026-09-10 — #326 refines the existing exec finding in place; historical preview question retained separately below — trace: none.
 - 2026-09-10 — reuse one authoritative no-COI Worker/VFS and existing Shell; API shape and any widened admission seam need ADR/reference/RED preparation at PICKUP.

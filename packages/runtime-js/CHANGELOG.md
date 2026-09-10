@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add structured FS RPC with checked persistence receipts, console-only eval result typing and command protocol v4; preserve recovery mutations and clear completed Node invocation timers.
+
 - Migrate Node entry bootstrap to v4 for optional host SQLite configuration; reject prior versions atomically (ADR-0416).
 
 - Reject unreadable acquired OPFS preload through Worker-error settlement, including pending eval/fs calls; unavailable-root memory fallback stays intact.

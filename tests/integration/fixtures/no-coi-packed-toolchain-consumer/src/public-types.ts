@@ -1,5 +1,15 @@
 import type {
+  RuntimeEffects,
+  RuntimeFs,
+  RuntimeFsDirent,
+  RuntimeFsStat,
+  SandboxCommandOptions,
+  SandboxCommandOutcome,
+  SandboxCommandOutput,
+  SandboxCommandRun,
   SandboxPreviewTarget,
+  SandboxProject,
+  SandboxProjectOptions,
   SandboxResidentBin,
   SandboxRestartOptions,
   SandboxRestartReport,
@@ -17,6 +27,48 @@ type RootDeclaredGapCause = typeof import('@riftydev/runtime-js')['declaredGapCa
 
 declare const toolchain: SandboxToolchain;
 declare const sandbox: ToolchainSandbox;
+
+const projectOptions: SandboxProjectOptions = {
+  root: '/project',
+  readonlyPaths: ['locked'],
+  allowedCommands: ['node', 'npm'],
+};
+const project: SandboxProject = sandbox.project(projectOptions);
+const files: RuntimeFs = project.fs;
+const entries: Promise<readonly RuntimeFsDirent[]> = files.readdir('.');
+const metadata: Promise<RuntimeFsStat> = files.stat('package.json');
+const write: Promise<void> = files.writeFile('src/main.js', 'console.log(42)');
+const mutations: Promise<RuntimeEffects>[] = [
+  files.mkdir('src', { recursive: true }),
+  files.rename('a', 'b'),
+  files.rm('b', { force: true, recursive: true }),
+  files.flush(),
+];
+const commandOptions: SandboxCommandOptions = { cwd: 'src', env: { MODE: 'test' } };
+const invocation: SandboxCommandRun = project.run('node main.js', commandOptions);
+const completion: Promise<SandboxCommandOutcome> = invocation.completion;
+const stop: Promise<SandboxCommandOutcome> = invocation.stop();
+const unsubscribe: () => void = invocation.onOutput((output: SandboxCommandOutput) => {
+  const stream: 'stdout' | 'stderr' = output.stream;
+  const chunk: string = output.chunk;
+  void [stream, chunk];
+});
+void [entries, metadata, write, mutations, completion, stop, unsubscribe];
+// @ts-expect-error root is required
+sandbox.project({});
+// @ts-expect-error policy is a string array
+sandbox.project({ root: '/project', readonlyPaths: 'locked' });
+// @ts-expect-error command is a string
+project.run(['node', 'main.js']);
+// @ts-expect-error command cwd is a string
+project.run('node main.js', { cwd: 1 });
+// @ts-expect-error environment values are strings
+project.run('node main.js', { env: { MODE: 1 } });
+// @ts-expect-error no persistent shell or background option
+project.run('node main.js', { background: true });
+// @ts-expect-error writeFile preserves its Promise<void> result
+const writeReceipt: Promise<RuntimeEffects> = files.writeFile('a', 'b');
+void writeReceipt;
 
 void toolchain.install({ cwd: '/project', registryUrl: 'https://registry.invalid' });
 void toolchain.runBin({

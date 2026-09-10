@@ -7,12 +7,15 @@ import {
   createSandbox,
 } from '@riftydev/sdk';
 
+export { agentFilesScenario, agentCommandsScenario, agentStopScenario } from './agent-scenarios';
+
 export async function bootToolchain(
   workerUrl: string | URL,
   vmEngine?: ToolchainCreateSandboxOptions['vmEngine'],
 ): Promise<ToolchainSandbox> {
   return await createSandbox({
     requireCrossOriginIsolation: false,
+    skipServiceWorker: true,
     toolchain: { workerUrl },
     vmEngine,
   });
@@ -37,3 +40,5 @@ export async function runInstalledTool(
   });
   return result.exitCode;
 }
+
+export { agentInstalledBuildScenario } from './agent-installed-scenario';

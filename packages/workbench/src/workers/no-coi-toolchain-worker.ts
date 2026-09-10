@@ -1,3 +1,5 @@
+import { setSyncMirror } from '@riftydev/vfs/internal';
+import { createNoCoiProjectFs } from './no-coi-project-fs.ts';
 /// <reference lib="webworker" />
 
 import { NotImplementedError } from '@riftydev/io';
@@ -14,14 +16,21 @@ import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/proce
 import {
   SANDBOX_TOOLCHAIN_PROTOCOL,
   type ToolchainActivationState,
+  type ToolchainCommandResult,
   type ToolchainRecoveryFile,
   type ToolchainRequest,
   type ToolchainResult,
+  type ToolchainResultValue,
+  checkedRuntimeFsFlush,
   claimSandboxToolchainResidentTransition,
+  handleWorkerFsRequest,
+  invalidateRuntimeWorkerModules,
   releaseSandboxToolchainResidentTransition,
   setRuntimeWorkerFsComposition,
+  validateCommandInput,
+  validateProjectOptions,
 } from '@riftydev/runtime-js/internal';
-import { type PersistFailureReport, dirname, syncMirror } from '@riftydev/vfs';
+import { dirname, syncMirror } from '@riftydev/vfs';
 import { INSTALL_STAMP_BASENAME, readInstallStamp } from '../glue/install-stamp.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { declaredGapCause } from './declared-gap-cause.ts';
@@ -43,8 +52,14 @@ installToolchainCloseSignal();
 
 let runtimeBackend: 'opfs' | 'memory' | null = null;
 let installContext: ReturnType<typeof createNoCoiInstallContext>;
+let projectContext: ReturnType<typeof createNoCoiProjectFs>;
+let activationCwd: string | null = null;
+let activationBindings: ToolchainActivationState['bindings'] = [];
+let activeCommand: { id: number; controller: AbortController } | null = null;
 setRuntimeWorkerFsComposition(() => {
   installContext = createNoCoiInstallContext();
+  projectContext = createNoCoiProjectFs(installContext.fs);
+  setSyncMirror(projectContext.fs, { async: new SyncMirrorVfs() });
 });
 
 function installationSlug(registryUrl: string): string {
@@ -62,22 +77,21 @@ function post(message: ToolchainResult): void {
 }
 
 async function flushMirror(): Promise<void> {
-  const mirror = syncMirror() as { flush?: () => Promise<PersistFailureReport> };
-  const report = await mirror.flush?.();
-  if (report === undefined || report.total === 0) return;
-  const detail = report.failures.map((failure) => `${failure.path}: ${failure.message}`).join('; ');
-  const error = new Error(`OPFS persistence failed (${report.total} unhealed): ${detail}`);
-  error.name = 'SandboxPersistenceError';
-  throw error;
+  await checkedRuntimeFsFlush(() => installContext.fs.flush());
 }
 
-function snapshotFiles(): readonly ToolchainRecoveryFile[] {
+function snapshotFiles(): {
+  files: readonly ToolchainRecoveryFile[];
+  directories: readonly string[];
+} {
   const fs = syncMirror();
   const files: ToolchainRecoveryFile[] = [];
+  const directories: string[] = [];
   const walk = (directory: string): void => {
     for (const entry of fs.readdirSync(directory)) {
       const path = directory === '/' ? `/${entry.name}` : `${directory}/${entry.name}`;
       if (entry.isDirectory) {
+        directories.push(path);
         walk(path);
         continue;
       }
@@ -86,7 +100,10 @@ function snapshotFiles(): readonly ToolchainRecoveryFile[] {
     }
   };
   walk('/');
-  return Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path)));
+  return {
+    files: Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path))),
+    directories: Object.freeze(directories.toSorted()),
+  };
 }
 
 function activationSnapshot(
@@ -94,7 +111,9 @@ function activationSnapshot(
   bindings: ToolchainActivationState['bindings'],
 ): ToolchainActivationState {
   if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
-  return Object.freeze({ cwd, bindings, vfsBackend: runtimeBackend, files: snapshotFiles() });
+  activationCwd = cwd;
+  activationBindings = bindings;
+  return Object.freeze({ cwd, bindings, vfsBackend: runtimeBackend, ...snapshotFiles() });
 }
 
 async function installManifest(input: Extract<ToolchainRequest, { op: 'install' }>['input']) {
@@ -242,6 +261,8 @@ async function startInstalledBin(
 }
 
 async function restoreActivation(state: ToolchainActivationState): Promise<void> {
+  activationCwd = state.cwd;
+  activationBindings = state.bindings;
   if (runtimeBackend === null) throw new Error('toolchain VFS backend is not ready');
   const { activateWorkbenchRuntimeAdapters } = await import('./no-coi-toolchain-install.ts');
   if (runtimeBackend === 'memory' || runtimeBackend !== state.vfsBackend) {
@@ -253,6 +274,7 @@ async function restoreActivation(state: ToolchainActivationState): Promise<void>
     for (const file of claims)
       installContext.claims.remove(file.path.slice(0, -suffix.length) || '/');
     await flushMirror();
+    for (const path of state.directories ?? []) fs.mkdirSync(path, { recursive: true });
     for (const file of state.files) {
       if (file.path.endsWith(suffix)) continue;
       fs.mkdirSync(dirname(file.path), { recursive: true });
@@ -274,22 +296,79 @@ async function restoreActivation(state: ToolchainActivationState): Promise<void>
   });
 }
 
-async function dispatch(
-  request: ToolchainRequest,
-): Promise<
-  | { readonly exitCode: number }
-  | { readonly port: number }
-  | { readonly activationState: ToolchainActivationState }
-  | undefined
-> {
+async function dispatch(request: ToolchainRequest): Promise<ToolchainResultValue | undefined> {
   if (
     residentPort !== null &&
-    (request.op === 'install' || request.op === 'open' || request.op === 'run-bin')
+    (request.op === 'install' ||
+      request.op === 'open' ||
+      request.op === 'run-bin' ||
+      request.op === 'command' ||
+      request.op === 'project-fs')
   ) {
     throw new NotImplementedError(
       'sandbox.toolchain.resident-concurrency',
       'install/open/runBin while a resident bin is active is not supported',
     );
+  }
+  if (request.op === 'project-fs') {
+    const project = validateProjectOptions(request.input.project);
+    const release = projectContext.activate(project);
+    if (!claimSandboxToolchainResidentTransition()) {
+      release();
+      throw new Error('toolchain realm is already owned');
+    }
+    try {
+      const fsResult = await handleWorkerFsRequest(request.input.request, {
+        fs: projectContext.fs,
+        invalidate: invalidateRuntimeWorkerModules,
+        flush: () => installContext.fs.flush(),
+      });
+      return { fsResult };
+    } finally {
+      release();
+      releaseSandboxToolchainResidentTransition();
+    }
+  }
+  if (request.op === 'command') {
+    const input = validateCommandInput(request.input);
+    const release = projectContext.activate(input.project);
+    if (!claimSandboxToolchainResidentTransition()) {
+      release();
+      throw new Error('toolchain realm is already owned');
+    }
+    const controller = new AbortController();
+    activeCommand = { id: request.id, controller };
+    self.postMessage({ type: 'toolchain-command-started', id: request.id });
+    let command: ToolchainCommandResult;
+    let unsettled = false;
+    try {
+      const { runNoCoiProjectCommand } = await import('./no-coi-project-command.ts');
+      command = await runNoCoiProjectCommand(input, controller.signal, {
+        fs: projectContext.fs,
+        onOutput(chunk, stream) {
+          self.postMessage({ type: 'toolchain-command-output', id: request.id, chunk, stream });
+        },
+        flush: () => checkedRuntimeFsFlush(() => installContext.fs.flush()),
+        effects: projectContext.effects,
+      });
+      if (command.requiresTermination) {
+        unsettled = true;
+        mustTerminate = true;
+        return { command };
+      }
+      invalidateRuntimeWorkerModules();
+      const state =
+        command.effects.persistence === 'failed'
+          ? undefined
+          : activationSnapshot(activationCwd ?? input.project.root, activationBindings);
+      return { command, ...(state === undefined ? {} : { activationState: state }) };
+    } finally {
+      if (!unsettled) {
+        activeCommand = null;
+        release();
+        releaseSandboxToolchainResidentTransition();
+      }
+    }
   }
   if (request.op === 'open') return { activationState: await openInstallation(request.input) };
   if (request.op === 'install') {
@@ -307,6 +386,7 @@ function serializedError(error: unknown): SerializedRuntimeError {
     readonly code?: unknown;
     readonly path?: unknown;
     readonly feature?: unknown;
+    readonly effects?: unknown;
   };
   return {
     name: inspected.name,
@@ -319,7 +399,13 @@ function serializedError(error: unknown): SerializedRuntimeError {
 }
 
 let busy = false;
+let mustTerminate = false;
 self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?: unknown }>) => {
+  if (event.data?.type === 'toolchain-command-stop') {
+    if (activeCommand !== null && activeCommand.id === (event.data as { id?: unknown }).id)
+      activeCommand.controller.abort();
+    return;
+  }
   if (event.data?.type !== 'toolchain') return;
   const request = event.data.request as ToolchainRequest;
   if (busy) {
@@ -340,7 +426,7 @@ self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?
       },
     )
     .finally(() => {
-      busy = false;
+      if (!mustTerminate) busy = false;
     });
 });
 

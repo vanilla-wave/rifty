@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Expose EROFS for host-configured readonly project files; runtime Node errors retain errno -30.
+
 - Preserve selected roots and operation budgets through strict single-pass preload; acquired-tree failures remain distinct from unavailable roots (ADR-0411).
 
 ### Added

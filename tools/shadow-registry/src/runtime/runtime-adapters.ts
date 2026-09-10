@@ -23,6 +23,7 @@ interface EsbuildRuntimeOptions {
   readonly bytes: Uint8Array;
   readonly fs: FsSync;
   readonly cwd: string;
+  readonly refs?: { ref(): void; unref(): void };
 }
 
 interface GeneratedRuntimeModule {
@@ -30,7 +31,9 @@ interface GeneratedRuntimeModule {
     readonly wasm: WebAssembly.Module;
     readonly fs: FsSync;
     readonly cwd: string;
+    readonly refs?: { ref(): void; unref(): void };
   }): Promise<RuntimeEsbuildCjsOuter>;
+  setEsbuildRuntimeCwd(cwd: string): void;
 }
 
 const generated = generatedRuntime as unknown as GeneratedRuntimeModule;
@@ -66,7 +69,12 @@ async function startGeneratedEsbuildRuntime(
   const ownedBytes = new Uint8Array(options.bytes.byteLength);
   ownedBytes.set(options.bytes);
   const wasm = await WebAssembly.compile(ownedBytes);
-  return generated.startEsbuildRuntime({ wasm, fs: options.fs, cwd: options.cwd });
+  return generated.startEsbuildRuntime({
+    wasm,
+    fs: options.fs,
+    cwd: options.cwd,
+    refs: options.refs,
+  });
 }
 
 function assertEsbuildPackagePath(binding: PackageRuntimeBinding, cwd: string): void {
@@ -91,6 +99,8 @@ async function activateEsbuild(
   binding: PackageRuntimeBinding,
   fs: FsSync,
   cwd: string,
+  getCwd?: () => string,
+  refs?: { ref(): void; unref(): void },
 ): Promise<void> {
   const packagePath = binding.packagePath;
   const normalizedCwd = normalizePath(cwd);
@@ -108,8 +118,12 @@ async function activateEsbuild(
     );
   }
   if (runtimeEsbuildBindingMatches(fs, normalizedCwd)) return;
-  const outer = await startGeneratedEsbuildRuntime({ bytes, fs, cwd: normalizedCwd });
-  publishRuntimeEsbuild(outer, { fs, cwd: normalizedCwd });
+  const outer = await startGeneratedEsbuildRuntime({ bytes, fs, cwd: normalizedCwd, refs });
+  publishRuntimeEsbuild(
+    outer,
+    { fs, cwd: normalizedCwd },
+    getCwd === undefined ? undefined : () => generated.setEsbuildRuntimeCwd(getCwd()),
+  );
 }
 
 export function assertPackageRuntimeBindings(options: {
@@ -133,9 +147,13 @@ export async function activatePackageRuntimeAdapters(options: {
   readonly bindings: readonly PackageRuntimeBinding[];
   readonly fs: FsSync;
   readonly cwd: string;
+  /** Captured when the synthetic package is evaluated, as native esbuild captures process.cwd(). */
+  readonly getCwd?: () => string;
+  /** Existing Node event-loop ownership, used by upstream request/context refs. */
+  readonly refs?: { ref(): void; unref(): void };
 }): Promise<void> {
   assertPackageRuntimeBindings(options);
   for (const binding of options.bindings) {
-    await activateEsbuild(binding, options.fs, options.cwd);
+    await activateEsbuild(binding, options.fs, options.cwd, options.getCwd, options.refs);
   }
 }

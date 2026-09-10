@@ -184,8 +184,8 @@ describe('generated esbuild runtime provenance', () => {
     expect(contents.match(/module\.exports = __toCommonJS\(browser_exports\);/g)).toHaveLength(1);
     expect(contents).toContain('const esbuild = module.exports;');
     expect(contents).toContain('export default esbuild;');
-    expect(contents).toContain('export { startEsbuildRuntime };');
-    expect(contents).toContain('startEsbuildRuntime = ({ wasm, fs, cwd }) => {');
+    expect(contents).toContain('export { startEsbuildRuntime, setEsbuildRuntimeCwd };');
+    expect(contents).toContain('startEsbuildRuntime = ({ wasm, fs, cwd, refs }) => {');
     expect(contents.match(/startRunningService\("", wasm, false\)/g)).toHaveLength(1);
     expect(contents).toContain(
       'import { createEsbuildCallbackFs } from "../esbuild-runtime-fs.ts";',

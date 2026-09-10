@@ -29,11 +29,14 @@ function registryRealm(): RegistryRealm {
 export function publishRuntimeEsbuild(
   outer: RuntimeEsbuildCjsOuter,
   binding?: RuntimeEsbuildBinding,
+  onAcquire?: () => void,
 ): void {
   const realm = registryRealm();
   Object.defineProperty(realm, 'esbuild', {
-    value: outer,
-    writable: true,
+    get() {
+      onAcquire?.();
+      return outer;
+    },
     configurable: true,
     enumerable: true,
   });

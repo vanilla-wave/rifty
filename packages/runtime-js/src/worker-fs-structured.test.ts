@@ -12,13 +12,13 @@ const flushedReceipt = { applied: 'yes', persistence: 'flushed' };
 function harness(flush?: () => Promise<PersistFailureReport | undefined>) {
   const fs = new MemoryFsSync();
   let invalidations = 0;
-  const deps = {
+  const deps: WorkerFsRpcDeps = {
     fs,
     invalidate: () => {
       invalidations += 1;
     },
     ...(flush === undefined ? {} : { flush }),
-  } as unknown as WorkerFsRpcDeps;
+  };
   return {
     fs,
     invalidations: () => invalidations,

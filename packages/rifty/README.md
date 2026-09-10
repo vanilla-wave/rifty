@@ -140,10 +140,52 @@ an error with `name === "SandboxInstallRequiredError"`; saved bytes stay intact.
 Install once after an upgrade from SDK 0.6 installations, which did not record this proof.
 
 Update the SDK and self-hosted toolchain Worker together: this API uses protocol
-v3; an older Worker is rejected during handshake. Serialized SDK errors are
+v4; an older Worker is rejected during handshake. Serialized SDK errors are
 ordinary `Error` objects: branch on `error.name`, including
 `SandboxInstallRequiredError` and `SandboxPersistenceError`, rather than `instanceof`
 a named SDK error class.
+
+### Agent files and commands without COI
+
+```ts
+const project = sandbox.project({ root: '/project', readonlyPaths: ['locked'] });
+await project.fs.mkdir('src', { recursive: true });
+await project.fs.writeFile('src/input.txt', 'hello');
+console.log(await project.fs.readdir('src'));
+console.log(await project.fs.stat('src/input.txt'));
+await project.fs.rename('src/input.txt', 'src/message.txt');
+
+const run = project.run('npm run build', { cwd: '.', env: { NODE_ENV: 'production' } });
+run.onOutput(({ stream, chunk }) => console.log(stream, chunk));
+const result = await run.completion; // or await run.stop()
+console.log(result.status, result.exitCode, result.effects, result.worker);
+await project.fs.rm('src/message.txt');
+```
+
+`project` is immutable configuration. Each run gets fresh Shell cwd/env; cd
+changes subsequent segments of that call. Files persist. Relative file paths,
+cwd and readonly paths resolve from root; absolute paths retain their VFS
+meaning. Root is a path origin, not a filesystem jail. Optional allowedCommands
+permits only exact names at Shell dispatch, including nested npm scripts.
+Background jobs are rejected before launch. Policy covers ordinary Node and
+installed-tool writes, not hostile JS.
+
+Completion reports exited/cancelled/failed, captured stdout/stderr, exitCode
+(null when unavailable), effects and Worker state. Output subscriptions do not
+replay: attach immediately. Stop retains ownership through handler and checked
+flush settlement. After one second without settlement, an admitted stopped
+command's Worker is terminated/replaced before completion, with unknown effects.
+Recovery never replays a command or promises rollback. Memory recovery uses the
+retained image; unknown effects can be lost. Concurrent finite operations reject
+busy. Project methods alongside a resident bin reject resident-concurrency.
+
+Raw sandbox.fs also provides readdir/stat/mkdir/rename/rm/flush; relative paths
+remain VFS-rooted. Stat/dirent results are plain VFS metadata records. New
+mutations/flush return applied/persistence receipts (memory/flushed); writeFile
+preserves its void result. Failed operations carry error.effects for application
+and persistence uncertainty. Console runtime.eval prints expression values and
+resolves success with value undefined; file/command methods supply structured
+results.
 
 Edited runtime assets (for example `esbuild.wasm`) can surface their original
 adapter/integrity error during open. Explicit install repairs package files.

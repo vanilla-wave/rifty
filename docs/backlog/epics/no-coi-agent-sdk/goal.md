@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: No-COI agent project files and commands
 created: 2026-09-10
 value: An embedded agent edits and executes a real project through public SDK methods without COI

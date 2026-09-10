@@ -26,6 +26,7 @@ import {
   assertClientBundleBudgets,
 } from '../../tools/checks/client-bundle-budget.mjs';
 import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
+import { provePackedAgent } from './no-coi-agent-browser-proof.mjs';
 import { provePackedInstallLoading } from './no-coi-install-browser-proof.mjs';
 import { provePackedVmSelection } from './no-coi-vm-browser-proof.mjs';
 import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
@@ -1437,6 +1438,21 @@ async function main() {
         consumerRoot,
         await readJson(resolve(consumerRoot, 'measure/report.json')),
       );
+      const agentRegistry = await startBrowserRegistry(await browserRegistryPackages());
+      try {
+        await provePackedAgent(consumerRoot, agentRegistry.origin);
+        assert(
+          agentRegistry.responses.some(
+            (response) =>
+              response.kind === 'tarball' &&
+              response.packageName === 'vite' &&
+              response.status === 200,
+          ),
+          'agent build must install the original Vite npm tarball',
+        );
+      } finally {
+        await agentRegistry.close();
+      }
       if (checkBudgets) {
         const report = await readJson(resolve(consumerRoot, 'measure/report.json'));
         assertClientBundleBudgets(report, boot);

@@ -15,6 +15,7 @@
  */
 
 import { OpfsPreloadError, initBackend, syncMirror } from '@riftydev/vfs';
+import type { PersistFailureReport } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
 import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './builtins/process.ts';
@@ -26,7 +27,10 @@ import {
   isSandboxToolchainResidentTransitionActive,
   sandboxToolchainWebAssembly,
 } from './internal/sandbox-toolchain-realm.ts';
-import { composeRuntimeWorkerFs } from './internal/worker-fs-composition.ts';
+import {
+  composeRuntimeWorkerFs,
+  setRuntimeWorkerModuleInvalidation,
+} from './internal/worker-fs-composition.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { vmEngineFromWorkerName } from './internal/worker-vm-engine.ts';
 import { createModuleLoader } from './module-loader/index.ts';
@@ -35,7 +39,11 @@ import { installConsole } from './repl/console.ts';
 import { evalInRepl } from './repl/eval.ts';
 import { inspect } from './repl/inspect.ts';
 import { captureNotImplemented, snapshotTelemetry } from './telemetry/divergence-sink.ts';
-import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
+import {
+  checkedRuntimeFsFlush,
+  handleWorkerFsRequest,
+  serializeRuntimeError,
+} from './worker-fs-rpc.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -74,7 +82,7 @@ function postDiagnosticIfChanged(): void {
   post({ type: 'diagnostic', payload });
 }
 
-async function handleEval(req: EvalRequest): Promise<EvalResult> {
+async function evaluateExpression(req: EvalRequest): Promise<EvalResult> {
   // ADR-0019 — seed the per-Worker cwd cell from the host's eval `cwd` snapshot
   // (kernel's ProcessRecord.cwd) before running user code. `setProcessCwd`
   // bypasses VFS validation: the host is trusted to pass an already-resolved path.
@@ -103,14 +111,21 @@ async function handleEval(req: EvalRequest): Promise<EvalResult> {
     const message = String(err);
     post({ type: 'stderr', chunk: `${message}\n` });
     return { id: req.id, ok: false, error: { name: 'Error', message } };
-  } finally {
-    // Drain OPFS write-through (ADR-0072) before posting the result, so a file
-    // written during eval is durably persisted before the host resolves the eval
-    // promise (e2e: before a page reload). No-op on memory (`flush` absent).
-    const mirror = syncMirror() as { flush?: () => Promise<void> };
-    if (typeof mirror.flush === 'function') {
-      await mirror.flush();
-    }
+  }
+}
+
+async function flushWorkerFs() {
+  const mirror = syncMirror() as { flush?: () => Promise<PersistFailureReport | undefined> };
+  return await mirror.flush?.();
+}
+
+async function handleEval(req: EvalRequest): Promise<EvalResult> {
+  const result = await evaluateExpression(req);
+  try {
+    await checkedRuntimeFsFlush(flushWorkerFs);
+    return result;
+  } catch (error) {
+    return { id: req.id, ok: false, error: serializeRuntimeError(error) };
   }
 }
 
@@ -154,6 +169,7 @@ const boot = (async () => {
   composeRuntimeWorkerFs();
   const active = syncMirror();
   const loader = createModuleLoader(active, { cwd: '/' });
+  setRuntimeWorkerModuleInvalidation(() => loader.invalidate());
 
   // Canonical home is `__rifty.require`/`__rifty.import`; also mirrored onto
   // `self.require`/`self.__riftyImport` for Node-style REPL ergonomics (M2 e2e).
@@ -194,6 +210,14 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   const { loader } = await boot;
   switch (msg.type) {
     case 'load-fixture': {
+      if (isSandboxToolchainResidentTransitionActive()) {
+        post({
+          type: 'stderr',
+          chunk:
+            'SandboxToolchainBusyError: runtime fixture cannot enter during owned toolchain operation\n',
+        });
+        break;
+      }
       // Keep the loader alive across editor saves, dropping only the module cache.
       // Route writes through the active mirror (ADR-0072) so saves land on the
       // wired backend, not a dead memory instance (`loadFixture` is optional on
@@ -245,10 +269,7 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
       const result = await handleWorkerFsRequest(msg.request, {
         fs: syncMirror(),
         invalidate: () => loader.invalidate(),
-        flush: async () => {
-          const mirror = syncMirror() as { flush?: () => Promise<void> };
-          if (typeof mirror.flush === 'function') await mirror.flush();
-        },
+        flush: flushWorkerFs,
       });
       post({ type: 'fs-result', result });
       break;

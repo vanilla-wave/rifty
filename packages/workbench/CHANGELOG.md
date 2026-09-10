@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Compose no-COI project file/command policy on the permanent Worker VFS; reuse Shell and Node entry execution, retain handlers through Stop/drain/flush and reject background jobs.
+
 - Make deployment.wasm/sqlite optional; preserve absence through recursive workers, reject malformed supplied values, and skip the SQLite provider without a URL (ADR-0416).
 
 - Prove npm fails when Scratch catalog dirty persistence hits quota or permission errors, retaining the prior catalog across reload; the regression kills swallowed reflection errors.

@@ -84,7 +84,7 @@ const PUBLISHED_PACKAGE_ROOTS = Object.freeze([
   'tools/shadow-registry',
 ]);
 const EXPECTED_PACKAGE_FILES = Object.freeze(['dist', 'CHANGELOG.md']);
-const GENERATED_CLIENT_SHA256 = '7acc5cd6f0e111810d3505c0959ec2fb5767f25af8dd2c5919a5b36d4f4da553';
+const GENERATED_CLIENT_SHA256 = '861f57235acf3609ee15d0a8d7ac9529166d72ce866e8f15a6658722ec70573d';
 const MAX_PUBLISHED_OUTPUT_BYTES = 2_000_000;
 // ADR-0391: exact existing compiler/runtime assets; never a directory-wide waiver.
 const WORKBENCH_ASSET_ROOT = 'packages/workbench/dist/assets/';
@@ -95,7 +95,7 @@ const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
   },
   'typescript-worker.js': {
     bytes: 10_022_664,
-    sha256: '18bd430b79c4ee695d25ec970f46999c88cc0ec2cdd7d62475887a2826ead6a8',
+    sha256: '0d6d036e92aab5844d3f1d2a0fddea8efb06d4714f979bbda7f3ba9699862523',
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({

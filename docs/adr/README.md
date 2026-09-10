@@ -245,6 +245,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0312 | Keep synchronous SHA-256 implementations layer-local |
 | 0323 | Gate heavy PR tests on code-affecting changes |
 | 0338 | TTY parity composes exact one-axis native resize traces |
+| 0421 | Bind reusable package adapters to Node invocations |
 
 ### protocol
 

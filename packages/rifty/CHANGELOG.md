@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add no-COI project filesystem methods and stateless command handles with streamed output, owned Stop and explicit Worker replacement; toolchain protocol v4 requires matching SDK/Worker versions.
+
 - No-COI toolchain protocol is now v3. Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.
 
 - Add toolchain.open({cwd, registryUrl}) for compatible saved installations; preserve dependency edits and require explicit install for missing/incompatible proof.

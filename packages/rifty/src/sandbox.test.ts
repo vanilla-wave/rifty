@@ -1,5 +1,6 @@
 import type { RuntimeController } from '@riftydev/runtime-js';
-import type { FsReadEncoding } from '@riftydev/runtime-js';
+import { createRuntimeFs, handleWorkerFsRequest } from '@riftydev/runtime-js/internal';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CapabilityCheck } from './capabilities.ts';
 import {
@@ -67,18 +68,14 @@ void publicResidentLifecycleTypeCarrier;
 
 /** A typed no-op controller — these tests assert wiring, never drive eval. */
 function fakeRuntime(onDispose: () => void = () => {}): RuntimeController {
-  function readFile(path: string): Promise<Uint8Array>;
-  function readFile(path: string, encoding: FsReadEncoding): Promise<string>;
-  function readFile(_path: string, encoding?: FsReadEncoding): Promise<Uint8Array | string> {
-    return Promise.resolve(encoding === undefined ? new Uint8Array() : '');
-  }
+  const memory = new MemoryFsSync();
+  const fs = createRuntimeFs((operation) =>
+    handleWorkerFsRequest({ ...operation, id: 0 }, { fs: memory, invalidate() {} }),
+  );
 
   return {
     eval: () => Promise.resolve({ id: 0, ok: true, value: undefined }),
-    fs: {
-      readFile,
-      writeFile: () => Promise.resolve(),
-    },
+    fs,
     reset: () => Promise.resolve(),
     dispose: onDispose,
     on: () => () => {},
@@ -429,7 +426,7 @@ describe('createSandbox', () => {
         worker.emit({ type: 'ready' });
         worker.emit({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v3',
+          protocol: 'rifty.sandbox-toolchain/v4',
           vfsBackend: 'opfs',
         });
       }
@@ -503,7 +500,7 @@ describe('createSandbox', () => {
       worker.emit({ type: 'ready' });
       worker.emit({
         type: 'toolchain-ready',
-        protocol: 'rifty.sandbox-toolchain/v3',
+        protocol: 'rifty.sandbox-toolchain/v4',
         vfsBackend: workerBackend,
       });
       const sandbox = await creating;
@@ -564,7 +561,7 @@ describe('createSandbox', () => {
     first.emit({ type: 'ready' });
     first.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v3',
+      protocol: 'rifty.sandbox-toolchain/v4',
       vfsBackend: 'memory',
     });
     const sandbox = (await creating) as ToolchainSandbox;
@@ -622,7 +619,7 @@ describe('createSandbox', () => {
     second.emit({ type: 'ready' });
     second.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v3',
+      protocol: 'rifty.sandbox-toolchain/v4',
       vfsBackend: 'memory',
     });
     await Promise.resolve();
@@ -663,7 +660,7 @@ describe('createSandbox', () => {
             this.emit({
               type: 'toolchain-ready',
               protocol:
-                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v3',
+                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v4',
               vfsBackend: 'memory',
             } as WorkerMessage);
           });

@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Structured no-COI project filesystem operations
 created: 2026-09-10
 why: Embedded agents must list and mutate the worker-owned project without eval strings or temporary result files
@@ -58,6 +58,8 @@ MessagePort loss/replay/reorder is excluded; no transport retry machinery.
 | malformed path/options, missing entry, readonly destination | Honest operation error, consistent path semantics across file and command interfaces | → scenario |
 
 ## Decisions
+
+ready-verdict: 2026-09-10 — Contract+RED @ 110c8ecf940f95cd6b0a89b9ab8d39dc4d5a9027
 
 - 2026-09-10 — #325 permits explicit console-only eval; typed FS plus #326 command outcomes close the supplied scenarios without a general JS-value API.
 - 2026-09-10 — raw root anchoring follows ADR-0131; project binding must be additive, never reinterpret existing raw read/write paths.

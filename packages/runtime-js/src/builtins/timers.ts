@@ -33,6 +33,18 @@ let nextTimerId = 1;
 // whose id collides). One-shot timeouts deregister on fire; intervals on clear.
 const handlesById = new Map<number, KeepaliveTimerHandle>();
 
+/** Invocation boundary in the existing timer registry; capture before running guest code. */
+export function captureTimerBoundary(): number {
+  return nextTimerId;
+}
+
+/** A drained invocation has exited: its remaining unref timers cannot run afterward. */
+export function clearTimersSince(boundary: number): void {
+  for (const [id, handle] of handlesById) {
+    if (id >= boundary) handle.clear();
+  }
+}
+
 class KeepaliveTimerHandle {
   private active = true;
   private refed = true;

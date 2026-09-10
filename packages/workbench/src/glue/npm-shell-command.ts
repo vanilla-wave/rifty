@@ -2,28 +2,8 @@
  * Shell npm commands use the existing installer and package mutation authority.
  * Without a registry, explicit install retains local replay; network misses fail.
  *
- * Scope: `npm install`, `npm install <name>[@<range>] …`, `i`/`add` synonyms,
- * plus `npm run <script>` via an injected host script runner. Deferred:
- * `npm uninstall`, `npm ci`/lockfile-only (M11 nested install lands first).
- *
- * Auto-creates a minimal `package.json` at `ctx.cwd` when none exists (matches
- * `realVite.ts` seeding) so `npm install express` is a one-liner on a blank tree.
- *
- * Progress reporting goes through `ctx.stdout.write`, which the shell pipes
- * into the terminal via `Shell.run`'s `onChunk` callback. Per-package lines
- * stream live through `InstallOptions.onPackage` (ADR-0134).
- *
- * After a successful install the OPFS write-through is drained and CHECKED
- * (ADR-0187 Corrected): only a clean drain (no persist failures) stamps the
- * tree (ADR-0135) — FIFO order alone cannot deliver "durable stamp implies
- * durable tree" when a quota/perm failure is swallowed per-op. On a dirty
- * drain the stamp is SKIPPED and the terminal warns loudly: the install
- * works this session, the next boot re-installs instead of trusting a torn
- * tree (npm parity stays honest — a reload cannot silently lose the install).
- * The durability sequence stays background to the terminal result: real
- * `npm install` exit does not fsync node_modules. The package authority keeps
- * the affected-root admission until promotion/readiness settles, so another
- * overlapping mutation or child cannot observe the pending tree.
+ * Script-only hosts share the dispatcher without owning package installation.
+ * The package authority retains install admission through checked persistence.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -296,7 +276,21 @@ async function npmPrefixMarker(
  * it with a plain `Shell` instance.
  */
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
-  const packages = deps.packageAcquisitionAuthority;
+  return npmCommand(deps, (args, ctx) =>
+    runInstall(args, ctx, deps, deps.packageAcquisitionAuthority, deps.observeInitialInstall),
+  );
+}
+
+type NpmScriptCommandDeps = Pick<NpmShellCommandDeps, 'vfs' | 'runScript' | 'mapInvocationContext'>;
+
+/** Existing npm parsing/lifecycles for hosts whose installation has a separate owner. */
+export function createNpmScriptShellCommand(deps: NpmScriptCommandDeps): ShellCommand {
+  return npmCommand(deps, () => {
+    throw new NotImplementedError('sandbox.project.npm-install', 'use toolchain.install');
+  });
+}
+
+function npmCommand(deps: NpmScriptCommandDeps, install: ShellCommand): ShellCommand {
   return async (rawArgs, rawContext) => {
     const invocation = npmPrefixInvocation(rawArgs, rawContext);
     if (invocation === null) return 1;
@@ -324,7 +318,7 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
       );
     }
     if (sub === 'install' || sub === 'i' || sub === 'add') {
-      return runInstall(args.slice(1), ctx, deps, packages, deps.observeInitialInstall);
+      return install(args.slice(1), ctx);
     }
     if (sub === 'run' || sub === 'run-script') {
       return runPackageScript(args.slice(1), ctx, deps);
@@ -516,7 +510,7 @@ async function writePackageJson(vfs: Vfs, cwd: string, pkg: ProjectPackageJson):
 async function runPackageScript(
   args: string[],
   ctx: CommandContext,
-  deps: NpmShellCommandDeps,
+  deps: NpmScriptCommandDeps,
 ): Promise<ShellCommandResult> {
   const scriptName = args[0];
   if (!scriptName) {

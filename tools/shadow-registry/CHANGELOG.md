@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Bind reusable esbuild adapters to Node module-acquisition cwd and upstream request/context refs; preserve exact CJS identity and caught-error settlement (ADR-0421).
+
 - Report unavailable runtime adapters at package use, preserving independent Node entry and strict explicit adapter activation; failed slots cannot expose a stale successful esbuild handle.
 
 - Share read-only installed-file preparation planners and explicit filesystem selection across finalizers, snapshot producers and source readiness validation.
