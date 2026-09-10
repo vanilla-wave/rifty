@@ -175,7 +175,6 @@ function errorFrom(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
 
-/** Browser composition: one physical owner, then typed control IPC only. */
 export function createBrowserWorkbenchOwnerPort(
   dependencies?: BrowserOwnerDependencies,
 ): WorkbenchOwnerPort {
@@ -205,6 +204,10 @@ export function startBrowserWorkspaceOwner(
   const readyState = deferred<void>();
   const closedState = deferred<void>();
   const pending = new Map<string, PendingOperation>();
+  const isPendingOpen = (opId?: string): boolean => {
+    const kind = opId === undefined ? undefined : pending.get(opId)?.kind;
+    return kind === 'open' || kind === 'playground-open';
+  };
   const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const catalogListeners = new Set<(snapshot: PlaygroundCatalogSnapshot) => void>();
   const healthListeners = new Set<(event: WorkbenchOwnerHealthEvent) => void>();
@@ -472,11 +475,11 @@ export function startBrowserWorkspaceOwner(
           activeProject.acceptVfs(message);
           return;
         case 'workbench:durability-progress':
-          // Owner-level: the first-open drain predates project tokens (ADR-0359).
           rearmSilenceDeadlines();
           publishHealth(
             Object.freeze({
               kind: 'durability-progress',
+              ...(isPendingOpen(message.opId) ? { projectOpen: true } : {}),
               persisted: message.persisted,
               total: message.total,
             }),
@@ -777,7 +780,6 @@ export function startBrowserWorkspaceOwner(
           listener(currentOperationalHealth);
           listener(currentPreviewHealth);
         } catch {
-          // Replay follows the same observer isolation as live delivery.
         }
         return () => operationalHealthListeners.delete(listener);
       },
@@ -915,7 +917,6 @@ export function startBrowserWorkspaceOwner(
       createTerminal: openTerminal,
       closeOwner,
     });
-    // Package branding maps the finite runtime result to phantom readiness.
     return session as ProjectSession<TReady>;
   };
 
@@ -1170,7 +1171,6 @@ export function startBrowserWorkspaceOwner(
         try {
           listener(invariantHealth);
         } catch {
-          // Replay follows the same listener isolation as live delivery.
         }
       }
       return () => healthListeners.delete(listener);

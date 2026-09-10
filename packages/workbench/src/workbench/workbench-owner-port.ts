@@ -53,6 +53,8 @@ export type WorkbenchOwnerHealthEvent =
    * as the heartbeat; terminal = `persisted === total` (clean drains only). */
   | Readonly<{
       kind: 'durability-progress';
+      /** The physical owner matched this frame to the pending project open. */
+      projectOpen?: boolean;
       persisted: number;
       total: number;
     }>;

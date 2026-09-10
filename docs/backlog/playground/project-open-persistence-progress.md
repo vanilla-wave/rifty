@@ -1,6 +1,6 @@
 ---
 area: playground
-status: draft
+status: ready
 title: Show real persistence progress during first project opening
 created: 2026-09-10
 why: first opening a heavy snapshot project exposes only a delayed preparing spinner although the owner already reports actual persistence progress
@@ -39,6 +39,8 @@ remains. No fictitious time estimate or whole-open percentage.
   or changed in this refinement.
 
 ## Decisions
+
+ready-verdict: 2026-09-10 — Contract+RED @ 685fa16c3e1a24a0fc9d3fdf5b8271e6f1ef99f9; reference/pr323-progress-contract-red.json.
 
 - 2026-09-10 — pickup: ADR-0413; owner existing opId/health stream reuse; no new coordination mechanism.
 

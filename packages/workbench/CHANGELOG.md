@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
+
 - Publish prepared dependency snapshots; reject unprepared apply sources before effects while preserving legacy initial restore and literal saved-file conflicts. Preserve acquired-tree preload failures under preferred storage.
 
 - Configure effective owner startup/storage-proof, project-file observation/durability and Playground request budgets through public deployment options; preserve omitted defaults, uniform catalog silence and applied/unknown settlement (ADR-0410).

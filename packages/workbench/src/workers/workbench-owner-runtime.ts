@@ -123,6 +123,7 @@ const DURABILITY_PROGRESS_MIN_INTERVAL_MS = 200;
  */
 function createDurabilityProgressForwarder(
   send: (message: WorkbenchOwnerToPageMessage) => void,
+  opId?: string,
 ): (snapshot: { readonly persisted: number; readonly total: number }) => void {
   let lastForwardedAt = 0;
   let lastPersisted = -1;
@@ -140,6 +141,7 @@ function createDurabilityProgressForwarder(
     try {
       send({
         type: 'workbench:durability-progress',
+        ...(opId === undefined ? {} : { opId }),
         persisted: snapshot.persisted,
         total: snapshot.total,
       });
@@ -297,13 +299,17 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
     starterInitialOids,
     async () => assertCleanDurability(await authority.flush()),
   );
+  let projectOpenOperation: string | undefined;
   const packageState = createOwnerPackageState({
     vfs: ownerVfs,
     fsSync: authority,
     installStampClaims,
     flush: () =>
       authority.flush({
-        onProgress: createDurabilityProgressForwarder((message) => sendOwnerMessage(ipc, message)),
+        onProgress: createDurabilityProgressForwarder(
+          (message) => sendOwnerMessage(ipc, message),
+          projectOpenOperation,
+        ),
       }),
     amendGeneratedBaseline,
     nodeWorkerRuntimeEnv,
@@ -432,6 +438,9 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         });
 
   const controller = createWorkbenchOwnerController({
+    setProjectOpenOperation: (opId) => {
+      projectOpenOperation = opId;
+    },
     ...(materializer === undefined ? {} : { materializer }),
     closeAuthority,
     ...(companionController === undefined ? {} : { playground: companionController }),

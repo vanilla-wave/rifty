@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
+
 - Bake the existing installed-file preparation into dependency snapshot payloads.
 
 - Regenerate the copied App SW for scoped preview routing/protocol7 (ADR-0409).

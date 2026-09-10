@@ -1412,6 +1412,13 @@ describe('PR323 public opening progress lifetime', () => {
           h.failOwnerClosed(failure);
           await Promise.resolve();
           expect(progress()).toBeUndefined();
+          h.emitOwnerHealth({
+            kind: 'durability-progress',
+            persisted: 9,
+            total: 9,
+            projectOpen: true,
+          });
+          expect(progress()).toBeUndefined();
         }
         gate.reject(failure);
         await expect(opening).rejects.toBe(failure);

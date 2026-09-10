@@ -99,6 +99,7 @@ export interface WorkbenchOwnerProjectRuntimeInput {
 }
 
 export interface WorkbenchOwnerControllerDependencies {
+  readonly setProjectOpenOperation?: (opId: string | undefined) => void;
   readonly materializer?: ProjectMaterializer;
   readonly createProject: (
     input: WorkbenchOwnerProjectRuntimeInput,
@@ -293,6 +294,15 @@ export function createWorkbenchOwnerController(
       return;
     }
     send({ type: 'workbench:project-vfs', projectToken: project.token, frame: output.frame });
+  };
+
+  const duringOpen = async (opId: string, operation: () => Promise<void>): Promise<void> => {
+    dependencies.setProjectOpenOperation?.(opId);
+    try {
+      await operation();
+    } finally {
+      dependencies.setProjectOpenOperation?.(undefined);
+    }
   };
 
   const performOpen = async (message: OpenMessage): Promise<void> => {
@@ -672,7 +682,7 @@ export function createWorkbenchOwnerController(
         return performPlaygroundTools(message.frame, project);
       }
       return message.type === 'workbench:playground-open-project'
-        ? enqueue(() => performPlaygroundOpen(message))
+        ? enqueue(() => duringOpen(message.opId, () => performPlaygroundOpen(message)))
         : enqueue(() => performPlaygroundCatalog(message));
     }
     let message: PageToWorkbenchOwnerMessage;
@@ -715,7 +725,7 @@ export function createWorkbenchOwnerController(
       return rejectImmediately(new TypeError('Workbench owner is already initialized'));
     }
     if (message.type === 'workbench:open-project') {
-      return enqueue(() => performOpen(message));
+      return enqueue(() => duringOpen(message.opId, () => performOpen(message)));
     }
     if (message.type === 'workbench:delete-project') {
       return enqueue(() => performDelete(message));

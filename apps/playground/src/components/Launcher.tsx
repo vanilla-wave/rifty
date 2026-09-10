@@ -26,6 +26,7 @@ export function Launcher(props: {
   activeId: ActiveId;
   ownerBlocked: boolean;
   instantPrepareLabel?: string;
+  persistenceProgress?: { readonly persisted: number; readonly total: number };
   storage: 'opfs' | 'memory';
   menuFor: string | null;
   q: string;
@@ -106,6 +107,17 @@ export function Launcher(props: {
                 <span class="rf-launcher__progress-spinner" aria-hidden="true" />
                 <span>Preparing instant project</span>
                 <strong>{label()}</strong>
+                <Show when={props.persistenceProgress}>
+                  {(progress) => (
+                    <span
+                      data-testid="project-persistence-progress"
+                      data-persisted={progress().persisted}
+                      data-total={progress().total}
+                    >
+                      Saving {progress().persisted}/{progress().total} operations
+                    </span>
+                  )}
+                </Show>
               </div>
             )}
           </Show>

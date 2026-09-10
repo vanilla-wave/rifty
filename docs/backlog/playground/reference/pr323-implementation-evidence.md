@@ -31,3 +31,10 @@ No new correlation ledger, FIFO, subscriber service or public operation handle.
 
 Implementation GREEN, full browser Reset/interrupted-install/adapter-use proof,
 independent Final+GREEN, `pnpm pr:check` and PR CI remain required.
+
+## Progress GREEN
+
+- Owner/protocol/public health/Launcher: 184 tests pass; old-opId and death-window additions: 72 tests pass.
+- Public real snapshot/OPFS progress: 1 browser test passes.
+- `RIFTY_PLAYGROUND_PORT=56323 pnpm exec playwright test --project=chromium-light project-opening-progress.spec.ts --workers=1`: 1 passed; actual Vite first-open UI, geometry and screenshot inspected. Screenshot shows `Preparing instant project Project files Saving 1/302 operations`; completion removes the indication.
+- Exact public type fixture gains the additive ADR-0413 field; no assertion removed. Source-size and backlog gates pass.
