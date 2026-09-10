@@ -39,7 +39,14 @@ module.exports = async function prove() {
 };
 `;
 
-export async function proveSqliteOmission(options: PlaygroundWorkbenchOptions): Promise<void> {
+export async function proveSqliteOmission(
+  options: PlaygroundWorkbenchOptions,
+  snapshot: {
+    readonly packageJsonText: string;
+    readonly snapshotId: string;
+    readonly templateId: string;
+  },
+): Promise<void> {
   const workbench = await openPlaygroundWorkbench({
     ...options,
     deployment: { ...options.deployment, wasm: {} },
@@ -47,13 +54,20 @@ export async function proveSqliteOmission(options: PlaygroundWorkbenchOptions): 
   const definition = workbench.playground.define({
     kind: 'node-server',
     starterId: 'packed-no-sqlite',
-    templateId: 'packed-no-sqlite',
-    firstMaterialization: { kind: 'install' },
+    templateId: snapshot.templateId,
+    firstMaterialization: {
+      kind: 'snapshot',
+      snapshot: {
+        snapshotId: snapshot.snapshotId,
+        templateId: snapshot.templateId,
+        assetUrl: new URL('/producer-vite-snapshot.tar.gz', location.href).href,
+      },
+    },
     id: 'scratch',
     entryPath: '/server.cjs',
     port: 3459,
     files: {
-      '/package.json': '{"name":"packed-no-sqlite","private":true}',
+      '/package.json': snapshot.packageJsonText,
       '/sqlite-probe.cjs': probe,
       '/sqlite-leaf.cjs': "console.log(require('./sqlite-probe.cjs')());",
       '/sqlite-thread.cjs': `

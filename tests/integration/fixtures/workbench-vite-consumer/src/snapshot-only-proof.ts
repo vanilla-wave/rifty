@@ -93,7 +93,7 @@ export async function openSnapshotOnlyAcceptance(
   } finally {
     await unavailable.close();
   }
-  await proveSqliteOmission(strict);
+  await proveSqliteOmission(strict, snapshot);
   const workbench = await openPlaygroundWorkbench(strict);
   const definition = workbench.playground.define({
     kind: 'npm-dev-server',
