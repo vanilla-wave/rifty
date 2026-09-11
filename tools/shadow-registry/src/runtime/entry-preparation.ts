@@ -20,6 +20,8 @@ export async function preparePackageEntryRuntime(
         readonly runtimeBindings: readonly PackageRuntimeBinding[];
         readonly fs: FsSync;
         readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
+        readonly getCwd?: () => string;
+        readonly refs?: { ref(): void; unref(): void };
       }
     | {
         readonly kind: 'eval';
@@ -27,6 +29,8 @@ export async function preparePackageEntryRuntime(
         readonly runtimeBindings: readonly PackageRuntimeBinding[];
         readonly fs: FsSync;
         readonly trackKeepalivePromise?: (promise: PromiseLike<unknown>) => void;
+        readonly getCwd?: () => string;
+        readonly refs?: { ref(): void; unref(): void };
       },
 ): Promise<void> {
   const integration =
@@ -49,6 +53,8 @@ export async function preparePackageEntryRuntime(
         bindings: options.runtimeBindings,
         fs: options.fs,
         cwd: options.root,
+        ...(options.getCwd === undefined ? {} : { getCwd: options.getCwd }),
+        ...(options.refs === undefined ? {} : { refs: options.refs }),
       });
     } catch (error) {
       publishRuntimeEsbuildFailure(error);

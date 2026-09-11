@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Report a never-admitted command as failed even after Stop; a settled command's failed/unknown persistence marks the next restart's unflushedWrites.
+
 - Add no-COI project filesystem methods and stateless command handles with streamed output, owned Stop and explicit Worker replacement; toolchain protocol v5 requires matching SDK/Worker versions.
 
 - No-COI toolchain protocol is now v3. Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.

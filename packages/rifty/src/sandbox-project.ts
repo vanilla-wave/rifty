@@ -52,6 +52,8 @@ interface ProjectOwner {
   current(): ToolchainRuntimeController;
   mutate<T>(operation: () => Promise<T>): Promise<T>;
   replace(target: ToolchainRuntimeController): Promise<'replaced' | 'terminated'>;
+  /** A settled command's applied-but-unpersisted effects join the restart report. */
+  recordEffects(effects: RuntimeEffects): void;
 }
 
 function serialized(error: unknown): SerializedRuntimeError {
@@ -147,12 +149,19 @@ export function createSandboxProject(
                 ? await replace()
                 : 'retained';
             settled = true;
+            const effects = worker === 'retained' ? result.effects : unknownEffects;
+            owner.recordEffects(effects);
             return {
-              status: result.status === 'failed' ? 'failed' : stopped ? 'cancelled' : result.status,
+              status:
+                result.status === 'failed'
+                  ? 'failed'
+                  : admitted && stopped
+                    ? 'cancelled'
+                    : result.status,
               exitCode: result.exitCode,
               stdout,
               stderr,
-              effects: worker === 'retained' ? result.effects : unknownEffects,
+              effects,
               worker,
               ...(result.error === undefined ? {} : { error: result.error }),
             };
@@ -166,15 +175,18 @@ export function createSandboxProject(
               inspected.code === 'WORKER_CRASHED' ||
               inspected.code === 'RUNTIME_NOT_RUNNING';
             const worker = peerLost || replacement !== undefined ? await replace() : 'retained';
+            const effects =
+              peerLost || replacement !== undefined
+                ? unknownEffects
+                : (inspected.effects ?? { applied: 'no', persistence: 'unknown' });
+            owner.recordEffects(effects);
             return {
-              status: stopped ? 'cancelled' : 'failed',
+              // A never-admitted invocation (busy, invalid input) failed; Stop cancels only admitted work.
+              status: admitted && stopped ? 'cancelled' : 'failed',
               exitCode: null,
               stdout,
               stderr,
-              effects:
-                peerLost || replacement !== undefined
-                  ? unknownEffects
-                  : (inspected.effects ?? { applied: 'no', persistence: 'unknown' }),
+              effects,
               worker,
               error: inspected,
             };

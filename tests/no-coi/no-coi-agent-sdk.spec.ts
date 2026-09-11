@@ -109,7 +109,11 @@ test('project mutation and command report a native OPFS write failure', async ({
       }
       const command = await project.run('echo command > fault.txt').completion;
       const content = await project.fs.readFile('fault.txt', 'utf8');
-      return { fileError, command, content };
+      const evalResult = await sandbox.runtime.eval(
+        "require('node:fs').writeFileSync('/quota/fault.txt', 'eval')",
+      );
+      const evalContent = await project.fs.readFile('fault.txt', 'utf8');
+      return { fileError, command, content, evalResult, evalContent };
     } finally {
       sandbox.dispose();
     }
@@ -123,6 +127,11 @@ test('project mutation and command report a native OPFS write failure', async ({
     effects: { applied: 'yes', persistence: 'failed' },
   });
   expect(observed.content).toBe('command\n');
+  expect(observed.evalResult).toMatchObject({
+    ok: false,
+    error: { name: 'SandboxPersistenceError' },
+  });
+  expect(observed.evalContent).toBe('eval');
 });
 
 for (const scenario of [

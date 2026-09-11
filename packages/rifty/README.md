@@ -203,13 +203,20 @@ cwd and readonly paths resolve from root; absolute paths retain their VFS
 meaning. Root is a path origin, not a filesystem jail. Optional allowedCommands
 permits only exact names at Shell dispatch, including nested npm scripts.
 Background jobs are rejected before launch. Policy covers ordinary Node and
-installed-tool writes, not hostile JS.
+installed-tool writes, not hostile JS. `npm install`/`add` inside `run` throws
+`NotImplementedError('sandbox.project.npm-install')`: install through
+`toolchain.install`; `npm run` reuses the installed tree.
 
 Completion reports exited/cancelled/failed, captured stdout/stderr, exitCode
 (null when unavailable), effects and Worker state. Output subscriptions do not
-replay: attach immediately. Stop retains ownership through handler and checked
-flush settlement. After one second without settlement, an admitted stopped
+replay: attach immediately. Stop emits SIGINT into the guest and retains
+ownership through handler, event-loop drain and checked flush settlement; a
+program without a SIGINT handler keeps draining its pending work (real Node
+exits 130 at once). After one second without settlement, an admitted stopped
 command's Worker is terminated/replaced before completion, with unknown effects.
+A never-admitted invocation (busy Worker, invalid input) reports `failed` even
+after Stop. Failed or unknown persistence of a settled command is also reported
+as `unflushedWrites` by the next `restart`.
 Recovery never replays a command or promises rollback. Memory recovery uses the
 retained image; unknown effects can be lost. Concurrent finite operations reject
 busy. Project methods alongside a resident bin reject resident-concurrency.

@@ -4,15 +4,15 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { riftyProcess } from '@riftydev/runtime-js/builtins/process';
-import { ref, unref } from '@riftydev/runtime-js/internal';
 import { builtinShadowSubstitutionCatalog } from '@riftydev/shadow-registry/internal';
 import {
   ESBUILD_RUNTIME_ADAPTER_ID,
-  activatePackageRuntimeAdapters,
+  preparePackageEntryRuntime,
 } from '@riftydev/shadow-registry/runtime';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { expect, it } from 'vitest';
 import { runNoCoiProjectCommand } from './no-coi-project-command.ts';
+import { workbenchRuntimeAdapterOwnership } from './workbench-runtime-adapters.ts';
 
 const require = createRequire(
   new URL('../../../../tools/shadow-registry/package.json', import.meta.url),
@@ -83,17 +83,18 @@ it('uses each fresh Node invocation cwd for esbuild, preserving its imported cwd
       fs.writeFileSync(path, new TextEncoder().encode(file.content));
     }
     Object.defineProperty(globalThis, 'self', { configurable: true, value: globalThis });
-    await activatePackageRuntimeAdapters({
-      bindings: [
+    // The saved-toolchain/open path (ADR-0417) activates through entry preparation.
+    await preparePackageEntryRuntime({
+      kind: 'eval',
+      root: '/project',
+      runtimeBindings: [
         {
           adapterId: ESBUILD_RUNTIME_ADAPTER_ID,
           packagePath: '/project/node_modules/esbuild-wasm',
         },
       ],
       fs,
-      cwd: '/project',
-      getCwd: () => riftyProcess.cwd(),
-      refs: { ref, unref },
+      ...workbenchRuntimeAdapterOwnership(),
     });
     setSyncMirror(fs);
     Object.defineProperty(globalThis, 'process', { configurable: true, value: riftyProcess });

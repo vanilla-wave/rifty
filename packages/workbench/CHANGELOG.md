@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Saved-toolchain and Node-entry adapter preparation carry the live cwd and event-loop refs (ADR-0421).
+
 - Remove completed Node command process/stdio listeners before admitting the next command (ADR-0422).
 
 - Compose no-COI project file/command policy on the permanent Worker VFS; reuse Shell and Node entry execution, retain handlers through Stop/drain/flush and reject background jobs.

@@ -187,3 +187,39 @@ Goal obligations I1–I4 proven; completed units/goal removed after independent
 verification. The explicitly excluded generic preview question remains in
 `docs/backlog/distribution/public-api-ai-agent-preview-question.md`, owned by the
 AI reference demo at live-preview pickup. No preview API claim added.
+
+## Merge with main and post-review repairs (2026-09-11)
+
+`origin/main` (`c1658a757`, PR #332: ADR-0417/0419/0420/0423) merged; ten
+conflicts resolved. Both sides had bumped the handshake to v4 with different
+meanings, so the merged protocol is v5: main's v4 Worker lacks project-fs/command
+and is rejected at handshake (`host.test.ts` retired-v4 case). Host validators
+keep main's home `internal/toolchain-input.ts`, extended with the optional
+`directories` recovery field and a `/` command root; `host-toolchain-inputs.ts`
+is gone. Delivered drafts `no-coi-project-files.md` (main's duplicate) and
+`public-api-ai-agent-exec-preview.md` are removed; the preview question item
+stays. Workbench production closure 160 + 2 = 162.
+
+Merge regression found by reading: main routes open/restore/runBin/startBin
+through `prepareSavedToolchain → preparePackageEntryRuntime`, which activated the
+esbuild adapter without the ADR-0421 `getCwd`/`refs`. Entry preparation now
+forwards optional ownership; `prepareSavedToolchain` supplies the Workbench cwd
+cell and refs. The ADR-0421 differential (`no-coi-project-esbuild-cwd.test.ts`)
+activates through entry preparation; dropping the forwarding reproduces RED
+(1 failed), restored GREEN. COI child entry preparation is untouched.
+
+Inline review repairs (advisory findings, each with a unit RED in
+`sandbox.test.ts` and a reverted-fix mutant 1 failed / 24 passed):
+
+- A command rejected before admission (busy Worker) reported `cancelled` when
+  `stop()` preceded the rejection; `cancelled` now requires admission.
+- A settled command with failed/unknown persistence did not mark the restart
+  report; `unflushedWrites` is now true after such a command.
+- `runtime.eval` after a native OPFS quota fault now has a carrier in
+  `no-coi-agent-sdk.spec.ts` (`ok: false`, `SandboxPersistenceError`, bytes visible).
+
+Captured, not fixed: per-command recovery snapshot cost on OPFS (measured 10–13 ms
+per command at 22.5 MB) and unhandled-rejection settlement in commands
+(`distribution/no-coi-command-snapshot-transfer`,
+`distribution/no-coi-command-unhandled-rejection-exit`).
+

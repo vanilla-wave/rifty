@@ -928,3 +928,129 @@ describe('createSandbox', () => {
     expect(optWarn).not.toHaveBeenCalled();
   });
 });
+
+describe('sandbox.project invocations', () => {
+  type HostMessage = import('@riftydev/runtime-js/internal').ToolchainHostMessage;
+  type WorkerMessage = import('@riftydev/runtime-js/internal').ToolchainWorkerMessage;
+  type ToolchainRequest = Extract<HostMessage, { type: 'toolchain' }>['request'];
+
+  class ScriptedWorker {
+    static instances: ScriptedWorker[] = [];
+    static reply: (request: ToolchainRequest, worker: ScriptedWorker) => void = () => {};
+    readonly sent: HostMessage[] = [];
+    private receive?: (event: MessageEvent<WorkerMessage>) => void;
+    constructor() {
+      ScriptedWorker.instances.push(this);
+      queueMicrotask(() => {
+        this.emit({ type: 'ready' });
+        this.emit({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v5',
+          vfsBackend: 'memory',
+        });
+      });
+    }
+    addEventListener(type: string, listener: (event: MessageEvent<WorkerMessage>) => void) {
+      if (type === 'message') this.receive = listener;
+    }
+    terminate() {}
+    emit(data: WorkerMessage) {
+      this.receive?.({ data } as MessageEvent<WorkerMessage>);
+    }
+    postMessage(message: HostMessage) {
+      this.sent.push(message);
+      if (message.type === 'toolchain') ScriptedWorker.reply(message.request, this);
+    }
+  }
+
+  async function bootProjectSandbox(
+    reply: (request: ToolchainRequest, worker: ScriptedWorker) => void,
+  ): Promise<ToolchainSandbox> {
+    ScriptedWorker.instances = [];
+    ScriptedWorker.reply = reply;
+    vi.stubGlobal('Worker', ScriptedWorker);
+    return (await createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: { workerUrl: '/toolchain.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    )) as ToolchainSandbox;
+  }
+
+  it('reports a never-admitted command as failed when Stop precedes the busy rejection', async () => {
+    const sandbox = await bootProjectSandbox(() => {});
+    const worker = ScriptedWorker.instances[0];
+    if (!worker) throw new Error('toolchain Worker missing');
+    const run = sandbox.project({ root: '/dev' }).run('echo hi');
+    const stopping = run.stop();
+    const request = worker.sent.find(
+      (message): message is Extract<HostMessage, { type: 'toolchain' }> =>
+        message.type === 'toolchain' && message.request.op === 'command',
+    );
+    if (!request) throw new Error('command request missing');
+    const id = request.request.id;
+    expect(
+      worker.sent.some((message) => message.type === 'toolchain-command-stop' && message.id === id),
+    ).toBe(true);
+    worker.emit({
+      type: 'toolchain-result',
+      result: {
+        id,
+        ok: false,
+        error: {
+          name: 'SandboxToolchainBusyError',
+          message: 'another sandbox toolchain operation is already active',
+        },
+      },
+    });
+    const outcome = await run.completion;
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      exitCode: null,
+      worker: 'retained',
+      effects: { applied: 'no', persistence: 'unknown' },
+      error: { name: 'SandboxToolchainBusyError' },
+    });
+    expect(await stopping).toBe(outcome);
+    sandbox.dispose();
+  });
+
+  it('marks unflushedWrites for the next restart after a settled command reports failed persistence', async () => {
+    const sandbox = await bootProjectSandbox((request, worker) => {
+      if (request.op !== 'command') return;
+      worker.emit({
+        type: 'toolchain-result',
+        result: {
+          id: request.id,
+          ok: true,
+          value: {
+            command: {
+              status: 'failed',
+              exitCode: 0,
+              effects: { applied: 'yes', persistence: 'failed' },
+              error: { name: 'SandboxPersistenceError', message: 'OPFS persistence failed' },
+            },
+          },
+        },
+      });
+    });
+    const outcome = await sandbox.project({ root: '/dev' }).run('echo x > file').completion;
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      worker: 'retained',
+      effects: { applied: 'yes', persistence: 'failed' },
+    });
+    await expect(sandbox.restart({ preview: { src: '' } })).resolves.toEqual({
+      unflushedWrites: true,
+      resident: null,
+    });
+    expect(ScriptedWorker.instances).toHaveLength(2);
+    await expect(sandbox.restart({ preview: { src: '' } })).resolves.toEqual({
+      unflushedWrites: false,
+      resident: null,
+    });
+    sandbox.dispose();
+  });
+});

@@ -585,6 +585,13 @@ async function bootToolchainSandbox(
           return current;
         },
         mutate: trackedMutation,
+        recordEffects(effects) {
+          if (
+            effects.applied !== 'no' &&
+            (effects.persistence === 'failed' || effects.persistence === 'unknown')
+          )
+            unflushedMarker = true;
+        },
         async replace(target) {
           if (disposed || restarting) {
             target.dispose();
