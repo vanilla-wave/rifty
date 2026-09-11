@@ -40,11 +40,7 @@ import { installConsole } from './repl/console.ts';
 import { evalInRepl } from './repl/eval.ts';
 import { inspect } from './repl/inspect.ts';
 import { captureNotImplemented, snapshotTelemetry } from './telemetry/divergence-sink.ts';
-import {
-  checkedRuntimeFsFlush,
-  handleWorkerFsRequest,
-  serializeRuntimeError,
-} from './worker-fs-rpc.ts';
+import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -123,12 +119,10 @@ async function flushWorkerFs() {
 
 async function handleEval(req: EvalRequest): Promise<EvalResult> {
   const result = await evaluateExpression(req);
-  try {
-    await checkedRuntimeFsFlush(flushWorkerFs);
-    return result;
-  } catch (error) {
-    return { id: req.id, ok: false, error: serializeRuntimeError(error) };
-  }
+  // Drain write-through before replying (ADR-0072). Durability is an fs receipt
+  // (`fs.flush()`), never the console result: an unhealed report must not fail an eval.
+  await flushWorkerFs();
+  return result;
 }
 
 // Async boot (ADR-0072): VFS backend selection (OPFS vs memory) is async, so the

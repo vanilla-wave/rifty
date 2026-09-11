@@ -113,7 +113,14 @@ test('project mutation and command report a native OPFS write failure', async ({
         "require('node:fs').writeFileSync('/quota/fault.txt', 'eval')",
       );
       const evalContent = await project.fs.readFile('fault.txt', 'utf8');
-      return { fileError, command, content, evalResult, evalContent };
+      let flushError: { name: string; effects?: unknown } | undefined;
+      try {
+        await sandbox.fs.flush();
+      } catch (error) {
+        const e = error as Error & { effects?: unknown };
+        flushError = { name: e.name, effects: e.effects };
+      }
+      return { fileError, command, content, evalResult, evalContent, flushError };
     } finally {
       sandbox.dispose();
     }
@@ -127,11 +134,13 @@ test('project mutation and command report a native OPFS write failure', async ({
     effects: { applied: 'yes', persistence: 'failed' },
   });
   expect(observed.content).toBe('command\n');
-  expect(observed.evalResult).toMatchObject({
-    ok: false,
-    error: { name: 'SandboxPersistenceError' },
-  });
+  // Console eval reports evaluation only; the unhealed report is an fs receipt.
+  expect(observed.evalResult).toMatchObject({ ok: true, value: undefined });
   expect(observed.evalContent).toBe('eval');
+  expect(observed.flushError).toMatchObject({
+    name: 'SandboxPersistenceError',
+    effects: { applied: 'yes', persistence: 'failed' },
+  });
 });
 
 for (const scenario of [

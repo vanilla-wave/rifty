@@ -215,8 +215,11 @@ Inline review repairs (advisory findings, each with a unit RED in
   `stop()` preceded the rejection; `cancelled` now requires admission.
 - A settled command with failed/unknown persistence did not mark the restart
   report; `unflushedWrites` is now true after such a command.
-- `runtime.eval` after a native OPFS quota fault now has a carrier in
-  `no-coi-agent-sdk.spec.ts` (`ok: false`, `SandboxPersistenceError`, bytes visible).
+- Console eval had been made to fail on any unhealed OPFS report; main's
+  `no-coi-snapshot-application.spec.ts:285` (read-only eval after a failed
+  apply) caught it. Eval again reports evaluation only (ADR-0418 §6); the
+  carrier in `no-coi-agent-sdk.spec.ts` proves eval `ok: true` with bytes
+  visible while `sandbox.fs.flush()` rejects with `SandboxPersistenceError`.
 
 Captured, not fixed: per-command recovery snapshot cost on OPFS (measured 10–13 ms
 per command at 22.5 MB) and unhandled-rejection settlement in commands
