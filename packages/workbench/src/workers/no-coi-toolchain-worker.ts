@@ -253,6 +253,7 @@ async function restoreActivation(state: ToolchainActivationState): Promise<void>
     }
     await flushMirror();
   }
+  // TODO(backlog: distribution/no-coi-activation-bindings-shrink): state.bindings is unused here.
   await prepareSavedToolchain(state.cwd);
 }
 

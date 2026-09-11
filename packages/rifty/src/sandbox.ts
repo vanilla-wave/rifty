@@ -139,7 +139,8 @@ export interface Sandbox {
   readonly fs: RuntimeFs;
   /**
    * Which VFS backend booted. Generic mode reports the page-realm probe; toolchain
-   * mode reports its one authoritative runtime Worker backend.
+   * mode reports its one authoritative runtime Worker backend, keeping the last
+   * booted report until a restart replacement is ready.
    */
   readonly vfs: VfsBootInfo;
   /** Capability probe taken at boot. */
@@ -355,8 +356,10 @@ async function bootToolchainSandbox(
   },
 ): Promise<ToolchainSandbox> {
   let current: ToolchainRuntimeController = spawnToolchainRuntime(options);
+  let vfs: VfsBootInfo;
   try {
     await current.toolchainReady;
+    vfs = current.toolchainVfs;
   } catch (error) {
     current.dispose();
     throw error;
@@ -574,6 +577,7 @@ async function bootToolchainSandbox(
       current = spawnToolchainRuntime(options);
       attachCurrent();
       await current.toolchainReady;
+      vfs = current.toolchainVfs;
       if (activation !== null) await current.restoreToolchainState(activation);
       // The restored controller owns recovery now, including writes from a failing callback.
       activation = null;
@@ -599,7 +603,7 @@ async function bootToolchainSandbox(
     runtime,
     fs,
     get vfs() {
-      return current.toolchainVfs;
+      return vfs;
     },
     capabilities: options.capabilities,
     toolchain,
