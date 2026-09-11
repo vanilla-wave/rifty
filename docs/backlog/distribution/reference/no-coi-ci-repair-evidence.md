@@ -30,3 +30,8 @@ terminal-cause regression 7/7. Full packed consumer completed exit 0 in
 explicit force reapply and successful next Vite build in the same worker.
 Exact rebuilt TypeScript asset remains 10,022,694 bytes; only its import-derived
 SHA changed. Retirement inventory verifies unchanged negative/size constraints.
+
+Full native no-COI lane: 83/83, exit 0 (3.8 min),
+`/tmp/rifty-332-full-no-coi-repair.log`. Full `pnpm pr:check`: 25/25, exit 0;
+unit/conformance 189.6s, parity 62.4s,
+`/tmp/rifty-332-ci-repair-pr-check.log`.
