@@ -121,6 +121,22 @@ describe('install-stamp one-writer gate', () => {
     ]);
   });
 
+  it('allows no-COI acquisition preparation but not saved opening or claim forgery', () => {
+    const source = `
+      async function installToolchainPackages() {
+        await finalizePackageInstallFiles({ root });
+        fs.writeFileSync(installStampPath(root), bytes);
+      }
+      async function prepareSavedToolchain() { await finalizePackageInstallFiles({ root }); }
+    `;
+    expect(
+      findInstallStampWriterViolations(
+        source,
+        'packages/workbench/src/workers/no-coi-toolchain-install.ts',
+      ).map((violation) => violation.operation),
+    ).toEqual(['writeFileSync', 'finalizePackageInstallFiles']);
+  });
+
   it('rejects both operands of move/copy mutations', () => {
     expect(
       operations(`

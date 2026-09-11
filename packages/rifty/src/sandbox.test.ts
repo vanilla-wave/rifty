@@ -426,7 +426,7 @@ describe('createSandbox', () => {
         worker.emit({ type: 'ready' });
         worker.emit({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v4',
+          protocol: 'rifty.sandbox-toolchain/v5',
           vfsBackend: 'opfs',
         });
       }
@@ -500,7 +500,7 @@ describe('createSandbox', () => {
       worker.emit({ type: 'ready' });
       worker.emit({
         type: 'toolchain-ready',
-        protocol: 'rifty.sandbox-toolchain/v4',
+        protocol: 'rifty.sandbox-toolchain/v5',
         vfsBackend: workerBackend,
       });
       const sandbox = await creating;
@@ -561,7 +561,7 @@ describe('createSandbox', () => {
     first.emit({ type: 'ready' });
     first.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v4',
+      protocol: 'rifty.sandbox-toolchain/v5',
       vfsBackend: 'memory',
     });
     const sandbox = (await creating) as ToolchainSandbox;
@@ -619,7 +619,7 @@ describe('createSandbox', () => {
     second.emit({ type: 'ready' });
     second.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v4',
+      protocol: 'rifty.sandbox-toolchain/v5',
       vfsBackend: 'memory',
     });
     await Promise.resolve();
@@ -644,6 +644,63 @@ describe('createSandbox', () => {
     sandbox.dispose();
   });
 
+  it('reports the last booted storage while a replacement Worker is still starting', async () => {
+    class StorageWorker {
+      static instances: StorageWorker[] = [];
+      private receive?: (event: MessageEvent<unknown>) => void;
+      constructor() {
+        StorageWorker.instances.push(this);
+      }
+      addEventListener(type: string, listener: (event: MessageEvent<unknown>) => void) {
+        if (type === 'message') this.receive = listener;
+      }
+      postMessage() {}
+      terminate() {}
+      emit(data: unknown) {
+        this.receive?.({ data } as MessageEvent<unknown>);
+      }
+    }
+    vi.stubGlobal('Worker', StorageWorker);
+    const creating = createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: { workerUrl: '/toolchain-worker.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    );
+    await Promise.resolve();
+    const first = StorageWorker.instances[0];
+    if (!first) throw new Error('first Worker missing');
+    first.emit({ type: 'ready' });
+    first.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v5',
+      vfsBackend: 'memory',
+      vfsReason: 'first boot fallback',
+    });
+    const sandbox = (await creating) as ToolchainSandbox;
+    const booted = { backend: 'memory', reason: 'first boot fallback' };
+    expect(sandbox.vfs).toEqual(booted);
+
+    const restarting = sandbox.restart({ preview: { src: '' } });
+    const second = StorageWorker.instances[1];
+    if (!second) throw new Error('replacement Worker missing');
+    // The replacement has not reported storage yet; the last booted report stays readable.
+    expect(sandbox.vfs).toEqual(booted);
+
+    second.emit({ type: 'ready' });
+    second.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v5',
+      vfsBackend: 'opfs',
+    });
+    await expect(restarting).resolves.toEqual({ unflushedWrites: false, resident: null });
+    expect(sandbox.vfs).toEqual({ backend: 'opfs' });
+    sandbox.dispose();
+    expect(sandbox.vfs).toEqual({ backend: 'opfs' });
+  });
+
   it.each(['boot', 'restore', 'beforeStart'] as const)(
     'retains recovery across replacement %s failure and a later retry',
     async (fault) => {
@@ -660,7 +717,7 @@ describe('createSandbox', () => {
             this.emit({
               type: 'toolchain-ready',
               protocol:
-                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v4',
+                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v5',
               vfsBackend: 'memory',
             } as WorkerMessage);
           });

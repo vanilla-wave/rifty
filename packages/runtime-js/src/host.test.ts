@@ -311,7 +311,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         'later version',
         () => ({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v5',
+          protocol: 'rifty.sandbox-toolchain/v10',
           vfsBackend: 'memory',
         }),
       ],
@@ -319,7 +319,7 @@ describe('spawnToolchainRuntime trust boundary', () => {
         'retired project-less version',
         () => ({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v3',
+          protocol: 'rifty.sandbox-toolchain/v4',
           vfsBackend: 'memory',
         }),
       ],
@@ -959,7 +959,11 @@ describe('spawnToolchainRuntime trust boundary', () => {
     };
 
     const calls = [
-      () => runtime.toolchain.open(missingInstallField as { cwd: string; registryUrl: string }),
+      () =>
+        runtime.toolchain.open({ registryUrl: '/registry' } as {
+          cwd: string;
+          registryUrl: string;
+        }),
       () => runtime.toolchain.open(extraInstallField),
       () => runtime.toolchain.open({ cwd: 'relative', registryUrl: '/registry' }),
       () => runtime.toolchain.open(accessor as { cwd: string; registryUrl: string }),

@@ -346,7 +346,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0412: source-only dependency snapshot preparation validation.
     // ADR-0414/0415: companion package policy and pure package-runtime tree composition.
     // ADR-0418: project policy view and invocation command composition.
-    expect(packageProductionFiles).toHaveLength(161);
+    // ADR-0420: explicit no-COI snapshot application composition.
+    expect(packageProductionFiles).toHaveLength(162);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

@@ -108,6 +108,14 @@ export function recordRejection(
   if (state.rejection === null) state.rejection = { reason, origin };
 }
 
+/** A serialized invocation reports this failure once; live handles and eval lifecycle remain. */
+export function takeUnhandledRejection(): { readonly reason: unknown } | null {
+  const state = keepaliveState();
+  const rejection = state.rejection;
+  state.rejection = null;
+  return rejection;
+}
+
 /**
  * Track a detached async task as an event-loop handle. Some real CLIs start an
  * async action without awaiting it at top level (Vite's bundled CAC does this);

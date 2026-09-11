@@ -8,14 +8,20 @@ import {
   validateProjectOptions,
 } from './host-project-inputs.ts';
 import {
-  decodeToolchainReady,
   exactInput,
   validateActivationState,
   validateInstallRequest,
+  validateOpenRequest,
   validateRunBinRequest,
+  validateSnapshotRequest,
   validateStartBinRequest,
-} from './host-toolchain-inputs.ts';
-import { vmEngineWorkerName } from './internal/worker-vm-engine.ts';
+} from './internal/toolchain-input.ts';
+import {
+  DEFAULT_STARTUP_TIMEOUT_MS,
+  type RuntimeStartupOptions,
+  captureRuntimeStartupOptions,
+  runtimeWorkerName,
+} from './internal/worker-startup-options.ts';
 import type {
   EvalResult,
   FsRequest,
@@ -23,10 +29,12 @@ import type {
   SerializedRuntimeError,
   TelemetrySnapshot,
   ToolchainActivationState,
+  ToolchainApplySnapshotRequest,
   ToolchainCommandInput,
   ToolchainCommandResult,
   ToolchainHostMessage,
   ToolchainInstallRequest,
+  ToolchainOpenRequest,
   ToolchainProjectOptions,
   ToolchainRequest,
   ToolchainResult,
@@ -48,6 +56,8 @@ export interface RuntimeOptions {
    */
   readonly vmEngine?: VmEngineName;
 }
+
+export type ToolchainRuntimeOptions = RuntimeOptions & RuntimeStartupOptions;
 
 export type RuntimeEvent =
   | { readonly type: 'ready' }
@@ -86,7 +96,8 @@ export interface RuntimeController {
 
 export interface RuntimeToolchain {
   install(input: ToolchainInstallRequest): Promise<void>;
-  open(input: ToolchainInstallRequest): Promise<void>;
+  open(input: ToolchainOpenRequest): Promise<void>;
+  applySnapshot(input: ToolchainApplySnapshotRequest): Promise<void>;
   runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
   startBin(input: ToolchainStartBinRequest): Promise<{ readonly port: number }>;
 }
@@ -106,6 +117,7 @@ export interface ToolchainRuntimeController extends RuntimeController {
   command(input: ToolchainCommandInput, observer: RuntimeCommandObserver): RuntimeCommandCall;
   readonly toolchain: RuntimeToolchain;
   readonly toolchainReady: Promise<'opfs' | 'memory'>;
+  readonly toolchainVfs: { readonly backend: 'opfs' | 'memory'; readonly reason?: string };
   snapshotToolchainState(): ToolchainActivationState | null;
   snapshotResidentRequest(): ToolchainStartBinRequest | null;
   restoreToolchainState(state: ToolchainActivationState): Promise<void>;
@@ -135,27 +147,27 @@ interface RuntimeError extends Error {
   feature?: string;
 }
 
-const TOOLCHAIN_HANDSHAKE_TIMEOUT_MS = 10_000;
-
 /** Host-side controller for the JS runtime Worker. Hides the message protocol. */
 export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
   return createRuntimeController(opts, false);
 }
 
-/** Runtime controller with the sandbox toolchain v2 handshake/control plane. */
-export function spawnToolchainRuntime(opts: RuntimeOptions): ToolchainRuntimeController {
+/** Runtime controller with the sandbox toolchain handshake/control plane. */
+export function spawnToolchainRuntime(opts: ToolchainRuntimeOptions): ToolchainRuntimeController {
   return createRuntimeController(opts, true);
 }
 
 function createRuntimeController(opts: RuntimeOptions, toolchainMode: false): RuntimeController;
 function createRuntimeController(
-  opts: RuntimeOptions,
+  opts: ToolchainRuntimeOptions,
   toolchainMode: true,
 ): ToolchainRuntimeController;
 function createRuntimeController(
-  opts: RuntimeOptions,
+  opts: ToolchainRuntimeOptions,
   toolchainMode: boolean,
 ): RuntimeController | ToolchainRuntimeController {
+  const startup = captureRuntimeStartupOptions(opts);
+  const startupTimeoutMs = startup.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
   const handlers = new Set<(event: RuntimeEvent) => void>();
   let worker: Worker | null = null;
   let nextId = 1;
@@ -163,6 +175,7 @@ function createRuntimeController(
   const pending = new Map<number, PendingEval>();
   const pendingRequests = new Map<number, PendingRequest>();
   let toolchainBackend: 'opfs' | 'memory' | null = null;
+  let toolchainReason: string | undefined;
   let toolchainReadySettled = false;
   let resolveToolchainReady: ((backend: 'opfs' | 'memory') => void) | undefined;
   let rejectToolchainReady: ((error: unknown) => void) | undefined;
@@ -293,12 +306,14 @@ function createRuntimeController(
   });
 
   function start(): void {
-    const name = vmEngineWorkerName(opts.vmEngine);
+    const name = runtimeWorkerName(startup);
     worker = new Worker(opts.workerUrl, {
       type: 'module',
       ...(name === undefined ? {} : { name }),
     });
-    worker.addEventListener('message', (event: MessageEvent<ToolchainWorkerMessage>) => {
+    const peer = worker;
+    peer.addEventListener('message', (event: MessageEvent<ToolchainWorkerMessage>) => {
+      if (worker !== peer) return;
       const msg = event.data;
       switch (msg.type) {
         case 'ready':
@@ -317,12 +332,17 @@ function createRuntimeController(
             break;
           }
           toolchainBackend = decoded;
+          toolchainReason = msg.vfsReason;
           settleToolchainReady();
           break;
         }
         case 'toolchain-terminal': {
           if (!toolchainMode) break;
-          terminateToolchainPeer(workerTerminatedError('Toolchain Worker closed'));
+          terminateToolchainPeer(
+            msg.error === undefined
+              ? workerTerminatedError('Toolchain Worker closed')
+              : deserializeError(msg.error),
+          );
           emit({ type: 'exit', reason: 'error' });
           break;
         }
@@ -379,7 +399,8 @@ function createRuntimeController(
           break;
       }
     });
-    worker.addEventListener('error', (event: ErrorEvent) => {
+    peer.addEventListener('error', (event: ErrorEvent) => {
+      if (worker !== peer) return;
       // This controller owns the crash; do not rethrow it into the creator.
       event.preventDefault();
       // Reject every in-flight eval so callers see the failure instead of
@@ -407,14 +428,19 @@ function createRuntimeController(
 
   if (toolchainMode) {
     toolchainHandshakeTimer = setTimeout(() => {
-      rejectToolchainHandshake(
+      terminateToolchainPeer(
         toolchainHandshakeError(
-          `toolchain Worker did not complete ${TOOLCHAIN_PROTOCOL} handshake within ${TOOLCHAIN_HANDSHAKE_TIMEOUT_MS}ms`,
+          `toolchain Worker did not complete ${TOOLCHAIN_PROTOCOL} handshake within ${startupTimeoutMs}ms`,
         ),
       );
-    }, TOOLCHAIN_HANDSHAKE_TIMEOUT_MS);
+    }, startupTimeoutMs);
   }
-  start();
+  try {
+    start();
+  } catch (error) {
+    if (toolchainHandshakeTimer !== undefined) clearTimeout(toolchainHandshakeTimer);
+    throw error;
+  }
 
   const controller: RuntimeController = {
     eval(code, options) {
@@ -475,12 +501,22 @@ function createRuntimeController(
   if (!toolchainMode || toolchainReady === null) return controller;
 
   async function activateToolchain(
-    op: 'install' | 'open',
-    input: ToolchainInstallRequest,
+    op: 'install' | 'open' | 'apply-snapshot',
+    input: ToolchainInstallRequest | ToolchainOpenRequest | ToolchainApplySnapshotRequest,
   ): Promise<void> {
-    const validated = validateInstallRequest(input, `toolchain.${op}`);
+    const id = nextId++;
+    const request: ToolchainRequest =
+      op === 'apply-snapshot'
+        ? { id, op, input: validateSnapshotRequest(input as ToolchainApplySnapshotRequest) }
+        : op === 'open'
+          ? { id, op, input: validateOpenRequest(input) }
+          : {
+              id,
+              op,
+              input: validateInstallRequest(input as ToolchainInstallRequest, 'toolchain.install'),
+            };
     await toolchainReady;
-    const result = await requestToolchain({ id: nextId++, op, input: validated });
+    const result = await requestToolchain(request);
     if (!result.ok) throw deserializeError(result.error);
     const value = exactInput(result.value, ['activationState'], `toolchain ${op} response`);
     activationState = validateActivationState(
@@ -491,6 +527,7 @@ function createRuntimeController(
   const toolchain: RuntimeToolchain = {
     install: (input) => activateToolchain('install', input),
     open: (input) => activateToolchain('open', input),
+    applySnapshot: (input) => activateToolchain('apply-snapshot', input),
     async runBin(input) {
       const validated = validateRunBinRequest(input);
       await toolchainReady;
@@ -567,6 +604,13 @@ function createRuntimeController(
         },
       };
     },
+    get toolchainVfs() {
+      if (toolchainBackend === null) throw new Error('Toolchain storage is not ready');
+      return {
+        backend: toolchainBackend,
+        ...(toolchainReason === undefined ? {} : { reason: toolchainReason }),
+      };
+    },
     snapshotToolchainState() {
       return activationState === null
         ? null
@@ -594,4 +638,36 @@ function createRuntimeController(
       activationState = Object.freeze({ ...validated, vfsBackend: backend });
     },
   };
+}
+
+function decodeToolchainReady(value: unknown): 'opfs' | 'memory' | null {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype ||
+    Object.getOwnPropertySymbols(value).length !== 0
+  ) {
+    return null;
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Object.keys(descriptors).toSorted();
+  if (
+    (keys.length !== 3 && keys.length !== 4) ||
+    keys[0] !== 'protocol' ||
+    keys[1] !== 'type' ||
+    keys[2] !== 'vfsBackend' ||
+    (keys.length === 4 && keys[3] !== 'vfsReason')
+  ) {
+    return null;
+  }
+  if (Object.values(descriptors).some((descriptor) => !('value' in descriptor))) return null;
+  const frame = value as Record<string, unknown>;
+  if (
+    'vfsReason' in frame &&
+    (frame.vfsBackend !== 'memory' || typeof frame.vfsReason !== 'string')
+  )
+    return null;
+  if (frame.type !== 'toolchain-ready' || frame.protocol !== TOOLCHAIN_PROTOCOL) return null;
+  return frame.vfsBackend === 'opfs' || frame.vfsBackend === 'memory' ? frame.vfsBackend : null;
 }

@@ -65,7 +65,11 @@ export default defineConfig({
     sourcemap: true,
     assetsInlineLimit: 0,
     rollupOptions: {
-      input: { root: resolve('index.html'), sandbox: resolve('sandbox/index.html') },
+      input: {
+        root: resolve('index.html'),
+        sandbox: resolve('sandbox/index.html'),
+        noCoiProject: resolve('src/no-coi-project-proof.ts'),
+      },
     },
   },
 });

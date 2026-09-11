@@ -8,9 +8,14 @@ import {
 } from '@riftydev/runtime-js';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import {
+  type ToolchainApplySnapshotRequest,
   type ToolchainInstallRequest,
+  type ToolchainOpenRequest,
   type ToolchainRunBinRequest,
   type ToolchainRuntimeController,
+  type ToolchainRuntimeOptions,
+  type ToolchainSnapshotSource,
+  captureRuntimeStartupOptions,
   spawnToolchainRuntime,
 } from '@riftydev/runtime-js/internal';
 import {
@@ -59,6 +64,10 @@ export interface GenericCreateSandboxOptions extends CreateSandboxCommonOptions 
 export interface ToolchainCreateSandboxOptions extends CreateSandboxCommonOptions {
   /** no-COI vm defaults to rewrite; quickjs opts into the preloaded real realm (ADR-0383). */
   readonly vmEngine?: RuntimeOptions['vmEngine'];
+  /** Selected native OPFS root and persistence policy; default preferred/origin root. */
+  readonly storage?: ToolchainRuntimeOptions['storage'];
+  /** Worker import/preload/handshake budget, initial and restart; default 10000ms. */
+  readonly startupTimeoutMs?: number;
   /** Explicit admission for the shared-memory-free tier. */
   readonly requireCrossOriginIsolation: false;
   /** Bundler-resolved `@riftydev/workbench/no-coi-toolchain-worker` URL. */
@@ -99,10 +108,15 @@ export interface SandboxStartBinInput {
   readonly port: number;
 }
 
+export type SandboxSnapshotSource = ToolchainSnapshotSource;
+export type SandboxApplySnapshotInput = ToolchainApplySnapshotRequest;
+
 export interface SandboxToolchain {
   install(input: ToolchainInstallRequest): Promise<void>;
-  /** Activate a compatible saved installation; never reinstall or repair files. */
-  open(input: ToolchainInstallRequest): Promise<void>;
+  /** Open saved files without installation admission or acquisition. */
+  open(input: ToolchainOpenRequest): Promise<void>;
+  /** Explicitly validate/apply the published producer archive; default conflicts reject. */
+  applySnapshot(input: SandboxApplySnapshotInput): Promise<void>;
   runBin(input: ToolchainRunBinRequest): Promise<{ readonly exitCode: number }>;
   startBin(input: SandboxStartBinInput): Promise<SandboxResidentBin>;
 }
@@ -131,7 +145,8 @@ export interface Sandbox {
   readonly fs: RuntimeFs;
   /**
    * Which VFS backend booted. Generic mode reports the page-realm probe; toolchain
-   * mode reports its one authoritative runtime Worker backend.
+   * mode reports its one authoritative runtime Worker backend, keeping the last
+   * booted report until a restart replacement is ready.
    */
   readonly vfs: VfsBootInfo;
   /** Capability probe taken at boot. */
@@ -271,10 +286,17 @@ export async function createSandbox(
   }
 
   if (options.toolchain !== undefined) {
+    const startup = captureRuntimeStartupOptions({
+      vmEngine: options.vmEngine ?? 'rewrite',
+      storage: options.storage,
+      startupTimeoutMs: options.startupTimeoutMs,
+    });
+    const workerUrl = String(options.toolchain.workerUrl);
     const { swError } = await bootServiceWorker(options, deps, logger);
     return bootToolchainSandbox({
-      workerUrl: String(options.toolchain.workerUrl),
-      vmEngine: options.vmEngine ?? 'rewrite',
+      ...startup,
+      workerUrl,
+      vmEngine: startup.vmEngine ?? 'rewrite',
       capabilities,
       ...(swError === undefined ? {} : { swError }),
     });
@@ -332,19 +354,19 @@ function mountToolchainPreview(port: number, ownerToken: string): () => void {
   };
 }
 
-async function bootToolchainSandbox(options: {
-  readonly workerUrl: string;
-  readonly vmEngine: NonNullable<RuntimeOptions['vmEngine']>;
-  readonly capabilities: CapabilityCheck;
-  readonly swError?: string;
-}): Promise<ToolchainSandbox> {
-  let current: ToolchainRuntimeController = spawnToolchainRuntime({
-    workerUrl: options.workerUrl,
-    vmEngine: options.vmEngine,
-  });
-  let backend: VfsBackend;
+async function bootToolchainSandbox(
+  options: ToolchainRuntimeOptions & {
+    readonly workerUrl: string;
+    readonly vmEngine: NonNullable<RuntimeOptions['vmEngine']>;
+    readonly capabilities: CapabilityCheck;
+    readonly swError?: string;
+  },
+): Promise<ToolchainSandbox> {
+  let current: ToolchainRuntimeController = spawnToolchainRuntime(options);
+  let vfs: VfsBootInfo;
   try {
-    backend = await current.toolchainReady;
+    await current.toolchainReady;
+    vfs = current.toolchainVfs;
   } catch (error) {
     current.dispose();
     throw error;
@@ -457,6 +479,10 @@ async function bootToolchainSandbox(options: {
   };
 
   const toolchain: SandboxToolchain = {
+    async applySnapshot(input) {
+      assertOperable();
+      await current.toolchain.applySnapshot(input);
+    },
     async open(input) {
       assertOperable();
       await current.toolchain.open(input);
@@ -523,9 +549,10 @@ async function bootToolchainSandbox(options: {
       if (disposed) throw new Error('Sandbox was disposed during restart');
       current.dispose();
 
-      current = spawnToolchainRuntime({ workerUrl: options.workerUrl, vmEngine: options.vmEngine });
+      current = spawnToolchainRuntime(options);
       attachCurrent();
-      backend = await current.toolchainReady;
+      await current.toolchainReady;
+      vfs = current.toolchainVfs;
       if (activation !== null) await current.restoreToolchainState(activation);
       // The restored controller owns recovery now, including writes from a failing callback.
       activation = null;
@@ -571,7 +598,7 @@ async function bootToolchainSandbox(options: {
       });
     },
     get vfs() {
-      return { backend };
+      return vfs;
     },
     capabilities: options.capabilities,
     toolchain,

@@ -64,7 +64,7 @@ Reference/RED: docs/backlog/distribution/reference/pr-331-implementation-evidenc
   physical paths and mirror preserves the adapter authority and Node ancestor
   lookup. This changes our proposed carrier, not the accepted user scenario.
 
-- Toolchain handshake advances to v4: older Workers cannot certify the new
+- Toolchain handshake advances to v5 (v4 = main's project-less snapshot/open protocol): older Workers cannot certify the new
   project/command protocol. Console eval success is typed value undefined.
 - Reuse the existing timer-id registry to clear a completed Node invocation's
   leftover unref timers. Referenced work drains first; older timers survive;

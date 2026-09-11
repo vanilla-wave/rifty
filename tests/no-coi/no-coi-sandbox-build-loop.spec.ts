@@ -1337,7 +1337,7 @@ test('Chrome Worker clone materializes an accessor protocol as exact data', asyn
       const frame = { type: 'toolchain-ready', vfsBackend: 'memory' };
       Object.defineProperty(frame, 'protocol', {
         enumerable: true,
-        get: () => 'rifty.sandbox-toolchain/v4',
+        get: () => 'rifty.sandbox-toolchain/v5',
       });
       postMessage(frame);
     `;
@@ -1373,7 +1373,7 @@ test('Chrome Worker clone materializes an accessor protocol as exact data', asyn
     plain: true,
     keys: ['protocol', 'type', 'vfsBackend'],
     protocolKind: 'data',
-    protocolValue: 'rifty.sandbox-toolchain/v4',
+    protocolValue: 'rifty.sandbox-toolchain/v5',
   });
 });
 
@@ -1393,7 +1393,7 @@ test('public SDK rejects an invalid real Worker before queued later frames can a
         });
         postMessage({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v4',
+          protocol: 'rifty.sandbox-toolchain/v5',
           vfsBackend: 'memory',
         });
         postMessage({ type: 'ready' });
@@ -1488,7 +1488,7 @@ test('public SDK backend mismatch throws the canonical NotImplementedError', asy
           postMessage({ type: 'ready' });
           postMessage({
             type: 'toolchain-ready',
-            protocol: 'rifty.sandbox-toolchain/v4',
+            protocol: 'rifty.sandbox-toolchain/v5',
             vfsBackend: 'indexeddb',
           });
         `;
@@ -1551,7 +1551,7 @@ test('public SDK waits for both readiness signals in either real Worker order', 
         const NativeWorker = globalThis.Worker;
         const run = async (kind: 'exact' | 'mismatch', backend: 'opfs' | 'memory') => {
           const protocol =
-            kind === 'exact' ? 'rifty.sandbox-toolchain/v4' : 'rifty.sandbox-toolchain/v10';
+            kind === 'exact' ? 'rifty.sandbox-toolchain/v5' : 'rifty.sandbox-toolchain/v10';
           const source = `
           addEventListener('message', (event) => {
             if (event.data === 'release-runtime-ready') postMessage({ type: 'ready' });
@@ -2479,10 +2479,11 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
       };
       const cliPath = `${root}/node_modules/vite/dist/node/cli.js`;
       let cliSource = await sandbox.fs.readFile(cliPath, 'utf8');
+      // Explicit acquisition now emits the same prepared CLI as snapshots.
       cliSource = replaceOnce(
         cliSource,
-        'if (run) this.runMatchedCommand();',
-        'if (run) globalThis.__riftyVite8FixtureAction = this.runMatchedCommand();',
+        'var __riftyAction = this.runMatchedCommand();',
+        'var __riftyAction = globalThis.__riftyVite8FixtureAction = this.runMatchedCommand();',
       );
       cliSource = replaceOnce(
         cliSource,

@@ -1,14 +1,47 @@
 import { RegistryClient, install } from '@riftydev/npm-client';
-import { shadowSubstitutionPlanForInstallResult } from '@riftydev/npm-client/internal';
+import {
+  planShadowSubstitutionsFromLockfile,
+  shadowSubstitutionPlanForInstallResult,
+} from '@riftydev/npm-client/internal';
 import type { ToolchainInstallRequest } from '@riftydev/runtime-js/internal';
+import { preparePackageEntryRuntime } from '@riftydev/shadow-registry/runtime';
 import { type Vfs, normalizePath, syncMirror } from '@riftydev/vfs';
-import { finalizeGenericPackageInstallFiles } from './package-install-generic-finalizer.ts';
+import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 import {
   type WorkbenchRuntimeBinding,
   activateWorkbenchRuntimeAdapters,
 } from './workbench-runtime-adapters.ts';
 
 export { activateWorkbenchRuntimeAdapters };
+
+/** Saved files remain accessible; invalid lock grants no adapter capability. */
+export async function prepareSavedToolchain(cwd: string) {
+  let bindings: readonly WorkbenchRuntimeBinding[] = [];
+  try {
+    const plan = planShadowSubstitutionsFromLockfile(
+      JSON.parse(
+        new TextDecoder().decode(syncMirror().readFileBytesSync(`${cwd}/package-lock.json`)),
+      ),
+    );
+    bindings = Object.freeze(
+      plan.bindings.map((binding) =>
+        Object.freeze({
+          adapterId: binding.adapterId,
+          packagePath: `${cwd}/${binding.packagePath}`,
+        }),
+      ),
+    );
+  } catch {
+    // A missing/invalid lock is not installation admission (ADR-0417).
+  }
+  await preparePackageEntryRuntime({
+    kind: 'eval',
+    root: cwd,
+    runtimeBindings: bindings,
+    fs: syncMirror(),
+  });
+  return bindings;
+}
 
 /** First-use package acquisition and activation; worker owns admission and snapshots. */
 export async function installToolchainPackages(
@@ -21,7 +54,7 @@ export async function installToolchainPackages(
     cwd: input.cwd,
     registry,
   });
-  finalizeGenericPackageInstallFiles({ root: input.cwd });
+  await finalizePackageInstallFiles({ root: input.cwd });
   const bindings: readonly WorkbenchRuntimeBinding[] = Object.freeze(
     shadowSubstitutionPlanForInstallResult(result).bindings.map((binding) =>
       Object.freeze({
