@@ -4,14 +4,12 @@
 
 - Report a never-admitted command as failed even after Stop; a settled command's failed/unknown persistence marks the next restart's unflushedWrites.
 
-- Add no-COI project filesystem methods and stateless command handles with streamed output, owned Stop and explicit Worker replacement; toolchain protocol v5 requires matching SDK/Worker versions.
+- Add no-COI project filesystem methods and stateless command handles with streamed output, owned Stop and explicit Worker replacement.
 
-- No-COI toolchain protocol is now v3. Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.
+- No-COI toolchain protocol is now v5 (v3/v4 never shipped). Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.
 - Add explicit applySnapshot with validated input/conflict force and registry-free ordinary saved open; interrupted applications never impose install-status admission (ADR-0417/0420).
 
 - Expose captured no-COI storage namespace/policy and startupTimeoutMs; report fallback reason and preserve configuration on restart; `sandbox.vfs` keeps the last booted report while a restart replacement starts (ADR-0419).
-
-- No-COI toolchain protocol is now v4 (v3 never shipped). Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.
 
 - Add toolchain.open({cwd, registryUrl}) for compatible saved installations; preserve dependency edits and require explicit install for missing/incompatible proof.
 

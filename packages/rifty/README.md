@@ -227,7 +227,8 @@ mutations/flush return applied/persistence receipts (memory/flushed); writeFile
 preserves its void result. Failed operations carry error.effects for application
 and persistence uncertainty. Console runtime.eval prints expression values and
 resolves success with value undefined; file/command methods supply structured
-results.
+results. Eval success never certifies persistence: `sandbox.fs.flush()` receipts
+and the next `restart().unflushedWrites` are the durability report.
 
 This mode owns runtime, VFS, npm install, installed registry-twin admission, and bin
 execution in one Worker. `startBin` is package-generic; the requested port

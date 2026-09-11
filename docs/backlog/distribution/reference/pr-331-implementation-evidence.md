@@ -226,3 +226,17 @@ per command at 22.5 MB) and unhandled-rejection settlement in commands
 (`distribution/no-coi-command-snapshot-transfer`,
 `distribution/no-coi-command-unhandled-rejection-exit`).
 
+## Verify pass on the merged revision
+
+Independent fresh-context Final+GREEN at `c3b1ac32072d6bea88177e31674cbd0ea3907f9e`
+(`pr-331-final-green.json`, validator exit 0): 68 coverage rows, 65 pass /
+3 weak / 0 missing, no blocker, unit residuals empty. The reviewer re-executed
+123 unit carriers, 19 no-COI browser tests and scratch mutants M1–M5 (admission
+label, restart marker, adapter ownership forwarding ×2, v4 handshake, eval
+persistence), each RED on its carrier only. Advisory notes kept as notes
+(`REV-12`): no committed carrier for mkdir/rename/rm recovery-image updates and
+memory-backend directory restore (`host-fs-recovery.ts`), none for
+project.run/project.fs against a live resident bin, and the resident-concurrency
+message names only install/open/runBin. The single goal residual is I4 on this
+revision: the PR's CI on the recorded commit, observed before merge.
+
