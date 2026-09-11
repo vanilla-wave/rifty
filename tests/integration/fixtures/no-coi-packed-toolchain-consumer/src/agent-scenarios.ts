@@ -168,6 +168,23 @@ export async function agentStopScenario(sandbox: AgentSandbox) {
   const same = stopped === (await slow.completion);
   const effect = await project.fs.readFile('src/applied.txt', 'utf8');
   const next = await project.run('pwd && echo next').completion;
+  await project.fs.writeFile(
+    'old.cjs',
+    "process.once('SIGINT', () => { process.stdout.write('OLD-OUTPUT'); require('node:fs').writeFileSync('/stop/old-effect', 'leaked'); })",
+  );
+  await project.fs.writeFile(
+    'current.cjs',
+    "const timer = setInterval(() => {}, 1000); process.once('SIGINT', () => { clearInterval(timer); console.log('current-stopped'); }); console.log('current-entered');",
+  );
+  const old = await project.run('node old.cjs').completion;
+  const current = project.run('node current.cjs');
+  await new Promise<void>((resolve) => {
+    current.onOutput(({ chunk }) => {
+      if (chunk.includes('current-entered')) resolve();
+    });
+  });
+  const currentStopped = await current.stop();
+  const oldEffect = await errorOf(() => project.fs.readFile('old-effect', 'utf8'));
   const hard = project.run('node spin.cjs');
   let spinning!: () => void;
   const entranceHard = new Promise<void>((resolve) => {
@@ -179,5 +196,16 @@ export async function agentStopScenario(sandbox: AgentSandbox) {
   await entranceHard;
   const terminated = await hard.stop();
   const afterHard = await project.run('echo after-hard').completion;
-  return { overlap, stopped, same, effect, next, terminated, afterHard };
+  return {
+    overlap,
+    stopped,
+    same,
+    effect,
+    next,
+    old,
+    currentStopped,
+    oldEffect,
+    terminated,
+    afterHard,
+  };
 }

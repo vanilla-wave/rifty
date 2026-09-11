@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
+
 - Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,
   `buildPreviewPath`, optional parser prefix; `/preview/` remains the default (ADR-0409).
 

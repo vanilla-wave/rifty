@@ -75,6 +75,13 @@ export async function provePackedAgent(root, registryUrl) {
           assert.equal(value.same, true);
           assert.equal(value.effect, 'applied\n');
           assert.equal(value.next.stdout, '/stop\nnext\n');
+          assert.equal(value.old.status, 'exited');
+          assert.equal(value.old.exitCode, 0);
+          assert.equal(value.old.stdout, '');
+          assert.equal(value.currentStopped.status, 'cancelled');
+          assert.equal(value.currentStopped.worker, 'retained');
+          assert.equal(value.currentStopped.stdout, 'current-entered\ncurrent-stopped\n');
+          assert.equal(value.oldEffect.code, 'ENOENT');
           assert.equal(value.terminated.status, 'cancelled');
           assert.equal(value.terminated.worker, 'replaced');
           assert.deepEqual(value.terminated.effects, {

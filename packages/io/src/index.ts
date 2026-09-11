@@ -19,7 +19,7 @@
  */
 
 export { NotImplementedError } from './errors.ts';
-export { EventEmitter, once } from './event-emitter.ts';
+export { EventEmitter, once, captureEventEmitterListenerScope } from './event-emitter.ts';
 export {
   Buffer,
   getInspectMaxBytes,

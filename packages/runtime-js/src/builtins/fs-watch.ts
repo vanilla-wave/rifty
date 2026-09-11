@@ -18,6 +18,7 @@ import { toNodeFsError } from './fs-errors.ts';
 import { resolvePath } from './fs-path.ts';
 import { Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { onTimerScopeDispose } from './timers.ts';
 
 export interface WatchOptions {
   /** poll interval in ms (default 250) */
@@ -103,19 +104,33 @@ function invalidEncoding(value: string): TypeError {
 export class FSWatcher extends EventEmitter {
   private timer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
+  private detachAbort: (() => void) | undefined;
 
   /** @internal — used by fs.watch */
   _start(tick: () => void, interval: number, signal?: AbortSignal): void {
     this.timer = setInterval(tick, interval);
+    onTimerScopeDispose(this.timer, () => {
+      this.closed = true;
+      this.timer = null;
+      this.detachAbort?.();
+      this.detachAbort = undefined;
+      EventEmitter.prototype.removeAllListeners.call(this);
+    });
     if (signal) {
       if (signal.aborted) this.close();
-      else signal.addEventListener('abort', () => this.close(), { once: true });
+      else {
+        const abort = () => this.close();
+        signal.addEventListener('abort', abort, { once: true });
+        this.detachAbort = () => signal.removeEventListener('abort', abort);
+      }
     }
   }
 
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.detachAbort?.();
+    this.detachAbort = undefined;
     if (this.timer !== null) {
       clearInterval(this.timer);
       this.timer = null;
@@ -346,10 +361,15 @@ function assertWatchFileOptions(opts: WatchFileOptions): void {
 
 interface PollEntry {
   timer: ReturnType<typeof setInterval>;
-  listeners: WatchFileListener[];
+  listeners: PollListener[];
   last: FileSnapshot;
   /** Node ENOENT contract: a missing-at-start target gets ONE zeroed listener call. */
   notifyMissingOnce: boolean;
+}
+
+interface PollListener {
+  readonly callback: WatchFileListener;
+  detachScope(): void;
 }
 
 /**
@@ -368,6 +388,18 @@ function toStats(snap: FileSnapshot): Stats {
 }
 
 const pollers = new Map<string, PollEntry>();
+
+function addPollListener(target: string, entry: PollEntry, callback: WatchFileListener): void {
+  const listener: PollListener = { callback, detachScope: () => {} };
+  entry.listeners.push(listener);
+  listener.detachScope = onTimerScopeDispose(entry.timer, () => {
+    entry.listeners = entry.listeners.filter((candidate) => candidate !== listener);
+    if (entry.listeners.length === 0 && pollers.get(target) === entry) {
+      clearInterval(entry.timer);
+      pollers.delete(target);
+    }
+  });
+}
 
 export function watchFile(
   path: string,
@@ -392,7 +424,7 @@ export function watchFile(
   const interval = opts.interval ?? 5007;
   const existing = pollers.get(target);
   if (existing) {
-    existing.listeners.push(cb);
+    addPollListener(target, existing, cb);
     return;
   }
   const initial = snapshotFile(target);
@@ -403,7 +435,8 @@ export function watchFile(
         // Missing at watchFile() time and still missing: Node invokes the
         // listener ONCE with all fields zeroed (curr === prev === zeros).
         entry.notifyMissingOnce = false;
-        for (const fn of entry.listeners.slice()) fn(toStats(next), toStats(entry.last));
+        for (const { callback } of entry.listeners.slice())
+          callback(toStats(next), toStats(entry.last));
         entry.last = next;
         return;
       }
@@ -411,10 +444,10 @@ export function watchFile(
       if (snapshotChanged(entry.last, next)) {
         const prev = entry.last;
         entry.last = next;
-        for (const fn of entry.listeners.slice()) fn(toStats(next), toStats(prev));
+        for (const { callback } of entry.listeners.slice()) callback(toStats(next), toStats(prev));
       }
     }, interval),
-    listeners: [cb],
+    listeners: [],
     last: initial,
     notifyMissingOnce: !initial.exists,
   };
@@ -422,6 +455,7 @@ export function watchFile(
     (entry.timer as { unref?: () => unknown }).unref?.();
   }
   pollers.set(target, entry);
+  addPollListener(target, entry, cb);
 }
 
 export function unwatchFile(path: string, listener?: WatchFileListener): void {
@@ -429,7 +463,10 @@ export function unwatchFile(path: string, listener?: WatchFileListener): void {
   const entry = pollers.get(target);
   if (!entry) return;
   if (listener) {
-    entry.listeners = entry.listeners.filter((l) => l !== listener);
+    for (const registered of entry.listeners) {
+      if (registered.callback === listener) registered.detachScope();
+    }
+    entry.listeners = entry.listeners.filter((registered) => registered.callback !== listener);
     if (entry.listeners.length > 0) return;
   }
   clearInterval(entry.timer);

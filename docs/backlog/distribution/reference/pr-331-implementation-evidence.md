@@ -147,3 +147,23 @@ Post-bake test provenance repairs (both reproduced in isolated full-gate rerun):
   Full5/5 PASS; reverting only fixture source selection recreates the same RED.
 
 No product source changed for either fixture repair.
+
+Independent Final review at80017f1 found F1: a completed process.once(SIGINT)
+callback ran during Stop of a later command, leaking stdout and a file write.
+Fault: observable-order/sibling-drift at the owned invocation lifecycle boundary.
+Existing process/stdio EventEmitter storage and timer handles now retire their
+new registrations after drain (ADR-0422). No transport fault is claimed excluded.
+Class sweep covered on/once/prepend variants, stdio/meta-events, unref timers,
+watchFile (including new listeners on a pre-existing poller), FSWatcher abort,
+and timers/promises abort closures. Unsafe drain still requires physical death.
+
+Real regression proof: listener/command/watch suites36/36 PASS. Removing only
+listener retirement reproduces all5 new command failures; removing timer scope
+disposal reproduces all4 watcher/abort failures. Original watcher/timer tests
+remain unchanged. Source browser7/7 PASS, including same-project Vite build →
+Stop → rebuild and completed handler → next command Stop with exact stdout
+and absent old file effect. The same new scenario is mandatory in packed proof.
+
+ADR-0391 TypeScript emitted-worker allowance refreshed after shared IO changes:
+size remains10,022,664B, SHA-256333013ec…; generated esbuild client pin and all
+byte ceilings unchanged. Exact worker identity remains enforced, not a waiver.

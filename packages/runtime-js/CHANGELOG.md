@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Retire invocation watcher and promise-timer abort callbacks with their existing timer owner (ADR-0422).
+
 - Add structured FS RPC with checked persistence receipts, console-only eval result typing and command protocol v4; preserve recovery mutations and clear completed Node invocation timers.
 
 - Migrate Node entry bootstrap to v4 for optional host SQLite configuration; reject prior versions atomically (ADR-0416).

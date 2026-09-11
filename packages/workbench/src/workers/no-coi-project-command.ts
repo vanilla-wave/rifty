@@ -1,4 +1,4 @@
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, captureEventEmitterListenerScope } from '@riftydev/io';
 import { listPorts } from '@riftydev/net';
 import { type SerializedRuntimeError, awaitDrain } from '@riftydev/runtime-js';
 import { type RunNodeEntryOptions, runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
@@ -68,6 +68,12 @@ export async function runNoCoiProjectCommand(
     ctx: CommandContext,
   ): Promise<number> => {
     const timerBoundary = captureTimerBoundary();
+    const listenerScopes = [
+      riftyProcess,
+      riftyProcess.stdin,
+      riftyProcess.stdout,
+      riftyProcess.stderr,
+    ].map(captureEventEmitterListenerScope);
     const previous = {
       cwd: riftyProcess.cwd(),
       env: riftyProcess.env,
@@ -133,6 +139,7 @@ export async function runNoCoiProjectCommand(
       ctx.signal?.removeEventListener('abort', abort);
       // A rejected drain leaves the realm owned until the host physically terminates it.
       if (!requiresTermination) {
+        for (const retire of listenerScopes) retire();
         clearTimersSince(timerBoundary);
         restoreConsole();
         riftyProcess.stdout.write = previous.stdout;

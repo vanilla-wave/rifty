@@ -207,6 +207,13 @@ for (const scenario of [
         effect: 'applied\n',
         next: { stdout: '/stop\nnext\n' },
       });
+      expect(observed.old).toMatchObject({ status: 'exited', exitCode: 0, stdout: '' });
+      expect(observed.currentStopped).toMatchObject({
+        status: 'cancelled',
+        worker: 'retained',
+        stdout: 'current-entered\ncurrent-stopped\n',
+      });
+      expect(observed.oldEffect).toMatchObject({ code: 'ENOENT' });
       expect(observed.terminated).toMatchObject({
         status: 'cancelled',
         worker: 'replaced',

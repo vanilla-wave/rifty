@@ -41,14 +41,21 @@ export function captureTimerBoundary(): number {
 /** A drained invocation has exited: its remaining unref timers cannot run afterward. */
 export function clearTimersSince(boundary: number): void {
   for (const [id, handle] of handlesById) {
+    handle.disposeScopesSince(boundary);
     if (id >= boundary) handle.clear();
   }
+}
+
+/** @internal — a watcher can add a new listener to a pre-invocation timer. */
+export function onTimerScopeDispose(handle: unknown, dispose: () => void): () => void {
+  return resolveHandle(handle)?.onScopeDispose(dispose) ?? (() => {});
 }
 
 class KeepaliveTimerHandle {
   private active = true;
   private refed = true;
   private readonly primitiveId = nextTimerId++;
+  private scopeDisposers: { readonly id: number; readonly dispose: () => void }[] = [];
 
   constructor(
     private readonly raw: HostTimer,
@@ -62,6 +69,7 @@ class KeepaliveTimerHandle {
     if (!this.active) return false;
     this.active = false;
     handlesById.delete(this.primitiveId);
+    this.scopeDisposers = [];
     if (this.refed) keepaliveUnref();
     return true;
   }
@@ -76,7 +84,24 @@ class KeepaliveTimerHandle {
       if (this.refed) keepaliveUnref();
     }
     handlesById.delete(this.primitiveId);
+    this.scopeDisposers = [];
     this.clearRaw(this.raw);
+  }
+
+  onScopeDispose(dispose: () => void): () => void {
+    if (!this.active) return () => {};
+    const entry = { id: nextTimerId++, dispose };
+    this.scopeDisposers.push(entry);
+    return () => {
+      const index = this.scopeDisposers.indexOf(entry);
+      if (index !== -1) this.scopeDisposers.splice(index, 1);
+    };
+  }
+
+  disposeScopesSince(boundary: number): void {
+    const retiring = this.scopeDisposers.filter((entry) => entry.id >= boundary);
+    this.scopeDisposers = this.scopeDisposers.filter((entry) => entry.id < boundary);
+    for (const entry of retiring) entry.dispose();
   }
 
   ref(): this {
@@ -286,6 +311,8 @@ function setTimeoutPromise<T = void>(
         reject(abortError(signal));
       };
       signal.addEventListener('abort', onAbort, { once: true });
+      const abortListener = onAbort;
+      onTimerScopeDispose(handle, () => signal.removeEventListener('abort', abortListener));
     }
   });
 }

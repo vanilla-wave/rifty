@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Remove completed Node command process/stdio listeners before admitting the next command (ADR-0422).
+
 - Compose no-COI project file/command policy on the permanent Worker VFS; reuse Shell and Node entry execution, retain handlers through Stop/drain/flush and reject background jobs.
 
 - Make deployment.wasm/sqlite optional; preserve absence through recursive workers, reject malformed supplied values, and skip the SQLite provider without a URL (ADR-0416).

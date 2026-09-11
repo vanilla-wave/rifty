@@ -51,6 +51,74 @@ function fixture(files: Record<string, string> = {}) {
 }
 
 describe('no-COI invocation command', () => {
+  it.each(['on', 'once', 'prependListener', 'prependOnceListener'])(
+    'retires process %s callbacks before a later command Stop',
+    async (method) => {
+      const before = riftyProcess.rawListeners('SIGINT');
+      const { fs, run } = fixture({
+        '/project/first.cjs': `process.${method}('SIGINT', () => {
+          process.stdout.write('OLD-OUTPUT');
+          require('node:fs').writeFileSync('/project/old-effect', 'old');
+        }); console.log('first-done');`,
+        '/project/second.cjs': "process.stdout.write('second-entered'); setTimeout(() => {}, 20);",
+      });
+      try {
+        expect((await run('node first.cjs')).stdout).toBe('first-done\n');
+        const controller = new AbortController();
+        let output = '';
+        const result = await runNoCoiProjectCommand(
+          {
+            project: { root: '/project' },
+            command: 'node second.cjs',
+            cwd: '/project',
+            env: {},
+          },
+          controller.signal,
+          {
+            fs,
+            flush: async () => 'memory',
+            effects: () => 'unknown',
+            onOutput(chunk) {
+              output += chunk;
+              if (chunk === 'second-entered') controller.abort();
+            },
+          },
+        );
+        expect(result.status).toBe('cancelled');
+        expect(output).toBe('second-entered');
+        expect(fs.existsSync('/project/old-effect')).toBe(false);
+      } finally {
+        riftyProcess.removeAllListeners('SIGINT');
+        for (const listener of before) riftyProcess.on('SIGINT', listener);
+      }
+    },
+  );
+
+  it('retires guest stdio listeners without replaying process meta-events', async () => {
+    const { fs, run } = fixture({
+      '/project/first.cjs': `
+        for (const stream of [process.stdin, process.stdout, process.stderr])
+          stream.once('test-event', () => require('node:fs').writeFileSync('/project/old-stream', 'old'));
+        process.on('removeListener', () => require('node:fs').writeFileSync('/project/meta', 'old'));
+        process.on('unused', () => {});
+      `,
+      '/project/second.cjs': `
+        for (const stream of [process.stdin, process.stdout, process.stderr]) stream.emit('test-event');
+      `,
+    });
+    try {
+      expect((await run('node first.cjs')).exitCode).toBe(0);
+      expect(fs.existsSync('/project/meta')).toBe(false);
+      expect((await run('node second.cjs')).exitCode).toBe(0);
+      expect(fs.existsSync('/project/old-stream')).toBe(false);
+    } finally {
+      riftyProcess.removeAllListeners('removeListener');
+      riftyProcess.removeAllListeners('unused');
+      for (const stream of [riftyProcess.stdin, riftyProcess.stdout, riftyProcess.stderr])
+        stream.removeAllListeners('test-event');
+    }
+  });
+
   it.each([
     ['setTimeout', ''],
     ['setInterval', ''],
