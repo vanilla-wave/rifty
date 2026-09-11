@@ -34,13 +34,13 @@
     }
   ],
   "axes": [
-    {"axis": "Completeness", "verdict": "pass", "findings": []},
-    {"axis": "Mission and architecture", "verdict": "pass", "findings": []},
-    {"axis": "Goal drift", "verdict": "pass", "findings": []},
-    {"axis": "Approach cost", "verdict": "pass", "findings": []},
-    {"axis": "Scope", "verdict": "pass", "findings": []},
-    {"axis": "Bugs", "verdict": "pass", "findings": []},
-    {"axis": "Regressions", "verdict": "pass", "findings": []},
-    {"axis": "Ecosystem UX", "verdict": "pass", "findings": []}
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
   ]
 }
