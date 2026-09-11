@@ -1,0 +1,550 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Product units and accepted goal PASS at 5417b5c; independently verified CI run34547673623 completed success on that exact SHA. Ready for authorized goal cleanup/delivery; no merge requested.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5417b5c3c159256cb6426f921fc55d7868a1fe8d",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-project-files.md + docs/backlog/distribution/public-api-ai-agent-exec-preview.md; docs/backlog/epics/no-coi-agent-sdk/goal.md; original issue325-source.json/issue326-source.json and verbatim answer in issues325-326-refine-evidence.md; BASE ca4f4786244f86a377626cef3f857ab3ae7488ef",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Files Acceptance 1: structured read/write/list/stat/mkdir/rename/remove share the real Worker VFS through a packed consumer",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:154; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; packages/runtime-js/src/worker-fs-structured.test.ts:31",
+      "note": ""
+    },
+    {
+      "row": "Files Acceptance 2: raw root anchoring and project file/command root plus readonly agreement",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0131",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/no-coi/no-coi-agent-sdk.spec.ts:154",
+      "note": ""
+    },
+    {
+      "row": "Files Acceptance 3: applied/persistence effects remain honest across failed storage and termination",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:146; packages/runtime-js/src/worker-fs-structured.test.ts:186; tests/no-coi/no-coi-agent-sdk.spec.ts:79; tests/no-coi/no-coi-dev-hmr.spec.ts:1110",
+      "note": ""
+    },
+    {
+      "row": "Files Acceptance 4: explicit console eval contract; structured files/command outcomes need no control files",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/protocol.ts:22; packages/runtime-js/src/host.ts:66; packages/rifty/README.md:91; tests/integration/no-coi-agent-browser-proof.mjs:7",
+      "note": ""
+    },
+    {
+      "row": "Files fault: quota/permission/torn mutation or flush cannot report durable success",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:186; packages/runtime-js/src/worker-fs-structured.test.ts:220; packages/runtime-js/src/worker-fs-structured.test.ts:236; tests/no-coi/no-coi-agent-sdk.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Files fault: peer death before reply preserves unknown/non-application distinction without replay",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-dev-hmr.spec.ts:1110; tests/no-coi/no-coi-agent-sdk.spec.ts:210",
+      "note": ""
+    },
+    {
+      "row": "Files fault: malformed paths/options, missing entries and readonly reject honestly",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:93; packages/runtime-js/src/worker-fs-structured.test.ts:108; packages/runtime-js/src/worker-fs-structured.test.ts:126; tests/no-coi/no-coi-agent-sdk.spec.ts:169; packages/workbench/src/workers/no-coi-project-fs.test.ts:92",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 1: invocation completion/stop/output is structured and unambiguous",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; tests/no-coi/no-coi-agent-sdk.spec.ts:175; tests/no-coi/no-coi-agent-sdk.spec.ts:196; packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 2: independent cwd/env after success/failure/Stop, within-call sequencing and persistent effects",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152; tests/no-coi/no-coi-agent-sdk.spec.ts:175",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 3: Stop owns real settlement or Worker replacement; next run output stays separate",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152; tests/no-coi/no-coi-agent-sdk.spec.ts:196; packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 4: applied effects, failed flush, unacknowledged writes and replacement stay explicit",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/no-coi/no-coi-agent-sdk.spec.ts:79; tests/no-coi/no-coi-agent-sdk.spec.ts:210",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 5: existing Shell, root/host policy and ordinary Node filesystem agreement",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/no-coi/no-coi-agent-sdk.spec.ts:175; tests/no-coi/no-coi-agent-installed-cli.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 6: host can prohibit background launch; ADR-0418 offers no background admission",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:126; tests/no-coi/no-coi-agent-sdk.spec.ts:185",
+      "note": ""
+    },
+    {
+      "row": "Commands Acceptance 7: real no-COI browser covers Stop-next, failure-success, pending mutation and policy agreement",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/no-coi/no-coi-agent-sdk.spec.ts:133",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: cooperative abort awaits handler/final flush and preserves applied effects",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:7; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:152",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: non-cooperative/ended Worker exposes termination and unknown effects, next owner independent",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:172; tests/no-coi/no-coi-agent-sdk.spec.ts:210; tests/no-coi/no-coi-dev-hmr.spec.ts:1214",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: storage failure is not clean success or rollback/replay",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:79; packages/runtime-js/src/worker-fs-structured.test.ts:186",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: overlapping calls preserve the existing explicit Worker busy result",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0376",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:162; tests/no-coi/no-coi-agent-sdk.spec.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Commands fault: malformed root/policy and readonly boundary rejection",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:129; tests/no-coi/no-coi-agent-sdk.spec.ts:185; packages/workbench/src/workers/no-coi-project-fs.test.ts:92",
+      "note": ""
+    },
+    {
+      "row": "RuntimeFs.readFile retains raw-root paths, UTF8/bytes and detached results",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:78; packages/runtime-js/src/worker-fs-structured.test.ts:108; packages/runtime-js/src/worker-fs-structured.test.ts:186",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: readdir",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:31",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: stat",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:46",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: mkdir",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:58",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: rename",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:67",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: rm",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:72",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: flush",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:236",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: ToolchainSandbox.project/project.fs",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:61; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:95",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: project.run",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: run.onOutput",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:120; tests/no-coi/no-coi-agent-sdk.spec.ts:184; packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: run.completion",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:111; tests/no-coi/no-coi-agent-sdk.spec.ts:175; packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": ""
+    },
+    {
+      "row": "ADR-0418 public shape: run.stop",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:163; tests/no-coi/no-coi-agent-sdk.spec.ts:196; packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": ""
+    },
+    {
+      "row": "Recorded native Node directory/stat/rename/removal observation, VFS metadata rather than full Stats prototype",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/pr-331-implementation-evidence.md:12; packages/runtime-js/src/worker-fs-structured.test.ts:31; tests/no-coi/no-coi-agent-sdk.spec.ts:154",
+      "note": ""
+    },
+    {
+      "row": "RuntimeFs.writeFile retains Promise<void>, auto-parents and honest mutation errors",
+      "source": "public-api",
+      "trace": "ADR-0418+ADR-0131",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/worker-fs-structured.test.ts:79; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/public-types.ts:40",
+      "note": ""
+    },
+    {
+      "row": "RuntimeController.eval/EvalResult explicitly returns undefined on console-oriented success",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/protocol.ts:22; packages/runtime-js/src/host.ts:66; packages/rifty/README.md:91",
+      "note": ""
+    },
+    {
+      "row": "SDK project/options/output/outcome/effect/stat/dirent types are consumable from packed public exports",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/public-types.ts:31",
+      "note": ""
+    },
+    {
+      "row": "ShellOptions.assertCommand checks actual selected expanded dispatch; policy survives nested scripts",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/shell/tests/command-policy.test.ts:12; packages/workbench/src/workers/no-coi-project-command.test.ts:194",
+      "note": ""
+    },
+    {
+      "row": "ShellOptions.allowBackground=false rejects every bare background operator before launch",
+      "source": "public-api",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/shell/tests/command-policy.test.ts:40",
+      "note": ""
+    },
+    {
+      "row": "activatePackageRuntimeAdapters getCwd/refs preserves acquisition-time CJS cwd/identity and real request/context drain",
+      "source": "public-api",
+      "trace": "ADR-0421+ADR-0384",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-esbuild-cwd.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "ADR-0421 real esbuild Node differential: repeat invocation cwd, require then chdir, caught missing build and live context/dispose",
+      "source": "acceptance",
+      "trace": "ADR-0421",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-esbuild-cwd.test.ts:20",
+      "note": ""
+    },
+    {
+      "row": "Unref timers created by a completed invocation cannot leak; earlier realm timers survive",
+      "source": "acceptance",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Real HTTP Node listener remains owned until Stop settles close",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0418",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-network.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Same installed Vite project builds, edits/rebuilds, Stops buildStart, edits and builds again",
+      "source": "acceptance",
+      "trace": "I2+I3+I4",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-installed-scenario.ts:3; tests/integration/no-coi-agent-browser-proof.mjs:84",
+      "note": ""
+    },
+    {
+      "row": "Runtime protocol v4 exact handshake accepts current, rejects retired v3 and future v5",
+      "source": "acceptance",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host.test.ts:307",
+      "note": ""
+    },
+    {
+      "row": "Generated esbuild runtime/manifest keep upstream input and validation hashes; declared 13th ref patch has exact hunks",
+      "source": "frozen-artifact",
+      "trace": "ADR-0226+ADR-0421",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-generated-provenance.test.ts:75; tools/shadow-registry/tools/esbuild-exact-patcher.mjs:84",
+      "note": ""
+    },
+    {
+      "row": "Generated esbuild emitted client SHA-256 is updated exactly, without extra client/asset allowance",
+      "source": "frozen-artifact",
+      "trace": "ADR-0384+ADR-0391+ADR-0421",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:87; tools/checks/esbuild-legacy-retirement.mjs:281",
+      "note": ""
+    },
+    {
+      "row": "TypeScript compiler emitted asset retains 10022664 bytes and exact new hash; no ceiling/filename waiver expansion",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:91; tests/integration/workbench-packed-consumer.mjs:1428",
+      "note": ""
+    },
+    {
+      "row": "vite baked snapshot payload and recorded ID: exact prepared package bytes, replay cache and current install identity",
+      "source": "frozen-artifact",
+      "trace": "ADR-0412+ADR-0384",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:58; apps/playground/src/generated/baked-snapshot-identities.json:1",
+      "note": ""
+    },
+    {
+      "row": "vite8 baked snapshot payload and recorded ID: exact prepared package bytes, replay cache and current install identity",
+      "source": "frozen-artifact",
+      "trace": "ADR-0412+ADR-0384",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:58; apps/playground/src/generated/baked-snapshot-identities.json:1",
+      "note": ""
+    },
+    {
+      "row": "typescript baked snapshot payload and recorded ID: exact prepared package bytes, replay cache and current install identity",
+      "source": "frozen-artifact",
+      "trace": "ADR-0412+ADR-0384",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/check-dep-snapshot-artifacts.ts:58; apps/playground/src/generated/baked-snapshot-identities.json:1",
+      "note": ""
+    },
+    {
+      "row": "Install artifact identity remains generated from the exact source recipe",
+      "source": "frozen-artifact",
+      "trace": "ADR-0384+ADR-0412",
+      "status": "pass",
+      "citation": "tools/shadow-registry/tools/generate-install-artifact-identity.ts:1; packages/workbench/src/generated/install-artifact-identity.json:1",
+      "note": ""
+    },
+    {
+      "row": "Vite 7.3.6 raw CLI upstream SHA remains pinned; prepared baked CLI equals exact acquisition transform",
+      "source": "frozen-artifact",
+      "trace": "ADR-0384+ADR-0412",
+      "status": "pass",
+      "citation": "tools/shadow-registry/src/esbuild-contract-source-pin.test.ts:95",
+      "note": ""
+    },
+    {
+      "row": "Original emnapi core 1.10.0 tarball is SHA512/lock pinned; raw readable/minified hoisted/nested bytes drive unchanged refusal oracle",
+      "source": "frozen-artifact",
+      "trace": "ADR-0384+ADR-0412",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:254; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:432",
+      "note": ""
+    },
+    {
+      "row": "Captured nanoid 3.3.19 manifest/tarball satisfy actual baked lock integrity; fixture registry performs real tarball installation",
+      "source": "frozen-artifact",
+      "trace": "ADR-0412+I4",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/registry/rollup-companions/provenance.json:1; tests/integration/workbench-packed-consumer.mjs:402; tests/integration/workbench-packed-consumer.mjs:1441",
+      "note": ""
+    },
+    {
+      "row": "Workbench production closure is exactly 161 files after two required composition modules; source closure equality preserved",
+      "source": "frozen-artifact",
+      "trace": "ADR-0418",
+      "status": "pass",
+      "citation": "packages/workbench/tests/extraction-boundary.contract.test.ts:345",
+      "note": ""
+    },
+    {
+      "row": "captureEventEmitterListenerScope retires new process/stdio listeners quietly and retains surviving original callbacks without reviving fired once handlers or removals",
+      "source": "public-api",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/io/src/event-emitter-listener-scope.test.ts:4; packages/io/src/event-emitter.ts:266",
+      "note": ""
+    },
+    {
+      "row": "F1: on/once/prependListener/prependOnceListener from completed Node entries cannot respond to later Stop with old stdout or file effects",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:55; tests/integration/fixtures/no-coi-packed-toolchain-consumer/src/agent-scenarios.ts:171; tests/integration/no-coi-agent-browser-proof.mjs:78",
+      "note": ""
+    },
+    {
+      "row": "Guest stdio callbacks and process removeListener meta-events do not run after invocation retirement",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:102",
+      "note": ""
+    },
+    {
+      "row": "A later watchFile on the same path obtains a live poller without stale callbacks",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-watches.test.ts:58",
+      "note": ""
+    },
+    {
+      "row": "Completed unref FSWatcher abort/change/close callbacks retire quietly; ordinary explicit close remains asynchronous once",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-watches.test.ts:82; packages/workbench/src/workers/no-coi-project-watches.test.ts:108",
+      "note": ""
+    },
+    {
+      "row": "Retired unref timer promises detach abort rejection callbacks",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-watches.test.ts:127",
+      "note": ""
+    },
+    {
+      "row": "Scope disposal removes only command-added watchFile callbacks from a shared pre-existing poller; earlier host callbacks continue",
+      "source": "acceptance",
+      "trace": "ADR-0422+scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-watches.test.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Goal I4: PR331 CI is green on the reviewed delivered revision, including no-COI browser and browser-unit acceptance",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "docs/backlog/epics/no-coi-agent-sdk/goal.md:31; https://github.com/vanilla-wave/rifty/actions/runs/34547673623",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

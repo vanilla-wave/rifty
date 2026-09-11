@@ -167,3 +167,23 @@ and absent old file effect. The same new scenario is mandatory in packed proof.
 ADR-0391 TypeScript emitted-worker allowance refreshed after shared IO changes:
 size remains10,022,664B, SHA-256333013ec…; generated esbuild client pin and all
 byte ceilings unchanged. Exact worker identity remains enforced, not a waiver.
+
+Final source revision5417b5c3c159256cb6426f921fc55d7868a1fe8d:
+
+- Full pnpm pr:check25/25 PASS; unit183.9s, parity63.8s. New exact compiler
+  artifact allowance passes with unchanged size/ceilings.
+- Mandatory packed client-bundles PASS:15 first-party+72 external tarballs,
+  strict types/build, all4 agent scenarios. main66,120B/gzip20,752B;
+  generic730,572B/gzip215,066B; toolchain836,610B/gzip250,296B.
+- Independent Final+GREEN:62/62 coverage; original F1 probe and24 targeted tests
+  rerun independently. Same real Vite project composes build/edit/Stop/rebuild.
+- CI21/21 SUCCESS: https://github.com/vanilla-wave/rifty/actions/runs/34547673623.
+  Earlier80017 browser-unit pending-write timing probe failed; unchanged isolated
+  test now PASS (26,811 files, exact trees,3.332x, faithful43,626ms/product13,092ms)
+  and full5417 CI browser-unit PASS. No timing gate or OPFS product code changed;
+  native timing variance remains an unconfirmed diagnosis, not a hidden fix.
+
+Goal obligations I1–I4 proven; completed units/goal removed after independent
+verification. The explicitly excluded generic preview question remains in
+`docs/backlog/distribution/public-api-ai-agent-preview-question.md`, owned by the
+AI reference demo at live-preview pickup. No preview API claim added.

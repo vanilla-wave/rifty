@@ -16,8 +16,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | file | status | epic | gist |
 |---|---|---|---|
 | `public-api-ai-agent-contract-snapshot-restore.md` | parked | SDK API | residual disk-state snapshot/restore/fork API after ADR-0131 FS slice |
-| `public-api-ai-agent-exec-preview.md` | draft | SDK API | #326 cancellable no-COI commands; legacy preview question retained |
-| `no-coi-project-files.md` | draft | SDK API | #325 structured project FS; explicit console-eval contract |
+| `public-api-ai-agent-preview-question.md` | draft | SDK API | inherited generic consumer/demo preview URL question |
 | `workbench-controllers.md` | ready | embeddable-dev-loop | build deep project sessions in safe slices; Playground dogfood, then mechanical package extraction + packed Chromium proof |
 | `workbench-guest-vfs-namespace.md` | draft | embeddable-dev-loop | decide one honest guest root; prevent active programs from reaching retained project/owner storage |
 | `react-bindings.md` | ready | embeddable-dev-loop | `@riftydev/react` provider + Terminal/Preview/Editor/FileTree/CapabilitiesGate atoms, headless+themeable (DD-4) |
@@ -28,7 +27,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `readme-open-auditable-rewrite.md` | ready | open-auditable-launch | root README reframed to the open/auditable wedge (GIF + MIT + compat + vs-WC) |
 | `publish-git-and-ts-language-service.md` | ready | open-auditable-launch | publish @riftydev/git + @riftydev/ts-language-service to npm |
 | `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
-| `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview gated on exec-preview) |
+| `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
 
 ## Dependency map
