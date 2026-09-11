@@ -1,7 +1,7 @@
 # Product integration issue triage
 
 Initial assessment below predates the user's first-group refinement answer.
-Current first-group destination: `docs/backlog/epics/no-coi-self-hosted-project/goal.md`.
+First-group delivery proof: `docs/backlog/distribution/reference/no-coi-self-hosted-project-final-green.json`; accepted goal/contract history is retained at its reviewed commit.
 ADR-0417 replaces the proposed installation-trust/forced-retry direction with
 ordinary saved access and explicit snapshot application. Second group stays draft.
 
