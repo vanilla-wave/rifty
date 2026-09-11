@@ -8,6 +8,7 @@ import {
   awaitDrain,
   installEventLoopKeepalive,
   installFetchKeepalive,
+  trackKeepalivePromise,
 } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
@@ -20,6 +21,7 @@ import {
   claimSandboxToolchainResidentTransition,
   releaseSandboxToolchainResidentTransition,
   setRuntimeWorkerFsComposition,
+  takeUnhandledRejection,
 } from '@riftydev/runtime-js/internal';
 import { type PersistFailureReport, dirname, syncMirror } from '@riftydev/vfs';
 import { INSTALL_STAMP_BASENAME, readInstallStamp } from '../glue/install-stamp.ts';
@@ -39,7 +41,8 @@ Object.defineProperty(globalThis, TOOLCHAIN_REALM, {
 });
 installEventLoopKeepalive();
 registerNetBuiltins();
-installToolchainCloseSignal();
+const closeToolchainWorker = installToolchainCloseSignal();
+Reflect.set(globalThis, '__riftyTrackCliPromise', trackKeepalivePromise);
 
 let runtimeBackend: 'opfs' | 'memory' | null = null;
 let installContext: ReturnType<typeof createNoCoiInstallContext>;
@@ -160,7 +163,7 @@ async function runInstalledBin(
   input: Extract<ToolchainRequest, { op: 'run-bin' }>['input'],
 ): Promise<{ readonly exitCode: number }> {
   const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
-  await prepareSavedToolchain(input.cwd, input);
+  await prepareSavedToolchain(input.cwd);
   const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
   process.argv = ['node', input.binPath, ...input.args];
   process.exitCode = undefined;
@@ -176,9 +179,11 @@ async function runInstalledBin(
     await awaitDrain({ capMs: 600_000 });
     if (typeof process.exitCode === 'number') exitCode = process.exitCode;
   } catch (error) {
-    const signalled = processExitCode(error);
+    const pendingRejection = takeUnhandledRejection();
+    const failure = pendingRejection === null ? error : pendingRejection.reason;
+    const signalled = processExitCode(failure);
     if (signalled !== null) exitCode = signalled;
-    else throw declaredGapCause(error) ?? error;
+    else throw declaredGapCause(failure) ?? failure;
   }
   await flushMirror();
   return { exitCode };
@@ -201,7 +206,7 @@ async function startInstalledBin(
   }
   try {
     const { prepareSavedToolchain } = await import('./no-coi-toolchain-install.ts');
-    await prepareSavedToolchain(input.cwd, input);
+    await prepareSavedToolchain(input.cwd);
     const started = await startResidentNodeEntry({
       vfs: syncMirror(),
       entryPath: input.binPath,
@@ -315,10 +320,9 @@ self.addEventListener('message', (event: MessageEvent<{ type?: unknown; request?
     .then(
       (value) => post({ id: request.id, ok: true, ...(value === undefined ? {} : { value }) }),
       (error: unknown) => {
-        post({ id: request.id, ok: false, error: serializedError(error) });
         if (request.op === 'start-bin' && residentPort === null) {
-          setTimeout(() => self.close(), 0);
-        }
+          closeToolchainWorker(serializedError(error));
+        } else post({ id: request.id, ok: false, error: serializedError(error) });
       },
     )
     .finally(() => {
@@ -339,19 +343,25 @@ void import('@riftydev/runtime-js/worker')
     });
   });
 
-function installToolchainCloseSignal(): void {
-  const closeWorker = self.close.bind(self);
+function installToolchainCloseSignal() {
+  const nativeClose = self.close.bind(self);
   let signalled = false;
+  const close = (error?: SerializedRuntimeError): void => {
+    if (!signalled) {
+      signalled = true;
+      self.postMessage({
+        type: 'toolchain-terminal',
+        reason: 'closed',
+        ...(error === undefined ? {} : { error }),
+      });
+    }
+    nativeClose();
+  };
   Object.defineProperty(self, 'close', {
     configurable: true,
     enumerable: false,
     writable: false,
-    value() {
-      if (!signalled) {
-        signalled = true;
-        self.postMessage({ type: 'toolchain-terminal', reason: 'closed' });
-      }
-      closeWorker();
-    },
+    value: () => close(),
   });
+  return close;
 }

@@ -84,6 +84,43 @@ it('rejects a pre-configuration worker before accepting its storage', async () =
   runtime.dispose();
 });
 
+it('a fatal start terminal reports its cause and exit before the caller resumes', async () => {
+  const runtime = boot(10_000);
+  const peer = Peer.latest;
+  peer.ready();
+  await runtime.toolchainReady;
+  const events: string[] = [];
+  runtime.on((event) => {
+    if (event.type === 'exit') events.push('exit');
+  });
+  const starting = runtime.toolchain
+    .startBin({
+      cwd: '/project',
+      binPath: '/project/node_modules/.bin/server',
+      args: [],
+      port: 5191,
+    })
+    .then(
+      () => null,
+      (error) => {
+        events.push('rejected');
+        return error;
+      },
+    );
+  await Promise.resolve();
+  peer.emit({
+    type: 'toolchain-terminal',
+    reason: 'closed',
+    error: { name: 'Error', message: 'port already in use', code: 'EADDRINUSE' },
+  });
+  expect(await starting).toMatchObject({ code: 'EADDRINUSE', message: 'port already in use' });
+  expect(events).toEqual(['exit', 'rejected']);
+  expect(peer.terminated).toBe(true);
+  peer.emit({ type: 'toolchain-terminal', reason: 'closed' });
+  expect(events).toEqual(['exit', 'rejected']);
+  runtime.dispose();
+});
+
 it('timeout terminates the worker and rejects every queued startup call without revival', async () => {
   const runtime = boot(50);
   const peer = Peer.latest;

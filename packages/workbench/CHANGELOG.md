@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep no-COI launch byte-driven; use existing CLI promise tracking, consume reported invocation errors and atomically settle fatal resident starts (ADR-0423).
+
 - Reuse program-entry adapter/CLI preparation in no-COI bin launches; explicit registry installs use the producer preparation recipe, preventing false successful Vite runs after missing adapter facts.
 
 - Apply no-COI producer archives through shared validation/overlay/flush; saved opening derives real adapter facts and defers adapter failures to use without install proof.

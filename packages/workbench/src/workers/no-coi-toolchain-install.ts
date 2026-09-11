@@ -3,11 +3,7 @@ import {
   planShadowSubstitutionsFromLockfile,
   shadowSubstitutionPlanForInstallResult,
 } from '@riftydev/npm-client/internal';
-import { trackKeepalivePromise } from '@riftydev/runtime-js';
-import type {
-  ToolchainInstallRequest,
-  ToolchainRunBinRequest,
-} from '@riftydev/runtime-js/internal';
+import type { ToolchainInstallRequest } from '@riftydev/runtime-js/internal';
 import { preparePackageEntryRuntime } from '@riftydev/shadow-registry/runtime';
 import { type Vfs, normalizePath, syncMirror } from '@riftydev/vfs';
 import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
@@ -19,7 +15,7 @@ import {
 export { activateWorkbenchRuntimeAdapters };
 
 /** Saved files remain accessible; invalid lock grants no adapter capability. */
-export async function prepareSavedToolchain(cwd: string, entry?: ToolchainRunBinRequest) {
+export async function prepareSavedToolchain(cwd: string) {
   let bindings: readonly WorkbenchRuntimeBinding[] = [];
   try {
     const plan = planShadowSubstitutionsFromLockfile(
@@ -38,18 +34,12 @@ export async function prepareSavedToolchain(cwd: string, entry?: ToolchainRunBin
   } catch {
     // A missing/invalid lock is not installation admission (ADR-0417).
   }
-  const common = { root: cwd, runtimeBindings: bindings, fs: syncMirror() };
-  await preparePackageEntryRuntime(
-    entry === undefined
-      ? { ...common, kind: 'eval' }
-      : {
-          ...common,
-          bin: true,
-          entryPath: entry.binPath,
-          args: entry.args,
-          trackKeepalivePromise,
-        },
-  );
+  await preparePackageEntryRuntime({
+    kind: 'eval',
+    root: cwd,
+    runtimeBindings: bindings,
+    fs: syncMirror(),
+  });
   return bindings;
 }
 

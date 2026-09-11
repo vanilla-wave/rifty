@@ -365,7 +365,11 @@ function createRuntimeController(
         }
         case 'toolchain-terminal': {
           if (!toolchainMode) break;
-          terminateToolchainPeer(workerTerminatedError('Toolchain Worker closed'));
+          terminateToolchainPeer(
+            msg.error === undefined
+              ? workerTerminatedError('Toolchain Worker closed')
+              : deserializeError(msg.error),
+          );
           emit({ type: 'exit', reason: 'error' });
           break;
         }

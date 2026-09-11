@@ -2479,10 +2479,11 @@ test('threaded-WASM: Vite 8 Rolldown fails at named boundary — designed RED', 
       };
       const cliPath = `${root}/node_modules/vite/dist/node/cli.js`;
       let cliSource = await sandbox.fs.readFile(cliPath, 'utf8');
+      // Explicit acquisition now emits the same prepared CLI as snapshots.
       cliSource = replaceOnce(
         cliSource,
-        'if (run) this.runMatchedCommand();',
-        'if (run) globalThis.__riftyVite8FixtureAction = this.runMatchedCommand();',
+        'var __riftyAction = this.runMatchedCommand();',
+        'var __riftyAction = globalThis.__riftyVite8FixtureAction = this.runMatchedCommand();',
       );
       cliSource = replaceOnce(
         cliSource,

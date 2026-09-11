@@ -169,5 +169,9 @@ export type ToolchainWorkerMessage =
       readonly vfsBackend: 'opfs' | 'memory';
       readonly vfsReason?: string;
     }
-  | { readonly type: 'toolchain-terminal'; readonly reason: 'closed' }
+  | {
+      readonly type: 'toolchain-terminal';
+      readonly reason: 'closed';
+      readonly error?: SerializedRuntimeError;
+    }
   | { readonly type: 'toolchain-result'; readonly result: ToolchainResult };

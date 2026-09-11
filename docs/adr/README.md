@@ -340,6 +340,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0417 | Open no-COI projects without installation status |
 | 0419 | Configure no-COI sandbox worker startup |
 | 0420 | Apply no-COI snapshots through the SDK |
+| 0423 | Keep no-COI invocation settlement generic |
 
 ## Superseded (removed)
 

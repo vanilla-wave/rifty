@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as keepalive from './event-loop-keepalive.ts';
 import {
   activeRefs,
   awaitDrain,
@@ -21,6 +22,30 @@ afterEach(() => {
 });
 
 describe('event-loop keepalive', () => {
+  it('a serialized invocation takes its failure without resetting live handles or future failures', async () => {
+    const marker = new Error('reported invocation');
+    ref();
+    recordRejection(marker);
+    const take = Reflect.get(keepalive, 'takeUnhandledRejection') as () => {
+      reason: unknown;
+    } | null;
+    expect(typeof take).toBe('function');
+    expect(take()?.reason).toBe(marker);
+    expect(activeRefs()).toBe(1);
+    expect(take()).toBeNull();
+    const queue: Array<() => void> = [];
+    const drain = awaitDrain({ scheduleMacrotask: (callback) => queue.push(callback) });
+    queue.shift()!();
+    expect(queue).toHaveLength(1);
+    unref();
+    queue.shift()!();
+    await expect(drain).resolves.toBeUndefined();
+    recordRejection(new Error('next invocation'));
+    const next = awaitDrain({ scheduleMacrotask: (callback) => queue.push(callback) });
+    queue.shift()!();
+    await expect(next).rejects.toThrow('next invocation');
+  });
+
   it('holds eval flush until caller-owned handles and timer refs both drain', async () => {
     const queue: Array<() => void> = [];
     let listening = true;
