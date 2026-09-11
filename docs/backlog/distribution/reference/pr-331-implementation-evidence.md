@@ -135,3 +135,15 @@ nanoid3.3.19 was in the new lock but only3.3.18 was captured. Fetched the exact
 original3.3.19 manifest/tarball from its lockfile registry origin;5,694 bytes,
 SHA-512 matches both npm metadata and baked lock. Added provenance alongside
 existing versions. No fixture fallback, version substitution or gate weakening.
+
+Post-bake test provenance repairs (both reproduced in isolated full-gate rerun):
+
+- Vite source pin compared prepared CLI (+194B existing acquisition transform)
+  with upstream SHA. Original6b900… tarball-member pin preserved; exact prepared
+  output additionally equals applyViteCliActionPatch(original).2/2 PASS.
+- emnapi preparation fixture copied already-prepared baked source. It now uses
+  original @emnapi/core1.10.0 tar members, pinned URL/SHA512 matching baked lock
+  (236,224B). Readable/minified × hoisted/nested refusal assertions unchanged.
+  Full5/5 PASS; reverting only fixture source selection recreates the same RED.
+
+No product source changed for either fixture repair.

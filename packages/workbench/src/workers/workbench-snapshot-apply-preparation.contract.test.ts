@@ -251,6 +251,12 @@ const emnapiFiles = [
   ['dist/emnapi-core.cjs.js', 'readable'],
   ['dist/emnapi-core.cjs.min.js', 'minified'],
 ] as const;
+const originalEmnapiCore = {
+  version: '1.10.0',
+  resolved: 'https://registry.npmjs.org/@emnapi/core/-/core-1.10.0.tgz',
+  integrity:
+    'sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==',
+} as const;
 
 async function realEmnapiFixture(): Promise<SavedSnapshotFixture> {
   const baked = parseDepSnapshot(
@@ -264,6 +270,14 @@ async function realEmnapiFixture(): Promise<SavedSnapshotFixture> {
     ).toString(),
   );
   const original = JSON.parse(baked.lockfile) as Lockfile;
+  expect(original.packages['node_modules/@emnapi/core']).toMatchObject(originalEmnapiCore);
+  const tarball = await readFile(
+    new URL('./test-fixtures/emnapi-core-1.10.0.tgz', import.meta.url),
+  );
+  expect(`sha512-${createHash('sha512').update(tarball).digest('base64')}`).toBe(
+    originalEmnapiCore.integrity,
+  );
+  const upstream = await extractTarGz(tarball);
   const dependencies = { '@emnapi/core': '1.10.0' };
   const manifest = { name: 'snapshot-emnapi', version: '1.0.0', dependencies };
   const packageNames = ['@emnapi/core', '@emnapi/wasi-threads', 'tslib'];
@@ -299,12 +313,18 @@ async function realEmnapiFixture(): Promise<SavedSnapshotFixture> {
   for (const file of baked.nodeModules.files) {
     if (!packageNames.some((name) => file.path.startsWith(`${name}/`))) continue;
     const paths = [file.path];
-    if (file.path.startsWith('@emnapi/core/'))
+    let bytes = Buffer.from(file.content, 'base64');
+    if (file.path.startsWith('@emnapi/core/')) {
+      // Baked payloads are prepared; the negative fixture owns original npm bytes.
+      const member = upstream[file.path.slice('@emnapi/core/'.length)];
+      if (member === undefined) throw new Error(`Original emnapi tarball lacks ${file.path}`);
+      bytes = Buffer.from(member);
       paths.push(`${nested}/${file.path.slice('@emnapi/core/'.length)}`);
+    }
     for (const relative of paths) {
       const path = `${root}/node_modules/${relative}`;
       memory.fsSync.mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
-      memory.fsSync.writeFileSync(path, Buffer.from(file.content, 'base64'));
+      memory.fsSync.writeFileSync(path, bytes);
     }
   }
   return fixture(
