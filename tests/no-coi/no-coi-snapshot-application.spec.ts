@@ -134,6 +134,12 @@ async function nativeReplace(page: Page, path: string, directory: boolean) {
         ).createWritable();
         await writer.write('overwritten target descendant');
         await writer.close();
+        const nested = await target.getDirectoryHandle('node_modules', { create: true });
+        const claim = await (
+          await nested.getFileHandle('.rifty-install-stamp.json', { create: true })
+        ).createWritable();
+        await claim.write('{"durability":"pending"}');
+        await claim.close();
       }
     },
     { path, directory },
@@ -221,6 +227,7 @@ for (const fault of [
   'oversized',
   'incompatible-runtime',
   'malformed-envelope',
+  'reserved-claim',
 ] as const) {
   test(`required ${fault} input fails without writes or acquisition fallback, also with force`, async ({
     page,
@@ -241,9 +248,11 @@ for (const fault of [
             : Buffer.from(
                 fault === 'incompatible-runtime'
                   ? first.incompatible.archive
-                  : fault === 'malformed-envelope'
-                    ? first.malformed.archive
-                    : first.archive,
+                  : fault === 'reserved-claim'
+                    ? first.reserved.archive
+                    : fault === 'malformed-envelope'
+                      ? first.malformed.archive
+                      : first.archive,
               ),
       }),
     );
@@ -254,14 +263,18 @@ for (const fault of [
       ...descriptor(),
       ...(fault === 'incompatible-runtime'
         ? { snapshotId: first.incompatible.snapshotId }
-        : fault === 'malformed-envelope'
-          ? { snapshotId: first.malformed.snapshotId }
-          : {}),
+        : fault === 'reserved-claim'
+          ? { snapshotId: first.reserved.snapshotId }
+          : fault === 'malformed-envelope'
+            ? { snapshotId: first.malformed.snapshotId }
+            : {}),
       ...(fault === 'wrong-id' ? { snapshotId: `sha256:${'0'.repeat(64)}` } : {}),
       ...(fault === 'wrong-template' ? { templateId: 'different' } : {}),
     };
     await expect(invoke(page, 'apply', [input, true])).rejects.toThrow(
-      /snapshot|HTTP|bytes|mismatch|template/i,
+      fault === 'reserved-claim'
+        ? /reserved install-stamp claim/i
+        : /snapshot|HTTP|bytes|mismatch|template/i,
     );
     expect(await tree(page)).toEqual(before);
     expect(requests).toEqual([]);

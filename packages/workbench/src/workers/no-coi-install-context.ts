@@ -14,6 +14,8 @@ export function createNoCoiInstallContext() {
   setSyncMirror(guarded.fs, { async: new SyncMirrorVfs() });
   return Object.freeze({
     fs: guarded.fs,
+    // Validated snapshot payloads may replace a whole target subtree, including old claims.
+    applicationFs: raw,
     // Structured clone owns the snapshot copy; guest reads remain detached.
     readRecoveryFile: (path: string) => raw.readFileBytesSync(path),
     claims: guarded.claims,

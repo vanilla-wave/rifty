@@ -136,7 +136,7 @@ async function openInstallation(input: Extract<ToolchainRequest, { op: 'open' }>
 async function applySnapshot(input: Extract<ToolchainRequest, { op: 'apply-snapshot' }>['input']) {
   const { applyNoCoiSnapshot } = await import('./no-coi-snapshot-application.ts');
   const bindings = await applyNoCoiSnapshot(input, {
-    fs: syncMirror(),
+    fs: installContext.applicationFs,
     flush: () => installContext.fs.flush(),
   });
   const { activateWorkbenchRuntimeAdapters } = await import('./no-coi-toolchain-install.ts');

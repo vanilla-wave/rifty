@@ -29,3 +29,12 @@ Packed SDK acceptance GREEN: Chromium/148.0.7778.96, real Vite 7.3.6
 apply/build/edit/reopen/force/update and native interruption+quota, zero browser
 registry/Eddy requests. Complete command log: /tmp/rifty-332-packed-snapshot-green-3.log.
 This includes the missing-lock adapter-use failure and successful explicit repair.
+
+Force-directory RED: a nested historical claim below a file replacement target
+made the guest FS guard reject authorized overwrite (EPERM). Application now
+uses the existing owner's raw filesystem after full source/preflight validation;
+ordinary SDK/guest FS remains guarded. Native source with a correct hash and an
+incoming reserved claim is rejected before effects. No claim promotion/ledger.
+Gate updates: exact installToolchainPackages acquisition context admitted, with
+negative saved-open/forged-claim tests; sealed closure inventory 159→160 names
+no-coi-snapshot-application.ts, retaining exact closure equality.

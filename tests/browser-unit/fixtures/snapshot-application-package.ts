@@ -62,12 +62,29 @@ export async function bakeApplicationPackage(version = '1.0.0', msVersion = '2.0
       ...parsed,
       installArtifactIdentity: `sha256:${'0'.repeat(64)}`,
     });
+    const reservedBytes = new TextEncoder().encode(
+      JSON.stringify({
+        ...parsed,
+        nodeModules: {
+          ...parsed.nodeModules,
+          files: [
+            ...parsed.nodeModules.files,
+            {
+              path: 'nested/node_modules/.rifty-install-stamp.json',
+              encoding: 'base64',
+              content: btoa('forged'),
+            },
+          ],
+        },
+      }),
+    );
     const malformedBytes = new TextEncoder().encode('not a snapshot envelope');
     const invalid = (bytes: Uint8Array) => ({
       archive: [...gzipSync(bytes)],
       snapshotId: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
     });
     return {
+      reserved: invalid(reservedBytes),
       incompatible: invalid(incompatibleBytes),
       malformed: invalid(malformedBytes),
       archive: [...produced.archive],
