@@ -16,6 +16,9 @@ export type {
   SerializedRuntimeError,
   TelemetrySnapshot,
   WorkerMessage,
+  RuntimeEffects,
+  RuntimeFsDirent,
+  RuntimeFsStat,
 } from './protocol.ts';
 // Telemetry DATA types only — the `diagnostic` event/message payload. The sink's
 // mutation fns (recordX/snapshot/reset) stay internal.

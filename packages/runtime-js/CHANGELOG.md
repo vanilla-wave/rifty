@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Retire invocation watcher and promise-timer abort callbacks with their existing timer owner (ADR-0422).
+
+- Add structured FS RPC with checked persistence receipts (console eval keeps reporting evaluation only), console-only eval result typing and command protocol v5; preserve recovery mutations and clear completed Node invocation timers.
 - Carry fatal toolchain cause on its terminal frame; allow the serialized owner to take a reported rejection without clearing handles (ADR-0423).
 
 - Carry validated snapshot requests and optional-registry saved opening through existing toolchain operation/recovery ownership.

@@ -1,9 +1,12 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { applyViteCliActionPatch } from './runtime/vite-cli-install-policy.ts';
 
 const require = createRequire(import.meta.url);
 const packagePath = require.resolve('esbuild-wasm/package.json');
@@ -89,12 +92,28 @@ describe('Vite 7.3.6 consumer pin', () => {
     };
     const cli = snapshotFile(snapshot, 'vite/dist/node/cli.js');
     const config = snapshotFile(snapshot, 'vite/dist/node/chunks/config.js');
+    const upstreamCli = execFileSync(
+      'tar',
+      [
+        '-xOzf',
+        fileURLToPath(
+          new URL(
+            '../../../tests/integration/fixtures/registry/rollup-companions/packages/vite-7.3.6.tgz',
+            import.meta.url,
+          ),
+        ),
+        'package/dist/node/cli.js',
+      ],
+      { encoding: 'utf8' },
+    );
 
     expect(manifest.version).toBe('7.3.6');
     expect(manifest.dependencies?.esbuild).toBe('^0.27.0 || ^0.28.0');
-    expect(sha256Text(cli)).toBe(
+    expect(sha256Text(upstreamCli)).toBe(
       '6b9001816eb5fb0979cbe380ed2116db93e315ff22ebf7fe55a4fc60458fa067',
     );
+    // ADR-0384: baked node_modules includes the registry's acquisition transform.
+    expect(cli).toBe(applyViteCliActionPatch(upstreamCli));
     for (const anchor of [
       'cli.command("[root]", "start dev server").alias("serve").alias("dev")',
       'const { createServer } = await import("./chunks/server.js");',

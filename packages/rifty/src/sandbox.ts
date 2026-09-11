@@ -25,6 +25,12 @@ import {
   setupPreviewBridge,
 } from '@riftydev/service-worker';
 import type { CapabilityCheck } from './capabilities.ts';
+import { delegateSandboxFs } from './sandbox-fs.ts';
+import {
+  type SandboxProject,
+  type SandboxProjectOptions,
+  createSandboxProject,
+} from './sandbox-project.ts';
 
 /** Which VFS backend booted. */
 export type VfsBackend = 'opfs' | 'memory';
@@ -156,6 +162,7 @@ export interface Sandbox {
 }
 
 export interface ToolchainSandbox extends Sandbox {
+  project(options: SandboxProjectOptions): SandboxProject;
   readonly toolchain: SandboxToolchain;
   readonly capabilityReport: SandboxCapabilityReport;
   restart(options: SandboxRestartOptions): Promise<SandboxRestartReport>;
@@ -415,59 +422,27 @@ async function bootToolchainSandbox(
     if (restarting) throw restartBusyError();
   }
 
-  function readFile(path: string): Promise<Uint8Array>;
-  function readFile(
-    path: string,
-    encoding: 'utf8' | { readonly encoding: 'utf8' },
-  ): Promise<string>;
-  async function readFile(
-    path: string,
-    encoding?: 'utf8' | { readonly encoding: 'utf8' },
-  ): Promise<Uint8Array | string> {
-    assertOperable();
-    return encoding === undefined
-      ? await current.fs.readFile(path)
-      : await current.fs.readFile(path, encoding);
-  }
-
-  async function trackedWrite(
-    target: ToolchainRuntimeController,
-    path: string,
-    data: string | Uint8Array,
-  ): Promise<void> {
+  async function trackedMutation<T>(operation: () => Promise<T>): Promise<T> {
     pendingWrites += 1;
     try {
-      await target.fs.writeFile(path, data);
+      return await operation();
+    } catch (error) {
+      const effects = (error as { effects?: { applied?: string } } | null)?.effects;
+      if (effects !== undefined && effects.applied !== 'no') unflushedMarker = true;
+      throw error;
     } finally {
       pendingWrites -= 1;
     }
   }
 
   function callbackFs(target: ToolchainRuntimeController): RuntimeFs {
-    function readCallbackFile(path: string): Promise<Uint8Array>;
-    function readCallbackFile(
-      path: string,
-      encoding: 'utf8' | { readonly encoding: 'utf8' },
-    ): Promise<string>;
-    function readCallbackFile(
-      path: string,
-      encoding?: 'utf8' | { readonly encoding: 'utf8' },
-    ): Promise<Uint8Array | string> {
-      return encoding === undefined ? target.fs.readFile(path) : target.fs.readFile(path, encoding);
-    }
-    return {
-      readFile: readCallbackFile,
-      writeFile: (path, data) => trackedWrite(target, path, data),
-    };
+    return delegateSandboxFs(() => target.fs, trackedMutation);
   }
 
-  const fs: RuntimeFs = {
-    readFile,
-    async writeFile(path, data) {
-      assertOperable();
-      await trackedWrite(current, path, data);
-    },
-  };
+  const fs: RuntimeFs = delegateSandboxFs(() => {
+    assertOperable();
+    return current.fs;
+  }, trackedMutation);
 
   const runtime: RuntimeController = {
     async eval(code, evalOptions) {
@@ -602,6 +577,33 @@ async function bootToolchainSandbox(
   return {
     runtime,
     fs,
+    project(projectOptions) {
+      assertOperable();
+      return createSandboxProject(projectOptions, {
+        current() {
+          assertOperable();
+          return current;
+        },
+        mutate: trackedMutation,
+        recordEffects(effects) {
+          if (
+            effects.applied !== 'no' &&
+            (effects.persistence === 'failed' || effects.persistence === 'unknown')
+          )
+            unflushedMarker = true;
+        },
+        async replace(target) {
+          if (disposed || restarting) {
+            target.dispose();
+            return 'terminated';
+          }
+          if (target !== current) return 'replaced';
+          unflushedMarker = true;
+          await restart({ preview: { src: '' } });
+          return 'replaced';
+        },
+      });
+    },
     get vfs() {
       return vfs;
     },

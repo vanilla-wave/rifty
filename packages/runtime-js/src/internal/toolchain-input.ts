@@ -207,8 +207,11 @@ export function validateStartBinRequest(input: ToolchainStartBinRequest): Toolch
 }
 
 export function validateActivationState(input: unknown, label: string): ToolchainActivationState {
-  const record = exactInput(input, ['bindings', 'cwd', 'files', 'vfsBackend'], label);
-  const cwd = absolutePath(record.cwd, `${label} cwd`);
+  const fields = ['bindings', 'cwd', 'files', 'vfsBackend'];
+  if (input !== null && typeof input === 'object' && Object.hasOwn(input, 'directories'))
+    fields.push('directories');
+  const record = exactInput(input, fields, label);
+  const cwd = record.cwd === '/' ? '/' : absolutePath(record.cwd, `${label} cwd`);
   if (record.vfsBackend !== 'opfs' && record.vfsBackend !== 'memory') {
     throw new TypeError(`${label} vfsBackend must be opfs or memory`);
   }
@@ -274,6 +277,15 @@ export function validateActivationState(input: unknown, label: string): Toolchai
     cwd,
     bindings: Object.freeze(bindings),
     vfsBackend: record.vfsBackend,
+    ...(record.directories === undefined
+      ? {}
+      : { directories: validateDirectories(record.directories, label) }),
     files: Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path))),
   });
+}
+
+function validateDirectories(value: unknown, label: string): readonly string[] {
+  if (!Array.isArray(value) || Object.keys(value).length !== value.length)
+    throw new TypeError(`${label} directories must be a dense array`);
+  return Object.freeze(value.map((path) => absolutePath(path, `${label} directory`)).toSorted());
 }

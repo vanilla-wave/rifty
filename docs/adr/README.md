@@ -94,6 +94,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0382 | Preserve tsconfig discovery through explicit compiler preload |
 | 0383 | No COI VM default and preboot worker selection |
 | 0385 | Keep one foreground drain across HTTP server close |
+| 0422 | Retire callbacks with completed command invocations |
 
 ### runtime-wasi
 
@@ -245,6 +246,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0312 | Keep synchronous SHA-256 implementations layer-local |
 | 0323 | Gate heavy PR tests on code-affecting changes |
 | 0338 | TTY parity composes exact one-axis native resize traces |
+| 0421 | Bind reusable package adapters to Node invocations |
 
 ### protocol
 
@@ -338,6 +340,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0410 | Configure existing Workbench operation deadlines end to end |
 | 0412 | Publish prepared dependency snapshot payloads |
 | 0417 | Open no-COI projects without installation status |
+| 0418 | No-COI project files and invocation commands |
 | 0419 | Configure no-COI sandbox worker startup |
 | 0420 | Apply no-COI snapshots through the SDK |
 | 0423 | Keep no-COI invocation settlement generic |

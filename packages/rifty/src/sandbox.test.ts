@@ -1,5 +1,6 @@
 import type { RuntimeController } from '@riftydev/runtime-js';
-import type { FsReadEncoding } from '@riftydev/runtime-js';
+import { createRuntimeFs, handleWorkerFsRequest } from '@riftydev/runtime-js/internal';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CapabilityCheck } from './capabilities.ts';
 import {
@@ -67,18 +68,14 @@ void publicResidentLifecycleTypeCarrier;
 
 /** A typed no-op controller — these tests assert wiring, never drive eval. */
 function fakeRuntime(onDispose: () => void = () => {}): RuntimeController {
-  function readFile(path: string): Promise<Uint8Array>;
-  function readFile(path: string, encoding: FsReadEncoding): Promise<string>;
-  function readFile(_path: string, encoding?: FsReadEncoding): Promise<Uint8Array | string> {
-    return Promise.resolve(encoding === undefined ? new Uint8Array() : '');
-  }
+  const memory = new MemoryFsSync();
+  const fs = createRuntimeFs((operation) =>
+    handleWorkerFsRequest({ ...operation, id: 0 }, { fs: memory, invalidate() {} }),
+  );
 
   return {
     eval: () => Promise.resolve({ id: 0, ok: true, value: undefined }),
-    fs: {
-      readFile,
-      writeFile: () => Promise.resolve(),
-    },
+    fs,
     reset: () => Promise.resolve(),
     dispose: onDispose,
     on: () => () => {},
@@ -429,7 +426,7 @@ describe('createSandbox', () => {
         worker.emit({ type: 'ready' });
         worker.emit({
           type: 'toolchain-ready',
-          protocol: 'rifty.sandbox-toolchain/v4',
+          protocol: 'rifty.sandbox-toolchain/v5',
           vfsBackend: 'opfs',
         });
       }
@@ -503,7 +500,7 @@ describe('createSandbox', () => {
       worker.emit({ type: 'ready' });
       worker.emit({
         type: 'toolchain-ready',
-        protocol: 'rifty.sandbox-toolchain/v4',
+        protocol: 'rifty.sandbox-toolchain/v5',
         vfsBackend: workerBackend,
       });
       const sandbox = await creating;
@@ -564,7 +561,7 @@ describe('createSandbox', () => {
     first.emit({ type: 'ready' });
     first.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v4',
+      protocol: 'rifty.sandbox-toolchain/v5',
       vfsBackend: 'memory',
     });
     const sandbox = (await creating) as ToolchainSandbox;
@@ -622,7 +619,7 @@ describe('createSandbox', () => {
     second.emit({ type: 'ready' });
     second.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v4',
+      protocol: 'rifty.sandbox-toolchain/v5',
       vfsBackend: 'memory',
     });
     await Promise.resolve();
@@ -678,7 +675,7 @@ describe('createSandbox', () => {
     first.emit({ type: 'ready' });
     first.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v4',
+      protocol: 'rifty.sandbox-toolchain/v5',
       vfsBackend: 'memory',
       vfsReason: 'first boot fallback',
     });
@@ -695,7 +692,7 @@ describe('createSandbox', () => {
     second.emit({ type: 'ready' });
     second.emit({
       type: 'toolchain-ready',
-      protocol: 'rifty.sandbox-toolchain/v4',
+      protocol: 'rifty.sandbox-toolchain/v5',
       vfsBackend: 'opfs',
     });
     await expect(restarting).resolves.toEqual({ unflushedWrites: false, resident: null });
@@ -720,7 +717,7 @@ describe('createSandbox', () => {
             this.emit({
               type: 'toolchain-ready',
               protocol:
-                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v4',
+                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v5',
               vfsBackend: 'memory',
             } as WorkerMessage);
           });
@@ -929,5 +926,131 @@ describe('createSandbox', () => {
     );
     expect(depWarn).toHaveBeenCalled();
     expect(optWarn).not.toHaveBeenCalled();
+  });
+});
+
+describe('sandbox.project invocations', () => {
+  type HostMessage = import('@riftydev/runtime-js/internal').ToolchainHostMessage;
+  type WorkerMessage = import('@riftydev/runtime-js/internal').ToolchainWorkerMessage;
+  type ToolchainRequest = Extract<HostMessage, { type: 'toolchain' }>['request'];
+
+  class ScriptedWorker {
+    static instances: ScriptedWorker[] = [];
+    static reply: (request: ToolchainRequest, worker: ScriptedWorker) => void = () => {};
+    readonly sent: HostMessage[] = [];
+    private receive?: (event: MessageEvent<WorkerMessage>) => void;
+    constructor() {
+      ScriptedWorker.instances.push(this);
+      queueMicrotask(() => {
+        this.emit({ type: 'ready' });
+        this.emit({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v5',
+          vfsBackend: 'memory',
+        });
+      });
+    }
+    addEventListener(type: string, listener: (event: MessageEvent<WorkerMessage>) => void) {
+      if (type === 'message') this.receive = listener;
+    }
+    terminate() {}
+    emit(data: WorkerMessage) {
+      this.receive?.({ data } as MessageEvent<WorkerMessage>);
+    }
+    postMessage(message: HostMessage) {
+      this.sent.push(message);
+      if (message.type === 'toolchain') ScriptedWorker.reply(message.request, this);
+    }
+  }
+
+  async function bootProjectSandbox(
+    reply: (request: ToolchainRequest, worker: ScriptedWorker) => void,
+  ): Promise<ToolchainSandbox> {
+    ScriptedWorker.instances = [];
+    ScriptedWorker.reply = reply;
+    vi.stubGlobal('Worker', ScriptedWorker);
+    return (await createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: { workerUrl: '/toolchain.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    )) as ToolchainSandbox;
+  }
+
+  it('reports a never-admitted command as failed when Stop precedes the busy rejection', async () => {
+    const sandbox = await bootProjectSandbox(() => {});
+    const worker = ScriptedWorker.instances[0];
+    if (!worker) throw new Error('toolchain Worker missing');
+    const run = sandbox.project({ root: '/dev' }).run('echo hi');
+    const stopping = run.stop();
+    const request = worker.sent.find(
+      (message): message is Extract<HostMessage, { type: 'toolchain' }> =>
+        message.type === 'toolchain' && message.request.op === 'command',
+    );
+    if (!request) throw new Error('command request missing');
+    const id = request.request.id;
+    expect(
+      worker.sent.some((message) => message.type === 'toolchain-command-stop' && message.id === id),
+    ).toBe(true);
+    worker.emit({
+      type: 'toolchain-result',
+      result: {
+        id,
+        ok: false,
+        error: {
+          name: 'SandboxToolchainBusyError',
+          message: 'another sandbox toolchain operation is already active',
+        },
+      },
+    });
+    const outcome = await run.completion;
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      exitCode: null,
+      worker: 'retained',
+      effects: { applied: 'no', persistence: 'unknown' },
+      error: { name: 'SandboxToolchainBusyError' },
+    });
+    expect(await stopping).toBe(outcome);
+    sandbox.dispose();
+  });
+
+  it('marks unflushedWrites for the next restart after a settled command reports failed persistence', async () => {
+    const sandbox = await bootProjectSandbox((request, worker) => {
+      if (request.op !== 'command') return;
+      worker.emit({
+        type: 'toolchain-result',
+        result: {
+          id: request.id,
+          ok: true,
+          value: {
+            command: {
+              status: 'failed',
+              exitCode: 0,
+              effects: { applied: 'yes', persistence: 'failed' },
+              error: { name: 'SandboxPersistenceError', message: 'OPFS persistence failed' },
+            },
+          },
+        },
+      });
+    });
+    const outcome = await sandbox.project({ root: '/dev' }).run('echo x > file').completion;
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      worker: 'retained',
+      effects: { applied: 'yes', persistence: 'failed' },
+    });
+    await expect(sandbox.restart({ preview: { src: '' } })).resolves.toEqual({
+      unflushedWrites: true,
+      resident: null,
+    });
+    expect(ScriptedWorker.instances).toHaveLength(2);
+    await expect(sandbox.restart({ preview: { src: '' } })).resolves.toEqual({
+      unflushedWrites: false,
+      resident: null,
+    });
+    sandbox.dispose();
   });
 });

@@ -67,8 +67,8 @@ function buildEsbuildMatrix(policyValue) {
   const patches = policyArray(policy.patches, 'patches').map((value, index) =>
     policyString(value, `patches[${index}]`),
   );
-  if (patches.length !== 12 || new Set(patches).size !== patches.length) {
-    throw new Error('esbuild runtime policy: patches must contain 12 unique ordered ids');
+  if (patches.length !== 13 || new Set(patches).size !== patches.length) {
+    throw new Error('esbuild runtime policy: patches must contain 13 unique ordered ids');
   }
   const patchDescriptions = policyRecord(policy.patchDescriptions, 'patchDescriptions');
   const patchPlan = patches

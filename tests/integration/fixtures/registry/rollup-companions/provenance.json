@@ -154,6 +154,15 @@
       "tarball": "https://registry.npmjs.org/esbuild-wasm/-/esbuild-wasm-0.28.0.tgz",
       "integrity": "sha512-5TRVKExcEmeMkccIZMzUq+Az6X2RoMAJyfl6SMMO1dMVhmvt0I2mx7gAb6zYi42n4d1ETcatFXazGKzA+aW7fg==",
       "bytes": 3845798
+    },
+    {
+      "name": "nanoid",
+      "version": "3.3.19",
+      "file": "nanoid-3.3.19",
+      "metadataUrl": "https://registry.npmjs.org/nanoid/3.3.19",
+      "tarball": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.19.tgz",
+      "integrity": "sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==",
+      "bytes": 5694
     }
   ]
 }

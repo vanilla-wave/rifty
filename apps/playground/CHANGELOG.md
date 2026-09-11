@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Rebuild all dependency snapshots for the esbuild invocation cwd/ref artifact identity (ADR-0421).
+
 - Retain the concrete Playground SQLite asset type when validating against optional Workbench deployment options.
 
 - Clear authoritative Scratch Reset dirty state while retaining pending optimistic edit/starter protection; preserve editor, terminal, npm and Git classifications.

@@ -10,6 +10,7 @@ import { finalizePackageInstallFiles } from './package-install-finalizer.ts';
 import {
   type WorkbenchRuntimeBinding,
   activateWorkbenchRuntimeAdapters,
+  workbenchRuntimeAdapterOwnership,
 } from './workbench-runtime-adapters.ts';
 
 export { activateWorkbenchRuntimeAdapters };
@@ -39,6 +40,7 @@ export async function prepareSavedToolchain(cwd: string) {
     root: cwd,
     runtimeBindings: bindings,
     fs: syncMirror(),
+    ...workbenchRuntimeAdapterOwnership(),
   });
   return bindings;
 }

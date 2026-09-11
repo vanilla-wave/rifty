@@ -175,10 +175,60 @@ Only valid lock facts grant adapters; missing/corrupt dependencies or adapter
 bytes fail at actual use. Explicit install/apply is optional recovery after
 interruption, never an admission requirement or automatic retry.
 
-Update SDK and copied Worker together (protocol v4). Older Workers reject during
+Update SDK and copied Worker together (protocol v5). Older Workers reject during
 handshake. Errors cross the boundary as ordinary `Error` objects; inspect
 `name`/`message`, including `SandboxPersistenceError`, rather than class identity.
 Unreadable OPFS preload rejects: clear the native fault and recreate the sandbox.
+
+### Agent files and commands without COI
+
+```ts
+const project = sandbox.project({ root: '/project', readonlyPaths: ['locked'] });
+await project.fs.mkdir('src', { recursive: true });
+await project.fs.writeFile('src/input.txt', 'hello');
+console.log(await project.fs.readdir('src'));
+console.log(await project.fs.stat('src/input.txt'));
+await project.fs.rename('src/input.txt', 'src/message.txt');
+
+const run = project.run('npm run build', { cwd: '.', env: { NODE_ENV: 'production' } });
+run.onOutput(({ stream, chunk }) => console.log(stream, chunk));
+const result = await run.completion; // or await run.stop()
+console.log(result.status, result.exitCode, result.effects, result.worker);
+await project.fs.rm('src/message.txt');
+```
+
+`project` is immutable configuration. Each run gets fresh Shell cwd/env; cd
+changes subsequent segments of that call. Files persist. Relative file paths,
+cwd and readonly paths resolve from root; absolute paths retain their VFS
+meaning. Root is a path origin, not a filesystem jail. Optional allowedCommands
+permits only exact names at Shell dispatch, including nested npm scripts.
+Background jobs are rejected before launch. Policy covers ordinary Node and
+installed-tool writes, not hostile JS. `npm install`/`add` inside `run` throws
+`NotImplementedError('sandbox.project.npm-install')`: install through
+`toolchain.install`; `npm run` reuses the installed tree.
+
+Completion reports exited/cancelled/failed, captured stdout/stderr, exitCode
+(null when unavailable), effects and Worker state. Output subscriptions do not
+replay: attach immediately. Stop emits SIGINT into the guest and retains
+ownership through handler, event-loop drain and checked flush settlement; a
+program without a SIGINT handler keeps draining its pending work (real Node
+exits 130 at once). After one second without settlement, an admitted stopped
+command's Worker is terminated/replaced before completion, with unknown effects.
+A never-admitted invocation (busy Worker, invalid input) reports `failed` even
+after Stop. Failed or unknown persistence of a settled command is also reported
+as `unflushedWrites` by the next `restart`.
+Recovery never replays a command or promises rollback. Memory recovery uses the
+retained image; unknown effects can be lost. Concurrent finite operations reject
+busy. Project methods alongside a resident bin reject resident-concurrency.
+
+Raw sandbox.fs also provides readdir/stat/mkdir/rename/rm/flush; relative paths
+remain VFS-rooted. Stat/dirent results are plain VFS metadata records. New
+mutations/flush return applied/persistence receipts (memory/flushed); writeFile
+preserves its void result. Failed operations carry error.effects for application
+and persistence uncertainty. Console runtime.eval prints expression values and
+resolves success with value undefined; file/command methods supply structured
+results. Eval success never certifies persistence: `sandbox.fs.flush()` receipts
+and the next `restart().unflushedWrites` are the durability report.
 
 This mode owns runtime, VFS, npm install, installed registry-twin admission, and bin
 execution in one Worker. `startBin` is package-generic; the requested port

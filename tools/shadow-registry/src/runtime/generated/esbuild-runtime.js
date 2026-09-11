@@ -2,6 +2,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { createEsbuildCallbackFs } from "../esbuild-runtime-fs.ts";
 const module = { exports: {} };
 let startEsbuildRuntime;
+let setEsbuildRuntimeCwd;
 (module=>{
 "use strict";
 var __defProp = Object.defineProperty;
@@ -971,6 +972,7 @@ function createChannel(streamIn) {
     }
   };
   let buildOrContext = ({ callName, refs, options, isTTY, defaultWD, callback }) => {
+    refs ??= runtimeRefs;
     let refCount = 0;
     const buildKey = nextBuildKey++;
     const requestCallbacks = {};
@@ -1010,6 +1012,7 @@ function createChannel(streamIn) {
     );
   };
   let transform2 = ({ callName, refs, input, options, isTTY, fs, callback }) => {
+    refs ??= runtimeRefs;
     const details = createObjectStash();
     let start = (inputPath) => {
       try {
@@ -1090,6 +1093,7 @@ function createChannel(streamIn) {
     start(null);
   };
   let formatMessages2 = ({ callName, refs, messages, options, callback }) => {
+    refs ??= runtimeRefs;
     if (!options) throw new Error(`Missing second argument in ${callName}() call`);
     let keys = {};
     let kind = getFlag(options, keys, "kind", mustBeString);
@@ -1111,6 +1115,7 @@ function createChannel(streamIn) {
     });
   };
   let analyzeMetafile2 = ({ callName, refs, metafile, options, callback }) => {
+    refs ??= runtimeRefs;
     if (options === void 0) options = {};
     let keys = {};
     let color = getFlag(options, keys, "color", mustBeBoolean);
@@ -1956,10 +1961,13 @@ var initialize = (options) => {
 };
 var runtimeFs;
 var runtimeDefaultWD;
-startEsbuildRuntime = ({ wasm, fs, cwd }) => {
+var runtimeRefs;
+setEsbuildRuntimeCwd = (cwd) => { runtimeDefaultWD = cwd; };
+startEsbuildRuntime = ({ wasm, fs, cwd, refs }) => {
   if (initializePromise || longLivedService) throw new Error("Cannot start the esbuild runtime more than once");
   runtimeFs = createEsbuildCallbackFs(fs, cwd);
   runtimeDefaultWD = cwd;
+  runtimeRefs = refs;
   initializePromise = startRunningService("", wasm, false);
   return initializePromise.then(() => module.exports);
 };
@@ -2755,6 +2763,6 @@ var startRunningService = (wasmURL, wasmModule, useWorker) => __async(null, null
 var browser_default = browser_exports;
 })(module);
 const esbuild = module.exports;
-export { startEsbuildRuntime };
+export { startEsbuildRuntime, setEsbuildRuntimeCwd };
 export default esbuild;
 

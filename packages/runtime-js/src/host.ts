@@ -1,5 +1,12 @@
+import { type RuntimeFs, createRuntimeFs, deserializeRuntimeError } from './host-fs.ts';
+export type { RuntimeFs } from './host-fs.ts';
 import { NotImplementedError } from '@riftydev/io';
-import { normalizePath } from '@riftydev/vfs';
+import { applyRecoveryFsOperation } from './host-fs-recovery.ts';
+import {
+  projectFsOperation,
+  validateCommandInput,
+  validateProjectOptions,
+} from './host-project-inputs.ts';
 import {
   exactInput,
   validateActivationState,
@@ -17,16 +24,18 @@ import {
 } from './internal/worker-startup-options.ts';
 import type {
   EvalResult,
-  FsReadEncoding,
   FsRequest,
   FsResult,
   SerializedRuntimeError,
   TelemetrySnapshot,
   ToolchainActivationState,
   ToolchainApplySnapshotRequest,
+  ToolchainCommandInput,
+  ToolchainCommandResult,
   ToolchainHostMessage,
   ToolchainInstallRequest,
   ToolchainOpenRequest,
+  ToolchainProjectOptions,
   ToolchainRequest,
   ToolchainResult,
   ToolchainRunBinRequest,
@@ -67,7 +76,7 @@ export interface EvalOptions {
 }
 
 export interface RuntimeController {
-  /** Send an eval request; resolves with the result message. */
+  /** Console-oriented evaluation: prints the expression value; success returns value undefined. */
   eval(code: string, options?: EvalOptions): Promise<EvalResult>;
   /**
    * Worker-realm filesystem RPC (ADR-0131) — reads/writes the authoritative
@@ -93,33 +102,25 @@ export interface RuntimeToolchain {
   startBin(input: ToolchainStartBinRequest): Promise<{ readonly port: number }>;
 }
 
+export interface RuntimeCommandObserver {
+  started(): void;
+  output(chunk: string, stream: 'stdout' | 'stderr'): void;
+}
+
+export interface RuntimeCommandCall {
+  readonly result: Promise<ToolchainCommandResult>;
+  stop(): void;
+}
+
 export interface ToolchainRuntimeController extends RuntimeController {
+  projectFs(options: ToolchainProjectOptions): RuntimeFs;
+  command(input: ToolchainCommandInput, observer: RuntimeCommandObserver): RuntimeCommandCall;
   readonly toolchain: RuntimeToolchain;
   readonly toolchainReady: Promise<'opfs' | 'memory'>;
   readonly toolchainVfs: { readonly backend: 'opfs' | 'memory'; readonly reason?: string };
   snapshotToolchainState(): ToolchainActivationState | null;
   snapshotResidentRequest(): ToolchainStartBinRequest | null;
   restoreToolchainState(state: ToolchainActivationState): Promise<void>;
-}
-
-/**
- * Host-side filesystem surface backed by the runtime Worker's VFS (ADR-0131).
- *
- * Path semantics: paths resolve from the VFS ROOT (`/`), NOT the guest's
- * `process.cwd()` (default `/workspace`) — `writeFile('a.txt', …)` lands at
- * `/a.txt` while guest `fs.writeFileSync('a.txt', …)` lands at
- * `/workspace/a.txt`. Pass absolute paths to avoid the divergence.
- *
- * `writeFile` resolves only after the worker created parent dirs, wrote the
- * bytes, invalidated the module loader, and awaited the active mirror's flush.
- * Failures reject with the serialized VFS error (`name`/`message`/`code`/
- * `path`); calls against a crashed/reset/disposed worker reject with
- * `name: 'WorkerTerminated'` or `code: 'WORKER_CRASHED'`/`'RUNTIME_NOT_RUNNING'`.
- */
-export interface RuntimeFs {
-  readFile(path: string): Promise<Uint8Array>;
-  readFile(path: string, encoding: FsReadEncoding): Promise<string>;
-  writeFile(path: string, data: string | Uint8Array): Promise<void>;
 }
 
 interface PendingEval {
@@ -135,6 +136,7 @@ type PendingRequest =
     }
   | {
       readonly kind: 'toolchain';
+      readonly observer?: RuntimeCommandObserver;
       resolve(result: ToolchainResult): void;
       reject(err: unknown): void;
     };
@@ -233,17 +235,12 @@ function createRuntimeController(
   function workerTerminatedError(message: string): RuntimeError {
     const err = new Error(message) as RuntimeError;
     err.name = 'WorkerTerminated';
+    Object.assign(err, { effects: { applied: 'unknown', persistence: 'unknown' } });
     return err;
   }
 
   function deserializeError(error: SerializedRuntimeError): RuntimeError {
-    const err = new Error(error.message) as RuntimeError;
-    err.name = error.name;
-    if (error.stack !== undefined) err.stack = error.stack;
-    if (error.code !== undefined) err.code = error.code;
-    if (error.path !== undefined) err.path = error.path;
-    if (error.feature !== undefined) err.feature = error.feature;
-    return err;
+    return deserializeRuntimeError(error);
   }
 
   function rejectPendingRequests(err: unknown): void {
@@ -281,14 +278,17 @@ function createRuntimeController(
     return promise;
   }
 
-  function requestToolchain(request: ToolchainRequest): Promise<ToolchainResult> {
+  function requestToolchain(
+    request: ToolchainRequest,
+    observer?: RuntimeCommandObserver,
+  ): Promise<ToolchainResult> {
     if (!worker) {
       const err = workerTerminatedError('Runtime is not running');
       err.code = 'RUNTIME_NOT_RUNNING';
       return Promise.reject(err);
     }
     const promise = new Promise<ToolchainResult>((resolve, reject) => {
-      pendingRequests.set(request.id, { kind: 'toolchain', resolve, reject });
+      pendingRequests.set(request.id, { kind: 'toolchain', resolve, reject, observer });
     });
     try {
       send({ type: 'toolchain', request });
@@ -299,38 +299,11 @@ function createRuntimeController(
     return promise;
   }
 
-  function readFile(path: string): Promise<Uint8Array>;
-  function readFile(path: string, encoding: FsReadEncoding): Promise<string>;
-  async function readFile(path: string, encoding?: FsReadEncoding): Promise<Uint8Array | string> {
-    const id = nextId++;
-    const result = await requestFs(
-      encoding === undefined
-        ? { id, op: 'readFile', path }
-        : { id, op: 'readFile', path, encoding },
-    );
-    if (!result.ok) throw deserializeError(result.error);
-    if (encoding === undefined) {
-      if (result.value instanceof Uint8Array) return result.value;
-      throw new Error('Invalid fs readFile byte response');
-    }
-    if (typeof result.value === 'string') return result.value;
-    throw new Error('Invalid fs readFile text response');
-  }
-
-  async function writeFile(path: string, data: string | Uint8Array): Promise<void> {
-    const recoveryData =
-      typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
-    const result = await requestFs({ id: nextId++, op: 'writeFile', path, data });
-    if (!result.ok) throw deserializeError(result.error);
-    if (activationState !== null) {
-      const normalized = normalizePath(path);
-      const absolute = normalized.startsWith('/') ? normalized : normalizePath(`/${normalized}`);
-      const files = activationState.files.filter((file) => file.path !== absolute);
-      files.push(Object.freeze({ path: absolute, data: recoveryData }));
-      files.sort((left, right) => left.path.localeCompare(right.path));
-      activationState = Object.freeze({ ...activationState, files: Object.freeze(files) });
-    }
-  }
+  const fs: RuntimeFs = createRuntimeFs(async (operation) => {
+    const result = await requestFs({ ...operation, id: nextId++ });
+    if (result.ok) activationState = applyRecoveryFsOperation(activationState, operation);
+    return result;
+  });
 
   function start(): void {
     const name = runtimeWorkerName(startup);
@@ -396,10 +369,25 @@ function createRuntimeController(
           }
           break;
         }
+        case 'toolchain-command-started': {
+          const entry = pendingRequests.get(msg.id);
+          if (entry?.kind === 'toolchain') entry.observer?.started();
+          break;
+        }
+        case 'toolchain-command-output': {
+          const entry = pendingRequests.get(msg.id);
+          if (entry?.kind === 'toolchain') entry.observer?.output(msg.chunk, msg.stream);
+          break;
+        }
         case 'toolchain-result': {
           const p = pendingRequests.get(msg.result.id);
           if (p?.kind === 'toolchain') {
-            pendingRequests.delete(msg.result.id);
+            const needsTermination =
+              msg.result.ok &&
+              msg.result.value !== undefined &&
+              'command' in msg.result.value &&
+              msg.result.value.command.requiresTermination;
+            if (!needsTermination) pendingRequests.delete(msg.result.id);
             p.resolve(msg.result);
           }
           break;
@@ -453,8 +441,6 @@ function createRuntimeController(
     if (toolchainHandshakeTimer !== undefined) clearTimeout(toolchainHandshakeTimer);
     throw error;
   }
-
-  const fs: RuntimeFs = { readFile, writeFile };
 
   const controller: RuntimeController = {
     eval(code, options) {
@@ -576,6 +562,48 @@ function createRuntimeController(
     },
     toolchain,
     toolchainReady,
+    projectFs(options) {
+      const project = validateProjectOptions(options);
+      return createRuntimeFs(async (operation) => {
+        const scoped = projectFsOperation(operation, project.root);
+        const id = nextId++;
+        await toolchainReady;
+        const result = await requestToolchain({
+          id,
+          op: 'project-fs',
+          input: { project, request: { ...scoped, id } },
+        });
+        if (!result.ok) throw deserializeError(result.error);
+        if (result.value === undefined || !('fsResult' in result.value))
+          throw new Error('Invalid project fs response');
+        if (result.value.fsResult.ok)
+          activationState = applyRecoveryFsOperation(activationState, scoped);
+        return result.value.fsResult;
+      });
+    },
+    command(input, observer) {
+      const validated = validateCommandInput(input);
+      const id = nextId++;
+      const result = requestToolchain({ id, op: 'command', input: validated }, observer).then(
+        (reply) => {
+          if (!reply.ok) throw deserializeError(reply.error);
+          if (reply.value === undefined || !('command' in reply.value))
+            throw new Error('Invalid command response');
+          if (reply.value.activationState !== undefined)
+            activationState = validateActivationState(
+              reply.value.activationState,
+              'command recovery state',
+            );
+          return reply.value.command;
+        },
+      );
+      return {
+        result,
+        stop() {
+          send({ type: 'toolchain-command-stop', id });
+        },
+      };
+    },
     get toolchainVfs() {
       if (toolchainBackend === null) throw new Error('Toolchain storage is not ready');
       return {

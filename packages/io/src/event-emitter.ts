@@ -263,6 +263,31 @@ export const EventEmitter = /* @__PURE__ */ (() => {
   return constructor;
 })();
 
+/** Retire a drained invocation's listeners without invoking guest meta-events.
+ * Pre-existing listeners survive only while still registered; fired once handlers
+ * and explicit removals are never resurrected. Listener storage stays with its owner. */
+export function captureEventEmitterListenerScope(emitter: EventEmitter): () => void {
+  const state = emitter as unknown as { _listenersMap?: Map<string | symbol, Listener[]> };
+  const original = new Map<string | symbol, Listener[]>(
+    Array.from(state._listenersMap ?? [], ([event, listeners]) => [event, listeners.slice()]),
+  );
+  return () => {
+    const current = state._listenersMap;
+    if (current === undefined) return;
+    for (const [event, listeners] of current) {
+      const remaining = original.get(event)?.slice() ?? [];
+      const survivors = listeners.filter((listener) => {
+        const index = remaining.indexOf(listener);
+        if (index === -1) return false;
+        remaining.splice(index, 1);
+        return true;
+      });
+      if (survivors.length === 0) current.delete(event);
+      else current.set(event, survivors);
+    }
+  };
+}
+
 export function once(emitter: EventEmitter, event: string | symbol): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
     // Remove BOTH listeners on either path. `once` wrappers auto-remove the

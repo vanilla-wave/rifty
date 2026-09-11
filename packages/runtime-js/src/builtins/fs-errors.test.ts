@@ -1,3 +1,4 @@
+import { getSystemErrorMap } from 'node:util';
 /**
  * FS_ERRNO must cover every code the VFS can emit (review 2026-07-05 handoff:
  * EPERM/EDQUOT/EIO crossed the boundary without errno/description). The
@@ -17,11 +18,23 @@ const ALL_VFS_CODES: Record<VfsErrorCode, true> = {
   EPERM: true,
   EINVAL: true,
   EACCES: true,
+  EROFS: true,
   EDQUOT: true,
   EIO: true,
 };
 
 describe('fs-errors errno table', () => {
+  it('preserves native read-only filesystem errno and description', () => {
+    const native = getSystemErrorMap().get(-30);
+    expect(native?.[0]).toBe('EROFS');
+    expect(toNodeFsError(new VfsError('EROFS', '/locked'), 'open', '/locked')).toMatchObject({
+      code: 'EROFS',
+      errno: -30,
+      syscall: 'open',
+      path: '/locked',
+      message: `EROFS: ${native?.[1]}, open '/locked'`,
+    });
+  });
   it('FS_ERRNO maps every VfsErrorCode (no bare-code Node errors)', () => {
     for (const code of Object.keys(ALL_VFS_CODES)) {
       expect(FS_ERRNO[code], `missing FS_ERRNO entry: ${code}`).toBeDefined();
