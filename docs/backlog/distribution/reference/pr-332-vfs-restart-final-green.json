@@ -1,0 +1,46 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS локального HEAD; перед merge — push и CI этого SHA.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "ad1e0b9e37683daa0747c36576d331465eec3d19",
+  "unit_goal_source": "PR #332, observed-defect repair: sandbox.vfs при запуске replacement Worker. BASE d5992dbd4349acbcbf07579f54439c3f25d4db05; authority: сценарий исправления, существующий Sandbox.vfs, ADR-0419. Предыдущие whole-goal и CI-repair PASS сохраняются; CI-repair reviewed_sha 39f9fc0091b654c83d5e0f42b1ff73e29aa81715 связан с BASE только docs-изменениями. Scope: sandbox.ts, добавленный regression, CHANGELOG, TODO и два backlog capture. PR-4: сравнение с BASE — 57 строк теста добавлены, прежние критерии неизменны. Выполнено на Node v24.16.0 / Vitest 2.1.9: в /tmp/rifty-review-332-9yumd2b1 BASE sandbox.ts + HEAD sandbox.test.ts, vitest run --config vitest.config.mjs packages/rifty/src/sandbox.test.ts -t 'reports the last booted storage' → RED, Toolchain storage is not ready, assertion :693 (red.log). HEAD → 23/23 GREEN (green.log). Удаление restart-обновления vfs и замена его на {...vfs, ...current.toolchainVfs} → оба мутанта падают на :702 (no-refresh.log, stale-reason.log). В рабочем дереве релевантные sandbox/startup/recovery suites — 55/55; полный pnpm pr:check — 25/25, без rerun (тот же каталог, pr-check.log). Код и docs независимо проверены review_code/review_docs; новых обязательных residuals нет. Tracked-файлы неизменны. goal_complete сохраняет ранее принятое end-to-end доказательство всей цели.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "sandbox.vfs сохраняет последний booted report, пока replacement Worker запускается.",
+      "source": "public-api",
+      "trace": "scenario: PR #332 observed-defect repair",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox.test.ts:693",
+      "note": ""
+    },
+    {
+      "row": "После готовности replacement публичный report отражает новый backend без старого fallback reason.",
+      "source": "acceptance",
+      "trace": "ADR-0419",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox.test.ts:702",
+      "note": ""
+    },
+    {
+      "row": "Последний booted report остаётся читаемым после dispose.",
+      "source": "public-api",
+      "trace": "baseline: Sandbox.vfs после dispose при d5992dbd4349acbcbf07579f54439c3f25d4db05",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox.test.ts:704",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {"axis": "Completeness", "verdict": "pass", "findings": []},
+    {"axis": "Mission and architecture", "verdict": "pass", "findings": []},
+    {"axis": "Goal drift", "verdict": "pass", "findings": []},
+    {"axis": "Approach cost", "verdict": "pass", "findings": []},
+    {"axis": "Scope", "verdict": "pass", "findings": []},
+    {"axis": "Bugs", "verdict": "pass", "findings": []},
+    {"axis": "Regressions", "verdict": "pass", "findings": []},
+    {"axis": "Ecosystem UX", "verdict": "pass", "findings": []}
+  ]
+}
