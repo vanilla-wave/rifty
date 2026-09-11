@@ -40,3 +40,9 @@ coordinator, hash cache or tree surveillance.
 
 Saved-open result describes access, never a freshly proved installation. Invalid
 or absent dependencies fail at use; explicit npm install remains available.
+
+## Corrections (active)
+
+2026-09-10 — ADR-0417 supersedes the retained ADR-0392 exception only for its
+SDK proof-required open gate. Existing Workbench access, transactions and
+storage recovery remain unchanged.

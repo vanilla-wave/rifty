@@ -103,6 +103,8 @@ Install `@riftydev/workbench`, bundle its
 const sandbox = await createSandbox({
   requireCrossOriginIsolation: false,
   toolchain: { workerUrl: toolchainWorkerUrl },
+  storage: { namespace: 'my-project', persistence: 'required' },
+  startupTimeoutMs: 30_000,
 });
 await sandbox.fs.writeFile('/project/package.json', manifest);
 await sandbox.toolchain.install({ cwd: '/project', registryUrl: '/npm-registry' });
@@ -130,25 +132,53 @@ await sandbox.restart({
 console.log(sandbox.capabilityReport);
 ```
 
+`storage` defaults to preferred OPFS at the origin root. `namespace` selects one
+literal native directory before preload; omission keeps existing origin-root
+files. Empty, dot, slash, backslash and NUL components reject before effects.
+`required` rejects unavailable OPFS; `preferred` exposes a memory fallback through
+`sandbox.vfs.reason`; `ephemeral` selects memory. Unreadable saved preload always
+rejects. Required persistence is not browser eviction protection or storage isolation.
+
+`startupTimeoutMs` defaults to 10000; positive integer through 2147483647.
+It covers Worker construction/import, native VFS hydration and runtime readiness,
+including restart. Expiry or Worker close rejects startup and terminates the
+Worker. Service-worker registration, guest execution and snapshot/install work
+have separate lifetimes. Startup configuration is captured before effects;
+restart retains it.
+
+For CI-baked dependencies, use published `produceDependencySnapshot` from
+`@riftydev/workbench`, serve its archive and apply explicitly:
+
+```ts
+await sandbox.toolchain.applySnapshot({
+  cwd: '/project',
+  snapshot: { assetUrl, snapshotId, templateId },
+});
+// Explicit replacement of conflicting payload targets:
+await sandbox.toolchain.applySnapshot({
+  cwd: '/project', snapshot: { assetUrl: updatedUrl, snapshotId: updatedId, templateId }, force: true,
+});
+```
+
+No registry URL is needed. Every application validates the bounded input and
+identities, including same-ID/forced calls. Default conflicts reject before
+payload/cache writes; force replaces only payload targets, including descendants
+of a directory replaced by a file. Other files survive. Success follows actual
+persistence; failure rejects and may leave partial dependencies.
+
 On a later page load, recreate the sandbox and call
-`await sandbox.toolchain.open({ cwd: '/project', registryUrl: '/npm-registry' })`
-before `runBin` or `startBin`. Open validates the saved installation and activates
-adapters without registry requests, reinstalling, or replacing dependency edits,
-extra files, deletions, or source edits. Explicit `install` reconciles/repairs
-dependencies. Missing, old, or incompatible installation proof throws
-an error with `name === "SandboxInstallRequiredError"`; saved bytes stay intact.
-Install once after an upgrade from SDK 0.6 installations, which did not record this proof.
+`await sandbox.toolchain.open({ cwd: '/project' })` before using saved adapters.
+Legacy `registryUrl` remains accepted but is unused. Open neither fetches an
+artifact nor reinstalls, rewrites files or checks installation completion.
+Missing/pending/old proof and missing/corrupt lock do not deny local source.
+Only valid lock facts grant adapters; missing/corrupt dependencies or adapter
+bytes fail at actual use. Explicit install/apply is optional recovery after
+interruption, never an admission requirement or automatic retry.
 
-Update the SDK and self-hosted toolchain Worker together: this API uses protocol
-v3; an older Worker is rejected during handshake. Serialized SDK errors are
-ordinary `Error` objects: branch on `error.name`, including
-`SandboxInstallRequiredError` and `SandboxPersistenceError`, rather than `instanceof`
-a named SDK error class.
-
-Edited runtime assets (for example `esbuild.wasm`) can surface their original
-adapter/integrity error during open. Explicit install repairs package files.
-For an unreadable OPFS entry, retry after a transient fault clears or repair the
-entry with the host’s storage tooling, then recreate the sandbox.
+Update SDK and copied Worker together (protocol v4). Older Workers reject during
+handshake. Errors cross the boundary as ordinary `Error` objects; inspect
+`name`/`message`, including `SandboxPersistenceError`, rather than class identity.
+Unreadable OPFS preload rejects: clear the native fault and recreate the sandbox.
 
 This mode owns runtime, VFS, npm install, installed registry-twin admission, and bin
 execution in one Worker. `startBin` is package-generic; the requested port

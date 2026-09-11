@@ -40,6 +40,8 @@ export type {
   SandboxRestartReport,
   SandboxStartBinInput,
   SandboxToolchain,
+  SandboxSnapshotSource,
+  SandboxApplySnapshotInput,
   ToolchainCreateSandboxOptions,
   ToolchainSandbox,
   VfsBackend,

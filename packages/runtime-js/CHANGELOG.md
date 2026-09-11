@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Carry fatal toolchain cause on its terminal frame; allow the serialized owner to take a reported rejection without clearing handles (ADR-0423).
+
+- Carry validated snapshot requests and optional-registry saved opening through existing toolchain operation/recovery ownership.
+
+- Carry preboot storage options through native Worker metadata; configured handshake timeout terminates pending workers/calls and ignores late readiness (ADR-0419).
+
 - Migrate Node entry bootstrap to v4 for optional host SQLite configuration; reject prior versions atomically (ADR-0416).
 
 - Reject unreadable acquired OPFS preload through Worker-error settlement, including pending eval/fs calls; unavailable-root memory fallback stays intact.

@@ -1,0 +1,279 @@
+import { normalizePath } from '@riftydev/vfs';
+import type {
+  ToolchainActivationState,
+  ToolchainApplySnapshotRequest,
+  ToolchainInstallRequest,
+  ToolchainOpenRequest,
+  ToolchainRunBinRequest,
+  ToolchainStartBinRequest,
+} from '../protocol.ts';
+
+export function exactInput(
+  input: unknown,
+  fields: readonly string[],
+  label: string,
+): Record<string, unknown> {
+  if (
+    input === null ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    Object.getPrototypeOf(input) !== Object.prototype
+  ) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) {
+    throw new TypeError(`${label} has symbol fields`);
+  }
+  for (const descriptor of Object.values(descriptors)) {
+    if (!('value' in descriptor)) throw new TypeError(`${label} has accessor fields`);
+  }
+  const actual = Object.keys(descriptors).toSorted();
+  const expected = [...fields].toSorted();
+  if (
+    actual.length !== expected.length ||
+    actual.some((field, index) => field !== expected[index])
+  ) {
+    throw new TypeError(`${label} has extra or missing fields`);
+  }
+  return Object.freeze(
+    Object.fromEntries(
+      actual.map((field) => {
+        const descriptor = descriptors[field];
+        if (descriptor === undefined || !('value' in descriptor)) {
+          throw new TypeError(`${label} has accessor fields`);
+        }
+        return [field, descriptor.value] as const;
+      }),
+    ),
+  );
+}
+
+function absolutePath(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value.length === 0 || !value.startsWith('/')) {
+    throw new TypeError(`${label} must be an absolute VFS path`);
+  }
+  const normalized = normalizePath(value);
+  if (normalized !== value || value === '/') {
+    throw new TypeError(`${label} must be a normalized non-root VFS path`);
+  }
+  return value;
+}
+
+export function validateInstallRequest(
+  input: ToolchainInstallRequest,
+  label: string,
+): ToolchainInstallRequest {
+  const record = exactInput(input, ['cwd', 'registryUrl'], `${label} input`);
+  const cwd = absolutePath(record.cwd, `${label} cwd`);
+  if (typeof record.registryUrl !== 'string' || record.registryUrl.length === 0) {
+    throw new TypeError(`${label} registryUrl must be a non-empty string`);
+  }
+  return Object.freeze({ cwd, registryUrl: record.registryUrl });
+}
+
+function optionalInput(
+  input: unknown,
+  required: readonly string[],
+  optional: readonly string[],
+  label: string,
+) {
+  const fields = optional.filter(
+    (key) => input !== null && typeof input === 'object' && Object.hasOwn(input, key),
+  );
+  return exactInput(input, [...required, ...fields], label);
+}
+
+export function validateOpenRequest(input: ToolchainOpenRequest): ToolchainOpenRequest {
+  const record = optionalInput(input, ['cwd'], ['registryUrl'], 'toolchain.open input');
+  const cwd = absolutePath(record.cwd, 'toolchain.open cwd');
+  if (
+    record.registryUrl !== undefined &&
+    (typeof record.registryUrl !== 'string' || record.registryUrl.length === 0)
+  )
+    throw new TypeError('toolchain.open registryUrl must be a non-empty string');
+  return Object.freeze({
+    cwd,
+    ...(typeof record.registryUrl === 'string' ? { registryUrl: record.registryUrl } : {}),
+  });
+}
+
+export function validateSnapshotRequest(
+  input: ToolchainApplySnapshotRequest,
+): ToolchainApplySnapshotRequest {
+  const record = optionalInput(
+    input,
+    ['cwd', 'snapshot'],
+    ['force'],
+    'toolchain.applySnapshot input',
+  );
+  const cwd = absolutePath(record.cwd, 'toolchain.applySnapshot cwd');
+  if (record.force !== undefined && typeof record.force !== 'boolean')
+    throw new TypeError('toolchain.applySnapshot force must be boolean');
+  const source = exactInput(
+    record.snapshot,
+    ['assetUrl', 'snapshotId', 'templateId'],
+    'toolchain.applySnapshot snapshot',
+  );
+  for (const key of ['assetUrl', 'templateId']) {
+    if (typeof source[key] !== 'string' || source[key].trim().length === 0)
+      throw new TypeError(`toolchain.applySnapshot ${key} must be a non-empty string`);
+  }
+  if (typeof source.snapshotId !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(source.snapshotId))
+    throw new TypeError('toolchain.applySnapshot snapshotId must be a sha256 identity');
+  return Object.freeze({
+    cwd,
+    force: record.force === true,
+    snapshot: Object.freeze({
+      assetUrl: source.assetUrl as string,
+      snapshotId: source.snapshotId,
+      templateId: source.templateId as string,
+    }),
+  });
+}
+
+function validateBinInput(
+  input: unknown,
+  fields: readonly string[],
+  label: string,
+): {
+  readonly request: ToolchainRunBinRequest;
+  readonly record: Readonly<Record<string, unknown>>;
+} {
+  const record = exactInput(input, fields, `${label} input`);
+  const cwd = absolutePath(record.cwd, `${label} cwd`);
+  const binPath = absolutePath(record.binPath, `${label} binPath`);
+  const binPrefix = `${cwd}/node_modules/.bin/`;
+  if (!binPath.startsWith(binPrefix) || binPath.slice(binPrefix.length).includes('/')) {
+    throw new TypeError(`${label} binPath must name an installed node_modules/.bin entry`);
+  }
+  if (!Array.isArray(record.args)) {
+    throw new TypeError(`${label} args must be a dense string array`);
+  }
+  const args = record.args;
+  const descriptors = Object.getOwnPropertyDescriptors(args);
+  if (Reflect.ownKeys(descriptors).some((key) => typeof key === 'symbol')) {
+    throw new TypeError(`${label} args must be a dense string array`);
+  }
+  const length = (descriptors as unknown as Record<PropertyKey, PropertyDescriptor>).length;
+  const indexKeys = Object.keys(descriptors).filter((key) => key !== 'length');
+  if (
+    length === undefined ||
+    !('value' in length) ||
+    typeof length.value !== 'number' ||
+    indexKeys.length !== length.value ||
+    indexKeys.some((key, index) => key !== String(index)) ||
+    indexKeys.some((key) => {
+      const descriptor = descriptors[key];
+      return (
+        descriptor === undefined || !('value' in descriptor) || typeof descriptor.value !== 'string'
+      );
+    })
+  ) {
+    throw new TypeError(`${label} args must be a dense string array`);
+  }
+  const copiedArgs = indexKeys.map((key) => {
+    const descriptor = descriptors[key];
+    if (
+      descriptor === undefined ||
+      !('value' in descriptor) ||
+      typeof descriptor.value !== 'string'
+    ) {
+      throw new TypeError(`${label} args must be a dense string array`);
+    }
+    return descriptor.value;
+  });
+  return {
+    record,
+    request: Object.freeze({ cwd, binPath, args: Object.freeze(copiedArgs) }),
+  };
+}
+
+export function validateRunBinRequest(input: ToolchainRunBinRequest): ToolchainRunBinRequest {
+  return validateBinInput(input, ['args', 'binPath', 'cwd'], 'toolchain.runBin').request;
+}
+
+export function validateStartBinRequest(input: ToolchainStartBinRequest): ToolchainStartBinRequest {
+  const validated = validateBinInput(
+    input,
+    ['args', 'binPath', 'cwd', 'port'],
+    'toolchain.startBin',
+  );
+  const port = validated.record.port;
+  if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new TypeError('toolchain.startBin port must be an integer from 1 through 65535');
+  }
+  return Object.freeze({ ...validated.request, port });
+}
+
+export function validateActivationState(input: unknown, label: string): ToolchainActivationState {
+  const record = exactInput(input, ['bindings', 'cwd', 'files', 'vfsBackend'], label);
+  const cwd = absolutePath(record.cwd, `${label} cwd`);
+  if (record.vfsBackend !== 'opfs' && record.vfsBackend !== 'memory') {
+    throw new TypeError(`${label} vfsBackend must be opfs or memory`);
+  }
+  if (!Array.isArray(record.bindings) || Object.getOwnPropertySymbols(record.bindings).length > 0) {
+    throw new TypeError(`${label} bindings must be a dense array`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(record.bindings);
+  const indexKeys = Object.keys(descriptors).filter((key) => key !== 'length');
+  if (
+    indexKeys.length !== record.bindings.length ||
+    indexKeys.some((key, index) => key !== String(index)) ||
+    indexKeys.some((key) => {
+      const descriptor = descriptors[key];
+      return descriptor === undefined || !('value' in descriptor);
+    })
+  ) {
+    throw new TypeError(`${label} bindings must be a dense array`);
+  }
+  const bindings = indexKeys.map((key, index) => {
+    const descriptor = descriptors[key];
+    if (descriptor === undefined || !('value' in descriptor)) {
+      throw new TypeError(`${label} bindings must be a dense array`);
+    }
+    const value = descriptor.value;
+    const binding = exactInput(value, ['adapterId', 'packagePath'], `${label} binding ${index}`);
+    if (typeof binding.adapterId !== 'string' || binding.adapterId.length === 0) {
+      throw new TypeError(`${label} binding ${index} adapterId must be a non-empty string`);
+    }
+    const packagePath = absolutePath(binding.packagePath, `${label} binding ${index} packagePath`);
+    return Object.freeze({ adapterId: binding.adapterId, packagePath });
+  });
+  if (!Array.isArray(record.files) || Object.getOwnPropertySymbols(record.files).length > 0) {
+    throw new TypeError(`${label} files must be a dense array`);
+  }
+  const fileDescriptors = Object.getOwnPropertyDescriptors(record.files);
+  const fileKeys = Object.keys(fileDescriptors).filter((key) => key !== 'length');
+  if (
+    fileKeys.length !== record.files.length ||
+    fileKeys.some((key, index) => key !== String(index)) ||
+    fileKeys.some((key) => {
+      const descriptor = fileDescriptors[key];
+      return descriptor === undefined || !('value' in descriptor);
+    })
+  ) {
+    throw new TypeError(`${label} files must be a dense array`);
+  }
+  const seen = new Set<string>();
+  const files = fileKeys.map((key, index) => {
+    const descriptor = fileDescriptors[key];
+    if (descriptor === undefined || !('value' in descriptor)) {
+      throw new TypeError(`${label} files must be a dense array`);
+    }
+    const file = exactInput(descriptor.value, ['data', 'path'], `${label} file ${index}`);
+    const path = absolutePath(file.path, `${label} file ${index} path`);
+    if (seen.has(path)) throw new TypeError(`${label} has duplicate file ${path}`);
+    seen.add(path);
+    if (!(file.data instanceof Uint8Array)) {
+      throw new TypeError(`${label} file ${index} data must be Uint8Array`);
+    }
+    return Object.freeze({ path, data: new Uint8Array(file.data) });
+  });
+  return Object.freeze({
+    cwd,
+    bindings: Object.freeze(bindings),
+    vfsBackend: record.vfsBackend,
+    files: Object.freeze(files.toSorted((left, right) => left.path.localeCompare(right.path))),
+  });
+}

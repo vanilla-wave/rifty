@@ -1,0 +1,161 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted; proceed to implementation. One advisory validation-boundary note; merge awaits Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-worker-startup.md at 22d73bcfd300115c4d8813794521f8f296dd82d9; BASE origin/main; startup unit only, prior refinement accepted; goal I1/I2 and ADR-0419.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1+I2",
+      "location": "docs/backlog/epics/no-coi-self-hosted-project/goal.md:44",
+      "summary": "Implement and prove configured native worker storage/startup in Final+GREEN; this checkpoint accepts the promise and REDs only."
+    },
+    {
+      "clause": "I3+I4+I5+I6",
+      "location": "docs/backlog/epics/no-coi-self-hosted-project/map.md:8",
+      "summary": "Linked project-open unit remains: snapshot application, ordinary saved access, explicit conflict policy and honest failure; packed Vite goal acceptance still required."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: public namespace reaches native preload; A/B/default roots persist independently across restart/recreation and preserve unrelated bytes",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: required acquisition rejects, preferred exposes fallback reason, acquired unreadable preload rejects",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:70; tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: public bounded startup budget controls initial/restart construction/import/preload/handshake, including 11s native preload under 30s",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:102; packages/runtime-js/src/host-startup.fault.test.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: invalid namespace, persistence and budget reject before effects",
+      "source": "acceptance",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: timeout/close/dispose settle startup/eval/fs, terminate Worker and reject late readiness",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:60; tests/no-coi/no-coi-configured-startup.spec.ts:130",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input \u00d7 boot config: invalid public options reject without Worker/SW effects",
+      "source": "fault-matrix",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail \u00d7 native acquisition: required rejection/teardown and observable preferred fallback",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:70",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input \u00d7 acquired preload: rejection preserves disk and never activates memory",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read \u00d7 slow preload: below-budget success; deadline terminates and settles pending calls",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:102; packages/runtime-js/src/host-startup.fault.test.ts:60",
+      "note": ""
+    },
+    {
+      "row": "torn-state \u00d7 close/dispose during boot: pending calls reject without late revival",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:80; tests/no-coi/no-coi-configured-startup.spec.ts:130",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift \u00d7 restart: captured namespace and startup budget remain effective",
+      "source": "fault-matrix",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5; tests/no-coi/no-coi-configured-startup.spec.ts:102",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/rifty/src/sandbox-startup.contract.test.ts:15",
+          "summary": "Budget cases omit a fractional value and acceptance of the upper bound 2147483647. Add focused boundary cases when implementing validation. No surviving mutant was executed, so this remains advisory and coverage stays pass under REV-4.",
+          "authority": "",
+          "evidence": "Independent runs on Node v24.16.0: pnpm exec vitest run --project unit packages/runtime-js/src/host-startup.fault.test.ts packages/rifty/src/sandbox-startup.contract.test.ts => 18/18 expected RED (Worker effect, old 10000ms, missing termination, late-ready revival); /tmp/rifty-332-startup-vitest-red.log. pnpm exec playwright test --config playwright.no-coi.config.ts tests/no-coi/no-coi-configured-startup.spec.ts tests/no-coi/no-coi-preload-failure.spec.ts, Playwright 1.60.0 Chromium => 4 expected RED (native namespace absent, required resolved, 11s preload rejected at 10000ms, configured 5000ms ignored), 3 GREEN (native close plus both existing unreadable-preload carriers); /tmp/rifty-332-startup-browser-red.log. Inspection of committed invalid-value table confirms no fractional or maximum-valid case; this is not a demonstrated missing carrier."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "22d73bcfd300115c4d8813794521f8f296dd82d9"
+}

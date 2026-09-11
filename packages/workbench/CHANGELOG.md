@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Keep no-COI launch byte-driven; use existing CLI promise tracking, consume reported invocation errors and atomically settle fatal resident starts (ADR-0423).
+
+- Reuse program-entry adapter/CLI preparation in no-COI bin launches; explicit registry installs use the producer preparation recipe, preventing false successful Vite runs after missing adapter facts.
+
+- Apply no-COI producer archives through shared validation/overlay/flush; saved opening derives real adapter facts and defers adapter failures to use without install proof.
+
+- No-COI worker reports authoritative storage fallback; reuse VFS namespace validation (ADR-0419).
+
 - Make deployment.wasm/sqlite optional; preserve absence through recursive workers, reject malformed supplied values, and skip the SQLite provider without a URL (ADR-0416).
 
 - Prove npm fails when Scratch catalog dirty persistence hits quota or permission errors, retaining the prior catalog across reload; the regression kills swallowed reflection errors.

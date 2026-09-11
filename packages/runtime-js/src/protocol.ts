@@ -60,6 +60,24 @@ export interface ToolchainInstallRequest {
   readonly registryUrl: string;
 }
 
+export interface ToolchainOpenRequest {
+  readonly cwd: string;
+  /** Legacy caller shape; saved opening performs no acquisition. */
+  readonly registryUrl?: string;
+}
+
+export interface ToolchainSnapshotSource {
+  readonly assetUrl: string;
+  readonly snapshotId: string;
+  readonly templateId: string;
+}
+
+export interface ToolchainApplySnapshotRequest {
+  readonly cwd: string;
+  readonly snapshot: ToolchainSnapshotSource;
+  readonly force?: boolean;
+}
+
 export interface ToolchainRunBinRequest {
   readonly cwd: string;
   readonly binPath: string;
@@ -89,7 +107,12 @@ export interface ToolchainActivationState {
 
 export type ToolchainRequest =
   | { readonly id: number; readonly op: 'install'; readonly input: ToolchainInstallRequest }
-  | { readonly id: number; readonly op: 'open'; readonly input: ToolchainInstallRequest }
+  | { readonly id: number; readonly op: 'open'; readonly input: ToolchainOpenRequest }
+  | {
+      readonly id: number;
+      readonly op: 'apply-snapshot';
+      readonly input: ToolchainApplySnapshotRequest;
+    }
   | { readonly id: number; readonly op: 'run-bin'; readonly input: ToolchainRunBinRequest }
   | { readonly id: number; readonly op: 'start-bin'; readonly input: ToolchainStartBinRequest }
   | { readonly id: number; readonly op: 'restore'; readonly input: ToolchainActivationState };
@@ -107,7 +130,7 @@ export type ToolchainResult =
     }
   | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
 
-export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v3' as const;
+export const SANDBOX_TOOLCHAIN_PROTOCOL = 'rifty.sandbox-toolchain/v4' as const;
 
 /** `node:vm` sandbox engine (ADR-0142): the real-realm QuickJS engine (default
  * after the T17 cutover) or the opt-in hardened-rewrite engine. */
@@ -144,6 +167,11 @@ export type ToolchainWorkerMessage =
       readonly type: 'toolchain-ready';
       readonly protocol: typeof SANDBOX_TOOLCHAIN_PROTOCOL;
       readonly vfsBackend: 'opfs' | 'memory';
+      readonly vfsReason?: string;
     }
-  | { readonly type: 'toolchain-terminal'; readonly reason: 'closed' }
+  | {
+      readonly type: 'toolchain-terminal';
+      readonly reason: 'closed';
+      readonly error?: SerializedRuntimeError;
+    }
   | { readonly type: 'toolchain-result'; readonly result: ToolchainResult };

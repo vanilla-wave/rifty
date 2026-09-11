@@ -53,3 +53,10 @@ original decisions: docs/backlog/distribution/reference/issue319-refine-evidence
 
 Public API/worker handshake changes together. No tree-hash surveillance, silent
 repair on open, crash transaction, new retry owner, or npm repair parity claim.
+
+## Corrections (active)
+
+2026-09-10 — ADR-0417 supersedes the SDK saved-install certification/admission,
+proof-miss explicit-install-required and mandatory old-proof reinstall clauses.
+Nonmutating/network-free open, install-only durable equality and retained
+consumers’ protected claim handling remain.

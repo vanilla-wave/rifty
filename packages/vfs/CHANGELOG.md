@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accept optional native-root/persistence boot configuration; share literal namespace validation with Workbench (ADR-0419).
+
 - Preserve selected roots and operation budgets through strict single-pass preload; acquired-tree failures remain distinct from unavailable roots (ADR-0411).
 
 ### Added

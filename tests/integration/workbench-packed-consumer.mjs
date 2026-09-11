@@ -27,6 +27,7 @@ import {
 } from '../../tools/checks/client-bundle-budget.mjs';
 import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
 import { provePackedInstallLoading } from './no-coi-install-browser-proof.mjs';
+import { provePackedNoCoiSnapshots } from './no-coi-snapshot-browser-proof.mjs';
 import { provePackedVmSelection } from './no-coi-vm-browser-proof.mjs';
 import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
@@ -947,6 +948,7 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
     cwd: consumerRoot,
     timeoutMs: 120_000,
   });
+  await provePackedNoCoiSnapshots(consumerRoot);
   await run('node', ['prepare-orphan-payload.mjs'], {
     cwd: consumerRoot,
     timeoutMs: 120_000,

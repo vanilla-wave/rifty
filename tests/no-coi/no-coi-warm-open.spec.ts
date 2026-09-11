@@ -99,7 +99,7 @@ async function replaceNative(page: Page, path: string, text: string | null): Pro
   );
 }
 
-async function rejectedOpen(
+async function openOutcome(
   page: Page,
   registryUrl = '/npm-registry',
 ): Promise<{ name: string; message: string }> {
@@ -201,7 +201,7 @@ for (const drift of [
   'lock',
   'registry',
 ] as const) {
-  test(`warm-open refuses ${drift} installation authority without altering saved bytes`, async ({
+  test(`warm-open ignores ${drift} installation proof without altering saved bytes`, async ({
     page,
     context,
   }) => {
@@ -244,12 +244,11 @@ for (const drift of [
     const before = await durableTree(page);
     const counts = await invoke(page, 'counts');
     const requests = registryRequests;
-    const failure = await rejectedOpen(
+    const failure = await openOutcome(
       page,
       drift === 'registry' ? '/different-registry' : '/npm-registry',
     );
-    expect(failure.name).not.toBe('resolved');
-    expect(failure.message).toMatch(/install/i);
+    expect(failure).toEqual({ name: 'resolved', message: '' });
     expect(await durableTree(page)).toEqual(before);
     expect(await invoke(page, 'counts')).toEqual(counts);
     expect(registryRequests).toBe(requests);
@@ -258,7 +257,9 @@ for (const drift of [
 }
 
 for (const failedFile of ['package-lock.json', '.rifty-install-stamp.json'] as const) {
-  test(`failed native ${failedFile} persistence cannot authorize warm-open`, async ({ page }) => {
+  test(`failed native ${failedFile} persistence does not deny ordinary warm-open`, async ({
+    page,
+  }) => {
     await boot(page);
     await seed(page);
     await invoke(page, 'counts', [failedFile]);
@@ -270,7 +271,7 @@ for (const failedFile of ['package-lock.json', '.rifty-install-stamp.json'] as c
     expect(counts.failures).toBeGreaterThan(0);
     await reopen(page);
     const before = await durableTree(page);
-    expect((await rejectedOpen(page)).name).not.toBe('resolved');
+    expect((await openOutcome(page)).name).toBe('resolved');
     expect(await durableTree(page)).toEqual(before);
     await invoke(page, 'dispose');
   });
@@ -317,8 +318,8 @@ test('explicit nested install demotes the ancestor claim while ordinary dependen
   await invoke(page, 'install', [nested]);
   await reopen(page);
   const before = await durableTree(page);
-  const failure = await rejectedOpen(page);
-  expect(failure.name).toBe('SandboxInstallRequiredError');
+  const failure = await openOutcome(page);
+  expect(failure.name).toBe('resolved');
   expect(await durableTree(page)).toEqual(before);
   await invoke(page, 'dispose');
 });

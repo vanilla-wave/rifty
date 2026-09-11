@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
-- No-COI toolchain protocol is now v3. Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.
+- Add explicit applySnapshot with validated input/conflict force and registry-free ordinary saved open; interrupted applications never impose install-status admission (ADR-0417/0420).
+
+- Expose captured no-COI storage namespace/policy and startupTimeoutMs; report fallback reason and preserve configuration on restart; `sandbox.vfs` keeps the last booted report while a restart replacement starts (ADR-0419).
+
+- No-COI toolchain protocol is now v4 (v3 never shipped). Upgrade the SDK and self-hosted toolchain Worker together; mismatched versions reject the handshake.
 
 - Add toolchain.open({cwd, registryUrl}) for compatible saved installations; preserve dependency edits and require explicit install for missing/incompatible proof.
 
