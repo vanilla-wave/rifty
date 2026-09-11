@@ -1,0 +1,144 @@
+{
+  "bin": {
+    "nanoid": "bin/nanoid.cjs"
+  },
+  "bugs": {
+    "url": "https://github.com/ai/nanoid/issues"
+  },
+  "dist": {
+    "shasum": "336d4aa4bcd4fb24d2cddede7ffeae40bec03f0a",
+    "tarball": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.19.tgz",
+    "fileCount": 25,
+    "integrity": "sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==",
+    "signatures": [
+      {
+        "sig": "MEUCIA9dttewvSwZqo1N1Gzr9i0r1hvA14310j9ik3PEyhq2AiEA4o9Z2qknSzidpQjS6Q/B5rswrdCsNp5DbnV4UctMIR4=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/nanoid@3.3.19",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 25291
+  },
+  "main": "index.cjs",
+  "name": "nanoid",
+  "type": "module",
+  "types": "./index.d.ts",
+  "author": {
+    "name": "Andrey Sitnik",
+    "email": "andrey@sitnik.ru"
+  },
+  "module": "index.js",
+  "browser": {
+    "./index.js": "./index.browser.js",
+    "./index.cjs": "./index.browser.cjs",
+    "./async/index.js": "./async/index.browser.js",
+    "./async/index.cjs": "./async/index.browser.cjs"
+  },
+  "engines": {
+    "node": "^10 || ^12 || ^13.7 || ^14 || >=15.0.1"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./index.d.ts",
+        "default": "./index.js"
+      },
+      "browser": "./index.browser.js",
+      "default": "./index.js",
+      "require": {
+        "types": "./index.d.cts",
+        "default": "./index.cjs"
+      },
+      "react-native": "./index.browser.js"
+    },
+    "./async": {
+      "import": {
+        "types": "./index.d.ts",
+        "default": "./async/index.js"
+      },
+      "browser": "./async/index.browser.js",
+      "default": "./async/index.js",
+      "require": {
+        "types": "./index.d.cts",
+        "default": "./async/index.cjs"
+      }
+    },
+    "./non-secure": {
+      "import": {
+        "types": "./index.d.ts",
+        "default": "./non-secure/index.js"
+      },
+      "default": "./non-secure/index.js",
+      "require": {
+        "types": "./index.d.cts",
+        "default": "./non-secure/index.cjs"
+      }
+    },
+    "./package.json": "./package.json",
+    "./url-alphabet": {
+      "import": {
+        "types": "./index.d.ts",
+        "default": "./url-alphabet/index.js"
+      },
+      "default": "./url-alphabet/index.js",
+      "require": {
+        "types": "./index.d.cts",
+        "default": "./url-alphabet/index.cjs"
+      }
+    },
+    "./async/package.json": "./async/package.json",
+    "./non-secure/package.json": "./non-secure/package.json",
+    "./url-alphabet/package.json": "./url-alphabet/package.json"
+  },
+  "funding": [
+    {
+      "url": "https://github.com/sponsors/ai",
+      "type": "github"
+    }
+  ],
+  "gitHead": "eb63bd6775188dc35d143bf24868be094f19b5ee",
+  "license": "MIT",
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "approver": {
+      "name": "ai",
+      "email": "andrey@sitnik.es"
+    },
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:012e1798-4fc7-407a-b875-bbc877f0017d"
+    }
+  },
+  "homepage": "https://github.com/ai/nanoid#readme",
+  "keywords": ["uuid", "random", "id", "url"],
+  "repository": {
+    "url": "git+https://github.com/ai/nanoid.git",
+    "type": "git"
+  },
+  "_npmVersion": "11.19.1",
+  "description": "A tiny (116 bytes), secure URL-friendly unique string ID generator",
+  "directories": {},
+  "maintainers": [
+    {
+      "name": "ai",
+      "email": "andrey@sitnik.es"
+    }
+  ],
+  "sideEffects": false,
+  "_nodeVersion": "26.8.2",
+  "react-native": "index.js",
+  "_hasShrinkwrap": false,
+  "readmeFilename": "README.md",
+  "_npmOperationalInternal": {
+    "tmp": "tmp/nanoid_3.3.19_1789063247994_0.3076578206971412",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "_id": "nanoid@3.3.19",
+  "version": "3.3.19"
+}

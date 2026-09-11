@@ -129,3 +129,9 @@ The shared packed scenario carries the same transition; final packed rerun follo
 The full gate completed with unit and parity PASS; its only two reds were the
 pre-generation compatibility/snapshot checks above. Both artifacts are now
 regenerated and committed; rerun the complete command on the final revision.
+
+CI light1 exposed a missing captured npm fixture after the full snapshot bake:
+nanoid3.3.19 was in the new lock but only3.3.18 was captured. Fetched the exact
+original3.3.19 manifest/tarball from its lockfile registry origin;5,694 bytes,
+SHA-512 matches both npm metadata and baked lock. Added provenance alongside
+existing versions. No fixture fallback, version substitution or gate weakening.
