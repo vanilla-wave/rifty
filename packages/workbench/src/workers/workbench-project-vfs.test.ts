@@ -38,6 +38,12 @@ const packageConfig: OwnerPackageConfig = {
 
 class FaultInjectableMemoryFsSync extends MemoryFsSync {
   #readdirFailure: Error | null = null;
+  readonly contentReads: string[] = [];
+
+  override readFileBytesSync(path: string): Uint8Array {
+    this.contentReads.push(path);
+    return super.readFileBytesSync(path);
+  }
 
   failNextReaddir(error: Error): void {
     this.#readdirFailure = error;
@@ -133,6 +139,7 @@ function harness(
     authority,
     emitted,
     vfs,
+    contentReads: rawFs.contentReads,
     failNextReaddir: (error: Error) => rawFs.failNextReaddir(error),
   };
 }
@@ -273,7 +280,7 @@ describe('Workbench project VFS owner adapter', () => {
     expect(events[0]).toMatch(/^dirty:guest:/);
   });
 
-  it('publishes only the active source tree and serves each read from one atomic snapshot', () => {
+  it('publishes only the active source tree and reads atomically without unrelated content', () => {
     const h = harness();
 
     h.vfs.publishSnapshot();
@@ -291,13 +298,13 @@ describe('Workbench project VFS owner adapter', () => {
     });
     expect(JSON.stringify(h.emitted[0])).not.toContain(OUTSIDE);
 
-    const snapshot = vi.spyOn(h.authority, 'snapshot');
+    h.contentReads.length = 0;
     h.vfs.handleFrame({
       type: 'workbench:project-vfs-read-file',
       requestId: 'read-file-1',
       path: `${ROOT}/src/main.ts`,
     });
-    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(h.contentReads).toEqual([`${ROOT}/src/main.ts`]);
     expect(h.emitted.at(-1)).toEqual({
       type: 'workbench:project-vfs-read-file-result',
       requestId: 'read-file-1',
@@ -313,13 +320,13 @@ describe('Workbench project VFS owner adapter', () => {
       },
     });
 
-    snapshot.mockClear();
+    h.contentReads.length = 0;
     h.vfs.handleFrame({
       type: 'workbench:project-vfs-read-directory',
       requestId: 'read-dir-1',
       path: `${ROOT}/src`,
     });
-    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(h.contentReads).toEqual([]);
     expect(h.emitted.at(-1)).toEqual({
       type: 'workbench:project-vfs-read-directory-result',
       requestId: 'read-dir-1',

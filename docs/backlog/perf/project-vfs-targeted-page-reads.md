@@ -53,3 +53,34 @@ Answer: 2026-09-01 — real `ProjectDocument.open()` measurement closes the
 impact premise: full-tree snapshot is 82.4% of median document admission on a
 shipping template. The absolute 4.32 ms is small on its 521-entry tree, while
 the already-measured 14,492-file tree raises the same phase to 46.5 ms.
+
+## Acceptance
+
+1. Real owner page read-file copies only the requested file; directory reads
+   copy no file content. Epoch, revision, path version, directory-first
+   ordering and defensive bytes retain current observable behavior. → I4
+2. In Chromium Worker, a 4 KB file and 33-entry directory each read in ≤1 ms
+   median on T and ≤2× their medians on a 521-entry tree. The committed
+   manifest carries the pinned snapshot's 15,568 paths / 73,637,414 bytes. → I4
+
+## Parity cases
+
+- Existing Project VFS replies, invalid paths, missing entries, current
+  versions and isolated returned content remain unchanged; this is an
+  internal owner protocol, with the existing implementation as reference. → scenario
+
+## Out of scope
+
+OPFS format and persistence waits remain with the replica slices; no API or
+guest filesystem semantics change.
+
+## Decisions
+
+- 2026-09-12 — reuse accepted goal premise; read synchronously through existing
+  authority FsSync and version accessors, without a new state owner or API.
+- 2026-09-12 — PR-4: replace the old test's required full-snapshot call count
+  with transparent memory content-read observation; exact reply assertions
+  remain. The previous criterion enforced the observed performance defect.
+- 2026-09-12 — source manifest extracted from the original snapshot SHA-256
+  `532d42b786858843e1c262caf303f75dfb58c4f61466ed1cea4d677c2fa3fd1a`;
+  generated payload bytes exercise storage shape, not package execution.
