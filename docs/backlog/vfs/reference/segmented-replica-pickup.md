@@ -189,6 +189,13 @@ watermark and live front; no queued second byte mirror is introduced.
 - PR-4 final compiler import pin: same 10,022,694 bytes and unchanged body after
   normalizing static/dynamic emitted import names; final SHA
   5b431255962e888846352f393c05ef017612c0a24422c043ac5d2f1bfcb2846d.
-- Packed consumer exposed its own obsolete per-file orphan seed. It now uses the
-  packed public SDK to write/flush current v2 state, then Workbench verifies exact
-  retention/export/reopen. No internal source import or synthetic archive seed.
+- Packed consumer exposed its own obsolete per-file orphan seed. Its native fault seed now uses
+  the installed public VFS to write/flush v2 state before a Workbench owner exists;
+  guarded SDK writes correctly refused the intentionally invalid private claim.
+  Exact retention/export/reopen assertions remain. No internal source import.
+- Full browser lane: 175 pass / 1 existing skip. `pnpm pr:check`: 25/25 pass.
+- Packed consumer GREEN: 15 first-party + 83 real external tarballs, public
+  producer and SDK, real Vite/HMR/sqlite, snapshot-only/scoped preview, no-COI
+  update/reopen/native interruption+quota, and exact orphan retention/export.
+  Private fault bytes are seeded before owner admission through installed VFS;
+  application SDK protection remains enforced.

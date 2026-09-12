@@ -1,4 +1,3 @@
-import { createSandbox } from '@riftydev/sdk';
 import type { PreviewHandle, ProjectSession } from '@riftydev/workbench';
 import {
   type PlaygroundWorkbench,
@@ -28,9 +27,6 @@ function encode(bytes: Uint8Array): string {
   for (let offset = 0; offset < bytes.length; offset += 0x8000)
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
   return btoa(binary);
-}
-function decode(content: string): Uint8Array<ArrayBuffer> {
-  return Uint8Array.from(atob(content), (character) => character.charCodeAt(0));
 }
 const textFile = (path: string, text: string): FileEntry => ({
   path,
@@ -98,38 +94,24 @@ export async function proveOrphanScratchRecovery(
   const expected = new Map(files.map((file) => [file.path, file.content]));
   if (expected.size !== files.length) throw new Error('Orphan fixture duplicate source paths');
   const namespace = 'packed-orphan-recovery';
-  const seed = await createSandbox({
-    requireCrossOriginIsolation: false,
-    skipServiceWorker: true,
-    storage: { persistence: 'required', namespace },
-    toolchain: { workerUrl: new URL('/rifty/no-coi-toolchain-worker.js', location.href).href },
-  });
+  // Native fault seed through installed public VFS, before any guarded Workbench owner.
+  const seed = new Worker(new URL('./orphan-seed-worker.ts', import.meta.url), { type: 'module' });
   try {
-    const root = '/.rifty/workbench/v2/projects/scratch/tree';
-    for (const path of directories) await seed.fs.mkdir(`${root}/${path}`, { recursive: true });
-    for (const file of files) await seed.fs.writeFile(`${root}/${file.path}`, decode(file.content));
-    await seed.fs.writeFile(`${root}/.rifty/private.txt`, 'private control must not be downloaded');
-    const dependencyResponse = await fetch('/producer-vite-snapshot.json');
-    if (!dependencyResponse.ok) throw new Error('Orphan dependency provenance is unavailable');
-    const dependency = (await dependencyResponse.json()) as {
-      snapshotId: string;
-      templateId: string;
-    };
-    await seed.toolchain.applySnapshot({
-      cwd: root,
-      force: true,
-      snapshot: {
-        snapshotId: dependency.snapshotId,
-        templateId: dependency.templateId,
-        assetUrl: new URL('/producer-vite-snapshot.tar.gz', location.href).href,
-      },
+    await new Promise<void>((resolve, reject) => {
+      seed.onmessage = ({ data }) => (data.error ? reject(new Error(data.error)) : resolve());
+      seed.onerror = (event) => reject(new Error(event.message));
+      seed.postMessage({
+        namespace,
+        directories,
+        files: [
+          ...files,
+          textFile('.rifty/private.txt', 'private control must not be downloaded'),
+          textFile('node_modules/.rifty-install-stamp.json', 'unproven claim'),
+        ],
+      });
     });
-    if ((await seed.fs.readFile(`${root}/node_modules/.rifty-install-stamp.json`)).length === 0)
-      throw new Error('Actual private install claim is absent');
-    const flush = await seed.fs.flush();
-    if (flush.persistence !== 'flushed') throw new Error('Packed SDK orphan seed was not durable');
   } finally {
-    seed.dispose();
+    seed.terminate();
   }
 
   const response = await fetch('/producer-snapshot.json');
