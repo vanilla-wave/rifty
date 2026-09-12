@@ -307,3 +307,30 @@ test('busy Worker termination waits for real native guard release before replay'
   }, workerModuleUrl);
   expect(result.actual).toEqual(result.expected);
 });
+
+test('an unrelated in-flight append cannot clear a detected native corruption repair', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  const result = await page.evaluate(async (url) => {
+    const module = await import(/* @vite-ignore */ url);
+    const worker = new Worker(module.default, { type: 'module' });
+    try {
+      return await new Promise<Record<string, unknown>>((resolve, reject) => {
+        worker.onmessage = ({ data }) =>
+          data.ok ? resolve(data.result) : reject(new Error(data.error));
+        worker.onerror = (event) => reject(new Error(event.message));
+        worker.postMessage({ kind: 'corrupt-during-append', namespace: crypto.randomUUID() });
+      });
+    } finally {
+      worker.terminate();
+    }
+  }, workerModuleUrl);
+  expect(result).toEqual({
+    rejected: true,
+    clean: 0,
+    issue: undefined,
+    a: 'repaired',
+    b: 'unrelated',
+  });
+});

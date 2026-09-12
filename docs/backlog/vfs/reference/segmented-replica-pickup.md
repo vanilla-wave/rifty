@@ -216,3 +216,12 @@ All three findings accepted; no criteria waiver.
   behavioral carriers; default per-file behavior and untouched bytes also checked.
 - ADR-0429 records the class sweep, causal scope in the one failure ledger,
   and reader retirement inside the existing replica publisher/guard.
+- B1/B2 GREEN: 16 native cases. Failure scope remains in the existing ledger;
+  entry-only proofs cannot erase subtree uncertainty, while late full-scope
+  success discharges its own sequence. Native readers settle before old-segment
+  GC; new readers use the new committed map.
+- Additional class-sweep RED: corruption detected by a paired read during an
+  unrelated in-flight append loses its force-base request when that append
+  completes; subsequent repair flushes clean but fresh replay cold-restores.
+  `replica-persistence` now captures this exact native overlap. A successful
+  append cannot discharge a repair that requires a base.

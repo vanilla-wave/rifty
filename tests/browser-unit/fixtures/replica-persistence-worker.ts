@@ -21,6 +21,7 @@ interface Input {
     | 'scale-write'
     | 'scale-read'
     | 'scale-mutate'
+    | 'corrupt-during-append'
     | 'corrupt'
     | 'native-read-error'
     | 'compaction-quota'
@@ -272,6 +273,60 @@ async function run(input: Input) {
   if (input.kind === 'spin') {
     self.postMessage({ ok: true, result: { tree: snapshot(current) } });
     while (true) {}
+  }
+  if (input.kind === 'corrupt-during-append') {
+    const directory = await pair.root.getDirectoryHandle('.rifty-replica-v1');
+    const head = JSON.parse(
+      await (await (await directory.getFileHandle('HEAD')).getFile()).text(),
+    ) as { segments: string[] };
+    const originalSegment = await directory.getFileHandle(`segment-${head.segments[0]}.bin`);
+    let releaseHead!: () => void;
+    let reached!: () => void;
+    const held = new Promise<void>((resolve) => {
+      releaseHead = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let armed = true;
+    const restore = faultNative(async (name, phase) => {
+      if (armed && name === 'HEAD' && phase === 'before-close') {
+        armed = false;
+        reached();
+        await held;
+      }
+    });
+    current.writeFileSync('/tree/b.txt', encoder.encode('unrelated'));
+    const flushing = current.flush();
+    await blocked;
+    const damaged = new Uint8Array(await (await originalSegment.getFile()).arrayBuffer()).fill(0);
+    const writer = await originalSegment.createWritable();
+    await writer.write(damaged);
+    await writer.close();
+    let rejected = false;
+    try {
+      await pair.vfs.readFile('/tree/a.txt');
+    } catch {
+      rejected = true;
+    }
+    releaseHead();
+    await flushing;
+    restore();
+    current.writeFileSync('/tree/a.txt', encoder.encode('repaired'));
+    const clean = await current.flush();
+    current.closeAll();
+    const fresh = await open(input.namespace);
+    return {
+      rejected,
+      clean: clean.total,
+      issue: fresh.layoutIssue?.kind,
+      a: fresh.fsSync.existsSync('/tree/a.txt')
+        ? new TextDecoder().decode(fresh.fsSync.readFileBytesSync('/tree/a.txt'))
+        : null,
+      b: fresh.fsSync.existsSync('/tree/b.txt')
+        ? new TextDecoder().decode(fresh.fsSync.readFileBytesSync('/tree/b.txt'))
+        : null,
+    };
   }
   if (input.kind === 'corrupt' || input.kind === 'native-read-error') {
     let damagedFile: FileSystemFileHandle | undefined;
