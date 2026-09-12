@@ -77,6 +77,53 @@ fresh session per reload.
 
 challenge: 2026-09-11 — 6 problems (goal-level, verbatim in the evidence file; all resolved there)
 
+## Acceptance
+
+1. Real Workbench session: standard file/search/patch tools and dedicated shell,
+   consumer tool/instructions/fetch, absent tools omitted with prompt notes;
+   public streamFn uses the same retained history/events. → I1, I2
+2. Provider error after a completed write retains its result; a new prompt
+   continues without automatic replay. Stop settles active and unexecuted calls,
+   releases the host command slot and permits another command. → I3
+3. Per-run tool/time budgets produce `budget-exceeded`; capped UTF-8 results
+   retain head/tail and explicit truncation. Trace includes transcript/events,
+   terminal output, timings/usage, host diff and key-free settings. → I4
+4. Optional Workbench companion diagnostics match its real results; SCM diff
+   appears in export. Host-supplied preview URL/frame supports fetch/query/click/type.
+   Absent host capabilities are never implemented as successful stubs. → I1, I4
+5. Packed public consumer runs the agent with fixed snapshot deps/no registry,
+   failed build → edit → build and real preview HMR. No caller bundler alias. → I1, I7
+
+## Reference contract
+
+Pi core/ai 0.85.1, npm gitHead `d981de1229ef899957bbe968bc8dcda02a21f477`;
+`reference/ai-agent-pi-pickup-evidence.md` and retained `ai-agent-pi-oracle.mjs`.
+Workbench public ProjectFiles/ProjectTerminal and companion are existing
+oracles (ADR-0263/0341); no shell behavior is reimplemented. ADR-0424 records
+the public seam, dependency choice, no-auth wire and recovery normalization.
+
+## Parity cases
+
+1. Shell text/exit equals the same ProjectTerminal command; Stop waits for
+   physical settlement and close before reuse. → I1, I3, ADR-0341
+2. Versioned write is the same owner mutation used by editor save; stale
+   versions fail and watched files update the real preview. → I1
+3. `edit_file` missing/ambiguous old text and mismatched patch hunks fail loudly;
+   diagnostics equal companion syntactic + semantic results. → I1
+4. Pi reference write → failed request → prompt retains the prior action;
+   missing pending results at Stop become explicit error outcomes, including
+   the full custom-stream path. → I2, I3
+
+## Fault matrix
+
+| Boundary / fault | Required result | Carrier |
+|---|---|---|
+| provider / torn-state after committed write | visible error; history retained | agent-core recovery → I3 |
+| host command / cancellation | real Stop and release; pending calls unexecuted with error results | agent-core Stop → I3 |
+| provider/tool / unbounded-read | wall-clock abort, byte cap; distinct budget status | agent-core budgets/cap → I4 |
+| file / corrupt-input or concurrent edit | exact-match/CAS failure with host effect facts | file tools + packed HMR → I1, I3 |
+| capabilities / sibling-drift | current offered tool set and prompt reflect host | browser and embedding proof → I1, I2 |
+
 ## Out of scope
 
 - `shell` in a no-COI preview mode (resident alive) → the host's
@@ -89,6 +136,7 @@ challenge: 2026-09-11 — 6 problems (goal-level, verbatim in the evidence file;
 
 ## Decisions
 
+- 2026-09-12 — PICKUP: ADR-0424; Pi/browser/host API probes and first five real-Workbench REDs captured in `reference/ai-agent-core-evidence.md`; remaining preparation is source/packed carriers for the same clauses, not a scope change.
 - 2026-09-12 — ADR at pickup (next-free number) replaces never-merged #111 branch decision record 0190: Pi 0.85.x pin, `node:fs` resolution (alias unreachable or loud), package placement above `workbench` in arch tiers, framework-free.
 - 2026-09-12 — first proof = mock OpenAI-compatible streaming endpoint driving a scripted session over a real Workbench `ProjectSession` (browser-unit/e2e), no real model in CI.
 - 2026-09-12 — re-cut (user, plan validation): the carried #111 line "provider access ONLY through the `api/openai-completions` subpath" becomes "subpath is the default transport; public `fetch` or `streamFn` seam"; integrator tools/instructions/capabilities are public acceptance, never rifty-side domain actions.

@@ -22,6 +22,7 @@ export interface SealedWorkbenchBootOptions {
   readonly starter?: string;
   readonly hiddenEmptyBoot?: boolean;
   readonly persistence?: 'required' | 'preferred' | 'ephemeral';
+  readonly snapshotOnly?: boolean;
   readonly namespace?: string;
   /** #255: host budget of owner durability-progress SILENCE; unset = shipped 60 s. */
   readonly ownerOperationSilenceTimeoutMs?: number;
@@ -257,7 +258,9 @@ export async function openSealedWorkbenchFixture(
           ? {}
           : { ownerOperationSilenceTimeoutMs: options.ownerOperationSilenceTimeoutMs }),
       },
-      packageAcquisition: { registryUrl: '/npm-registry' },
+      packageAcquisition: options.snapshotOnly
+        ? { mode: 'snapshot-only' }
+        : { registryUrl: '/npm-registry' },
       storage: {
         persistence: options.persistence ?? 'ephemeral',
         ...(options.namespace === undefined ? {} : { namespace: options.namespace }),

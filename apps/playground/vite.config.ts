@@ -132,6 +132,10 @@ export default defineConfig({
     // Pre-bundle deps first seen from Worker/child graphs. Late discovery makes
     // dev Vite re-optimize and FULL-RELOAD the page mid-session (drops owner state).
     include: [
+      // Lazy agent first-open must not reload the live project during dep discovery.
+      '@riftydev/agent > @earendil-works/pi-agent-core',
+      '@riftydev/agent > @earendil-works/pi-ai',
+      '@riftydev/agent > @earendil-works/pi-ai/api/openai-completions',
       '@riftydev/runtime-js > @jitl/quickjs-wasmfile-release-sync',
       '@riftydev/runtime-js > acorn',
       '@riftydev/runtime-js > cjs-module-lexer',

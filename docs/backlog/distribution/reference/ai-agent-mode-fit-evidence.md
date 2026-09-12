@@ -40,7 +40,8 @@ manual live-streaming acceptance; deterministic preparation is independent.
 `5d46fb9debeb067a014bbdc3ac464dbf4a665fe4`. Entire goal/map/ledger + four drafts,
 raw refine sources and carried PR #111 conditions checked. No new material fork
 or attribution error; tier retains recovery obligations. Resident exit stays
-technical fog; a test stopping at that gap cannot close I6. `pnpm docs:check`+PASS. This is RDY-6's written-result check, not product Final+GREEN.
+technical fog; a test stopping at that gap cannot close I6. `pnpm docs:check`
+PASS. This is RDY-6's written-result check, not product Final+GREEN.
 
 User supplied `~/codex-proxy.mjs` and authorized repairs if needed. It started
 at `http://127.0.0.1:10530/v1`; model `gpt-5.6-sol`, real streaming request
