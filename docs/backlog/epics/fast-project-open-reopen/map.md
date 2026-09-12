@@ -4,11 +4,6 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `perf/project-vfs-targeted-page-reads` — **targeted-page-reads** — I4;
-   independent of the format, no new mechanism; leads as the smallest slice,
-   and its RED commits T's manifest (paths + sizes from the embedder asset) as
-   the fixture every later slice reuses. After it: one editor read on T costs
-   the same as on a 521-entry tree.
 2. `vfs/segmented-opfs-replica` — **replica-base-segment** (slice A) — I1,
    I2: the IRREVERSIBLE format ADR (candidates: current per-file baseline; B
    index + lazy — measured, killed; A traced segment replica — measured),
