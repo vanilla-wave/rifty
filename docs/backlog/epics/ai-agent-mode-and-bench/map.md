@@ -1,14 +1,12 @@
 ## Items
 
-1. `distribution/ai-agent-no-coi-host` — **no-COI host** — next: `sandbox.project()` adapter, host-owned resident exit, full-cycle e2e edit → build → preview → edit in `tests/no-coi`.
-2. `playground/ai-mode-chat` — **hands-on** — "+chat" panel over delivered core; settings; `?agentBench=1` hooks.
-3. `distribution/agent-bench` — **measurement** — lanes `rifty` (over 2), `rifty-no-coi` (over 1), `local-reference`; 5 tasks on the #300 template; report — depends on 1 and 2.
+1. `playground/ai-mode-chat` — **hands-on** — next: "+chat" panel over delivered core; settings; `?agentBench=1` hooks.
+2. `distribution/agent-bench` — **measurement** — lanes `rifty` (over 1), delivered `rifty-no-coi` host, `local-reference`; 5 tasks on the #300 template; report — depends on 1.
 
 ## Open questions
 
 - `tsc --noEmit` via `.bin`, vitest under rifty, and the no-COI ⚠️ rows (`node -e/-p`, shell built-ins, `git`, foreground pipes) of the believed baseline — owner: agent — measured by the bench lanes, not pre-probed.
 - no-COI resident/finite coexistence (agent project fs/commands while the dev server lives) — owner: agent — `distribution/public-api-ai-agent-preview-question` pickup; not prescribed by this goal.
-- no-COI resident exit: `restart` re-runs the resident (`sandbox.ts` residentRequest never cleared; `SandboxResidentBin` has no stop), so preview mode cannot be left without `dispose()` — owner: agent — the full-cycle e2e needs a public host-side exit (new SDK surface → ADR at no-COI host pickup) or names this as its blocker.
 
 ## Out of scope
 

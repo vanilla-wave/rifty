@@ -78,3 +78,7 @@ serve restart and stopResident. No additional lock/correlation/FIFO/journal.
   `/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-workbench-packed-consumer-98cR43`.
   New no-COI agent used the published producer archive, public installed
   agent/SDK exports and copied Worker/SW assets; zero runtime registry requests.
+- Full `pnpm pr:check` @ 1989bdfca → 25/25 PASS, test:run 189.9s,
+  parity 61.3s, no isolation rerun (`/tmp/pr333-no-coi-prcheck.log`). Independent
+  Final+GREEN: 17/17 coverage, no findings, 5/5 browser PASS 35.3s;
+  same raw verdict in `ai-agent-no-coi-final-green.json`.
