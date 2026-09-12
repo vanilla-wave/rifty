@@ -91,6 +91,8 @@ const PERSIST_REPORT_SAMPLE = 20;
 interface TrackedPersistFailure {
   readonly failure: PersistFailure;
   readonly operationSequence: number;
+  /** Settled structural failure; timeouts instead retain the scheduler's real-operation fence. */
+  readonly subtreeSequence?: number;
 }
 
 export class OpfsFsSync implements FsSync {
@@ -171,6 +173,7 @@ export class OpfsFsSync implements FsSync {
             new Error(
               `OPFS ${operation.op} did not settle within ${this.scheduler.reportTimeoutMs}ms`,
             ),
+            true,
           );
         },
         onBlockedBehindTimeout: (operation, blocker) => {
@@ -179,6 +182,7 @@ export class OpfsFsSync implements FsSync {
             new Error(
               `OPFS ${operation.op} blocked behind timed out ${blocker.op} ${blocker.paths[0] ?? '/'}`,
             ),
+            true,
           );
         },
       },
@@ -399,7 +403,7 @@ export class OpfsFsSync implements FsSync {
     this.enqueuePending({ paths, op: 'mkdir' }, async (operation) => {
       try {
         await this.persistDirectoryPath(path, recursive);
-        this.healPersistFailure(path, operation.sequence);
+        this.healPersistFailure(path, operation.sequence, true);
         // A persisted dir proves its ancestors exist on disk too — heal any
         // stale ancestor mkdir failure.
         this.healAncestorPersistFailures(path, operation.sequence);
@@ -461,7 +465,7 @@ export class OpfsFsSync implements FsSync {
     if (this.persistFailures.size === 0) return;
     let parent = dirnameNormalized(path);
     while (parent !== '/') {
-      this.healPersistFailure(parent, operationSequence);
+      this.healPersistFailure(parent, operationSequence, true);
       const next = dirnameNormalized(parent);
       if (next === parent) break;
       parent = next;
@@ -588,26 +592,48 @@ export class OpfsFsSync implements FsSync {
     op: PersistFailure['op'],
     err: unknown,
     operationSequence: number,
+    provisional = false,
   ): void {
     const current = this.persistFailures.get(path);
-    if (current && current.operationSequence > operationSequence) return;
+    const subtreeSequence =
+      !provisional && (op === 'rm' || op === 'rename')
+        ? Math.max(operationSequence, current?.subtreeSequence ?? 0)
+        : current?.subtreeSequence;
+    if (current && current.operationSequence > operationSequence) {
+      this.persistFailures.set(path, { ...current, subtreeSequence });
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     this.persistFailures.set(path, {
       failure: { path, op, message },
       operationSequence,
+      subtreeSequence,
     });
   }
 
-  private healPersistFailure(path: string, operationSequence: number): void {
+  private healPersistFailure(path: string, operationSequence: number, entryOnly = false): void {
     const current = this.persistFailures.get(path);
-    if (current && current.operationSequence <= operationSequence) {
+    if (!current || (entryOnly && current.subtreeSequence !== undefined)) return;
+    if (current.operationSequence <= operationSequence) {
       this.persistFailures.delete(path);
+    } else if (
+      current.subtreeSequence !== undefined &&
+      current.subtreeSequence <= operationSequence
+    ) {
+      this.persistFailures.set(path, {
+        failure: current.failure,
+        operationSequence: current.operationSequence,
+      });
     }
   }
 
-  private recordOperationFailure(operation: PersistOperation, err: unknown): void {
+  private recordOperationFailure(
+    operation: PersistOperation,
+    err: unknown,
+    provisional = false,
+  ): void {
     for (const path of operation.paths) {
-      this.recordPersistFailure(path, operation.op, err, operation.sequence);
+      this.recordPersistFailure(path, operation.op, err, operation.sequence, provisional);
     }
   }
 
@@ -695,7 +721,7 @@ export class OpfsFsSync implements FsSync {
         for (const record of records) {
           if (record.kind === 'delete') this.clearPersistFailuresUnder(record.path, last.sequence);
           else {
-            this.healPersistFailure(record.path, last.sequence);
+            this.healPersistFailure(record.path, last.sequence, record.kind === 'dir');
             this.healAncestorPersistFailures(record.path, last.sequence);
           }
         }
@@ -1094,7 +1120,7 @@ export class OpfsFsSync implements FsSync {
           );
           for (const dir of orderedDirs) {
             await this.persistDirectoryPath(dir, true);
-            this.healPersistFailure(dir, operation.sequence);
+            this.healPersistFailure(dir, operation.sequence, true);
             this.healAncestorPersistFailures(dir, operation.sequence);
           }
           if (surface) {
@@ -1123,9 +1149,10 @@ export class OpfsFsSync implements FsSync {
           // subtree no longer describes any divergence (same rule as
           // `persistRmAsync`). Without this, a pre-rename write failure on a
           // moved path would read as torn forever.
+          const directoryPaths = new Set(dirCreates);
           for (const path of operation.paths) {
             if (path === srcRoot) continue;
-            this.healPersistFailure(path, operation.sequence);
+            this.healPersistFailure(path, operation.sequence, directoryPaths.has(path));
             this.healAncestorPersistFailures(path, operation.sequence);
           }
           this.clearPersistFailuresUnder(srcRoot, operation.sequence);

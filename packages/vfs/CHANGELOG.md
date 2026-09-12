@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Preserve settled subtree failure scope across later entry reports; provisional timeouts still heal on real success (ADR-0429).
+- Retain native readers through compaction/close and keep detected corruption repair pending across unrelated appends (ADR-0429).
+
 - Wait for actual native guard release during busy-Worker replacement, bounded by the captured I/O budget; close late grants (ADR-0428).
 - Persist configured Workbench/SDK storage as validated OPFS segments with one physical writer, batched drains and crash-safe compaction (ADR-0425).
 

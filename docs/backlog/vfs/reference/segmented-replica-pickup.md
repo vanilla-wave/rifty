@@ -225,3 +225,19 @@ All three findings accepted; no criteria waiver.
   completes; subsequent repair flushes clean but fresh replay cold-restores.
   `replica-persistence` now captures this exact native overlap. A successful
   append cannot discharge a repair that requires a base.
+- Preserve baseline late rename/rm behavior: only settled native failures create
+  subtree uncertainty. Provisional active/fenced timeout reports remain owned by
+  the existing scheduler fence. Unchanged OPFS unit suite: 95 pass / 1 skip;
+  all eight native structural cases remain GREEN.
+- Native closeAll reader carrier passes. Five isolated revert-checks all RED:
+  forget inherited scope; treat directory entry as subtree proof; reclaim before
+  reader settles; close guard before reader settles; clear force-base on append.
+  Each exact production file restored after its probe.
+- All 37 replica/structural/paired/deadline/performance cases GREEN before the
+  provisional distinction; eight structural cases and 95 old unit assertions
+  re-run GREEN after it. Latest T medians 311.870 / 199.515 / 255.800 ms.
+- Restored final source: 38 native cases pass; T medians 313.350 / 201.500 /
+  256.745 ms. VFS typecheck/build and source-size ratchet pass.
+- Rebuilt exact compiler pin after repairs: 10,022,694 bytes, unchanged body
+  except emitted static/dynamic import names; SHA
+  957ad1d8a8508fd6b29d4731ac0defbe881ed6527befa5123bfdc23641f8c1f8.

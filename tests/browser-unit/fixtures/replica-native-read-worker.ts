@@ -5,7 +5,7 @@ import { installOpfsFs } from '@riftydev/vfs/internal';
 declare const self: DedicatedWorkerGlobalScope;
 interface Input {
   readonly mode: 'files' | 'replica';
-  readonly kind: 'concurrent' | 'read' | 'stat' | 'dir' | 'content' | 'controls';
+  readonly kind: 'concurrent' | 'read' | 'stat' | 'dir' | 'content' | 'controls' | 'close';
 }
 async function run(input: Input) {
   const root = await (await navigator.storage.getDirectory()).getDirectoryHandle(
@@ -145,6 +145,23 @@ async function run(input: Input) {
         (error: unknown) => ({ ok: false, error: String(error) }),
       );
       await blocked;
+      if (input.kind === 'close') {
+        fs.closeAll();
+        let acquiredBeforeRead = false;
+        try {
+          const competing = await installOpfsFs(root, { layout: 'replica', ioReportTimeoutMs: 40 });
+          acquiredBeforeRead = true;
+          competing.fsSync.closeAll();
+        } catch {
+          /* Native guard must still be owned by the admitted reader. */
+        }
+        released = true;
+        release();
+        const read = await reading;
+        const fresh = await installOpfsFs(root, { layout: 'replica', ioReportTimeoutMs: 100 });
+        fresh.fsSync.closeAll();
+        return { acquiredBeforeRead, read, reacquired: true };
+      }
       fs.writeFileSync('/b', new TextEncoder().encode('compacted'));
       const reported = await fs.flush();
       released = true;

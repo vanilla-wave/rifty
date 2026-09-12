@@ -57,3 +57,12 @@ for (const kind of ['read', 'stat', 'dir', 'content']) {
     expect(result.oldRemoved).toBe(true);
   });
 }
+
+test('closeAll retains native ownership until an already-admitted read settles', async ({
+  page,
+}) => {
+  const result = await probe(page, 'close');
+  expect(result.acquiredBeforeRead).toBe(false);
+  expect(result.read).toMatchObject({ ok: true, value: 'stable' });
+  expect(result.reacquired).toBe(true);
+});

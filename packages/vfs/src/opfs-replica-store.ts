@@ -145,6 +145,7 @@ export class OpfsReplicaStore implements ReplicaPersistence {
   #closing = false;
   #guard: FileSystemSyncAccessHandle | null;
   #forceBase = false;
+  readonly #readers = new Set<Promise<void>>();
   readonly layoutIssue?: OpfsLayoutIssue;
 
   private constructor(
@@ -221,7 +222,7 @@ export class OpfsReplicaStore implements ReplicaPersistence {
   closeAfter(settled: Promise<void>): void {
     if (this.#closing) return;
     this.#closing = true;
-    void settled.then(() => {
+    void Promise.all([settled, ...this.#readers]).then(() => {
       this.#guard?.close();
       this.#guard = null;
     });
@@ -253,11 +254,14 @@ export class OpfsReplicaStore implements ReplicaPersistence {
     const segments = base ? [encoded.digest] : [...previous, encoded.digest];
     await writeNative(this.root, segmentName(encoded.digest), encoded.bytes);
     await writeNative(this.root, HEAD, await encodeHead(segments));
+    const retiringReaders = base ? [...this.#readers] : [];
     this.#entries = entries;
     this.#segments = segments;
     this.#sizes = base ? [encoded.bytes.length] : [...this.#sizes, encoded.bytes.length];
-    this.#forceBase = false;
+    if (base) this.#forceBase = false;
     if (base) {
+      // New readers use the new map; only already-admitted native reads retain old segments.
+      await Promise.all(retiringReaders);
       // HEAD already certifies the tree. Failed reclamation leaves only unreachable bytes.
       for (const digest of previous) {
         if (digest === encoded.digest) continue;
@@ -269,6 +273,20 @@ export class OpfsReplicaStore implements ReplicaPersistence {
       }
     }
     return { base };
+  }
+
+  private async reading<T>(operation: () => Promise<T>): Promise<T> {
+    let release!: () => void;
+    const settled = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.#readers.add(settled);
+    try {
+      return await operation();
+    } finally {
+      this.#readers.delete(settled);
+      release();
+    }
   }
 
   private entry(path: string): CommittedReplicaEntry {
@@ -306,52 +324,59 @@ export class OpfsReplicaStore implements ReplicaPersistence {
   }
 
   async readFile(path: string): Promise<Uint8Array<ArrayBuffer>> {
-    const normalized = normalizeAbsolute(path);
-    const entry = this.entry(normalized);
-    if (entry.kind !== 'file') throw new VfsError('EISDIR', path);
-    const file = await this.nativeEntry(entry);
-    const location = entry.location;
-    if (!file || !location || location.digest === null)
-      throw new VfsError('EIO', path, 'Missing native file record');
-    const bytes = new Uint8Array(
-      await file.slice(location.offset, location.offset + location.size).arrayBuffer(),
-    );
-    if (bytes.length !== location.size || (await replicaDigest(bytes)) !== location.digest) {
-      this.#forceBase = true;
-      throw new VfsError('EIO', path, 'Native replica content checksum mismatch');
-    }
-    return bytes;
+    return this.reading(async () => {
+      const normalized = normalizeAbsolute(path);
+      const entry = this.entry(normalized);
+      if (entry.kind !== 'file') throw new VfsError('EISDIR', path);
+      const file = await this.nativeEntry(entry);
+      const location = entry.location;
+      if (!file || !location || location.digest === null)
+        throw new VfsError('EIO', path, 'Missing native file record');
+      const bytes = new Uint8Array(
+        await file.slice(location.offset, location.offset + location.size).arrayBuffer(),
+      );
+      if (bytes.length !== location.size || (await replicaDigest(bytes)) !== location.digest) {
+        this.#forceBase = true;
+        throw new VfsError('EIO', path, 'Native replica content checksum mismatch');
+      }
+      return bytes;
+    });
   }
 
   async stat(path: string): Promise<VfsStat> {
-    const entry = this.entry(normalizeAbsolute(path));
-    await this.nativeEntry(entry);
-    if (entry.kind === 'file' && entry.location === null)
-      throw new VfsError('EIO', path, 'Missing native file record');
-    return {
-      isFile: entry.kind === 'file',
-      isDirectory: entry.kind === 'dir',
-      size: entry.location?.size ?? 0,
-      mtime: entry.mtime,
-    };
+    return this.reading(async () => {
+      const entry = this.entry(normalizeAbsolute(path));
+      await this.nativeEntry(entry);
+      if (entry.kind === 'file' && entry.location === null)
+        throw new VfsError('EIO', path, 'Missing native file record');
+      return {
+        isFile: entry.kind === 'file',
+        isDirectory: entry.kind === 'dir',
+        size: entry.location?.size ?? 0,
+        mtime: entry.mtime,
+      };
+    });
   }
 
   async readdir(path: string): Promise<readonly VfsDirent[]> {
-    const normalized = normalizeAbsolute(path);
-    const entry = this.entry(normalized);
-    if (entry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
-    await this.nativeEntry(entry);
-    const children: VfsDirent[] = [];
-    for (const child of this.#entries.values()) {
-      if (child.path !== normalized && dirnameNormalized(child.path) === normalized)
-        children.push({
-          name: child.path.slice(child.path.lastIndexOf('/') + 1),
-          isFile: child.kind === 'file',
-          isDirectory: child.kind === 'dir',
-        });
-    }
-    return children.sort((left, right) =>
-      left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
-    );
+    return this.reading(async () => {
+      const entries = this.#entries;
+      const normalized = normalizeAbsolute(path);
+      const entry = this.entry(normalized);
+      if (entry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
+      await this.nativeEntry(entry);
+      const children: VfsDirent[] = [];
+      for (const child of entries.values()) {
+        if (child.path !== normalized && dirnameNormalized(child.path) === normalized)
+          children.push({
+            name: child.path.slice(child.path.lastIndexOf('/') + 1),
+            isFile: child.kind === 'file',
+            isDirectory: child.kind === 'dir',
+          });
+      }
+      return children.sort((left, right) =>
+        left.name < right.name ? -1 : left.name > right.name ? 1 : 0,
+      );
+    });
   }
 }
