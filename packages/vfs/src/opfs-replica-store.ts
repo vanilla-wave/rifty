@@ -1,6 +1,9 @@
 /// <reference lib="webworker" />
 import { VfsError } from './errors.ts';
-import type { PersistOperation } from './opfs-drain-scheduler.ts';
+import {
+  PERSIST_OPERATION_REPORT_TIMEOUT_MS,
+  type PersistOperation,
+} from './opfs-drain-scheduler.ts';
 import { OpfsPreloadError } from './opfs-preload.ts';
 import {
   type CommittedReplicaEntry,
@@ -28,6 +31,54 @@ const HEAD = 'HEAD';
 const GUARD = 'writer.lock';
 const MIN_COMPACTION_BYTES = 4 * 1024 * 1024;
 const MAX_SEGMENTS = 64;
+
+/** ADR-0428: terminate() may leave a busy native writer alive briefly. Never steal its guard. */
+async function acquireGuard(
+  directory: FileSystemDirectoryHandle,
+  timeoutMs: number,
+): Promise<FileSystemSyncAccessHandle> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+    throw new RangeError('OPFS replica admission timeout must be positive and finite');
+  const deadline = performance.now() + timeoutMs;
+  let expired = false;
+  let lastContention: unknown;
+  const timeoutError = () =>
+    new Error(`OPFS replica writer admission timed out after ${timeoutMs}ms`, {
+      cause: lastContention,
+    });
+  let timer!: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      expired = true;
+      reject(timeoutError());
+    }, timeoutMs);
+  });
+  const acquiring = (async () => {
+    const file = await directory.getFileHandle(GUARD, { create: true });
+    for (;;) {
+      if (expired || performance.now() >= deadline) throw timeoutError();
+      let handle: FileSystemSyncAccessHandle;
+      try {
+        handle = await file.createSyncAccessHandle();
+      } catch (cause) {
+        if ((cause as { name?: string } | null)?.name !== 'NoModificationAllowedError') throw cause;
+        lastContention = cause;
+        await new Promise<void>((resolve) => setTimeout(resolve, 25));
+        continue;
+      }
+      if (expired || performance.now() >= deadline) {
+        handle.close();
+        throw timeoutError();
+      }
+      return handle;
+    }
+  })();
+  try {
+    return await Promise.race([acquiring, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function absent(error: unknown): boolean {
   return (error as { name?: string } | null)?.name === 'NotFoundError';
@@ -109,16 +160,17 @@ export class OpfsReplicaStore implements ReplicaPersistence {
     if (issue) this.layoutIssue = issue;
   }
 
-  static async open(root: FileSystemDirectoryHandle): Promise<{
+  static async open(
+    root: FileSystemDirectoryHandle,
+    timeoutMs = PERSIST_OPERATION_REPORT_TIMEOUT_MS,
+  ): Promise<{
     readonly store: OpfsReplicaStore;
     readonly images: readonly ReplicaImage[];
   }> {
     const directory = await root.getDirectoryHandle(DIRECTORY, { create: true });
     let guard: FileSystemSyncAccessHandle;
     try {
-      guard = await (
-        await directory.getFileHandle(GUARD, { create: true })
-      ).createSyncAccessHandle();
+      guard = await acquireGuard(directory, timeoutMs);
     } catch (cause) {
       // A competing owner must not become an apparently successful memory owner.
       throw new OpfsPreloadError(

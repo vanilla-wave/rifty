@@ -178,3 +178,9 @@ watermark and live front; no queued second byte mirror is introduced.
 - A second RED holds a genuinely acquired native handle past the deadline;
   requires preferred refusal, eventual close and clean reacquisition. It fails
   before the repair. Existing busy-stop assertion stays unchanged.
+- GREEN: all 19 native replica/paired/deadline cases, plus unchanged public
+  `agentStopScenario`. Busy replacement now reacquires after native release;
+  held-I/O competitor remains refused for the full 30 s admission budget.
+- Revert-check: deleting only late-grant `handle.close()` makes the deadline
+  carrier fail again; exact production file restored. No acquisition failure
+  enters the mutation ledger; scheduler behavior unchanged.

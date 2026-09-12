@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Wait for actual native guard release during busy-Worker replacement, bounded by the captured I/O budget; close late grants (ADR-0428).
 - Persist configured Workbench/SDK storage as validated OPFS segments with one physical writer, batched drains and crash-safe compaction (ADR-0425).
 
 - Expose EROFS for host-configured readonly project files; runtime Node errors retain errno -30.

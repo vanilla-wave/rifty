@@ -99,7 +99,7 @@ export async function createReplicaPair(
   readonly fsSync: OpfsFsSync;
   readonly layoutIssue?: OpfsLayoutIssue;
 }> {
-  const { store, images } = await OpfsReplicaStore.open(root);
+  const { store, images } = await OpfsReplicaStore.open(root, options.ioReportTimeoutMs);
   let fsSync: OpfsFsSync;
   const vfs = new ReplicaVfs(store, () => fsSync);
   try {
