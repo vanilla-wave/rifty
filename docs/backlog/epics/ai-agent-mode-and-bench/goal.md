@@ -1,9 +1,10 @@
 ---
 kind: epic
 status: draft
+tier: works
 title: AI agent mode over rifty hosts + agent-bench (revives PR #111)
 created: 2026-09-12
-value: One headless AI coding agent runs over any rifty host (COI Workbench session or no-COI SDK project) with the same tool surface; the playground offers it hands-on; an external two-lane bench reports where rifty loses coding-agent quality vs a real local environment, classified per run
+value: One headless AI coding agent runs over any rifty host (COI Workbench session or no-COI SDK project) with the same tool surface; the playground offers it hands-on; an external three-lane bench reports where rifty loses coding-agent quality vs a real local environment, classified per run
 user_story: As the rifty maintainer and as a Workbench/SDK embedder, I want a real coding agent (Pi loop, standard coding-agent tools, honest budgets, session trace) over my rifty host plus a measured rifty-vs-local delta, but today main has zero AI code and PR #111's agent binds to six retired playground seams
 ---
 
@@ -48,8 +49,39 @@ runtime packages (M12 litmus); rifty grows only AI-agnostic capability.
 
 ## Invariants
 
-<!-- Drafted at FIT from Outcome/User scenario/Decisions — never new scope.
-     Each checked false on current main (evidence comment above the list). -->
+Baseline: main `acf594da9` has no agent package, playground AI mode or
+agent-bench (`reference/ai-agent-mode-fit-evidence.md` in distribution).
+All invariants below are absent there; existing host features are substrates.
+
+1. **I1** A framework-free Pi agent over public Workbench `ProjectSession` APIs
+   edits/searches files, runs the same shell path as user terminals and uses
+   available preview/diagnostics; absent host capabilities are not offered and
+   are named in its versioned prompt. AI stays outside runtime packages.
+2. **I2** Consumers add tools, instructions and capabilities to the same
+   loop/history/events/trace, and inject `fetch` or `streamFn`; the default is
+   OpenAI-compatible chat completions with an optional, never-persisted key.
+3. **I3** A failed next provider request retains completed tool calls/results;
+   Stop reaches the active host command, settles partial calls with a defined
+   outcome and permits the next command. Worker-replacement uncertainty appears
+   in results/events; continuation never replays an action because history lost it.
+4. **I4** Per-run limits produce distinct `budget-exceeded`; tool results have
+   the 16 KiB head/tail cap. Export includes transcript, tools/results, timings,
+   usage, agent terminal output, final diff and configuration without the key.
+5. **I5** Playground `react-vite` → lazy "+chat" streams replies/tool calls,
+   edits visible files/SCM, runs a labeled visible agent terminal and checks
+   preview. Settings persist only endpoint/model; Stop, Reset and trace export
+   work. Unreachable endpoints fail visibly with the dev-proxy remedy.
+6. **I6** The same headless agent over no-COI `sandbox.project()` obeys project
+   policy and host-owned edit/build ↔ preview modes, observes capability changes
+   and completes edit → build → preview → edit; no raw-fs fallback.
+7. **I7** Deterministic real-host embedding proof covers fixed deps/no registry,
+   custom tool/transport, absent diagnostics/preview, failed build → fix → build,
+   provider error after a write → continuation, and Stop → next command.
+8. **I8** `pnpm agent-bench` runs the five accepted tasks × three runs in COI
+   chat/local Pi CLI and the four React tasks in packed no-COI, using the same
+   model/profile. All three lanes pass mock-model smoke with identical judge
+   evidence. Reports show per-lane delta, evidence and human failure class per
+   run, distinguish budget exhaustion, and state tool/context non-equivalence.
 
 ## Challenge
 
@@ -60,6 +92,7 @@ the same file)
 
 ## Decisions
 
+- 2026-09-12 — FIT: tier `works`; existing happy-path requirements and explicit recovery obligations remain binding, unrelated crash/reload guarantees are not added. Invariants transcribe Outcome/scenarios/accepted decisions; unchanged premise reused from refine.
 - 2026-09-12 — user: «должно быть возможно использовать при использовании workbench» → headless package over public host APIs; playground consumes it.
 - 2026-09-12 — user: «no COI works. Скорее в формате "агент правит исходники, а потом из них можно что-то собрать"» → no-COI host adapter over ADR-0418 `sandbox.project()`; resident-concurrency (no project fs/commands while a `startBin` resident lives; only `preview_*` remains) = two host modes (preview / commands); entering = host `startBin`; leaving is NOT public on main (`restart` re-runs the resident, `SandboxResidentBin` has no stop) — recorded as the open substrate of the no-COI child, not fixed here.
 - 2026-09-12 — user: «без апрува» → no approve gate for writes/shell.
