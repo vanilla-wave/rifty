@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: draft
+status: ready
 title: One segmented OPFS substrate for base, mutations and compaction
 created: 2026-08-31
 why: current per-file drain is 10.320 s and fresh offline restore 4.465 s on Tracker; both storage budgets are 2 s
@@ -74,6 +74,8 @@ MemoryBackend-based owner, and removes the temporary delta substrate.
 - General storage-pressure UX/reclaim of untouched v1 or orphan bytes.
 
 ## Decisions
+
+- ready-verdict: 2026-09-12 — Contract+RED @ de8777d746f357a648ab0522101cbbada37cbf92
 
 - re-cut: 2026-09-12 — merge predecessor segmented-replica-append-compaction into this unit; omit temporary per-file deltas; keep I1/I2/I3/I5 and Outcome (c) — trace: none
 - 2026-09-12 — ADR-0425; DEC-2 /root/replica_decision; existing OpfsFsSync state, one scheduler batch mode, native physical guard, fresh native proof.

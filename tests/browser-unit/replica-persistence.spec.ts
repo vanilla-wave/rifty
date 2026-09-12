@@ -9,6 +9,37 @@ interface Entry {
   mtime?: number;
 }
 
+for (const policy of ['required', 'preferred'] as const) {
+  test(`real ${policy} owner uses replica writes under its selected namespace`, async ({
+    page,
+  }) => {
+    await gotoHarness(page);
+    const result = await page.evaluate(
+      async ({ url, policy }) => {
+        const module = await import(/* @vite-ignore */ url);
+        const worker = new Worker(module.default, { type: 'module' });
+        try {
+          return await new Promise<{
+            storage: { policy: string; backend: string; durability: string };
+            segments: number | null;
+          }>((resolve, reject) => {
+            worker.onmessage = ({ data }) =>
+              data.ok ? resolve(data.result) : reject(new Error(data.error));
+            worker.onerror = (e) => reject(new Error(e.message));
+            worker.postMessage({ kind: 'owner', policy, namespace: crypto.randomUUID() });
+          });
+        } finally {
+          worker.terminate();
+        }
+      },
+      { url: workerModuleUrl, policy },
+    );
+    expect(result.storage).toEqual({ policy, backend: 'opfs', durability: 'durable' });
+    expect(result.segments).not.toBeNull();
+    expect(result.segments).toBeGreaterThan(0);
+  });
+}
+
 for (const damage of [
   'head',
   'segment',
@@ -51,6 +82,7 @@ for (const damage of [
                   ? damage
                   : 'corrupt',
               damage,
+              policy: damage === 'native-read-error' ? 'preferred' : undefined,
               namespace: crypto.randomUUID(),
             });
           });
@@ -173,13 +205,13 @@ test('report timeout retains the physical writer until real settlement and late 
       first.postMessage({ kind: 'close', namespace });
       await closing;
       const waiting = once<{ acquired: boolean }>(second);
-      second.postMessage({ kind: 'contend', namespace });
+      second.postMessage({ kind: 'owner-contend', namespace });
       const competing = await waiting;
       const settled = once<{ clean: { total: number }; tree: Entry[] }>(first);
       first.postMessage({ kind: 'release', namespace });
       const completed = await settled;
       const reacquiring = once<{ acquired: boolean }>(second);
-      second.postMessage({ kind: 'contend', namespace });
+      second.postMessage({ kind: 'owner-contend', namespace });
       return { dirty, competing, settled: completed, reacquired: await reacquiring };
     } finally {
       first.terminate();

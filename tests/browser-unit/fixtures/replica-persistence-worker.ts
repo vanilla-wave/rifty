@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { OpfsFsSync, type PersistFailureReport, initBackend, syncMirror } from '@riftydev/vfs';
 import { installOpfsFs } from '@riftydev/vfs/internal';
+import { installWorkbenchOwnerStorageAuthority } from '../../../packages/workbench/src/workers/workbench-owner-storage.ts';
 import manifest from './tracker-tree-manifest.json';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -23,7 +24,10 @@ interface Input {
     | 'native-read-error'
     | 'compaction-quota'
     | 'configured'
-    | 'legacy';
+    | 'legacy'
+    | 'owner'
+    | 'owner-contend';
+  policy?: 'required' | 'preferred';
   mutated?: boolean;
   damage?: 'head' | 'segment' | 'truncate' | 'live-native';
   phase?: 'before-close' | 'after-close';
@@ -128,6 +132,26 @@ function writeSize(value: FileSystemWriteChunkType | undefined): number {
 }
 async function run(input: Input) {
   if (input.kind === 'ping') return { ready: true };
+  if (input.kind === 'owner-contend') {
+    try {
+      const authority = await installWorkbenchOwnerStorageAuthority('preferred', {
+        namespace: input.namespace,
+      });
+      return { acquired: true, backend: authority.snapshot.backend };
+    } catch (error) {
+      return { acquired: false, error: String(error) };
+    }
+  }
+  if (input.kind === 'owner') {
+    const authority = await installWorkbenchOwnerStorageAuthority(input.policy ?? 'required', {
+      namespace: input.namespace,
+    });
+    const raw = syncMirror();
+    if (!(raw instanceof OpfsFsSync)) throw new Error('owner is not using OpfsFsSync');
+    await seed(raw);
+    const root = await (await navigator.storage.getDirectory()).getDirectoryHandle(input.namespace);
+    return { storage: authority.snapshot, segments: await referencedSegments(root) };
+  }
   if (input.kind === 'legacy') {
     const root = await (await navigator.storage.getDirectory()).getDirectoryHandle(
       input.namespace,
@@ -295,6 +319,10 @@ async function run(input: Input) {
     }
     current.closeAll();
     try {
+      if (input.kind === 'native-read-error' && input.policy) {
+        await installWorkbenchOwnerStorageAuthority(input.policy, { namespace: input.namespace });
+        return { rejected: false };
+      }
       const fresh = await open(input.namespace);
       const retained =
         damagedFile === undefined
@@ -346,6 +374,7 @@ async function run(input: Input) {
     current.rmSync('/tree/a.txt');
     current.mkdirSync('/tree/a.txt', {});
     current.copyFileSync('/tree/moved/bytes', '/tree/a.txt/copy');
+    await current.flush();
     current.utimes('/tree/a.txt/copy', 12000, 34000);
     const clean = await current.flush();
     const expected = snapshot(current);

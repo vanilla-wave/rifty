@@ -83,3 +83,8 @@ The native stream decorator injects only allowed storage faults and never
 substitutes a rifty filesystem. The late-close case also explicitly closes the
 old instance and attempts reacquisition after real settle; its targeted RED still
 fails because baseline permits the competing writer before settle.
+
+Advisories accepted before implementation: the roundtrip now drains before
+metadata-only utimes; real required/preferred owner composition is exercised;
+contention and acquired-read failure pass through the preferred owner selector.
+Targeted native repeat: 4 RED / 1 baseline GREEN (5.4 s). No storage code changed.
