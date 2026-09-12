@@ -38,3 +38,13 @@ post-edit version checked.
 `workbench-project-vfs.test.ts`: 40 passed; `owner-vfs-authority.test.ts`:
 66 passed. Remaining baseline snapshot-call criteria for missing/outside paths
 were also replaced with real content-read observation, preserving exact errors.
+
+Gate follow-up (rifty-fix): first full run passed unit/parity but found JSON
+formatting and the owner's 875-line size ratchet. Extracting the read helpers
+fixed that ratchet. The next run reproduced one inventory RED in isolation:
+`extraction-boundary.contract.test.ts`, 163 production files versus its 162 pin
+(0 time-outs; 10,366 other tests passed). Cause: new reachable helper omitted
+from the explicit inventory count (`frozen-assumption`, source inventory).
+Pin advanced to 163; exact production-vs-import-closure equality and emitted
+runtime reachability checks remain. Independent Final+GREEN reviews this PR-4
+criterion change. No product behavior or oracle was weakened.
