@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
 import {
   type RuntimeController,
@@ -166,6 +167,8 @@ export interface ToolchainSandbox extends Sandbox {
   readonly toolchain: SandboxToolchain;
   readonly capabilityReport: SandboxCapabilityReport;
   restart(options: SandboxRestartOptions): Promise<SandboxRestartReport>;
+  /** Replace the Worker without relaunching its resident; host owns the preview element. */
+  stopResident(): Promise<SandboxRestartReport>;
 }
 
 /**
@@ -625,6 +628,9 @@ async function bootToolchainSandbox(
     }),
     ...(options.swError === undefined ? {} : { swError: options.swError }),
     restart,
+    async stopResident() {
+      throw new NotImplementedError('sandbox.stopResident');
+    },
     dispose: disposeSandbox,
   };
 }

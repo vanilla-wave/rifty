@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentMessage, AgentTool, StreamFn } from '@earendil-works/pi-agent-core';
 import type { ProviderRequestOptions } from '@earendil-works/pi-ai';
+import type { SandboxProjectOptions, ToolchainSandbox } from '@riftydev/sdk';
 import type { ProjectSession, ProjectTerminal } from '@riftydev/workbench';
 import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';
 
@@ -55,6 +56,14 @@ export interface WorkbenchAgentHostOptions {
   /** Supply the visible host terminal, or let the adapter own a dedicated one. */
   readonly terminal?: ProjectTerminal;
   readonly companion?: PlaygroundSessionTools;
+  readonly preview?: () => AgentPreview | undefined;
+}
+
+export interface SandboxAgentHostOptions {
+  readonly sandbox: ToolchainSandbox;
+  readonly project: SandboxProjectOptions;
+  /** Host owns startBin/stopResident; report preview while a resident owns the Worker. */
+  readonly mode: () => 'commands' | 'preview';
   readonly preview?: () => AgentPreview | undefined;
 }
 

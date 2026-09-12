@@ -1,0 +1,222 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Core Final+GREEN PASS; accept this slice and continue the linked UI/no-COI/bench goal. Independent browser 17/17, patch 7/7, Pi oracle 7/7; reviewed full gate and packed PASS evidence.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "523628b0cc4828e4ae802445e683f84a7f0359cc",
+  "unit_goal_source": "docs/backlog/distribution/ai-ide-pi-agent-harness.md; BASE acf594da9 (origin/main); independent fresh reviewer /root/core_final_review; accepted goal/map/raw refine/FIT evidence and ADR-0424; Contract+RED 3807502aca22fef2407af19e423941f80bdc5f40. Current-head independent logs: /tmp/pr333-core-independent-browser.log, /tmp/pr333-core-independent-patch.log, /tmp/pr333-core-independent-oracle.log. Raw delivery gate /tmp/pr333-core-delivery-check.log: 25/25 PASS. Packed /tmp/pr333-packed-core3.log: full PASS, 16 first-party/177 external tarballs. Packed predates the narrow outcome/Stop/BOM/path fixes: reuse covers unchanged packaging/install/HMR boundaries; current-head source browser/unit checks cover those repaired semantics. Retained packed graph independently checked: 178 HTTP lock resolutions have loopback origins and exact local tarball integrity; both Smithy versions retained; agent dist exports/no source/no caller alias. Detail: /tmp/pr333-core-final-review-evidence.md.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I5",
+      "location": "docs/backlog/playground/ai-mode-chat.md",
+      "summary": "Playground +chat, visible agent terminal, settings, Stop/Reset/export UI and live endpoint acceptance remain in the linked UI child."
+    },
+    {
+      "clause": "I3 + I6 + I7",
+      "location": "docs/backlog/distribution/ai-agent-no-coi-host.md",
+      "summary": "no-COI adapter, host policy/capability transitions, resident exit/full edit-build-preview-edit cycle and replaced-worker uncertainty remain linked goal work."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/distribution/agent-bench.md",
+      "summary": "Three-lane benchmark, common task/judge evidence, mock-model smoke and classified report remain in the linked measurement child."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: real Workbench files/search/patch/shell; consumer tools/instructions/fetch; absent capabilities; custom stream history/events",
+      "source": "acceptance",
+      "trace": "I1 + I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:116; tests/browser-unit/agent-core.spec.ts:206",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: committed write survives provider error; continuation does not replay; Stop settles calls and permits another command",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:49; tests/browser-unit/agent-core.spec.ts:79; tests/browser-unit/agent-core.spec.ts:275",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: per-run tool/time budgets, UTF-8 head/tail cap, complete key-free trace",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:106; tests/browser-unit/agent-core.spec.ts:172; tests/browser-unit/agent-core.spec.ts:218; tests/browser-unit/agent-core.spec.ts:236; tests/browser-unit/agent-core.spec.ts:249",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: real companion diagnostics/SCM and supplied preview fetch/query/click/type; absent capabilities omitted",
+      "source": "acceptance",
+      "trace": "I1 + I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:142; tests/browser-unit/agent-core.spec.ts:159",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: packed public consumer; fixed snapshot/no registry; failed build/edit/build; actual HMR; no caller alias",
+      "source": "acceptance",
+      "trace": "I1 + I7",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1313; tests/integration/workbench-packed-consumer.mjs:1349; tests/integration/fixtures/workbench-vite-consumer/src/agent-proof.ts:10; tests/browser-unit/agent-core-snapshot.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: same ProjectTerminal command stdout/stderr/owner exit; Stop physically settles and closes before reuse",
+      "source": "acceptance",
+      "trace": "I1 + I3 + ADR-0341",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:249; tests/browser-unit/agent-core.spec.ts:79; packages/agent/src/workbench-host.ts:97",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: owner versioned write/CAS and real watched-file HMR",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:226; tests/browser-unit/agent-core-snapshot.spec.ts:39; tests/integration/workbench-packed-consumer.mjs:1330",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: missing/ambiguous exact edit and mismatched patch fail; diagnostics equal real companion",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:116; tests/browser-unit/agent-core.spec.ts:142; packages/agent/src/apply-patch.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: reference Pi recovery retains completed action; skipped accepted calls get explicit Stop outcomes for custom streams",
+      "source": "acceptance",
+      "trace": "I2 + I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:87; tests/browser-unit/agent-core.spec.ts:49; tests/browser-unit/agent-core.spec.ts:206; tests/browser-unit/agent-core.spec.ts:275",
+      "note": ""
+    },
+    {
+      "row": "provider / torn-state after committed write: visible error and retained history",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:49; tests/browser-unit/fixtures/agent-core-proof.ts:140",
+      "note": ""
+    },
+    {
+      "row": "host command / cancellation: real Stop and release; unexecuted calls receive error outcomes",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:79; tests/browser-unit/agent-core.spec.ts:206; tests/browser-unit/fixtures/agent-core-proof.ts:165",
+      "note": ""
+    },
+    {
+      "row": "provider/tool / unbounded-read: wall-clock abort, byte cap, distinct budget status",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:106; tests/browser-unit/agent-core.spec.ts:172; tests/browser-unit/agent-core.spec.ts:218",
+      "note": ""
+    },
+    {
+      "row": "file / corrupt-input or concurrent edit: exact-match/CAS failure with host effect facts",
+      "source": "fault-matrix",
+      "trace": "I1 + I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:116; tests/browser-unit/agent-core.spec.ts:226; tests/browser-unit/agent-core.spec.ts:294; packages/agent/src/apply-patch.test.ts:4; packages/agent/src/workbench-host.ts:153",
+      "note": ""
+    },
+    {
+      "row": "capabilities / sibling-drift: current offered tools and prompt reflect host capabilities",
+      "source": "fault-matrix",
+      "trace": "I1 + I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:142; tests/browser-unit/agent-core.spec.ts:159; packages/agent/src/session.ts:106",
+      "note": ""
+    },
+    {
+      "row": "createAgentSession: native Pi extensions/transport, retained send/Stop history/events and export lifecycle",
+      "source": "public-api",
+      "trace": "ADR-0424 + I2 + I3 + I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:24; tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:49; tests/browser-unit/agent-core.spec.ts:79; tests/browser-unit/agent-core.spec.ts:206; tests/browser-unit/agent-core.spec.ts:236; tests/browser-unit/agent-core.spec.ts:265",
+      "note": ""
+    },
+    {
+      "row": "createWorkbenchAgentHost: public ProjectSession files/terminal with optional real companion capabilities",
+      "source": "public-api",
+      "trace": "ADR-0424 + I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:32; tests/browser-unit/agent-core.spec.ts:142; tests/browser-unit/agent-core.spec.ts:226; tests/browser-unit/agent-core.spec.ts:249",
+      "note": ""
+    },
+    {
+      "row": "createBrowserAgentPreview: actual supplied URL/frame fetch/query/click/type",
+      "source": "public-api",
+      "trace": "ADR-0424 + I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/agent-core-proof.ts:308; tests/browser-unit/agent-core.spec.ts:159",
+      "note": ""
+    },
+    {
+      "row": "Native Pi AgentTool/AgentEvent/AgentMessage/StreamFn, Type and host capability types support consumer extensions",
+      "source": "public-api",
+      "trace": "ADR-0424 + I2",
+      "status": "pass",
+      "citation": "packages/agent/src/index.ts:1; tests/browser-unit/fixtures/agent-core-proof.ts:39; tests/browser-unit/fixtures/agent-core-proof.ts:65; tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:206; tests/browser-unit/agent-core.spec.ts:265",
+      "note": ""
+    },
+    {
+      "row": "Frozen Pi 0.85.1 oracle: prompt/follow-up recovery, OpenAI wire, abort throw/structured outcomes, ignored abort, replay declaration",
+      "source": "frozen-artifact",
+      "trace": "ADR-0424 + I2 + I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:447; docs/backlog/distribution/reference/ai-agent-pi-pickup-evidence.md:128",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

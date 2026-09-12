@@ -16,6 +16,7 @@
     "@earendil-works/pi-agent-core": "0.85.1",
     "@earendil-works/pi-ai": "0.85.1",
     "@riftydev/io": "workspace:*",
+    "@riftydev/sdk": "workspace:*",
     "@riftydev/workbench": "workspace:*"
   }
 }

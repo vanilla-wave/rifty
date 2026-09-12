@@ -4,4 +4,5 @@ export { Type } from '@earendil-works/pi-ai';
 
 export { createAgentSession } from './session.ts';
 export { createWorkbenchAgentHost } from './workbench-host.ts';
+export { createSandboxAgentHost } from './sandbox-host.ts';
 export { createBrowserAgentPreview } from './browser-preview.ts';

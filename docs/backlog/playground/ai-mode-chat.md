@@ -6,7 +6,7 @@ created: 2026-09-12
 why: the goal needs a hands-on AI mode and a real chat UI for the bench's `rifty` lane; PR #111's `AiChatPanel.tsx` targeted a playground whose App/adapters were replaced by the sealed Workbench composition
 user_story: As a playground user, I want to toggle AI mode, point it at an OpenAI-compatible endpoint (no key required) and vibecode the react-vite starter while the agent edits files, runs the visible agent terminal and checks the preview, but today the playground has no agent at all
 epic: ai-agent-mode-and-bench
-blocked_by: [distribution/ai-ide-pi-agent-harness]
+blocked_by: []
 sources: [docs/backlog/epics/ai-agent-mode-and-bench/goal.md, docs/backlog/distribution/reference/ai-agent-mode-refine-evidence.md]
 code: [apps/playground/src/adapters/playground-app.tsx, apps/playground/src/adapters/playground-terminal-ui.ts, apps/playground/src/components/PreviewPanel.tsx, apps/playground/src/components/ScmPanel.tsx, apps/playground/src/glue/ts-diagnostics-sync.ts, apps/playground/vite.config.ts]
 ---
