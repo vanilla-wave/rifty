@@ -5,7 +5,7 @@ import type {
 } from '../workbench/project-materialization.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
 
-const ROOT = '/.rifty/workbench/v1';
+const ROOT = '/.rifty/workbench/v2';
 const PROJECTS_ROOT = `${ROOT}/projects`;
 const STAGES_ROOT = `${ROOT}/stages`;
 const encoder = new TextEncoder();

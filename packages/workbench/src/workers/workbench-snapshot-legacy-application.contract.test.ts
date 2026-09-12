@@ -246,7 +246,7 @@ describe('I8 snapshot policy preserves pending legacy adoption', () => {
       expect.soft(h.network.requests).toEqual([fixture.descriptor.assetUrl]);
       if (result.opened === undefined) return;
       const root = result.opened.projectRoot;
-      expect.soft(root).toBe('/.rifty/workbench/v1/projects/legacy-project/tree');
+      expect.soft(root).toBe('/.rifty/workbench/v2/projects/legacy-project/tree');
       expectRetainedFiles(h, root);
       expect
         .soft(decoder.decode(h.authority.readFileBytesSync(`${root}/package.json`)))
@@ -304,7 +304,7 @@ function pendingSiblingState(tree: ExactFsTree) {
   };
   return {
     source: projectTree(tree, siblingRoot),
-    target: projectTree(tree, `/.rifty/workbench/v1/projects/${siblingId}`),
+    target: projectTree(tree, `/.rifty/workbench/v2/projects/${siblingId}`),
     index: tree.files[legacyIndex],
     catalog: catalog.projects.find((project) => project.id === siblingId),
     journal: journal.refs.find((ref) => ref.id === siblingId),
@@ -433,7 +433,7 @@ describe('I8 legacy projects remain usable after adoption', () => {
         : undefined;
       expectPendingSibling(h, siblingBefore);
       const savedId = 'saved-legacy-scratch';
-      const root = `/.rifty/workbench/v1/projects/${savedId}/tree`;
+      const root = `/.rifty/workbench/v2/projects/${savedId}/tree`;
       let opened: OpenedPlaygroundProject | undefined;
       let restarted: Awaited<ReturnType<typeof openSavedSnapshotOwner>> | undefined;
       try {
@@ -609,7 +609,7 @@ function expectFollowingMutation(
   opened: OpenedPlaygroundProject | undefined,
 ): void {
   const id = operation === 'apply' ? 'legacy-project' : receiptSaveId;
-  const root = `/.rifty/workbench/v1/projects/${id}/tree`;
+  const root = `/.rifty/workbench/v2/projects/${id}/tree`;
   if (operation === 'apply') {
     expect(opened?.acquisition).toMatchObject({
       kind: 'ready',
@@ -617,7 +617,7 @@ function expectFollowingMutation(
     });
   } else {
     expect(h.catalog.snapshot()).toMatchObject({ active: { kind: 'project', id }, scratch: null });
-    expect(h.authority.existsSync('/.rifty/workbench/v1/projects/scratch/tree')).toBe(false);
+    expect(h.authority.existsSync('/.rifty/workbench/v2/projects/scratch/tree')).toBe(false);
   }
   const expected = operation === 'apply' ? artifact : fixture;
   expect(decoder.decode(h.authority.readFileBytesSync(`${root}/package.json`))).toBe(

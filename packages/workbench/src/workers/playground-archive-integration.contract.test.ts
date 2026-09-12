@@ -38,11 +38,11 @@ import {
 } from './test-fixtures/durable-owner-fs.ts';
 import { type WorkbenchProjectVfs, createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
-const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
-const ARCHIVE_TRANSACTION_ROOT = '/.rifty/workbench/v1/projects/project-a/.playground-archive-v1';
+const PROJECT_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
+const ARCHIVE_TRANSACTION_ROOT = '/.rifty/workbench/v2/projects/project-a/.playground-archive-v1';
 const ARCHIVE_TRANSACTION_STAGE = `${ARCHIVE_TRANSACTION_ROOT}/stage`;
 const ARCHIVE_TRANSACTION_PHASE = `${ARCHIVE_TRANSACTION_ROOT}/phase`;
-const FOREIGN_OWNER_PATH = '/.rifty/workbench/v1/projects/project-b/tree/private.ts';
+const FOREIGN_OWNER_PATH = '/.rifty/workbench/v2/projects/project-b/tree/private.ts';
 const SAME_PREFIX_FOREIGN_OWNER_PATH = `${PROJECT_ROOT}-backup/private.ts`;
 const COLON_PREFIX_FOREIGN_OWNER_PATH = `${PROJECT_ROOT}:backup/private.ts`;
 const SPACE_PREFIX_FOREIGN_OWNER_PATH = `${PROJECT_ROOT} backup/private.ts`;

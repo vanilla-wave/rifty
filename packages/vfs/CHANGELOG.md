@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Persist configured Workbench/SDK storage as validated OPFS segments with one physical writer, batched drains and crash-safe compaction (ADR-0425).
+
 - Expose EROFS for host-configured readonly project files; runtime Node errors retain errno -30.
 - Accept optional native-root/persistence boot configuration; share literal namespace validation with Workbench (ADR-0419).
 

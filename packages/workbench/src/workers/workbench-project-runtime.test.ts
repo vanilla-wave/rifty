@@ -59,7 +59,7 @@ const clearKernelWorkerUrl = (): void => {
   Reflect.apply(clearKernelWorkerUrlCandidate, undefined, []);
 };
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const NODE_ENTRY_WORKER_URL = 'https://example.test/node-entry.js';
 const DEV_SERVER_WORKER_URL = 'https://example.test/dev-server.js';
 const NODE_WORKER_RUNTIME_ENV = Object.freeze({

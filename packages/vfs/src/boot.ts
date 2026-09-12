@@ -82,7 +82,8 @@ export async function initBackend(options?: VfsStorageOptions): Promise<'opfs' |
         : await (await navigator.storage.getDirectory()).getDirectoryHandle(namespace, {
             create: true,
           });
-    await installOpfsFs(root);
+    if (storage === undefined) await installOpfsFs(root);
+    else await installOpfsFs(root, { layout: 'replica' });
   } else {
     if (storage !== undefined) throw new Error('OPFS is unavailable in this realm');
     installMemoryFs();

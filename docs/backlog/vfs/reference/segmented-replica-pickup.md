@@ -88,3 +88,25 @@ Advisories accepted before implementation: the roundtrip now drains before
 metadata-only utimes; real required/preferred owner composition is exercised;
 contention and acquired-read failure pass through the preferred owner selector.
 Targeted native repeat: 4 RED / 1 baseline GREEN (5.4 s). No storage code changed.
+
+## First GREEN
+
+Native suite: 16 passed (7.2 s), including true required/preferred owner, native
+read failure, independent metadata-only utimes, corruption, quota and kill.
+Per-file OpfsFsSync + v2 layout tests: 96 passed / 1 existing skip. VFS and
+Workbench typechecks pass; file-size ratchet holds.
+
+T median first flush **340.575 ms**, fresh offline restore **215.865 ms**,
+restore after 5,000 changes **278.990 ms** (three fresh processes each).
+The same committed manifest and unique content pattern as RED; every byte
+checked. Native budget suite: 1 passed (14.8 s).
+
+PR-4: existing Workbench unit fixture addresses move v1→v2 with the active
+store; their behavioral assertions remain. The dedicated old-v1 isolation
+contract and native legacy fixture retain v1. The old Store tests' two REDs
+were the expected namespace mismatch and corrupt-metadata seeding in old v1.
+
+Replica native prewarm/external per-file refresh controls are retired as named
+NotImplementedError (VFS README); ordinary FsSync is unchanged. No production
+call-site uses those controls. Final image capture uses the existing scheduler
+watermark and live front; no queued second byte mirror is introduced.

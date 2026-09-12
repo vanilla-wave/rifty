@@ -14,8 +14,8 @@ import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import { playgroundMutationIsDirty } from './playground-package-mutations.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
-const OUTSIDE = '/.rifty/workbench/v1/projects/project-b/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
+const OUTSIDE = '/.rifty/workbench/v2/projects/project-b/tree';
 const OWNER_EPOCH = 'workbench-project-vfs-test';
 const encoder = new TextEncoder();
 const packageJson = '{"name":"project-a","version":"1.0.0"}\n';

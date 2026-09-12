@@ -15,7 +15,7 @@ import {
   operationalHealthForScmSnapshot,
 } from './playground-session-tools-transport.ts';
 
-const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const PROJECT_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const SOURCE = '/src/main.ts';
 const OWNER_SOURCE = `${PROJECT_ROOT}${SOURCE}`;
 const encoder = new TextEncoder();

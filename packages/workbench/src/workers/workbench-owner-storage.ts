@@ -7,7 +7,7 @@ import {
   validateOwnerStorageNamespace,
 } from './owner-storage.ts';
 
-const PROOF_ROOT = '/.rifty/workbench/v1/storage-proof';
+const PROOF_ROOT = '/.rifty/workbench/v2/storage-proof';
 const DEFAULT_PROOF_TIMEOUT_MS = 30_000;
 const encoder = new TextEncoder();
 
@@ -55,10 +55,11 @@ function defaultInstallers(
       installMemoryFs();
     },
     openOpfs: async () => {
-      if (namespace === undefined) return installOpfsFs(undefined, { ioReportTimeoutMs });
+      if (namespace === undefined)
+        return installOpfsFs(undefined, { ioReportTimeoutMs, layout: 'replica' });
       const origin = await navigator.storage.getDirectory();
       const root = await origin.getDirectoryHandle(namespace, { create: true });
-      return installOpfsFs(root, { ioReportTimeoutMs });
+      return installOpfsFs(root, { ioReportTimeoutMs, layout: 'replica' });
     },
   });
 }

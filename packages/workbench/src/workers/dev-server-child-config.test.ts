@@ -71,7 +71,7 @@ afterEach(() => publishKernelEntryBootstrap(null));
 
 describe('dev-server entry bootstrap', () => {
   it('accepts guest root only with a typed private remote-root binding', () => {
-    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const remoteFsRoot = '/.rifty/workbench/v2/projects/project-a/tree';
     const cfg = {
       ...CFG,
       root: '/',

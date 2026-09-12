@@ -113,3 +113,9 @@ kill, new after close. Native guarantees:
 [atomic writable publication](https://fs.spec.whatwg.org/#api-filesystemfilehandle-createwritable).
 Product fault and performance carriers accompany the implementation; this native
 probe alone does not certify the replica.
+
+Replica batches capture final affected images/tombstones from the live front
+at admission; intermediate applied writes need no second queued byte mirror.
+The old native prewarm/external-refresh controls have no per-file substrate in
+replica mode and throw named NotImplementedError; no production caller uses
+them. Ordinary FsSync operations and default per-file controls retain behavior.
