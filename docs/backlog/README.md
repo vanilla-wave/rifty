@@ -32,8 +32,8 @@ A draft is one of two shapes — never a solution without its decision:
 
 - **question** — `## Question` + context; no prescribed carrier (a carrier with
   no spike/ADR fact = frozen assumption). Exits: compiled to `ready`, absorbed
-  into a goal's `map.md` fog, or declined into `docs/adr/README.md` §Declined
-  concepts.
+  into a goal's `map.md` fog (agent-owned), or declined into
+  `docs/adr/README.md` §Declined concepts.
 - **finding** — observed fact/gap with evidence: `## Context`, honest sources,
   compat ❌ / code-marker link. A draft whose `sources`/`code` refs no longer
   resolve on main is stale: refresh or delete.
@@ -102,7 +102,7 @@ ends with the completion report (§Report) — a ready goal is immediately
 runnable. FIT runs where the outcome was ratified: in the refine session for a
 refined epic (`rifty-refine` §4), in the hand-off session for a legacy epic.
 A `draft` goal directory is unfinished FIT input (an unanswered user question
-or a just-file), never a delivery or merge boundary (`PR-3`).
+or a just-file); no merge is required before FIT resumes (`PR-3`).
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
 `ledger.md` opens empty. Seeded children stay `draft` — a ready goal hands off
 with draft children; each compiles to `ready` at its own PICKUP, never at FIT
@@ -114,7 +114,8 @@ probe existing for its technical half is not a reason to park it
 (`docs/process/stages/fit.md` 3). Unanswered → the goal stays `draft`: a ready
 goal carries no `owner: user` fog, so its run is autonomous. Fog in a ready
 map is agent-owned — `<question> — owner: agent — <what settles it>`;
-`owner: user` appears only mid-run (`STOP-4`). A rejected rival route is recorded checkable in goal `##
+`owner: user` lives only in a `draft` goal (unanswered at FIT) or mid-run
+(`STOP-4`). A rejected rival route is recorded checkable in goal `##
 Decisions`: `rejected route: <route> — violates <I#|Outcome clause>` — the
 clause a later agent cites instead of re-deriving the comparison. Seed order proves the minimal pattern first (the
 null/install-only case of a shared mechanism lands before machinery for the

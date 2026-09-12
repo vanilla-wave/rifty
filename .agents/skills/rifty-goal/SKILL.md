@@ -23,9 +23,9 @@ the loop to `.claude/workflows/goal-run.js`. A single-mode ask ("fit X",
 | Map `## Items` empty and invariants provable | CLOSE → `docs/process/stages/close.md` |
 
 A refined epic normally arrives `ready`: FIT ran in the refine session
-(`rifty-refine` §4). A `draft` goal dir here: a recorded open question is
-asked first (`rifty-refine`), a just-file goes straight to FIT 3; FIT continues
-on the goal PR's branch (`PR-3`).
+(`rifty-refine` §4). A `draft` goal dir here: its recorded `owner: user`
+question is asked first, in this session (the `rifty-refine` interview); then
+FIT from step 1. Packaging per `PR-3`.
 
 Standing rules: `goal.md` is user-owned (explicit amendments per `RDY-6`); `ledger.md` only
 grows; `map.md` and unit contracts are the agent's path (`RDY-5`). The only

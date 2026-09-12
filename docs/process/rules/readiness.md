@@ -120,7 +120,8 @@ the scenario the agent wrote. An empty known question frontier is not that check
 4. Ask the informed independent frontier together. After an answer or new fact,
    revisit affected assumptions and dependent choices before closure. A live
    unresolved user choice cannot be declared settled or compiled into a ready
-   promise; dependent work waits, independent work continues (`STOP-1`).
+   promise; dependent work waits, independent work continues (`STOP-1`;
+   inside a goal only mid-run, `STOP-4`).
    Route-only unknowns remain agent-owned fog; an unanswered user question
    keeps the goal `draft` — never an invented answer.
 

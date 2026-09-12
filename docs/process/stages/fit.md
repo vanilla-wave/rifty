@@ -14,16 +14,16 @@ session. A stage is never a PR boundary; packaging per `../rules/pr.md`
    owner doc, or a ratchet — stop. A legacy epic failing the test is re-typed
    the same way and its file deleted.
 2. **Destination.** Create `goal.md` (`status: draft`): frontmatter,
-   `## Outcome`, `## User scenario`. A dir minted at refine formalize is
-   verified, not re-created. Legacy epic: carry ratified content verbatim;
-   delete the old file in the same commit.
+   `## Outcome`, `## User scenario`; an existing draft dir is verified, not
+   re-created. Legacy epic: carry ratified content verbatim; delete the old
+   file in the same commit.
 3. **Owner first, then probe-or-fog.** Apply `RDY-6` §Establishing scope to
    material assumptions, including mappings such as "path X is the issue
    scenario"; reuse refine evidence for unchanged scope. Type each
    by OWNER before choosing an exit — a probe settles facts, never value:
    - user-owned (observable scope: what the value requires, what must NOT
      change, whose scenario counts) → ask now; no answer → the goal stays
-     `draft` (step 9 does not flip);
+     `draft`, the question an `owner: user` fog line (step 9 does not flip);
    - agent-owned fact → discriminating probe (command + output + version;
      disposable spike subagents in parallel; artifact kept) or a fog line when
      it only shapes the route.

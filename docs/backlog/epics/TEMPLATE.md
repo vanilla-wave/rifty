@@ -62,8 +62,9 @@ Index, not store: one line + link per entry; content lives on items/ledger.
 <!-- Fog: in-scope questions not yet phrasable as a contract. A child whose
      contract depends on an open question is not seeded. Don't pre-slice fog.
      A user-owned question is ASKED at FIT (stages/fit.md 3); unanswered →
-     the goal stays draft. A ready map is agent-owned; owner: user appears
-     only mid-run (STOP-4). Split a mixed question by owner. -->
+     the goal stays draft, the question recorded here as owner: user. A ready
+     map is agent-owned; owner: user otherwise only mid-run (STOP-4). Split a
+     mixed question by owner. -->
 
 - <question> — owner: agent — <what settles it: probe/spike/design>
 

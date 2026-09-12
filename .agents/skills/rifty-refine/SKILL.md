@@ -59,7 +59,7 @@ its branch — Invariants, tier, final check, `status: ready`. A goal stays
 `draft` only when the user asked to just file it or a user question is still
 unanswered (`STOP-1a`): a ready goal carries no `owner: user` fog, its run is
 autonomous. FIT resumes when the answer arrives — here (§3) or at the next
-hand-off (`rifty-goal`); a draft goal is never a merge boundary (`PR-3`). A
+hand-off (`rifty-goal`); no merge is required in between (`PR-3`). A
 ready `goal.md` is amended in place (`RDY-6`). One `RDY-6` §Final check in a
 fresh context on the actual final drafts (fit.md 8 for an epic); FIT/PICKUP
 reuse it only for an unchanged result. Item `draft → ready` stays with PICKUP
