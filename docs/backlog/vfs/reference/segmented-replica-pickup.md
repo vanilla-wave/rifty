@@ -184,3 +184,11 @@ watermark and live front; no queued second byte mirror is introduced.
 - Revert-check: deleting only late-grant `handle.close()` makes the deadline
   carrier fail again; exact production file restored. No acquisition failure
   enters the mutation ledger; scheduler behavior unchanged.
+- After admission repair, fresh T medians: flush 337.515 ms, replay 223.470 ms,
+  post-mutation replay 283.610 ms (3 samples); deadline carrier GREEN after revert-check.
+- PR-4 final compiler import pin: same 10,022,694 bytes and unchanged body after
+  normalizing static/dynamic emitted import names; final SHA
+  5b431255962e888846352f393c05ef017612c0a24422c043ac5d2f1bfcb2846d.
+- Packed consumer exposed its own obsolete per-file orphan seed. It now uses the
+  packed public SDK to write/flush current v2 state, then Workbench verifies exact
+  retention/export/reopen. No internal source import or synthetic archive seed.
