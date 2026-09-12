@@ -39,3 +39,7 @@ Consumers stop backend-sniffing: `packages/shell/src/builtins.ts` drops the `@ri
 - [x] Parity case `tools/node-parity-runner/cases/fs/utimes-basic.case.ts` passes (Node vs rifty agree on `statSync('x').mtimeMs` after `utimesSync('x', 1, 2)`).
 - [x] OPEN_QUESTIONS.md moves Q-2026-05-25-touch-utimes to "Promoted" with this ADR as resolution.
 - [x] No `TODO(ADR): Q-2026-05-25-touch-utimes` markers remain (`pnpm todo:adr`).
+
+## Corrections (active)
+
+2026-09-12 — ADR-0425: Replica mode persists access/modification metadata; standalone per-file mode retains its memory-only times.

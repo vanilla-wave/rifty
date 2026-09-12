@@ -4,27 +4,12 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-2. `vfs/segmented-opfs-replica` — **replica-base-segment** (slice A) — I1,
-   I2: the IRREVERSIBLE format ADR (candidates: current per-file baseline; B
-   index + lazy — measured, killed; A traced segment replica — measured),
-   write-once base segment at init under the existing ledger/scheduler/stamp
-   contracts, validated replay on reopen, mutations after init on today's
-   per-file path with an explicit precedence + tombstone rule, store
-   namespace bump `/.rifty/workbench/v1` → `v2` under the selected
-   `storage.namespace` root (ADR-0402) so a legacy per-file tree is never
-   read (I3 mechanism; `v1` bytes untouched), replay publishes the tree
-   without waiting on stamp trust (ADR-0415/0417), the no-COI toolchain
-   Worker's `OpfsFsSync` is a consumer of the same format (sequenced after
-   #332), `## Fault matrix` at production tier. After it: I1–I2 hold on T
-   for a freshly materialized project; a legacy project reopens from its
-   definition.
-3. `vfs/segmented-replica-append-compaction` — **replica-append** (slice B) —
-   I5 + Outcome (c): mutations append into segments, deletions as tombstones,
-   compaction = base-segment re-emission from the live front with a
-   crash-safe swap; the per-file mutation layer retires. Blocked by slice A.
-   After it: one substrate under every writer; reopen after a package-scale
-   `npm install` still ≤ 2 s.
-4. `vfs/legacy-per-file-layout-cold-restore` — **legacy-notice** — I3
+1. `vfs/segmented-opfs-replica` — **segmented-replica** — I1/I2/I5 storage
+   boundary and Outcome (c): one format for base, append and compaction, existing
+   OpfsFsSync/ledger plus scheduler batch mode (ADR-0425). Re-cut A+B together:
+   omit temporary per-file deltas; preserve all accepted obligations. Native
+   fault and fresh-process performance proof on T; configured no-COI consumer.
+2. `vfs/legacy-per-file-layout-cold-restore` — **legacy-notice** — I3
    user-facing half: one-time `storage-layout` health issue (carrier: the
    health snapshot ADR-0413 extended; per selected namespace) when `v1`
    exists and `v2` is first created, playground starts with an empty catalog (never
@@ -34,23 +19,19 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Open questions
 
-- Re-measure I1/I2 on current main with T′: the 8.4 s reopen was two-pass
-  (`refreshIndex` + `preloadContent` on 1a851d7bc); ADR-0393's single
-  `walkOpfsTree` traversal is unmeasured on a large tree (its evidence is 8
-  files) — owner: agent — before slice A Contract+RED; the result re-pins
-  goal I2 "today" and the Invariants evidence commit. (The candidate-B
-  touch-fraction probe is closed: goal Decisions 2026-09-12, ADR-0393/0406/0411.)
+- Current native baseline measured: drain 10.320 s, fresh offline restore
+  4.465 s on T; `vfs/reference/segmented-replica-pickup.md`. Complete goal
+  proof still crosses public openProject → Node command → offline reopen →
+  real post-init npm install; storage-only numbers do not close those actions.
 - Order vs `fault-honest-opfs-persistence` items
   (`vfs/iso-git-ref-torn-write-rows`, `vfs/persist-ledger-fault-rows-completion`,
   `playground/reload-crash-consistency-fault-e2e`) — owner: agent — settled at
   slice A PICKUP by their merge state: landed rows are re-proven in the
   replica `## Fault matrix`; unlanded ones get a demotion note naming the
   substrate move, never silence.
-- Slice B probes: append cost per small write vs today's per-file
-  write-through, and the compaction trigger (appended bytes since last base
-  as a fraction of the base) — owner: agent — measured on slice A's writer
-  before slice B PICKUP; the crash surface of the swap is a fault row, not
-  fog.
+- Small-write/compaction cost: measure with the implemented replica before
+  Final+GREEN. Threshold and crash surface are fixed in ADR-0425; one unit
+  replaces the former A/B frontier. Owner: agent.
 - OS-cold reopen (page cache evicted): does replay keep ≥ 3× over per-file? —
   owner: agent — probe at slice A Contract+RED if the runner can evict the
   cache; otherwise recorded as an accepted limit (C3).

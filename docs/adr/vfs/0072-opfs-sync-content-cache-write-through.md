@@ -94,3 +94,5 @@ memory fallback, sync content cache and async write-through remain.
 - 2026-09-09 — ADR-0406 replaces only missing-content empty success: indexed
   uncached read/copy raises EIO. Existing cache/preload/write-through, pairing,
   lifecycle and backend-selector decisions remain.
+
+2026-09-12 — ADR-0425: Replica mode persists through validated segments instead of direct per-file OpfsVfs write-through; eager sync cache and flush lifecycle remain.

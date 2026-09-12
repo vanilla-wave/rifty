@@ -1,7 +1,7 @@
 ---
 area: vfs
 status: draft
-title: OPFS replica format for fast first open and reopen
+title: One segmented OPFS substrate for base, mutations and compaction
 created: 2026-08-31
 why: per-file OPFS persistence takes 7.18 s and eager reopen 4.91 s on a 98.2 MB / 14,492-file tree; a traced validated mini-journal measured 1.15 s append and 1.08 s read+replay
 user_story: As an SDK embedder opening and reopening a project with a baked 98.2 MB dependency snapshot, I want the multi-second storage wait reduced without weakening reload honesty.
@@ -13,143 +13,69 @@ code: [packages/vfs/src/opfs-sync.ts, packages/vfs/src/opfs-preload.ts, packages
 
 ## Context
 
-Chromium evidence on a real-path 14,492-file / exact 98.2 MB surrogate:
-current per-file drain median 7.18 s; reopen 4.91 s (walk 2.14 s, preload
-2.73 s, owner assignment 20 ms). A disposable content-addressed segment spike
-replayed the real 16,502-op drain trace: 1.15 s append at 85.5 MB/s and 1.08 s
-validated read+replay. The ≥50 MB/s design gate passes; owner assignment is not
-the ceiling. Evidence conditions and samples are in the reference doc.
+Accepted goal I1/I2/I5 storage boundary + I3 format trigger. T: 15,568 files /
+73,637,414 bytes. Current native drain 10.320 s, fresh offline preload 4.465 s;
+reference and independent DEC-2: `reference/segmented-replica-pickup.md`.
+ADR-0425 selects one physical replica behind existing OpfsFsSync and its
+ledger/scheduler. A+B are combined; no temporary per-file delta layer.
 
-Real embedder re-verified 2026-09-01 (`reference/tracker-embedder-snapshot-facts-2026-09-01.md`):
-snapshot T = 216 packages / 15,568 files / 73.6 MB logical (the "98.2 MB"
-was base64); cold `openProject` on workbench 0.4.0 is 16.3 s end-to-end
-(0.3.0: ≈ 50 s, 40.4 s promotion), reopen never timed. Projections on T:
-per-file drain 7.72 s, per-file reopen 4.95 s, journal 0.86 s each way.
-T's manifest, not S, is this item's proof substrate.
+## Acceptance
 
-Issue #256's end-to-end owner probe places the durability flush inside
-`openProject`: 40.4 s of a 42 s first materialization before `createProject`.
-ADR-0358 changed the drain mechanism; this session remeasured that same
-flush-shaped boundary at 7.18 s. The spike therefore proves a storage-boundary
-gain, not a one-second end-to-end readiness claim.
+1. Workbench/configured no-COI consumers use the same replica-backed OpfsFsSync
+   under the captured namespace root. Standalone default per-file installation
+   remains available. Sync reads are eager; no partial or lazy ready. → scenario, ADR-0425
+2. Binary bytes, file/directory shape, copy/rename/delete and timestamps survive
+   replay exactly. Healthy paired native reads return the committed bytes;
+   live-cache equality cannot conceal native corruption. → scenario, ADR-0425
+3. On T's committed path/size manifest, a 4-byte per-path discriminator prevents
+   artificial same-size content dedup. Median flush tail ≤2 s; fresh-process
+   offline restore ≤2 s before and after 5,000 changed paths (three samples).
+   Every reopened byte is checked outside the restore timer. → I1, I2, I5
+4. The store uses `/.rifty/workbench/v2`; a valid v1 definition/project is not
+   adopted. New materialization uses its definition, old native bytes remain.
+   The user-facing layout notice stays with the linked legacy unit. → I3
 
-This is a new persistence authority/format, so implementation needs an ADR with
-radically different candidates and migration/fault evidence. The spike is
-carrier evidence, not that decision.
+## Parity cases
 
-The ADR comparison must include at least: (A) traced segmented CAS replay;
-(B) per-file content retained, but a durable logical index/metadata snapshot
-removes the 2.14 s walk and lazy hydration removes the 2.73 s preload; (C)
-ephemeral + lazy hydration. Candidate B is now measured: its index is cheap
-(1.48 MB, 11 ms warm / 31 ms fresh-process load), but a cached-dir lazy burst
-takes 4.42 s versus today's 2.73 s preload. The sync-compatible path must
-pre-open all 14,492 Promise-valued access handles and takes 4.21 s total.
-Candidate A separately targets the 7.18 s first persist and replays the full
-tree in 1.14 s fresh-process. Index + cached lazy burst totals ~4.45 s, only
-~0.15 s below current fresh-process reopen + eager preload.
+- Existing OpfsFsSync and MemoryFsSync behavior remains the FsSync reference;
+  no new Node API. Native-backed roundtrip covers binary data, structural
+  changes and explicit utimes; existing sync and owner parity suites remain. → scenario, ADR-0425
 
-Fresh-process measurement did not reverse the prior result: current reopen
-4.60 s, journal 1.14 s. Plain deferred promotion is not a cheaper replacement:
-it can move the reply, but an immediate `node -e` fails because package-tree
-readiness is published only after the trusted stamp. Making that early session
-executable needs a new pending-ready contract; fetch/prepare/project setup
-also remains and owner death in the window takes the cold restore path.
+## Fault matrix
 
-Constraints already derived from current durability behavior:
-
-- persist-failure ledger stays logical-path granular; every segment records
-  its full affected path list;
-- install stamp remains independently writable/removable inside the attested
-  subtree; `package-lock.json` remains independently readable;
-- replay hydrates the complete logical index, including children sets;
-- mtime is persisted in the replica; format reserves symlink, hardlink, mode;
-- content addressing leaves a route to cross-project dedup without requiring
-  it now.
-
-Sibling/overlap: `vfs/opfs-lazy-content-preload` can remove some eager byte
-preload but not the measured 2.14 s tree walk or 7.18 s first persist —
-and is declined since by ADR-0393/0406/0411 (eager all-or-error preload, no
-lazy sync I/O; an indexed file without cached bytes is `EIO`).
-`perf/reference/dependency-store-and-vfs-links.md` targets install reuse and
-cross-project sharing, not the per-project reload format; keep its COW
-constraint if the designs later meet.
-
-Mechanism sweep (`fault-classes.md` §Class-kill): existing state owners are
-`OpfsFsSync.persistFailures` (path durability), `OpfsDrainScheduler` (ordering),
-`OwnerVfsAppliedJournal` (page publication), project migration journal
-(one-shot layout adoption), and content-addressed npm/eddy caches. The replica
-must replace per-file persistence under the existing ledger/scheduler
-contracts, not add a second writer, failure ledger, or publication journal.
-
-Storage boundary rows to settle before ready: torn/truncated segment and commit
-point; corrupt frame/index; quota/permission mid-append; same-origin cross-tab
-writers; provenance of content-addressed blocks; exact path-list identity
-(`lossy-aggregate`); compaction crash; legacy per-file migration. Actual Tracker
-trace remains missing; fresh browser process reopen is measured, but OS cache
-eviction was unavailable.
+| Boundary / fault | Required outcome and carrier | Trace |
+|---|---|---|
+| OPFS / corrupt-input | Invalid HEAD/segment/truncation: diagnosed cold restoration, no old file/claim publication; native bytes not deleted by recovery. `replica-persistence.spec.ts`. | → scenario, ADR-0425 |
+| OPFS / provenance-lie | Corrupt native bytes while cache remains intact: paired read rejects; healthy paired reads succeed. Same native fixture. | → scenario, ADR-0392, ADR-0425 |
+| OPFS / native read failure | NotReadableError rejects as OpfsPreloadError with cause, never cold-restore/memory success. Same fixture. | → ADR-0393, ADR-0411 |
+| OPFS / quota-perm-fail + lossy-aggregate | One failed physical batch records its full logical footprint beyond the 20-entry sample; a single repaired path heals only itself. Same fixture, 230 writes. | → scenario, ADR-0358, ADR-0425 |
+| OPFS / quota during compaction | Dirty report, prior HEAD/tree survives; no reachable old segment deleted. Same fixture after 63 append rounds. | → scenario, ADR-0425 |
+| OPFS / concurrent-same-key | Second writer refused until previous physical work really settles or its Worker dies. Reporting timeout retains exclusion and fence; late success heals. Same fixture. | → scenario, ADR-0358, ADR-0425 |
+| Worker death / torn-state | Kill at native before/after-close during append and compaction: replay one complete old/new tree, never a mixed batch. Same fixture. | → scenario, ADR-0425 |
 
 ## Challenge
 
 challenge: 2026-08-31 — 1 problem
-- Combined scope lacks cheaper-route evidence: per-file OPFS + durable index + lazy hydration could remove 4.87 s of the measured 4.91 s reopen cost without a new authority but remains unmeasured; segmented CAS is only uniquely evidenced for the 7.18 s first-persist boundary, so its migration, compaction, cross-tab, and provenance complexity is not yet justified against whole open-and-reopen UX.
+Cheaper per-file index/lazy route was unmeasured. The 2026-09-01 benchmarks
+resolved it: 4.42 s lazy burst versus 2.73 s preload; traced segment replay
+1.14 s. Accepted goal rejects route R and pending-ready. Reuse that premise;
+2026-09-12 independent DEC-2 selects existing owner/scheduler over a new
+MemoryBackend-based owner, and removes the temporary delta substrate.
 
-Answer: 2026-09-01 — candidate B measured and fails its decisive burst gate:
-4.42 s lazy first-touch versus 2.73 s current preload (+1.70 s, allowed
-~0.5 s); its only mechanism-free sync path pre-opens every handle. Journal
-fresh-process read+replay is 1.14 s and also removes the 7.18 s first-persist
-tail. Plain deferred promotion returns a non-executable session until the
-trusted stamp. Cheaper-route challenge closed; journal complexity still needs
-the fault and migration evidence above before ADR/ready.
+## Out of scope
+
+- Legacy user-facing health/catalog notice: linked
+  `vfs/legacy-per-file-layout-cold-restore`.
+- Public openProject → Node command → offline reopen → real post-init npm
+  install composition: required goal closure proof, explicitly still open in
+  the goal map; isolated storage measurements do not claim it complete.
+- Cross-project dedup, lazy sync I/O, guest overlays, native modules and a new
+  public persistence default. Existing loud unsupported behaviors remain.
+- General storage-pressure UX/reclaim of untouched v1 or orphan bytes.
 
 ## Decisions
 
-Fit-time (goal `epics/fast-project-open-reopen`, 2026-09-01); the compile at
-PICKUP prepends its `ready-verdict` line.
-
-- Route R (snapshot re-apply on reopen) rejected by the user 2026-09-01 —
-  option 3: the replica persists every tree (goal `## Decisions`).
-- Scope = slice A of the staged cut (goal map item 2): write-once base
-  segment at init + validated replay on reopen; mutations after init stay on
-  today's per-file path under an explicit precedence rule (per-file entry
-  wins over the base segment for the same path) and a tombstone for a
-  base-segment path deleted later — both from day one; store namespace bump
-  `/.rifty/workbench/v1` → `v2` so a legacy per-file tree is never read
-  (`v1` bytes untouched; the existing `project-materialization.ts` open path
-  re-materializes from the definition); the format ADR carries the
-  no-migration decision as an IRREVERSIBLE clause. Append into segments +
-  compaction = `vfs/segmented-replica-append-compaction`; one-time legacy
-  notice + playground honesty = `vfs/legacy-per-file-layout-cold-restore`.
-- Format ADR is IRREVERSIBLE (new persistence authority): ≥2 radically
-  different candidates kept/killed by named evidence — current per-file
-  baseline (B4/C3), B index + lazy hydration (C1/C2: killed, +1.70 s burst,
-  Promise-valued handle open vs sync `FsSync`), A traced segment replica
-  (B2/B3/C3: 1.15 s append, 1.14 s replay).
-- Legacy per-file layout: cold restore (user) — never read as project state;
-  owner names the layout, re-materializes from the definition; unsourced edits
-  are not kept (goal I3). Playground-catalog consequence is goal fog
-  (owner: user) and fires at this PICKUP.
-- One writer per origin is already loud on main (`WorkbenchOriginOccupiedError`
-  via Web Lock `rifty:workbench:v1`); the ADR states it as the clause the
-  replica's epoch/digest honesty depends on (C2 probe). No new lock.
-- Readiness: `openProject` resolution stays the named executable + durable
-  await (goal Outcome (a)); the write path never replies before the trusted
-  stamp; pending-ready is declined (`docs/adr/README.md` §Declined concepts).
-- Reserved, not built: symlink / hardlink / mode fields; content addressing as
-  the cross-project dedup route; manifests for fork/export.
-- Neighbour `cold-npm-install-speedup` rejected bulk-write consolidation for
-  per-file `require()` addressability — inapplicable here (guests read the
-  Memory VFS); the ADR says so.
-- Sibling `fault-honest-opfs-persistence` rows are re-proven on this substrate
-  in `## Fault matrix`, never dropped (goal map.md fog).
-- Re-check 2026-09-12 (goal Decisions): the reopen baseline was measured on
-  the two-pass init (`refreshIndex` + `preloadContent`); ADR-0393's single
-  `walkOpfsTree` traversal is the current per-file baseline and is
-  re-measured on T′ before Contract+RED — the format ADR compares against
-  that number, not 8.4 s. The namespace bump is per selected
-  `storage.namespace` root (ADR-0402). Replay publishes the tree without
-  waiting on stamp trust (ADR-0415/0417: a saved open never certifies
-  installation). The no-COI toolchain Worker (`no-coi-install-context.ts`,
-  ADR-0372/0392) is a consumer of the same `OpfsFsSync`: the format serves
-  it by construction, its `## Fault matrix` rows include that writer, and
-  this slice lands after #332 (`owner-storage.ts`). Candidate B's record in
-  the ADR cites ADR-0393/0406/0411 as the decisions that foreclose it.
+- re-cut: 2026-09-12 — merge predecessor segmented-replica-append-compaction into this unit; omit temporary per-file deltas; keep I1/I2/I3/I5 and Outcome (c) — trace: none
+- 2026-09-12 — ADR-0425; DEC-2 /root/replica_decision; existing OpfsFsSync state, one scheduler batch mode, native physical guard, fresh native proof.
+- 2026-09-12 — prior draft's compaction-quota append fallback replaced by exact failure + preserved HEAD; no second maintenance ledger/queue. Goal fault outcome is unchanged.
+- 2026-09-12 — preparation carriers and actual RED outputs: `reference/segmented-replica-pickup.md`; no new Node oracle asserted.

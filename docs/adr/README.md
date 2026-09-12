@@ -23,6 +23,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0402 | Mount Workbench namespaces through one captured OPFS root |
 | 0406 | Refuse unavailable OPFS cache bytes |
 | 0411 | Preserve acquired-tree preload failures in Workbench storage selection |
+| 0425 | Persist Workbench trees as validated OPFS segments |
 
 ### kernel
 

@@ -60,3 +60,5 @@ repair on open, crash transaction, new retry owner, or npm repair parity claim.
 proof-miss explicit-install-required and mandatory old-proof reinstall clauses.
 Nonmutating/network-free open, install-only durable equality and retained
 consumers’ protected claim handling remain.
+
+2026-09-12 — ADR-0425: Replica equality reads fresh authenticated native record bytes/metadata instead of per-file native paths; cleanliness and ordinary repair remain.

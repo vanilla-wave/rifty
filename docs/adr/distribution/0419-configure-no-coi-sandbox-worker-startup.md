@@ -39,3 +39,7 @@ through native Worker.name. VFS already mounts a selected native directory.
 
 `host-startup.fault.test.ts`, `sandbox-startup.contract.test.ts`, native
 `no-coi-configured-startup.spec.ts`; evidence in startup unit reference.
+
+## Corrections (active)
+
+2026-09-12 — ADR-0425: Configured no-COI storage selects the same replica mode; public storage options, namespace capture and startup policy remain.
