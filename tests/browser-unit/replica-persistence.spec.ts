@@ -177,7 +177,10 @@ test('report timeout retains the physical writer until real settlement and late 
       const competing = await waiting;
       const settled = once<{ clean: { total: number }; tree: Entry[] }>(first);
       first.postMessage({ kind: 'release', namespace });
-      return { dirty, competing, settled: await settled };
+      const completed = await settled;
+      const reacquiring = once<{ acquired: boolean }>(second);
+      second.postMessage({ kind: 'contend', namespace });
+      return { dirty, competing, settled: completed, reacquired: await reacquiring };
     } finally {
       first.terminate();
       second.terminate();
@@ -187,6 +190,7 @@ test('report timeout retains the physical writer until real settlement and late 
   expect(result.dirty.fenced).toBe(false);
   expect(result.competing.acquired).toBe(false);
   expect(result.settled.clean.total).toBe(0);
+  expect(result.reacquired.acquired).toBe(true);
   expect(result.settled.tree.find((e) => e.path === '/tree/b.txt')?.content).toEqual([
     ...new TextEncoder().encode('new-b'),
   ]);

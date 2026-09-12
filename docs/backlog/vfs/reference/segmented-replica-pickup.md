@@ -55,3 +55,31 @@ unchanged; legacy health remains linked until its final slice. Broader existing
 fault-honest-opfs-persistence drafts remain unlanded: replica carriers must prove
 required faults on the new substrate; their old native-file injections are not
 accepted by filename alone.
+
+## Contract+RED execution
+
+Production storage unchanged. Final full native/browser RED at `78aef7eac`:
+`RIFTY_PLAYGROUND_PORT=5399 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/replica-persistence.spec.ts tests/browser-unit/replica-storage-budget.spec.ts`.
+13 failed / 2 passed, 1.7 min. Semantic failures: current native format admits
+corrupt bytes without diagnosis; utimes disappear; quota reports one path instead
+of the failed batch's 230; closing a timed-out writer does not exclude a second
+owner; after-close kill exposes new-a with old-b; no compacted HEAD exists.
+Native read failure and before-close append preserve the existing good baseline.
+
+Formal budget RED uses distinct 4-byte file prefixes, and includes namespace
+acquisition in restore timing. Medians: first flush 10,451.515 ms; fresh offline
+restore 5,027.200 ms; restore after 5,000 changes 5,021.365 ms. Every byte checked.
+These are storage-boundary proofs, not a completed public opening/npm scenario.
+
+`pnpm exec vitest run packages/workbench/src/workers/workbench-project-store-layout.contract.test.ts`:
+1 failed, 4 ms — valid old definition adopted instead of absent in v2.
+
+`RIFTY_NO_COI_PORT=5491 RIFTY_NO_COI_ORACLE_PORT=5492 RIFTY_NO_COI_RESOURCE_PORT=5493 pnpm exec playwright test --config playwright.no-coi.config.ts tests/no-coi/replica-storage.spec.ts`:
+1 failed — real unisolated configured runtime reports per-file storage;
+OpfsFsSync and persisted bytes otherwise work. No import/harness failure.
+
+Strict standalone TypeScript check of all four browser fixture/spec files passes.
+The native stream decorator injects only allowed storage faults and never
+substitutes a rifty filesystem. The late-close case also explicitly closes the
+old instance and attempts reacquisition after real settle; its targeted RED still
+fails because baseline permits the competing writer before settle.
