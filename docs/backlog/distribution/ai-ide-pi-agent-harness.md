@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Headless AI agent core on Pi over public rifty hosts (Workbench session, no-COI project)
 created: 2026-06-13
 why: main has zero AI code; PR #111's agent bound to six retired playground seams; the same Pi loop + standard coding-agent tools must run over `@riftydev/workbench` ProjectSession and no-COI `sandbox.project()` with one tool surface
@@ -136,6 +136,7 @@ the public seam, dependency choice, no-auth wire and recovery normalization.
 
 ## Decisions
 
+- ready-verdict: 2026-09-12 — Contract+RED @ 3807502aca22fef2407af19e423941f80bdc5f40; `reference/ai-agent-core-contract-red.json`, independent /root/core_contract_review; 12 expected RED + 7 Pi oracle cases verified; 4 concerns retained for GREEN proof.
 - 2026-09-12 — PICKUP: ADR-0424; Pi/browser/host API probes and first five real-Workbench REDs captured in `reference/ai-agent-core-evidence.md`; remaining preparation is source/packed carriers for the same clauses, not a scope change.
 - 2026-09-12 — ADR at pickup (next-free number) replaces never-merged #111 branch decision record 0190: Pi 0.85.x pin, `node:fs` resolution (alias unreachable or loud), package placement above `workbench` in arch tiers, framework-free.
 - 2026-09-12 — first proof = mock OpenAI-compatible streaming endpoint driving a scripted session over a real Workbench `ProjectSession` (browser-unit/e2e), no real model in CI.

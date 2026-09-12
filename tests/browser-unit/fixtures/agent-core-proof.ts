@@ -21,13 +21,18 @@ async function file(path: string) {
   return new TextDecoder().decode((await currentProject().files.readFile(path)).bytes);
 }
 
-function setup(replies: readonly ScriptedReply[], maxToolCalls = 20, customStream = false) {
+function setup(
+  replies: readonly ScriptedReply[],
+  maxToolCalls = 20,
+  customStream = false,
+  apiKey?: string,
+) {
   const provider = scriptedProvider(replies);
   const events: AgentSessionEvent[] = [];
   const host = createWorkbenchAgentHost({ session: currentProject() });
   const session = createAgentSession({
     host,
-    settings: { ...settings, maxToolCalls },
+    settings: { ...settings, maxToolCalls, apiKey },
     fetch: provider.fetch,
     ...(customStream
       ? {
@@ -59,6 +64,30 @@ function setup(replies: readonly ScriptedReply[], maxToolCalls = 20, customStrea
     instructions: ['Project instruction: preserve the existing file.'],
     tools: [
       {
+        name: 'domain_status',
+        label: 'Domain status',
+        description: 'Read a domain record',
+        parameters: Type.Object({}),
+        async execute() {
+          return {
+            content: [{ type: 'text', text: 'The observed domain job failed.' }],
+            details: { status: 'failed' },
+          };
+        },
+      },
+      {
+        name: 'large_result',
+        label: 'Large result',
+        description: 'Consumer text-producing tool',
+        parameters: Type.Object({}),
+        async execute() {
+          return {
+            content: [{ type: 'text', text: `EXT_HEAD${'x'.repeat(20_000)}EXT_TAIL` }],
+            details: { custom: true },
+          };
+        },
+      },
+      {
         name: 'deliver_note',
         label: 'Deliver note',
         description: 'Integrator-owned action',
@@ -88,6 +117,10 @@ export async function proveTools() {
     [{ name: 'deliver_note', args: { text: 'custom-action' } }],
     'Finished.',
   ]);
+  let completedTrace: ReturnType<AgentSession['exportTrace']> | undefined;
+  session.subscribe((event) => {
+    if (event.type === 'status' && event.status === 'done') completedTrace = session.exportTrace();
+  });
   try {
     await session.send('Write, run and deliver.');
     return {
@@ -97,6 +130,7 @@ export async function proveTools() {
       requests: provider.requests,
       events,
       trace: await session.exportTrace(),
+      completedTrace: await completedTrace,
     };
   } finally {
     await session.dispose();
@@ -193,6 +227,11 @@ export async function proveBudget() {
 }
 
 export async function proveFileTools() {
+  await currentProject().files.writeFile(
+    '/ambiguous.txt',
+    new TextEncoder().encode('repeat repeat'),
+    { expectedVersion: null },
+  );
   const { session } = setup([
     [{ name: 'write_file', args: { path: 'nested/source.txt', content: 'alpha\nbeta\n' } }],
     [{ name: 'edit_file', args: { path: 'nested/source.txt', old: 'missing', new: 'wrong' } }],
@@ -210,6 +249,16 @@ export async function proveFileTools() {
       },
     ],
     [{ name: 'read_file', args: { path: 'nested/source.txt' } }],
+    [{ name: 'edit_file', args: { path: 'ambiguous.txt', old: 'repeat', new: 'wrong' } }],
+    [
+      {
+        name: 'apply_patch',
+        args: {
+          patch:
+            '--- a/nested/source.txt\n+++ b/nested/source.txt\n@@ -1,2 +1,2 @@\n wrong-context\n-delta\n+wrong\n',
+        },
+      },
+    ],
     'Finished.',
   ]);
   try {
@@ -292,11 +341,15 @@ export async function provePreview() {
 }
 
 export async function proveCap() {
-  const text = `HEAD${'é'.repeat(10_000)}TAIL`;
+  const text = `\ufeffHEAD${'é'.repeat(10_000)}TAIL`;
   await currentProject().files.writeFile('/large.txt', new TextEncoder().encode(text), {
     expectedVersion: null,
   });
-  const { session } = setup([[{ name: 'read_file', args: { path: 'large.txt' } }], 'Read.']);
+  const { session } = setup([
+    [{ name: 'read_file', args: { path: 'large.txt' } }],
+    [{ name: 'large_result', args: {} }],
+    'Read.',
+  ]);
   try {
     await session.send('Read the file.');
     return { status: session.status(), trace: await session.exportTrace() };
@@ -365,5 +418,144 @@ export async function proveConcurrentEdit() {
     };
   } finally {
     await host.close();
+  }
+}
+
+export async function proveKeyExport() {
+  const key = 'synthetic-key-"quote"-\\slash';
+  const { session, provider } = setup(['Reply without the key.'], 20, false, key);
+  try {
+    await session.send(`Synthetic input contains ${key}.`);
+    return {
+      trace: await session.exportTrace(),
+      authorization: provider.requests[0]?.authorization,
+      key,
+    };
+  } finally {
+    await session.dispose();
+  }
+}
+
+export async function proveShellParity() {
+  const command = 'node -e "console.log(\'PARITY_OUTPUT\'); process.exit(7)"';
+  const terminal = currentProject().terminals.open();
+  let stdout = '';
+  let stderr = '';
+  const detach = terminal.attach((chunk, stream) => {
+    if (stream === 'stdout') stdout += chunk;
+    else stderr += chunk;
+  });
+  let exitCode: number;
+  try {
+    const run = terminal.run(command);
+    exitCode = await run.exitCode;
+    await run.close();
+  } finally {
+    detach();
+    await terminal.close();
+  }
+  const { session } = setup([[{ name: 'shell', args: { command } }], 'Observed exit.']);
+  try {
+    await session.send('Run the command.');
+    return { reference: { stdout, stderr, exitCode }, trace: await session.exportTrace() };
+  } finally {
+    await session.dispose();
+  }
+}
+
+export async function proveDomainResult() {
+  const { session } = setup([[{ name: 'domain_status', args: {} }], 'Observed.']);
+  try {
+    await session.send('Read the domain status.');
+    return session.exportTrace();
+  } finally {
+    await session.dispose();
+  }
+}
+
+export async function provePartialStreamStop() {
+  const next = scriptedProvider(['Continued without executing the partial call.']);
+  const unmatchedResults: string[] = [];
+  let calls = 0;
+  const transport: typeof fetch = async (input, init) => {
+    const request = new Request(input, init);
+    if (calls++ === 0) {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          request.signal.addEventListener(
+            'abort',
+            () => controller.error(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+          controller.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({ id: 'partial', object: 'chat.completion.chunk', model: 'scripted', created: 1, choices: [{ index: 0, finish_reason: null, delta: { role: 'assistant', tool_calls: [{ index: 0, id: 'partial-call', type: 'function', function: { name: 'write_file', arguments: '{"path":"partial.txt","content":' } }] } }] })}\n\n`,
+            ),
+          );
+        },
+      });
+      return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
+    }
+    const body = await request.clone().json();
+    const messages = body.messages as Record<string, unknown>[];
+    const ids = new Set(
+      messages.flatMap((message) =>
+        Array.isArray(message.tool_calls)
+          ? message.tool_calls.map((call: { id: string }) => call.id)
+          : [],
+      ),
+    );
+    for (const message of messages)
+      if (message.role === 'tool' && !ids.has(String(message.tool_call_id)))
+        unmatchedResults.push(String(message.tool_call_id));
+    if (unmatchedResults.length)
+      return Response.json({ error: { message: 'orphaned tool result' } }, { status: 400 });
+    return next.fetch(input, init);
+  };
+  const session = createAgentSession({
+    host: createWorkbenchAgentHost({ session: currentProject() }),
+    settings,
+    fetch: transport,
+  });
+  let stopping: Promise<void> | undefined;
+  session.subscribe((event) => {
+    if (
+      event.type === 'agent' &&
+      event.event.type === 'message_update' &&
+      event.event.message.role === 'assistant' &&
+      event.event.message.content.some((block) => block.type === 'toolCall')
+    )
+      stopping ??= session.stop();
+  });
+  try {
+    await session.send('Begin a tool call.');
+    await stopping;
+    const stopped = session.status();
+    await session.send('Continue.');
+    return {
+      stopped,
+      finished: session.status(),
+      unmatchedResults,
+      paths: (await currentProject().files.readdir('/')).map((entry) => entry.path),
+      trace: await session.exportTrace(),
+    };
+  } finally {
+    await session.dispose();
+  }
+}
+
+export async function proveBomEdit() {
+  await currentProject().files.writeFile('/bom.txt', new TextEncoder().encode('\ufeffalpha'), {
+    expectedVersion: null,
+  });
+  const { session } = setup([
+    [{ name: 'edit_file', args: { path: 'bom.txt', old: 'alpha', new: 'beta' } }],
+    'Edited.',
+  ]);
+  try {
+    await session.send('Replace alpha only.');
+    return Array.from((await currentProject().files.readFile('/bom.txt')).bytes);
+  } finally {
+    await session.dispose();
   }
 }

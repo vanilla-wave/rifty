@@ -200,6 +200,7 @@ function workspaceDependencyNames(manifest) {
 async function packedDependencyClosure() {
   const packages = await workspacePackages();
   const pending = ['@riftydev/sdk', '@riftydev/workbench'];
+  if (!surfaceOnly) pending.push('@riftydev/agent');
   const closure = new Map();
   while (pending.length > 0) {
     const name = pending.pop();
@@ -283,16 +284,9 @@ async function externalDependencyClosure(workspaceClosure) {
     const dir = pending.pop();
     if (dir === undefined) continue;
     const manifest = await readJson(resolve(dir, 'package.json'));
-    const existing = closure.get(manifest.name);
-    if (existing !== undefined) {
-      if (existing.manifest.version !== manifest.version) {
-        throw new Error(
-          `Offline consumer requires two ${manifest.name} versions: ${existing.manifest.version}, ${manifest.version}`,
-        );
-      }
-      continue;
-    }
-    closure.set(manifest.name, { dir, manifest });
+    const identity = `${manifest.name}@${manifest.version}`;
+    if (closure.has(identity)) continue;
+    closure.set(identity, { dir, manifest });
     for (const name of installedDependencyNames(manifest)) {
       try {
         pending.push(await findInstalledPackage(name, dir));
@@ -539,30 +533,31 @@ async function startBrowserRegistry(packages) {
         sendResponse(request, response, 400, { 'Content-Type': 'application/json' }, '{}');
         return;
       }
-      const packageEntry = packages.get(name);
-      if (packageEntry === undefined) {
+      const entries = [...packages.values()].filter((entry) => entry.manifest.name === name);
+      if (entries.length === 0) {
         sendResponse(request, response, 404, { 'Content-Type': 'application/json' }, '{}');
         return;
       }
-      const version = packageEntry.manifest.version;
-      const tarballPath = [...tarballRoutes.entries()].find(
-        ([, entry]) => entry === packageEntry,
-      )?.[0];
-      if (tarballPath === undefined) throw new Error(`Missing registry tarball route for ${name}`);
-      const manifest = {
-        ...packageEntry.manifest,
-        dist: {
-          tarball: `${origin}${tarballPath}`,
-          integrity: packageEntry.integrity,
-          shasum: packageEntry.shasum,
-        },
-      };
+      const versions = {};
+      for (const entry of entries) {
+        const tarballPath = [...tarballRoutes].find(([, candidate]) => candidate === entry)?.[0];
+        if (tarballPath === undefined)
+          throw new Error(`Missing registry tarball route for ${name}`);
+        versions[entry.manifest.version] = {
+          ...entry.manifest,
+          dist: {
+            tarball: `${origin}${tarballPath}`,
+            integrity: entry.integrity,
+            shasum: entry.shasum,
+          },
+        };
+      }
       const body = Buffer.from(
         JSON.stringify({
           _id: name,
           name,
-          'dist-tags': { latest: version },
-          versions: { [version]: manifest },
+          'dist-tags': entries.length === 1 ? { latest: entries[0].manifest.version } : {},
+          versions,
         }),
       );
       responses.push({ kind: 'packument', packageName: name, status: 200 });
@@ -608,8 +603,8 @@ async function startBrowserRegistry(packages) {
     throw new Error('Packed consumer registry did not bind a TCP port');
   }
   origin = `http://127.0.0.1:${address.port}`;
-  for (const [name, packageEntry] of packages) {
-    const tarballPath = `/-/tarballs/${encodeURIComponent(name)}-${packageEntry.manifest.version}.tgz`;
+  for (const packageEntry of packages.values()) {
+    const tarballPath = `/-/tarballs/${encodeURIComponent(packageEntry.manifest.name)}-${packageEntry.manifest.version}.tgz`;
     tarballRoutes.set(tarballPath, packageEntry);
   }
   server.unref();
@@ -617,6 +612,17 @@ async function startBrowserRegistry(packages) {
     origin,
     requests,
     responses,
+    assertResolution(entry) {
+      const url = new URL(entry.resolved);
+      const artifact = url.origin === origin ? tarballRoutes.get(url.pathname) : undefined;
+      if (
+        !artifact ||
+        entry.integrity !== artifact.integrity ||
+        entry.version !== artifact.manifest.version
+      ) {
+        throw new Error(`Consumer resolution is not an exact local tarball: ${entry.resolved}`);
+      }
+    },
     deny: () => {
       denied = true;
     },
@@ -834,14 +840,15 @@ async function assertFirstPartyImportsStayExternal(installedRoot, manifest) {
   assertExactFirstPartyImports(expected, actual);
 }
 
-async function assertTarballInstall(consumerRoot, tarballs) {
+async function assertTarballInstall(consumerRoot, tarballs, installedRegistry) {
   const manifest = await readJson(resolve(consumerRoot, 'package.json'));
   const invalidSpecs = Object.entries({
     ...(manifest.dependencies ?? {}),
     ...(manifest.devDependencies ?? {}),
   }).filter(
-    ([, specifier]) =>
-      typeof specifier !== 'string' || !/^file:\.\.\/tarballs\/[^/]+\.tgz$/u.test(specifier),
+    ([name, specifier]) =>
+      typeof specifier !== 'string' ||
+      (name.startsWith('@riftydev/') && !/^file:\.\.\/tarballs\/[^/]+\.tgz$/u.test(specifier)),
   );
   if (invalidSpecs.length > 0) {
     throw new Error(`Non-tarball consumer dependencies: ${JSON.stringify(invalidSpecs)}`);
@@ -889,6 +896,10 @@ async function assertTarballInstall(consumerRoot, tarballs) {
     ([packagePath, packageEntry]) => {
       if (packageEntry?.link === true) return [[packagePath, 'link']];
       const resolved = packageEntry?.resolved;
+      if (typeof resolved === 'string' && /^https?:/u.test(resolved)) {
+        installedRegistry.assertResolution(packageEntry);
+        return [];
+      }
       return typeof resolved === 'string' && /^(?:https?:|link:|workspace:)/u.test(resolved)
         ? [[packagePath, resolved]]
         : [];
@@ -1299,6 +1310,36 @@ async function runChromiumJourney(consumerRoot, registryPackages) {
         strictKey,
       );
       assertHmrProof({ expectedSentinel: strictSentinel, ...strictHmr });
+      const agentTrace = await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).proveAgent('packed-agent-repaired'),
+      );
+      assert.equal(agentTrace.status, 'done', 'packed public agent build recovery');
+      await strictPage.waitForFunction(
+        () =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === 'packed-agent-repaired',
+        undefined,
+        { timeout: 60_000 },
+      );
+      const agentDocument = await strictApp.evaluate(() => {
+        globalThis.__agentDocumentMarker = 'packed-agent-original-document';
+        return globalThis.__agentDocumentMarker;
+      });
+      await strictPage.evaluate(async () =>
+        (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).agentWriteMessage('packed-agent-hmr'),
+      );
+      await strictPage.waitForFunction(
+        () =>
+          document.querySelector('#preview')?.contentDocument?.querySelector('#app')
+            ?.textContent === 'packed-agent-hmr',
+        undefined,
+        { timeout: 60_000 },
+      );
+      assert.equal(
+        await strictApp.evaluate(() => globalThis.__agentDocumentMarker),
+        agentDocument,
+        'agent write preserves preview document through HMR',
+      );
       await strictPage.evaluate(async () =>
         (await window.__RIFTY_PACKED_SNAPSHOT_ONLY__).closeAndProveSavedState(),
       );
@@ -1388,7 +1429,16 @@ async function main() {
   try {
     await run(
       'pnpm',
-      ['-r', '--filter', '@riftydev/sdk...', '--filter', '@riftydev/workbench...', 'run', 'build'],
+      [
+        '-r',
+        '--filter',
+        '@riftydev/sdk...',
+        '--filter',
+        '@riftydev/workbench...',
+        ...(!surfaceOnly ? ['--filter', '@riftydev/agent...'] : []),
+        'run',
+        'build',
+      ],
       {
         timeoutMs: 600_000,
       },
@@ -1399,14 +1449,35 @@ async function main() {
       tarballRoot,
       npmPackCacheRoot,
     );
-    const tarballs = new Map([...workspaceTarballs, ...externalTarballs]);
-    await writePackedConsumerManifest(consumerRoot, tarballs);
-    await run('npm', ['install', '--offline', '--no-audit', '--no-fund'], {
-      cwd: consumerRoot,
-      timeoutMs: 600_000,
-      env: { npm_config_cache: npmCacheRoot, npm_config_offline: 'true' },
-    });
-    await assertTarballInstall(consumerRoot, tarballs);
+    const installedPackages = new Map();
+    for (const [identity, entry] of externalClosure) {
+      const tarball = externalTarballs.get(identity);
+      if (!tarball) throw new Error(`Missing installed tarball ${identity}`);
+      const bytes = await readFile(tarball);
+      installedPackages.set(identity, {
+        name: entry.manifest.name,
+        manifest: entry.manifest,
+        tarball,
+        integrity: tarballIntegrity(bytes),
+        shasum: createHash('sha1').update(bytes).digest('hex'),
+      });
+    }
+    const installedRegistry = await startBrowserRegistry(installedPackages);
+    try {
+      await writePackedConsumerManifest(consumerRoot, workspaceTarballs);
+      await run(
+        'npm',
+        ['install', '--no-audit', '--no-fund', '--registry', installedRegistry.origin],
+        {
+          cwd: consumerRoot,
+          timeoutMs: 600_000,
+          env: { npm_config_cache: npmCacheRoot, npm_config_offline: 'false' },
+        },
+      );
+      await assertTarballInstall(consumerRoot, workspaceTarballs, installedRegistry);
+    } finally {
+      await installedRegistry.close();
+    }
     if (surfaceOnly) {
       const failures = [];
       for (const [script, timeoutMs] of [

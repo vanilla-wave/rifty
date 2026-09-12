@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Prepare lazy agent consumption; predeclare Pi optimizer dependencies so first use cannot reload the live project (ADR-0424).
+
 - Rebuild all dependency snapshots for the esbuild invocation cwd/ref artifact identity (ADR-0421).
 
 - Retain the concrete Playground SQLite asset type when validating against optional Workbench deployment options.
