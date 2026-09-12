@@ -48,15 +48,21 @@ completion, not a refusal.
 3. Do not ask what code/ADR/Node already answers. Apply reachability and refine-altitude rules (`docs/process/rules/readiness.md` `RDY-6`, `RDY-7`).
 4. For infra, ask only physically reachable fault branches within the epic tier; use `docs/process/rules/fault-classes.md` and `docs/backlog/README.md` §Tier.
 5. Treat dropping or weakening a traced (`I#` / `scenario`) row as user-owned (`RDY-5`); never soften it through ADR, backlog, Out of scope, or rewritten acceptance.
-6. For an epic, land the outcome as numbered `## Invariants` (shape: `docs/backlog/README.md` §Epic fit) — each false on main before the run.
+6. For an epic, grill until the outcome is statable as numbered `## Invariants`, each false on main (shape: `docs/backlog/README.md` §Epic fit); FIT step 4 lands them in this session (§4).
 
 ## 4. Formalize and report
 
 Hand the settled result to `rifty-to-backlog` in this invocation: mint/update
-with evidence, decisions and any early Challenge record. Before completion,
-run `RDY-6` §Final check of the written result on the actual final drafts in
-a fresh context; early Challenge does not replace it. FIT/PICKUP can reuse
-that final check only for an unchanged result. Document shape, `draft → ready`
-and `backlog:check` stay with the ordinary workflow. The driver delivers `docs/backlog/README.md`
-§Report before implementation. Refine-only ends with preparation; already
-authorized implementation continues without another permission request.
+with evidence, decisions and any early Challenge record. An epic with no open
+user fork continues into `docs/process/stages/fit.md` here — same session,
+same branch and PR: Invariants, tier, final check, `status: ready`. Refine
+leaves a goal `draft` only on a live `STOP-1a` fork or a user "just file it";
+that draft is FIT's input at the next hand-off (`rifty-goal`), never a merge
+boundary (`docs/process/rules/pr.md` `PR-3`). Before completion, run `RDY-6`
+§Final check of the written result on the actual final drafts in a fresh
+context; early Challenge does not replace it. FIT/PICKUP can reuse that final
+check only for an unchanged result. Item `draft → ready` stays with PICKUP
+(`RDY-1`); `backlog:check` with the ordinary workflow. The driver delivers
+`docs/backlog/README.md` §Report before implementation. Refine-only ends with
+preparation — for an epic, the ready goal; already authorized implementation
+continues without another permission request.

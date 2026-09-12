@@ -27,7 +27,8 @@ tier: <works|robust|production — required at ready>
 
 ## Invariants
 
-<!-- Drafted at FIT from Outcome/User scenario/Decisions — never new scope.
+<!-- Drafted at FIT — in the refine session for a refined epic (rifty-refine §4) —
+     from Outcome/User scenario/Decisions — never new scope.
      Each checked false on current main (evidence comment above the list).
      Reported to the user at FIT completion (README §Report).
      A run only proves them; every child row traces to one (RDY-3).

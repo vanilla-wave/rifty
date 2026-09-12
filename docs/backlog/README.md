@@ -99,7 +99,10 @@ A ready goal (`goal.md`) needs `## Outcome`, end-to-end `## User scenario`,
 numbered checkable `## Invariants` (each false on current main, evidence
 recorded), and `tier`. No approval gate: FIT flips `status: ready` itself and
 ends with the completion report (§Report) — a ready goal is immediately
-runnable.
+runnable. FIT runs where the outcome was ratified: in the refine session for a
+refined epic (same branch and PR, `rifty-refine` §4), in the hand-off session
+for a legacy epic. A `draft` goal directory is unfinished FIT input (open
+`STOP-1a` fork or just-file), never a delivery or merge boundary (`PR-3`).
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
 `ledger.md` opens empty. Seeded children stay `draft` — a ready goal hands off
 with draft children; each compiles to `ready` at its own PICKUP, never at FIT
@@ -137,8 +140,9 @@ the first IMPLEMENT. A standalone pickup without an earlier report emits it
 at that boundary. Repeated stages need only material changes, not the whole
 report again. Mid-task capture needs only its durable record.
 
-A report is not an approval gate. Refine-only authorizes preparation, not a
-build; already-authorized implementation continues without another hand-off.
+A report is not an approval gate. Refine-only authorizes preparation — for an
+epic, through FIT to a ready goal — not a build; already-authorized
+implementation continues without another hand-off.
 An unresolved user scope/value choice still needs the user's answer (`RDY-6`);
 silence is not a decision.
 

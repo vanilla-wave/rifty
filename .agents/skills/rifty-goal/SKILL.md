@@ -17,10 +17,14 @@ the loop to `.claude/workflows/goal-run.js`. A single-mode ask ("fit X",
 
 | State | Mode → procedure |
 |---|---|
-| No goal dir — a hand-off naming an outcome, or a legacy single-file epic | FIT → `docs/process/stages/fit.md` |
+| No goal dir — a hand-off naming an outcome, or a legacy single-file epic — or a `draft` goal dir (refine ended on a `STOP-1a` fork or a just-file) | FIT → `docs/process/stages/fit.md` |
 | Ready goal with an open frontier | PICKUP → `docs/process/stages/pickup.md` |
 | A slice of this goal just landed (Final+GREEN PASS on the goal branch), a unit left the path (`STOP-4`), or new facts arrived | RECHART → `docs/process/stages/rechart.md` |
 | Map `## Items` empty and invariants provable | CLOSE → `docs/process/stages/close.md` |
+
+A refined epic normally arrives `ready`: FIT ran in the refine session on the
+refine branch (`rifty-refine` §4). A `draft` goal dir here means its open user
+fork is asked first (`rifty-refine`), then FIT continues on the same branch.
 
 Standing rules: `goal.md` is user-owned (explicit amendments per `RDY-6`); `ledger.md` only
 grows; `map.md` and unit contracts are the agent's path (`RDY-5`). The only

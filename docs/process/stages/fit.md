@@ -2,7 +2,10 @@
 
 Input: a ratified outcome (user hand-off, refined draft, legacy single-file
 epic). Output: a ready goal directory (`../artifacts/goal.md`, `map.md`,
-`ledger.md`). Derive, never invent scope. Interactive: the user is present.
+`ledger.md`). Derive, never invent scope. Interactive: the user is present —
+for a refined epic that is the refine session itself, on its branch and PR
+(`rifty-refine` §4); a hand-off or legacy epic starts FIT in the hand-off
+session. A stage is never a PR boundary (`../rules/pr.md` `PR-3`).
 
 1. **Bounded-destination test.** Provably closable, or it is not a goal: a
    direction, theme, or standing invariant routes to `docs/ROADMAP.md`, an
