@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- Process: FIT runs in the refine session for a refined epic — same branch and PR (Invariants, tier, ready); a `draft` goal dir is FIT's input at the next hand-off, never a merge boundary. Seed: PR #333 ended at draft and planned FIT after merge. `rifty-refine` §3.6/§4 (dual Invariants ownership removed), `stages/fit.md`, backlog README §Epic fit/§Report, `rifty-goal` state table (draft goal dir row), `PR-3`, epic template; rehearsals re-run on the changed clauses.
+- Process: FIT runs in the refine session for a refined epic — same branch and PR (Invariants, tier, ready); a `draft` goal dir is FIT's input at the next hand-off, never a merge boundary. Seed: PR #333 ended at draft and planned FIT after merge. `rifty-refine` §3.6/§4 (dual Invariants ownership removed), `stages/fit.md`, backlog README §Epic fit/§Report, `rifty-goal` state table (draft goal dir row), `PR-3`, epic template. A user question unanswered at FIT keeps the goal `draft` — `owner: user` fog removed from ready goals (runs stay autonomous; `STOP-4` mid-run fog unchanged): backlog README §Epic fit, epic template, `RDY-6` 4, `fit.md` 3-4, `artifacts/map.md`. Rehearsals re-run on the changed clauses.
 
 - Include the esbuild runtime-service-refs patch in generated compatibility inventory (ADR-0421).
 

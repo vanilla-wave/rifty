@@ -1,6 +1,6 @@
 ---
 name: rifty-to-backlog
-description: Formalize a rifty finding or idea into a deduplicated, gated backlog draft. Direct invocation = mid-task/agent intake (audit/review/post-merge discoveries, no user in session); user-brought input enters via rifty-refine, which runs this formalization as its final step.
+description: Formalize a rifty finding or idea into a deduplicated, gated backlog draft. Direct invocation = mid-task/agent intake (audit/review/post-merge discoveries, no user in session); user-brought input enters via rifty-refine, which runs this formalization as its formalize step.
 ---
 
 Capture = verify relevance → dedup → record a fact/question that must wait.

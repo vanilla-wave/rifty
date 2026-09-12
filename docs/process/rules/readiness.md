@@ -121,8 +121,8 @@ the scenario the agent wrote. An empty known question frontier is not that check
    revisit affected assumptions and dependent choices before closure. A live
    unresolved user choice cannot be declared settled or compiled into a ready
    promise; dependent work waits, independent work continues (`STOP-1`).
-   Route-only unknowns remain agent-owned fog; unknowable user questions follow
-   FIT's fog rule and cannot be used to invent a destination-changing answer.
+   Route-only unknowns remain agent-owned fog; an unanswered user question
+   keeps the goal `draft` — never an invented answer.
 
 Later facts may open new forks; report checked scope and remaining uncertainty,
 never a guarantee that no future choice exists. Machines validate records, not
