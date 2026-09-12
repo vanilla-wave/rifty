@@ -1347,7 +1347,7 @@ describe('Workbench project VFS owner adapter', () => {
 
   it('returns an exact read failure without making a second authority observation', () => {
     const h = harness();
-    const snapshot = vi.spyOn(h.authority, 'snapshot');
+    h.contentReads.length = 0;
 
     h.vfs.handleFrame({
       type: 'workbench:project-vfs-read-file',
@@ -1355,7 +1355,7 @@ describe('Workbench project VFS owner adapter', () => {
       path: `${ROOT}/missing.ts`,
     });
 
-    expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(h.contentReads).toEqual([]);
     expect(h.emitted).toEqual([
       {
         type: 'workbench:project-vfs-read-file-result',
@@ -1431,10 +1431,10 @@ describe('Workbench project VFS owner adapter', () => {
     'rejects an out-of-project read before observing authority',
     (frame) => {
       const h = harness();
-      const snapshot = vi.spyOn(h.authority, 'snapshot');
+      h.contentReads.length = 0;
 
       expect(() => h.vfs.handleFrame(frame)).toThrow(TypeError);
-      expect(snapshot).not.toHaveBeenCalled();
+      expect(h.contentReads).toEqual([]);
       expect(h.emitted).toEqual([]);
     },
   );

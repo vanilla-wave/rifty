@@ -1,6 +1,6 @@
 ---
 area: perf
-status: draft
+status: ready
 title: Project VFS page reads copy the whole owner tree
 created: 2026-08-31
 why: each page read-file/read-directory request calls full OwnerVfsAuthority.snapshot; one target read on a 98.2 MB / 14,492-file tree measured 46.5 ms versus 0.01 ms direct
@@ -75,6 +75,8 @@ OPFS format and persistence waits remain with the replica slices; no API or
 guest filesystem semantics change.
 
 ## Decisions
+
+- ready-verdict: 2026-09-12 — Contract+RED @ e1de2db6694fc34c949a6f3310070ab82b66d025
 
 - 2026-09-12 — reuse accepted goal premise; read synchronously through existing
   authority FsSync and version accessors, without a new state owner or API.

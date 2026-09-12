@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Read project files/directories through targeted owner access; avoid full-tree byte copies on editor reads.
+
 - Saved-toolchain and Node-entry adapter preparation carry the live cwd and event-loop refs (ADR-0421).
 
 - Remove completed Node command process/stdio listeners before admitting the next command (ADR-0422).

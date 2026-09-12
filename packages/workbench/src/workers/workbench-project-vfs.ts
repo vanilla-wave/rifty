@@ -2,7 +2,6 @@ import {
   type VfsMutationGuard,
   type VfsMutationIntent,
   basename,
-  dirname,
   isAbsolute,
   normalizePath,
 } from '@riftydev/vfs';
@@ -14,7 +13,6 @@ import type {
   HostCommitAck,
   HostCommitRequest,
   OwnerVfsDurabilityReceipt,
-  OwnerVfsSnapshot,
   OwnerVfsSnapshotEntry,
 } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitAppliedError, VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
@@ -208,37 +206,57 @@ function projectMutations(
 
 type AtomicFileEntry = Extract<OwnerVfsSnapshotEntry, { readonly kind: 'file' }>;
 
-function atomicFile(snapshot: OwnerVfsSnapshot, path: string): AtomicFileEntry {
-  const entry = snapshot.entries.find((candidate) => candidate.path === path);
-  if (entry?.kind !== 'file') throw new Error(`No file exists at ${path}`);
+function requiredVersion(authority: OwnerVfsAuthority, path: string): string {
+  const version = authority.versionOf(path);
+  if (version === null) throw new Error(`owner VFS version missing for ${path}`);
+  return version;
+}
+
+function atomicFile(authority: OwnerVfsAuthority, path: string): AtomicFileEntry {
+  if (authority.statSyncOrNull(path)?.isFile !== true) {
+    throw new Error(`No file exists at ${path}`);
+  }
+  const content = authority.readFileBytesSync(path);
   return {
-    ...entry,
-    content: entry.content.slice(),
+    path,
+    kind: 'file',
+    size: content.byteLength,
+    content,
+    version: requiredVersion(authority, path),
   };
 }
 
 function atomicDirectory(
-  snapshot: OwnerVfsSnapshot,
+  authority: OwnerVfsAuthority,
   path: string,
 ): readonly ProjectVfsDirectoryEntry[] {
-  const directory = snapshot.entries.find((candidate) => candidate.path === path);
-  if (directory?.kind !== 'dir') throw new Error(`No directory exists at ${path}`);
-  return snapshot.entries
-    .filter((entry) => entry.path !== path && dirname(entry.path) === path)
+  if (authority.statSyncOrNull(path)?.isDirectory !== true) {
+    throw new Error(`No directory exists at ${path}`);
+  }
+  return authority
+    .readdirSync(path)
+    .map((child) => {
+      const childPath = `${path}/${child.name}`;
+      const kind = child.isDirectory ? ('dir' as const) : ('file' as const);
+      const size = kind === 'dir' ? 0 : authority.statSync(childPath).size;
+      if (size === undefined) throw new Error(`owner VFS file size missing for ${childPath}`);
+      return Object.freeze({
+        path: childPath,
+        kind,
+        size,
+        version: requiredVersion(authority, childPath),
+      });
+    })
     .sort((left, right) => {
       if (left.kind !== right.kind) return left.kind === 'dir' ? -1 : 1;
       const leftName = basename(left.path).toLowerCase();
       const rightName = basename(right.path).toLowerCase();
-      return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
-    })
-    .map((entry) =>
-      Object.freeze({
-        path: entry.path,
-        kind: entry.kind,
-        size: entry.size,
-        version: entry.version,
-      }),
-    );
+      return leftName < rightName
+        ? -1
+        : leftName > rightName
+          ? 1
+          : left.path.localeCompare(right.path);
+    });
 }
 
 /** Active-project namespace gate over the lifetime owner VFS authorities. */
@@ -745,14 +763,13 @@ export function createWorkbenchProjectVfs(
     assertProjectPath(projectRoot, frame.path, true);
     let result: OwnerProjectVfsFrame;
     try {
-      const snapshot = options.authority.snapshot();
       result = {
         type: 'workbench:project-vfs-read-file-result',
         requestId: frame.requestId,
         ok: true,
-        ownerEpoch: snapshot.ownerEpoch,
-        treeRevision: snapshot.treeRevision,
-        entry: atomicFile(snapshot, frame.path),
+        ownerEpoch: options.authority.ownerEpoch,
+        treeRevision: options.authority.treeRevision,
+        entry: atomicFile(options.authority, frame.path),
       };
     } catch (error) {
       result = {
@@ -771,14 +788,13 @@ export function createWorkbenchProjectVfs(
     assertProjectPath(projectRoot, frame.path, true);
     let result: OwnerProjectVfsFrame;
     try {
-      const snapshot = options.authority.snapshot();
       result = {
         type: 'workbench:project-vfs-read-directory-result',
         requestId: frame.requestId,
         ok: true,
-        ownerEpoch: snapshot.ownerEpoch,
-        treeRevision: snapshot.treeRevision,
-        entries: Object.freeze(atomicDirectory(snapshot, frame.path)),
+        ownerEpoch: options.authority.ownerEpoch,
+        treeRevision: options.authority.treeRevision,
+        entries: Object.freeze(atomicDirectory(options.authority, frame.path)),
       };
     } catch (error) {
       result = {

@@ -27,3 +27,14 @@ of the original dependencies. Whole snapshot asset is not committed.
 PR-4: baseline test demanded `snapshot()` once per request, cementing the
 defect. Transparent real-backend read observation replaces only that internal
 call-count criterion; exact existing protocol responses remain checked.
+
+## GREEN
+
+Same Chromium carrier: 1 passed (4.1 s). T file 0.00250 ms, directory
+0.03050 ms; small file 0.00325 ms, directory 0.03725 ms. Content reads:
+one target for a file, zero for a directory. Defensive reply bytes and fresh
+post-edit version checked.
+
+`workbench-project-vfs.test.ts`: 40 passed; `owner-vfs-authority.test.ts`:
+66 passed. Remaining baseline snapshot-call criteria for missing/outside paths
+were also replaced with real content-read observation, preserving exact errors.
