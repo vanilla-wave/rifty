@@ -126,3 +126,83 @@ final-check: 2026-09-12 — 3 problems
 ```
 
 Pass 2 confirmed problems 1–6 of pass 1 resolved (file:line cited), every `user:` line matched to the verbatim answers, every baseline ✅ cell backed by a test on main, no §Declined/Fidelity conflict, gates green. Advisory: `startBin` enters preview mode, `restart` leaves it (one direction). Resolutions of the 3 wording problems applied as stated (no scope change, no new answer → no third pass).
+
+## Plan validation against a real integrator (user, 2026-09-12)
+
+Source: the user's own session wrap-up «Уточнения к плану AI в Rifty исходя из
+текущего проекта» (reference: a Tracker frontend integration on rifty 0.7 with a
+sandbox agent — app-level tools `build_plugin`/`save_to_tracker`, an SDK brief in
+its system prompt, a `ChatCompletionTransport` abstraction with a same-origin
+CSRF transport and a local-model transport, a turn runner that appends history
+only after a whole turn). Framing stated by the user: «качественная универсальная
+реализация Rifty; текущий проект служит референсом потребностей. Реализация
+специально под Tracker не является целью» and «рекомендации по итогам анализа,
+а не уже согласованные изменения PR».
+
+Recommendations (condensed, the user's wording kept where decisive):
+
+1. «Расширения интегратора должны быть частью публичного интерфейса» — small
+   interface for extra tools, project instructions and available capabilities;
+   app actions go through the same loop, history, events and trace; domain
+   knowledge stays with the integrator; no `build_plugin`/`save_to_tracker` in
+   rifty.
+2. «Настройки endpoint не заменяют подключаемый транспорт» — public transport /
+   stream-function hook, preferably Pi's own extension; OpenAI-compatible stays
+   default; auth and backend specifics belong to the consumer. Open in the file:
+   is Pi's seam enough or is a thin adapter needed.
+3. «Восстановление после частичной ошибки — критерий качества ядра» — five
+   criteria: completed tool calls/results survive a failed next request; after
+   Stop the history remains continuable and partial calls have a defined
+   outcome; cancellation reaches the active command; Worker replacement
+   uncertainty is visible in result and events; continuation never repeats an
+   action only because it was lost from history. Not chat persistence.
+4. «No-COI: определить полный переход между edit и preview» — sequential model
+   fits; fix the owner of edit → build → preview → edit, how the agent learns a
+   capability change, prove the full cycle with one e2e; exclude the raw
+   `sandbox.fs` fallback from the standard adapter.
+5. «Проверки встраивания дополняют benchmark» — deterministic scenarios: fixed
+   deps/no registry; custom tool + transport; absent diagnostics/preview → no
+   dead tools offered; failed build → fix → build; provider error after a write →
+   correct continuation; Stop → next command. Bench caveat: same model + Pi
+   version ≠ tool/context equivalence; interpret the delta, never auto-attribute.
+
+Responsibility split recommended (rifty core vs integrator): loop, history,
+cancellation, budgets, events, trace, transport/tool seams, declared host
+capabilities, generic file/shell/preview tools — vs — UI, SDK instructions,
+domain actions, auth/CSRF/backend, permissions/dependency set, artifact
+delivery/verification.
+
+Verification in this session (Pi 0.85.1 `.d.ts` from the spike install; Tracker
+files read locally):
+
+```
+pi-agent-core/dist/agent.d.ts:9   streamFn: StreamFn
+pi-agent-core/dist/types.d.ts:13  StreamFn = (model, context, options?) => AssistantMessageEventStream | Promise<…>
+pi-agent-core/dist/types.d.ts:292 systemPrompt: string   :298 set tools(tools: AgentTool[])
+pi-agent-core/dist/types.d.ts:349 execute(toolCallId, params, signal?, onUpdate?)  :351 replay?: "never" | "safe"
+pi-agent-core/dist/agent-loop.js:142-143 tool results pushed into context before the next call; :227-233 stream error → assistant message appended
+pi-ai/dist/types.d.ts:62          ProviderRequestOptions.fetch?: FetchFunction
+Tracker: executeSandboxTool.ts (build_plugin/save_to_tracker; errors returned as text), chatCompletionStream.ts (ChatCompletionTransport.request), runSandboxAgentTurn.ts (produced returned at turn end), agentEffects.ts (transcript appended after the turn)
+tests/integration/no-coi-agent-browser-proof.mjs: failed command → next ✓, Stop → next ✓, overlap → failed ✓; failed vite build → rebuild and a preview round-trip: not covered
+```
+
+Answer to recommendation 2's open question: Pi's seam is sufficient — `fetch`
+injection covers a same-origin/CSRF transport that still speaks OpenAI chat
+completions; `streamFn` covers any other wire shape. No rifty adapter needed.
+
+User confirmation (`AskUserQuestion`, 2026-09-12): items 1–3 → «3. Контракт
+восстановления, 2. Подключаемый транспорт, 1. Расширения интегратора»; items 4–5
+→ «4. no-COI: хост владеет переходом, 5. Сценарии встраивания + оговорка bench».
+All five folded into goal Decisions, map, and the core / no-COI / bench drafts.
+
+Pass 3 (fresh read-only reviewer, clean context, working tree on fe61fa103; verbatim verdict):
+
+```
+final-check: 2026-09-12 — 4 problems
+1. ai-agent-no-coi-host.md:27,56; goal.md:64,78; map.md:5 — `restart` does NOT leave preview mode: sandbox.ts:561-568 re-runs startBin(residentRequest) whenever a resident was ever started; host.ts:551 sets residentRequest and nothing clears it; SandboxResidentBin has no stop; ADR-0377 D3 "restart the resident request". The promised full-cycle e2e is unreachable on main's public API. Fix: state the fact, record the gap loudly (host-side resident exit = new public API → ADR at pickup) — agent-owned.
+2. goal.md:77 "carried by … per-tool replay: never|safe" — Pi 0.85.1 only declares the field (types.d.ts:351) and reports it as telemetry; no loop code consumes it. Fix: "declared by Pi, enforced by rifty's continuation/adapter".
+3. ai-ide-pi-agent-harness.md:67-68 still states "subpath only … reconfirmed" while Decisions re-cuts it; map.md:22 "OpenAI-compatible only" reads as excluding the streamFn seam. Fix: wording.
+4. goal.md:75 "confirmed «1,2,3,4,5»" in guillemets is not what the user said. Fix: drop the guillemets or quote the labels.
+```
+
+Pass 3 verified every new Pi/rifty/Tracker citation, the four answer rounds, §Declined/Fidelity consistency, gates green. Resolutions: 1 → fact stated in goal/map/no-COI child; resident exit recorded as open substrate (fog + child Decisions), ADR at pickup. 2–4 → wording fixed as stated. No scope change and no new answer → no pass 4 (RDY-6: review-record additions and corrections of transcription do not invalidate the check).

@@ -38,6 +38,19 @@ where `diagnostics`/`preview`/`scm` are host capabilities: absent → not offere
 to the model and named in the prompt profile; never a stub. The believed
 baseline of what `shell` can do per host: evidence file §Baseline.
 
+Integrator seams (user plan validation 2026-09-12, evidence §Plan validation),
+all native to Pi 0.85.1: consumer tools = `AgentTool` entries in
+`AgentState.tools` (`execute(id, params, signal, onUpdate)`, throw on failure,
+per-tool `replay: "never" | "safe"`), project instructions = sections of
+`AgentState.systemPrompt`, declared capabilities from the host adapter; transport
+= default `pi-ai/api/openai-completions` with `ProviderRequestOptions.fetch`
+(consumer fetch: same-origin session, CSRF, body) or a full `Agent.streamFn`
+(`(model, context, options) → AssistantMessageEventStream`). Recovery: Pi pushes
+each tool result into the context as it completes and records a stream error as
+an assistant message (`stopReason: error`), so a failed next request keeps
+executed actions in history; cancellation = the same `signal` into `execute` →
+host `stop()`; ADR-0418 `worker: replaced` uncertainty rides the tool result.
+
 Pi 0.85.1 (spike 2026-09-12, evidence file): `pi-agent-core` +
 `pi-ai/api/openai-completions` bundle for browser ≈120 KB min+gz; static graph
 = `openai` SDK + `@earendil-works/chord` (its `esbuild` dep is not in the graph)
@@ -52,7 +65,8 @@ Quarry from #111 (port, do not cherry-pick): `apply-patch.ts`(+test),
 `session.ts`.
 
 Carried #111 decisions (user-grilled 2026-07-02, reconfirmed 2026-09-12): Pi
-exact-pinned via the `api/openai-completions` subpath only; prompt profile =
+exact-pinned, default transport via the `api/openai-completions` subpath (the
+"subpath only" clause is re-cut — Decisions); prompt profile =
 Pi baseline + rifty adapter block, versioned, no benchmark tuning; tool results
 capped 16 KiB head+tail with `[truncated N bytes]`; per-run limits → distinct
 `budget-exceeded`; trace = transcript + tool calls/results + timings + usage +
@@ -77,4 +91,7 @@ challenge: 2026-09-11 — 6 problems (goal-level, verbatim in the evidence file;
 
 - 2026-09-12 — ADR at pickup (next-free number) replaces never-merged #111 branch decision record 0190: Pi 0.85.x pin, `node:fs` resolution (alias unreachable or loud), package placement above `workbench` in arch tiers, framework-free.
 - 2026-09-12 — first proof = mock OpenAI-compatible streaming endpoint driving a scripted session over a real Workbench `ProjectSession` (browser-unit/e2e), no real model in CI.
+- 2026-09-12 — re-cut (user, plan validation): the carried #111 line "provider access ONLY through the `api/openai-completions` subpath" becomes "subpath is the default transport; public `fetch` or `streamFn` seam"; integrator tools/instructions/capabilities are public acceptance, never rifty-side domain actions.
+- 2026-09-12 — recovery rows carried for compile at PICKUP (user, plan validation): completed tool calls/results survive a failed next request; after Stop the history continues and partial calls have a defined outcome; cancellation reaches the active host command; Worker replacement uncertainty is visible in result + events; continuation never repeats an action only because it was lost.
+- 2026-09-12 — embedding scenarios for compile at PICKUP (mock model, deterministic): fixed deps + no registry access; custom tool + custom transport through the same loop/trace; absent diagnostics/preview → tools not offered; failed build → fix → successful build; provider error after a write → correct continuation; Stop of an active command → next command in the same session.
 - 2026-09-12 — parity rows carried from #111 for compile at PICKUP: `shell` stdout/exit == user terminal for the same line; `write_file` on a watched file == editor save (HMR); `edit_file` non-matching `old` → loud string-not-found; `diagnostics` == Problems panel for the same file.

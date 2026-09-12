@@ -24,9 +24,14 @@ TypeScript, preload, `-p -- <entry>` loud; no `tests/no-coi` spec runs it). Whil
 throws `sandbox.toolchain.resident-concurrency` — the agent as mapped then has
 NO file or shell tool, only `preview_*`; raw `sandbox.fs`/`runtime.eval` still
 work but bypass root/readonly policy. Two host modes — "preview" and
-"commands/build" — switched by the host's `restart`; whether the adapter may
-fall back to raw `sandbox.fs` in preview mode is an agent design choice (goal
-map fog), never a silent bypass; not a gap this item fixes.
+"commands/build" — entered by the host's `startBin`; NOT left by `restart`
+(it re-runs the resident, ADR-0377 D3; `SandboxResidentBin` has no stop) — on
+main preview mode ends only with `dispose()` + fresh boot. The host owns the
+switch, but the exit is an open substrate (goal map fog); the adapter exposes the current capability
+set and the agent observes the change (tool set + prompt note; Pi allows
+reassigning `state.tools` mid-session). Raw `sandbox.fs` fallback is excluded
+from the standard adapter (user, 2026-09-12). Resident/finite coexistence is not
+a gap this item fixes.
 
 Adapter mapping: `shell` → `project.run` (+ `stop` on abort; outcome
 `cancelled`/`failed`/`worker: replaced` surfaced verbatim in the tool result);
@@ -49,4 +54,5 @@ challenge: 2026-09-11 — 6 problems (goal-level, verbatim in the evidence file;
 
 ## Decisions
 
-- 2026-09-12 — proof shape follows `tests/no-coi/no-coi-agent-installed-cli.spec.ts`: packed no-COI page, mock model, scripted session edits the react-vite sources → `npm run build` → Stop mid-run → next command; readonly violation surfaces as a tool error.
+- 2026-09-12 — proof shape follows `tests/no-coi/no-coi-agent-installed-cli.spec.ts` / `tests/integration/no-coi-agent-browser-proof.mjs`: packed no-COI page, mock model, scripted session edits the react-vite sources → `npm run build` → Stop mid-run → next command; readonly violation surfaces as a tool error.
+- 2026-09-12 — user (plan validation): one e2e proves the full cycle edit → build → preview (host `startBin`, agent `preview_*`) → host ends the resident → edit → failed `vite build` → fix → successful build; the agent sees each capability change; commands/project fs in preview mode surface the host's loud error, never a raw-fs bypass. Blocker recorded: no public resident exit on main (`restart` re-runs it) — a host-side exit is new SDK surface → ADR at pickup, or the e2e stops at the loud `resident-concurrency` error and names the gap.

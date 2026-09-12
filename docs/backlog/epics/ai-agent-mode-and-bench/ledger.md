@@ -1,1 +1,2 @@
 - 2026-09-12 — refined from PR #111 revival (user hand-off); evidence + critic + final check: `docs/backlog/distribution/reference/ai-agent-mode-refine-evidence.md`
+- 2026-09-12 — amended (draft) after the user's plan validation against a real integrator: five recommendations accepted into goal Decisions; source + verification: evidence §Plan validation

@@ -57,4 +57,5 @@ challenge: 2026-09-11 — 6 problems (goal-level, verbatim in the evidence file;
 ## Decisions
 
 - 2026-09-12 — ADR at pickup (next-free number) replaces never-merged #111 branch decision record 0191 with the same decisions; reports land in `tools/agent-bench/reports/` (gitignored except committed summaries); no secrets in traces.
+- 2026-09-12 — user (plan validation): the report interprets the `local-reference` delta — a shared model + Pi version does not prove tool/context equivalence with the Pi CLI; observed delta is classified, never auto-attributed to the rifty runtime. Embedding scenarios (custom tool/transport, absent capabilities, failed build → repair, provider error after write, Stop → next) are deterministic acceptance of the core/no-COI children, not bench tasks.
 - 2026-09-12 — `node-endpoint` control task is COI-only by construction (a user `server.js` gets no preview in no-COI) — recorded, not a bench finding.

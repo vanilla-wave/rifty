@@ -14,7 +14,10 @@ main. Two of #111's three pillars already landed in re-cut form and are NOT this
 goal: real esbuild (ADR-0226) and the react-vite starter with the same four
 planted rough edges (PR #300). What remains: (1) a headless, framework-free
 agent package — Pi loop + standard coding-agent tools + per-run budgets + trace —
-consuming only public rifty host APIs; (2) host adapters for `@riftydev/workbench`
+consuming only public rifty host APIs, with two public seams for the integrator —
+its own tools/instructions/capabilities through the same loop, history, events
+and trace, and its own transport (`fetch` or full `streamFn`) — and an explicit
+recovery contract for partial failure; (2) host adapters for `@riftydev/workbench`
 `ProjectSession` (COI) and no-COI `sandbox.project()` (ADR-0418), same prompt
 profile and tool surface, capabilities the host lacks are not offered to the
 model and are named in the prompt; (3) the playground "+chat" reference UI;
@@ -31,8 +34,10 @@ runtime packages (M12 litmus); rifty grows only AI-agnostic capability.
    in the visible agent terminal, checks the preview → SCM shows the diff →
    "Export session" downloads the trace JSON (no key inside).
 2. Workbench embedder (COI): wire the agent to an open `ProjectSession`; the
-   same session's terminal/files/preview serve the agent; the consumer renders
-   its own UI from the agent's event stream.
+   same session's terminal/files/preview serve the agent; the consumer adds its
+   own app-level tools (e.g. a build-and-deliver action) and project
+   instructions, plugs its own transport (same-origin session/CSRF), and renders
+   its own UI from the agent's event stream — without forking the loop.
 3. SDK embedder (no-COI): wire the agent to `sandbox.project({root, readonlyPaths,
    allowedCommands})`; agent edits → `npm run build` → Stop → next command;
    proven by e2e in `tests/no-coi` (no hands-on page in v1 — user choice).
@@ -56,7 +61,7 @@ the same file)
 ## Decisions
 
 - 2026-09-12 — user: «должно быть возможно использовать при использовании workbench» → headless package over public host APIs; playground consumes it.
-- 2026-09-12 — user: «no COI works. Скорее в формате "агент правит исходники, а потом из них можно что-то собрать"» → no-COI host adapter over ADR-0418 `sandbox.project()`; resident-concurrency (no project fs/commands while a `startBin` resident lives; only `preview_*` remains) = two host modes (preview / commands) switched by `restart`, not a gap to fix here.
+- 2026-09-12 — user: «no COI works. Скорее в формате "агент правит исходники, а потом из них можно что-то собрать"» → no-COI host adapter over ADR-0418 `sandbox.project()`; resident-concurrency (no project fs/commands while a `startBin` resident lives; only `preview_*` remains) = two host modes (preview / commands); entering = host `startBin`; leaving is NOT public on main (`restart` re-runs the resident, `SandboxResidentBin` has no stop) — recorded as the open substrate of the no-COI child, not fixed here.
 - 2026-09-12 — user: «без апрува» → no approve gate for writes/shell.
 - 2026-09-12 — user: «Headless + playground «+chat» (Recommended)» → agent cut: no "vibe" layout (layout-only difference per #111, REV-7).
 - 2026-09-12 — user: no-COI hands-on = «Только библиотека + e2e в tests/no-coi» → no examples page, no playground no-COI mode.
@@ -67,6 +72,12 @@ the same file)
 - 2026-09-12 — #111 branch decision records 0190/0191 exist only on `origin/ai-mode-mvp` (never merged): core pickup writes new ADRs at next-free numbers ("replaces the never-merged branch ADRs"), absorbing draft `distribution/ai-ide-pi-agent-harness` (now this goal's core child).
 - 2026-09-12 — carrier: workspace package above `workbench` in `tools/checks/arch-rules.cjs` tiers, framework-free (D-002 keeps solid in playground); npm publication is a separate confirm-first act (DEC-3; `@riftydev/git`/`ts-language-service` precedent still unpublished).
 - 2026-09-12 — tier: agent-fitted at FIT (`works` proposed: honest happy path, reachable faults loud), not a user fork (critic P4).
+- 2026-09-12 — user (plan validation against a real integrator, evidence §Plan validation; all five confirmed, option labels verbatim there): integrator extensions are public — consumer tools, project instructions and declared capabilities enter the same loop/history/events/trace (Pi `AgentState.tools`/`systemPrompt`; tool failures are thrown, Pi records the error result); no integrator-specific tools in rifty.
+- 2026-09-12 — user (same): transport is pluggable — default `pi-ai/api/openai-completions`; public `fetch` (`ProviderRequestOptions.fetch`) or full `Agent.streamFn`; authorization/CSRF/body stay with the consumer. Re-cut of the carried #111 line "provider access ONLY through the subpath": the subpath is the default, not the only path.
+- 2026-09-12 — user (same): recovery after partial failure is a core obligation (FIT invariant candidates): completed tool calls/results survive a failed next request; after Stop the history remains continuable and partial calls have a defined outcome; cancellation reaches the active host command; Worker replacement uncertainty is visible in the result and events; continuation never repeats an action only because it was lost — carried by Pi's incremental context + error assistant message + ADR-0418 outcomes; Pi only declares per-tool `replay: never|safe` (not consumed by its loop) — enforcement is the core's continuation/adapter obligation.
+- 2026-09-12 — user (same): no-COI mode switch (edit/build ↔ preview) is host-owned (`startBin` enters; a public way to end the resident without `dispose()` does not exist on main — open substrate, ADR at pickup); the adapter exposes the current capability set and the agent observes changes (tool set + prompt); raw `sandbox.fs` fallback is excluded from the standard adapter; one e2e proves the full cycle edit → build → preview → edit.
+- 2026-09-12 — user (same): six deterministic embedding scenarios (mock model) are acceptance of the core/no-COI children, not bench tasks: fixed deps + no registry; custom tool + custom transport; absent diagnostics/preview → tools not offered; failed build → fix → successful build; provider error after a write → correct continuation; Stop of an active command → next command in the same session. Bench report states that a shared model + Pi version does not prove tool/context equivalence with the Pi CLI lane; delta is interpreted, never auto-attributed to the rifty runtime.
+- 2026-09-12 — boundary (same source): rifty/core owns loop, history, cancellation, budgets, events, trace, transport/tool seams, honoring declared host capabilities, generic file/shell/preview tools; the integrator owns UI, SDK instructions, domain actions, auth/CSRF/backend, permissions/dependency policy, delivery/verification of its artifact.
 - rejected route: rebuild inside `apps/playground` only (as #111) — violates user answer "usable with workbench".
 - rejected route: fold into `epics/open-bolt-ai-sandbox-demo` — that epic is a demo page + outbound acts with its own preview question; this goal delivers the agent library it can consume (its 2026-09-11 baseline note already points at ADR-0418).
 - rejected route: hand-rolled loop / Vercel AI SDK as primary — breaks the same-loop-both-lanes bench premise; stays the recorded fallback if Pi proves browser-unclean.
