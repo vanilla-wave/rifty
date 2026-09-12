@@ -51,6 +51,8 @@ ledger/scheduler. A+B are combined; no temporary per-file delta layer.
 | OPFS / quota-perm-fail + lossy-aggregate | One failed physical batch records its full logical footprint beyond the 20-entry sample; a single repaired path heals only itself. Same fixture, 230 writes. | → scenario, ADR-0358, ADR-0425 |
 | OPFS / quota during compaction | Dirty report, prior HEAD/tree survives; no reachable old segment deleted. Same fixture after 63 append rounds. | → scenario, ADR-0425 |
 | OPFS / concurrent-same-key | Second writer refused until previous physical work really settles or its Worker dies. Reporting timeout retains exclusion and fence; late success heals. Same fixture. | → scenario, ADR-0358, ADR-0425 |
+| OPFS / lossy-aggregate after structural failure | Entry success never clears an unproven subtree; later full-scope proof heals only covered sequences. Both modes, rm/rename/failed mkdir/late rm. `opfs-structural-repair.spec.ts`. | → Acceptance 2, ADR-0429 |
+| OPFS / reader-reclamation observable-order | readFile/stat/readdir and content already admitted before compaction finish without stale-segment ENOENT; GC follows real reader settlement. `replica-native-read.spec.ts`. | → Acceptance 2, ADR-0429 |
 | Worker death / torn-state | Kill at native before/after-close during append and compaction: replay one complete old/new tree, never a mixed batch. Same fixture. | → scenario, ADR-0425 |
 
 ## Challenge
@@ -81,3 +83,5 @@ MemoryBackend-based owner, and removes the temporary delta substrate.
 - 2026-09-12 — ADR-0425; DEC-2 /root/replica_decision; existing OpfsFsSync state, one scheduler batch mode, native physical guard, fresh native proof.
 - 2026-09-12 — prior draft's compaction-quota append fallback replaced by exact failure + preserved HEAD; no second maintenance ledger/queue. Goal fault outcome is unchanged.
 - 2026-09-12 — preparation carriers and actual RED outputs: `reference/segmented-replica-pickup.md`; no new Node oracle asserted.
+
+- 2026-09-13 — Final review B1/B2 repair observed baseline under RDY-8; ADR-0429 and native RED carriers. B3 adds promised control refusal coverage.

@@ -199,3 +199,20 @@ watermark and live front; no queued second byte mirror is introduced.
   update/reopen/native interruption+quota, and exact orphan retention/export.
   Private fault bytes are seeded before owner admission through installed VFS;
   application SDK protection remains enforced.
+
+## Final review repairs — 2026-09-13
+
+Independent report retained verbatim in `segmented-opfs-replica-final-review-1.json`.
+All three findings accepted; no criteria waiver.
+
+- B1 confirmed in both per-file and replica modes: rm, rm followed by another
+  failed mkdir, and rename each falsely clear `/a` uncertainty. Native
+  `opfs-structural-repair.spec.ts`: 6 RED; 2 existing late-rm cases GREEN.
+  Explicit whole-subtree repair must then persist the exact live tree.
+- B2: `replica-native-read.spec.ts`: continuous read/stat/readdir during 140
+  writes plus four native held-I/O cuts RED. Per-file reference and both
+  backend-control cases GREEN (5 fail / 3 pass). No fake VFS/reader.
+- B3: all three named replica NotImplementedError controls now have committed
+  behavioral carriers; default per-file behavior and untouched bytes also checked.
+- ADR-0429 records the class sweep, causal scope in the one failure ledger,
+  and reader retirement inside the existing replica publisher/guard.
