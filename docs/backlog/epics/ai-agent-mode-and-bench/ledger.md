@@ -1,0 +1,1 @@
+- 2026-09-12 — refined from PR #111 revival (user hand-off); evidence + critic + final check: `docs/backlog/distribution/reference/ai-agent-mode-refine-evidence.md`

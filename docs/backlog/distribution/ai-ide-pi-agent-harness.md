@@ -1,50 +1,80 @@
 ---
 area: distribution
 status: draft
-title: M12 — AI-first IDE agent harness on Pi (pi-agent-core) over the rifty sandbox
+title: Headless AI agent core on Pi over public rifty hosts (Workbench session, no-COI project)
 created: 2026-06-13
-why: build an in-browser AI coding agent for Node projects whose only external dep is an OpenAI-compatible endpoint; chosen over the opencode facade (whose tool layer needs native spawn — a browser ceiling)
-user_story: As a dev shipping an in-browser AI coding agent on rifty, I want to embed `pi-agent-core` + `pi-ai/openai-completions` with rifty primitives wrapped as `AgentTool`s (vfs read/write/edit, `shell_exec`, grep, git, typecheck) talking to my OpenAI-compatible endpoint, but today the Pi harness is unbuilt — streaming over the SW-bridge unproven and the dep choice still provisional, not ratified.
-sources: [M12, docs/research/open-webcontainers-alternative-2026-06.md, docs/backlog/distribution/public-api-ai-agent-preview-question.md, docs/backlog/distribution/public-api-ai-agent-contract-snapshot-restore.md, docs/backlog/distribution/workbench-controllers.md]
-code: [packages/rifty/src/sandbox.ts]
+why: main has zero AI code; PR #111's agent bound to six retired playground seams; the same Pi loop + standard coding-agent tools must run over `@riftydev/workbench` ProjectSession and no-COI `sandbox.project()` with one tool surface
+user_story: As a Workbench/SDK embedder, I want to wire a real coding agent (Pi loop, `shell`/file/search/preview tools, per-run budgets, session trace) to my open rifty host and render its event stream in my own UI, but today no such package exists and PR #111's `app-context.ts` seams (terminal-manager, owner-rpc-fs, git-owner-port, ts-ls-client, node-program-lifecycle, preview-bridge-wiring) are gone
+epic: ai-agent-mode-and-bench
+blocked_by: []
+sources: [docs/backlog/epics/ai-agent-mode-and-bench/goal.md, docs/backlog/distribution/reference/ai-agent-mode-refine-evidence.md, M12, docs/research/open-webcontainers-alternative-2026-06.md, docs/adr/distribution/0263-workbench-playground-companion-subpath.md, docs/adr/distribution/0418-no-coi-project-files-and-invocation-commands.md]
+code: [packages/workbench/src/workbench/public.ts, packages/workbench/src/workbench/playground.ts, packages/workbench/src/workbench/project-terminal.ts, packages/workbench/src/workbench/project-files.ts, packages/rifty/src/sandbox-project.ts, tools/checks/arch-rules.cjs]
 ---
 
 ## Context
 
-M12 builds the actual AI coding agent ON TOP of M11's AI-agent sandbox contract
-(exec → preview → snapshot — `distribution/public-api-ai-agent-*`). Not a new runtime;
-a consumer of it.
+Rewritten 2026-09-12 as the core child of `epics/ai-agent-mode-and-bench`
+(the 2026-06-13 direction — Pi over opencode, AI outside rifty — is carried,
+now with PR #111 as quarry: `origin/ai-mode-mvp`, never merged).
 
-Direction (provisional — promote to an ADR when the track starts):
+Host seams on main (public, proven):
 
-- **Pi, not opencode.** Embed `@earendil-works/pi-agent-core` (the agent loop —
-  verified browser-clean: only `fetch` + typebox/yaml; node-coupling sits behind a
-  `./node` subexport off the main barrel) + `@earendil-works/pi-ai/openai-completions`
-  (the SUBPATH — the main `pi-ai` entry eagerly pulls aws/smithy/google/mistral).
-  opencode's Effect/Bun server + native-spawn tool layer is a browser ceiling plus a
-  permanent 900-file vendoring liability; Pi's tools are plain pluggable functions, so
-  the swap is its PUBLIC extension API, not surgery. Fallback: raw Vercel AI SDK
-  (known-good in rifty) + harvest Pi's prompt/edit (MIT) if the live streaming spike fails.
-- **AI lives OUTSIDE rifty.** Litmus: "does this make sense with no AI at all?" Yes →
-  rifty (VFS/shell/git/lsp/search/IDE-kit); No → here. The harness, tool-bindings,
-  prompts, and OpenAI config consume only `@riftydev/*` public API (a down-dep; the
-  no-reverse-imports hard rule keeps AI out of the runtime). Start co-located as an
-  `apps/` consumer or a separate repo — the boundary is identical.
+- COI `@riftydev/workbench` `ProjectSession`: `ProjectTerminal.run(line)` +
+  `attach` (same pty path a user terminal uses), versioned `ProjectFiles`
+  (`readFile`/`writeFile`/`readdir`/`mkdir`/`rename`/`remove`), companion
+  `PlaygroundTypeScript` (diagnostics), `PlaygroundScm` (diff), `PlaygroundPreview`.
+- no-COI `ToolchainSandbox.project({root, readonlyPaths?, allowedCommands?})`
+  (ADR-0418): `project.fs` + `project.run(line)` → `{completion, stop, onOutput}`,
+  outcome `exited|cancelled|failed`, worker `retained|replaced|terminated`.
+  Same `@riftydev/shell` interprets the line. No diagnostics/SCM companion; no
+  `&`, no stdin; `node -e/-p` ⚠️ unproven there (loud subset: `--input-type=module`,
+  TypeScript eval, preload, `-p -- <entry>`); one call at a time; every project/command op
+  rejects while a `startBin` resident lives (`sandbox.toolchain.resident-concurrency`).
 
-Tool-bindings (AI side): wrap rifty primitives as Pi `AgentTool`s — vfs read/write/edit
-(node:fs→VFS), shell_exec (rifty shell, not spawn), grep (existing shell grep / runtime
-vfsGrep), git (shell/git-command-isomorphic), typecheck (toolchain-build/ts-language-service).
+Consequence: ONE tool surface — `shell`, `read_file`, `write_file`,
+`edit_file(old,new)` (no fuzzy match), `apply_patch` (unified diff, no fuzz),
+`list_files`, `grep`, `glob`, `preview_fetch|query|click|type`, `diagnostics` —
+where `diagnostics`/`preview`/`scm` are host capabilities: absent → not offered
+to the model and named in the prompt profile; never a stub. The believed
+baseline of what `shell` can do per host: evidence file §Baseline.
 
-## Options or Next
+Pi 0.85.1 (spike 2026-09-12, evidence file): `pi-agent-core` +
+`pi-ai/api/openai-completions` bundle for browser ≈120 KB min+gz; static graph
+= `openai` SDK + `@earendil-works/chord` (its `esbuild` dep is not in the graph)
++ `pi-telemetry` (no egress); heavy providers absent; ONE static `node:fs`
+import in `pi-ai/dist/utils/provider-env.js` (Bun `/proc/self/environ` fallback,
+guarded by `typeof process`).
 
-- De-risk #1 (live): OpenAI streaming over the SW-bridge (CORS / SSE / ReadableStream) — a non-streaming round-trip first.
-- Bundle-check that the `pi-ai/openai-completions` subpath excludes aws/smithy/google/mistral.
-- Point the client: a generic openai-compatible provider, `model.baseUrl` = endpoint, key via options (not env).
-- Session: `InMemorySessionRepo`, or a VFS/OPFS-backed `SessionStorage` (storage injectable — data on rifty, schema here). Context compaction is already in Pi core.
-- UI + orchestration are tracked separately (ai-ide-product-ui, ai-agent-subagent-orchestration).
+Quarry from #111 (port, do not cherry-pick): `apply-patch.ts`(+test),
+`truncate.ts`, `budget.ts`, `prompt-profile.ts`, `trace.ts` schema,
+`tools/tool-def.ts`; rewrite: `app-context.ts` → host adapter interface,
+`fs-tools.ts` (versioned writes), `shell.ts`, `preview-tools.ts`, `diagnostics.ts`,
+`session.ts`.
 
-## Reversibility
+Carried #111 decisions (user-grilled 2026-07-02, reconfirmed 2026-09-12): Pi
+exact-pinned via the `api/openai-completions` subpath only; prompt profile =
+Pi baseline + rifty adapter block, versioned, no benchmark tuning; tool results
+capped 16 KiB head+tail with `[truncated N bytes]`; per-run limits → distinct
+`budget-exceeded`; trace = transcript + tool calls/results + timings + usage +
+agent-run terminal output + final diff + config without key; no approve gate;
+fresh session per reload.
 
-IRREVERSIBLE — new external dep (Pi) + a genuine product-direction choice + a new
-top-of-stack consumer. Promote this direction to an ADR when the track starts (citing
-the dropped opencode-facade exploration it supersedes).
+## Challenge
+
+challenge: 2026-09-11 — 6 problems (goal-level, verbatim in the evidence file; all resolved there)
+
+## Out of scope
+
+- `shell` in a no-COI preview mode (resident alive) → the host's
+  `NotImplementedError('sandbox.toolchain.resident-concurrency')` surfaces as the
+  tool error; no agent-side queue/retry.
+- `sed`/`awk`/`sort`/`xargs`/`npx`, and `|`/`<` inside a background job
+  (`shell.pipe`/`shell.input-redirect`) → the shell's own loud errors, both hosts;
+  foreground pipes/redirects are real.
+- Subagents, product UI, chat persistence, multimodal, provider zoo — goal map.
+
+## Decisions
+
+- 2026-09-12 — ADR at pickup (next-free number) replaces never-merged #111 branch decision record 0190: Pi 0.85.x pin, `node:fs` resolution (alias unreachable or loud), package placement above `workbench` in arch tiers, framework-free.
+- 2026-09-12 — first proof = mock OpenAI-compatible streaming endpoint driving a scripted session over a real Workbench `ProjectSession` (browser-unit/e2e), no real model in CI.
+- 2026-09-12 — parity rows carried from #111 for compile at PICKUP: `shell` stdout/exit == user terminal for the same line; `write_file` on a watched file == editor save (HMR); `edit_file` non-matching `old` → loud string-not-found; `diagnostics` == Problems panel for the same file.

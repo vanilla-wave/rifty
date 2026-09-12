@@ -28,6 +28,9 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `publish-git-and-ts-language-service.md` | ready | open-auditable-launch | publish @riftydev/git + @riftydev/ts-language-service to npm |
 | `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
+| `ai-ide-pi-agent-harness.md` | draft | ai-agent-mode-and-bench | headless agent core on Pi over Workbench session / no-COI project (goal core child) |
+| `ai-agent-no-coi-host.md` | draft | ai-agent-mode-and-bench | no-COI host adapter over `sandbox.project()` + tests/no-coi e2e |
+| `agent-bench.md` | draft | ai-agent-mode-and-bench | harness lanes rifty (COI chat) / rifty-no-coi (headless SDK) / local-reference (Pi CLI) over the #300 template |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
 
 ## Dependency map
