@@ -23,11 +23,18 @@
     "browser-runtime"
   ],
   "sideEffects": [
+    "./src/workers/workbench-owner-bootstrap.ts",
+    "./src/workers/kernel-worker-entry.ts",
+    "./src/workers/node-entry-bootstrap.ts",
+    "./src/workers/dev-server-child-bootstrap.ts",
+    "./src/workers/ts-lsp-worker-entry.ts",
+    "./src/workers/no-coi-toolchain-worker.ts",
     "./dist/owner-worker.js",
     "./dist/kernel-worker.js",
     "./dist/node-worker.js",
     "./dist/dev-server-worker.js",
-    "./dist/typescript-worker.js"
+    "./dist/typescript-worker.js",
+    "./dist/no-coi-toolchain-worker.js"
   ],
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -39,7 +46,8 @@
     "./kernel-worker": "./src/workers/kernel-worker-entry.ts",
     "./node-worker": "./src/workers/node-entry-bootstrap.ts",
     "./dev-server-worker": "./src/workers/dev-server-child-bootstrap.ts",
-    "./typescript-worker": "./src/workers/ts-lsp-worker-entry.ts"
+    "./typescript-worker": "./src/workers/ts-lsp-worker-entry.ts",
+    "./no-coi-toolchain-worker": "./src/workers/no-coi-toolchain-worker.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -75,12 +83,16 @@
       "./typescript-worker": {
         "types": "./dist/typescript-worker.d.ts",
         "import": "./dist/typescript-worker.js"
+      },
+      "./no-coi-toolchain-worker": {
+        "types": "./dist/no-coi-toolchain-worker.d.ts",
+        "import": "./dist/no-coi-toolchain-worker.js"
       }
     }
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsup"
+    "build": "tsup && node ../../tools/publishing/build-workbench-assets.mjs"
   },
   "dependencies": {
     "@riftydev/git": "workspace:*",
@@ -92,6 +104,7 @@
     "@riftydev/service-worker": "workspace:*",
     "@riftydev/shell": "workspace:*",
     "@riftydev/ts-language-service": "workspace:*",
-    "@riftydev/vfs": "workspace:*"
+    "@riftydev/vfs": "workspace:*",
+    "@riftydev/shadow-registry": "workspace:*"
   }
 }

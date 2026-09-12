@@ -42,7 +42,12 @@ import type { QuickJSContext } from 'quickjs-emscripten-core';
 import type { ContextLifetime } from './context-lifetime.ts';
 import { Membrane } from './membrane.ts';
 import { getQuickJsModuleSync } from './quickjs-loader.ts';
-import type { CompiledScript, ContextObject, VmEngine } from './types.ts';
+import {
+  type CompiledScript,
+  type ContextObject,
+  type VmEngine,
+  getContextCodeGeneration,
+} from './types.ts';
 
 /** Per-context QuickJS runtime+membrane pair, created lazily and reused across runs. */
 interface GuestRuntime {
@@ -69,11 +74,166 @@ function withSourceURL(code: string, filename?: string): string {
   return `${code}\n//# sourceURL=${filename}`;
 }
 
+function evalInfrastructure(qctx: QuickJSContext, source: string, feature: string): void {
+  const result = qctx.evalCode(source);
+  if (result.error !== undefined) {
+    const dumped = qctx.dump(result.error);
+    result.error.dispose();
+    throw new Error(`${feature} bootstrap failed: ${String(dumped)}`);
+  }
+  result.value.dispose();
+}
+
+function applyCodeGenerationPolicy(qctx: QuickJSContext, context: ContextObject): void {
+  const policy = getContextCodeGeneration(context);
+  if (!policy || (policy.strings && policy.wasm)) return;
+  evalInfrastructure(
+    qctx,
+    `
+      (() => {
+        const allowStrings = ${String(policy.strings)};
+        const allowWasm = ${String(policy.wasm)};
+        const facades = new WeakMap();
+        let hasFacade = false;
+
+        function replaceValue(owner, key, value) {
+          const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+          if (!descriptor || !('value' in descriptor)) {
+            throw new TypeError('Cannot guard intrinsic ' + String(key));
+          }
+          Object.defineProperty(owner, key, Object.assign({}, descriptor, { value }));
+        }
+
+        function facade(original, traps) {
+          const guarded = new Proxy(original, traps);
+          facades.set(guarded, original);
+          hasFacade = true;
+          return guarded;
+        }
+
+        if (!allowStrings) {
+          const OriginalEval = eval;
+          const OriginalFunction = Function;
+          const constructors = [
+            OriginalFunction,
+            (async function () {}).constructor,
+            (function* () {}).constructor,
+            (async function* () {}).constructor
+          ];
+          function raiseDisabledCodeGeneration() {
+            throw new EvalError('Code generation from strings disallowed for this context');
+          }
+          const guardedEval = facade(OriginalEval, {
+            apply() {
+              return raiseDisabledCodeGeneration();
+            }
+          });
+          const guardedConstructors = constructors.map((original) => facade(original, {
+            apply() {
+              return raiseDisabledCodeGeneration();
+            },
+            construct() {
+              return raiseDisabledCodeGeneration();
+            }
+          }));
+          constructors.forEach((original, index) => {
+            replaceValue(original.prototype, 'constructor', guardedConstructors[index]);
+            if (index > 0) Object.setPrototypeOf(original, guardedConstructors[0]);
+          });
+          replaceValue(globalThis, 'eval', guardedEval);
+          replaceValue(globalThis, 'Function', guardedConstructors[0]);
+        }
+
+        if (!allowWasm && typeof WebAssembly === 'object' && WebAssembly !== null) {
+          const wasm = WebAssembly;
+          const OriginalModule = wasm.Module;
+          const CompileErrorCtor = wasm.CompileError || Error;
+          const disabled = (api) => new CompileErrorCtor(
+            api + '(): Wasm code generation disallowed by embedder'
+          );
+          const arrayBufferByteLength = Object.getOwnPropertyDescriptor(
+            ArrayBuffer.prototype,
+            'byteLength'
+          ).get;
+          const sharedArrayBufferByteLength =
+            typeof SharedArrayBuffer === 'undefined'
+              ? undefined
+              : Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength').get;
+          function isBackingStore(value) {
+            if (typeof value !== 'object' || value === null) return false;
+            try {
+              arrayBufferByteLength.call(value);
+              return true;
+            } catch {
+              if (!sharedArrayBufferByteLength) return false;
+            }
+            try {
+              sharedArrayBufferByteLength.call(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }
+          if (typeof OriginalModule === 'function') {
+            const guardedModule = facade(OriginalModule, {
+              apply(target, thisArg, args) {
+                return Reflect.apply(target, thisArg, args);
+              },
+              construct() {
+                throw disabled('WebAssembly.Module');
+              }
+            });
+            replaceValue(OriginalModule.prototype, 'constructor', guardedModule);
+            replaceValue(wasm, 'Module', guardedModule);
+          }
+          for (const api of ['compile', 'compileStreaming', 'instantiateStreaming']) {
+            const original = wasm[api];
+            if (typeof original !== 'function') continue;
+            replaceValue(wasm, api, facade(original, {
+              apply() {
+                return Promise.reject(disabled('WebAssembly.' + api));
+              }
+            }));
+          }
+          if (typeof wasm.instantiate === 'function') {
+            const originalInstantiate = wasm.instantiate;
+            replaceValue(wasm, 'instantiate', facade(originalInstantiate, {
+              apply(target, thisArg, args) {
+                if (typeof OriginalModule === 'function' && args[0] instanceof OriginalModule) {
+                  return Reflect.apply(target, thisArg, args);
+                }
+                const input = args[0];
+                const isBufferSource = ArrayBuffer.isView(input) || isBackingStore(input);
+                if (isBufferSource) {
+                  return Promise.reject(disabled('WebAssembly.instantiate'));
+                }
+                return Reflect.apply(target, thisArg, args);
+              }
+            }));
+          }
+        }
+
+        if (hasFacade) {
+          const originalToString = Function.prototype.toString;
+          const guardedToString = facade(originalToString, {
+            apply(target, thisArg, args) {
+              return Reflect.apply(target, facades.get(thisArg) || thisArg, args);
+            }
+          });
+          replaceValue(Function.prototype, 'toString', guardedToString);
+        }
+      })();
+    `,
+    'vm.createContext.codeGeneration',
+  );
+}
+
 function getOrCreateGuestRuntime(context: ContextObject): GuestRuntime {
   let rt = guestRuntimes.get(context);
   if (!rt) {
     const qctx = getQuickJsModuleSync().newContext();
     const membrane = new Membrane(qctx);
+    applyCodeGenerationPolicy(qctx, context);
     rt = { qctx, membrane };
     guestRuntimes.set(context, rt);
     // GC'ing the ContextObject marks the controller pending → safe teardown once

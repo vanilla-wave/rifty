@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-07T18:13:41.204Z",
+  "generatedAt": "2026-09-02T09:03:19.614Z",
   "runner": {
     "runs": 5,
     "browser": "chromium",
@@ -11,29 +11,18 @@
       "status": "measured",
       "count": 5,
       "samples": [
-        1053,
-        1005,
-        864,
-        918,
-        857
+        446,
+        442,
+        444,
+        441,
+        451
       ],
-      "median": 918,
-      "displayMs": 1000
+      "median": 444,
+      "displayMs": 500
     },
     "npmInstallToFirstViteResponseMs": {
-      "status": "measured",
-      "count": 5,
-      "samples": [
-        2847,
-        2748,
-        2761,
-        2775,
-        2652
-      ],
-      "median": 2761,
-      "displayMs": 2800,
-      "registryUrl": "https://registry.rifty.dev/npm-registry",
-      "resolverUrl": "https://eddy.rifty.dev",
+      "status": "unmeasured",
+      "note": "transport auto did not produce complete standard+eddy install samples — eddy: eddy: proxy https://registry.rifty.dev/npm-registry configured but only 0/5 runs reached first Vite response — refusing a partial median: eddy pass reached first Vite response without terminal proof `via eddy (fast)`",
       "transport": {
         "mode": "auto",
         "originProtocols": {
@@ -41,127 +30,212 @@
             "h2"
           ],
           "https://eddy.rifty.dev": [
-            "h2"
+            "h3"
           ]
         },
         "runs": [
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
+              "requests": 169
             },
             "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
+              "protocol": "h3",
+              "requests": 2
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
+              "requests": 169
             },
             "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
+              "protocol": "h3",
+              "requests": 2
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
+              "requests": 169
             },
             "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
+              "protocol": "h3",
+              "requests": 2
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
+              "requests": 169
             },
             "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
+              "protocol": "h3",
+              "requests": 2
             }
           },
           {
             "https://registry.rifty.dev": {
               "protocol": "h2",
-              "requests": 50
+              "requests": 169
             },
             "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
-            }
-          },
-          {
-            "https://registry.rifty.dev": {
-              "protocol": "h2",
-              "requests": 0
-            },
-            "https://eddy.rifty.dev": {
-              "protocol": "h2",
-              "requests": 1
+              "protocol": "h3",
+              "requests": 2
             }
           }
         ]
       },
-      "baseline": {
-        "status": "measured",
-        "count": 5,
-        "samples": [
-          6511,
-          5474,
-          4873,
-          4772,
-          5180
-        ],
-        "median": 5180,
-        "displayMs": 5200,
-        "label": "standard"
-      },
-      "speedupX": 1.88
+      "transportMatrix": {
+        "auto": {
+          "standard": {
+            "status": "measured",
+            "count": 5,
+            "samples": [
+              10331,
+              9307,
+              10576,
+              9820,
+              9560
+            ],
+            "median": 9820,
+            "displayMs": 9900,
+            "registryUrl": "https://registry.rifty.dev/npm-registry",
+            "transport": {
+              "mode": "auto",
+              "originProtocols": {
+                "https://registry.rifty.dev": [
+                  "h2"
+                ],
+                "https://eddy.rifty.dev": [
+                  "h2"
+                ]
+              },
+              "runs": [
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 0
+                  }
+                }
+              ]
+            }
+          },
+          "eddy": {
+            "status": "unmeasured",
+            "note": "eddy: proxy https://registry.rifty.dev/npm-registry configured but only 0/5 runs reached first Vite response — refusing a partial median: eddy pass reached first Vite response without terminal proof `via eddy (fast)`",
+            "registryUrl": "https://registry.rifty.dev/npm-registry",
+            "resolverUrl": "https://eddy.rifty.dev",
+            "transport": {
+              "mode": "auto",
+              "originProtocols": {
+                "https://registry.rifty.dev": [
+                  "h2"
+                ],
+                "https://eddy.rifty.dev": [
+                  "h3"
+                ]
+              },
+              "runs": [
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
+                  }
+                },
+                {
+                  "https://registry.rifty.dev": {
+                    "protocol": "h2",
+                    "requests": 169
+                  },
+                  "https://eddy.rifty.dev": {
+                    "protocol": "h3",
+                    "requests": 2
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
     },
     "presetBootToPreviewLiveMs": {
       "status": "skipped",

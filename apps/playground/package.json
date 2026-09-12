@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:no-coi": "vite optimize --config vite.no-coi.config.ts --force && vite --config vite.no-coi.config.ts",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -13,6 +14,7 @@
     "snapshots:bake": "tsx tools/bake-dep-snapshots.ts"
   },
   "dependencies": {
+    "@jitl/quickjs-wasmfile-release-sync": "^0.32.0",
     "@rifty-examples/vite-like-dev": "workspace:*",
     "@riftydev/git": "workspace:*",
     "@riftydev/io": "workspace:*",

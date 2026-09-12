@@ -23,11 +23,12 @@ export {
   registerPort,
   unregisterPort,
   getHandler,
+  isPortRegisteredBy,
   listPorts,
   dispatchToPort,
   onRegistryChange,
 } from './registry.ts';
-export type { PortHandler } from './registry.ts';
+export type { PortHandler, PortRegistrationOwner } from './registry.ts';
 export type { AddressInfo } from './server-address.ts';
 export {
   WebSocket,

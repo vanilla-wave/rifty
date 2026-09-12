@@ -6,8 +6,8 @@
  * MessagePorts + ADR-0045 fork-IPC — and installs it on `globalThis.process`.
  * `installNodeRuntime` is the pre-entry hook: it builds the process AND, gated
  * to Node workers, runs the rich extras (`patchPromiseForNextTick` for nextTick
- * ordering + `globalThis.Buffer` + `globalThis.global`). WASI workers skip
- * those (no over-Node).
+ * ordering + `globalThis.Buffer` + `globalThis.global`). QuickJS-selected Node
+ * workers return engine readiness; WASI/rewrite workers remain synchronous.
  *
  * Registers itself as the kernel's pre-entry hook at module load — host bundles
  * wire it in by importing this BEFORE `@riftydev/kernel/worker-entry`:
@@ -41,8 +41,13 @@ import {
   bindNodeProcessDescendantAuthority,
   patchPromiseForNextTick,
 } from '../builtins/process.ts';
+import { resolveVmEngineName } from '../builtins/vm/engine-config.ts';
+import { QUICKJS_WASM_URL_ENV, ensureVmEngineReady } from '../builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
+
+/** Host bootstrap key for the QuickJS asset consumed by this pre-entry installer. */
+export { QUICKJS_WASM_URL_ENV };
 
 /**
  * The `process` shim installed for kernel-spawned children. Alias of the unified
@@ -93,7 +98,9 @@ export function installNodeProcessShim(
  * children lacked them.
  * Timers + keepalive stay universal at `kernel-worker-entry.ts` module top-level.
  */
-export function installNodeRuntime(spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>): void {
+export function installNodeRuntime(
+  spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>,
+): void | Promise<void> {
   const isNodeEntry = readNodeEntryBootstrapIfPresent() !== null;
   const isNode = isNodeEntry || spec.env.__RIFTY_WASI_WASM_URL === undefined;
   const processSpec = readKernelProcessSpec();
@@ -115,6 +122,7 @@ export function installNodeRuntime(spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 
     // `worker-realm-compat.ts`. Node workers only (a WASI guest runs raw WASI,
     // no JS realm-compat); folded here so the host pre-entry hook needs no change.
     installWorkerRealmCompat();
+    if (resolveVmEngineName() === 'quickjs') return ensureVmEngineReady().then(() => undefined);
   }
 }
 

@@ -8,7 +8,7 @@ user_story: As an SDK embedder opening and reopening a project with a baked 98.2
 epic: fast-project-open-reopen
 blocked_by: []
 sources: ["issues #255/#256", ADR-0072, ADR-0358, docs/backlog/vfs/reference/storage-journal-design-benchmarks-2026-08-31.md, docs/backlog/vfs/reference/storage-open-reopen-candidate-benchmarks-2026-09-01.md]
-code: [packages/vfs/src/opfs-sync.ts, packages/vfs/src/opfs.ts, packages/vfs/src/opfs-drain-scheduler.ts, packages/workbench/src/glue/install-stamp.ts, packages/workbench/src/glue/install-stamp-authority.ts]
+code: [packages/vfs/src/opfs-sync.ts, packages/vfs/src/opfs-preload.ts, packages/vfs/src/opfs.ts, packages/vfs/src/opfs-drain-scheduler.ts, packages/workbench/src/glue/install-stamp.ts, packages/workbench/src/glue/install-stamp-authority.ts, packages/workbench/src/workers/workbench-owner-storage.ts, packages/workbench/src/workers/no-coi-install-context.ts]
 ---
 
 ## Context
@@ -67,7 +67,9 @@ Constraints already derived from current durability behavior:
   it now.
 
 Sibling/overlap: `vfs/opfs-lazy-content-preload` can remove some eager byte
-preload but not the measured 2.14 s tree walk or 7.18 s first persist.
+preload but not the measured 2.14 s tree walk or 7.18 s first persist —
+and is declined since by ADR-0393/0406/0411 (eager all-or-error preload, no
+lazy sync I/O; an indexed file without cached bytes is `EIO`).
 `perf/reference/dependency-store-and-vfs-links.md` targets install reuse and
 cross-project sharing, not the per-project reload format; keep its COW
 constraint if the designs later meet.
@@ -139,3 +141,15 @@ PICKUP prepends its `ready-verdict` line.
   Memory VFS); the ADR says so.
 - Sibling `fault-honest-opfs-persistence` rows are re-proven on this substrate
   in `## Fault matrix`, never dropped (goal map.md fog).
+- Re-check 2026-09-12 (goal Decisions): the reopen baseline was measured on
+  the two-pass init (`refreshIndex` + `preloadContent`); ADR-0393's single
+  `walkOpfsTree` traversal is the current per-file baseline and is
+  re-measured on T′ before Contract+RED — the format ADR compares against
+  that number, not 8.4 s. The namespace bump is per selected
+  `storage.namespace` root (ADR-0402). Replay publishes the tree without
+  waiting on stamp trust (ADR-0415/0417: a saved open never certifies
+  installation). The no-COI toolchain Worker (`no-coi-install-context.ts`,
+  ADR-0372/0392) is a consumer of the same `OpfsFsSync`: the format serves
+  it by construction, its `## Fault matrix` rows include that writer, and
+  this slice lands after #332 (`owner-storage.ts`). Candidate B's record in
+  the ADR cites ADR-0393/0406/0411 as the decisions that foreclose it.

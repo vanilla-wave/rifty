@@ -206,7 +206,8 @@ export function ensureSqliteEngineFromProvider(): void {
 export function getSqliteEngine(): SqlJsStatic {
   if (engine === undefined) {
     throw new Error(
-      'sqlite engine not initialized: await initSqliteEngine() or call ' +
+      'sqlite engine not initialized: configure deployment.wasm.sqlite in Workbench, ' +
+        'or await initSqliteEngine() or call ' +
         'initSqliteEngineSync(bytes) before use, or install ' +
         'setSqliteEngineSyncProvider(() => wasmBytes) at boot so ' +
         "require('node:sqlite') brings the engine up on demand",

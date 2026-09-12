@@ -53,6 +53,11 @@ Mechanism, minimal form:
   persist-failure ledger) is stated explicitly in the ADR — constraint gone
   → deletion, not port.
 
+Writer added 2026-09-12: the no-COI installer's install-only durable-equality
+skip (ADR-0392) decides "unchanged" from fresh native bytes per path; before
+the per-file layer retires this slice restates it against the replica (live
+front + ledger, never a per-file native lookup) — a `provenance-lie` row.
+
 Unmeasured today, probed before this item's PICKUP (goal map fog): append
 cost per small write versus the current per-file write-through (the spike
 measured bulk append only — 85.5 MB/s at 4 MiB chunks) and the compaction

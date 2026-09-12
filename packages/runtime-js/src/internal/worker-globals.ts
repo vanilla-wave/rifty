@@ -33,13 +33,17 @@
  *                          the playground's `realVite.ts`); read by
  *                          `createRequire` there. Closure turning a
  *                          `from`-path into a bound `require()`.
- *  - `esbuild`           — exact upstream CJS outer, published before a guest
- *                          action imports esbuild and read by its CJS overlay.
+ *  - `quickjsModulePromise` / `quickjsModuleSync` — one realm-wide QuickJS
+ *                          preload authority. Production worker entries can
+ *                          carry duplicate runtime-js module copies into the
+ *                          same realm; both must observe the same VM engine.
  *
  * Multi-realm note (M11 A-026) — each realm imports its own runtime-js copy
  * and gets its own table on its own `globalThis.__rifty`; no realm reads
  * another's, and the publish helpers are realm-scoped by construction.
  */
+
+import type { QuickJSWASMModule } from 'quickjs-emscripten-core';
 
 /** Single root key under which every runtime-js global lives. */
 export const RUNTIME_JS_ROOT_KEY = '__rifty' as const;
@@ -52,7 +56,8 @@ export const RUNTIME_JS_GLOBAL_KEYS = {
   esmLastBody: 'esmLastBody',
   esmLastFile: 'esmLastFile',
   createRequireImpl: 'createRequireImpl',
-  esbuild: 'esbuild',
+  quickjsModulePromise: 'quickjsModulePromise',
+  quickjsModuleSync: 'quickjsModuleSync',
 } as const;
 
 /** Union of the documented key names. */
@@ -71,9 +76,6 @@ export type RuntimeImport = (specifier: string) => Promise<unknown>;
  */
 export type CreateRequireImpl = (from: string) => RuntimeRequire;
 
-/** Opaque exact esbuild CJS outer; runtime-js owns identity, not its API. */
-export type RuntimeEsbuildCjsOuter = object;
-
 /**
  * Concrete value type per key — kept narrow so call sites stay `any`-free.
  * New keys must extend this alongside {@link RUNTIME_JS_GLOBAL_KEYS}.
@@ -85,7 +87,8 @@ export interface RuntimeJsGlobalRecord {
   esmLastBody: string;
   esmLastFile: string;
   createRequireImpl: CreateRequireImpl;
-  esbuild: RuntimeEsbuildCjsOuter;
+  quickjsModulePromise: Promise<QuickJSWASMModule>;
+  quickjsModuleSync: QuickJSWASMModule;
 }
 
 interface GlobalWithRuntimeRoot {
@@ -157,14 +160,4 @@ export function unpublishRuntimeGlobal<K extends RuntimeJsGlobalKey>(key: K): vo
  */
 export function runtimeGlobalKeys(): readonly RuntimeJsGlobalKey[] {
   return Object.keys(RUNTIME_JS_GLOBAL_KEYS) as RuntimeJsGlobalKey[];
-}
-
-/** Publish the exact esbuild CJS outer for this realm. */
-export function publishRuntimeEsbuild(outer: RuntimeEsbuildCjsOuter): void {
-  publishRuntimeGlobal('esbuild', outer);
-}
-
-/** Read the exact esbuild CJS outer for this realm, preserving identity. */
-export function readRuntimeEsbuild(): RuntimeEsbuildCjsOuter | null {
-  return readRuntimeGlobal('esbuild');
 }

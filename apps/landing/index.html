@@ -14,6 +14,27 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <link rel="sitemap" href="/sitemap.xml" type="application/xml" />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/src/assets/fonts/archivo-black-latin-v23.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/src/assets/fonts/roboto-mono-latin-v31.woff2"
+    />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      crossorigin
+      href="/src/assets/fonts/inter-latin-v20.woff2"
+    />
 
     <meta property="og:site_name" content="rifty" />
     <meta property="og:title" content="Open Node-compatible runtime for the browser | rifty" />
@@ -55,7 +76,7 @@
       body {
         margin: 0;
         background: #15171d;
-        color: #fff;
+        color: #f2f4f8;
         font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
       }
 
@@ -65,76 +86,72 @@
         place-items: center;
         padding: 40px 32px;
         box-sizing: border-box;
-        background:
-          radial-gradient(circle at 76% 20%, rgba(199, 240, 90, 0.09), transparent 31rem),
-          #15171d;
       }
 
       .static-shell-inner {
-        width: min(100%, 72rem);
+        width: min(100%, 1080px);
+        border: 2px solid rgba(255, 255, 255, 0.16);
+        padding: 40px;
+        box-sizing: border-box;
       }
 
       .static-shell-brand,
-      .static-shell-kicker {
+      .static-shell-kicker,
+      .static-shell-link {
         font-family: "Roboto Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
       }
 
       .static-shell-brand {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
+        display: inline-block;
         color: #fff;
-        font-size: 15px;
-        font-weight: 600;
+        font-family: "Archivo Black", "Arial Black", Impact, sans-serif;
+        font-size: 18px;
         text-decoration: none;
       }
 
-      .static-shell-mark {
-        width: 14px;
-        height: 14px;
-        border-radius: 3px;
-        background: #c7f05a;
-        transform: rotate(45deg);
-      }
-
       .static-shell-kicker {
-        margin: 88px 0 18px;
-        color: #c7f05a;
+        margin: 56px 0 22px;
+        color: rgba(255, 255, 255, 0.5);
         font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.12em;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
       }
 
       .static-shell h1 {
         max-width: 900px;
         margin: 0;
-        font-size: clamp(42px, 7vw, 78px);
-        line-height: 1.02;
-        letter-spacing: -0.055em;
+        font-family: "Archivo Black", "Arial Black", Impact, sans-serif;
+        font-weight: 400;
+        font-size: clamp(40px, 7vw, 72px);
+        line-height: 0.98;
+        letter-spacing: -0.01em;
+        text-transform: uppercase;
       }
 
       .static-shell-accent {
-        color: #c7f05a;
+        display: inline-block;
+        padding: 0 14px;
+        background: #c7f05a;
+        color: #15170b;
       }
 
       .static-shell-copy {
-        max-width: 680px;
+        max-width: 460px;
         margin: 28px 0 34px;
-        color: rgba(255, 255, 255, 0.65);
-        font-size: clamp(17px, 2vw, 20px);
-        line-height: 1.65;
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 16px;
+        line-height: 1.55;
       }
 
       .static-shell-link {
         display: inline-flex;
         min-height: 46px;
         align-items: center;
-        padding: 0 18px;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        border-radius: 7px;
+        padding: 0 24px;
+        border: 2px solid rgba(255, 255, 255, 0.25);
         color: #fff;
-        font-weight: 600;
+        font-size: 13px;
+        font-weight: 700;
         text-decoration: none;
       }
 
@@ -145,11 +162,15 @@
 
       @media (max-width: 600px) {
         .static-shell {
-          padding: 28px 20px;
+          padding: 20px;
+        }
+
+        .static-shell-inner {
+          padding: 24px 20px;
         }
 
         .static-shell-kicker {
-          margin-top: 64px;
+          margin-top: 40px;
         }
       }
     </style>
@@ -158,21 +179,20 @@
     <div id="app">
       <main id="main-content" class="static-shell" data-rifty-static-shell>
         <div class="static-shell-inner">
-          <a class="static-shell-brand" href="__RIFTY_REPOSITORY_URL__">
-            <span class="static-shell-mark" aria-hidden="true"></span>
-            rifty
-          </a>
+          <a class="static-shell-brand" href="__RIFTY_REPOSITORY_URL__">RIFTY</a>
           <p class="static-shell-kicker">Open runtime · Self-hostable</p>
           <h1>
-            Node, npm, and a dev server —
-            <span class="static-shell-accent">inside a browser tab.</span>
+            Node, npm &amp;<br />
+            a dev server —<br />
+            <span class="static-shell-accent">in a tab.</span>
           </h1>
           <p class="static-shell-copy">
-            An open, MIT-licensed, self-hostable Node-compatible runtime and WASI runner for
-            Chromium. Install packages, run Node-compatible apps and CLIs, or execute WASI guests.
+            rifty is an open, self-hostable Node-compatible runtime and WASI runner for Chromium.
+            Run tested Express 4, Vite 7, npm tooling and .wasm workflows — execution and files stay
+            in the tab.
           </p>
           <a class="static-shell-link" href="__RIFTY_REPOSITORY_URL__">
-            View rifty on GitHub
+            VIEW RIFTY ON GITHUB <span aria-hidden="true">↗</span>
           </a>
         </div>
       </main>

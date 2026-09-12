@@ -50,7 +50,7 @@ Realm/storage constraint (load-bearing): the VFS interface is synchronous; sync 
    - re-selecting the SAME project (same slug) reuses its tree (fast); switching to a different project re-runs its arrival path (instant: snapshot restore; from-scratch: visible install). The page-side ad-hoc `npm install` stamps under slug `''`, which no worker boot ever reuses.
 > Correction 2026-06-21 (ADR-0165): §4's reuse key `slug = preset.id` is project-scoped for multi-project — `slug = projectId | 'scratch'`. Two projects from one Starter share `templateId`/deps but must NOT reuse each other's node_modules; the `devServer.boot` templateId-keyed cleanup also fires on root/projectId change. Baked snapshots stay template-keyed (shared Starter artifact).
 
-5. **Trust model**: stamp trusts the tree — no per-file verification. Escape hatch: deleting `node_modules` or changing package.json deps forces a fresh worker install. Invalidation strategy is provisional → `docs/backlog/playground/install-stamp-invalidation.md`.
+5. **Trust model**: stamp trusts the tree — no per-file verification. Escape hatch: deleting `node_modules` or changing package.json deps forces a fresh worker install. Saved-open policy: `docs/adr/playground/0415-open-saved-projects-independently-of-installation-proof.md`.
 6. **UI**: TemplateSwitcher dropdown groups rows under "Instant start" / "From scratch"; rows render the preset `tag` pill (instant / npm install). e2e selectors (`data-testid="gallery"`, `data-preset`) unchanged.
 7. **Baked node_modules snapshots** (instant only) — the first-ever boot of an instant template is truly instant, no silent install:
    - `pnpm snapshots:bake` runs a REAL `install()` (same installer, shadow overrides, native gate as the worker) into a memory VFS for every template declaring `bakedNodeModulesUrl`, and writes node_modules + lockfile as a gzipped JSON asset under `apps/playground/public/snapshots/` (vite: 8 packages, ~9 MB gz — dominated by `@esbuild/wasi-preview1/esbuild.wasm`; kept, the tree must be byte-equivalent to an installed one).
@@ -71,3 +71,11 @@ Superseded sub-decision (this ADR was not yet merged): a first cut ran the from-
 - ~9 MB committed asset; each re-bake adds another copy to git history. Regeneration policy + size pressure tracked in `docs/backlog/playground/baked-snapshot-regeneration.md`.
 - A corrupted-but-stamped tree boots a broken dev server; recovery = delete node_modules / change deps. Accepted for now; see backlog item.
 - `fullstack-demo` e2e: selecting `express-sqlite` streams `npm: + express@…` from the worker before the server boots (deliberate product change).
+
+## Corrections (active)
+
+2026-09-10 — ADR-0415 supersedes decision 5 and its Consequences only where
+removed node_modules or changed dependencies implied automatic installation on
+saved open. Files and terminal remain accessible; dependency failures occur at
+use, installation remains explicit. Setup-kind first materialization and no
+per-file surveillance remain.

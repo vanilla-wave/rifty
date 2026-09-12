@@ -124,6 +124,8 @@ export interface ResolveContext {
   readonly parentInstallPath: string;
   readonly parentLockfilePath: string;
   readonly parentOrigin: 'root' | 'lockfile' | 'metadata';
+  /** Only a request issued by the registry's same-version companion declaration. */
+  readonly companionTriggerVersion?: string;
   readonly lockfilePathTranslations: readonly LockfilePathTranslation[];
 }
 
@@ -176,7 +178,14 @@ export function lockfileReuseDecision(
     overrides,
     hit?.entry.version,
   );
-  const policyFrontier = override !== null || recipe !== null;
+  const companion =
+    ctx.companionTriggerVersion !== undefined &&
+    ctx.parentName !== undefined &&
+    companionRequestsFor(ctx.parentName, ctx.companionTriggerVersion)[name] === range;
+  if (ctx.companionTriggerVersion !== undefined && !companion) {
+    throw new TypeError('Companion request does not match its registry-owned declaration');
+  }
+  const policyFrontier = override !== null || recipe !== null || companion;
   if (!hit) return { kind: 'miss', reason: 'missing-entry', policyFrontier };
   if (
     (!rangeIsUnconstrained(effectiveRange) && !matchesRange(hit.entry.version, effectiveRange)) ||
@@ -510,14 +519,13 @@ export async function walkAndPin(
           }
         }
       }
-      // ADR-0188: same-version companion pins for shadow internals shims
-      // (rollup ↔ @rollup/wasm-node lockstep). Injected on BOTH sources —
-      // replay re-derives them from (name, version); a pre-shim lockfile
-      // misses the entry and throws EBROKENLOCK (delete + re-install).
+      // ADR-0399: the injected policy edge can acquire a missing companion;
+      // its retained parent and ordinary children keep their real source origin.
       const companions = companionRequestsFor(pin.name, pin.version);
-      prefetchPackuments(companions, childContext);
+      const companionContext = { ...childContext, companionTriggerVersion: pin.version };
+      prefetchPackuments(companions, companionContext);
       for (const [depName, depRange] of Object.entries(companions)) {
-        await visit(depName, depRange, childContext, optional, false);
+        await visit(depName, depRange, companionContext, optional, false);
       }
     })();
   }

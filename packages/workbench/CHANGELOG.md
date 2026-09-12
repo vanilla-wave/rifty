@@ -2,7 +2,82 @@
 
 ## [Unreleased]
 
+- Saved-toolchain and Node-entry adapter preparation carry the live cwd and event-loop refs (ADR-0421).
+
+- Remove completed Node command process/stdio listeners before admitting the next command (ADR-0422).
+
+- Compose no-COI project file/command policy on the permanent Worker VFS; reuse Shell and Node entry execution, retain handlers through Stop/drain/flush and reject background jobs.
+- Keep no-COI launch byte-driven; use existing CLI promise tracking, consume reported invocation errors and atomically settle fatal resident starts (ADR-0423).
+
+- Reuse program-entry adapter/CLI preparation in no-COI bin launches; explicit registry installs use the producer preparation recipe, preventing false successful Vite runs after missing adapter facts.
+
+- Apply no-COI producer archives through shared validation/overlay/flush; saved opening derives real adapter facts and defers adapter failures to use without install proof.
+
+- No-COI worker reports authoritative storage fallback; reuse VFS namespace validation (ADR-0419).
+
+- Make deployment.wasm/sqlite optional; preserve absence through recursive workers, reject malformed supplied values, and skip the SQLite provider without a URL (ADR-0416).
+
+- Prove npm fails when Scratch catalog dirty persistence hits quota or permission errors, retaining the prior catalog across reload; the regression kills swallowed reflection errors.
+
+- Open saved projects and Node commands independently of install claims; retain snapshot transactions and bind runtime adapters only from usable existing provenance. Keep Scratch dirty classification in the companion (ADR-0414/0415).
+
+- Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
+
+- Publish prepared dependency snapshots; reject unprepared apply sources before effects while preserving legacy initial restore and literal saved-file conflicts. Preserve acquired-tree preload failures under preferred storage.
+
+- Configure effective owner startup/storage-proof, project-file observation/durability and Playground request budgets through public deployment options; preserve omitted defaults, uniform catalog silence and applied/unknown settlement (ADR-0410).
+- Reject invalid or overflowing deployment wait budgets before effects; bound at2,147,483,647ms and round positive fractions upward, including existing preview/silence settings.
+
+- Add deployment.previewPrefix for scoped copied-SW HTTP/iframe/HMR routing, with immutable configuration proof and preserved default routes (ADR-0409).
+
+- Retain unjournaled orphan Scratch bytes through the existing catalog transaction, open fresh Scratch, and expose non-consuming public list/export across persistent reopen (ADR-0407).
+- Refuse directories at catalog/journal paths before recovery or cleanup; malformed storage cannot authorize fresh Scratch.
+
+- Add optional literal `storage.namespace` to both entrypoints; paired OPFS preload/writes stay inside the selected directory, preserving default storage and the origin-wide lease (ADR-0402).
+
+- Add snapshot-only acquisition without a registry URL/client or Eddy; required snapshots fail with public reasons, saved state keeps priority, and explicit npm calls retain local replay (ADR-0398).
+- Produce ordinary npm Vite/Rollup locks through declared companion acquisition while preserving caller ordinary/companion source identities (ADR-0399).
+
+- Preserve saved snapshot projects by default; explicit error/overwrite application runs on every request, retains untargeted files, and reports public conflict paths. Catalog transactions cover first admission, rollback and recovery (ADR-0394).
+
+- Publish a complete `dist/assets` Worker/SW/WASM closure; hosts copy it and supply ordinary URLs without worker compilation, aliases or a QuickJS wrapper (ADR-0390).
+
+- Public `produceDependencySnapshot` bakes caller-pinned npm v3 locks into tar.gz and returns snapshot/runtime identities; packed Node/Chromium restore proof covers real package execution (ADR-0387).
+
+- Dependency snapshots support deterministic standard tar/gzip envelopes with disjoint payload/control paths, long UTF-8 names and empty directories; legacy v3 JSON/gzip remains readable (ADR-0386).
+- Recovery snapshots borrow owner bytes until structured clone; protected guest reads still copy, avoiding an extra full-tree snapshot copy.
+- No-COI read streams use the same guarded mirror as synchronous fs, so pending persistence cannot expose stale native bytes.
+
+- Explicit no-COI install skips only fresh, nonempty, durable-equal package bytes and verified recursive directories; dirty paths retain healing.
+
+- No-COI open activates saved adapters from stamp/lock authority; explicit install publishes durable claims through shared reserved-path guards.
+
+- Reject no-COI install/build when OPFS reports unhealed persistence failures.
+
+- Package preparation delegates to registry; ordinary `.vite` files survive snapshots/archives and generic diagnostics use Workbench provenance (ADR-0384).
+- Foreground node file/eval commands keep one drain through listen/close; last close exits naturally after referenced work, preserving previews (ADR-0385).
+
+- No-COI worker loads install/activation code on first install or restore; failed chunk fetch rejects that request while eval/fs remain usable.
+
+- Preserve every source worker entry in bare-import consumer wrappers, beside published dist entries.
+
+### Fixed
+
+- Explicit snapshot application handles absent, malformed or directory `package.json` through ordinary file conflicts; stamp demotion retains only valid prior provenance.
+
+- No-COI install snapshots reuse mirror bytes until outgoing structured clone instead of pre-copying the full tree.
+
+### Added
+
+- The generic no-COI Worker can start one caller-selected resident installed
+  bin and serve its existing cross-realm HTTP/WebSocket preview bridge
+  (ADR-0377).
+
 ### Changed
+
+- The no-COI Worker installs exact manifests and runs admitted installed bins
+  without Vite identity/version/path/lifecycle policy. Generic installed-tree
+  finalization is isolated from the existing Vite project finalizer.
 
 - Owner child launchers call `reservation.commit` /
   `abortBeforeSpawn` / `abortAfterChildSettlement` directly. The three
@@ -20,6 +95,13 @@
   JSON + binary kernel sync API with no legacy fallback.
 
 ### Fixed
+
+- Resident readiness now requires ADR-0378 loader-generation ownership of the
+  requested port. Harmless unref cleanup no longer blocks build→dev, while
+  stale timer, AbortSignal, MessageChannel, BroadcastChannel and Promise
+  continuations cannot supply false readiness. ADR-0379 concentrates entry,
+  ownership and live bind settlement behind one internal module; bind→close
+  before settlement rejects.
 
 - npm shell `EBROKENLOCK` stderr line surfaces the installer's message (which
   entries, which reason) instead of a `(unknown package)` placeholder; the
@@ -39,6 +121,11 @@
 
 ### Added
 
+- **No-COI SDK toolchain Worker (ADR-0375).** One Worker owns runtime/VFS, real
+  npm-client + installed registry-twin esbuild admission, installed `.bin`
+  execution, loud overlap/death/clean-close settlement, and the generic
+  shared-WASM boundary.
+
 - **Owner-authoritative command completion and direct VFS entries (ADR-0362).**
   `ProjectTerminal.complete()` uses a bounded, correlated PTY request against
   the owning Shell's live cwd/VFS. Owner errors, close, timeout, and death
@@ -54,6 +141,11 @@
   needed — the default handles the 42 s first open unconfigured.
 
 ### Fixed
+
+- No-COI installed-bin failure projection never reads a forbidden ninth
+  `cause` getter. A throwing getter within the eight-link walk is read once and
+  absorbed, preserving the honest outer error.
+
 - `@emnapi/core@1.10.0` installs receive the exact upstream child-thread
   orphaned-reference cleanup backport before stamp promotion. A Vite 8
   unresolved import now returns Vite's normal non-zero build error instead of
@@ -114,12 +206,24 @@
   guarantee lives in the `@riftydev/git` facade (ADR-0357), so the local
   Starter read-latch and preflight object reads are gone.
 
+- Preview readiness starts its bounded service-worker and routed-HTTP proof
+  only after the exact project run advertises a candidate, so cold dependency
+  acquisition cannot falsely fail while its live dev server is still starting.
+- Kernel Worker hosts install the sealed entry in their initial static module
+  graph, so its listener admits the one-shot `init` before QuickJS preload; the
+  workspace source entry is explicitly retained through tree-shaking (ADR-0352).
+- Kernel workers register runtime-js's pre-entry hook directly, preserving its
+  selected readiness while installing the init listener synchronously (ADR-0351).
 - Dependency snapshot v3 now carries the exact integrity-pinned cache closure
   required by registry-backed shadow replay, verifies it before mutation, and
   merges it before publishing the restored lockfile. The first explicit install
   after instant Vite 8 restore no longer fails `EBROKENLOCK` (ADR-0346).
 
 ### Added
+
+- Playground definitions now admit exact `npm-dev-server` projects whose
+  manifest-owned `dev` script runs through the generic installed-bin and
+  PTY-correlated preview path, without a declared entry path or port (ADR-0349).
 
 - The terminal `node` command now admits Node 24-compatible CommonJS
   `-e`/`--eval`, `-p`/`--print`, and explicit `--input-type=commonjs`

@@ -141,7 +141,9 @@ describe('entry-scoped bootstrap envelope', () => {
     const outcome = await runEntryLifecycle(
       makeSpec({ kind: 'url', url: 'https://example.invalid/entry.js', bootstrap }),
       makeDeps({
-        preEntryHook: () => seen.push({ phase: 'pre-entry', value: readKernelEntryBootstrap() }),
+        preEntryHook: () => {
+          seen.push({ phase: 'pre-entry', value: readKernelEntryBootstrap() });
+        },
         runEntry: async () => {
           seen.push({ phase: 'entry', value: readKernelEntryBootstrap() });
         },
@@ -155,12 +157,43 @@ describe('entry-scoped bootstrap envelope', () => {
     ]);
   });
 
+  it('waits for asynchronous pre-entry readiness before running guest code', async () => {
+    const order: string[] = [];
+    let resolveReadiness!: () => void;
+    const readiness = new Promise<void>((resolve) => {
+      resolveReadiness = resolve;
+    });
+    const lifecycle = runEntryLifecycle(
+      makeSpec({ kind: 'source', code: 'void 0;', sourceUrl: '/entry.js' }),
+      makeDeps({
+        preEntryHook: () => {
+          order.push('pre-entry');
+          return readiness;
+        },
+        runEntry: async () => {
+          order.push('entry');
+        },
+      }),
+    );
+
+    await Promise.resolve();
+    expect(order).toEqual(['pre-entry']);
+
+    resolveReadiness();
+    await expect(lifecycle).resolves.toEqual({ threw: false, code: 0 });
+    expect(order).toEqual(['pre-entry', 'entry']);
+  });
+
   it('publishes null before pre-entry when the entry has no envelope', async () => {
     publishKernelEntryBootstrap({ protocol: 'test:stale/v1', payload: { mustNotLeak: true } });
     const seen: Array<KernelEntryBootstrapEnvelope | null> = [];
     await runEntryLifecycle(
       makeSpec({ kind: 'url', url: 'https://example.invalid/plain-entry.js' }),
-      makeDeps({ preEntryHook: () => seen.push(readKernelEntryBootstrap()) }),
+      makeDeps({
+        preEntryHook: () => {
+          seen.push(readKernelEntryBootstrap());
+        },
+      }),
     );
     expect(seen).toEqual([null]);
   });

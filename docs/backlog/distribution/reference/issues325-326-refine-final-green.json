@@ -1,0 +1,21 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS для docs-only PR #331: запись draft корректна. cwd/env остаётся без ответа; scope не settled, готовность и реализация API не подтверждены.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "f2bb7365e3f305c857dd7180b85c2de65d3b784b",
+  "unit_goal_source": "PR #331, docs-only refinement preparation; BASE 2c7f9bbf4c88c34c40ac4d83411ba2dda27eafae. Reviewer /root/sdk_refine_final, fresh independent read-only context, depth 1, no children. Raw request: $rifty-refine issues #325 + #326. Independently read original issue325-source.json / issue326-source.json under distribution/reference, with no user answers. Final draft set under docs/backlog: distribution/no-coi-project-files.md; distribution/public-api-ai-agent-exec-preview.md; distribution/README.md; distribution/reference/issues325-326-refine-evidence.md and original JSON snapshots. These are preparation evidence, not a ready implementation contract. Independently checked ADR-0131/0375/0376/0377 and relevant RuntimeFs, eval, sandbox, no-COI Worker, Shell and ProjectFiles code. Existing preview question remains visible; the unanswered per-call versus persistent cwd/env fork remains explicit. Relevant proof: clean diff check executed; supplied pr:check log inspected (docs-only 20/20 PASS), building-block log inspected (79 tests PASS); committed browser probe source/output inspected. Coverage is empty because this unit delivers documentation only: future traced draft acceptance/fault targets and API outcomes remain unimplemented and unproven. No accepted product goal is closed.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

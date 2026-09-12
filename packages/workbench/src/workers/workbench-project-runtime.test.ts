@@ -25,7 +25,6 @@ import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { createNoShadowInstallResultFixture } from './install-result.test-fixture.ts';
 import {
   type OwnerPackageConfig,
-  type OwnerPackageMutationKind,
   type OwnerPackageState,
   createOwnerPackageState,
 } from './owner-package-state.ts';
@@ -33,6 +32,10 @@ import {
   type OwnerVfsAuthority,
   createOwnerVfsAuthorityComposition,
 } from './owner-vfs-authority.ts';
+import {
+  type PlaygroundPackageMutationKind as OwnerPackageMutationKind,
+  createPlaygroundNpmObserver,
+} from './playground-package-mutations.ts';
 import {
   type WorkbenchProjectRuntime,
   createWorkbenchProjectRuntime,
@@ -669,10 +672,12 @@ async function harness(
     `${ROOT}/package.json`,
     new TextEncoder().encode(activePackageConfig.cfg.packageJson),
   );
-  authority.writeFileSync(
-    activePackageConfig.cfg.entryPath,
-    new TextEncoder().encode('export {};\n'),
-  );
+  if ('entryPath' in activePackageConfig.cfg) {
+    authority.writeFileSync(
+      activePackageConfig.cfg.entryPath,
+      new TextEncoder().encode('export {};\n'),
+    );
+  }
   authority.writeFileSync(
     `${ROOT}/node_modules/.bin/vite`,
     new TextEncoder().encode('#!/usr/bin/env node\n'),
@@ -739,7 +744,9 @@ async function harness(
     nodeWorkerRuntimeEnv,
     mutationGuard,
     publicationBarrier,
-    ...(recordMutation === undefined ? {} : { recordMutation }),
+    ...(recordMutation === undefined
+      ? {}
+      : { observeNpmOperation: createPlaygroundNpmObserver(authority, recordMutation) }),
     send: (frame: OwnerToPageFrame) => {
       frames.push(frame);
       onSend?.(frame, () => {
@@ -1063,7 +1070,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         kind: 'url',
         url: DEV_SERVER_WORKER_URL,
         bootstrap: {
-          protocol: 'rifty.dev-server/v1',
+          protocol: 'rifty.dev-server/v2',
           payload: {
             nodeWorkerRuntime: NODE_WORKER_RUNTIME_CONFIG,
             cfg: {
@@ -1332,7 +1339,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         kind: 'url',
         url: NODE_ENTRY_WORKER_URL,
         bootstrap: {
-          protocol: 'rifty.node-entry/v3',
+          protocol: 'rifty.node-entry/v4',
           payload: {
             hostRuntime: NODE_WORKER_RUNTIME_ENV,
             launch: {
@@ -1471,7 +1478,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         expect(spec).toMatchObject({
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v3',
+              protocol: 'rifty.node-entry/v4',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1555,7 +1562,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v3',
+              protocol: 'rifty.node-entry/v4',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1600,7 +1607,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         argv: [NODE_PROCESS_IDENTITY.execPath],
         entry: {
           bootstrap: {
-            protocol: 'rifty.node-entry/v3',
+            protocol: 'rifty.node-entry/v4',
             payload: {
               launch: {
                 kind: 'eval',
@@ -1647,7 +1654,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
           argv: [NODE_PROCESS_IDENTITY.execPath, '', 'alpha', '-x'],
           entry: {
             bootstrap: {
-              protocol: 'rifty.node-entry/v3',
+              protocol: 'rifty.node-entry/v4',
               payload: {
                 launch: {
                   kind: 'eval',
@@ -1822,7 +1829,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
         argv: [NODE_PROCESS_IDENTITY.execPath, ...scriptArgs],
         entry: {
           bootstrap: {
-            protocol: 'rifty.node-entry/v3',
+            protocol: 'rifty.node-entry/v4',
             payload: {
               launch: {
                 kind: 'eval',
@@ -1898,7 +1905,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-a'],
       entry: {
         bootstrap: {
-          protocol: 'rifty.node-entry/v3',
+          protocol: 'rifty.node-entry/v4',
           payload: {
             launch: {
               kind: 'eval',
@@ -1917,7 +1924,7 @@ describe('Workbench finite Node owner lifecycle Contract+RED', () => {
       argv: [NODE_PROCESS_IDENTITY.execPath, 'argv-b'],
       entry: {
         bootstrap: {
-          protocol: 'rifty.node-entry/v3',
+          protocol: 'rifty.node-entry/v4',
           payload: {
             launch: {
               kind: 'eval',
@@ -2554,7 +2561,7 @@ describe('Workbench project runtime', () => {
     h.runtime.handlePtyFrame({ type: 'pty:open', sid: 'terminal-npm-mutations' });
 
     expect(createNpmCommand).toHaveBeenCalledWith(expect.any(Function), {
-      recordMutation,
+      observeOperation: expect.any(Function),
       mapInvocationContext: expect.any(Function),
     });
     await h.runtime.close();

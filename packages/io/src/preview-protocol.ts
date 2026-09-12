@@ -13,6 +13,8 @@
  * on every SW↔main frame so addressing-shape and frame-shape drift are distinct failures.
  */
 
+export const DEFAULT_PREVIEW_PREFIX = '/preview/';
+
 /**
  * Regex matching the `/preview/<port>/...` request path the SW intercepts.
  * Groups: 1 = `<port>` digits; 2 = optional suffix (`/foo/bar`), empty for the
@@ -20,6 +22,36 @@
  * the pattern; canonical helper is {@link parsePreviewPath}.
  */
 export const PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
+
+/** Canonical absolute pathname prefix (ADR-0409); never decode escaped bytes twice. */
+export function normalizePreviewPrefix(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    !value.startsWith('/') ||
+    value.startsWith('//') ||
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: reject raw controls before URL parsing strips them.
+    /[\\?#\u0000-\u001f\u007f]|%2f|%5c/i.test(value)
+  ) {
+    throw new TypeError('previewPrefix must be an absolute pathname without encoded separators');
+  }
+  // Append before URL parsing so a literal trailing space becomes %20, not trimmed.
+  const path = new URL(value.endsWith('/') ? value : `${value}/`, 'http://localhost').pathname;
+  if (path.startsWith('//')) throw new TypeError('previewPrefix must have one leading slash');
+  return path;
+}
+
+/** Same captures as PREVIEW_PREFIX_RE; safe to transport into generated WebSocket code. */
+export function previewPrefixPattern(prefix: string = DEFAULT_PREVIEW_PREFIX): RegExp {
+  const normalized = normalizePreviewPrefix(prefix);
+  if (normalized === DEFAULT_PREVIEW_PREFIX) return PREVIEW_PREFIX_RE;
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped}(\\d+)(/.*)?$`);
+}
+
+/** Preserve existing decimal-port semantics; admission belongs to the port owner. */
+export function buildPreviewPath(port: number, prefix: string = DEFAULT_PREVIEW_PREFIX): string {
+  return `${normalizePreviewPrefix(prefix)}${port}/`;
+}
 
 /**
  * Synthetic host kept for the EXPLICIT `setupHmrBridge`/devMode legacy path
@@ -46,13 +78,16 @@ export function synthesizePreviewUrl(path: string, port?: number): string {
 }
 
 /**
- * Parse a pathname against {@link PREVIEW_PREFIX_RE}. Returns `null` for a
+ * Parse a pathname against {@link previewPrefixPattern}. Returns `null` for a
  * non-preview path; otherwise `port` (decimal int) and `rest` after the prefix.
  * `rest` is `/` for the bare `/preview/<port>` form, matching what the SW needs
  * to synthesise an upstream URL.
  */
-export function parsePreviewPath(path: string): { port: number; rest: string } | null {
-  const m = PREVIEW_PREFIX_RE.exec(path);
+export function parsePreviewPath(
+  path: string,
+  prefix: string = DEFAULT_PREVIEW_PREFIX,
+): { port: number; rest: string } | null {
+  const m = previewPrefixPattern(prefix).exec(path);
   if (!m) return null;
   const port = Number.parseInt(m[1]!, 10);
   const rest = m[2] ?? '/';

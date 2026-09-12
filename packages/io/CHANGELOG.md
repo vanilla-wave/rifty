@@ -2,7 +2,21 @@
 
 ## [Unreleased]
 
+- Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
+
+- Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,
+  `buildPreviewPath`, optional parser prefix; `/preview/` remains the default (ADR-0409).
+
+- Constructor initialization follows used exports; minified Buffer/EventEmitter/Stream retain Node names.
+
 ### Changed
+
+- `Buffer.from(ArrayBuffer | SharedArrayBuffer, byteOffset?, length?)` now aliases
+  the supplied backing store like Node (ADR-0350). Writes through raw,
+  cross-realm, and WebAssembly-memory stores remain visible; offset/length,
+  detachment, and grow behavior are parity-pinned. Omitted `length` tracks a
+  resizable/growable store; explicit `length` stays fixed. Typed-array input
+  still copies.
 
 - `EventEmitter` is one callable listener-state owner for `new`, subclassing,
   `.call(target)`, and `util.inherits` (ADR-0324).
@@ -105,6 +119,14 @@
   mode); exported from `streams/index.ts`.
 
 ### Fixed
+
+- Packed strict declarations keep Node's real `Duplex.toWeb` pair without a
+  static-side suppression or widening `Readable.toWeb`.
+- **Callable Node stream constructors (ADR-0353).** `Readable`, `Writable`,
+  `Duplex`, `Transform`, and `PassThrough` now initialize legacy
+  `util.inherits` receivers through `.call(this, options)` while preserving
+  no-`new`, ES-subclass, prototype, static, name, and arity parity. Real memfs
+  read streams can serve webpack assets without a package-specific fallback.
 
 - **Node stream source protocol converges on one owner (ADR-0237–0239).**
   `Readable` now dispatches late-bound `_read`, keeps demand latched until

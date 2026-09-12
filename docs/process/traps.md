@@ -33,6 +33,8 @@
 - **verify-committed-not-worktree**: gates prove the WORKING TREE, not the commit → uncommitted/unstaged edits keep gates green while the push misses files → re-run the decisive check on the committed state before push.
 - **parity-runner-in-process**: parity cases run rifty builtins in-process in the Node host → `globalThis.process` is REAL Node; bare `Buffer`/`process`/`console`/`global` in a case is Node==Node tautology (false-green) → builtins resolving "the live process" must `instanceof NodeProcess` check; cases must `require('node:buffer')` etc. explicitly; RED-check by stashing `packages/`.
 - **parity-win32-alias**: rifty ships `path.win32 === posix` → never parity-test `path.win32.*` (real Node diverges).
+- **codex-sandbox-listen-eperm**: `pnpm pr:check` / playwright / `tsx` lanes die 3–4 min in with `listen EPERM …/tsx-501/*.pipe` or a loopback `listen` refusal, no failing test → the Codex `workspace-write` sandbox denies IPC pipes and local ports by construction (21 hits on #294, twice on 2026-09-03), and every retry then passes through an LLM guardian → run those lanes with `sandbox_permissions: require_escalated` from the FIRST attempt; never read their in-sandbox failure as a code failure. Optional: `~/.codex/rules` prefix rules for `pnpm pr:check` / `pnpm test:*` skip the guardian.
+- **codex-output-schema-strict**: `codex exec --output-schema tools/review/review-schema.json` (the checkpoint-run recipe) dies before any work with HTTP 400 `invalid_json_schema … 'required' … Missing 'evidence'` → OpenAI strict structured output wants every property in `required`, but `findings[].evidence` is optional in the schema → run without `--output-schema`, demand a JSON-only final message, validate with `node tools/review/blockers.mjs` (worked 2026-09-11, codex-cli 0.154.0); or make the schema strict-compatible (`evidence` required + nullable).
 
 ## e2e
 
@@ -51,6 +53,8 @@
 - **e2e-runs-locally**: belief that COI blocks local e2e is wrong → playground vite config ships COOP/COEP, browsers installed → `npx playwright test --project=chromium <spec>` is the fastest RED→GREEN loop for owner/shell behavior.
 
 ## Browser runtime & bundling
+
+- **copied-asset-fingerprints**: Workbench `dist/assets` bundles the runtime; shared-chunk changes can rename imports in the large TypeScript worker. `check:esbuild-legacy-retirement` pins its complete bytes plus the lexical compiler (ADR-0391). After a reviewed source change, rebuild, inspect the new compiler outputs and update only their filename/size/SHA pins; keep negative payload tests and packed-browser proof. SW stays classic; Workers are ESM.
 
 - **worker-console-invisible**: worker-realm logs never reach page/Playwright console; BroadcastChannel is shimmed in workers → route diagnostics via `process.stdout.write`; an eval-crashed kernel worker shows only as `page.on('worker')` create→close ~0.1s apart (DOM `error`, no exit frame).
 - **pre-entry-hook-lives-in-host**: refactoring runtime-js's install path silently breaks the browser → `setKernelPreEntryHook` is last-writer-wins and the playground `kernel-worker-entry.ts` registration is the one that runs (ADR-0157) → update the host hook with any shim refactor; failure = silent emnapi pthread crash, preview 503, only the SW-preview e2e catches it.
@@ -71,8 +75,13 @@
 - **default-timeout-load-flake**: red main after green PRs, failure ≈5000ms with NO assertion diff → real-Worker test hit vitest's default `it()` timeout under higher CI parallelism → explicit generous `it()` timeout; keep inner protocol bounds (e.g. `waitReplyAsync(2000)`) as the correctness guard.
 - **count-ratchet-lossy**: count-only ratchet passes a same-count swap silently → a count is a lossy aggregate → carry an identity digest (hash of the sorted normalized-signature multiset) per allowlist entry.
 - **write-ack-not-durable**: sleep barriers "proving" persistence lie → write-ack means applied to owner memory; the OPFS write-through drains behind it → prove durability with an acked flush IPC (durable-or-throw flush), never a timeout.
+- **opfs-file-readback-race**: polling `getFile().arrayBuffer()` while a native writable is closing can throw `NotReadableError` on Linux — a fresh File can become stale before its read → await the actual flush/close acknowledgement before acquiring the readback File.
 
 ## Tooling wiring
 
+- **caller-sweep-omits-examples**: "no callers" cleanup breaks workspace typecheck and HTTP/HMR tests → fixed packages/apps/tools/services sweep omitted `examples/vite-like-dev` → enumerate `pnpm-workspace.yaml` roots before retiring an API; private examples can carry a tested baseline.
+
 - **new-toplevel-dir-invisible**: a new top-level dir (e.g. `services/`) is silently ignored → workspace/arch/test/backlog tooling hardcodes `packages|apps|tools` → wire 6 spots: pnpm-workspace glob, vitest unit include, `check:arch` args, arch-boundaries sweep, arch-rules carve-out, backlog SCAN_ROOTS; not in `build:libs`; publish build = hand-written tsup config.
 - **pnpm-eats-double-dash**: `pnpm test:parity -- foo` drops the filter → pass args bare: `pnpm test:parity foo`.
+
+- **generated-sw-source-ratchet**: `apps/playground/public/sw.js` is the ADR-0016 bundle, not handwritten source. `check:file-size` excludes exactly that output (replaces its old879-line pin); TS inputs and `build/sw-plugin.ts` stay measured. Do not hand-edit/minify/split the bundle to satisfy a source line count. Verify canonical generator bytes and production runtime; this exclusion is not an artifact-drift check.

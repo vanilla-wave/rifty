@@ -1,8 +1,7 @@
-# glue — page-realm integration
+# glue — boundary adapters
 
-Page-side ports, clients, and bridges connecting a host to the owner worker and
-lower platform packages.
+Adapters between Workbench and lower packages: ports, clients, portable archives
+and snapshot production. Package policy stays with its lower-package owner.
 
-Belongs here: the page-realm side of one channel or concern. Doesn't:
-owner-realm authority (→ `../workers`), the Workbench public surface and
-protocol (→ `../workbench`), or host UI policy.
+Public surface/protocol → `../workbench`; durable owner authority → `../workers`;
+host UI stays outside this package.

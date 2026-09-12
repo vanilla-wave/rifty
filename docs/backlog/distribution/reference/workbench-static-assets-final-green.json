@@ -1,0 +1,221 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS for I2 runtime assets; accept this slice and continue PR #316. Whole-goal completion and merge are not certified.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/workbench-static-assets.md:14-58 at clean committed HEAD ab3871d714525c4b7db75d6be0b3631817997783; BASE c798a8e84a6d1489c89aeefe3788ceda7d0570e5, prior accepted producer slice. Authority: docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:33 and I2 at :77; ADR-0390, ADR-0352 synchronous bootstrap, ADR-0381 lazy lexical compiler, ADR-0282 sealed entries; ADR-0391 exact gate exceptions with retained ADR-0316/0371 provenance. Fresh independent assets_final_review read AGENTS, rifty-review, review/checkpoint canon, raw unit diff, unchanged goal, current/prior raw PR body and gh pr view316 (draft, same HEAD), changed judging criteria at BASE, preparation revision d25162b5afeeeafa8e77b6d3d212eaa3f5ab34cf and raw missing-artifact RED logs. Prior producer deletion/ledger/map bookkeeping preserves its accepted proof and remaining I3-I8. PR-4: alias table moved byte-for-byte; static bootstrap/public-surface assertions retained and retargeted to package-owned composition. The copied-worker assertion correction matches BASE runtime-js/worker-entry.ts:84-88 and no-coi-vm-browser-proof.mjs:64-72: successful eval exposes stdout and returns undefined value; new probe requires real VM/compiler execution, result.ok and exact stdout42. No runtime criterion was relaxed. Retirement diff keeps original path/reference/packlist/map/generated-client and payload criteria; exact QuickJS/SQLite/compiler/lexer exceptions reflect existing runtime inputs rather than another esbuild source. Independently executed pnpm test:packed-consumer: PASS123.90s, /tmp/rifty-316-assets-final-packed.log; real package build/pack, offline tarball installation, consumer typecheck/copy/application build and fresh Chromium Vite7.3.6 preview/native HMR/SQLite, producer raw-gzip and HTTP-decoded restore with zero registry requests, copied VM/compiler stdout42. Independently executed bootstrap/compiler/export/retirement suites27/27 in /tmp/rifty-316-assets-final-carriers.log, owner startup/failure suite22/22 plus real emitted retirement inventory PASS in /tmp/rifty-316-assets-final-owner.log. Read-only build probe reran actual esbuild configuration with output writes removed, requiring nonempty boot roots and real compiler outputs:40 Worker outputs,1 classic SW,177 imports including11 dynamic imports,17 eager outputs; both compiler outputs excluded from eager closure, no external/missing edges; /tmp/rifty-316-assets-final-closure.log. Supplied full pr:check raw log inspected:25/25 PASS, test:run initially18 failures in8 files (15 explicit timeouts) all passed mandatory isolated rerun without code/timeout changes; parity PASS66.9s. Node24.16.0, Vitest2.1.9, Playwright1.60.0. No tracked files changed; clean HEAD rechecked.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:80",
+      "summary": "Registry-free snapshot-only acquisition and no terminal/package fallback remain in distribution/workbench-snapshot-only."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:85",
+      "summary": "Selected OPFS namespace and former-project reopening remain in vfs/workbench-storage-namespace."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:88",
+      "summary": "Scoped preview, assets and native HMR remain in service-worker/workbench-preview-prefix."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:91",
+      "summary": "Retained orphan downloads and fresh Scratch remain in playground/orphan-scratch-recovery."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:94",
+      "summary": "Effective configurable operation budgets and composed whole-goal proof remain in distribution/workbench-operation-budgets."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:98",
+      "summary": "Saved-state priority and explicit generic snapshot overwrite/error policy remain in distribution/workbench-snapshot-application-policy."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: complete published Worker/SW/JS/WASM closure copies whole without host Worker/SW compilation, builtin aliases or QuickJS bootstrap; custom source/dist entries retained.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/publishing/build-workbench-assets.mjs:16; tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:6; tests/integration/fixtures/workbench-vite-consumer/src/main.ts:8; packages/workbench/tests/package-surface.contract.test.ts:8; tests/integration/workbench-packed-consumer-contract.test.ts:206",
+      "note": ""
+    },
+    {
+      "row": "Acceptance2: fresh packed static consumer boots real Workbench, Vite7.3.6 preview/native HMR, SQLite and public producer snapshot journey with only ordinary host compilation.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.test.ts:17; tests/integration/workbench-packed-consumer.mjs:1093; tests/integration/workbench-packed-consumer.mjs:1153; tests/integration/workbench-packed-consumer.mjs:1207; tests/integration/fixtures/workbench-vite-consumer/package.json:8",
+      "note": ""
+    },
+    {
+      "row": "Acceptance3: synchronous sibling QuickJS URL before init; complete lazy compiler/QuickJS modules and existing lexical compiler boundary.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/publishing/workbench-kernel-asset.ts:3; tools/publishing/build-workbench-assets.mjs:50; tests/integration/workbench-packed-consumer-contract.test.ts:144; tests/integration/client-compiler-loading.test.ts:111; tests/integration/fixtures/workbench-vite-consumer/src/copied-worker-proof.ts:14; tests/integration/workbench-packed-consumer.mjs:1224",
+      "note": ""
+    },
+    {
+      "row": "Fault1: missing/external build/copy edge rejects incomplete published closure instead of requiring a host alias or CDN.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/publishing/build-workbench-assets.mjs:86; tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:7; tests/integration/workbench-packed-consumer.mjs:1040; tests/integration/workbench-packed-consumer.mjs:1228",
+      "note": ""
+    },
+    {
+      "row": "Fault2: Worker/WASM acquisition or bootstrap failure rejects through existing owner readiness without alternate runtime or fake success.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-owner-port.test.ts:137; packages/workbench/src/workbench/workbench-owner-port.test.ts:235; packages/workbench/src/workbench/workbench-owner-port.test.ts:319; tests/integration/workbench-packed-consumer.mjs:1064",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: owner-worker.js, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: kernel-worker.js, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: node-worker.js, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: dev-server-worker.js, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: typescript-worker.js, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: no-coi-toolchain-worker.js, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: sw.js, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: quickjs.wasm, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 static public asset: sql-wasm.wasm, copied with the complete dist/assets build located relative to the resolved published root.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tools/publishing/build-workbench-assets.mjs:16; tools/publishing/build-workbench-assets.mjs:75; tools/publishing/build-workbench-assets.mjs:100; tests/integration/workbench-packed-consumer.test.ts:17",
+      "note": ""
+    },
+    {
+      "row": "ADR-0391: only exact named QuickJS and SQLite binary size/SHA values bypass the runtime-WASM carrier detector; corruption and renaming reject.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:102; tools/checks/esbuild-legacy-retirement.test.ts:30; tools/checks/esbuild-legacy-retirement.test.ts:51",
+      "note": ""
+    },
+    {
+      "row": "ADR-0391: only the two exact compiler output filename/size/SHA values bypass the2 MB ceiling; esbuild bytes in raw/gzip/base64 forms and oversized replacements reject.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:91; tools/checks/esbuild-legacy-retirement.mjs:248; tools/checks/esbuild-legacy-retirement.test.ts:51",
+      "note": ""
+    },
+    {
+      "row": "ADR-0391: only the exact cjs-module-lexer2.2.0 inline WASM literal bypasses the prefix/base64 detector; unknown adjacent inline WASM remains rejected.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:112; tools/checks/esbuild-legacy-retirement.mjs:260; tools/checks/esbuild-legacy-retirement.test.ts:74",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "ab3871d714525c4b7db75d6be0b3631817997783"
+}

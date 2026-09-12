@@ -11,7 +11,7 @@ import {
   snapshotNodeWorkerRuntimeConfig,
 } from './node-worker-runtime-config.ts';
 
-export const DEV_SERVER_CHILD_BOOTSTRAP_PROTOCOL = 'rifty.dev-server/v1' as const;
+export const DEV_SERVER_CHILD_BOOTSTRAP_PROTOCOL = 'rifty.dev-server/v2' as const;
 
 export interface DevServerChildConfig {
   readonly nodeWorkerRuntime: NodeWorkerRuntimeConfig;

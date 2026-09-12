@@ -650,8 +650,9 @@ describe('ProjectSession files contract', () => {
 
     const snapshot = h.controller.files.snapshot();
     expect(snapshot).toEqual({
-      excludedDirectoryNames: ['node_modules', '.git', '.vite', 'dist'],
+      excludedDirectoryNames: ['node_modules', '.git', 'dist'],
       entries: [
+        { path: '/.vite', kind: 'dir', size: 0, version: h.version('vite-v1') },
         { path: '/src', kind: 'dir', size: 0, version: h.version('dir-v2') },
         {
           path: '/src/main.ts',

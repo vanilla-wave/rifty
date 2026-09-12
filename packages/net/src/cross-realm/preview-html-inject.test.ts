@@ -11,7 +11,6 @@ describe('injectPreviewWebSocketBridge (ADR-0189)', () => {
     // Before any existing head content, so it runs before framework dev clients.
     expect(scriptAt).toBeLessThan(out.indexOf('<title>'));
     expect(out).toContain('__riftyWebSocketBridgeInstalled');
-    expect(out).toContain('/preview/');
     expect(out).toContain('<body>x</body>');
   });
 

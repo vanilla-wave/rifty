@@ -76,7 +76,7 @@ function result(): InstallResult {
 
 function adapterWith(overrides: Partial<PackageAcquisitionAdapter>): PackageAcquisitionAdapter {
   return {
-    readTrustedPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
+    readPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
     planSnapshotRestore: async () => ({ status: 'rejected', reason: 'unavailable' }),
     install: async () => {
       throw new Error('unexpected install');

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add per-dispatch command policy and explicit background prohibition; preserve default Shell behavior.
+
 ### Fixed
 
 - `git` command probes no longer re-collapse facade-surfaced storage failures

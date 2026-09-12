@@ -41,9 +41,9 @@
           },
           {
             "path": "lib/main.cjs",
-            "content": "const esbuild = globalThis.__rifty?.esbuild;\nif (esbuild == null) {\n  throw new Error('rifty invariant: esbuild runtime slot is not initialized');\n}\nmodule.exports = esbuild;\n0 && (module.exports = {\n  analyzeMetafile,\n  analyzeMetafileSync,\n  build,\n  buildSync,\n  context,\n  formatMessages,\n  formatMessagesSync,\n  initialize,\n  stop,\n  transform,\n  transformSync,\n  version,\n});\n",
-            "sha256": "bd38f603e494f0cf4554d5f73b727e8886b90224f5a043d54d6bf036313576c8",
-            "bytes": 382
+            "content": "const esbuild = globalThis.__riftyShadowRegistry?.esbuild;\nif (esbuild == null) {\n  throw new Error('rifty invariant: esbuild runtime slot is not initialized');\n}\nmodule.exports = esbuild;\n0 && (module.exports = {\n  analyzeMetafile,\n  analyzeMetafileSync,\n  build,\n  buildSync,\n  context,\n  formatMessages,\n  formatMessagesSync,\n  initialize,\n  stop,\n  transform,\n  transformSync,\n  version,\n});\n",
+            "sha256": "00d51782a27da7b6f6f13404c97a46ac898d88e7213a7cda89253fc639952b33",
+            "bytes": 396
           },
           {
             "path": "package.json",
@@ -56,7 +56,7 @@
       "binding": {
         "adapterId": "rifty.runtime-adapter.esbuild.v1"
       },
-      "digest": "7cd677fe08657829bf151d3d97520984d81f70323cdc948f8fd0a7116e4a4afd"
+      "digest": "844104d3f7a0f7fb997a3678d63f8d34af0fe52c8f6788413b9bae8a92618c2d"
     },
     {
       "schema": 2,
@@ -179,5 +179,5 @@
       "digest": "eb0ca99df87e4df12d1fc3ec5b7fe8eb563cf68fe9527d7997c7e650fca95712"
     }
   ],
-  "digest": "c9f38a0ea9218c64fdc68bca65eb34817cb51f1c1132c89048ffcb86b510d4b0"
+  "digest": "68b82251f296d987ba8ca8883b14adf2785b507b4ed3b69a84ebcad76b6f7002"
 }

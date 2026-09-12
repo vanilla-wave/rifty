@@ -15,6 +15,7 @@ import {
   type NodeEntryRuntimeBinding,
   buildNodeEntryWorkerEntry,
 } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { preparePackageBinSpawnRequest } from '@riftydev/shadow-registry/runtime';
 import type { BinExecutor } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest, BinWorkerHandle } from '../glue/bin-executor.ts';
 import { childTerminalBootstrap } from '../glue/child-terminal.ts';
@@ -25,7 +26,6 @@ import {
   observeOwnerChildExit,
   projectOwnerChildRuntimeBindings,
 } from './owner-child-admission.ts';
-import { prepareViteBinSpawnRequest } from './vite-cli-prep.ts';
 
 /** Pure: build the spawn spec for a resolved bin request (unit-tested). */
 export function buildChildSpawnSpec(
@@ -61,7 +61,7 @@ export function prepareOwnerChildBinSpawnRequest(
   request: BinSpawnRequest,
   enrichRequest?: OwnerChildBinRequestEnricher,
 ): BinSpawnRequest {
-  const prepared = prepareViteBinSpawnRequest(request);
+  const prepared = preparePackageBinSpawnRequest(request);
   return enrichRequest?.(prepared) ?? prepared;
 }
 

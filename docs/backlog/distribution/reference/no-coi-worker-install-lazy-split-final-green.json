@@ -1,0 +1,116 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "I4 Final+GREEN PASS, 7/7 coverage; continue I5. Independently executed packed first-use install/restore, held import/busy and fetch faults: /tmp/rifty-install-independent-browser.log PASS; extraction-boundary contract 5/5 PASS. Inspected raw pr:check 25/25 and unchanged no-COI Vite build/HMR/memory/OPFS restart 5/5 logs. Initial packed RuntimeFs.mkdir setup failure corrected without weakening assertions; independent replay passed. PR-4 closure audit now follows literal dynamic imports and retains package/escape/exact-file checks.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "974cc355ecdd5cad59a967e2c9ed5327f2e60e5f",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-worker-install-lazy-split.md; BASE previous accepted I3 7a431a09a5b1c69b09a11b87ed827b30b4771ea8; HEAD 974cc355ecdd5cad59a967e2c9ed5327f2e60e5f. I4 implementation and changed supporting gates; I1-I3 accepted. Preparation reviewed at 3dd957a8a7fe2741190ec51d98a1ef1713004b14 before implementation.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/no-coi-client-bundle/goal.md",
+      "summary": "CI-only budgets for complete eager JS graphs of four packed artifacts, calibrated historical leaks and standing TypeScript guard remain."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Packed boot requests and complete eager graph omit npm-client, catalog and generated esbuild runtime; first install/restore loads once.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-install-browser-proof.mjs:6; tests/integration/no-coi-install-browser-proof.mjs:47; tests/integration/no-coi-install-browser-proof.mjs:114; tests/integration/fixtures/no-coi-packed-toolchain-consumer/measure-bundles.mjs:123",
+      "note": ""
+    },
+    {
+      "row": "Real Vite install/build, dev/HMR and restore/restart retain public no-COI SDK results.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2341; tests/no-coi/no-coi-dev-hmr.spec.ts:913; tests/no-coi/no-coi-dev-hmr.spec.ts:1052; tests/no-coi/no-coi-dev-hmr.spec.ts:1374",
+      "note": ""
+    },
+    {
+      "row": "Failed install and restore chunk fetch rejects with native error; same Worker retains eval/fs.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-install-browser-proof.mjs:15; tests/integration/no-coi-install-browser-proof.mjs:22; tests/integration/no-coi-install-browser-proof.mjs:68; tests/integration/no-coi-install-browser-proof.mjs:95",
+      "note": ""
+    },
+    {
+      "row": "Existing real Vite build byte parity and HMR/wedge-restart assertions remain unchanged.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2364; tests/no-coi/no-coi-dev-hmr.spec.ts:1104; tests/no-coi/no-coi-dev-hmr.spec.ts:1186",
+      "note": ""
+    },
+    {
+      "row": "Network / false-fallback: failed first install/restore chunk fetch rejects; eval/fs remain usable.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-install-browser-proof.mjs:15; tests/integration/no-coi-install-browser-proof.mjs:22; tests/integration/no-coi-install-browser-proof.mjs:91",
+      "note": ""
+    },
+    {
+      "row": "Worker first use / concurrent-same-key: held import preserves busy error, admitted completion and reuse.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-install-browser-proof.mjs:127; tests/integration/no-coi-install-browser-proof.mjs:188; tests/integration/no-coi-install-browser-proof.mjs:196",
+      "note": ""
+    },
+    {
+      "row": "Package split / sibling-drift: both install and restore load activation; boot/eval/fs do not.",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-install-browser-proof.mjs:15; tests/integration/no-coi-install-browser-proof.mjs:47; tests/integration/no-coi-install-browser-proof.mjs:87; tests/no-coi/no-coi-dev-hmr.spec.ts:913",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -6,7 +6,6 @@ import {
   isAbsolute,
   normalizePath,
 } from '@riftydev/vfs';
-import { isInsideInstallTree } from '../glue/install-stamp.ts';
 import {
   handleOwnerVfsCommitRequest,
   handleOwnerVfsDurabilityRequest,
@@ -23,7 +22,6 @@ import {
   type PackageMutationExecutor,
   applyPackageAwareHostCommit,
   hostCommitMutationIntent,
-  vfsMutationIntentPaths,
 } from '../glue/package-mutation-executor.ts';
 import { collectSnapshot } from '../glue/vfs-snapshot-port.ts';
 import { ClosedHandleError } from '../workbench/errors.ts';
@@ -48,7 +46,11 @@ export interface WorkbenchProjectVfsOptions {
   readonly durability: OwnerVfsDurabilityReceipt['durability'];
   readonly emit: (frame: OwnerProjectVfsFrame) => void;
   /** Companion metadata reflection, awaited before the originating mutation settles. */
-  readonly recordMutation?: (kind: 'guest' | 'file', treeRevision: number) => Promise<void>;
+  readonly recordMutation?: (
+    kind: 'guest' | 'file',
+    treeRevision: number,
+    intents: readonly VfsMutationIntent[],
+  ) => Promise<void>;
   /** Delivery failure must end the owner lifetime; stale project state cannot continue. */
   readonly fatal: (error: Error) => void;
 }
@@ -508,27 +510,22 @@ export function createWorkbenchProjectVfs(
       // recovery. No tentative/recovered revision crosses to the page.
       cursor.acknowledge(options.authority.treeRevision);
     } else {
-      if (mutationKind !== null && !extraneousTreeMutation(intents)) {
-        await recordAppliedMutation(mutationKind, priorTreeRevision);
+      if (mutationKind !== null) {
+        await recordAppliedMutation(mutationKind, priorTreeRevision, intents);
       }
       await publishThroughCurrent(true);
     }
     return scoped;
   };
 
-  // ADR-0307: a batch touching only paths strictly inside node_modules is an
-  // extraneous tree write — it never marks Scratch dirty.
-  const extraneousTreeMutation = (intents: readonly VfsMutationIntent[]): boolean =>
-    intents.length > 0 &&
-    intents.every((intent) => vfsMutationIntentPaths(intent).every(isInsideInstallTree));
-
   const recordAppliedMutation = async (
     kind: 'guest' | 'file',
     priorTreeRevision: number,
+    intents: readonly VfsMutationIntent[],
   ): Promise<void> => {
     const treeRevision = options.authority.treeRevision;
     if (treeRevision <= priorTreeRevision) return;
-    await options.recordMutation?.(kind, treeRevision);
+    await options.recordMutation?.(kind, treeRevision, intents);
   };
 
   const admitMutation = <T>(
@@ -693,9 +690,9 @@ export function createWorkbenchProjectVfs(
                   projectRoot,
                   candidate,
                 );
-                if (!extraneousTreeMutation([hostCommitMutationIntent(candidate)])) {
-                  await recordAppliedMutation('file', priorTreeRevision);
-                }
+                await recordAppliedMutation('file', priorTreeRevision, [
+                  hostCommitMutationIntent(candidate),
+                ]);
                 return applied;
               } catch (error) {
                 if (applied !== null) {

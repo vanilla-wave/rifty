@@ -69,15 +69,24 @@ export function installSharedMemoryTolerantTextDecoder(
     return false;
   }
   const patched = function (this: TextDecoder, input?: unknown, opts?: unknown): string {
+    const SharedBuffer = (
+      globalThis as typeof globalThis & {
+        SharedArrayBuffer?: typeof SharedArrayBuffer;
+      }
+    ).SharedArrayBuffer;
     // Copy a shared-backed view into a PRIVATE buffer before decoding. Without
     // the copy the realm that rejects shared views throws here and crashes the
     // emnapi pthread worker (the bug this shim exists to fix).
-    if (ArrayBuffer.isView(input) && input.buffer instanceof SharedArrayBuffer) {
+    if (
+      typeof SharedBuffer === 'function' &&
+      ArrayBuffer.isView(input) &&
+      input.buffer instanceof SharedBuffer
+    ) {
       const copy = new Uint8Array(input.byteLength);
       copy.set(new Uint8Array(input.buffer, input.byteOffset, input.byteLength));
       return orig.call(this, copy, opts);
     }
-    if (input instanceof SharedArrayBuffer) {
+    if (typeof SharedBuffer === 'function' && input instanceof SharedBuffer) {
       return orig.call(this, new Uint8Array(input).slice(), opts);
     }
     return orig.call(this, input, opts);

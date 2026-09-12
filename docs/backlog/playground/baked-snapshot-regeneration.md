@@ -62,3 +62,7 @@ one this item owns (freshness identity vs catalog drift); the embedder-side
 consequence — a session that opens fast and is not the project — needs its
 own loud surface at pickup. Evidence:
 `docs/backlog/vfs/reference/tracker-snapshot-open-split-2026-09-01.md` §Blocker.
+
+Update 2026-09-12: the producer is public since ADR-0386/0387
+(`produceDependencySnapshot`, tar.gz envelope; the v3 JSON asset stays
+readable) — the re-bake against main is that call, not a script to write.

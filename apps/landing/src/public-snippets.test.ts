@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { type Plugin, build } from 'vite';
 import { describe, expect, test } from 'vitest';
-import { HERO_SNIPPET, QUICKSTART_SNIPPET, snippetText } from './public-snippets';
+import { QUICKSTART_SNIPPET, snippetText } from './public-snippets';
 
 interface BuildArtifact {
   readonly type: 'asset' | 'chunk';
@@ -17,17 +17,11 @@ interface ViteBuildOutput {
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
 const playgroundRoot = resolve(repoRoot, 'apps/playground');
-const heroId = 'virtual:landing-hero-snippet.ts';
 const quickStartId = 'virtual:landing-quickstart-snippet.ts';
-const heroFile = resolve(playgroundRoot, '.landing-snippets/hero.ts');
 const quickStartFile = resolve(playgroundRoot, '.landing-snippets/quickstart.ts');
 const workerUrlTypesFile = resolve(playgroundRoot, '.landing-snippets/worker-url.d.ts');
-const resolvedSnippetIds = new Map([
-  [heroId, heroFile],
-  [quickStartId, quickStartFile],
-]);
+const resolvedSnippetIds = new Map([[quickStartId, quickStartFile]]);
 const snippetSources = new Map([
-  [heroFile, snippetText(HERO_SNIPPET)],
   [quickStartFile, snippetText(QUICKSTART_SNIPPET)],
   [
     workerUrlTypesFile,
@@ -80,7 +74,7 @@ describe('landing public snippets', () => {
     };
 
     const program = ts.createProgram({
-      rootNames: [heroFile, quickStartFile, workerUrlTypesFile],
+      rootNames: [quickStartFile, workerUrlTypesFile],
       options,
       host,
     });
@@ -115,7 +109,6 @@ describe('landing public snippets', () => {
         rollupOptions: {
           preserveEntrySignatures: 'strict',
           input: {
-            hero: heroId,
             quickstart: quickStartId,
           },
         },

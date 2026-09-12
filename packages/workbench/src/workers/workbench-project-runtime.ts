@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { readRootProcessSnapshot } from '@riftydev/kernel';
 import { NODE_PROCESS_IDENTITY } from '@riftydev/runtime-js';
+import { binNameOf, createPreviewScope } from '@riftydev/shadow-registry/runtime';
 import {
   type BinExecutor,
   type CommandContext,
@@ -25,8 +26,8 @@ import {
   createOwnerChildNodeExecutor,
 } from './owner-child-node-executor.ts';
 import type {
+  OwnerNpmCommandOptions,
   OwnerPackageConfig,
-  OwnerPackageMutationKind,
   OwnerPackageState,
 } from './owner-package-state.ts';
 import { createOwnerProcessListCommand } from './owner-process-list-command.ts';
@@ -43,7 +44,6 @@ import {
   createProjectTerminalNamespace,
 } from './project-terminal-namespace.ts';
 import { type PtyServer, createPtyServer } from './pty-server.ts';
-import { binNameOf, createPreviewScope } from './vite-cli-prep.ts';
 
 export interface WorkbenchProjectRuntimeOptions {
   /** Materializer-owned root. Page claims and project ids are resolved before this seam. */
@@ -54,13 +54,14 @@ export interface WorkbenchProjectRuntimeOptions {
   readonly packageState: OwnerPackageState;
   readonly nodeEntryWorkerUrl: string;
   readonly devServerWorkerUrl: string;
+  readonly previewPrefix?: string;
   readonly nodeWorkerRuntimeEnv: Readonly<Record<string, string>>;
   /** Project VFS owns package FIFO, semantic evidence, and reply publication. */
   readonly mutationGuard: VfsMutationGuard;
   /** Owner-applied VFS state must precede every observable PTY completion. */
   readonly publicationBarrier: () => Promise<void>;
-  /** Companion metadata reflection for terminal package mutations. */
-  readonly recordMutation?: (kind: OwnerPackageMutationKind, treeRevision: number) => Promise<void>;
+  /** Optional consumer of real npm invocation facts. */
+  readonly observeNpmOperation?: OwnerNpmCommandOptions['observeOperation'];
   /** Raw project-local PTY frames; lifetime owner wraps tokens outside this module. */
   readonly send: (frame: OwnerToPageFrame) => void;
 }
@@ -165,7 +166,7 @@ export function createWorkbenchProjectRuntime(
     }
     options.send(frame);
   };
-  const previews = createPreviewRegistry({ send });
+  const previews = createPreviewRegistry({ send, previewPrefix: options.previewPrefix });
   const serverRef: { current?: PtyServer } = {};
   let binSequence = 0;
   let nodeSequence = 0;
@@ -289,7 +290,9 @@ export function createWorkbenchProjectRuntime(
       },
       {
         mapInvocationContext: namespace.toOwnerContext,
-        ...(options.recordMutation === undefined ? {} : { recordMutation: options.recordMutation }),
+        ...(options.observeNpmOperation === undefined
+          ? {}
+          : { observeOperation: options.observeNpmOperation }),
       },
     );
     shell.registerCommand('npm', async (args, ctx) => {

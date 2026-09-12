@@ -2,7 +2,53 @@
 
 ## [Unreleased]
 
+- Retire invocation watcher and promise-timer abort callbacks with their existing timer owner (ADR-0422).
+
+- Add structured FS RPC with checked persistence receipts (console eval keeps reporting evaluation only), console-only eval result typing and command protocol v5; preserve recovery mutations and clear completed Node invocation timers.
+- Carry fatal toolchain cause on its terminal frame; allow the serialized owner to take a reported rejection without clearing handles (ADR-0423).
+
+- Carry validated snapshot requests and optional-registry saved opening through existing toolchain operation/recovery ownership.
+
+- Carry preboot storage options through native Worker metadata; configured handshake timeout terminates pending workers/calls and ignores late readiness (ADR-0419).
+
+- Migrate Node entry bootstrap to v4 for optional host SQLite configuration; reject prior versions atomically (ADR-0416).
+
+- Reject unreadable acquired OPFS preload through Worker-error settlement, including pending eval/fs calls; unavailable-root memory fallback stays intact.
+
+- Toolchain protocol v3 adds validated open activation and composes the guarded Worker filesystem before module loading.
+
+- Remove esbuild-specific realm API/key; exact CJS identity now belongs to registry (ADR-0384).
+- Drain accepts a caller-owned live-handle query; listening ports prevent early completion/eval flush while terminal failures still win (ADR-0385).
+
+- Resolve VM overrides from native Worker construction metadata before boot;
+  rewrite skips QuickJS preload. No-COI toolchain realm defaults to rewrite,
+  generic remains quickjs; existing env/global precedence retained (ADR-0383).
+
+- Load the real TypeScript eval classifier only after Acorn rejects the source;
+  JavaScript-only workers no longer eagerly download it with ESM splitting.
+  Compiler chunk load failures throw with their original cause (ADR-0380).
+- Keep `autoDiscoverTsconfigPaths` behind explicit `await preloadTsconfigPaths()`;
+  unprepared opt-in throws `TSCONFIG_NOT_READY`, explicit maps remain immediate.
+  ADR-0382 overturns ADR-0380 D1 after finding the existing example consumer.
+- Generate a pinned, lexically browser-scoped real compiler so late loading
+  cannot mistake installed Node globals for a native host (ADR-0381).
+
+### Fixed
+
+- Successful no-COI restore labels recovery with its current backend, preserving acknowledged bytes through repeated OPFS/memory transitions.
+
+- No-COI writes reuse untouched recovery bytes; same-OPFS restore omits file payloads while preserving detached snapshots and backend-flip recovery.
+
 ### Added
+
+- Toolchain protocol v2 supports exact resident-bin start plus a host-held
+  binding/file activation snapshot restored into a replacement Worker
+  (ADR-0377); v1 peers fail during handshake.
+
+- Runtime Worker protocol carries the ADR-0375 toolchain handshake and
+  install/run-bin results through its existing correlation owner, including
+  exact protocol/backend decoding and Worker crash/disposal/clean-close
+  settlement.
 
 - **Measured child-FS sync-RPC hot path.** The completed one-hop/binary-request
   goal carries baseline, post-I1, and post-I2 two-lane Chromium artifacts while
@@ -17,6 +63,9 @@
   response. Empty and small `readFileSync` calls use one sync-RPC round-trip;
   larger reads continue from the first unread offset, with no cache or bypass.
 
+- **QuickJS host asset bootstrap API (ADR-0352).**
+  `@riftydev/runtime-js/install-process` exports `QUICKJS_WASM_URL_ENV` so a
+  browser host can publish its bundler-owned WASM URL before Node pre-entry.
 - **Node 24 synchronous `require(ESM)` (ADR-0348).** Plain-JS graphs now share
   one import/require job with Node namespace, `"module.exports"`, TLA, cycle,
   race, resolver, and statically detected CJS re-export semantics;
@@ -61,12 +110,55 @@
 
 ### Changed
 
+- The repo-only loader composition seam accepts exact builtin overrides for one
+  installed-bin generation (ADR-0378); normal public loader behavior is
+  unchanged.
+- Contextual loaders bind `node:module.createRequire` to their own generation
+  instead of replacing the realm-global ordinary-loader fallback (ADR-0379).
+
+- The repo-only `./internal` composition seam now ships in packed JS and
+  declarations for the SDK + Workbench no-COI Worker; the public root still
+  exposes no toolchain controller or protocol.
+
+- Sandbox toolchain controller/protocol stays on the repo-only internal seam;
+  the published runtime root exposes no admission-bypassing control plane.
+
 - **Entry-scoped runtime bindings (ADR-0371).** Node-entry v3 validates and
   freezes exact `{adapterId, packagePath}` rows in its existing clone metadata;
   recursive launches inherit them without a new channel or process-visible
   environment field.
 
 ### Fixed
+
+- Toolchain request snapshots copy own data descriptors instead of invoking
+  inherited iterators or Proxy getters; acknowledged root-relative writes use
+  the same root-normalized path as the Worker VFS.
+
+- Sandbox toolchain `WebAssembly.Memory` preserves native descriptor getter
+  order/cardinality and consumes stateful `shared` once before its named gap.
+
+- The toolchain realm applies WebIDL ToBoolean to `WebAssembly.Memory`'s
+  `shared` descriptor through its lexical guard, so truthy numbers/strings join
+  literal true without replacing the Worker-global constructor.
+
+- Toolchain peer clean-close, dispose and crash settle pending eval, fs and
+  toolchain calls through one owner. CJS, ESM, REPL and installed bins reject
+  own/inherited/accessor shared WebAssembly memory before native construction
+  while non-shared native identity remains unchanged.
+
+- Selected toolchain Worker realms warn once for same-realm
+  `child_process.spawn`; `os.cpus()` and `availableParallelism()` report one.
+  Generic explicit no-COI sandboxes retain their prior hardware report and no
+  new spawn warning. Multiline async REPL expressions settle before
+  `runtime.eval()` resolves; toolchain boot captures native timers before the
+  dynamic runtime entry installs tracked timer globals.
+
+- Same-realm spawned children now bind one private Node-compatible console to
+  their stdout/stderr pipes; global console and both module aliases share it.
+
+- Worker-realm TextDecoder compatibility now keeps its unconditional patch in
+  non-isolated browser realms while safely passing private inputs when the
+  `SharedArrayBuffer` global is absent.
 
 - Owner-backed `fs.*` calls now rehydrate the `VfsError` prototype erased by
   SyncRpc's JSON error frame before reaching `node:fs`, preserving exact Node
@@ -77,6 +169,40 @@
   physical kill, preventing emnapi pthreads from running after their creator
   has torn down shared N-API state during a failed Vite build.
 
+- Runtime-global QuickJS and live Express/SQLite smokes now run in bounded
+  physical children, keeping guest process globals and `MessagePort` handles
+  out of Vitest's task-update IPC realm.
+- Detached fetch keepalive now makes Chromium's
+  `WebAssembly.compileStreaming` / `instantiateStreaming` an unconditional
+  whole-realm, Promise-rejected `NotImplementedError` gap. Arbitrary
+  Response/PromiseLike internal-slot consumption can no longer bypass
+  keepalive tracking or silently hang a finite child (ADR-0158 correction).
+- `node:stream` core constructors are callable like Node: legacy inherited
+  receivers receive their non-default options and usable stream state, while
+  no-`new`, modern subclassing, prototype, and static identity stay intact
+  (ADR-0353). This restores memfs-backed webpack asset reads.
+- Browser QuickJS preload now threads the host-published URL and owner-fetched
+  tracked bytes through upstream `wasmLocation` / `wasmBinary`, cancelling HTTP
+  fault bodies before exact failure. It shares one promise/module across
+  duplicate same-realm bundles, drops a rejected promise so boot can retry, and
+  keeps native package artifact resolution and explicit location-only overrides
+  after guest Worker globals replace `process` (ADR-0352).
+- `installNodeRuntime` returns QuickJS readiness only for Node workers selecting
+  that engine; WASI and rewrite workers remain synchronous (ADR-0351).
+- Static direct `eval('(specifier) => import(specifier)')` importers now stay on
+  the constructing CJS/ESM module's VFS resolver, including importers created
+  inside the routed `Function` constructor. Indirect, aliased, global, and
+  dynamic-scope eval forms retain their directed ceilings.
+- Routed `Function` analysis no longer mistakes ordinary opaque calls in
+  generated Tapable hook bodies for derived Function-constructor execution;
+  statically known import-bearing constructor arguments remain loud.
+- **Webpack `vm.createContext` policy parity.** Context names are accepted as
+  metadata, and the QuickJS realm now enforces Node's
+  `codeGeneration.strings` / `codeGeneration.wasm` controls without changing
+  guarded intrinsic descriptors, statics, prototypes, or native-source shape.
+  First contextification owns the policy; option access order and validation
+  codes match Node. The rewrite opt-in stays loud when either disabled policy
+  cannot be enforced.
 - Public `spawnRuntime` Worker crashes now stay owned by the runtime controller
   after it rejects pending calls and publishes stderr/exit, instead of also
   rethrowing the same error into the creator global.

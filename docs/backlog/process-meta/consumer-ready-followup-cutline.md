@@ -4,7 +4,7 @@ status: draft
 title: Consumer Ready follow-up cutline
 created: 2026-06-12
 why: The current branch delivers a large adoption slice, but full Consumer Ready still has tracked future work across areas
-user_story: As a maintainer planning post-branch work, I want one durable index of every remaining Consumer-Ready follow-up (`Sandbox.exec` streaming, snapshot/restore, `create-rifty` scaffold, `node:zlib` subset…), but today that list lives only in temporary Superpowers spec notes that vanish with the branch.
+user_story: As a maintainer planning post-branch work, I want one durable index of every remaining Consumer-Ready follow-up (preview normalization, snapshot/restore, `create-rifty` scaffold, `node:zlib` subset…), but today that list lives only in temporary Superpowers spec notes that vanish with the branch.
 sources: [docs/ROADMAP.md, docs/backlog/distribution/README.md]
 ---
 
@@ -24,8 +24,8 @@ they are no longer part of the current branch.
 
 Hard consumer contract follow-ups:
 
-- `distribution/public-api-ai-agent-exec-preview` — `Sandbox.exec` streaming
-  results and normalized preview URL.
+- `distribution/public-api-ai-agent-preview-question` — inherited preview URL question;
+  cancellable no-COI project commands delivered by ADR-0418.
 - `distribution/public-api-ai-agent-contract-snapshot-restore` — public
   snapshot/restore/fork semantics.
 - `distribution/workbench-controllers` — `@riftydev/workbench` deep project
@@ -40,9 +40,9 @@ Runtime/project fidelity follow-ups:
   after the first honest one-shot subset (ADR-0159).
 - `runtime-js/platform-arch-adoption-friction` — ADR-0026 reconsideration gate.
 - `runtime-js/fs-promises-filehandle` — `fs.promises.open()` / FileHandle.
-- `runtime-js/vm-unwired-seams` — wire the `node:vm` wasm-URL env-config into a
-  browser/worker variant loader + expose explicit `disposeContext` (both defined +
-  typed in the ADR-0142 vm work, no production caller yet).
+- `runtime-js/vm-unwired-seams` — expose explicit `disposeContext` (defined and
+  typed in the ADR-0142 vm work, no production caller yet; WASM URL wiring shipped
+  in ADR-0352).
 - `runtime-js/vm-test-pinning` — pin the two membrane reconciliation caveats + backfill
   parity `expected` baselines on the Node-diff-only quickjs cases.
 - `runtime-wasi/runwasi-kernel-dispatch-wiring` — heavy WASI guest dispatch.

@@ -1,13 +1,12 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, joinPath } from '@riftydev/vfs';
 import { type Node as AcornNode, parse as acornParse } from 'acorn';
-// TODO(backlog: runtime-js/lazy-typescript-tsconfig-discovery):
-// share the lazy compiler boundary with eval-context detection.
-import ts from 'typescript';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
+import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { sandboxToolchainWebAssembly } from '../internal/sandbox-toolchain-realm.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
 import {
   type CjsExtensionHook,
@@ -45,16 +44,11 @@ export interface ModuleLoaderOptions {
   readonly transformSource?: TransformSourceHook;
   /**
    * tsconfig-style path aliases (ADR-0066), e.g. `{ "@/*": "/workspace/src/*" }`.
-   * Targets are absolute VFS path patterns; when supplied, this explicit map wins
-   * over auto-discovery.
+   * Targets are absolute VFS path patterns; the host owns config discovery.
    * Absent = Node-faithful resolution (bare `@/foo` is `MODULE_NOT_FOUND`).
    */
   readonly paths?: PathAliases;
-  /**
-   * Locate the nearest `tsconfig.json` and derive `compilerOptions.paths` via
-   * TypeScript's parser (`extends`, JSONC, `baseUrl` included). Off by default
-   * so vanilla Node-style resolution stays byte-stable.
-   */
+  /** Nearest tsconfig discovery; requires await preloadTsconfigPaths() first (ADR-0382). */
   readonly autoDiscoverTsconfigPaths?: boolean;
 }
 
@@ -104,7 +98,11 @@ export interface NodeEvalScriptRunner {
 
 interface ModuleLoaderCore {
   readonly loader: ModuleLoader;
-  runNodeEvalScript(source: string, explicitCommonJs: boolean): unknown;
+  runNodeEvalScript(
+    source: string,
+    explicitCommonJs: boolean,
+    compiler?: NodeEvalCompiler,
+  ): unknown;
 }
 
 interface AcornSyntaxFailure extends Error {
@@ -126,10 +124,49 @@ setSameRealmWorkerModuleImporter(async (vfs, script, cwd) => {
  * and async paths; deliberately returns raw CJS-shaped exports — the async path
  * materialises the record-owned namespace at the call site.
  */
-function loadBuiltinOrThrow(id: string): Record<string, unknown> {
-  const builtin = loadBuiltin(id);
+function loadBuiltinOrThrow(
+  id: string,
+  overrides?: ReadonlyMap<string, Record<string, unknown>>,
+): Record<string, unknown> {
+  const builtin = overrides?.get(id) ?? loadBuiltin(id);
   if (!builtin) throw new ModuleLoadError('MODULE_NOT_FOUND', id, `Built-in '${id}' not found`);
   return builtin;
+}
+
+function cloneBuiltinRecord(
+  source: Record<string, unknown>,
+  replacements: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const descriptors = Object.getOwnPropertyDescriptors(source);
+  for (const [key, value] of Object.entries(replacements)) {
+    const current = descriptors[key];
+    descriptors[key] = {
+      configurable: current?.configurable ?? true,
+      enumerable: current?.enumerable ?? true,
+      writable: true,
+      value,
+    };
+  }
+  return Object.create(Object.getPrototypeOf(source), descriptors) as Record<string, unknown>;
+}
+
+function createLoaderModuleBuiltin(
+  source: Record<string, unknown>,
+  makeRequire: (from: string) => CjsRequire,
+): Record<string, unknown> {
+  function createRequire(from: string | URL): CjsRequire {
+    return makeRequire(createRequirePath(from));
+  }
+  const sourceClass = source.Module;
+  if (sourceClass === null || typeof sourceClass !== 'object') {
+    throw new Error('node:module builtin has no Module object');
+  }
+  const moduleClass = cloneBuiltinRecord(sourceClass as Record<string, unknown>, { createRequire });
+  return cloneBuiltinRecord(source, {
+    createRequire,
+    Module: moduleClass,
+    ...(source.default === sourceClass ? { default: moduleClass } : {}),
+  });
 }
 
 function parsesAsJavaScriptScript(source: string): boolean {
@@ -145,57 +182,6 @@ function parsesAsJavaScriptScript(source: string): boolean {
   } catch {
     return false;
   }
-}
-
-const TYPESCRIPT_ONLY_MODIFIERS = new Set<ts.SyntaxKind>([
-  ts.SyntaxKind.DeclareKeyword,
-  ts.SyntaxKind.AbstractKeyword,
-  ts.SyntaxKind.ReadonlyKeyword,
-  ts.SyntaxKind.PublicKeyword,
-  ts.SyntaxKind.PrivateKeyword,
-  ts.SyntaxKind.ProtectedKeyword,
-  ts.SyntaxKind.OverrideKeyword,
-]);
-
-function hasTypeScriptOnlySyntax(node: ts.Node): boolean {
-  if (
-    ts.isTypeNode(node) ||
-    ts.isTypeParameterDeclaration(node) ||
-    ts.isInterfaceDeclaration(node) ||
-    ts.isTypeAliasDeclaration(node) ||
-    ts.isEnumDeclaration(node) ||
-    ts.isModuleDeclaration(node) ||
-    ts.isImportEqualsDeclaration(node) ||
-    ts.isNamespaceExportDeclaration(node) ||
-    ts.isTypeAssertionExpression(node) ||
-    ts.isAsExpression(node) ||
-    ts.isSatisfiesExpression(node) ||
-    ts.isNonNullExpression(node) ||
-    ts.isTypeOnlyImportOrExportDeclaration(node) ||
-    (ts.isExportAssignment(node) && node.isExportEquals) ||
-    (ts.isHeritageClause(node) && node.token === ts.SyntaxKind.ImplementsKeyword) ||
-    (ts.isFunctionLike(node) && (!('body' in node) || node.body === undefined)) ||
-    (ts.isVariableDeclaration(node) && node.exclamationToken !== undefined) ||
-    (ts.isParameter(node) &&
-      (node.questionToken !== undefined ||
-        (ts.isIdentifier(node.name) && node.name.text === 'this'))) ||
-    (ts.isPropertyDeclaration(node) &&
-      (node.questionToken !== undefined || node.exclamationToken !== undefined)) ||
-    (ts.isMethodDeclaration(node) && node.questionToken !== undefined)
-  ) {
-    return true;
-  }
-  if (
-    ts.canHaveModifiers(node) &&
-    ts.getModifiers(node)?.some((modifier) => TYPESCRIPT_ONLY_MODIFIERS.has(modifier.kind))
-  ) {
-    return true;
-  }
-  let found = false;
-  ts.forEachChild(node, (child) => {
-    if (!found && hasTypeScriptOnlySyntax(child)) found = true;
-  });
-  return found;
 }
 
 function isAcornNode(value: unknown): value is AcornNode {
@@ -265,48 +251,11 @@ function nodeEvalThrowLocation(
   return start === undefined || start === null ? null : { line: start.line, column: start.column };
 }
 
-function nodeEvalConstBindingMarker(
+function nodeEvalSyntaxPrelude(
   source: string,
-  position: number,
-): { readonly line: number; readonly column: number; readonly width: number } | null {
-  const syntax = ts.createSourceFile(
-    '[eval].ts',
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  const bindings: ts.Identifier[] = [];
-  const visit = (node: ts.Node): void => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.type !== undefined &&
-      ts.isVariableDeclarationList(node.parent) &&
-      (node.parent.flags & ts.NodeFlags.Const) !== 0 &&
-      node.name.getEnd() <= position &&
-      position <= node.type.getEnd()
-    ) {
-      bindings.push(node.name);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(syntax);
-  let binding = bindings[0];
-  if (binding === undefined) return null;
-  for (const candidate of bindings.slice(1)) {
-    if (candidate.getStart(syntax) > binding.getStart(syntax)) binding = candidate;
-  }
-  const start = binding.getStart(syntax);
-  const location = syntax.getLineAndCharacterOfPosition(start);
-  return {
-    line: location.line + 1,
-    column: location.character,
-    width: Math.max(1, binding.getEnd() - start),
-  };
-}
-
-function nodeEvalSyntaxPrelude(source: string, error: SyntaxError): string | null {
+  error: SyntaxError,
+  compiler?: NodeEvalCompiler,
+): string | null {
   let parsed: AcornSyntaxFailure | null = null;
   try {
     acornParse(source, {
@@ -327,7 +276,7 @@ function nodeEvalSyntaxPrelude(source: string, error: SyntaxError): string | nul
     error.message === 'Missing initializer in const declaration' &&
     typeof parsed.pos === 'number'
   ) {
-    const marker = nodeEvalConstBindingMarker(source, parsed.pos);
+    const marker = compiler?.nodeEvalConstBindingMarker(source, parsed.pos) ?? null;
     if (marker !== null) {
       line = marker.line;
       column = marker.column;
@@ -380,12 +329,13 @@ export function projectNodeEvalError(
   error: unknown,
   source: string,
   origin: 'sync' | 'unhandled' | 'uncaught' = 'sync',
+  compiler?: NodeEvalCompiler,
 ): unknown {
   if (!(error instanceof Error)) return error;
   const firstLine =
     (error.stack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
   if (error instanceof SyntaxError) {
-    const prelude = nodeEvalSyntaxPrelude(source, error);
+    const prelude = nodeEvalSyntaxPrelude(source, error, compiler);
     if (prelude !== null) {
       error.stack = `${prelude}${firstLine}`;
       return error;
@@ -418,33 +368,6 @@ export function projectNodeEvalError(
   return error;
 }
 
-function requiresTypeScriptEvalContext(source: string): boolean {
-  if (parsesAsJavaScriptScript(source)) return false;
-  const transpiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.None,
-      target: ts.ScriptTarget.ESNext,
-    },
-    fileName: '[eval].ts',
-    reportDiagnostics: true,
-  });
-  if (
-    transpiled.diagnostics?.some(
-      (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
-    )
-  ) {
-    return false;
-  }
-  const syntax = ts.createSourceFile(
-    '[eval].ts',
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  return hasTypeScriptOnlySyntax(syntax) && parsesAsJavaScriptScript(transpiled.outputText);
-}
-
 function installNodeEvalCjsBindings(moduleObject: CjsModule, require: CjsRequire): void {
   for (const [key, value] of [
     ['require', require],
@@ -462,7 +385,11 @@ function installNodeEvalCjsBindings(moduleObject: CjsModule, require: CjsRequire
   }
 }
 
-function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoaderCore {
+function createModuleLoaderCore(
+  vfs: FsSync,
+  opts: ModuleLoaderOptions = {},
+  builtinOverrides?: ReadonlyMap<string, Record<string, unknown>>,
+): ModuleLoaderCore {
   const registry = new ModuleRegistry();
   // Node's replaceable `.js` translator publishes a CJS `require.cache`
   // projection even when the same file already has an independent ESM job.
@@ -470,14 +397,19 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
   // bypassing a later custom hook while preserving normal CJS cache identity.
   const customJsRegistry = new ModuleRegistry();
   const defaultRequiredEsm = new Set<string>();
-  const resolver = createResolver(vfs, {
-    paths: opts.paths,
-    autoDiscoverTsconfigPaths: opts.autoDiscoverTsconfigPaths,
-  });
+  const resolver = createResolver(vfs, opts);
+  let loaderModuleBuiltin: Record<string, unknown> | null = null;
+  const loadBuiltinForLoader = (id: string): Record<string, unknown> => {
+    if (builtinOverrides !== undefined && id === 'node:module') {
+      loaderModuleBuiltin ??= createLoaderModuleBuiltin(loadBuiltinOrThrow(id), makeRequire);
+      return loaderModuleBuiltin;
+    }
+    return loadBuiltinOrThrow(id, builtinOverrides);
+  };
   const cjsInterop = createCjsInteropAuthority({
     registry,
     resolver,
-    loadBuiltin: loadBuiltinOrThrow,
+    loadBuiltin: loadBuiltinForLoader,
   });
   const cjsExtensions = Object.create(null) as CjsExtensions;
   const loadDefaultEsm = (resolved: ResolvedModule): unknown => {
@@ -552,13 +484,14 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
     sourceMaps,
     transformSource: cachedTransform,
     transformEsm: cachedTransformEsm,
+    WebAssembly: sandboxToolchainWebAssembly(),
     staticImportNames: cjsInterop.staticImportNames,
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },
     loadSync(resolved: ResolvedModule, parent?: CjsModule): unknown {
       if (resolved.kind === 'builtin') {
-        return loadBuiltinOrThrow(resolved.id);
+        return loadBuiltinForLoader(resolved.id);
       }
       // Node's replaceable `.js` extension owns dispatch before package-type or
       // syntax detection. Only the loader's default `.js` hook enters ESM; a
@@ -643,20 +576,13 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
     return req;
   }
 
-  __setCreateRequireImpl(makeRequire);
+  if (builtinOverrides === undefined) __setCreateRequireImpl(makeRequire);
 
   const loader: ModuleLoader = {
     require(specifier, from = cwd) {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: false });
       if (resolved.kind === 'builtin') {
-        const builtin = loadBuiltin(resolved.id);
-        if (!builtin)
-          throw new ModuleLoadError(
-            'MODULE_NOT_FOUND',
-            specifier,
-            `Built-in '${specifier}' not found`,
-          );
-        return builtin;
+        return loadBuiltinForLoader(resolved.id);
       }
       return deps.loadSync(resolved);
     },
@@ -703,8 +629,11 @@ function createModuleLoaderCore(vfs: FsSync, opts: ModuleLoaderOptions = {}): Mo
 
   return {
     loader,
-    runNodeEvalScript(source, explicitCommonJs) {
-      if (!explicitCommonJs && requiresTypeScriptEvalContext(source)) {
+    runNodeEvalScript(source, explicitCommonJs, compiler) {
+      if (
+        !explicitCommonJs &&
+        compiler?.requiresTypeScriptEvalContext(source, parsesAsJavaScriptScript)
+      ) {
         // TODO(backlog: runtime-js/node-cli-typescript-eval-context)
         throw new NotImplementedError('runtime-js.node-eval-typescript-context');
       }
@@ -724,15 +653,35 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   return createModuleLoaderCore(vfs, opts).loader;
 }
 
+/** Internal toolchain seam: bind selected builtin facades to one loader generation. */
+export function createModuleLoaderWithBuiltinOverrides(
+  vfs: FsSync,
+  opts: ModuleLoaderOptions,
+  builtinOverrides: ReadonlyMap<string, Record<string, unknown>>,
+): ModuleLoader {
+  return createModuleLoaderCore(vfs, opts, builtinOverrides).loader;
+}
+
 /** Package-internal Node CLI eval seam; intentionally absent from `module-loader/index.ts`. */
 export function createNodeEvalScriptRunner(opts: {
   readonly vfs: FsSync;
   readonly cwd: string;
   readonly explicitCommonJs: boolean;
+  readonly compiler?: NodeEvalCompiler;
 }): NodeEvalScriptRunner {
   const core = createModuleLoaderCore(opts.vfs, { cwd: opts.cwd });
   return {
     registry: core.loader.registry,
-    run: (source) => core.runNodeEvalScript(source, opts.explicitCommonJs),
+    run: (source) => core.runNodeEvalScript(source, opts.explicitCommonJs, opts.compiler),
   };
+}
+
+type NodeEvalCompiler = typeof import('./node-eval-typescript.ts');
+
+/** Undefined keeps valid JavaScript on its original synchronous path. */
+export function prepareNodeEvalCompiler(source: string): Promise<NodeEvalCompiler> | undefined {
+  if (parsesAsJavaScriptScript(source)) return undefined;
+  return import('./node-eval-typescript.ts').catch((cause: unknown) => {
+    throw new Error('TypeScript compiler chunk failed to load', { cause });
+  });
 }

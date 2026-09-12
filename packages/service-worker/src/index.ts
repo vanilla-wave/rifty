@@ -1,4 +1,8 @@
 export { registerServiceWorker } from './register.ts';
+export {
+  configurePreviewServiceWorkerUrl,
+  previewPrefixFromServiceWorkerUrl,
+} from './preview-configuration.ts';
 export type {
   RegisterServiceWorkerOptions,
   ServiceWorkerRegistrationResult,

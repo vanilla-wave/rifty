@@ -123,12 +123,12 @@ export async function ensureProjectDependencies(
     switch (provenance.outcome) {
       case 'existing':
         opts.log(
-          `[real-vite/worker] node_modules reused via install stamp (${provenance.packages} packages, install skipped)\n`,
+          `[workbench/worker] node_modules reused via install stamp (${provenance.packages} packages, install skipped)\n`,
         );
         return { source: 'stamp', packages: provenance.packages };
       case 'snapshot':
         opts.log(
-          `[real-vite/worker] baked node_modules restored (${provenance.packages} packages, no install needed)\n`,
+          `[workbench/worker] baked node_modules restored (${provenance.packages} packages, no install needed)\n`,
         );
         return { source: 'snapshot', packages: provenance.packages };
       case 'installed':
@@ -269,22 +269,22 @@ function reportSnapshotFailure(
     ? ' — falling back to install\n'
     : ' — dependencies remain absent (restore-only mode)\n';
   if (reason === 'snapshot-unavailable') {
-    opts.log(`[real-vite/worker] baked snapshot unavailable (${snapshotId})${outcome}`);
+    opts.log(`[workbench/worker] baked snapshot unavailable (${snapshotId})${outcome}`);
     return;
   }
   if (reason.startsWith('snapshot-fetch-failed:')) {
     const detail = reason.slice('snapshot-fetch-failed:'.length).trim();
-    opts.log(`[real-vite/worker] baked snapshot unavailable (${snapshotId}): ${detail}${outcome}`);
+    opts.log(`[workbench/worker] baked snapshot unavailable (${snapshotId}): ${detail}${outcome}`);
     return;
   }
   if (reason.startsWith('snapshot-restore-failed:')) {
     opts.log(
-      `[real-vite/worker] baked snapshot restore failed: ${reason.slice('snapshot-restore-failed:'.length).trim()}${outcome}`,
+      `[workbench/worker] baked snapshot restore failed: ${reason.slice('snapshot-restore-failed:'.length).trim()}${outcome}`,
     );
     return;
   }
   opts.log(
-    `[real-vite/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run \`pnpm snapshots:bake\`)${outcome}`,
+    `[workbench/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run \`pnpm snapshots:bake\`)${outcome}`,
   );
 }
 
@@ -300,39 +300,39 @@ function reportPromotion(
       );
       const sample = example ? ` (first: ${example.op} ${example.path}: ${example.message})` : '';
       opts.log(
-        `[real-vite/worker] WARNING: node_modules failed to persist${sample} — trusted stamp publication blocked; the pending claim remains untrusted and the next boot re-runs dependency arrival\n`,
+        `[workbench/worker] WARNING: node_modules failed to persist${sample} — trusted stamp publication blocked; the pending claim remains untrusted and the next boot re-runs dependency arrival\n`,
       );
       return;
     }
     case 'claim-not-durable':
       opts.log(
-        '[real-vite/worker] WARNING: pending install stamp failed to persist — promotion skipped; the next boot re-runs dependency arrival\n',
+        '[workbench/worker] WARNING: pending install stamp failed to persist — promotion skipped; the next boot re-runs dependency arrival\n',
       );
       return;
     case 'identity-drift':
       opts.log(
-        '[real-vite/worker] WARNING: package.json deps changed before install stamp promotion — trusted stamp publication blocked; the pending claim remains untrusted and the next boot re-runs dependency arrival\n',
+        '[workbench/worker] WARNING: package.json deps changed before install stamp promotion — trusted stamp publication blocked; the pending claim remains untrusted and the next boot re-runs dependency arrival\n',
       );
       return;
     case 'tree-missing':
       opts.log(
-        '[real-vite/worker] WARNING: node_modules vanished before install stamp promotion — the next boot re-runs dependency arrival\n',
+        '[workbench/worker] WARNING: node_modules vanished before install stamp promotion — the next boot re-runs dependency arrival\n',
       );
       return;
     case 'claim-replaced':
       opts.log(
-        '[real-vite/worker] WARNING: install stamp claim was replaced before promotion — the next boot re-runs dependency arrival\n',
+        '[workbench/worker] WARNING: install stamp claim was replaced before promotion — the next boot re-runs dependency arrival\n',
       );
       return;
     case 'revocation-not-durable':
       opts.log(
-        '[real-vite/worker] CRITICAL: a trusted install stamp over a damaged tree could not be revoked durably; reload is unsafe until browser storage recovers\n',
+        '[workbench/worker] CRITICAL: a trusted install stamp over a damaged tree could not be revoked durably; reload is unsafe until browser storage recovers\n',
       );
       return;
     case 'flush-failed':
     case 'write-failed':
       opts.log(
-        `[real-vite/worker] WARNING: stamp durability check failed: ${result.error ?? result.reason}\n`,
+        `[workbench/worker] WARNING: stamp durability check failed: ${result.error ?? result.reason}\n`,
       );
   }
 }

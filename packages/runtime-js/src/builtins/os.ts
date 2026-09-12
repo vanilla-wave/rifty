@@ -6,6 +6,7 @@
  * NotImplementedError so callers see the gap.
  */
 import { NotImplementedError } from '@riftydev/io';
+import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 
 export const EOL = '\n';
 
@@ -68,8 +69,9 @@ export function cpus(): Array<{
   speed: number;
   times: { user: number; nice: number; sys: number; idle: number; irq: number };
 }> {
-  const count =
-    typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
+  const count = isSandboxToolchainRealm()
+    ? 1
+    : typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
       ? navigator.hardwareConcurrency
       : 1;
   const stub = {
@@ -245,9 +247,11 @@ export const constants = {
 } as const;
 
 export function availableParallelism(): number {
-  return typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
-    ? navigator.hardwareConcurrency
-    : 1;
+  return isSandboxToolchainRealm()
+    ? 1
+    : typeof navigator !== 'undefined' && typeof navigator.hardwareConcurrency === 'number'
+      ? navigator.hardwareConcurrency
+      : 1;
 }
 
 export function getPriority(_pid?: number): number {

@@ -60,3 +60,7 @@ bytes that the installer does not require for correctness.
 Decision 4's separate runtime-asset CAS clause is withdrawn. Snapshot v3 now
 carries the exact esbuild-wasm member in ordinary `node_modules`; its existing
 verified replay tarball cache remains the network-byte authority.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0394 supersedes decision 4's whole-node_modules replacement for explicit snapshot application; verified cache-before-lock ordering remains.

@@ -108,6 +108,14 @@ export function recordRejection(
   if (state.rejection === null) state.rejection = { reason, origin };
 }
 
+/** A serialized invocation reports this failure once; live handles and eval lifecycle remain. */
+export function takeUnhandledRejection(): { readonly reason: unknown } | null {
+  const state = keepaliveState();
+  const rejection = state.rejection;
+  state.rejection = null;
+  return rejection;
+}
+
 /**
  * Track a detached async task as an event-loop handle. Some real CLIs start an
  * async action without awaiting it at top level (Vite's bundled CAC does this);
@@ -312,6 +320,8 @@ export const DEFAULT_DRAIN_CAP_MS = 30_000;
 
 export interface DrainOptions {
   capMs?: number;
+  /** Additional caller-owned handles (e.g. listening ports) that keep this realm alive. */
+  hasRef?: () => boolean;
   /** Schedule a check on the MACROTASK queue (seam for tests; defaults to setTimeout 0). */
   scheduleMacrotask?: (cb: () => void) => void;
   /** Monotonic clock (seam for tests; defaults to performance.now). */
@@ -407,7 +417,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
         });
         return;
       }
-      if (state.refCount <= 0) {
+      if (state.refCount <= 0 && !opts.hasRef?.()) {
         // TODO(backlog: runtime-js/late-unhandled-rejection-drain): cover a late
         // browser unhandledrejection task without a second drain owner.
         finish({ kind: 'resolved' });

@@ -15,7 +15,14 @@ Successor to the closed `timer-unref-keepalive` item. ADR-0152 §1 counts a NARR
 
 ## SHIPPED — ADR-0158
 
-**(d) Detached `fetch()`/network — DONE.** `installFetchKeepalive()` (`packages/runtime-js/src/builtins/fetch-keepalive.ts`) wraps the realm's global `fetch`: `keepaliveRef()` on dispatch, released once the response BODY is consumed (Body-mixin consumers or the `body` stream), on reject, or when there is no body. Held until the body (not headers) because Node keeps the socket refed until the body is read. `http.request`-to-external routes through `fetch` (covered); loopback `http.request` is in-process (microtask, no socket); `https`/`net.connect` are loud-throws. Guard: `packages/runtime-js/src/builtins/fetch-keepalive.test.ts` (real loopback `http.createServer` + real host fetch + real `awaitDrain`). compat `process.md`: Detached `fetch()` ✅.
+**(d) Detached `fetch()`/network — DONE for public Body consumers.** `installFetchKeepalive()` (`packages/runtime-js/src/builtins/fetch-keepalive.ts`) wraps the realm's global `fetch`: `keepaliveRef()` on dispatch, released once a Body-mixin/`body` stream consumes, cancels, or errors, on request reject, or when there is no body. Held until the body (not headers) because Node keeps the socket refed until the body is read. `http.request`-to-external routes through `fetch` (covered); loopback is in-process; `https`/`net.connect` are loud-throws. Package loopback guards; compat `process.md`: Detached `fetch()` ✅.
+
+**Native WebAssembly streaming — explicit loud gap.** Chromium consumes Response
+internal slots and accepts arbitrary clone/untracked PromiseLike carriers, so
+exact-fetch mediation cannot own the whole boundary. Both streaming APIs reject
+feature-specific `NotImplementedError` Promises unconditionally; byte-buffer
+compile/instantiate remain available. Real-Chromium ceiling/carrier/priority/
+effective-descriptor guard; compat `process.md`: WebAssembly streaming ❌.
 
 **(e) Nested-spawn dispatcher backstop — DONE (mechanism).** `sync-dispatch.ts` now captures the HOST `setInterval`/`clearInterval` at module load and arms the backstop on them, so the infra timer never enters the keepalive count by construction (ADR-0152 §5 precedent) — at ANY recursion depth. Removes the prior depth-1 count-then-`.unref()` coupling. Guard: `packages/kernel/src/ipc/sync-dispatch.test.ts` (backstop arms the host timer, not the keepalive-wrapped global).
 

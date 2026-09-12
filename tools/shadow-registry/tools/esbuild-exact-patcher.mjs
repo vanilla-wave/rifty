@@ -10,6 +10,7 @@ export const ESBUILD_RUNTIME_PATCH_IDS = Object.freeze([
   'node-callback-fs',
   'channel-has-fs',
   'runtime-default-wd',
+  'runtime-service-refs',
   'transform-temp-fs',
   'native-validation-provenance',
   'native-target-errno',
@@ -79,6 +80,27 @@ export const ESBUILD_RUNTIME_PATCH_ANCHORS = Object.freeze(
         '        isTTY: false,',
         '        defaultWD: "/",',
       ),
+    },
+    {
+      id: 'runtime-service-refs',
+      hunk: 'build',
+      anchor:
+        '  let buildOrContext = ({ callName, refs, options, isTTY, defaultWD, callback }) => {',
+    },
+    {
+      id: 'runtime-service-refs',
+      hunk: 'transform',
+      anchor: '  let transform2 = ({ callName, refs, input, options, isTTY, fs, callback }) => {',
+    },
+    {
+      id: 'runtime-service-refs',
+      hunk: 'format',
+      anchor: '  let formatMessages2 = ({ callName, refs, messages, options, callback }) => {',
+    },
+    {
+      id: 'runtime-service-refs',
+      hunk: 'analyze',
+      anchor: '  let analyzeMetafile2 = ({ callName, refs, metafile, options, callback }) => {',
     },
     {
       id: 'transform-temp-fs',

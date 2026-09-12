@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defineNodeCliProject,
   defineNodeServerProject,
+  defineNpmDevServerProject,
   inspectProjectDefinition,
   projects,
 } from '../workbench/project-definition.ts';
@@ -251,5 +252,43 @@ describe('Workbench package config', () => {
       entryPath: '/owner/projects/config-cli/src/main.mjs',
     });
     expect('port' in cli.cfg).toBe(false);
+  });
+
+  it('maps npm-owned dev servers without inventing entry or port coordinates', () => {
+    const definition = inspectProjectDefinition(
+      defineNpmDevServerProject({
+        id: 'config-npm-dev-server',
+        files: {
+          '/package.json': `${JSON.stringify({
+            name: 'ordinary-webpack-project',
+            version: '1.0.0',
+            scripts: { dev: 'webpack serve' },
+            devDependencies: { webpack: '5.101.0', 'webpack-dev-server': '5.2.2' },
+          })}\n`,
+          '/webpack.config.js': 'module.exports = {};\n',
+        },
+      }),
+    );
+    const config = workbenchPackageConfig(definition, '/owner/projects/config-npm-dev-server', {
+      packageJsonBytes: currentManifest(definition),
+    });
+
+    expect(config.cfg).toMatchObject({
+      runtime: 'npm-dev-server',
+      root: '/owner/projects/config-npm-dev-server',
+      packageName: 'ordinary-webpack-project',
+      packageVersion: '1.0.0',
+      seedFiles: {},
+    });
+    expect(Reflect.ownKeys(config.cfg).sort()).toEqual([
+      'installDeps',
+      'packageJson',
+      'packageName',
+      'packageVersion',
+      'root',
+      'runtime',
+      'seedFiles',
+    ]);
+    expect(config.cfg.packageJson).toContain('webpack serve');
   });
 });

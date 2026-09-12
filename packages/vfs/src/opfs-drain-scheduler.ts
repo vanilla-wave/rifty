@@ -227,7 +227,10 @@ export class OpfsDrainScheduler {
   private readonly hooks: DrainSchedulerHooks;
   readonly dirHandles = new DrainDirHandleCache();
 
-  constructor(hooks: DrainSchedulerHooks) {
+  constructor(
+    hooks: DrainSchedulerHooks,
+    readonly reportTimeoutMs = PERSIST_OPERATION_REPORT_TIMEOUT_MS,
+  ) {
     this.hooks = hooks;
   }
 
@@ -293,6 +296,14 @@ export class OpfsDrainScheduler {
       this.ready.push(op);
       this.admit();
     }
+  }
+
+  /** Existing registry is the authority; a reporting timeout is still pending. */
+  hasPendingAtOrAbove(path: string): boolean {
+    for (const prefix of pathPrefixes(path)) {
+      if (this.registry.has(prefix)) return true;
+    }
+    return false;
   }
 
   /** Bounded reporting barrier over every op enqueued so far — the flush()
@@ -380,7 +391,7 @@ export class OpfsDrainScheduler {
       op.settleReporting();
       this.reportBlockedDependents(op);
       this.reportCapacityStarved();
-    }, PERSIST_OPERATION_REPORT_TIMEOUT_MS);
+    }, this.reportTimeoutMs);
     const finish = (succeeded: boolean): void => {
       clearTimeout(timer);
       this.settle(op, succeeded);

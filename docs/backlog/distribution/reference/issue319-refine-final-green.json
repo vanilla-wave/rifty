@@ -1,0 +1,27 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Refine write-up готов к слиянию; реализация и доказательства I1–I5 остаются будущей работой draft goal.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "bb749252fe55528160fbf45bc0f5fea51b5b708d",
+  "unit_goal_source": "/root/warm_reopen_final; fresh RDY-6 final written-result review; original issue #319 + definitive repeated-round user answer + PR #316 raw contracts at fd829ca42ba698c168e5442278a3e5d50ffbbc7f; docs/backlog/epics/no-coi-persisted-warm-open/goal.md with map.md, ledger.md and issue319-refine-evidence.md; BASE da485021fab3f9f881ebafe29106b604f347b2b3. Scope: docs-only refine, not product acceptance. Read raw issue body/comments via gh, ADR-0307/0375/0377, browser probe code/results and docs-only pr:check 20/20 log. Independently ran git diff --check; verified final files match reviewed SHA. No omitted material user choice found; API/proof/handle mechanisms remain agent-owned; research limits and separate COI scope stay explicit.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1–I5",
+      "location": "docs/backlog/epics/no-coi-persisted-warm-open/goal.md:69",
+      "summary": "Draft destination only: warm activation, preserved edits, honest persistence rejection, installer dedup and handle reuse require FIT/PICKUP, implementation and independent observable proof; map retains all five obligations. No implementation authorized by this refine request."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

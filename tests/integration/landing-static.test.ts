@@ -55,7 +55,10 @@ describe('landing static site', () => {
     // The hero exits directly to the playground through the same env-configured,
     // same-origin-by-default seam used by the preset cards.
     const hero = readFileSync(HERO, 'utf8');
-    expect(hero).toContain('buildPlaygroundHref');
+    expect(hero).toContain('playgroundHref');
+    expect(readFileSync('apps/landing/src/landing-config.ts', 'utf8')).toContain(
+      'buildPlaygroundHref',
+    );
     expect(hero).not.toContain("primary.href = '#demos'");
     const demos = readFileSync(DEMOS, 'utf8');
     expect(demos).toContain('VITE_RIFTY_PLAYGROUND_URL');

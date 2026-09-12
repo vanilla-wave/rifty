@@ -100,10 +100,7 @@ for (const call of calls) {
   Atomics.notify(i32, REQ_STATE_INDEX);
 
   // Phase 2: block on reply (production caller-side path uses Atomics.wait).
-  const waitResult = Atomics.wait(i32, REP_STATE_INDEX, STATE_IDLE, timeoutMs);
-  if (waitResult === 'timed-out') {
-    throw new Error(`sync-rpc-echo: timed out after ${timeoutMs}ms`);
-  }
+  Atomics.wait(i32, REP_STATE_INDEX, STATE_IDLE);
 
   // Phase 3: consume reply and release the exact HANDLING claim.
   const repVersion = Atomics.load(i32, VERSION_INDEX);

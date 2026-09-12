@@ -9,7 +9,7 @@ import {
   normalizePath,
 } from '@riftydev/vfs';
 import type { InstallStampClaimIo } from '../glue/install-stamp-authority.ts';
-import { installStampPath, installTreeDir, isInstallStampPath } from '../glue/install-stamp.ts';
+import { installStampPath, installTreeDir } from '../glue/install-stamp.ts';
 import {
   type OwnerVfsCommitTerminal,
   encodeOwnerVfsError,
@@ -29,6 +29,7 @@ import {
   equalHostCommitAcks,
   equalHostCommitRequests,
 } from '../glue/owner-vfs-protocol.ts';
+import { InstallClaimGuard, reservedInstallClaimError } from './install-claim-guard.ts';
 import {
   type OwnerVfsAppliedJournal,
   type OwnerVfsAppliedMutation,
@@ -39,12 +40,6 @@ import {
 interface TrackedEntry {
   readonly kind: 'file' | 'dir';
   readonly version: PathVersion;
-}
-
-interface CopyPlanEntry {
-  readonly source: string;
-  readonly target: string;
-  readonly kind: 'file' | 'dir';
 }
 
 export interface OwnerVfsAuthorityOptions {
@@ -152,6 +147,7 @@ export function createOwnerVfsAuthorityComposition(
 
 class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   readonly #fs: FsSync;
+  readonly #claimGuard: InstallClaimGuard;
   readonly #initialRoots: readonly string[];
   readonly #entries = new Map<string, TrackedEntry>();
   readonly #appliedJournal: OwnerVfsAppliedJournal;
@@ -165,6 +161,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     receiveCompositionCapabilities?: (capabilities: OwnerVfsCompositionCapabilities) => void,
   ) {
     this.#fs = fs;
+    this.#claimGuard = new InstallClaimGuard(fs);
     this.ownerEpoch = options.ownerEpoch ?? createOwnerEpoch();
     if (this.ownerEpoch.length === 0) throw new Error('owner VFS epoch must be non-empty');
     this.#appliedJournal = createOwnerVfsAppliedJournal(this.ownerEpoch);
@@ -247,8 +244,8 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void {
     const normalized = normalizeOwnerPath(path);
     this.assertPortablePaths([normalized]);
-    const nestedClaim = this.#firstInstallStampInSubtree(normalized);
-    if (nestedClaim) throw this.#reservedClaimError(nestedClaim);
+    const nestedClaim = this.#claimGuard.firstInSubtree(normalized);
+    if (nestedClaim) throw reservedInstallClaimError(nestedClaim);
     const tracked = this.#trackedSubtree(normalized);
     if (tracked.length > 0) this.#assertRevisionAvailable();
     this.#fs.rmSync(normalized, options);
@@ -301,7 +298,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
       throw new VfsError('EINVAL', src);
     }
 
-    const plan = this.#planRecursiveCopy(source, target);
+    const plan = this.#claimGuard.copyPlan(source, target);
     // Applying remains FsSync-best-effort. The complete mapping and reserved
     // exclusions are fixed before the first byte changes.
     for (const entry of plan) {
@@ -319,8 +316,8 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
       return;
     }
     const carriedClaim =
-      this.#firstInstallStampInTransfer(source, target) ?? this.#firstInstallStampInSubtree(target);
-    if (carriedClaim) throw this.#reservedClaimError(carriedClaim);
+      this.#claimGuard.firstInTransfer(source, target) ?? this.#claimGuard.firstInSubtree(target);
+    if (carriedClaim) throw reservedInstallClaimError(carriedClaim);
     this.#assertRevisionAvailable();
     const removed = [...this.#trackedSubtree(source), ...this.#trackedSubtree(target)];
     this.#fs.renameSync(source, target);
@@ -348,9 +345,7 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
   }
 
   assertPortablePaths(paths: readonly string[]): void {
-    const normalized = paths.map(normalizeOwnerPath);
-    const reserved = normalized.find(isInstallStampPath);
-    if (reserved) throw this.#reservedClaimError(reserved);
+    this.#claimGuard.assertPaths(paths);
   }
 
   validateHostCommit(request: HostCommitRequest): void {
@@ -498,14 +493,6 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     })();
   }
 
-  #reservedClaimError(path: string): VfsError {
-    return new VfsError(
-      'EPERM',
-      path,
-      `EPERM: reserved install-stamp authority claim path: ${path}`,
-    );
-  }
-
   #canonicalInstallStampRoot(root: string): string {
     const canonical = normalizeOwnerPath(root);
     if (canonical !== root) {
@@ -544,60 +531,6 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     if (tracked.length > 0) {
       this.#recordClaimMutation(path, tracked);
     }
-  }
-
-  #planRecursiveCopy(source: string, target: string): readonly CopyPlanEntry[] {
-    const plan: CopyPlanEntry[] = [];
-    const visit = (currentSource: string, currentTarget: string): void => {
-      if (isInstallStampPath(currentSource)) return;
-      if (isInstallStampPath(currentTarget)) throw this.#reservedClaimError(currentTarget);
-      const stat = this.#fs.statSync(currentSource);
-      if (stat.isFile) {
-        plan.push({ source: currentSource, target: currentTarget, kind: 'file' });
-        return;
-      }
-      plan.push({ source: currentSource, target: currentTarget, kind: 'dir' });
-      const children = [...this.#fs.readdirSync(currentSource)].sort((left, right) =>
-        left.name.localeCompare(right.name),
-      );
-      for (const child of children) {
-        visit(joinPath(currentSource, child.name), joinPath(currentTarget, child.name));
-      }
-    };
-    visit(source, target);
-    return plan;
-  }
-
-  #firstInstallStampInSubtree(root: string): string | null {
-    if (isInstallStampPath(root)) return root;
-    const stat = this.#fs.statSyncOrNull(root);
-    if (!stat?.isDirectory) return null;
-    const children = [...this.#fs.readdirSync(root)].sort((left, right) =>
-      left.name.localeCompare(right.name),
-    );
-    for (const child of children) {
-      const found = this.#firstInstallStampInSubtree(joinPath(root, child.name));
-      if (found) return found;
-    }
-    return null;
-  }
-
-  #firstInstallStampInTransfer(source: string, target: string): string | null {
-    if (isInstallStampPath(source)) return source;
-    if (isInstallStampPath(target)) return target;
-    const stat = this.#fs.statSync(source);
-    if (!stat.isDirectory) return null;
-    const children = [...this.#fs.readdirSync(source)].sort((left, right) =>
-      left.name.localeCompare(right.name),
-    );
-    for (const child of children) {
-      const found = this.#firstInstallStampInTransfer(
-        joinPath(source, child.name),
-        joinPath(target, child.name),
-      );
-      if (found) return found;
-    }
-    return null;
   }
 
   #assertRevisionAvailable(): void {

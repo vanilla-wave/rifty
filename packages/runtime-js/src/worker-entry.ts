@@ -14,15 +14,26 @@
  * Boot also installs Node-compatible globals (`process`, `Buffer`, timers).
  */
 
-import { initBackend, syncMirror } from '@riftydev/vfs';
+import { OpfsPreloadError, initBackend, syncMirror } from '@riftydev/vfs';
+import type { PersistFailureReport } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
 import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
-import { setVmEngineOverride } from './builtins/vm/engine-config.ts';
+import { resolveVmEngineName, setVmEngineOverride } from './builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from './builtins/web-globals.ts';
+import {
+  isSandboxToolchainRealm,
+  isSandboxToolchainResidentTransitionActive,
+  sandboxToolchainWebAssembly,
+} from './internal/sandbox-toolchain-realm.ts';
+import {
+  composeRuntimeWorkerFs,
+  setRuntimeWorkerModuleInvalidation,
+} from './internal/worker-fs-composition.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
+import { runtimeWorkerOptionsFromName } from './internal/worker-startup-options.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
 import { installConsole } from './repl/console.ts';
@@ -32,6 +43,10 @@ import { captureNotImplemented, snapshotTelemetry } from './telemetry/divergence
 import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
+
+const startup = runtimeWorkerOptionsFromName(self.name);
+const selectedVmEngine = startup.vmEngine;
+if (selectedVmEngine !== undefined) setVmEngineOverride(selectedVmEngine);
 
 installProcessGlobals();
 installTimerGlobals();
@@ -65,7 +80,7 @@ function postDiagnosticIfChanged(): void {
   post({ type: 'diagnostic', payload });
 }
 
-async function handleEval(req: EvalRequest): Promise<EvalResult> {
+async function evaluateExpression(req: EvalRequest): Promise<EvalResult> {
   // ADR-0019 — seed the per-Worker cwd cell from the host's eval `cwd` snapshot
   // (kernel's ProcessRecord.cwd) before running user code. `setProcessCwd`
   // bypasses VFS validation: the host is trusted to pass an already-resolved path.
@@ -73,7 +88,7 @@ async function handleEval(req: EvalRequest): Promise<EvalResult> {
     setProcessCwd(req.cwd);
   }
   try {
-    const value = await evalInRepl(req.code);
+    const value = await evalInRepl(req.code, { WebAssembly: sandboxToolchainWebAssembly() });
     if (value !== undefined) {
       post({ type: 'stdout', chunk: `${inspect(value)}\n` });
     }
@@ -94,15 +109,20 @@ async function handleEval(req: EvalRequest): Promise<EvalResult> {
     const message = String(err);
     post({ type: 'stderr', chunk: `${message}\n` });
     return { id: req.id, ok: false, error: { name: 'Error', message } };
-  } finally {
-    // Drain OPFS write-through (ADR-0072) before posting the result, so a file
-    // written during eval is durably persisted before the host resolves the eval
-    // promise (e2e: before a page reload). No-op on memory (`flush` absent).
-    const mirror = syncMirror() as { flush?: () => Promise<void> };
-    if (typeof mirror.flush === 'function') {
-      await mirror.flush();
-    }
   }
+}
+
+async function flushWorkerFs() {
+  const mirror = syncMirror() as { flush?: () => Promise<PersistFailureReport | undefined> };
+  return await mirror.flush?.();
+}
+
+async function handleEval(req: EvalRequest): Promise<EvalResult> {
+  const result = await evaluateExpression(req);
+  // Drain write-through before replying (ADR-0072). Durability is an fs receipt
+  // (`fs.flush()`), never the console result: an unhealed report must not fail an eval.
+  await flushWorkerFs();
+  return result;
 }
 
 // Async boot (ADR-0072): VFS backend selection (OPFS vs memory) is async, so the
@@ -113,15 +133,21 @@ async function handleEval(req: EvalRequest): Promise<EvalResult> {
 // posted only after `boot` resolves, so a post-marker write (OPFS round-trip
 // e2e) lands on the wired backend.
 const boot = (async () => {
+  let backend: 'opfs' | 'memory';
+  let reason: string | undefined;
   try {
-    await initBackend();
+    backend = await initBackend(
+      startup.storage ?? (isSandboxToolchainRealm() ? { persistence: 'preferred' } : undefined),
+    );
   } catch (err) {
+    if (err instanceof OpfsPreloadError || startup.storage?.persistence === 'required') throw err;
     // OPFS init failed for this realm — degrade to in-memory so the runtime still
     // boots (mirrors the playground bootstrap fallback). Persistence is lost but
     // eval keeps working.
-    const reason = err instanceof Error ? err.message : String(err);
+    reason = err instanceof Error ? err.message : String(err);
     post({ type: 'stderr', chunk: `[rifty] VFS backend init failed, using memory: ${reason}\n` });
     installMemoryFs();
+    backend = 'memory';
   }
 
   // Preload the QuickJS WASM engine into the boot promise (ADR-0142) so a
@@ -130,7 +156,7 @@ const boot = (async () => {
   // `vm.runInNewContext` is safe. On preload failure, log + continue — the
   // opt-in rewrite engine still works without QuickJS.
   try {
-    await ensureVmEngineReady();
+    if (resolveVmEngineName() === 'quickjs') await ensureVmEngineReady();
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     post({ type: 'stderr', chunk: `[rifty] QuickJS vm engine preload failed: ${reason}\n` });
@@ -139,8 +165,10 @@ const boot = (async () => {
   // Build the loader from the active sync mirror (ADR-0014 + ADR-0037 +
   // ADR-0072): `node:fs` reads `syncMirror()` live and the loader captures the
   // same instance, so both see the one OPFS (or memory) tree for this realm.
+  composeRuntimeWorkerFs();
   const active = syncMirror();
   const loader = createModuleLoader(active, { cwd: '/' });
+  setRuntimeWorkerModuleInvalidation(() => loader.invalidate());
 
   // Canonical home is `__rifty.require`/`__rifty.import`; also mirrored onto
   // `self.require`/`self.__riftyImport` for Node-style REPL ergonomics (M2 e2e).
@@ -153,8 +181,12 @@ const boot = (async () => {
   (self as unknown as { __riftyImport: typeof replImport }).__riftyImport = replImport;
 
   installConsole(sink);
-  return loader;
+  return { backend, loader, ...(reason === undefined ? {} : { reason }) };
 })();
+
+/** Selected backend after the runtime Worker has one authoritative VFS. */
+export const runtimeWorkerBackend: Promise<'opfs' | 'memory'> = boot.then(({ backend }) => backend);
+export const runtimeWorkerStorage = boot.then(({ backend, reason }) => ({ backend, reason }));
 
 self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   const msg = event.data;
@@ -175,9 +207,17 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   }
   // `eval`/`load-fixture` need the wired backend + loader. Awaiting `boot` lets
   // an eval posted before readiness run against the wired tree instead of being lost.
-  const loader = await boot;
+  const { loader } = await boot;
   switch (msg.type) {
     case 'load-fixture': {
+      if (isSandboxToolchainResidentTransitionActive()) {
+        post({
+          type: 'stderr',
+          chunk:
+            'SandboxToolchainBusyError: runtime fixture cannot enter during owned toolchain operation\n',
+        });
+        break;
+      }
       // Keep the loader alive across editor saves, dropping only the module cache.
       // Route writes through the active mirror (ADR-0072) so saves land on the
       // wired backend, not a dead memory instance (`loadFixture` is optional on
@@ -190,6 +230,20 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
       break;
     }
     case 'eval': {
+      if (isSandboxToolchainResidentTransitionActive()) {
+        post({
+          type: 'result',
+          result: {
+            id: msg.request.id,
+            ok: false,
+            error: {
+              name: 'SandboxToolchainBusyError',
+              message: 'runtime eval cannot enter during resident launch transition',
+            },
+          },
+        });
+        break;
+      }
       const result = await handleEval(msg.request);
       post({ type: 'result', result });
       // After an eval that may have recorded a divergence (rewrite engine) or a
@@ -198,13 +252,24 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
       break;
     }
     case 'fs': {
+      if (isSandboxToolchainResidentTransitionActive()) {
+        post({
+          type: 'fs-result',
+          result: {
+            id: msg.request.id,
+            ok: false,
+            error: {
+              name: 'SandboxToolchainBusyError',
+              message: 'runtime fs cannot enter during resident launch transition',
+            },
+          },
+        });
+        break;
+      }
       const result = await handleWorkerFsRequest(msg.request, {
         fs: syncMirror(),
         invalidate: () => loader.invalidate(),
-        flush: async () => {
-          const mirror = syncMirror() as { flush?: () => Promise<void> };
-          if (typeof mirror.flush === 'function') await mirror.flush();
-        },
+        flush: flushWorkerFs,
       });
       post({ type: 'fs-result', result });
       break;
@@ -212,4 +277,12 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   }
 });
 
-void boot.then(() => post({ type: 'ready' }));
+void boot.then(
+  () => post({ type: 'ready' }),
+  (error: unknown) => {
+    // The host's existing Worker error owner rejects handshake and pending calls.
+    setTimeout(() => {
+      throw error;
+    }, 0);
+  },
+);

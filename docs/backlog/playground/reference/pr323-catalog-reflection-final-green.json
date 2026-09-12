@@ -1,0 +1,70 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: follow-up готов к merge после привязки этого verdict и GREEN CI; прежнюю доставку #323 повторно не оценивал.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "57aacb699c24a470b11e10e74333ff8b4359cd99",
+  "unit_goal_source": "PR #323 standalone npm→catalog fault-proof follow-up; observed BASE 9c78f7db2ece433beab2917ac7461b667c3c014b, reviewed HEAD 57aacb699c24a470b11e10e74333ff8b4359cd99. User accepted «Добавить один fault-тест: реальный npm → catalog, отказ persistence при сохранении dirty; ошибка доходит до результата npm-команды; тест падает при удалении проброса ошибки; текущий код проходит» with «добавляй доводи до зеленого ci и мержи». Authority: ADR-0414; scratch-dirty-ide-ownership.md at 516b4dc14f9323236701df4155220f6dd1856cc7, Fault matrix quota-perm-fail × catalog reflection → scenario. REV-1 scope is this three-file follow-up only. PR-4: baseline owner-package-state and catalog criteria inspected from git; existing tests, production code and gate configuration unchanged. Independent GREEN: /tmp/rifty-pr323-catalog-review-green.log, 74/74 tests, exit 0; independent swallowed-reflection mutant: /tmp/rifty-pr323-catalog-review-red.log, 2/2 fail at playground-npm-catalog.fault.test.ts:108 with expected +0 to be 1, exit 1; raw full pr:check log inspected: 25/25 passed. Clean reviewed HEAD verified after probes. No whole-goal completion claim.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "quota-perm-fail × catalog reflection: existing mutation settlement reports failure rather than false durable dirty; real npm result reports the storage error, and the prior catalog survives close/reload.",
+      "source": "fault-matrix",
+      "trace": "scenario + ADR-0414",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:35; packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:62; packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:97; packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:108; packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:118",
+      "note": ""
+    },
+    {
+      "row": "Accepted proof: removing reflection-error propagation makes the new real npm→catalog fault test fail, while current production code passes.",
+      "source": "acceptance",
+      "trace": "scenario + ADR-0414",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:81; packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:99; packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:107; packages/workbench/src/workers/playground-npm-catalog.fault.test.ts:108; docs/backlog/playground/reference/pr323-catalog-reflection-evidence.md:26",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

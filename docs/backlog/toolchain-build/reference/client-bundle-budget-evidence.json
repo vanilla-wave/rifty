@@ -1,0 +1,315 @@
+{
+  "historical": {
+    "source": "d52ef81285a65b4668cb6a694b9e928a8ab2c02a",
+    "report": {
+      "node": "v24.16.0",
+      "esbuild": "0.28.0",
+      "rows": [
+        {
+          "name": "main",
+          "min": 103660,
+          "gzip": 30188,
+          "eager": ["/measure/main/stdin.js"],
+          "compiler": []
+        },
+        {
+          "name": "sw",
+          "min": 63105,
+          "gzip": 18467,
+          "eager": ["/measure/sw/stdin.js"],
+          "compiler": []
+        },
+        {
+          "name": "generic",
+          "min": 4311637,
+          "gzip": 1245917,
+          "eager": [
+            "/measure/generic/stdin.js",
+            "/measure/generic/chunk-ZWRDP37E.js",
+            "/measure/generic/chunk-YQNX3F3R.js",
+            "/measure/generic/chunk-GID5H76B.js",
+            "/measure/generic/emscripten-module.browser-QVFB72VZ.js",
+            "/measure/generic/ffi-A74IUOQZ.js",
+            "/measure/generic/module-ES6BEMUI-7DQV35R3.js"
+          ],
+          "compiler": ["/measure/generic/stdin.js"]
+        },
+        {
+          "name": "toolchain",
+          "min": 4568192,
+          "gzip": 1326387,
+          "eager": [
+            "/measure/toolchain/worker-N5QWGUML.js",
+            "/measure/toolchain/chunk-ZWRDP37E.js",
+            "/measure/toolchain/chunk-YQNX3F3R.js",
+            "/measure/toolchain/chunk-GID5H76B.js",
+            "/measure/toolchain/chunk-DV2PYV7E.js",
+            "/measure/toolchain/stdin.js",
+            "/measure/toolchain/emscripten-module.browser-QVFB72VZ.js",
+            "/measure/toolchain/ffi-A74IUOQZ.js",
+            "/measure/toolchain/module-ES6BEMUI-7DQV35R3.js"
+          ],
+          "compiler": ["/measure/toolchain/chunk-DV2PYV7E.js"]
+        }
+      ]
+    },
+    "boot": {
+      "chromium": "148.0.7778.96",
+      "rows": [
+        {
+          "name": "generic",
+          "sample": 0,
+          "requests": [
+            "/",
+            "/measure/generic/stdin.js",
+            "/measure/generic/chunk-GID5H76B.js",
+            "/measure/generic/chunk-YQNX3F3R.js",
+            "/measure/generic/chunk-ZWRDP37E.js",
+            "/measure/generic/emscripten-module.browser-QVFB72VZ.js",
+            "/measure/generic/ffi-A74IUOQZ.js",
+            "/measure/generic/module-ES6BEMUI-7DQV35R3.js",
+            "/quickjs.wasm"
+          ]
+        },
+        {
+          "name": "generic",
+          "sample": 1,
+          "requests": [
+            "/",
+            "/measure/generic/stdin.js",
+            "/measure/generic/chunk-GID5H76B.js",
+            "/measure/generic/chunk-YQNX3F3R.js",
+            "/measure/generic/chunk-ZWRDP37E.js",
+            "/measure/generic/emscripten-module.browser-QVFB72VZ.js",
+            "/measure/generic/ffi-A74IUOQZ.js",
+            "/measure/generic/module-ES6BEMUI-7DQV35R3.js",
+            "/quickjs.wasm"
+          ]
+        },
+        {
+          "name": "generic",
+          "sample": 2,
+          "requests": [
+            "/",
+            "/measure/generic/stdin.js",
+            "/measure/generic/chunk-GID5H76B.js",
+            "/measure/generic/chunk-YQNX3F3R.js",
+            "/measure/generic/chunk-ZWRDP37E.js",
+            "/measure/generic/emscripten-module.browser-QVFB72VZ.js",
+            "/measure/generic/ffi-A74IUOQZ.js",
+            "/measure/generic/module-ES6BEMUI-7DQV35R3.js",
+            "/quickjs.wasm"
+          ]
+        },
+        {
+          "name": "toolchain",
+          "sample": 0,
+          "requests": [
+            "/",
+            "/measure/toolchain/stdin.js",
+            "/measure/toolchain/chunk-DV2PYV7E.js",
+            "/measure/toolchain/chunk-GID5H76B.js",
+            "/measure/toolchain/chunk-YQNX3F3R.js",
+            "/measure/toolchain/chunk-ZWRDP37E.js",
+            "/measure/toolchain/worker-N5QWGUML.js",
+            "/measure/toolchain/emscripten-module.browser-QVFB72VZ.js",
+            "/measure/toolchain/ffi-A74IUOQZ.js",
+            "/measure/toolchain/module-ES6BEMUI-7DQV35R3.js",
+            "/quickjs.wasm"
+          ]
+        },
+        {
+          "name": "toolchain",
+          "sample": 1,
+          "requests": [
+            "/",
+            "/measure/toolchain/stdin.js",
+            "/measure/toolchain/chunk-DV2PYV7E.js",
+            "/measure/toolchain/chunk-GID5H76B.js",
+            "/measure/toolchain/chunk-YQNX3F3R.js",
+            "/measure/toolchain/chunk-ZWRDP37E.js",
+            "/measure/toolchain/worker-N5QWGUML.js",
+            "/measure/toolchain/emscripten-module.browser-QVFB72VZ.js",
+            "/measure/toolchain/ffi-A74IUOQZ.js",
+            "/measure/toolchain/module-ES6BEMUI-7DQV35R3.js",
+            "/quickjs.wasm"
+          ]
+        },
+        {
+          "name": "toolchain",
+          "sample": 2,
+          "requests": [
+            "/",
+            "/measure/toolchain/stdin.js",
+            "/measure/toolchain/chunk-DV2PYV7E.js",
+            "/measure/toolchain/chunk-GID5H76B.js",
+            "/measure/toolchain/chunk-YQNX3F3R.js",
+            "/measure/toolchain/chunk-ZWRDP37E.js",
+            "/measure/toolchain/worker-N5QWGUML.js",
+            "/measure/toolchain/emscripten-module.browser-QVFB72VZ.js",
+            "/measure/toolchain/ffi-A74IUOQZ.js",
+            "/measure/toolchain/module-ES6BEMUI-7DQV35R3.js",
+            "/quickjs.wasm"
+          ]
+        }
+      ]
+    }
+  },
+  "cleaned": {
+    "source": "974cc355ecdd5cad59a967e2c9ed5327f2e60e5f",
+    "report": {
+      "node": "v24.16.0",
+      "esbuild": "0.28.0",
+      "rows": [
+        {
+          "name": "main",
+          "min": 56861,
+          "gzip": 18033,
+          "eager": [
+            "/measure/main/stdin.js",
+            "/measure/main/chunk-UDIYDBBL.js",
+            "/measure/main/chunk-BLCNZBVE.js"
+          ],
+          "compiler": ["/measure/main/chunk-OCLRNQS4.js"]
+        },
+        {
+          "name": "sw",
+          "min": 14056,
+          "gzip": 4828,
+          "eager": ["/measure/sw/stdin.js"],
+          "compiler": []
+        },
+        {
+          "name": "generic",
+          "min": 725778,
+          "gzip": 213598,
+          "eager": [
+            "/measure/generic/stdin.js",
+            "/measure/generic/chunk-OCFBCI5O.js",
+            "/measure/generic/chunk-YQNX3F3R.js",
+            "/measure/generic/chunk-GID5H76B.js",
+            "/measure/generic/emscripten-module.browser-NHFZ7RXK.js",
+            "/measure/generic/ffi-RQMBT53F.js",
+            "/measure/generic/module-ES6BEMUI-TCFOUELZ.js"
+          ],
+          "compiler": ["/measure/generic/chunk-OCLRNQS4.js"]
+        },
+        {
+          "name": "toolchain",
+          "min": 796895,
+          "gzip": 236199,
+          "eager": [
+            "/measure/toolchain/worker-3F3CROL3.js",
+            "/measure/toolchain/chunk-YKICEWO4.js",
+            "/measure/toolchain/chunk-YQNX3F3R.js",
+            "/measure/toolchain/chunk-GID5H76B.js",
+            "/measure/toolchain/chunk-S74RQEHQ.js",
+            "/measure/toolchain/chunk-BLCNZBVE.js",
+            "/measure/toolchain/chunk-LXBJEKG2.js",
+            "/measure/toolchain/stdin.js",
+            "/measure/toolchain/chunk-EJ62BJY5.js"
+          ],
+          "compiler": ["/measure/toolchain/chunk-OCLRNQS4.js"]
+        }
+      ]
+    },
+    "boot": {
+      "chromium": "148.0.7778.96",
+      "rows": [
+        {
+          "name": "generic",
+          "sample": 0,
+          "requests": [
+            "/",
+            "/measure/generic/stdin.js",
+            "/measure/generic/chunk-GID5H76B.js",
+            "/measure/generic/chunk-YQNX3F3R.js",
+            "/measure/generic/chunk-OCFBCI5O.js",
+            "/measure/generic/emscripten-module.browser-NHFZ7RXK.js",
+            "/measure/generic/ffi-RQMBT53F.js",
+            "/measure/generic/module-ES6BEMUI-TCFOUELZ.js",
+            "/quickjs.wasm"
+          ]
+        },
+        {
+          "name": "generic",
+          "sample": 1,
+          "requests": [
+            "/",
+            "/measure/generic/stdin.js",
+            "/measure/generic/chunk-GID5H76B.js",
+            "/measure/generic/chunk-YQNX3F3R.js",
+            "/measure/generic/chunk-OCFBCI5O.js",
+            "/measure/generic/emscripten-module.browser-NHFZ7RXK.js",
+            "/measure/generic/ffi-RQMBT53F.js",
+            "/measure/generic/module-ES6BEMUI-TCFOUELZ.js",
+            "/quickjs.wasm"
+          ]
+        },
+        {
+          "name": "generic",
+          "sample": 2,
+          "requests": [
+            "/",
+            "/measure/generic/stdin.js",
+            "/measure/generic/chunk-GID5H76B.js",
+            "/measure/generic/chunk-YQNX3F3R.js",
+            "/measure/generic/chunk-OCFBCI5O.js",
+            "/measure/generic/emscripten-module.browser-NHFZ7RXK.js",
+            "/measure/generic/ffi-RQMBT53F.js",
+            "/measure/generic/module-ES6BEMUI-TCFOUELZ.js",
+            "/quickjs.wasm"
+          ]
+        },
+        {
+          "name": "toolchain",
+          "sample": 0,
+          "requests": [
+            "/",
+            "/measure/toolchain/stdin.js",
+            "/measure/toolchain/chunk-LXBJEKG2.js",
+            "/measure/toolchain/chunk-BLCNZBVE.js",
+            "/measure/toolchain/chunk-EJ62BJY5.js",
+            "/measure/toolchain/chunk-S74RQEHQ.js",
+            "/measure/toolchain/chunk-GID5H76B.js",
+            "/measure/toolchain/chunk-YQNX3F3R.js",
+            "/measure/toolchain/chunk-YKICEWO4.js",
+            "/measure/toolchain/worker-3F3CROL3.js"
+          ]
+        },
+        {
+          "name": "toolchain",
+          "sample": 1,
+          "requests": [
+            "/",
+            "/measure/toolchain/stdin.js",
+            "/measure/toolchain/chunk-LXBJEKG2.js",
+            "/measure/toolchain/chunk-BLCNZBVE.js",
+            "/measure/toolchain/chunk-EJ62BJY5.js",
+            "/measure/toolchain/chunk-S74RQEHQ.js",
+            "/measure/toolchain/chunk-GID5H76B.js",
+            "/measure/toolchain/chunk-YQNX3F3R.js",
+            "/measure/toolchain/chunk-YKICEWO4.js",
+            "/measure/toolchain/worker-3F3CROL3.js"
+          ]
+        },
+        {
+          "name": "toolchain",
+          "sample": 2,
+          "requests": [
+            "/",
+            "/measure/toolchain/stdin.js",
+            "/measure/toolchain/chunk-LXBJEKG2.js",
+            "/measure/toolchain/chunk-BLCNZBVE.js",
+            "/measure/toolchain/chunk-EJ62BJY5.js",
+            "/measure/toolchain/chunk-S74RQEHQ.js",
+            "/measure/toolchain/chunk-GID5H76B.js",
+            "/measure/toolchain/chunk-YQNX3F3R.js",
+            "/measure/toolchain/chunk-YKICEWO4.js",
+            "/measure/toolchain/worker-3F3CROL3.js"
+          ]
+        }
+      ]
+    }
+  }
+}

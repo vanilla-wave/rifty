@@ -5,31 +5,27 @@
  * self-contained `window.WebSocket` patch head-prepended, so ANY dev tool's
  * stock WS client (vite HMR, webpack HMR, socket.io) reaches the guest server
  * — no per-tool plugin. The script remaps loopback/current-origin WS URLs to
- * the guest port derived from the iframe's `/preview/<port>/` prefix.
+ * the guest port derived from the iframe's configured preview prefix.
  */
 
+import { DEFAULT_PREVIEW_PREFIX, normalizePreviewPrefix } from '@riftydev/io';
 import { webSocketBridgeClientScript } from '../ws/browser-client-script.ts';
 
 /** Idempotence marker attribute on the injected script tag. */
 export const PREVIEW_WS_BRIDGE_MARKER = 'data-rifty-ws-bridge';
 
-let cachedTag: string | null = null;
-
-function bridgeScriptTag(): string {
-  if (cachedTag === null) {
-    const script = webSocketBridgeClientScript({
-      previewPortFromPath: true,
-      // Observability hooks (window flags + CustomEvents) for e2e/self-tests;
-      // no behavioral effect on the bridged sockets.
-      instrumentation: {
-        eventPrefix: 'rifty:ws',
-        openFlag: '__riftyWsBridgeOpen',
-        lastMessageFlag: '__riftyWsBridgeLastMessage',
-      },
-    });
-    cachedTag = `<script ${PREVIEW_WS_BRIDGE_MARKER}>${script}</script>`;
-  }
-  return cachedTag;
+function bridgeScriptTag(previewPrefix: string): string {
+  const script = webSocketBridgeClientScript({
+    previewPortFromPath: true,
+    previewPrefix,
+    // Observability hooks (window flags + CustomEvents) for e2e/self-tests.
+    instrumentation: {
+      eventPrefix: 'rifty:ws',
+      openFlag: '__riftyWsBridgeOpen',
+      lastMessageFlag: '__riftyWsBridgeLastMessage',
+    },
+  });
+  return `<script ${PREVIEW_WS_BRIDGE_MARKER}>${script}</script>`;
 }
 
 /**
@@ -38,9 +34,13 @@ function bridgeScriptTag(): string {
  * is returned unchanged. Falls back to after-`<html>` / document-prefix when
  * the tag is absent — the patch must land before any framework client script.
  */
-export function injectPreviewWebSocketBridge(html: string): string {
+export function injectPreviewWebSocketBridge(
+  html: string,
+  previewPrefix: string = DEFAULT_PREVIEW_PREFIX,
+): string {
+  const prefix = normalizePreviewPrefix(previewPrefix);
   if (html.includes(PREVIEW_WS_BRIDGE_MARKER)) return html;
-  const tag = bridgeScriptTag();
+  const tag = bridgeScriptTag(prefix);
   const headOpen = /<head\b[^>]*>/i.exec(html);
   if (headOpen) {
     const at = headOpen.index + headOpen[0].length;

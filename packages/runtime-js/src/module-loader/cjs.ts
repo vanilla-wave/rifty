@@ -3,6 +3,8 @@ import { basename, dirname, joinPath } from '@riftydev/vfs';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
+import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
@@ -61,6 +63,7 @@ export interface CjsLoaderDeps {
   readonly extensions: CjsExtensions;
   /** Loader-owned `.js` identity; replacements own unregistered suffixes. */
   readonly defaultJsExtension: CjsExtensionHook;
+  readonly WebAssembly: typeof WebAssembly;
   /** Create a require bound to `fromFile`, including the shared extensions table. */
   makeRequire(fromFile: string, parent?: CjsModule): CjsRequire;
   /**
@@ -108,12 +111,6 @@ function snippetForSource(source: string, stack: string): string {
   return `\nNear line ${srcLine}:\n${numbered}`;
 }
 
-interface Edit {
-  readonly start: number;
-  readonly end: number;
-  readonly text: string;
-}
-
 interface AnyNodeShape {
   readonly type: string;
   readonly start: number;
@@ -133,6 +130,8 @@ interface FunctionRewriteCtx {
   readonly edits: Edit[];
   readonly scopes: Scope[];
   readonly functionHelperName: string;
+  readonly webAssemblyHelperName: string;
+  readonly dynamicImportHelperName: string;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
   hasWithDynamicFunctionScope: boolean;
@@ -144,21 +143,7 @@ interface FunctionRewriteCtx {
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
 // finite guard for known Function/eval import escapes, not proof-complete JS alias analysis.
 const functionRoutingAnalysisToken =
-  /\bFunction\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
-
-function uniqueHelperName(
-  source: string,
-  base: string,
-  reserved: ReadonlySet<string> = new Set(),
-): string {
-  let candidate = base;
-  let suffix = 0;
-  while (reserved.has(candidate) || source.includes(candidate)) {
-    suffix++;
-    candidate = `${base}${suffix}`;
-  }
-  return candidate;
-}
+  /\bFunction\b|\bWebAssembly\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
 
 function rewriteDynamicImports(source: string, id: string, helperName: string): string {
   if (!/\bimport\b/.test(source)) return source;
@@ -221,6 +206,8 @@ function rewriteCjsFunctionConstructorReferences(
   source: string,
   id: string,
   functionHelperName: string,
+  webAssemblyHelperName: string,
+  dynamicImportHelperName: string,
 ): string {
   if (!functionRoutingAnalysisToken.test(source)) return source;
   let program: Program;
@@ -250,6 +237,8 @@ function rewriteCjsFunctionConstructorReferences(
     edits: [],
     scopes: [rootScope],
     functionHelperName,
+    webAssemblyHelperName,
+    dynamicImportHelperName,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -281,18 +270,6 @@ function rewriteCjsFunctionConstructorReferences(
   }
   if (ctx.edits.length === 0) return source;
   return applyEdits(source, ctx.edits);
-}
-
-function applyEdits(source: string, edits: readonly Edit[]): string {
-  let out = '';
-  let pos = 0;
-  for (const edit of [...edits].sort((a, b) => a.start - b.start || a.end - b.end)) {
-    out += source.slice(pos, edit.start);
-    out += edit.text;
-    pos = edit.end;
-  }
-  out += source.slice(pos);
-  return out;
 }
 
 function createScope(): Scope {
@@ -576,6 +553,9 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
         ctx.hasRoutedFunctionReference = true;
         ctx.edits.push({ start: n.start, end: n.end, text: ctx.functionHelperName });
       }
+      if (name === 'WebAssembly' && !isShadowed(ctx, name)) {
+        ctx.edits.push({ start: n.start, end: n.end, text: ctx.webAssemblyHelperName });
+      }
       return;
     }
 
@@ -665,6 +645,13 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           ctx.hasRoutedFunctionReference = true;
           ctx.edits.push({ start: p.value.start, end: p.value.start, text: 'Function: ' });
         }
+        if (name === 'WebAssembly' && !isShadowed(ctx, name)) {
+          ctx.edits.push({
+            start: p.value.start,
+            end: p.value.start,
+            text: 'WebAssembly: ',
+          });
+        }
       }
       walkFunctionReferences(p.value, ctx);
       return;
@@ -714,21 +701,17 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       if (calleeMayBeDerivedHostFunction(callee, ctx) && constructorArgsMayImport(args)) {
         ctx.hasDerivedHostFunctionConstructor = true;
       }
-      if (calleeMayBeEval(callee, ctx)) {
+      const directEvalImportEdit = rewriteDirectEvalImportCallArgument(
+        n,
+        ctx.dynamicImportHelperName,
+        isShadowed(ctx, 'eval'),
+      );
+      if (directEvalImportEdit !== null) ctx.edits.push(directEvalImportEdit);
+      if (expressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
-      }
-      if (
-        callee?.type === 'Identifier' &&
-        (callee as unknown as { name?: string }).name === 'eval' &&
-        !isShadowed(ctx, 'eval')
-      ) {
-        ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
-      }
-      if (callee?.type === 'MemberExpression' && isGlobalEvalCallMember(callee, ctx)) {
-        ctx.hasDynamicFunctionScope = true;
-        ctx.hasFunctionEvalText = ctx.hasFunctionEvalText || evalArgumentMayTouchFunction(args[0]);
+        ctx.hasFunctionEvalText =
+          ctx.hasFunctionEvalText ||
+          (directEvalImportEdit === null && evalArgumentMayTouchFunction(args[0]));
       }
       walkFunctionReferences(callee, ctx);
       for (const arg of args) walkFunctionReferences(arg, ctx);
@@ -1612,13 +1595,12 @@ function expressionMayBeGlobalEval(node: unknown, ctx: FunctionRewriteCtx): bool
   const n = unwrapChain(node) as AnyNodeShape;
   if (n.type === 'Identifier') {
     const name = (n as unknown as { name?: string }).name;
-    return name === 'eval' || (typeof name === 'string' && isMaybeEvalAlias(ctx, name));
+    return (
+      (name === 'eval' && !isShadowed(ctx, name)) ||
+      (typeof name === 'string' && isMaybeEvalAlias(ctx, name))
+    );
   }
   return n.type === 'MemberExpression' && isGlobalEvalCallMember(n, ctx);
-}
-
-function calleeMayBeEval(node: unknown, ctx: FunctionRewriteCtx): boolean {
-  return expressionMayBeGlobalEval(node, ctx);
 }
 
 function isGlobalFunctionUnknownReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
@@ -1814,6 +1796,7 @@ function compileCjsSource(
     __dirname: string,
     __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
     __riftyFunction: FunctionConstructor,
+    __riftyWebAssembly: typeof WebAssembly,
   ) => void;
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
@@ -1823,10 +1806,17 @@ function compileCjsSource(
     '__riftyFunction',
     new Set([dynamicImportHelperName]),
   );
+  const webAssemblyHelperName = uniqueHelperName(
+    sourceText,
+    '__riftyWebAssembly',
+    new Set([dynamicImportHelperName, functionHelperName]),
+  );
   const source = rewriteCjsFunctionConstructorReferences(
     rewriteDynamicImports(sourceText, filename, dynamicImportHelperName),
     filename,
     functionHelperName,
+    webAssemblyHelperName,
+    dynamicImportHelperName,
   );
   let fn: CjsFactory;
   try {
@@ -1838,6 +1828,7 @@ function compileCjsSource(
       '__dirname',
       dynamicImportHelperName,
       functionHelperName,
+      webAssemblyHelperName,
       `${source}\n//# sourceURL=${filename}`,
     ) as CjsFactory;
   } catch (error) {
@@ -1861,6 +1852,7 @@ function compileCjsSource(
     dirname(filename),
     dynamicImport,
     routedConstructors.Function,
+    deps.WebAssembly,
   );
 }
 

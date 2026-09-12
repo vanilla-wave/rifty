@@ -32,7 +32,7 @@ async function waitForListeningPort(port: number, timeoutMs: number): Promise<vo
         () =>
           reject(
             new Error(
-              `[real-vite/worker] entry never started listening on port ${port} — a node-server template entry must call listen(process.env.PORT)`,
+              `[workbench/worker] entry never started listening on port ${port} — a node-server template entry must call listen(process.env.PORT)`,
             ),
           ),
         timeoutMs,
@@ -59,10 +59,10 @@ async function bootNodeServer(
   (globalThis as { console: unknown }).console = new Console(termWriter, termWriter);
 
   const projectEntryPath = cfg.root === '/' ? cfg.entryPath : cfg.entryPath.slice(cfg.root.length);
-  log(`[real-vite/worker] starting server ${projectEntryPath} on port ${cfg.port}…\n`);
+  log(`[workbench/worker] starting server ${projectEntryPath} on port ${cfg.port}…\n`);
   await loader.import(cfg.entryPath, `${cfg.root}/__entry__.mjs`);
   await waitForListeningPort(cfg.port, 10_000);
-  log(`[real-vite/worker] server is listening on internal port ${cfg.port}\n`);
+  log(`[workbench/worker] server is listening on internal port ${cfg.port}\n`);
 }
 
 export async function bootDevServer(opts: {
@@ -115,7 +115,7 @@ export async function bootDevServer(opts: {
     async (request) => dispatchToPort(port, request),
     opts.previewScope === undefined ? {} : { scope: opts.previewScope },
   );
-  log('[real-vite/worker] preview bridge ready\n');
+  log('[workbench/worker] preview bridge ready\n');
 
   return {
     port,

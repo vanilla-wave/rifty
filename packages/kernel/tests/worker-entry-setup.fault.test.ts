@@ -146,6 +146,25 @@ describe('worker-entry setup transaction', () => {
     expectReaped(target, ports, spec.outputState);
   });
 
+  it('reports and reaps a serve worker when asynchronous pre-entry readiness rejects', async () => {
+    const target = new DispatchableWorkerTarget();
+    const fixture = makeSpec();
+    const spec: WorkerSpawnSpec = {
+      ...fixture.spec,
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/entry.js' },
+      serve: true,
+    };
+    const fault = new Error('async pre-entry readiness failed');
+    setKernelPreEntryHook(() => Promise.reject(fault));
+    installWorkerEntry(target as unknown as DedicatedWorkerGlobalScope);
+
+    await target.init(spec);
+
+    expectReaped(target, fixture.ports.slice(0, 4), spec.outputState);
+    const stderr = fixture.ports[1]?.postMessage.mock.calls[0]?.[0] as Uint8Array;
+    expect(new TextDecoder().decode(stderr)).toContain(fault.message);
+  });
+
   it('publishes only the exact public process spec before guest entry', async () => {
     const target = new DispatchableWorkerTarget();
     const { spec, ports } = makeSpec();

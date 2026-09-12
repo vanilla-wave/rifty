@@ -31,6 +31,44 @@ export class ProjectDefinitionMismatchError extends Error {
   }
 }
 
+function snapshotConflictPaths(value: unknown): readonly string[] {
+  const invalid = (): never => {
+    throw new TypeError('Invalid snapshot application conflicting paths');
+  };
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return invalid();
+  if (Reflect.ownKeys(value).length !== value.length + 1) return invalid();
+  const paths: string[] = [];
+  for (let index = 0; index < value.length; index++) {
+    const property = Object.getOwnPropertyDescriptor(value, String(index));
+    if (property === undefined || !property.enumerable || !('value' in property)) return invalid();
+    const path: unknown = property.value;
+    if (
+      typeof path !== 'string' ||
+      !path.startsWith('/') ||
+      path === '/' ||
+      path.includes('\0') ||
+      path
+        .slice(1)
+        .split('/')
+        .some((segment) => segment === '' || segment === '.' || segment === '..')
+    )
+      return invalid();
+    paths.push(path);
+  }
+  return Object.freeze([...new Set(paths)].sort());
+}
+
+export class SnapshotApplicationConflictError extends Error {
+  readonly conflictingPaths: readonly string[];
+
+  constructor(conflictingPaths: readonly string[]) {
+    const paths = snapshotConflictPaths(conflictingPaths);
+    super(`SnapshotApplicationConflictError: conflicting project paths ${paths.join(', ')}`);
+    this.name = 'SnapshotApplicationConflictError';
+    this.conflictingPaths = paths;
+  }
+}
+
 export class ProjectRunExitedBeforeReadyError extends Error {
   readonly exit: ProcessExit;
 
@@ -173,6 +211,39 @@ export function isRetryableProjectClosePreflightError(
 export interface SerializedWorkbenchOwnerError {
   readonly name: string;
   readonly message: string;
+  readonly conflictingPaths?: readonly string[];
+}
+
+export function inspectSerializedWorkbenchOwnerError(
+  value: unknown,
+): SerializedWorkbenchOwnerError {
+  const invalid = (): never => {
+    throw new TypeError('Invalid serialized owner error');
+  };
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return invalid();
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== null && prototype !== Object.prototype) return invalid();
+  const fields: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !['name', 'message', 'conflictingPaths'].includes(key))
+      return invalid();
+    const property = Object.getOwnPropertyDescriptor(value, key);
+    if (property === undefined || !property.enumerable || !('value' in property)) return invalid();
+    fields[key] = property.value;
+  }
+  if (
+    typeof fields.name !== 'string' ||
+    fields.name.length === 0 ||
+    typeof fields.message !== 'string'
+  )
+    return invalid();
+  const conflict = fields.name === 'SnapshotApplicationConflictError';
+  if (Object.hasOwn(fields, 'conflictingPaths') !== conflict) return invalid();
+  return Object.freeze({
+    name: fields.name,
+    message: fields.message,
+    ...(conflict ? { conflictingPaths: snapshotConflictPaths(fields.conflictingPaths) } : {}),
+  });
 }
 
 /** Clone-safe owner failure payload; protocol inspection owns field validation. */
@@ -181,6 +252,9 @@ export function serializeWorkbenchOwnerError(error: unknown): SerializedWorkbenc
     return Object.freeze({
       name: error.name.length > 0 ? error.name : 'Error',
       message: error.message,
+      ...(error instanceof SnapshotApplicationConflictError
+        ? { conflictingPaths: snapshotConflictPaths(error.conflictingPaths) }
+        : {}),
     });
   }
   return Object.freeze({ name: 'Error', message: String(error) });
@@ -188,6 +262,13 @@ export function serializeWorkbenchOwnerError(error: unknown): SerializedWorkbenc
 
 /** Restore owner-crossing public domain prototypes without guessing constructor data. */
 export function deserializeWorkbenchOwnerError(value: SerializedWorkbenchOwnerError): Error {
+  if (value.name === 'SnapshotApplicationConflictError') {
+    const error = new SnapshotApplicationConflictError(
+      snapshotConflictPaths(value.conflictingPaths),
+    );
+    error.message = value.message;
+    return error;
+  }
   const error = new Error(value.message);
   const prototype =
     value.name === 'ProjectDefinitionMismatchError'

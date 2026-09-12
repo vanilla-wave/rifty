@@ -1,0 +1,366 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS for both units and I1–I6 at reviewed SHA. Previous startup default-fallback blocker independently verified repaired. Finish goal documentation closure and PR CI/push delivery; no product residuals.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "4e25f5a9384150ebace4f30953fe89a0aea6e715",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-self-hosted-project-open.md plus docs/backlog/distribution/no-coi-worker-startup.md; whole docs/backlog/epics/no-coi-self-hosted-project/goal.md I1–I6; BASE ca4f4786244f86a377626cef3f857ab3ae7488ef. Raw user round 1 answer and ADR-0417/0419/0420 read. Independent current diff/criteria review. Raw RED checked: /tmp/rifty-332-default-storage-probe.log, /tmp/rifty-332-default-storage-red.log, /tmp/rifty-332-snapshot-red.log, /tmp/rifty-332-saved-access-red.log, /tmp/rifty-332-packed-snapshot-red.log. GREEN read: /tmp/rifty-332-startup-repair-green.log (8), /tmp/rifty-332-snapshot-entry-green.log (24), /tmp/rifty-332-force-owner-green.log (12), /tmp/rifty-332-reserved-claim-green.log (1), /tmp/rifty-332-snapshot-input-green.log (11). /tmp/rifty-332-packed-final.log completed real packed Vite apply/build/edit/reopen/force/update/native interruption+quota, zero registry/Eddy, and unchanged Workbench/SQLite/scoped preview. /tmp/rifty-332-final-pr-check.log completed 25/25 including test:run and parity. Prior startup BLOCK repair: worker-entry.ts now selects preferred for omitted toolchain storage, preserving generic legacy boot; new omitted/explicit/required/ephemeral native regression discriminates lost reason. PR-4: warm-open expectation change authorized by raw user/ADR-0417; protocol fixtures v4 positive/v10 future retain explicit v3 negative. install-stamp gate permits only installToolchainPackages acquisition and negatively tests saved-open/claim forgery. Closure inventory 159→160 retains exact file-set equality. Compiler emitted bytes/hash independently measured 10022694 / 3a989cf38bea4bf3b6aea5612259725668e5c9c8219ea06da1147bb9a1188679; unchanged carrier restrictions/negative tests. Prior Contract+RED advisory update/admission/fresh-reapply concerns addressed by committed carriers; prior saturation timeouts superseded by completed full GREEN. Both linked children reviewed together; their remaining records need routine closure, no unproved implementation obligations.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "I1: scoped native roots, required teardown and observable default/preferred fallback",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5; tests/no-coi/no-coi-configured-startup.spec.ts:39; tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "I2: effective validated startup deadline, initial/restart, timeout/close without revival",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:136; tests/no-coi/no-coi-configured-startup.spec.ts:165; packages/runtime-js/src/host-startup.fault.test.ts:88",
+      "note": ""
+    },
+    {
+      "row": "I3: packed producer/public SDK/copied Worker real Vite, no registry/Eddy, validated source",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:7; tests/no-coi/no-coi-snapshot-application.spec.ts:221",
+      "note": ""
+    },
+    {
+      "row": "I4: ordinary saved access ignores proof and bad/missing lock; adapter errors at use",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-saved-access.spec.ts:4; tests/integration/no-coi-snapshot-browser-proof.mjs:93; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "I5: explicit same-ID/update conflict preflight; force preserves untargeted paths",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:142; tests/integration/no-coi-snapshot-browser-proof.mjs:82",
+      "note": ""
+    },
+    {
+      "row": "I6: persistence settlement, quota rejection and native tab interruption with ordinary reopen",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:281; tests/no-coi/no-coi-snapshot-application.spec.ts:303; tests/integration/no-coi-snapshot-browser-proof.mjs:117",
+      "note": ""
+    },
+    {
+      "row": "Startup Acceptance 1: namespace A/B/default native preload/writes survive restart/recreation",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Startup Acceptance 2: required rejects; omitted/explicit preferred return reason; unreadable preload fatal",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5; tests/no-coi/no-coi-configured-startup.spec.ts:104; tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Startup Acceptance 3: 10000ms default, bounded integer budget, native 11s preload under 30s including restart",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:136; packages/runtime-js/src/host-startup.fault.test.ts:48; packages/runtime-js/src/host-startup.fault.test.ts:61; packages/rifty/src/sandbox-startup.contract.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Startup Acceptance 4: invalid namespace/policy/budget before SW/Worker/storage effects",
+      "source": "acceptance",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Startup Acceptance 5: pending startup/eval/fs settle on deadline/close/dispose; no late revival",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:88; packages/runtime-js/src/host-startup.fault.test.ts:109; tests/no-coi/no-coi-configured-startup.spec.ts:165",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × boot config",
+      "source": "fault-matrix",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × native acquisition: required rejection, visible preferred fallback",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:5; tests/no-coi/no-coi-configured-startup.spec.ts:104",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × acquired preload: reject, preserve disk, no fallback",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-preload-failure.spec.ts:5",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read × slow preload: below budget succeeds, deadline terminates",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:136; packages/runtime-js/src/host-startup.fault.test.ts:88",
+      "note": ""
+    },
+    {
+      "row": "torn-state × close/dispose during boot",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:165; packages/runtime-js/src/host-startup.fault.test.ts:109",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × restart: captured namespace and budget",
+      "source": "fault-matrix",
+      "trace": "I1+I2",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-configured-startup.spec.ts:39; tests/no-coi/no-coi-configured-startup.spec.ts:136",
+      "note": ""
+    },
+    {
+      "row": "Snapshot Acceptance 1: packed producer/public SDK/copied Worker real Vite with zero registry/Eddy",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:7",
+      "note": ""
+    },
+    {
+      "row": "Snapshot Acceptance 2: missing/corrupt/identity/template/runtime/oversized source, force/same-ID validation",
+      "source": "acceptance",
+      "trace": "I3+I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:142; tests/no-coi/no-coi-snapshot-application.spec.ts:221",
+      "note": ""
+    },
+    {
+      "row": "Snapshot Acceptance 3: saved proof/bad-lock independence, no acquisition or file rewrites",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-saved-access.spec.ts:4; tests/no-coi/no-coi-warm-open.spec.ts:204; tests/integration/no-coi-snapshot-browser-proof.mjs:74",
+      "note": ""
+    },
+    {
+      "row": "Snapshot Acceptance 4: valid real adapter activation; unusable facts/payload fail at use",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:63; tests/integration/no-coi-snapshot-browser-proof.mjs:93; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Snapshot Acceptance 5: preflight before effects; force targeted files/directories including old-claim descendants",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:112; tests/no-coi/no-coi-snapshot-application.spec.ts:142",
+      "note": ""
+    },
+    {
+      "row": "Snapshot Acceptance 6: changed dependencies, saved source retention and real Vite rebuild",
+      "source": "acceptance",
+      "trace": "I4+I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:200; tests/integration/no-coi-snapshot-browser-proof.mjs:85",
+      "note": ""
+    },
+    {
+      "row": "Snapshot Acceptance 7: operation settles persistence; quota/tab death, ordinary access and optional reapply",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:281; tests/no-coi/no-coi-snapshot-application.spec.ts:303; tests/integration/no-coi-snapshot-browser-proof.mjs:117",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × source/application: no cache/payload effects, force cannot bypass",
+      "source": "fault-matrix",
+      "trace": "I3+I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:221; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:415",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read × acquisition: 128MiB/stall bounds",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:221; packages/workbench/src/glue/bounded-asset-fetch.fault.test.ts:7; packages/workbench/src/glue/dep-snapshot.test.ts:732",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache × replay: exact source/replay/runtime checks",
+      "source": "fault-matrix",
+      "trace": "I3+I5",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:470; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:415",
+      "note": ""
+    },
+    {
+      "row": "torn-state × saved open: actual files accessible, dependencies fail at use",
+      "source": "fault-matrix",
+      "trace": "I4+I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-saved-access.spec.ts:4; tests/integration/no-coi-snapshot-browser-proof.mjs:117",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × adapter facts/payload: no fake capability/eager refusal",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:93; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "observable-order × default conflict: unchanged entire native tree",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:142",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × application: rejection and ordinary access",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:281; tests/integration/no-coi-snapshot-browser-proof.mjs:145",
+      "note": ""
+    },
+    {
+      "row": "torn-state × tab death: pending operation, readable reopened source, use failure and explicit reapply",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:303; tests/integration/no-coi-snapshot-browser-proof.mjs:117",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key × toolchain: existing busy/resident admission includes apply",
+      "source": "fault-matrix",
+      "trace": "ADR-0376+ADR-0417",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:59; tests/no-coi/no-coi-snapshot-application.spec.ts:303",
+      "note": ""
+    },
+    {
+      "row": "SDK storage/startupTimeoutMs and vfs.reason; captured before effects and reused on restart",
+      "source": "public-api",
+      "trace": "ADR-0419+I1+I2",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6; tests/no-coi/no-coi-configured-startup.spec.ts:5; tests/no-coi/no-coi-configured-startup.spec.ts:39; tests/no-coi/no-coi-configured-startup.spec.ts:136",
+      "note": ""
+    },
+    {
+      "row": "VFS initBackend options, capture and literal namespace validator",
+      "source": "public-api",
+      "trace": "ADR-0419",
+      "status": "pass",
+      "citation": "packages/rifty/src/sandbox-startup.contract.test.ts:6; tests/no-coi/no-coi-configured-startup.spec.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Protocol v4 rejects older workers unable to honor configuration",
+      "source": "public-api",
+      "trace": "ADR-0419",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/host-startup.fault.test.ts:73",
+      "note": ""
+    },
+    {
+      "row": "SDK applySnapshot request/source/force and runtime transport",
+      "source": "public-api",
+      "trace": "ADR-0420+I3+I5",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/toolchain-snapshot-input.test.ts:1; tests/no-coi/no-coi-snapshot-application.spec.ts:142; tests/integration/no-coi-snapshot-browser-proof.mjs:7",
+      "note": ""
+    },
+    {
+      "row": "SDK open optional legacy registryUrl; saved use without registry placeholder",
+      "source": "public-api",
+      "trace": "ADR-0420+I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-saved-access.spec.ts:4; tests/integration/no-coi-snapshot-browser-proof.mjs:74",
+      "note": ""
+    },
+    {
+      "row": "Emitted compiler pin remains exact size/hash exception; raw/gzip/base64 retired payload rejection retained",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:51",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

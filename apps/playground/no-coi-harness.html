@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>rifty no-COI SDK harness</title>
+  </head>
+  <body>
+    <main id="no-coi-harness" data-status="booting">headerless SDK harness</main>
+    <img id="cross-origin-probe" alt="cross-origin probe" data-status="loading" />
+    <script>
+      (() => {
+        const root = document.getElementById('no-coi-harness');
+        const image = document.getElementById('cross-origin-probe');
+        const token = crypto.randomUUID();
+        const enteredTimeOrigin = performance.timeOrigin;
+        const samples = [];
+        let phase = 'entry';
+        const resourcePort = new URLSearchParams(location.search).get('resourcePort');
+
+        image.addEventListener('load', () => {
+          image.dataset.status = 'loaded';
+        });
+        image.addEventListener('error', () => {
+          image.dataset.status = 'error';
+        });
+        image.src = `${location.protocol}//${location.hostname}:${resourcePort ?? location.port}/favicon.svg?${token}`;
+
+        addEventListener('message', (event) => {
+          if (event.origin !== location.origin || event.data?.kind !== 'rifty-opener-probe') return;
+          event.source?.postMessage(
+            { kind: 'rifty-opener-ack', id: event.data.id },
+            { targetOrigin: event.origin },
+          );
+        });
+
+        function snapshot() {
+          return {
+            token,
+            phase,
+            timeOrigin: performance.timeOrigin,
+            enteredTimeOrigin,
+            navigationCount: performance.getEntriesByType('navigation').length,
+            navigationType: performance.getEntriesByType('navigation')[0]?.type ?? null,
+            crossOriginIsolated: globalThis.crossOriginIsolated,
+            sharedArrayBufferType: typeof globalThis.SharedArrayBuffer,
+            openerPresent: window.opener !== null,
+            imageStatus: image.dataset.status,
+            imageWidth: image.naturalWidth,
+          };
+        }
+
+        globalThis.__riftyNoCoiHost = {
+          snapshot,
+          samples: () => samples.slice(),
+          setPhase(next) {
+            phase = next;
+            samples.push(snapshot());
+          },
+          openerRoundTrip() {
+            return new Promise((resolve, reject) => {
+              if (window.opener === null) {
+                reject(new Error('no opener'));
+                return;
+              }
+              const id = crypto.randomUUID();
+              const timer = setTimeout(() => reject(new Error('opener round-trip timeout')), 2000);
+              const onMessage = (event) => {
+                if (
+                  event.origin !== location.origin ||
+                  event.data?.kind !== 'rifty-opener-ack' ||
+                  event.data.id !== id
+                ) return;
+                clearTimeout(timer);
+                removeEventListener('message', onMessage);
+                resolve(true);
+              };
+              addEventListener('message', onMessage);
+              window.opener.postMessage(
+                { kind: 'rifty-opener-probe', id },
+                { targetOrigin: location.origin },
+              );
+            });
+          },
+        };
+
+        setInterval(() => samples.push(snapshot()), 20);
+        root.dataset.status = 'ready';
+      })();
+    </script>
+  </body>
+</html>

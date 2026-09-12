@@ -19,7 +19,7 @@
  */
 
 export { NotImplementedError } from './errors.ts';
-export { EventEmitter, once } from './event-emitter.ts';
+export { EventEmitter, once, captureEventEmitterListenerScope } from './event-emitter.ts';
 export {
   Buffer,
   getInspectMaxBytes,
@@ -66,8 +66,12 @@ export {
   type BuiltinFactory,
 } from './builtin-registry.ts';
 export {
+  DEFAULT_PREVIEW_PREFIX,
   PREVIEW_PREFIX_RE,
   PREVIEW_LOCAL_HOST,
+  normalizePreviewPrefix,
+  previewPrefixPattern,
+  buildPreviewPath,
   synthesizePreviewUrl,
   parsePreviewPath,
 } from './preview-protocol.ts';

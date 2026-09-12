@@ -1,4 +1,9 @@
-import type { OwnerStoragePersistence, OwnerStorageSnapshot } from '../workers/owner-storage.ts';
+import type {
+  OwnerStorageConfig,
+  OwnerStoragePersistence,
+  OwnerStorageSnapshot,
+} from '../workers/owner-storage.ts';
+import type { NormalizedWorkbenchPackageAcquisition } from './internal/workbench-package-acquisition.ts';
 import type {
   PlaygroundProjectCatalog,
   PlaygroundProjectOpenOptions,
@@ -48,6 +53,8 @@ export type WorkbenchOwnerHealthEvent =
    * as the heartbeat; terminal = `persisted === total` (clean drains only). */
   | Readonly<{
       kind: 'durability-progress';
+      /** The physical owner matched this frame to the pending project open. */
+      projectOpen?: boolean;
       persisted: number;
       total: number;
     }>;
@@ -72,22 +79,21 @@ export interface WorkbenchOwnerStartInput {
       readonly typescript?: string;
     };
     readonly wasm: {
-      readonly sqlite: string;
+      readonly sqlite?: string;
     };
     readonly previewProbeTimeoutMs: number;
+    readonly previewPrefix?: string;
     /** ADR-0360: host budget of owner durability-progress SILENCE per
      *  operation; unset = the shipped default at the transport. */
     readonly ownerOperationSilenceTimeoutMs?: number;
+    readonly ownerStartupTimeoutMs?: number;
+    readonly projectFileCommitTimeoutMs?: number;
+    readonly playgroundRequestTimeoutMs?: number;
+    /** Captured maximum of applicable explicit overrides; omission keeps native IO defaults. */
+    readonly ioReportTimeoutMs?: number;
   };
-  readonly packageAcquisition: {
-    readonly registryUrl: string;
-    readonly eddy?: {
-      readonly resolverUrl: string;
-      readonly bundleBaseUrl: string;
-      readonly presetPins: Readonly<Record<string, string>>;
-    };
-  };
-  readonly storage: { readonly persistence: OwnerStoragePersistence };
+  readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
+  readonly storage: OwnerStorageConfig;
   /** First-party companion only; captured historical selection, never guest env. */
   readonly legacyWorkspacePrefix?: string;
   /** First-party companion only; one immutable page URL snapshot for definition ingress. */
@@ -150,7 +156,11 @@ export function createWorkbenchOwnerPort(
       } catch (error) {
         return Promise.reject(error);
       }
-      return admitWorkspaceOwner(raw, input.storage.persistence);
+      return admitWorkspaceOwner(
+        raw,
+        input.storage.persistence,
+        input.deployment.ownerStartupTimeoutMs,
+      );
     },
   });
 }
@@ -158,6 +168,7 @@ export function createWorkbenchOwnerPort(
 function admitWorkspaceOwner(
   raw: RawWorkspaceOwnerHandle,
   requestedPolicy: OwnerStoragePersistence,
+  readyTimeoutMs = WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS,
 ): Promise<WorkbenchOwnerStartResult> {
   return new Promise<WorkbenchOwnerStartResult>((resolve, reject) => {
     let startupSettled = false;
@@ -165,11 +176,9 @@ function admitWorkspaceOwner(
       if (startupSettled) return;
       startupSettled = true;
       failAfterCleanup(
-        new Error(
-          `Workspace owner ready timed out after ${String(WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS)}ms`,
-        ),
+        new Error(`Workspace owner ready timed out after ${String(readyTimeoutMs)}ms`),
       );
-    }, WORKSPACE_OWNER_LIFECYCLE_TIMEOUT_MS);
+    }, readyTimeoutMs);
 
     const failAfterCleanup = (failure: unknown): void => {
       void cleanupRawOwner(raw, failure).then(resolve, reject);

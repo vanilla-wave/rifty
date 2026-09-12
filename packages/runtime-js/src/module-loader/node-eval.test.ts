@@ -2,6 +2,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import * as loaderImplementation from './loader.ts';
+import * as compiler from './node-eval-typescript.ts';
 import type { ModuleRegistry } from './registry.ts';
 
 const CJS_BINDINGS = ['require', 'module', 'exports', '__filename', '__dirname'] as const;
@@ -76,7 +77,8 @@ function reflectedCreateNodeEvalScriptRunner(): ReflectedCreateNodeEvalScriptRun
   expect(candidate, 'loader implementation must own createNodeEvalScriptRunner').toBeTypeOf(
     'function',
   );
-  return candidate as ReflectedCreateNodeEvalScriptRunner;
+  const create = candidate as typeof loaderImplementation.createNodeEvalScriptRunner;
+  return (opts) => create({ ...opts, explicitCommonJs: opts.explicitCommonJs ?? false, compiler });
 }
 
 function snapshotCjsBindings(): Map<string, PropertyDescriptor | undefined> {

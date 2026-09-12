@@ -221,12 +221,24 @@ export const EXTRACTION_MAP = [
   ['workers/dev-server-child-config.ts', 'workers/dev-server-child-config.ts'],
   ['workers/dev-server-controller.test.ts', 'workers/dev-server-controller.test.ts'],
   ['workers/dev-server-controller.ts', 'workers/dev-server-controller.ts'],
-  ['workers/esbuild-runtime-fs.test.ts', 'workers/esbuild-runtime-fs.test.ts'],
-  ['workers/esbuild-runtime-fs.ts', 'workers/esbuild-runtime-fs.ts'],
-  ['workers/generated/esbuild-runtime.js', 'workers/generated/esbuild-runtime.js'],
+  [
+    'workers/esbuild-runtime-fs.test.ts',
+    '../../../tools/shadow-registry/src/runtime/esbuild-runtime-fs.test.ts',
+  ],
+  [
+    'workers/esbuild-runtime-fs.ts',
+    '../../../tools/shadow-registry/src/runtime/esbuild-runtime-fs.ts',
+  ],
+  [
+    'workers/generated/esbuild-runtime.js',
+    '../../../tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',
+  ],
   ['workers/kernel-worker-entry.test.ts', 'workers/kernel-worker-entry.test.ts'],
   ['workers/kernel-worker-entry.ts', 'workers/kernel-worker-entry.ts'],
-  ['workers/node-entry-bootstrap.test.ts', 'workers/node-entry-bootstrap.test.ts'],
+  [
+    'workers/node-entry-bootstrap.test.ts',
+    '../../../tools/shadow-registry/src/runtime/node-entry-bootstrap.test.ts',
+  ],
   ['workers/node-entry-bootstrap.ts', 'workers/node-entry-bootstrap.ts'],
   ['workers/node-entry-remote-fs.test.ts', 'workers/node-entry-remote-fs.test.ts'],
   ['workers/node-entry-remote-fs.ts', 'workers/node-entry-remote-fs.ts'],
@@ -261,7 +273,10 @@ export const EXTRACTION_MAP = [
     'workers/package-acquisition-invalid-claim.test.ts',
     'workers/package-acquisition-invalid-claim.test.ts',
   ],
-  ['workers/package-install-finalizer.test.ts', 'workers/package-install-finalizer.test.ts'],
+  [
+    'workers/package-install-finalizer.test.ts',
+    '../../../tests/integration/package-install-finalizer.test.ts',
+  ],
   [
     'workers/playground-archive-integration.contract.test.ts',
     'workers/playground-archive-integration.contract.test.ts',
@@ -295,10 +310,16 @@ export const EXTRACTION_MAP = [
   ['workers/ts-lsp-owner-relay.contract.test.ts', 'workers/ts-lsp-owner-relay.contract.test.ts'],
   ['workers/ts-lsp-owner-relay.ts', 'workers/ts-lsp-owner-relay.ts'],
   ['workers/ts-lsp-worker-entry.ts', 'workers/ts-lsp-worker-entry.ts'],
-  ['workers/vite-cli-install-policy.ts', 'workers/vite-cli-install-policy.ts'],
-  ['workers/vite-cli-prep.test.ts', 'workers/vite-cli-prep.test.ts'],
-  ['workers/vite-cli-prep.ts', 'workers/vite-cli-prep.ts'],
-  ['workers/vite-esbuild-runtime.ts', 'workers/vite-esbuild-runtime.ts'],
+  [
+    'workers/vite-cli-install-policy.ts',
+    '../../../tools/shadow-registry/src/runtime/vite-cli-install-policy.ts',
+  ],
+  ['workers/vite-cli-prep.test.ts', '../../../tests/integration/vite-cli-prep.test.ts'],
+  ['workers/vite-cli-prep.ts', '../../../tools/shadow-registry/src/runtime/vite-cli-prep.ts'],
+  [
+    'workers/vite-esbuild-runtime.ts',
+    '../../../tools/shadow-registry/src/runtime/vite-esbuild-runtime.ts',
+  ],
   [
     'workers/workbench-first-materialization.contract.test.ts',
     'workers/workbench-first-materialization.contract.test.ts',

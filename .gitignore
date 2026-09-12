@@ -14,10 +14,10 @@ test-results/
 .env.local
 .vite/
 .playwright-mcp/
-# `.claude/` is local agent state, EXCEPT shared skills and user commands:
-# Claude Code reads .claude/skills, Codex reads .agents/skills via symlink — one
-# committed source. `.claude/commands/` is user-invoked only: loaded when the
-# user types the slash command, never advertised to a model as a skill.
+# `.claude/` is local agent state, except shared skills, commands and workflows.
+# Claude Code reads .claude/skills symlinks; Codex reads .agents/skills — one
+# committed source. Manual-only Claude skills/commands require
+# `disable-model-invocation: true`; the commands directory alone does not enforce it.
 .claude/*
 !.claude/skills/
 !.claude/skills/**

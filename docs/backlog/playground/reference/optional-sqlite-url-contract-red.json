@@ -1,0 +1,126 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted; proceed to implementation. Merge requires Final+GREEN. One nonblocking typed-consumer coverage concern.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "18ffa13020f531b1031e9ccf639e7867b8f1f9e1",
+  "unit_goal_source": "docs/backlog/playground/optional-sqlite-url.md @ 18ffa13020f531b1031e9ccf639e7867b8f1f9e1; BASE 2c7f9bbf4. Independent reviewer /root/sqlite_contract_review. Raw authorities read: gh issue view 281 (body/comments), /tmp/rifty-sqlite-optional-url-handoff.md, ADR-0065/0267/0272/0339/0390/0416, PR #330. RDY-6 final scope/attribution and REV-6 premise: clear. Handoff explicitly authorizes omitted wasm/sqlite, no provider on absence, strict supplied values and unchanged configured SQLite; ADR-0267 settles guest-env isolation/version migration. Existing realm isolation settles repeated opens with changed host options; persistence/bytes/builtin removal remain excluded by the handoff. Existing lazy engine plus published assets is sufficient; no new transport required. Independently executed Node v24.16.0 / Vitest v2.1.9 RED: /tmp/rifty-sqlite-independent-red.log, 41 failed/120 passed; /tmp/rifty-sqlite-independent-protocol-red.log, 4 failed/57 passed. Inspected packed RED /tmp/rifty-sqlite-packed-red.log: configured stage passed; omitted deployment.wasm fails at browser public validation, line 109. All modified checking criteria compared with BASE.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: omitted wasm/sqlite accepted; supplied malformed objects/URLs rejected by public validation.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/sqlite-options.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: packed snapshot-only Vite build/dev/HMR and ordinary/recursive Node/dev-server run without configured or deployed SQLite; SQLite use names the missing option.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sqlite-omission-proof.ts:44; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:96; tests/integration/workbench-packed-consumer.mjs:1223",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: configured packed SQLite executes real CREATE/INSERT/SELECT; provider is lazy and preserves exact URL.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/main.ts:84; packages/workbench/src/glue/sqlite-wasm-provider.fault.test.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: host snapshot serializers preserve absence, retain required/unknown-field strictness and reject prior Node/dev-server protocols.",
+      "source": "acceptance",
+      "trace": "ADR-0267 + ADR-0416",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/node-worker-runtime-config.test.ts:14; packages/workbench/src/workers/dev-server-child-config.test.ts:88; packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:472",
+      "note": ""
+    },
+    {
+      "row": "Absent asset × boot/build: success, zero SQLite requests.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1223; tests/integration/workbench-packed-consumer.mjs:1321",
+      "note": ""
+    },
+    {
+      "row": "Absent URL × SQLite use in child/recursive/dev-server: missing-option error with no guest-env fallback.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sqlite-omission-proof.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Supplied invalid URL/object × admission: reject before startup.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/sqlite-options.test.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Missing/extra host fields or old protocol × decode: reject; optional SQLite alone accepted.",
+      "source": "fault-matrix",
+      "trace": "ADR-0267 + ADR-0416",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/node-worker-runtime-config.test.ts:38; packages/workbench/src/workbench/owner-protocol.test.ts:1088; packages/workbench/src/workers/dev-server-child-config.test.ts:244; packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:472",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/fixtures/workbench-vite-consumer/src/main.ts:221",
+          "summary": "Reflect.deleteProperty exercises runtime omission while retaining the mandatory-field static type. A typed options object without wasm (and with empty wasm) would also protect the published TypeScript omission surface during GREEN.",
+          "authority": "",
+          "evidence": "Reading: the fixture builds full workbenchOptions(), then reflectively deletes wasm. Packed RED log /tmp/rifty-sqlite-packed-red.log:100 records successful consumer typecheck before runtime rejection; public declarations at reviewed revision still require wasm/sqlite. No surviving-mutant or wrong-RED claim."
+        }
+      ]
+    }
+  ]
+}

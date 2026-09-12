@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+- Forward optional adapter cwd/ref ownership through package entry preparation (ADR-0421).
+
+- Bind reusable esbuild adapters to Node module-acquisition cwd and upstream request/context refs; preserve exact CJS identity and caught-error settlement (ADR-0421).
+
+- Report unavailable runtime adapters at package use, preserving independent Node entry and strict explicit adapter activation; failed slots cannot expose a stale successful esbuild handle.
+
+- Share read-only installed-file preparation planners and explicit filesystem selection across finalizers, snapshot producers and source readiness validation.
+
+- Reuse an already-active esbuild adapter for the same filesystem and cwd after strict installed-byte validation; repeated install/open no longer restarts the service.
+
+- Vite action preparation rejects a missing/non-callable host keepalive tracker before adapter startup or CLI execution; informational and unrelated entries remain valid without it.
+
+- Own existing Vite/esbuild/emnapi runtime, patches, manifest and launch preparation through a closed runtime entry; data catalog stays separate (ADR-0384).
+
 ### Changed
 
 - **One registry-twin byte carrier (ADR-0371).** The esbuild recipe now

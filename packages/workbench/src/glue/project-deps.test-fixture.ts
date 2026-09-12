@@ -40,21 +40,21 @@ export function createTestProjectPackageAcquisitionAuthority(
         ? ' — falling back to install\n'
         : ' — dependencies remain absent (restore-only mode)\n';
       if (event.reason === 'snapshot-unavailable') {
-        opts.log(`[real-vite/worker] baked snapshot unavailable (${event.snapshotId})${outcome}`);
+        opts.log(`[workbench/worker] baked snapshot unavailable (${event.snapshotId})${outcome}`);
       } else if (event.reason.startsWith('snapshot-fetch-failed:')) {
         opts.log(
-          `[real-vite/worker] baked snapshot unavailable (${event.snapshotId}): ${event.reason
+          `[workbench/worker] baked snapshot unavailable (${event.snapshotId}): ${event.reason
             .slice('snapshot-fetch-failed:'.length)
             .trim()}${outcome}`,
         );
       } else {
         opts.log(
-          `[real-vite/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run \`pnpm snapshots:bake\`)${outcome}`,
+          `[workbench/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run \`pnpm snapshots:bake\`)${outcome}`,
         );
       }
     },
     adapter: {
-      readTrustedPackageLock: async (project) => {
+      readPackageLock: async (project) => {
         const path = `${project.root}/package-lock.json`;
         if (!(await opts.vfs.exists(path))) return { lockfileVersion: 3, packages: {} };
         return JSON.parse(await opts.vfs.readFileText(path)) as unknown;

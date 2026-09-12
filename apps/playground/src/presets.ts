@@ -8,10 +8,13 @@ import {
 import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
 import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
 import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
+import { NPM_DEV_SERVER_NODE_WS_TEMPLATE } from './templates/npm-dev-server-node-ws.ts';
 import { terminalDevLine } from './templates/project-spec.ts';
+import { REACT_VITE_TEMPLATE } from './templates/react-vite/index.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
+import { WEBPACK_DEV_SERVER_TEMPLATE } from './templates/webpack-dev-server.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
 
@@ -58,6 +61,8 @@ export interface Preset {
   readonly files: readonly PresetFile[];
   /** Workspace-relative files opened as editor tabs when this preset loads; first is active. */
   readonly openFiles?: readonly string[];
+  /** Deep-link / class-proof only — omitted from the gallery and command palette. */
+  readonly hidden?: true;
 }
 
 const PROJECT_FILES_SOURCE = `import project from './project.json';
@@ -374,6 +379,14 @@ const TYPESCRIPT_LS_PRESET: Preset = {
   ],
 };
 
+/**
+ * The "Real npm project" tile: an ordinary React 19 + Router + TypeScript SPA
+ * built from scratch — visible `npm install`, then the real `vite` CLI with the
+ * template's own `vite.config.ts`. Fast Refresh comes from
+ * `@vitejs/plugin-react`, not from hand-written `import.meta.hot.accept`
+ * boundaries. The preset id is unchanged: the launch deep-link, the landing
+ * card, and `tools/perf/bench.mjs` all address this tile by `real-vite`.
+ */
 const REAL_VITE_PRESET: Preset = {
   id: 'real-vite',
   label: 'Real npm project',
@@ -381,12 +394,27 @@ const REAL_VITE_PRESET: Preset = {
   icon: 'rocket',
   mode: 'real-vite',
   setup: 'from-scratch',
-  templateId: 'vite',
-  blurb: 'Runs a visible npm install in the terminal, then boots the Vite dev server.',
-  glyph: { text: 'V', color: '#5FCE96' },
+  templateId: REACT_VITE_TEMPLATE.id,
+  blurb: 'Installs React 19 + Router from npm, then boots the Vite dev server with Fast Refresh.',
+  glyph: { text: 'RE', color: '#61DAFB' },
   tag: { text: 'npm install', tone: 'slow' },
-  openFiles: ['src/main.js'],
-  files: [{ path: 'src/main.js', content: REAL_VITE_SOURCE }],
+  openFiles: [
+    'src/App.tsx',
+    'src/components/StatusBadge.tsx',
+    'src/pages/IssueList.tsx',
+    'src/data/issues.ts',
+    'README.md',
+  ],
+  files: [
+    {
+      path: REACT_VITE_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: REACT_VITE_TEMPLATE.entry.content,
+    },
+    ...Object.entries(REACT_VITE_TEMPLATE.extraFiles ?? {}).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 const VITE8_PRESET: Preset = {
@@ -402,6 +430,55 @@ const VITE8_PRESET: Preset = {
   tag: { text: 'instant', tone: 'live' },
   openFiles: ['src/main.js'],
   files: [{ path: 'src/main.js', content: REAL_VITE_SOURCE }],
+};
+
+const WEBPACK_DEV_SERVER_PRESET: Preset = {
+  id: 'webpack-dev-server',
+  label: 'Webpack dev server',
+  category: 'Live preview',
+  icon: 'rocket',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: WEBPACK_DEV_SERVER_TEMPLATE.id,
+  blurb: 'A plain webpack app with webpack-cli, webpack-dev-server, and stock HMR.',
+  glyph: { text: 'WP', color: '#8BD3FF' },
+  tag: { text: 'npm install', tone: 'slow' },
+  openFiles: ['src/index.js', 'webpack.config.js', 'src/styles.css', 'public/index.html'],
+  files: [
+    {
+      path: WEBPACK_DEV_SERVER_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: WEBPACK_DEV_SERVER_TEMPLATE.entry.content,
+    },
+    ...Object.entries(WEBPACK_DEV_SERVER_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
+};
+
+const NPM_DEV_SERVER_NODE_WS_PRESET: Preset = {
+  id: NPM_DEV_SERVER_NODE_WS_TEMPLATE.id,
+  label: 'npm-dev-server node ws',
+  category: 'Live preview',
+  icon: 'rocket',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: NPM_DEV_SERVER_NODE_WS_TEMPLATE.id,
+  hidden: true,
+  blurb: 'Hidden class-proof: generic npm-dev-server seam with node server.mjs.',
+  glyph: { text: 'NW', color: '#8FE3C0' },
+  tag: { text: 'npm install', tone: 'slow' },
+  openFiles: ['server.mjs', 'public/index.html', 'public/message.txt'],
+  files: [
+    {
+      path: NPM_DEV_SERVER_NODE_WS_TEMPLATE.entry.relativePath.replace(/^\/+/, ''),
+      content: NPM_DEV_SERVER_NODE_WS_TEMPLATE.entry.content,
+    },
+    ...Object.entries(NPM_DEV_SERVER_NODE_WS_TEMPLATE.extraFiles).map(([path, content]) => ({
+      path: path.replace(/^\/+/, ''),
+      content,
+    })),
+  ],
 };
 
 /**
@@ -565,6 +642,8 @@ export const PRESETS: readonly Preset[] = [
   TYPESCRIPT_LS_PRESET,
   REAL_VITE_PRESET,
   VITE8_PRESET,
+  WEBPACK_DEV_SERVER_PRESET,
+  NPM_DEV_SERVER_NODE_WS_PRESET,
   EXPRESS_SQLITE_PRESET,
   SOCKET_LAB_PRESET,
   HONO_API_PRESET,

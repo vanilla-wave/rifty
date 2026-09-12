@@ -25,6 +25,12 @@ git/GitHub shorthand, URL tarballs, and npm aliases throw named
 dependency installs. Script execution is tracked separately from registry
 resolution/linking.
 
+`InstallOptions.registry` is optional. All install forms retain local lockfile,
+packument-cache and integrity-checked tarball replay. A required network miss
+throws `NotImplementedError`; configured Eddy without a registry rejects before
+prefetch or callbacks. Optional-dependency warning/skip behavior remains. This
+capability is independent of npm CLI `--offline` semantics (ADR-0398).
+
 ## Why none of this hits the live registry in tests
 
 We pin a mock fetcher in the test harness. Real-network installs are exercised manually; CI uses fixtures. This matches D-004's contract.

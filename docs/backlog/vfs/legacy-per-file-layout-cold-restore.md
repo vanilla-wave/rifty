@@ -8,7 +8,7 @@ user_story: As a developer reopening the playground after the format switch, I w
 epic: fast-project-open-reopen
 blocked_by: [vfs/segmented-opfs-replica]
 sources: [docs/adr/playground/0165-multi-project-management-with-durable-scratch.md, docs/adr/playground/0286-workspace-archives-round-trip-observable-git-and-nested-dot-rifty-state.md, docs/backlog/vfs/storage-pressure-and-eviction-ux.md]
-code: [packages/workbench/src/workbench/project-materialization.ts, packages/workbench/src/workbench/workbench-project-store.ts, packages/workbench/src/workbench/health.ts, packages/workbench/src/workers/playground-project-authority.ts]
+code: [packages/workbench/src/workbench/project-materialization.ts, packages/workbench/src/workers/workbench-project-store.ts, packages/workbench/src/workbench/health.ts, packages/workbench/src/workers/playground-project-authority.ts]
 ---
 
 ## Context
@@ -28,10 +28,12 @@ nothing by itself; quota accounting of the dead namespace belongs to
 
 What this item owns beyond the trigger:
 
-1. One-time notice: when `/.rifty/workbench/v1` exists and `v2` is being
-   created for the first time, the workbench emits a health issue through the
-   existing `WorkbenchHealthIssue` channel with a NEW scope value (`kind:
-   'degraded'`, scope `storage-layout`): "projects saved under the previous
+1. One-time notice: when `/.rifty/workbench/v1` exists under the selected
+   `storage.namespace` root (ADR-0402; omitted namespace = the historical
+   origin root) and `v2` is being created there for the first time, the
+   workbench emits a health issue through the existing `WorkbenchHealthIssue`
+   channel — the health snapshot ADR-0413 extended with `projectOpen` — with
+   a NEW scope value (`kind: 'degraded'`, scope `storage-layout`): "projects saved under the previous
    storage layout were not carried over; their bytes remain until storage is
    cleared". `fatal-invariant` (session over, `recovery: 'reload'` re-hits the
    same tree) and `persistence` (`Workspace persistence failed` + retry) are
@@ -50,7 +52,8 @@ What this item owns beyond the trigger:
    (`playground-project-authority.ts` `copy | promote | mark |
    source-cleanup`, fault-tested) could read v1 once through the still-live
    per-file reader — and was NOT taken: user decision 2026-09-01, breaking
-   change. The format ADR (slice A) records the no-migration decision as an
+   change (ADR-0397 since bounds those receipts' lifetime; the not-taken
+   route stands). The format ADR (slice A) records the no-migration decision as an
    IRREVERSIBLE clause so the rationale outlives the goal directory.
 
 Fault rows (production tier): v2 materialization fails after staging (quota

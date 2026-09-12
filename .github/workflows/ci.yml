@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # ready_for_review re-runs the gates a draft PR skips (check:pass-binding, REV-8).
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
     types: [checks_requested]
   push:
@@ -57,6 +59,7 @@ jobs:
       - run: pnpm check:e2e-coverage
       - run: pnpm check:compat-drift # docs-only PRs still prove generated compatibility claims
       - run: pnpm test:docs-contract # lightweight source↔compat/ADR honesty guards
+      - run: pnpm check:eval-compiler-drift
       - run: pnpm check:shadow-catalog-drift
       - run: pnpm check:install-artifact-drift
       - run: pnpm check:snapshot-artifact-drift
@@ -66,6 +69,7 @@ jobs:
       - run: pnpm check:esbuild-legacy-retirement # cutover: vendored ADR-0047 path cannot return
       - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
       - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
+      - run: pnpm check:pass-binding # blocking on a ready PR: product/test changes carry a landing verdict bound to an ancestor sha (REV-8); draft PRs skipped
       - run: pnpm backlog:check # blocking: frontmatter + TODO(backlog:) integrity
       - run: pnpm refs:check # blocking: ADR index + cross-ref integrity
 
@@ -106,7 +110,7 @@ jobs:
     # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
     if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     runs-on: ubuntu-latest
-    # Run the three lanes as PARALLEL matrix jobs (separate runners), not
+    # Run the four lanes as PARALLEL matrix jobs (separate runners), not
     # sequential steps in one job: e2e wall-clock becomes max(lane) instead of
     # the sum. Separate runners also remove heavy<->light contention entirely
     # (the reason the old global workers=1 / same-job lane-split existed), so each
@@ -134,6 +138,7 @@ jobs:
           - { lane: light, shard: 7, shardTotal: 8 }
           - { lane: light, shard: 8, shardTotal: 8 }
           - { lane: prod }
+          - { lane: hosted }
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
@@ -168,8 +173,9 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       # One lane per matrix job. heavy = serialized TS-LS/fullstack specs
       # (--workers=1); light = the rest; prod = prod-artifact smoke (builds the
-      # app + `pnpm preview` with Netlify COI headers, asserts the owner boots —
-      # catches prod-only regressions the dev-server e2e can't).
+      # app + `pnpm preview` with Netlify COI headers); hosted = the webpack
+      # journey under a non-local HTTPS hostname, including stock HMR. The last
+      # two catch production/deployment paths the localhost dev carrier cannot.
       #
       # light is serialized --workers=1 IN CI ONLY: on the shared CI runner, ≥2
       # dev-server specs cold-booting a Vite-WASI stack (owner + dev-server child +
@@ -270,6 +276,38 @@ jobs:
           name: playwright-report-browser-unit
           path: playwright-report
 
+  no-coi-chromium:
+    needs: change-scope
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - id: pw-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+      - id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}-chromium
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Packed client bundle budgets
+        run: pnpm test:client-bundles
+      - run: pnpm test:no-coi
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-no-coi
+          path: playwright-report/no-coi
+
   ci-gate:
     name: CI gate
     if: always()
@@ -279,6 +317,7 @@ jobs:
       - unit-and-conformance
       - e2e-chromium
       - browser-unit-chromium
+      - no-coi-chromium
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -290,4 +329,5 @@ jobs:
           UNIT_RESULT: ${{ needs.unit-and-conformance.result }}
           E2E_RESULT: ${{ needs.e2e-chromium.result }}
           BROWSER_UNIT_RESULT: ${{ needs.browser-unit-chromium.result }}
+          NO_COI_RESULT: ${{ needs.no-coi-chromium.result }}
         run: node tools/checks/ci-gate.mjs

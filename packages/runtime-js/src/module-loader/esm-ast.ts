@@ -31,6 +31,7 @@ import type {
   VariableDeclaration,
 } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { rewriteDirectEvalImportArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import {
   type EsmAstEdit as Edit,
@@ -241,6 +242,10 @@ function walk(node: unknown, ctx: Ctx): void {
 
     case 'Identifier': {
       const id = n as unknown as Identifier;
+      if (id.name === 'WebAssembly' && !isShadowed(ctx, id.name)) {
+        emitEdit(ctx, id.start, id.end, ctx.helpers.webAssembly);
+        return;
+      }
       const binding = ctx.imports.get(id.name);
       if (!binding) return;
       if (isShadowed(ctx, id.name)) return;
@@ -274,6 +279,33 @@ function walk(node: unknown, ctx: Ctx): void {
       return;
     }
 
+    case 'CallExpression': {
+      const call = n as unknown as {
+        callee: AnyNodeShape;
+        arguments: AnyNodeShape[];
+        optional?: boolean;
+      };
+      const isDirectEval =
+        call.optional !== true &&
+        call.callee.type === 'Identifier' &&
+        (call.callee as unknown as Identifier).name === 'eval' &&
+        !isShadowed(ctx, 'eval');
+      const replacement = isDirectEval
+        ? rewriteDirectEvalImportArgument(call.arguments[0], ctx.helpers.dynamicImport)
+        : null;
+      walk(call.callee, ctx);
+      for (let index = 0; index < call.arguments.length; index++) {
+        const argument = call.arguments[index];
+        if (!argument) continue;
+        if (index === 0 && replacement !== null) {
+          emitEdit(ctx, argument.start, argument.end, replacement);
+        } else {
+          walk(argument, ctx);
+        }
+      }
+      return;
+    }
+
     case 'Property': {
       const p = n as unknown as Property;
       if (p.computed) walk(p.key, ctx);
@@ -288,6 +320,9 @@ function walk(node: unknown, ctx: Ctx): void {
           end: number;
         };
         if (id.type === 'Identifier' && id.name) {
+          if (id.name === 'WebAssembly' && !isShadowed(ctx, id.name)) {
+            emitEdit(ctx, id.start, id.start, 'WebAssembly: ');
+          }
           const binding = ctx.imports.get(id.name);
           if (binding && !isShadowed(ctx, id.name)) {
             emitEdit(ctx, id.start, id.start, `${id.name}: `);
@@ -551,6 +586,7 @@ function createHelperNames(source: string): TransformHelperNames {
     assetPath: uniqueHelperName(source, used, '__assetPath'),
     metaResolve: uniqueHelperName(source, used, '__metaResolve'),
     runtimeObject: uniqueHelperName(source, used, RUNTIME_OBJECT_BINDING),
+    webAssembly: uniqueHelperName(source, used, '__riftyWebAssembly'),
   };
 }
 

@@ -25,10 +25,8 @@ CJS + ESM on one resolver, live bindings, cycles, CJS↔ESM interop. ADR-0004, A
 
 ## M4 — FileSystem
 
-**PARTIAL.**
+**DONE.**
 Sync + async + promises fs over a unified VFS; OPFS + Memory backends. ADR-0014, ADR-0029, ADR-0037, ADR-0041, ADR-0072.
-open:
-- `docs/backlog/vfs/opfs-persistence-browser-roundtrip` — write→reload round-trip in a real browser.
 
 ## M5 — Streams & IO
 

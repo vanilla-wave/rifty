@@ -19,6 +19,7 @@ const EXPORTED_SOURCE_ENTRIES = [
   'src/workers/node-entry-bootstrap.ts',
   'src/workers/dev-server-child-bootstrap.ts',
   'src/workers/ts-lsp-worker-entry.ts',
+  'src/workers/no-coi-toolchain-worker.ts',
 ] as const;
 
 const EXPECTED_EXTERNAL_PACKAGES = [
@@ -29,6 +30,7 @@ const EXPECTED_EXTERNAL_PACKAGES = [
   '@riftydev/npm-client',
   '@riftydev/runtime-js',
   '@riftydev/service-worker',
+  '@riftydev/shadow-registry',
   '@riftydev/shell',
   '@riftydev/ts-language-service',
   '@riftydev/vfs',
@@ -42,7 +44,6 @@ interface PackageManifest {
 interface ModuleReference {
   readonly importer: string;
   readonly specifier: string;
-  readonly isStatic: boolean;
 }
 
 interface ClosureAudit {
@@ -81,11 +82,11 @@ function moduleReferences(path: string, sourceText: string): readonly ModuleRefe
       node.moduleSpecifier !== undefined &&
       ts.isStringLiteral(node.moduleSpecifier)
     ) {
-      references.push({ importer: path, specifier: node.moduleSpecifier.text, isStatic: true });
+      references.push({ importer: path, specifier: node.moduleSpecifier.text });
     } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const argument = node.arguments[0];
       if (node.arguments.length === 1 && argument !== undefined && ts.isStringLiteral(argument)) {
-        references.push({ importer: path, specifier: argument.text, isStatic: false });
+        references.push({ importer: path, specifier: argument.text });
       }
     }
     ts.forEachChild(node, visit);
@@ -175,7 +176,6 @@ function sourceClosure(entries: readonly string[]): ClosureAudit {
     const references = moduleReferences(path, sourceText);
     allReferences.push(...references);
     for (const reference of references) {
-      if (!reference.isStatic) continue;
       const dependency = relativeSource(path, reference.specifier);
       if (dependency === null) {
         externalPackages.add(packageName(reference.specifier));
@@ -305,7 +305,7 @@ describe('@riftydev/workbench extraction boundary', () => {
     ).toEqual([]);
   });
 
-  it('resolves exactly the seven sealed package source entries', () => {
+  it('resolves exactly the eight sealed package source entries', () => {
     const entries = resolvedExportEntries();
     expect(entries.map((path) => relative(PACKAGE_ROOT, path))).toEqual(EXPORTED_SOURCE_ENTRIES);
     expect(
@@ -332,11 +332,26 @@ describe('@riftydev/workbench extraction boundary', () => {
     // 141 → 143 (2026-08-24, ADR-0362): PTY pending-authority file-size split
     // and the owner-only `.bin` path classifier.
     // 143 → 142 (2026-08-31, ADR-0371): delete the N=1 owner asset authority.
-    expect(packageProductionFiles).toHaveLength(142);
+    // 142 → 143 (2026-09-01, ADR-0375): public no-COI toolchain Worker.
+    // 143 → 145 (2026-09-01, ADR-0375): generic finalizer + bounded gap provenance.
+    // 145 → 146 (PR #122): browser-project-runtime.ts owns kind dispatch.
+    // 146 → 147 (ADR-0379): deep resident-entry admission authority.
+    // 147 → 148 (PR #313): first-use no-COI install/activation module.
+    // ADR-0384: seven package implementations now belong to registry.
+    // ADR-0386: standard dependency snapshot tar codec.
+    // ADR-0387: published dependency snapshot producer.
+    // ADR-0394: snapshot overlay, claim reading and owner type/tree helpers.
+    // ADR-0407: stored catalog schema/projection extracted without another state owner.
+    // ADR-0392: shared claim guard, thin claim FS, install context and durable-equality adapter.
+    // ADR-0412: source-only dependency snapshot preparation validation.
+    // ADR-0414/0415: companion package policy and pure package-runtime tree composition.
+    // ADR-0418: project policy view and invocation command composition.
+    // ADR-0420: explicit no-COI snapshot application composition.
+    expect(packageProductionFiles).toHaveLength(162);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
-  it('does not retain runtime-bearing source outside the seven published build entries', async () => {
+  it('does not retain runtime-bearing source outside the eight published build entries', async () => {
     expect(await runtimeBearingSourcesOutsideBuild()).toEqual([]);
   });
 

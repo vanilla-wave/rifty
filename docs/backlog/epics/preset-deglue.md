@@ -26,6 +26,10 @@ Delivered (closed 2026-07-02; unit + full e2e lanes green):
 - **legacy curated Vite boot** — direct Vite dev/build/preview helpers,
   `ServerSpec`, and bespoke file-change IPC deleted; installed `.bin/vite` is
   the only Vite execution path. (done → removed)
+- **ordinary webpack-dev-server starter** — exact seeded npm bytes run stock
+  `webpack serve` through a zero-field `npm-dev-server` plan; local, production,
+  and non-local HTTPS Chromium prove LIVE/HTTP/HMR/reload, while a hidden bare
+  Node+WS fixture proves the path is not webpack-shaped. (`playground/webpack-dev-server-starter`)
 
 Open:
 

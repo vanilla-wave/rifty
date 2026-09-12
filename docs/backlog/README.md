@@ -2,13 +2,13 @@
 
 - Item: one implementable unit at `docs/backlog/<area>/<slug>.md`.
 - Epic: user outcome spanning items at `docs/backlog/epics/<slug>/` — `goal.md`
-  (frozen destination) + `map.md` (live plan) + `ledger.md` (append-only
+  (user-owned destination) + `map.md` (live plan) + `ledger.md` (append-only
   journal). Template: `epics/TEMPLATE.md`. Legacy single-file epics remain
   valid until re-typed or closed; no new ones.
 
-Routing: `AGENTS.md` + `docs/process/decision-workflow.md`; goal lifecycle
-(FIT / PICKUP / RE-CHART / CLOSE): `rifty-goal` skill. Delete completed work;
-there is no done status.
+Routing: `AGENTS.md` + `docs/process/README.md`; artifact shapes and
+owners: `docs/process/artifacts/`; goal lifecycle (FIT / PICKUP / RECHART /
+CLOSE): `docs/process/stages/`. Delete completed work; there is no done status.
 
 ## Shape
 
@@ -45,41 +45,53 @@ A ready item needs:
 - `## Acceptance`: testable done-definition that rejects approximations; an
   admission/policy surface names the organic request form it admits — a pinned
   fixture alone is not reach;
-- `## Parity cases`: enumerated oracle behaviors and RED targets;
+- `## Parity cases`: enumerated oracle behaviors and RED targets — where an
+  oracle exists; a process/tooling unit has none and omits the section;
+- every Acceptance/Parity/Fault row traced (`→ I#` / `→ scenario` /
+  `→ ADR-NNNN`; a `→ <rule-id>` trace is a note, never an obligation —
+  `docs/process/rules/readiness.md` `RDY-3`; gated by `backlog:check` for
+  items `created ≥ 2026-09-03`); one intent, one-sentence `title` (`RDY-4`);
 - `## Out of scope`: named loud throws + compat ❌;
-- `## Decisions`: every fork resolved or ADR-linked;
-- once picked up: `ready-verdict: <date> — Contract+RED @ <sha>` from the
-  unit's checkpoint, recorded before implementation
-  (`decision-workflow.md` §Backlog readiness).
+- `## Decisions`: every fork resolved or ADR-linked; one-line records only
+  (`docs/process/artifacts/unit.md`);
+- at pickup: record the reference/RED evidence required by `RDY-8`; a prior
+  review is a reference to its artifact, never permission from a status flag.
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
 semantic copies require an ADR + differential suite.
 
 Infra work also needs `## Fault matrix`: each reachable axis × operation →
 fallback, visible degradation, or loud throw; each row is a fault-test target.
-Use `docs/process/fault-classes.md`. Template: `TEMPLATE.md`.
+Use `docs/process/rules/fault-classes.md`. Template: `TEMPLATE.md`.
 
 ## Challenge
 
-Every new item and epic (`created` ≥ 2026-08-27) carries `## Challenge` before
-merge: one fresh independent critic (never the author's context — raw doc only,
-no author framing; frame-then-validate voids it) attacks the premise: does the
-claimed value follow from the proposed work; is the causal/impact claim sized
-against the whole (share of the real user-visible cost/gap, evidenced in the
-doc); is there a cheaper route to the same value. It names problems explicitly,
-especially **user experience** (which real user scenario benefits, and does it
-materially) and **project direction** (mission/ROADMAP fit, opportunity cost).
-Verdict verbatim: `challenge: <date> — clear` or `challenge: <date> — N
-problems` + one grounded line each. Advisory at capture — never blocks a draft
-landing or a run start. Two premise classes BLOCK `draft→ready`: the claimed
-value does not follow from the proposed work, and a materially cheaper direct
-authority reaches the same value. Each closes by answering it in the doc or by
-a recorded user override (`## Decisions` line naming the override) — never by
-compiling past it; these are the findings a review cannot raise later, because
-by then the work is the premise. Every other problem stays advisory and
-surfaces verbatim in the completion report (§Report), in refine, and in the
-capturing PR body. Fabricated speculative doubt = failure symmetric to missing
-a rotten premise. `backlog:check` enforces presence + verdict line only.
+Recording a fact or question needs no premise critic. When refine recommends
+a new direction whose value or competing direct route could change what or
+whether the user chooses to build, check the premise before that choice is
+treated as settled. Otherwise check it at FIT/PICKUP before adopting the plan;
+the Contract+RED reviewer may do it in the same pass.
+
+One fresh read-only critic receives the original user request/answers, proposed
+outcome, evidence, alternatives and unresolved forks, not just the polished
+solution. It asks whether the value follows and a cheaper direct route reaches
+it, and checks for omitted material user choices by `RDY-6` §Establishing scope.
+An omission names a reachable action, consequential difference and missing
+authority; a preferred extra feature is not an omitted choice. Verify objections;
+return new scope/value choices to the current research/interview frontier.
+Record the verdict verbatim in `## Challenge`, including an early draft check.
+FIT/PICKUP and goal children reuse a checked premise for unchanged promises;
+new evidence or materially changed promises need reconsideration, a new stage
+name does not. Existing-baseline repairs and just-file captures gain no premise critic.
+Every completed backlog write-up still gets `RDY-6` §Final check of the written
+result after drafting; reuse of an early premise check cannot skip it.
+
+A ready document records `challenge: <date> — clear | N problems` in
+`## Challenge`. Resolve a value/cheaper-route objection with evidence or the
+user's explicit decision before adoption; other concerns are advisory. The
+verified live user forks follow `RDY-6` / `STOP-1a` even when reported as concerns;
+they cannot be waved through as advice. The machine checks this record at ready,
+not when an observation is captured; `clear` alone is not scope-closure evidence.
 
 ## Epic fit
 
@@ -91,14 +103,14 @@ runnable.
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
 `ledger.md` opens empty. Seeded children stay `draft` — a ready goal hands off
 with draft children; each compiles to `ready` at its own PICKUP, never at FIT
-(`decision-workflow.md` §Backlog readiness, WHEN).
+(`docs/process/rules/readiness.md` `RDY-1`).
 
 Fog is owner-typed. A user-owned observable-scope question (what the value
 requires, what must NOT change, whose scenario counts) is asked at FIT while
 the user is there — a probe existing for its technical half is not a reason to
-park it (`rifty-goal` FIT 3). It reaches fog only when it is not answerable
+park it (`docs/process/stages/fit.md` 3). It reaches fog only when it is not answerable
 yet, tagged `owner: user` + why; PICKUP routes such a line to `rifty-refine`,
-never to a probe. Every fog line: `<question> — owner: user|agent — <what
+never to a probe (`docs/process/artifacts/map.md`). Every fog line: `<question> — owner: user|agent — <what
 settles it>`. A rejected rival route is recorded checkable in goal `##
 Decisions`: `rejected route: <route> — violates <I#|Outcome clause>` — the
 clause a later agent cites instead of re-deriving the comparison. Seed order proves the minimal pattern first (the
@@ -106,60 +118,45 @@ null/install-only case of a shared mechanism lands before machinery for the
 maximal case); a child whose contract depends on an open question is not
 seeded. A mechanism shared by two children needs an existing owner, a first
 substrate item, or an ADR explaining separation. Procedure, incl.
-probe-or-fog and the completion report: `rifty-goal` FIT.
+probe-or-fog and the completion report: `docs/process/stages/fit.md`.
 
 ## Report
 
-Every backlog write-up (capture, FIT, re-fit) ends with a user-facing report
-delivered in the conversation — not an approval ask, not a PR comment, not a
-file. Form and producer procedure (fresh clean-context subagent, six
-sections): `rifty-to-backlog` §6 Report — the single canon for capture AND
-FIT. Replaces the former `signoff:` gate (removed 2026-08-28): the user reacts if
-the destination is wrong — pushback re-opens FIT; nothing waits on a reply.
-Inside a goal run, RECHART-minted drafts ride the run's status relay and
-ledger — no separate report per graduation.
+Every user-facing refine ends with a report after the fresh final written-result
+check (`RDY-6`), in the conversation, before any
+implementation. The driver writes it from recorded facts, in the user's
+language: proposed observable result; decisive findings and evidence; chosen
+direction and meaningful rejected alternative; major steps and what becomes
+usable after each for a composite task; remaining risks/questions; next action.
+Distinguish research evidence from outcomes still to be implemented/proven.
+Omit empty sections; a settled capture may take a few lines. No separate report
+document, report-writing agent or fixed six-part template.
+
+FIT/PICKUP reuse that report and communicate changes after preparation, before
+the first IMPLEMENT. A standalone pickup without an earlier report emits it
+at that boundary. Repeated stages need only material changes, not the whole
+report again. Mid-task capture needs only its durable record.
+
+A report is not an approval gate. Refine-only authorizes preparation, not a
+build; already-authorized implementation continues without another hand-off.
+An unresolved user scope/value choice still needs the user's answer (`RDY-6`);
+silence is not a decision.
 
 ## Goal run
 
 An explicit whole-ready-goal hand-off starts a run; the goal directory is the
-run id. Loop: `rifty-goal` (PICKUP → build → RE-CHART, then CLOSE).
-
-- One draft PR per goal by default — opened at the goal's first Contract+RED,
-  carrying every slice; splitting into several PRs is allowed, never required.
-  The PR body names the goal and each carried slice's ledger band row
-  (convention, review-checked — `rifty-review` axis 5).
-- Review-owned rules: scope outside `ready` items: 0; ready-contract edits
-  after pickup: 0 (items: `check:contract-drift`); new coordination
-  mechanisms: 0 unless a named substrate item owns one; hand-written insertions
-  far above the declared band, or an expected-RED batch far above it → the unit
-  is too big: re-cut/split before implementation.
-- A ready `goal.md` never changes once a run has started — amend = close +
-  re-fit. Before the first PICKUP, report-driven user pushback re-fits it in
-  place (no run state to protect yet). `ledger.md` only
-  grows. `map.md` is live: RE-CHART graduates fog into drafts, re-cuts or
-  deletes unpicked items, reorders; weakening a `ready` item stays a demotion
-  with its fork recorded (§Backlog readiness 5). Every landed slice gets a
-  `re-chart after <slice>` ledger line; the next PICKUP and CLOSE refuse while
-  it is missing.
-- A slice lands when its Final+GREEN passes on the goal branch; merge is the
-  goal PR's, at the end by default. Slices land serially — the next PICKUP
-  waits for the prior slice's Final+GREEN; with split PRs, never stack one on
-  an unmerged other.
-- Close only with no linked children, empty unit/goal residuals, end-to-end
-  proof of `## Invariants`, and the ledger + fog walk exporting every ledger
-  and `## Open questions` line to a durable carrier or an explicit drop
-  (`rifty-goal` CLOSE); then delete the directory whole.
+run id. Stages, roles, stops, PR rules: `docs/process/README.md`. Store-level
+facts that hold inside a run: a ready `goal.md` changes only with the user's recorded amendment (`RDY-6`); `ledger.md` only grows; `map.md` and unit contracts are re-cut by the
+agent (`RDY-5`); every landed slice gets a `re-chart after <slice>` ledger
+line; scope outside `ready` items: 0; new coordination mechanisms: 0 unless a
+named substrate item owns one.
 
 ## Gates
 
-| Owner | Enforces |
-|---|---|
-| `backlog:check` | schema, ready sections, links, markers, goal-dir shape, challenge presence |
-| `check:contract-drift` | ready item contracts vs merge-base beside source |
-| Final review | frozen goal, append-only ledger, run membership, checkpoint order, scope/residuals, mechanism sweep, acceptance |
-
-Machine gates prove only the listed local facts; review owns everything else —
-including that a ready `goal.md` never changed and the ledger only grew.
+`docs/process/README.md` lists each gate and its authority. Record checks prove
+shape and attribution; independent review proves authorization, reference
+semantics and acceptance. Document creation/deletion is not another review
+state machine. No machine rule requires a separate PR.
 
 ## Tier
 

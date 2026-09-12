@@ -1,7 +1,7 @@
 // Generated from packages/service-worker/src/sw.ts — do not edit. Source of truth: ADR 0016.
 // ../../packages/service-worker/src/protocol.ts
 var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "6";
+var SW_ROUTING_VERSION = "7";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";
@@ -10,7 +10,7 @@ var SW_PREVIEW_REQUEST = "rifty:preview:request";
 var SW_ERROR_PROTOCOL_VERSION_MISMATCH = "PROTOCOL_VERSION_MISMATCH";
 
 // ../../packages/service-worker/src/control-ping.ts
-function createControlPingHandler(warn = (message) => console.warn(message)) {
+function createControlPingHandler(warn = (message) => console.warn(message), previewPrefix2) {
   const mismatchWarned = /* @__PURE__ */ new Set();
   return (event) => {
     const data = event.data;
@@ -39,7 +39,8 @@ function createControlPingHandler(warn = (message) => console.warn(message)) {
       type: SW_PONG,
       frameVersion: SW_FRAME_VERSION,
       routingVersion: SW_ROUTING_VERSION,
-      from: "service-worker"
+      from: "service-worker",
+      ...previewPrefix2 === void 0 ? {} : { previewPrefix: previewPrefix2 }
     };
     const replyPort = event.ports[0];
     if (replyPort === void 0) {
@@ -55,13 +56,29 @@ function createControlPingHandler(warn = (message) => console.warn(message)) {
 }
 
 // ../../packages/io/src/preview-protocol.ts
+var DEFAULT_PREVIEW_PREFIX = "/preview/";
 var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
+function normalizePreviewPrefix(value) {
+  if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//") || // biome-ignore lint/suspicious/noControlCharactersInRegex: reject raw controls before URL parsing strips them.
+  /[\\?#\u0000-\u001f\u007f]|%2f|%5c/i.test(value)) {
+    throw new TypeError("previewPrefix must be an absolute pathname without encoded separators");
+  }
+  const path = new URL(value.endsWith("/") ? value : `${value}/`, "http://localhost").pathname;
+  if (path.startsWith("//")) throw new TypeError("previewPrefix must have one leading slash");
+  return path;
+}
+function previewPrefixPattern(prefix = DEFAULT_PREVIEW_PREFIX) {
+  const normalized = normalizePreviewPrefix(prefix);
+  if (normalized === DEFAULT_PREVIEW_PREFIX) return PREVIEW_PREFIX_RE;
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped}(\\d+)(/.*)?$`);
+}
 function synthesizePreviewUrl(path, port) {
   const host = port === void 0 ? "localhost" : `localhost:${port}`;
   return `http://${host}${path}`;
 }
-function parsePreviewPath(path) {
-  const m = PREVIEW_PREFIX_RE.exec(path);
+function parsePreviewPath(path, prefix = DEFAULT_PREVIEW_PREFIX) {
+  const m = previewPrefixPattern(prefix).exec(path);
   if (!m) return null;
   const port = Number.parseInt(m[1], 10);
   const rest = m[2] ?? "/";
@@ -722,8 +739,8 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
 
 // ../../packages/service-worker/src/preview-bridge.ts
 var MAX_PREVIEW_FRAME_CONTEXTS = 256;
-function matchPreviewUrl(pathname) {
-  const parsed = parsePreviewPath(pathname);
+function matchPreviewUrl(pathname, previewPrefix2) {
+  const parsed = parsePreviewPath(pathname, previewPrefix2);
   if (!parsed) return null;
   return { port: parsed.port, path: parsed.rest };
 }
@@ -733,11 +750,11 @@ function isPreviewFrameRequest(request) {
 function isTopLevelPreviewNavigation(request) {
   return request.mode === "navigate" && request.destination === "document";
 }
-function matchPreviewReferrer(request, origin) {
+function matchPreviewReferrer(request, origin, previewPrefix2) {
   if (!request.referrer) return null;
   const referrer = new URL(request.referrer);
   if (referrer.origin !== origin) return null;
-  return matchPreviewUrl(referrer.pathname);
+  return matchPreviewUrl(referrer.pathname, previewPrefix2);
 }
 function rememberPreviewFrameContext(contexts, docClients, clientId, context) {
   if (!clientId) return;
@@ -759,6 +776,9 @@ function getScopeOrigin(scope, requestUrl) {
 }
 var DEFAULT_READY_TIMEOUT_MS = 3e3;
 function createPreviewInterceptor(scope, hooks = {}) {
+  const previewPrefix2 = normalizePreviewPrefix(
+    hooks.previewPrefix === void 0 ? DEFAULT_PREVIEW_PREFIX : hooks.previewPrefix
+  );
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
   const previewFrameContexts = /* @__PURE__ */ new Map();
   const previewDocumentClients = /* @__PURE__ */ new Set();
@@ -787,7 +807,7 @@ function createPreviewInterceptor(scope, hooks = {}) {
     const url = new URL(event.request.url);
     const scopeOrigin = getScopeOrigin(scope, url);
     const sameOrigin = url.origin === scopeOrigin;
-    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
+    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname, previewPrefix2) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
     const knownPreviewContext = event.clientId ? previewFrameContexts.get(event.clientId) : void 0;
     const knownPreviewClient = knownPreviewContext !== void 0;
@@ -814,7 +834,7 @@ function createPreviewInterceptor(scope, hooks = {}) {
       let context = frameClientId ? previewFrameContexts.get(frameClientId) : void 0;
       let port = context?.port;
       if (port === void 0) {
-        port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
+        port = matchPreviewReferrer(event.request, scopeOrigin, previewPrefix2)?.port;
         if (port !== void 0 && frameClientId) {
           context = { port, copiedTopLevel: false };
           rememberPreviewFrameContext(
@@ -862,17 +882,46 @@ function createPreviewInterceptor(scope, hooks = {}) {
     }
   };
 }
-function installPreviewInterceptor(scope) {
-  const handle = createPreviewInterceptor(scope);
+function installPreviewInterceptor(scope, previewPrefix2) {
+  const handle = createPreviewInterceptor(scope, { previewPrefix: previewPrefix2 });
   return () => handle.teardown();
 }
 
+// ../../packages/service-worker/src/preview-configuration.ts
+var PREVIEW_PREFIX_QUERY = "__rifty_preview_prefix";
+function configuredPrefixFields(url) {
+  return new URL(url).search.slice(1).split("&").filter((field) => {
+    const key = field.split("=", 1)[0];
+    try {
+      return decodeURIComponent(key.replace(/\+/g, " ")) === PREVIEW_PREFIX_QUERY;
+    } catch {
+      return false;
+    }
+  });
+}
+function previewPrefixFromServiceWorkerUrl(url) {
+  const fields = configuredPrefixFields(url);
+  if (fields.length === 0) return DEFAULT_PREVIEW_PREFIX;
+  if (fields.length !== 1) throw new TypeError(`Duplicate ${PREVIEW_PREFIX_QUERY}`);
+  const field = fields[0];
+  const equals = field.indexOf("=");
+  const value = equals === -1 ? "" : field.slice(equals + 1);
+  let decoded;
+  try {
+    decoded = decodeURIComponent(value.replace(/\+/g, " "));
+  } catch {
+    throw new TypeError(`Malformed ${PREVIEW_PREFIX_QUERY}`);
+  }
+  return normalizePreviewPrefix(decoded);
+}
+
 // ../../packages/service-worker/src/sw.ts
+var previewPrefix = previewPrefixFromServiceWorkerUrl(self.location.href);
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
-self.addEventListener("message", createControlPingHandler());
-installPreviewInterceptor(self);
+self.addEventListener("message", createControlPingHandler(void 0, previewPrefix));
+installPreviewInterceptor(self, previewPrefix);

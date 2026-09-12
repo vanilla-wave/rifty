@@ -57,7 +57,7 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/,
  *   TARGET: kernel is a workspace package OUTSIDE the playground Vite root, so
  *   Vite serves its source via `/@fs/<abs>/packages/kernel/src/worker-entry.ts`.
  *   The injection lands in the IMPORTED module's transform, not the playground
- *   importer (`/src/workers/kernel-worker-entry.ts`) — fetching the importer is
+ *   importer (`/src/workers/quickjs-kernel-worker-host.ts`) — fetching the importer is
  *   a FALSE guard (it never carries the markers, fix or no fix).
  */
 test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', () => {
@@ -149,7 +149,7 @@ test.describe('child-realm async lifecycle: true drain observables (ADR-0152)', 
     // wraps the specifier in `__vite__injectQuery(...)`. The indirect-eval fix
     // hides the `import(` from the lexer → no injection → neither marker appears.
     //
-    // NOTE: the playground importer `/src/workers/kernel-worker-entry.ts` never
+    // NOTE: the playground importer `/src/workers/quickjs-kernel-worker-host.ts` never
     // carries these markers (the injection lands in the IMPORTED kernel module,
     // not the importer) — asserting against it would be a FALSE guard.
     const res = await request.get(`/@fs${repoRoot}/packages/kernel/src/worker-entry.ts`);

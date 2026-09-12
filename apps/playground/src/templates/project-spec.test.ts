@@ -7,10 +7,12 @@ import { MARKDOWN_SSG_TEMPLATE } from './markdown-ssg.ts';
 import {
   type NodeCliProjectSpec,
   type NodeServerProjectSpec,
+  type NpmDevServerProjectSpec,
   type ProjectSpec,
   buildProjectPackageJson,
   devScriptCommand,
   isDevScriptName,
+  projectScripts,
   resolveBootstrapConfig,
   terminalDevLine,
 } from './project-spec.ts';
@@ -43,6 +45,33 @@ const CLI_FIXTURE: NodeCliProjectSpec = {
   estimatedBootSeconds: 5,
   extraFiles: {
     '/data/input.yml': 'items:\n  - one\n',
+  },
+};
+
+const WEBPACK_DEV_DEPENDENCIES = {
+  webpack: '^5.0.0',
+  'webpack-cli': '^5.0.0',
+  'webpack-dev-server': '^5.0.0',
+  'css-loader': '^7.0.0',
+  'style-loader': '^4.0.0',
+} as const;
+
+const NPM_DEV_SERVER_FIXTURE: NpmDevServerProjectSpec = {
+  id: 'webpack-fixture',
+  displayName: 'Webpack fixture',
+  runtime: 'npm-dev-server',
+  install: {},
+  devDependencies: WEBPACK_DEV_DEPENDENCIES,
+  entry: { relativePath: '/src/index.js', content: "import './styles.css';\n" },
+  defaultPort: 5184,
+  estimatedBootSeconds: 60,
+  packageType: false,
+  devCommand: 'webpack serve',
+  extraFiles: {
+    '/webpack.config.js': "module.exports = { output: { publicPath: 'auto' } };\n",
+    '/public/index.html': '<!doctype html><div id="app"></div>\n',
+    '/src/styles.css': 'body { margin: 0; }\n',
+    '/README.md': '# Webpack fixture\n',
   },
 };
 
@@ -313,6 +342,40 @@ describe('resolveBootstrapConfig (node-cli runtime)', () => {
   });
 });
 
+describe('resolveBootstrapConfig (npm-owned dev-server runtime, ADR-0349)', () => {
+  it('builds the exact npm-owned dev script without inventing a module package type', () => {
+    const pkg = JSON.parse(buildProjectPackageJson(NPM_DEV_SERVER_FIXTURE).json) as {
+      readonly dependencies: Readonly<Record<string, string>>;
+      readonly devDependencies: Readonly<Record<string, string>>;
+      readonly scripts: Readonly<Record<string, string>>;
+      readonly type?: string;
+    };
+
+    expect(devScriptCommand(NPM_DEV_SERVER_FIXTURE)).toBe('webpack serve');
+    expect(projectScripts(NPM_DEV_SERVER_FIXTURE)).toEqual({ dev: 'webpack serve' });
+    expect(pkg.scripts).toEqual({ dev: 'webpack serve' });
+    expect(pkg.dependencies).toEqual({});
+    expect(pkg.devDependencies).toEqual(WEBPACK_DEV_DEPENDENCIES);
+    expect(Object.hasOwn(pkg, 'type')).toBe(false);
+  });
+
+  it('seeds the ordinary project entry and extra files without a synthetic Vite index', () => {
+    const cfg = resolveBootstrapConfig(NPM_DEV_SERVER_FIXTURE, 5999, '/workspace');
+
+    expect(cfg.runtime).toBe('npm-dev-server');
+    expect(cfg.seedFiles['/workspace/src/index.js']).toBe(NPM_DEV_SERVER_FIXTURE.entry.content);
+    expect(cfg.seedFiles['/workspace/webpack.config.js']).toBe(
+      "module.exports = { output: { publicPath: 'auto' } };\n",
+    );
+    expect(cfg.seedFiles['/workspace/public/index.html']).toBe(
+      '<!doctype html><div id="app"></div>\n',
+    );
+    expect(cfg.seedFiles['/workspace/src/styles.css']).toBe('body { margin: 0; }\n');
+    expect(cfg.seedFiles['/workspace/README.md']).toBe('# Webpack fixture\n');
+    expect(cfg.seedFiles['/workspace/index.html']).toBeUndefined();
+  });
+});
+
 describe('terminal dev command derivation', () => {
   it('boots vite templates through the real vite CLI with only the preferred template port', () => {
     expect(terminalDevLine(VITE_TEMPLATE, '/workspace')).toBe('vite --port 5174');
@@ -333,6 +396,12 @@ describe('terminal dev command derivation', () => {
   it("boots node-cli templates through 'npm run dev' pinned to the project root", () => {
     expect(terminalDevLine(CLI_FIXTURE, '/workspace')).toBe('cd /workspace && npm run dev');
   });
+
+  it("boots npm-owned dev servers through root-pinned 'npm run dev'", () => {
+    expect(terminalDevLine(NPM_DEV_SERVER_FIXTURE, '/workspace')).toBe(
+      'cd /workspace && npm run dev',
+    );
+  });
 });
 
 describe('isDevScriptName (page-realm dev-line matcher)', () => {
@@ -349,6 +418,23 @@ describe('isDevScriptName (page-realm dev-line matcher)', () => {
     // the default vite preset's `vite` command — so the node server never booted.
     // Name-based matching is immune: `dev` is the dev line regardless of command.
     expect(isDevScriptName(NODE_FIXTURE, 'dev')).toBe(true);
+  });
+
+  it('derived dev aliases win over colliding template `scripts` — a template can never redefine the boot line', () => {
+    const hijack: ProjectSpec = {
+      ...VITE_TEMPLATE,
+      id: 'hijack',
+      scripts: { dev: 'echo hijacked', vite: 'echo hijacked', build: 'vite build' },
+    };
+    expect(projectScripts(hijack)).toEqual({ build: 'vite build', dev: 'vite', vite: 'vite' });
+    expect(isDevScriptName(hijack, 'dev')).toBe(true);
+    expect(isDevScriptName(hijack, 'build')).toBe(false);
+    const nodeHijack: ProjectSpec = {
+      ...NODE_FIXTURE,
+      id: 'node-hijack',
+      scripts: { start: 'echo hijacked' },
+    };
+    expect(projectScripts(nodeHijack).start).toBe(projectScripts(NODE_FIXTURE).start);
   });
 
   it('rejects an arbitrary user script (e.g. `npm run build`) — must not boot dev', () => {

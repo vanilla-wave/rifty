@@ -2,7 +2,21 @@
 
 ## [Unreleased]
 
+- Name Workbench deployment.wasm.sqlite in the uninitialized SQLite error while retaining direct engine initialization guidance.
+
 ### Added
+
+- **Configured preview prefix (ADR-0409).** `bridgeCrossRealmPreview` and
+  `webSocketBridgeClientScript` accept `previewPrefix`, default `/preview/`.
+  Both request paths carry the captured prefix into HTML/WS injection; relative
+  WebSocket URLs drop the full prefix while guest paths and external sockets retain
+  their behavior. Canonical io validation rejects malformed configuration.
+
+- **Causal resident port ownership (ADR-0378).** Loader-local `node:http` and
+  `node:net` facades bind an opaque owner to constructed servers; registry
+  registration exposes that owner so resident readiness cannot accept a stale
+  async callback's target port. ADR-0379 preserves ordinary factory/class names
+  and `createServer().constructor === Server` inside the owned loader.
 
 - **Node-compatible `net.isIP`, `net.isIPv4`, and `net.isIPv6`.** Includes IPv6
   zones and runtime `ToString` coercion, with live-Node parity coverage.
@@ -64,6 +78,20 @@
   `NotImplementedError`s instead of leaving missing/ambiguous raw TCP surface.
 
 ### Fixed
+
+- **Preview WebSocket upgrades preserve browser/Node Origin provenance
+  (ADR-0354).** Browser bridge opens now carry the actual
+  `window.location.origin` independently from target-derived `Host`; local
+  `http.request` upgrades forward an explicit raw `Origin` unchanged, while
+  origin-less programmatic clients stay origin-less. Stock dev-server security
+  checks no longer reject an otherwise-valid bridge handshake.
+
+- **`IncomingMessage.socket` accepts EventEmitter listeners.** Ordinary server
+  requests and fetch-backed client responses now expose the listener and
+  active-state surface required by `on-finished`/`ee-first`; the old plain
+  object crashed during attachment. Per-request transport destruction remains
+  a loud gap because the shared fetch/preview transport cannot be torn down by
+  this synthetic socket view.
 
 - **`http.Server.address()` and `net.Server.address()` return complete
   `AddressInfo`.** Bound servers expose the effective virtual

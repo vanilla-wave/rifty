@@ -10,7 +10,7 @@ Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](
 
 ## Packages
 
-**`npm i @riftydev/sdk`** is the umbrella front door ([`packages/rifty`](./packages/rifty)): framework-free `createSandbox()` plus every layer below on a subpath (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Each layer is also its own package. All are ESM, ship `.d.ts`, released in lockstep under the `@riftydev` scope.
+**`npm i @riftydev/sdk`** is the umbrella front door ([`packages/rifty`](./packages/rifty)): framework-free `createSandbox()` plus twelve runtime layers on subpaths (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Each layer is also its own package; `workbench`, `shadow-registry` and `eddy` ship standalone. Sixteen names, all ESM, ship `.d.ts`, released in lockstep under the `@riftydev` scope ([publishing](./docs/public/publishing.md)).
 
 | Package | What it is | Runs in |
 |---|---|---|
@@ -25,7 +25,11 @@ Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](
 | [`@riftydev/shell`](./packages/shell) | Tiny bash-flavoured shell over `@riftydev/vfs` | anywhere |
 | [`@riftydev/terminal`](./packages/terminal) | xterm.js terminal wrapper | browser |
 | [`@riftydev/service-worker`](./packages/service-worker) | Service Worker preview/HMR routing bridge | browser |
+| [`@riftydev/git`](./packages/git) | git over the VFS (isomorphic-git); smart-HTTP via a CORS proxy | anywhere |
+| [`@riftydev/ts-language-service`](./packages/ts-language-service) | In-browser `ts.LanguageService` over the VFS | anywhere |
+| [`@riftydev/workbench`](./packages/workbench) | Framework-free project / session / run / preview API (owner Worker) | browser + Worker |
 | [`@riftydev/shadow-registry`](./tools/shadow-registry) | Data tables of in-browser npm substitutions | anywhere |
+| [`@riftydev/eddy`](./services/eddy) | Opt-in fast-install resolver service (ADR-0182) | Node service |
 
 ```bash
 npm install @riftydev/sdk                 # everything + createSandbox() (the front door)
@@ -66,7 +70,7 @@ The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@ri
    Cross-Origin-Resource-Policy: cross-origin
    ```
 
-   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not work**; Netlify / Cloudflare Pages / Vercel can work when configured with equivalent headers. Copy-paste configs: [`netlify.toml`](./netlify.toml), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
+   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not serve this tier**; Netlify / Cloudflare Pages / Vercel can work when configured with equivalent headers. The only thing that boots without isolation is the explicit shared-memory-free tier, `createSandbox({ requireCrossOriginIsolation: false })`: eval and files work, `execSync` throws a named `NotImplementedError`, child processes run same-realm (the no-COI install/build toolchain, ADR-0375, is on `main` and unreleased). Copy-paste configs: [`netlify.toml`](./netlify.toml), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
 
 2. **A bundler that emits module Worker entries.** With Vite, import each entry
    with `?worker&url`, pass the returned URL to rifty, and set

@@ -1,14 +1,14 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { emnapiCoreOrphanedReferencePatchPolicy } from '../../../packages/workbench/src/workers/emnapi-core-install-policy.ts';
-import {
-  viteCliActionPatchPolicy,
-  viteRootWatchPatchPolicy,
-} from '../../../packages/workbench/src/workers/vite-cli-install-policy.ts';
 import { bakedOverrides, internalsShims } from '../src/index.ts';
 import { identityForRecipe, identityPolicyProjection } from '../src/install-artifact-recipe.ts';
 import { builtinShadowSubstitutionCatalog } from '../src/internal/index.ts';
+import { emnapiCoreOrphanedReferencePatchPolicy } from '../src/runtime/emnapi-core-install-policy.ts';
+import {
+  viteCliActionPatchPolicy,
+  viteRootWatchPatchPolicy,
+} from '../src/runtime/vite-cli-install-policy.ts';
 
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
 const runtimeManifestUrl = new URL('../generated/esbuild-runtime-manifest.json', import.meta.url);

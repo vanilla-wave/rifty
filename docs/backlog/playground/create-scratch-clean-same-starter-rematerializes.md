@@ -28,6 +28,11 @@ persisted scratch (variant A: `define` + `openProject`, no catalog mutation).
 Frequency is unsized: a dirty scratch (the normal state after one edit)
 takes the preserve path and was not measured (Honest limits #5).
 
+ADR-0414 (2026-09-10) moves dirty classification into the playground
+companion; the exclusions (seed, first clean dependency arrival,
+`node_modules`-internal writes) are unchanged, so the clean-scratch reseed
+premise stands on main.
+
 The cheap direct route already exists and needs no workbench change:
 `catalog.snapshot()` + `activate` on an already-active ref does zero tree
 work (`playground-project-authority.ts` `activate`: same active id → return

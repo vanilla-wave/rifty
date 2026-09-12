@@ -103,6 +103,93 @@ function harness() {
 }
 
 describe('preview readiness', () => {
+  it('[fault: provenance-lie] does not spend the routed-proof bound before a run advertises a preview', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    try {
+      const ready = h.readiness.waitFor({
+        ownerToken: 'owner-a',
+        ptySid: TARGET_PTY_SID,
+        ptyRid: TARGET_PTY_RID,
+        matches: () => true,
+      });
+
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(await settledOr(ready, 'pending')).toBe('pending');
+
+      h.publish([advertisement()]);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(await settledOr(ready, 'pending')).toBe('pending');
+
+      h.swProofs[0]?.resolve();
+      await Promise.resolve();
+      h.httpProofs[0]?.resolve({ ok: true, status: 200 });
+      await expect(ready).resolves.toEqual({ port: 5173, url: '/preview/5173/' });
+    } finally {
+      const closing = h.readiness.close();
+      h.swProofs.at(-1)?.resolve();
+      await closing;
+      vi.useRealTimers();
+    }
+  });
+
+  it('[fault: provenance-lie] resets the proof bound after advertisement revocation', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    try {
+      const ready = h.readiness.waitFor({
+        ownerToken: 'owner-a',
+        ptySid: TARGET_PTY_SID,
+        ptyRid: TARGET_PTY_RID,
+        matches: () => true,
+      });
+      h.publish([advertisement()]);
+      await vi.advanceTimersByTimeAsync(900);
+
+      h.publish([]);
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(await settledOr(ready, 'pending')).toBe('pending');
+
+      h.publish([advertisement({ port: 5174, url: '/preview/5174/' })]);
+      await vi.advanceTimersByTimeAsync(999);
+      expect(await settledOr(ready, 'pending')).toBe('pending');
+      h.swProofs.at(-1)?.resolve();
+      await Promise.resolve();
+      h.httpProofs.at(-1)?.resolve({ ok: true, status: 200 });
+
+      await expect(ready).resolves.toEqual({ port: 5174, url: '/preview/5174/' });
+    } finally {
+      const closing = h.readiness.close();
+      h.swProofs.at(-1)?.resolve();
+      await closing;
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds SW and routed-HTTP proof after the exact run advertises a preview', async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    try {
+      const ready = h.readiness.waitFor({
+        ownerToken: 'owner-a',
+        ptySid: TARGET_PTY_SID,
+        ptyRid: TARGET_PTY_RID,
+        matches: () => true,
+      });
+      h.publish([advertisement()]);
+
+      await vi.advanceTimersByTimeAsync(1_001);
+
+      await expect(ready).rejects.toThrow('Preview readiness timed out after 1000ms');
+      expect(h.teardowns[0]).toHaveBeenCalledTimes(1);
+    } finally {
+      const closing = h.readiness.close();
+      h.swProofs.at(-1)?.resolve();
+      await closing;
+      vi.useRealTimers();
+    }
+  });
+
   it('mounts an owner-authoritative route, then proves SW control and routed HTTP', async () => {
     const h = harness();
     const ready = h.readiness.waitFor({

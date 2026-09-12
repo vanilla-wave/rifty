@@ -8,6 +8,7 @@ export type VfsErrorCode =
   | 'EPERM'
   | 'EINVAL'
   | 'EACCES'
+  | 'EROFS'
   | 'EDQUOT'
   | 'EIO';
 

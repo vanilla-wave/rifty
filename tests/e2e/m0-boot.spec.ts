@@ -57,6 +57,39 @@ async function recordChooserProjectArtifactsOnNextDocument(page: Page): Promise<
   });
 }
 
+async function recordStoragePresentationOnNextDocument(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const state = globalThis as typeof globalThis & {
+      __riftyStoragePresentations?: string[];
+    };
+    state.__riftyStoragePresentations = [];
+    const scan = (): void => {
+      const badge = document.querySelector('[data-storage-badge]');
+      const mode = badge?.closest('[data-storage-mode]')?.getAttribute('data-storage-mode');
+      const seen = state.__riftyStoragePresentations ?? [];
+      if (badge instanceof HTMLElement && mode !== null && mode !== undefined) {
+        const observation = `status:${mode}:${badge.textContent?.trim() ?? ''}`;
+        if (!seen.includes(observation)) seen.push(observation);
+      }
+      for (const store of document.querySelectorAll('.rf-pcard__store')) {
+        const observation = `project:${store.textContent?.trim() ?? ''}`;
+        if (!seen.includes(observation)) seen.push(observation);
+      }
+    };
+    const start = (): void => {
+      scan();
+      new MutationObserver(scan).observe(document.documentElement, {
+        attributes: true,
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+    };
+    if (document.documentElement) start();
+    else document.addEventListener('DOMContentLoaded', start, { once: true });
+  });
+}
+
 test.describe('M0 — Foundation', () => {
   test('playground loads with the chooser and opens shell terminals after project admission', async ({
     page,
@@ -215,6 +248,47 @@ test.describe('M0 — Foundation', () => {
     // The App must have rendered — the storage badge proves `bootstrapPlayground`
     // resolved (it only paints after `initBackend()` returns).
     await expect(page.locator('[data-storage-badge]')).toBeVisible();
+  });
+
+  test('owner-reported durable storage is exact in status and saved project presentation', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await recordStoragePresentationOnNextDocument(page);
+    await page.goto('/');
+    await expect(page.locator('[data-storage-badge]')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[data-storage-mode="opfs"]')).toBeVisible();
+
+    await pickStarter(page, 'project-files');
+    await page.locator('[data-action="open-launcher"]').click();
+    const launcher = page.locator('[data-testid="launcher"]');
+    await expect(launcher).toBeVisible({ timeout: 5_000 });
+    await launcher.getByRole('button', { name: /^Projects/ }).click();
+    const saveScratch = launcher.locator('[data-action="save-scratch"]');
+    await expect(saveScratch).toBeEnabled({ timeout: 90_000 });
+    await saveScratch.click();
+    const dialog = page.locator('.rf-dialog[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5_000 });
+    const projectName = `Storage owner ${Date.now()}`;
+    await dialog.locator('input.rf-dialog__input').fill(projectName);
+    await dialog.getByRole('button', { name: 'Save project' }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 90_000 });
+    const projectCard = launcher.locator('.rf-pcard', { hasText: projectName }).first();
+    await expect(projectCard).toBeVisible({ timeout: 90_000 });
+    await expect(projectCard.locator('.rf-pcard__store')).toHaveText('OPFS');
+
+    const presentations = await page.evaluate(
+      () =>
+        (
+          globalThis as typeof globalThis & {
+            __riftyStoragePresentations?: string[];
+          }
+        ).__riftyStoragePresentations ?? [],
+    );
+    expect(presentations).toContainEqual(expect.stringMatching(/^status:opfs:/));
+    expect(presentations).toContain('project:OPFS');
+    expect(presentations).not.toContainEqual(expect.stringMatching(/^status:memory:/));
+    expect(presentations).not.toContain('project:memory');
   });
 
   test('shell file commands round-trip through the workspace VFS', async ({ page }) => {

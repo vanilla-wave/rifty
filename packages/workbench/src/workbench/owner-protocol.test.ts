@@ -36,6 +36,7 @@ const BOOT_CONFIG = Object.freeze({
     previewProbeTimeoutMs: 3_000,
   }),
   packageAcquisition: Object.freeze({
+    mode: 'registry',
     registryUrl: 'https://registry.invalid/',
     eddy: Object.freeze({
       resolverUrl: 'https://eddy.invalid/resolve',
@@ -1081,5 +1082,18 @@ describe('Workbench owner protocol', () => {
         ).toThrow(TypeError);
       }
     });
+  });
+});
+
+describe('optional SQLite owner boot', () => {
+  it.each([undefined, {}])('accepts omitted SQLite configuration: %j', (wasm) => {
+    const { wasm: _wasm, ...deployment } = BOOT_CONFIG.deployment;
+    const config = {
+      ...BOOT_CONFIG,
+      deployment: { ...deployment, ...(wasm === undefined ? {} : { wasm }) },
+    };
+    expect(() =>
+      inspectPageToWorkbenchOwnerMessage({ type: 'workbench:initialize', config }),
+    ).not.toThrow();
   });
 });

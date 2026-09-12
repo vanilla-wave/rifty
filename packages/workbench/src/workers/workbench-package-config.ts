@@ -1,7 +1,11 @@
-import { isAbsolute, normalizePath } from '@riftydev/vfs';
+import { type FsSync, isAbsolute, normalizePath } from '@riftydev/vfs';
 import { defineOwnEnumerableProperty } from '../workbench/internal/own-property.ts';
 import type { InspectedProjectDefinition } from '../workbench/project-definition.ts';
-import type { ProjectFirstMaterialization } from '../workbench/project-materialization.ts';
+import {
+  type ProjectAcquisitionRequest,
+  type ProjectFirstMaterialization,
+  normalizeProjectSnapshotApplication,
+} from '../workbench/project-materialization.ts';
 import type {
   FirstMaterializationOwnerPackageConfig,
   OwnerPackageConfig,
@@ -18,7 +22,7 @@ export type FirstMaterializationProjectDefinition<TReady = unknown> =
   };
 
 export interface WorkbenchPackageConfigOptions {
-  /** Exact current owner-tree manifest; definitions describe only the immutable baseline. */
+  /** Exact manifest selected by owner admission; default reads the current tree. */
   readonly packageJsonBytes: Uint8Array;
 }
 
@@ -58,6 +62,7 @@ function firstMaterializationMetadata(definition: InspectedProjectDefinition): {
     }
     firstMaterialization = Object.freeze({
       kind: 'snapshot',
+      application: normalizeProjectSnapshotApplication(materialization.application),
       snapshot: Object.freeze({
         snapshotId: snapshot.snapshotId,
         assetUrl: snapshot.assetUrl,
@@ -174,25 +179,30 @@ export function workbenchPackageConfig(
     seedFiles: Object.freeze({}),
   };
   const cfg =
-    definition.kind === 'node-server'
+    definition.kind === 'npm-dev-server'
       ? Object.freeze({
           ...base,
-          runtime: 'node-server' as const,
-          port: definition.port,
-          entryPath: `${projectRoot}${definition.entryPath}`,
+          runtime: 'npm-dev-server' as const,
         })
-      : definition.kind === 'node-cli'
+      : definition.kind === 'node-server'
         ? Object.freeze({
             ...base,
-            runtime: 'node-cli' as const,
+            runtime: 'node-server' as const,
+            port: definition.port,
             entryPath: `${projectRoot}${definition.entryPath}`,
           })
-        : Object.freeze({
-            ...base,
-            runtime: 'vite' as const,
-            port: metadata?.port ?? DEFAULT_VITE_PORT,
-            entryPath: `${projectRoot}/index.html`,
-          });
+        : definition.kind === 'node-cli'
+          ? Object.freeze({
+              ...base,
+              runtime: 'node-cli' as const,
+              entryPath: `${projectRoot}${definition.entryPath}`,
+            })
+          : Object.freeze({
+              ...base,
+              runtime: 'vite' as const,
+              port: metadata?.port ?? DEFAULT_VITE_PORT,
+              entryPath: `${projectRoot}/index.html`,
+            });
 
   return Object.freeze({
     cfg,
@@ -204,13 +214,25 @@ export function workbenchPackageConfig(
   });
 }
 
-/** Companion-only boundary: first materialization metadata is mandatory, never inferred. */
+/** Apply derives provisional config from owned input; the package actor commits verified payload config. */
 export function workbenchFirstMaterializationPackageConfig(
-  definition: InspectedProjectDefinition,
-  projectRoot: string,
-  options: WorkbenchPackageConfigOptions,
+  request: ProjectAcquisitionRequest,
+  fs: Pick<FsSync, 'readFileBytesSync'>,
 ): FirstMaterializationOwnerPackageConfig {
-  const config = workbenchPackageConfig(definition, projectRoot, options);
+  const { definition, projectRoot, snapshotAdmission } = request;
+  const currentRoot =
+    snapshotAdmission !== undefined && snapshotAdmission.mode !== 'saved'
+      ? (snapshotAdmission.preflightRoot ?? projectRoot)
+      : projectRoot;
+  const packageJsonBytes =
+    snapshotAdmission?.mode === 'apply' || snapshotAdmission?.mode === 'saved'
+      ? definition.files['/package.json']
+      : fs.readFileBytesSync(`${currentRoot}/package.json`);
+  if (packageJsonBytes === undefined)
+    throw new TypeError('Playground definition is missing normalized /package.json');
+  const config = workbenchPackageConfig(definition, projectRoot, {
+    packageJsonBytes,
+  });
   if (!Object.hasOwn(config, 'firstMaterialization')) {
     throw new TypeError('Playground definition is missing first-materialization metadata');
   }

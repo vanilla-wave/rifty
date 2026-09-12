@@ -12,6 +12,7 @@ import {
   allocateEphemeralPort,
   dispatchToPort,
   isPortBound,
+  isPortRegisteredBy,
   listPorts,
   registerPort,
   unregisterPort,
@@ -28,6 +29,15 @@ describe('port occupancy (ADR-0157 review C3)', () => {
     expect(isPortBound(4400)).toBe(true);
     unregisterPort(4400);
     expect(isPortBound(4400)).toBe(false);
+  });
+
+  it('tracks the exact optional registration owner', () => {
+    const owner = Symbol('owner');
+    registerPort(4401, () => new Response('ok'), owner);
+    expect(isPortRegisteredBy(4401, owner)).toBe(true);
+    expect(isPortRegisteredBy(4401, Symbol('other'))).toBe(false);
+    unregisterPort(4401);
+    expect(isPortRegisteredBy(4401, owner)).toBe(false);
   });
 
   it('addrInUseError carries the libuv-shaped EADDRINUSE fields', () => {

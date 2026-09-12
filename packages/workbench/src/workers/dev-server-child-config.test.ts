@@ -49,7 +49,7 @@ function envelope(
   } = {},
 ): unknown {
   return {
-    protocol: 'rifty.dev-server/v1',
+    protocol: 'rifty.dev-server/v2',
     payload: {
       nodeWorkerRuntime: input.nodeWorkerRuntime ?? NODE_WORKER_RUNTIME,
       cfg: input.cfg ?? CFG,
@@ -83,6 +83,13 @@ describe('dev-server entry bootstrap', () => {
       cfg,
       remoteFsRoot,
     });
+  });
+
+  it('preserves omitted SQLite in the dev-server host snapshot', () => {
+    const { sqliteWasmUrl: _sqlite, ...nodeWorkerRuntime } = NODE_WORKER_RUNTIME;
+    expect(resolveDevServerChildConfig(envelope({ nodeWorkerRuntime })).nodeWorkerRuntime).toEqual(
+      nodeWorkerRuntime,
+    );
   });
 
   it('boots from the complete entry-scoped runtime config without an app template registry', () => {
@@ -172,7 +179,7 @@ describe('dev-server entry bootstrap', () => {
     expect(entry).toMatchObject({
       kind: 'url',
       url: 'https://consumer.test/dev-server.js',
-      bootstrap: { protocol: 'rifty.dev-server/v1' },
+      bootstrap: { protocol: 'rifty.dev-server/v2' },
     });
     if (entry.bootstrap === undefined) throw new Error('dev-server entry lost its bootstrap');
     publishKernelEntryBootstrap(entry.bootstrap);
@@ -236,6 +243,11 @@ describe('dev-server entry bootstrap', () => {
 
   it.each([
     ['missing envelope', null, /bootstrap/i],
+    [
+      'previous mandatory-SQLite protocol',
+      { ...(envelope() as object), protocol: 'rifty.dev-server/v1' },
+      /protocol/i,
+    ],
     ['wrong protocol', { protocol: 'rifty.dev-server/v0', payload: {} }, /protocol/i],
     [
       'extra envelope field',
@@ -244,13 +256,13 @@ describe('dev-server entry bootstrap', () => {
     ],
     [
       'missing payload field',
-      { protocol: 'rifty.dev-server/v1', payload: { cfg: CFG, terminal: TERMINAL } },
+      { protocol: 'rifty.dev-server/v2', payload: { cfg: CFG, terminal: TERMINAL } },
       /missing or unexpected fields/i,
     ],
     [
       'extra payload field',
       {
-        protocol: 'rifty.dev-server/v1',
+        protocol: 'rifty.dev-server/v2',
         payload: {
           nodeWorkerRuntime: NODE_WORKER_RUNTIME,
           cfg: CFG,

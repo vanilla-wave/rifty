@@ -1,0 +1,102 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS: all PR314 review fixes verified; 119 focused tests and docs:check independently pass; raw RED/mutant, 7 browser cases, Markdown SSG and 25/25 pr:check artifacts inspected. Ready for pass binding and authorized merge.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "8e3a2b81af4bff138c44fc6fdf493fad60e676ff",
+  "unit_goal_source": "PR314 review fixes against observed BASE 0c3b9248ed889db2bd4b9c60db6e27e04508d7d3, as requested by handoff-pr314-fix-and-merge. Historical authorities: vite-knowledge-boundary goal and registry-package-adaptations unit at 0feeb5c89; active ADR-0384. REV-1 preserves unaffected accepted coverage and end-to-end goal proof in docs/backlog/npm-client/reference/registry-package-adaptations-final-green.json (reviewed c31cd02ae759a3e6eea7515da33e3297d4f1ab3d). Its PostCSS advisory was recorded in existing migration evidence and remains history; no snapshot bytes change in this repair. No new current contract.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Preserve existing installed Chokidar adaptation behavior: empty/current/parent entries excluded, ordinary child retained; restore both corrupted fixture literals and strengthen execution criteria against BASE.",
+      "source": "acceptance",
+      "trace": "I1 + scenario + ADR-0384 D3",
+      "status": "pass",
+      "citation": "tests/integration/vite-cli-prep.test.ts:232; tests/integration/package-install-finalizer.test.ts:21; /tmp/pr314-review-fix-red.log; /tmp/pr314-fixes-reviewer-focused.log",
+      "note": ""
+    },
+    {
+      "row": "Preserve detached action tracking and startup-before-import; info and unrelated entries require no action tracker.",
+      "source": "acceptance",
+      "trace": "I2 + scenario + ADR-0384 D1/D2",
+      "status": "pass",
+      "citation": "tests/integration/vite-cli-prep.test.ts:178; tests/integration/vite-cli-prep.test.ts:271; tests/integration/vite-cli-prep.test.ts:317; tools/shadow-registry/src/runtime/vite-node-entry-edge.test.ts:5; tests/browser-unit/esbuild-vite-contract.spec.ts:1004; /tmp/pr314-fixes-reviewer-focused.log; /tmp/pr314-fix-browser.log",
+      "note": ""
+    },
+    {
+      "row": "Generic server diagnostics identify the project subsystem: Markdown SSG expectation changes only the accepted generic prefix; real HTTP/content/render assertions and timeouts remain intact.",
+      "source": "acceptance",
+      "trace": "I3 + scenario + ADR-0384 D4",
+      "status": "pass",
+      "citation": "tests/e2e/markdown-ssg.spec.ts:29; packages/workbench/src/workers/dev-server-boot.ts:62; /tmp/pr314-ci-light-failure.log:369; /tmp/pr314-fix-markdown.log",
+      "note": ""
+    },
+    {
+      "row": "Supported Vite action paths remain functional for optional helper and ordinary npm projects, retaining exact esbuild identity and offline/cache behavior; unaffected COI/no-COI/HMR/restore proof retained from prior accepted review.",
+      "source": "acceptance",
+      "trace": "scenario + ADR-0384 D2/D3/D5",
+      "status": "pass",
+      "citation": "tests/browser-unit/esbuild-vite-contract.spec.ts:1004; tests/browser-unit/esbuild-vite-contract.spec.ts:1258; tests/browser-unit/esbuild-vite-contract.spec.ts:1523; /tmp/pr314-fix-browser.log; docs/backlog/npm-client/reference/registry-package-adaptations-final-green.json:1",
+      "note": ""
+    },
+    {
+      "row": "Corrupt-input at host keepalive admission: missing/non-callable tracker throws before CLI preparation or adapter activation; stale realm global cannot satisfy the current request.",
+      "source": "fault-matrix",
+      "trace": "ADR-0384 D1 + scenario",
+      "status": "pass",
+      "citation": "tests/integration/vite-cli-prep.test.ts:271; tests/integration/vite-cli-prep.test.ts:302; tools/shadow-registry/src/runtime/vite-node-entry-edge.test.ts:25; tools/shadow-registry/src/runtime/vite-node-entry-edge.ts:20; /tmp/pr314-guard-mutant-0.log; /tmp/pr314-guard-mutant-1.log",
+      "note": ""
+    },
+    {
+      "row": "Registry ./runtime preparePackageEntryRuntime rejects unsupported Vite action host capabilities, preserves info/eval and unrelated-bin entry paths, and receives the real host tracker from Workbench.",
+      "source": "public-api",
+      "trace": "ADR-0384 D1/D2/D3",
+      "status": "pass",
+      "citation": "tests/integration/vite-cli-prep.test.ts:285; tests/integration/vite-cli-prep.test.ts:317; tools/shadow-registry/src/runtime/vite-node-entry-edge.test.ts:37; packages/workbench/src/workers/node-entry-runtime-preparation.ts:6; packages/workbench/src/workers/node-entry-runtime-preparation.contract.test.ts:1; /tmp/pr314-fixes-reviewer-focused.log",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

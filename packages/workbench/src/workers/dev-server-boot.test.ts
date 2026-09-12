@@ -75,7 +75,7 @@ describe('node-server boot', () => {
     try {
       const logText = sinks.logs.join('');
       expect(logText).toContain(
-        `[real-vite/worker] starting server /src/server.js on port ${String(cfg.port)}`,
+        `[workbench/worker] starting server /src/server.js on port ${String(cfg.port)}`,
       );
       expect(logText).not.toContain(root);
       expect(logText).toContain('bu-entry-console-routed');
@@ -118,7 +118,7 @@ describe('node-server boot', () => {
     });
     try {
       expect(sinks.logs.join('')).toContain(
-        '[real-vite/worker] starting server /__bu-public-root/server.js on port 4473',
+        '[workbench/worker] starting server /__bu-public-root/server.js on port 4473',
       );
     } finally {
       await handle.stop();

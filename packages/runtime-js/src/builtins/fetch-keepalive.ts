@@ -14,14 +14,14 @@
  * `.text()` (race-dependent). Symmetric with `loader.import` ref-on-start /
  * unref-on-settle, extended across the body read.
  *
- * Honest scope (Fidelity): counts the global `fetch` boundary including body
- * consumption. Reaping `fetch` covers `http.request` to external hosts (it routes
- * through `fetch`); loopback `http.request` is in-process port-registry dispatch
- * (microtask-settled, no socket); `https`/`net.connect` are loud-throws. An
- * exotic Response whose body is never consumed holds the realm to the drain cap
- * (loud) — matching Node keeping an undrained socket alive.
+ * Honest scope (Fidelity): counts the global `fetch` boundary through public
+ * Body consumption. Native WebAssembly streaming is a realm-wide loud gap;
+ * `http.request` external hosts route through `fetch`; loopback is in-process;
+ * `https`/`net.connect` loud-throw. A never-consumed Response holds the realm to
+ * the drain cap (loud) — matching Node keeping an undrained socket alive.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 
 /** Body-mixin consumers — reading any of them (or the `body` stream) drains the body. */
@@ -29,14 +29,19 @@ const BODY_CONSUMERS = ['arrayBuffer', 'blob', 'bytes', 'formData', 'json', 'tex
 
 interface FetchTarget {
   fetch?: typeof fetch;
+  WebAssembly?: Pick<typeof WebAssembly, 'compileStreaming' | 'instantiateStreaming'>;
 }
+
+const WEBASSEMBLY_STREAMING_APIS = ['compileStreaming', 'instantiateStreaming'] as const;
 
 /**
  * Wrap `target.fetch` so an in-flight request keeps the keepalive loop alive
- * until its body is consumed. Idempotent-safe per target. No-op when the realm
- * has no `fetch` (honest: nothing to count) — never a silent stub.
+ * until its body is consumed. Idempotent-safe per target. The Body wrapper is a
+ * no-op when the realm has no `fetch` (honest: nothing to count); WebAssembly
+ * streaming stays a realm-wide loud gap because native body reads escape it.
  */
 export function installFetchKeepalive(target: FetchTarget = globalThis as FetchTarget): void {
+  installWebAssemblyStreamingCeilings(target.WebAssembly);
   const hostFetch = target.fetch;
   if (typeof hostFetch !== 'function') return;
   const boundFetch = hostFetch.bind(target) as typeof fetch;
@@ -69,6 +74,39 @@ export function installFetchKeepalive(target: FetchTarget = globalThis as FetchT
   }) as typeof fetch;
 
   target.fetch = keepaliveFetch;
+}
+
+/** Preserve effective property + name/length/own descriptors; close the realm loudly. */
+function installWebAssemblyStreamingCeilings(namespace: FetchTarget['WebAssembly']): void {
+  if (namespace === undefined) return;
+
+  for (const name of WEBASSEMBLY_STREAMING_APIS) {
+    const original = namespace[name];
+    if (typeof original !== 'function') continue;
+    const feature = `WebAssembly.${name}`;
+    const ceiling = new Proxy(original, {
+      apply() {
+        return Promise.reject(new NotImplementedError(feature));
+      },
+    });
+    const descriptor = findPropertyDescriptor(namespace, name);
+    Object.defineProperty(namespace, name, {
+      configurable: descriptor?.configurable ?? true,
+      enumerable: descriptor?.enumerable ?? false,
+      value: ceiling,
+      writable: descriptor !== undefined && 'writable' in descriptor ? descriptor.writable : true,
+    });
+  }
+}
+
+function findPropertyDescriptor(target: object, key: PropertyKey): PropertyDescriptor | undefined {
+  let owner: object | null = target;
+  while (owner !== null) {
+    const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+    if (descriptor !== undefined) return descriptor;
+    owner = Object.getPrototypeOf(owner) as object | null;
+  }
+  return undefined;
 }
 
 /** Hold the ref until the response body is drained (or release now if there is none). */
@@ -113,6 +151,7 @@ function overrideConsumers(response: Response, release: () => void): void {
  * slot) free to consume the body when the stream is never pulled.
  */
 function wrapBodyStream(response: Response, release: () => void): void {
+  // TODO(backlog: runtime-js/fetch-keepalive-response-clone-lifecycle)
   const source = response.body;
   if (source === null) return;
   let wrapped: ReadableStream<Uint8Array> | null = null;

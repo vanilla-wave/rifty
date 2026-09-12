@@ -1,0 +1,201 @@
+{
+  "bin": { "rollup": "dist/bin/rollup" },
+  "bugs": { "url": "https://github.com/rollup/rollup/issues" },
+  "dist": {
+    "shasum": "0edbd6a9a34d5a83ea4e0134095ab3aeb1be2f51",
+    "tarball": "https://registry.npmjs.org/@rollup/wasm-node/-/wasm-node-4.63.1.tgz",
+    "fileCount": 28,
+    "integrity": "sha512-zuZMuBHMMhtuXagc+3p5PGeGfL0VnO/44cX1k9R4Q/Ipb863tF8ZBGeoTz3ypgANqrpREAp49mNTwv6qSyc6XQ==",
+    "signatures": [
+      {
+        "sig": "MEUCIQDnI9502+hfj83vWc9rHNFu+8uh0mEJUKeDDStLlYS6bwIgXoRhsWewTWuZk7DLGwqY+eodLhwRio4GE/yPHVTeRjs=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "sig": "MEUCIQC1objypRa8wZ6GFfZ5aAg1EW5Ii6QgQFaixyPw/hQ6SAIgbK18nx3Tq4ocGFYH5aA+/ju+D7z2FQU9FoSUr0nN4w8=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/@rollup%2fwasm-node@4.63.1",
+      "provenance": { "predicateType": "https://slsa.dev/provenance/v1" }
+    },
+    "unpackedSize": 3421492
+  },
+  "main": "dist/rollup.js",
+  "name": "@rollup/wasm-node",
+  "types": "dist/rollup.d.ts",
+  "author": { "name": "Rich Harris" },
+  "module": "dist/es/rollup.js",
+  "engines": { "npm": ">=8.0.0", "node": ">=18.0.0" },
+  "exports": {
+    ".": {
+      "types": "./dist/rollup.d.ts",
+      "import": "./dist/es/rollup.js",
+      "require": "./dist/rollup.js"
+    },
+    "./dist/*": "./dist/*",
+    "./parseAst": {
+      "types": "./dist/parseAst.d.ts",
+      "import": "./dist/es/parseAst.js",
+      "require": "./dist/parseAst.js"
+    },
+    "./getLogFilter": {
+      "types": "./dist/getLogFilter.d.ts",
+      "import": "./dist/es/getLogFilter.js",
+      "require": "./dist/getLogFilter.js"
+    },
+    "./package.json": "./package.json",
+    "./loadConfigFile": {
+      "types": "./dist/loadConfigFile.d.ts",
+      "default": "./dist/loadConfigFile.js",
+      "require": "./dist/loadConfigFile.js"
+    }
+  },
+  "gitHead": "78bfef0cb94479566f81012fafa372c84b90bd34",
+  "license": "MIT",
+  "_npmUser": {
+    "name": "GitHub Actions",
+    "email": "npm-oidc-no-reply@github.com",
+    "trustedPublisher": {
+      "id": "github",
+      "oidcConfigId": "oidc:bdaa46a7-9fb7-4c65-a638-90984350e63e"
+    }
+  },
+  "comments": {
+    "react": "If missing this fails npm install for Linux ARM",
+    "vue-tsc": "This is necessary so that prettier-plugin-organize-imports works correctly in Vue templatges",
+    "react-dom": "If missing this fails npm install for Linux ARM",
+    "@emnapi/core": "If missing this fails npm install for Linux ARM",
+    "@emnapi/runtime": "If missing this fails npm install for Linux ARM",
+    "@napi-rs/lzma-linux-x64-gnu": "If missing, napi build --use-napi-cross silently skips the cross toolchain and links against the host glibc (#6461)"
+  },
+  "homepage": "https://rollupjs.org/",
+  "keywords": ["modules", "bundler", "bundling", "es6", "optimizer"],
+  "overrides": {
+    "tar": ">7.5.6",
+    "vite": "$vite",
+    "axios": "^1.19.0",
+    "react": "^18.3.1",
+    "semver": "^7.8.5",
+    "esbuild": ">0.24.2",
+    "lodash-es": ">4.17.22",
+    "react-dom": "^18.3.1",
+    "path-scurry": { "lru-cache": ">=11.0.0" },
+    "readable-stream": "npm:@built-in/readable-stream@1"
+  },
+  "repository": { "url": "git+https://github.com/rollup/rollup.git", "type": "git" },
+  "_npmVersion": "11.15.0",
+  "description": "Next-generation ES module bundler with Node wasm",
+  "directories": {},
+  "maintainers": [
+    { "name": "shellscape", "email": "andrew@shellscape.org" },
+    { "name": "rich_harris", "email": "richard.a.harris@gmail.com" },
+    { "name": "guybedford", "email": "guybedford@gmail.com" },
+    { "name": "lukastaegert", "email": "lukas.taegert@tngtech.com" }
+  ],
+  "_nodeVersion": "24.10.0",
+  "dependencies": { "@types/estree": "1.0.9" },
+  "_hasShrinkwrap": false,
+  "devDependencies": {
+    "nyc": "^18.0.0",
+    "shx": "^0.4.0",
+    "vue": "^3.5.41",
+    "flru": "^1.0.2",
+    "vite": "^7.3.6",
+    "acorn": "^8.18.0",
+    "buble": "^0.20.0",
+    "husky": "^9.1.7",
+    "memfs": "^4.68.1",
+    "mocha": "11.8.0",
+    "pinia": "^4.0.3",
+    "tslib": "^2.8.1",
+    "eslint": "^10.9.1",
+    "rollup": "^4.62.5",
+    "semver": "^7.8.5",
+    "terser": "^5.50.0",
+    "core-js": "3.38.1",
+    "globals": "^17.11.0",
+    "nodemon": "^3.1.14",
+    "vue-tsc": "^3.3.11",
+    "chokidar": "^3.6.0",
+    "es5-shim": "^4.6.7",
+    "es6-shim": "^0.35.8",
+    "fs-extra": "^11.4.0",
+    "prettier": "^3.9.6",
+    "systemjs": "^6.15.1",
+    "acorn-jsx": "^5.3.2",
+    "date-time": "^4.0.0",
+    "fixturify": "^3.0.0",
+    "picomatch": "^4.0.7",
+    "pretty-ms": "^9.3.0",
+    "requirejs": "^2.3.8",
+    "vitepress": "^1.6.4",
+    "wasm-pack": "^0.15.0",
+    "@eslint/js": "^10.0.1",
+    "github-api": "^3.4.0",
+    "picocolors": "^1.1.1",
+    "source-map": "^0.8.0",
+    "typescript": "^5.9.3",
+    "@types/node": "^20.19.43",
+    "lint-staged": "^17.3.0",
+    "signal-exit": "^4.1.0",
+    "@emnapi/core": "^1.11.3",
+    "@napi-rs/cli": "3.4.1",
+    "@types/mocha": "^10.0.10",
+    "concurrently": "^9.2.4",
+    "is-reference": "^3.0.3",
+    "magic-string": "^1.2.2",
+    "pretty-bytes": "^7.1.1",
+    "yargs-parser": "^21.1.1",
+    "@types/semver": "^7.8.0",
+    "patch-package": "^8.0.1",
+    "@emnapi/runtime": "^1.11.3",
+    "builtin-modules": "^5.3.0",
+    "@codemirror/view": "^6.43.9",
+    "@types/picomatch": "^4.0.3",
+    "locate-character": "^3.0.0",
+    "@codemirror/state": "^6.7.1",
+    "@inquirer/prompts": "^7.10.1",
+    "eslint-plugin-vue": "^10.10.0",
+    "typescript-eslint": "^8.68.0",
+    "vue-eslint-parser": "^10.4.1",
+    "@codemirror/search": "^6.7.1",
+    "npm-audit-resolver": "^3.0.0-RC.0",
+    "source-map-support": "^0.5.21",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/pluginutils": "^5.4.0",
+    "@types/yargs-parser": "^21.0.3",
+    "acorn-import-phases": "^1.0.4",
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/language": "^6.12.4",
+    "@rollup/plugin-alias": "^6.0.0",
+    "@rollup/plugin-buble": "^1.0.3",
+    "@vue/language-server": "^3.3.11",
+    "@rollup/plugin-terser": "^0.4.4",
+    "eslint-plugin-unicorn": "^73.0.0",
+    "rollup-plugin-license": "^3.7.1",
+    "@rollup/plugin-replace": "^6.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.6",
+    "@mermaid-js/mermaid-cli": "^11.16.0",
+    "@rollup/plugin-commonjs": "^29.0.3",
+    "acorn-import-assertions": "^1.9.0",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@jridgewell/sourcemap-codec": "^1.5.5",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@shikijs/vitepress-twoslash": "^4.4.3",
+    "prettier-plugin-organize-imports": "^4.3.0"
+  },
+  "optionalDependencies": { "fsevents": "~2.3.2", "@napi-rs/lzma-linux-x64-gnu": "1.5.1" },
+  "_npmOperationalInternal": {
+    "tmp": "tmp/wasm-node_4.63.1_1787896854178_0.12593906112560593",
+    "host": "s3://npm-registry-packages-npm-production"
+  },
+  "devDependenciesComments": {
+    "core-js": "We only update manually as every update requires a snapshot update"
+  },
+  "_id": "@rollup/wasm-node@4.63.1",
+  "version": "4.63.1"
+}

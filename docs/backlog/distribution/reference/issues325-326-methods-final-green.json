@@ -1,0 +1,53 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS: docs-only PR #331; итоговые draft корректно отражают исходные задачи и условный ответ пользователя. Реализация и готовность API не подтверждены.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "cab32293352e759d7c16cfe2f315da2cd722e464",
+  "unit_goal_source": "Docs-only refinement PR #331; BASE 2c7f9bbf4c88c34c40ac4d83411ba2dda27eafae. Independent reviewer /root/sdk_methods_final, fresh read-only context, depth 1, no children. Raw request: $rifty-refine issues #325 + #326; original complete issue325-source.json and issue326-source.json read independently. Actual user answer reviewed verbatim in reference/issues325-326-refine-evidence.md: ordinary methods require no retained state; shell instances would retain state; no-COI shell concern. Driver attribution correctly selects methods with invocation-only handles, not unconditional user approval or security containment. Full changed set inspected: distribution/no-coi-project-files.md, distribution/public-api-ai-agent-exec-preview.md, distribution/README.md, original source snapshots, reference/issues325-326-refine-evidence.md and historical final review. Independently read RDY-6 and Backlog Challenge plus active ADR-0131/0375/0376/0377 and relevant RuntimeFs, worker FS RPC/eval, sandbox, no-COI Worker, Shell and ProjectFiles sources. Checked reachable repeated success/failure/Stop calls, within-call cd/env, persistent filesystem effects versus shell state, raw versus project paths, ordinary readonly policy versus hostile-JS isolation, background ownership, overlapping finite calls, resident preview limits, and forced termination/persistence uncertainty. No omitted material user fork found in this refinement boundary. Existing raw FS root anchoring and resident-concurrency rejection preserved. Legacy preview residual remains explicit with owners and pickup trigger. Both items remain draft; exact API/policy/carrier design and reference/RED preparation belong to PICKUP. Original general structured evaluation alternative is honestly resolved by explicit console eval, typed FS and command results. Historical review explicitly cannot close amended scope. Executed git diff --check against BASE: PASS; verified clean reviewed HEAD; inspected current /tmp/rifty-325-326-scope-pr-check.log: docs-only 20/20 PASS, skipped source lanes explicitly listed. Research test/probe evidence is not product acceptance. Coverage empty because the reviewed unit delivers documentation only; future draft traced acceptance/fault rows and SDK APIs are not delivered or proven here.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

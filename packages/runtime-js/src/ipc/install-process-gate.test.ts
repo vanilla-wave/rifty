@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 /**
  * ADR-0157 — the Node-worker GATE at the pre-entry seam + by-construction process.
  *
@@ -16,7 +18,7 @@ import {
   publishKernelEntryBootstrap,
   publishKernelProcessSpec,
 } from '@riftydev/kernel';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { Buffer as RiftyBuffer } from '../builtins/buffer.ts';
 import { buildNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
 import {
@@ -24,15 +26,39 @@ import {
   applyNodeProcessTerminalBootstrap,
   getProcessCwd,
 } from '../builtins/process.ts';
+import { isVmEngineReady } from '../builtins/vm/quickjs-loader.ts';
+import { runRuntimeSmokeChild } from '../internal/runtime-smoke-child.test-helper.ts';
 import { installNodeProcessShim, installNodeRuntime } from './install-process.ts';
 
 const NATIVE_THEN = Promise.prototype.then;
 const ORIGINAL_PROCESS = (globalThis as { process?: unknown }).process;
 const ORIGINAL_BUFFER = (globalThis as { Buffer?: unknown }).Buffer;
 const ORIGINAL_GLOBAL_DESCRIPTOR = Object.getOwnPropertyDescriptor(globalThis, 'global');
+const QUICKJS_FIXTURE = fileURLToPath(
+  new URL('../../tests/fixtures/install-node-runtime-quickjs.ts', import.meta.url),
+);
+const QUICKJS_MARKER = 'RIFTY_INSTALL_NODE_RUNTIME_QUICKJS_OK';
+const openChannels = new Set<MessageChannel>();
+
+function channel(): MessageChannel {
+  const value = new MessageChannel();
+  openChannels.add(value);
+  return value;
+}
+
+function expectSupervisorIdentity(): void {
+  const globalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'global');
+  expect.soft((globalThis as { process?: unknown }).process).toBe(ORIGINAL_PROCESS);
+  expect.soft((globalThis as { Buffer?: unknown }).Buffer).toBe(ORIGINAL_BUFFER);
+  expect.soft(Promise.prototype.then).toBe(NATIVE_THEN);
+  expect.soft(globalDescriptor?.value).toBe(ORIGINAL_GLOBAL_DESCRIPTOR?.value);
+  expect.soft(globalDescriptor?.writable).toBe(ORIGINAL_GLOBAL_DESCRIPTOR?.writable);
+  expect.soft(globalDescriptor?.enumerable).toBe(ORIGINAL_GLOBAL_DESCRIPTOR?.enumerable);
+  expect.soft(globalDescriptor?.configurable).toBe(ORIGINAL_GLOBAL_DESCRIPTOR?.configurable);
+}
 
 function spec(env: Record<string, string> = {}): KernelProcessSpec {
-  const port = (): MessagePort => new MessageChannel().port1;
+  const port = (): MessagePort => channel().port1;
   const value: KernelProcessSpec = {
     pid: 7,
     ppid: 3,
@@ -62,18 +88,47 @@ afterEach(() => {
   if (ORIGINAL_GLOBAL_DESCRIPTOR) {
     Object.defineProperty(globalThis, 'global', ORIGINAL_GLOBAL_DESCRIPTOR);
   }
+  for (const value of openChannels) {
+    value.port1.close();
+    value.port2.close();
+  }
+});
+
+afterAll(() => {
+  Promise.prototype.then = NATIVE_THEN;
 });
 
 describe('pre-entry gate (ADR-0157)', () => {
   // MUST be first: asserts the realm is still un-patched.
   it('WASI worker: seeds the process but installs NO Buffer / NO Promise patch', () => {
     Reflect.deleteProperty(globalThis, 'global');
-    installNodeRuntime(spec({ __RIFTY_WASI_WASM_URL: 'https://x/app.wasm' }));
+    const readiness = installNodeRuntime(spec({ __RIFTY_WASI_WASM_URL: 'https://x/app.wasm' }));
     expect((globalThis as { process?: unknown }).process).toBeInstanceOf(NodeProcess);
     // NEGATIVE: no Node over-implementation for a non-Node worker.
     expect(Promise.prototype.then).toBe(NATIVE_THEN);
     expect((globalThis as { Buffer?: unknown }).Buffer).not.toBe(RiftyBuffer);
     expect(Object.prototype.hasOwnProperty.call(globalThis, 'global')).toBe(false);
+    expect(readiness).toBeUndefined();
+    expect(isVmEngineReady()).toBe(false);
+  });
+
+  it('QuickJS readiness runs in a child without mutating the Vitest supervisor', async () => {
+    const completion = runRuntimeSmokeChild({
+      fixture: QUICKJS_FIXTURE,
+      marker: QUICKJS_MARKER,
+      timeoutMs: 30_000,
+    });
+    expectSupervisorIdentity();
+    await expect(completion).resolves.toContain(QUICKJS_MARKER);
+    expectSupervisorIdentity();
+  });
+
+  it('rewrite Node worker installs globals synchronously without QuickJS readiness', () => {
+    const readiness = installNodeRuntime(spec({ __RIFTY_VM_ENGINE: 'rewrite' }));
+
+    expect(readiness).toBeUndefined();
+    expect(isVmEngineReady()).toBe(false);
+    expect((globalThis as { process?: unknown }).process).toBeInstanceOf(NodeProcess);
   });
 
   it('Node-entry bootstrap outranks a guest __RIFTY_WASI_WASM_URL key', () => {
@@ -193,7 +248,7 @@ describe('pre-entry gate (ADR-0157)', () => {
   });
 
   it('Node worker: TTY stdout exposes cursor helpers and writes ANSI control sequences', async () => {
-    const stdout = new MessageChannel();
+    const stdout = channel();
     const s = spec();
     const proc = installNodeProcessShim({
       ...s,
@@ -320,5 +375,25 @@ describe('process.exitCode / exit coercion is Node-faithful (ADR-0157 review)', 
     );
     // An invalid exit() arg throws the coercion error, NOT a RIFTY_PROCESS_EXIT.
     expect(() => proc.exit(1.9)).toThrow(expect.objectContaining({ code: 'ERR_OUT_OF_RANGE' }));
+  });
+
+  it('leaves no test-owned process MessagePort handle active', async () => {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    const hostProcess = ORIGINAL_PROCESS as typeof process & {
+      _getActiveHandles(): unknown[];
+    };
+    const handles = hostProcess._getActiveHandles();
+    const leaked = [...openChannels]
+      .flatMap(({ port1, port2 }) => [port1, port2])
+      .filter((port) => handles.includes(port));
+    try {
+      expect(leaked).toEqual([]);
+    } finally {
+      for (const value of openChannels) {
+        value.port1.close();
+        value.port2.close();
+      }
+      openChannels.clear();
+    }
   });
 });

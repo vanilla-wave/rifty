@@ -20,6 +20,7 @@ import {
   addrInUseError,
   allocateEphemeralPort,
   isPortBound,
+  portRegistrationOwner,
   registerPort,
   unregisterPort,
 } from './registry.ts';
@@ -157,7 +158,7 @@ export class Server extends EventEmitter {
     // the realm registry, exposed via `address().port` until close (no OS socket).
     const register = (resolvedPort: number): void => {
       this.boundAddress = createVirtualAddressInfo(resolvedPort);
-      registerPort(resolvedPort, async (request) => {
+      const handler = async (request: Request): Promise<Response> => {
         const socket = new HttpFramedSocket();
         this.emit('connection', socket);
         this.connectionHandler?.(socket);
@@ -199,7 +200,8 @@ export class Server extends EventEmitter {
             resolve(new Response(bodyStr, { status, headers }));
           });
         });
-      });
+      };
+      registerPort(resolvedPort, handler, portRegistrationOwner(this));
     };
     const resolvedPort = requested === 0 ? allocateEphemeralPort() : requested;
     if (requested === 0) {

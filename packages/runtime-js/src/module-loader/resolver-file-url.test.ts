@@ -1,6 +1,7 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { createModuleLoader } from './loader.ts';
+import { preloadTsconfigPaths } from './tsconfig-preload.ts';
 
 describe('resolver file: URL imports', () => {
   it('resolves file:/// URLs into VFS absolute paths', async () => {
@@ -113,3 +114,6 @@ describe('resolver file: URL imports', () => {
     },
   );
 });
+
+// ADR-0382: retain discovery semantics after explicit async preparation.
+beforeAll(() => preloadTsconfigPaths());

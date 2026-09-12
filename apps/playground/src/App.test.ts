@@ -153,6 +153,11 @@ describe('http compat docs', () => {
     expect(httpCompatSrc).toContain('derived from Fetch-normalized headers');
     expect(httpCompatSrc).toContain('raw casing/order/duplicates are not claimed');
   });
+
+  it('tells Origin-validating servers to allow-list the exact Playground page hostname', () => {
+    expect(httpCompatSrc).toContain('exact Playground page hostname');
+    expect(httpCompatSrc).toContain('does not rewrite Host or Origin');
+  });
 });
 
 describe('App degraded path wiring', () => {

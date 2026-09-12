@@ -15,10 +15,14 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
    write-once base segment at init under the existing ledger/scheduler/stamp
    contracts, validated replay on reopen, mutations after init on today's
    per-file path with an explicit precedence + tombstone rule, store
-   namespace bump `/.rifty/workbench/v1` → `v2` so a legacy per-file tree is
-   never read (I3 mechanism; `v1` bytes untouched), `## Fault matrix` at
-   production tier. After it: I1–I2 hold on T for a freshly materialized
-   project; a legacy project reopens from its definition.
+   namespace bump `/.rifty/workbench/v1` → `v2` under the selected
+   `storage.namespace` root (ADR-0402) so a legacy per-file tree is never
+   read (I3 mechanism; `v1` bytes untouched), replay publishes the tree
+   without waiting on stamp trust (ADR-0415/0417), the no-COI toolchain
+   Worker's `OpfsFsSync` is a consumer of the same format (sequenced after
+   #332), `## Fault matrix` at production tier. After it: I1–I2 hold on T
+   for a freshly materialized project; a legacy project reopens from its
+   definition.
 3. `vfs/segmented-replica-append-compaction` — **replica-append** (slice B) —
    I5 + Outcome (c): mutations append into segments, deletions as tombstones,
    compaction = base-segment re-emission from the live front with a
@@ -26,18 +30,21 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
    After it: one substrate under every writer; reopen after a package-scale
    `npm install` still ≤ 2 s.
 4. `vfs/legacy-per-file-layout-cold-restore` — **legacy-notice** — I3
-   user-facing half: one-time `storage-layout` health issue when `v1` exists
-   and `v2` is first created, playground starts with an empty catalog (never
+   user-facing half: one-time `storage-layout` health issue (carrier: the
+   health snapshot ADR-0413 extended; per selected namespace) when `v1`
+   exists and `v2` is first created, playground starts with an empty catalog (never
    a starter rebuilt under an old name), loss stated; `v1` reclaim stays with
    `vfs/storage-pressure-and-eviction-ux`. Blocked by slice A. After it: I3
    holds end-to-end with the user told once, honestly.
 
 ## Open questions
 
-- Post-open touch fraction: what share of T does a real workload (`node -e`,
-  `vite build`, `tsc`) read before the first reload? — owner: agent — probe
-  (count distinct files read on T) before slice A PICKUP; < ~15 % re-opens
-  candidate B as a re-fit (goal Decisions), ≥ that confirms the full-scan kill.
+- Re-measure I1/I2 on current main with T′: the 8.4 s reopen was two-pass
+  (`refreshIndex` + `preloadContent` on 1a851d7bc); ADR-0393's single
+  `walkOpfsTree` traversal is unmeasured on a large tree (its evidence is 8
+  files) — owner: agent — before slice A Contract+RED; the result re-pins
+  goal I2 "today" and the Invariants evidence commit. (The candidate-B
+  touch-fraction probe is closed: goal Decisions 2026-09-12, ADR-0393/0406/0411.)
 - Order vs `fault-honest-opfs-persistence` items
   (`vfs/iso-git-ref-torn-write-rows`, `vfs/persist-ledger-fault-rows-completion`,
   `playground/reload-crash-consistency-fault-e2e`) — owner: agent — settled at
@@ -64,7 +71,10 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - Executable session before the trusted stamp (pending-ready) — declined.
 - Route R / snapshot re-apply on reopen — rejected (goal Decisions).
 - Overlay / COW guest-visible FS.
-- COI-free ephemeral mode — sync reads need the SAB ring.
+- no-COI SDK API/protocol changes (#332) — the tier itself is a consumer of
+  the substrate (goal Decisions 2026-09-12).
+- Lazy content hydration (`vfs/opfs-lazy-content-preload`) — foreclosed by
+  ADR-0393/0406/0411.
 - Changing the public `storage.persistence` default.
 - Multi-tab shared project — loud refusal stays.
 - Export-before-switch prompt for legacy playground projects — declined by
@@ -74,7 +84,8 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 - Committing the 28.5 MB tracker-plugin asset — only its path/size manifest
   enters the repo.
 - Re-baking the embedder's 0.4.0 snapshot against main (unrestorable today:
-  identity + shadow-catalog drift) — `playground/baked-snapshot-regeneration`.
+  identity + shadow-catalog drift) — `playground/baked-snapshot-regeneration`
+  (producer: `produceDependencySnapshot`, ADR-0387).
 - `createScratch` rebuilding a clean same-starter scratch (40.7 s reopen in
   the embedder's sequence) —
   `playground/create-scratch-clean-same-starter-rematerializes`.

@@ -2,7 +2,42 @@
 
 ## [Unreleased]
 
+- Rebuild all dependency snapshots for the esbuild invocation cwd/ref artifact identity (ADR-0421).
+
+- Retain the concrete Playground SQLite asset type when validating against optional Workbench deployment options.
+
+- Clear authoritative Scratch Reset dirty state while retaining pending optimistic edit/starter protection; preserve editor, terminal, npm and Git classifications.
+
+- Expose real project-opening persistence operations through Workbench health and Playground preparing UI; scope counts to the existing open operation and clear them on settlement (ADR-0413).
+
+- Bake the existing installed-file preparation into dependency snapshot payloads.
+
+- Regenerate the copied App SW for scoped preview routing/protocol7 (ADR-0409).
+- Nodemon stop acceptance waits for foreground completion and a real output marker before counting further starts; HTTP absence alone does not settle admitted output.
+
+- Intentional snapshot starter replacement uses Reset; same-starter reload preserves saved source under Workbench's default snapshot policy (ADR-0394).
+
+- Refresh installed-package snapshots for registry-owned adaptation identity; normal semver resolution also updates PostCSS 8.5.26 → 8.5.28 (ADR-0384).
+
 ### Added
+
+- **"Real npm project" is now an ordinary React app.** The `real-vite` tile
+  seeds the `react-vite` template — React 19 + React Router 7 + TypeScript on
+  Vite 7 with its own visible `vite.config.ts` (`@vitejs/plugin-react`), a
+  4-route issue tracker with 8 components and a mock dataset, and four planted
+  rough edges named in the seeded `README.md`. Setup stays `from-scratch` (the
+  terminal runs a visible `npm install`, no baked snapshot) and the preset id is
+  unchanged, so the launch deep-link, the landing card and `pnpm bench` still
+  address the same tile. The vanilla `vite` template is untouched and stays the
+  internal base for the instant presets. A template may now seed its own
+  package.json `scripts` (here `build`/`preview`); dev aliases stay derived, so
+  `npm run build` never boots the dev server. The launch benchmark (`pnpm
+  bench`) now measures this tile: `perf/benchmarks.json` regenerated
+  2026-09-02 — cold start 444 ms, install → first Vite response 9820 ms on the
+  standard transport; the eddy pass is `unmeasured` because the deployed
+  resolver (image 2026-08-23) resolves `esbuild@0.28.0` through the pre-#289
+  catalog shape, which carries no integrity, and declines every esbuild
+  closure (`distribution/eddy-live-esbuild-closure-decline`).
 
 - **Live terminal command completion (ADR-0362).** Tab completion now queries
   the active owner Shell instead of a page-side inventory, so registered
@@ -11,6 +46,16 @@
   failure shows `Completion failed: <reason>` without a fabricated menu.
   Foreground Tab remains child stdin, and switching sessions invalidates the
   hidden session's pending/menu state.
+- An ordinary webpack 5 / webpack-dev-server 5 starter now cold-installs its
+  npm-owned `webpack serve` script and reaches the generic routed preview with
+  stock HMR; its companion plan carries no webpack-specific runtime fields
+  (ADR-0349).
+- Hidden `npm-dev-server-node-ws` class-proof: the same zero-field
+  `kind: 'npm-dev-server'` seam with `scripts.dev` = `node server.mjs` (no extra
+  npm deps). Deep-link only (`?preset=npm-dev-server-node-ws`); not a gallery
+  tile. Hosted e2e proves LIVE + HTTP 200 + WS through the preview bridge on a
+  non-webpack tool that allow-lists the exact Playground page origin.
+
 - Express, Hono, and Koa pin real `nodemon@3.1.14`; owner-VFS edits now replace
   the app Worker on the same preview port with crash recovery and teardown.
   Direct `start` and non-server templates keep their paths (ADR-0324–0327).
@@ -34,6 +79,14 @@
   persistent terminal hint explains that `+` opens a second shell while a
   program owns stdin.
 
+- The webpack starter now allow-lists only the exact Playground page hostname
+  in its visible dev-server config, so stock HMR works on deployed aliases
+  without weakening Host/Origin checks (ADR-0355).
+- A preview-readiness failure no longer marks its still-live project process as
+  stopped or disables Stop Project; physical exit remains the state authority.
+- The Vite host kernel wrapper now publishes its emitted QuickJS WASM URL
+  before loading Workbench's sealed kernel entry, so transformed Emscripten
+  chunks never fetch the playground HTML fallback (ADR-0352).
 - Node 24 `require(ESM)` no longer makes the playground dev host discover
   `cjs-module-lexer` mid-session and full-reload away the live owner. Rebaked
   TypeScript/Vite snapshots carry the new esbuild recipe identity and refresh
@@ -2349,7 +2402,7 @@
   (fast). Switching projects clears the terminal first. Template switcher groups
   presets under "Instant start" / "From scratch" with kind pills. Stamp
   invalidation is provisional —
-  `docs/backlog/playground/install-stamp-invalidation.md`.
+  `docs/adr/playground/0415-open-saved-projects-independently-of-installation-proof.md`.
 
 ### Changed
 

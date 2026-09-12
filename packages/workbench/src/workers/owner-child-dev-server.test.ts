@@ -84,7 +84,7 @@ describe('buildDevServerChildSpawnSpec', () => {
       kind: 'url',
       url: 'blob:dev-server-url',
       bootstrap: {
-        protocol: 'rifty.dev-server/v1',
+        protocol: 'rifty.dev-server/v2',
         payload: {
           nodeWorkerRuntime: {
             kernelWorkerUrl: 'blob:kernel-url',

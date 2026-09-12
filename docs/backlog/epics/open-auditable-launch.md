@@ -23,4 +23,8 @@ The launch acts themselves (the Show HN post, the awesome-wasm/aggregator PRs, s
 - `distribution/readme-open-auditable-rewrite` — the star-conversion landing reframed to the wedge (blocked on the deep-link demo above; the ONE measured number now lives in `perf/benchmarks.json` — the cold-start + npm-install benchmark item is delivered and closed).
 - `distribution/publish-git-and-ts-language-service` — make the two flagship differentiators npm-installable (shared with the compare-slot epic).
 
-Out of scope for this epic (downstream of HN success, NOT prerequisites): `distribution/create-rifty-template`, `distribution/workbench-controllers`, `distribution/framework-bindings-kit`, `distribution/public-api-ai-agent-exec-preview`, `distribution/public-api-ai-agent-contract-snapshot-restore`. The wedge is open/auditable ownership; the audience self-selects into hand-wiring.
+Out of scope for this epic (downstream of HN success, NOT prerequisites): `distribution/create-rifty-template`, `distribution/workbench-controllers`, `distribution/framework-bindings-kit`, `distribution/public-api-ai-agent-preview-question`, `distribution/public-api-ai-agent-contract-snapshot-restore`. The wedge is open/auditable ownership; the audience self-selects into hand-wiring.
+
+## Decisions
+
+- 2026-09-02 (user override, via `playground/react-vite-starter` go/no-go budget (b)): the deep-link tile is now the React 19 issue-tracker starter; the scenario's "<5s cold start" clause is superseded by this line (frozen text stays — `check:contract-drift`; amend = close + re-fit). That tile measures 9.8 s on the standard transport, and the eddy figure stays unmeasured until `distribution/eddy-live-esbuild-closure-decline` closes. The launch quotes `perf/benchmarks.json` as re-measured on the tile the link boots, never a stale tile's figure.

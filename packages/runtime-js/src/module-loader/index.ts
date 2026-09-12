@@ -11,3 +11,4 @@ export { createModuleLoader } from './loader.ts';
 export type { ModuleLoader, ModuleLoaderOptions, TransformSourceHook } from './loader.ts';
 export type { PathAliases, ResolvedModule, ModuleKind } from './resolver.ts';
 export { ModuleLoadError } from './errors.ts';
+export { preloadTsconfigPaths } from './tsconfig-preload.ts';

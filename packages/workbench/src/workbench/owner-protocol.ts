@@ -1,17 +1,28 @@
+import { normalizePreviewPrefix } from '@riftydev/io';
 import type { PtyPreview, PtyPreviewReq } from '../glue/pty-protocol.ts';
-import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
-import type { SerializedWorkbenchOwnerError } from './errors.ts';
+import {
+  type OwnerStorageConfig,
+  type OwnerStorageSnapshot,
+  validateOwnerStorageNamespace,
+} from '../workers/owner-storage.ts';
+import {
+  type SerializedWorkbenchOwnerError,
+  inspectSerializedWorkbenchOwnerError as inspectSerializedError,
+} from './errors.ts';
+import {
+  type NormalizedWorkbenchPackageAcquisition,
+  inspectNormalizedWorkbenchPackageAcquisition,
+} from './internal/workbench-package-acquisition.ts';
 import {
   absoluteHttpUrl,
-  copyStringMap,
   exact,
   exactMatch,
   invalid,
+  nativeTimerDelay,
   nonEmptyString,
   optionalKeys,
   own,
   port,
-  positiveFinite,
   progressCount,
   record,
   string,
@@ -48,18 +59,14 @@ export interface WorkbenchOwnerBootConfig {
       readonly devServer: string;
       readonly typescript?: string;
     };
-    readonly wasm: { readonly sqlite: string };
+    readonly wasm: { readonly sqlite?: string };
     readonly previewProbeTimeoutMs: number;
+    readonly previewPrefix?: string;
+    readonly ownerStartupTimeoutMs?: number;
+    readonly ioReportTimeoutMs?: number;
   };
-  readonly packageAcquisition: {
-    readonly registryUrl: string;
-    readonly eddy?: {
-      readonly resolverUrl: string;
-      readonly bundleBaseUrl: string;
-      readonly presetPins: Readonly<Record<string, string>>;
-    };
-  };
-  readonly storage: { readonly persistence: 'required' | 'preferred' | 'ephemeral' };
+  readonly packageAcquisition: NormalizedWorkbenchPackageAcquisition;
+  readonly storage: OwnerStorageConfig;
   readonly legacyWorkspacePrefix?: string;
   readonly playgroundUrlContext?: {
     readonly apiBaseUrl: string;
@@ -142,6 +149,7 @@ export type WorkbenchOwnerToPageMessage =
    * is owner-scoped and the first-open drain predates any project token. */
   | {
       readonly type: 'workbench:durability-progress';
+      readonly opId?: string;
       readonly persisted: number;
       readonly total: number;
     }
@@ -225,39 +233,50 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   );
 
   const deployment = record(config.deployment, 'owner boot deployment');
-  exact(deployment, ['workers', 'wasm', 'previewProbeTimeoutMs'], 'owner boot deployment');
+  exact(
+    deployment,
+    optionalKeys(
+      deployment,
+      ['workers', 'previewProbeTimeoutMs'],
+      ['wasm', 'previewPrefix', 'ownerStartupTimeoutMs', 'ioReportTimeoutMs'],
+    ),
+    'owner boot deployment',
+  );
+  const rawPrefix = deployment.previewPrefix;
+  const previewPrefix = rawPrefix === undefined ? undefined : normalizePreviewPrefix(rawPrefix);
+  if (previewPrefix !== rawPrefix) {
+    throw invalid('owner boot previewPrefix');
+  }
   const workers = record(deployment.workers, 'owner boot workers');
   exact(
     workers,
     optionalKeys(workers, ['kernel', 'node', 'devServer'], ['typescript']),
     'owner boot workers',
   );
-  const wasm = record(deployment.wasm, 'owner boot wasm');
-  exact(wasm, ['sqlite'], 'owner boot wasm');
-  const previewProbeTimeoutMs = positiveFinite(
+  const wasm = deployment.wasm === undefined ? {} : record(deployment.wasm, 'owner boot wasm');
+  exact(wasm, optionalKeys(wasm, [], ['sqlite']), 'owner boot wasm');
+  const previewProbeTimeoutMs = nativeTimerDelay(
     deployment.previewProbeTimeoutMs,
     'owner boot preview proof timeout',
   );
 
-  const packageAcquisition = record(config.packageAcquisition, 'owner boot package acquisition');
-  exact(
-    packageAcquisition,
-    optionalKeys(packageAcquisition, ['registryUrl'], ['eddy']),
-    'owner boot package acquisition',
+  const ownerStartupTimeoutMs = own(deployment, 'ownerStartupTimeoutMs')
+    ? nativeTimerDelay(deployment.ownerStartupTimeoutMs, 'owner boot startup timeout')
+    : undefined;
+  const ioReportTimeoutMs = own(deployment, 'ioReportTimeoutMs')
+    ? nativeTimerDelay(deployment.ioReportTimeoutMs, 'owner boot IO report timeout')
+    : undefined;
+
+  const packageAcquisition = inspectNormalizedWorkbenchPackageAcquisition(
+    config.packageAcquisition,
   );
-  let eddy: WorkbenchOwnerBootConfig['packageAcquisition']['eddy'];
-  if (own(packageAcquisition, 'eddy')) {
-    const candidate = record(packageAcquisition.eddy, 'owner boot Eddy config');
-    exact(candidate, ['resolverUrl', 'bundleBaseUrl', 'presetPins'], 'owner boot Eddy config');
-    eddy = Object.freeze({
-      resolverUrl: nonEmptyString(candidate.resolverUrl, 'owner boot Eddy resolverUrl'),
-      bundleBaseUrl: nonEmptyString(candidate.bundleBaseUrl, 'owner boot Eddy bundleBaseUrl'),
-      presetPins: copyStringMap(candidate.presetPins, 'owner boot Eddy presetPins'),
-    });
-  }
 
   const storage = record(config.storage, 'owner boot storage policy');
-  exact(storage, ['persistence'], 'owner boot storage policy');
+  exact(
+    storage,
+    optionalKeys(storage, ['persistence'], ['namespace']),
+    'owner boot storage policy',
+  );
   if (
     storage.persistence !== 'required' &&
     storage.persistence !== 'preferred' &&
@@ -265,6 +284,7 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   ) {
     throw invalid('owner boot storage policy');
   }
+  const namespace = validateOwnerStorageNamespace(storage.namespace);
 
   const frozenDeployment = Object.freeze({
     workers: Object.freeze({
@@ -276,13 +296,14 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
         : {}),
     }),
     wasm: Object.freeze({
-      sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm'),
+      ...(wasm.sqlite === undefined
+        ? {}
+        : { sqlite: nonEmptyString(wasm.sqlite, 'owner boot sqlite wasm') }),
     }),
     previewProbeTimeoutMs,
-  });
-  const frozenAcquisition = Object.freeze({
-    registryUrl: nonEmptyString(packageAcquisition.registryUrl, 'owner boot registryUrl'),
-    ...(eddy === undefined ? {} : { eddy }),
+    ...(previewPrefix === undefined ? {} : { previewPrefix }),
+    ...(ownerStartupTimeoutMs === undefined ? {} : { ownerStartupTimeoutMs }),
+    ...(ioReportTimeoutMs === undefined ? {} : { ioReportTimeoutMs }),
   });
   let legacyWorkspacePrefix: string | undefined;
   if (own(config, 'legacyWorkspacePrefix')) {
@@ -305,8 +326,11 @@ function inspectBootConfig(value: unknown): WorkbenchOwnerBootConfig {
   }
   return Object.freeze({
     deployment: frozenDeployment,
-    packageAcquisition: frozenAcquisition,
-    storage: Object.freeze({ persistence: storage.persistence }),
+    packageAcquisition,
+    storage: Object.freeze({
+      persistence: storage.persistence,
+      ...(namespace === undefined ? {} : { namespace }),
+    }),
     ...(legacyWorkspacePrefix === undefined ? {} : { legacyWorkspacePrefix }),
     ...(playgroundUrlContext === undefined ? {} : { playgroundUrlContext }),
   });
@@ -369,11 +393,22 @@ export function inspectWorkbenchOwnerToPageMessage(value: unknown): WorkbenchOwn
       });
     }
     case 'workbench:durability-progress': {
-      exact(message, ['type', 'persisted', 'total'], 'durability-progress message');
+      exact(
+        message,
+        optionalKeys(message, ['type', 'persisted', 'total'], ['opId']),
+        'durability-progress message',
+      );
       const persisted = progressCount(message.persisted, 'durability-progress persisted');
       const total = progressCount(message.total, 'durability-progress total');
       if (persisted > total) throw invalid('durability-progress counts');
-      return Object.freeze({ type: message.type, persisted, total });
+      return Object.freeze({
+        type: message.type,
+        persisted,
+        total,
+        ...(own(message, 'opId')
+          ? { opId: nonEmptyString(message.opId, 'durability-progress opId') }
+          : {}),
+      });
     }
     case 'workbench:failure': {
       exact(message, optionalKeys(message, ['type', 'error'], ['opId']), 'failure message');
@@ -489,15 +524,6 @@ function inspectStorage(value: unknown): OwnerStorageSnapshot {
     });
   }
   throw invalid('owner storage snapshot');
-}
-
-function inspectSerializedError(value: unknown): WorkbenchOwnerFailure['error'] {
-  const error = record(value, 'serialized owner error');
-  exact(error, ['name', 'message'], 'serialized owner error');
-  return Object.freeze({
-    name: nonEmptyString(error.name, 'serialized owner error name'),
-    message: string(error.message, 'serialized owner error message'),
-  });
 }
 
 function ownerProjectToken(value: unknown): OwnerProjectToken {

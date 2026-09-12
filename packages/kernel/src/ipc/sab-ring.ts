@@ -44,6 +44,11 @@ function atomicsWaitAsync(ia: Int32Array, i: number, v: number, t: number): Wait
   return (Atomics as unknown as AtomicsWithWaitAsync).waitAsync(ia, i, v, t);
 }
 
+function waitDeadline(timeout: number): number {
+  const duration = Number.isNaN(timeout) ? Number.POSITIVE_INFINITY : Math.max(0, timeout);
+  return Number.isFinite(duration) ? performance.now() + duration : Number.POSITIVE_INFINITY;
+}
+
 export const SAB_RING_HEADER_BYTES = 20;
 export const VERSION_OFFSET = 0;
 export const REQ_STATE_OFFSET = 4;
@@ -276,22 +281,32 @@ export class SabRing {
    * only). Throws {@link RingTimeoutError} on timeout,
    * {@link SyncRpcProtocolMismatchError} on version mismatch (ADR-0032). */
   waitReply(timeoutMs?: number): Uint8Array {
-    this.assertCallerOwnsLiveRequest();
     const timeout = timeoutMs ?? Number.POSITIVE_INFINITY;
-    const result = Atomics.wait(this.i32, REP_STATE_INDEX, STATE_IDLE, timeout);
-    if (result === 'timed-out') throw new RingTimeoutError(timeout, this.headerState());
-    return this.consumeReply();
+    const deadline = waitDeadline(timeout);
+    for (;;) {
+      this.assertCallerOwnsLiveRequest();
+      if (Atomics.load(this.i32, REP_STATE_INDEX) !== STATE_IDLE) return this.consumeReply();
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new RingTimeoutError(timeout, this.headerState());
+      const result = Atomics.wait(this.i32, REP_STATE_INDEX, STATE_IDLE, remaining);
+      if (result === 'timed-out') throw new RingTimeoutError(timeout, this.headerState());
+    }
   }
 
   /** Async sibling of {@link waitReply} — awaitable from any realm via
    * `Atomics.waitAsync`. Not part of the production caller API. */
   async waitReplyAsync(timeoutMs?: number): Promise<Uint8Array> {
-    this.assertCallerOwnsLiveRequest();
     const timeout = timeoutMs ?? Number.POSITIVE_INFINITY;
-    const pending = atomicsWaitAsync(this.i32, REP_STATE_INDEX, STATE_IDLE, timeout);
-    const result = pending.async ? await pending.value : pending.value;
-    if (result === 'timed-out') throw new RingTimeoutError(timeout, this.headerState());
-    return this.consumeReply();
+    const deadline = waitDeadline(timeout);
+    for (;;) {
+      this.assertCallerOwnsLiveRequest();
+      if (Atomics.load(this.i32, REP_STATE_INDEX) !== STATE_IDLE) return this.consumeReply();
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) throw new RingTimeoutError(timeout, this.headerState());
+      const pending = atomicsWaitAsync(this.i32, REP_STATE_INDEX, STATE_IDLE, remaining);
+      const result = pending.async ? await pending.value : pending.value;
+      if (result === 'timed-out') throw new RingTimeoutError(timeout, this.headerState());
+    }
   }
 
   /** Responder-side arm on REQ_STATE (ADR-0084 #17). Waits on the current

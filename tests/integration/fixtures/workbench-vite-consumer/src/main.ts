@@ -1,28 +1,52 @@
-import serviceWorkerUrl from '@riftydev/service-worker/sw?worker&url';
+import { createSandbox } from '@riftydev/sdk';
 import { type PreviewHandle, openWorkbench, projects } from '@riftydev/workbench';
-import devServerWorkerUrl from '@riftydev/workbench/dev-server-worker?worker&url';
-import kernelWorkerUrl from '@riftydev/workbench/kernel-worker?worker&url';
-import nodeWorkerUrl from '@riftydev/workbench/node-worker?worker&url';
-import ownerWorkerUrl from '@riftydev/workbench/owner-worker?worker&url';
 import { openPlaygroundWorkbench } from '@riftydev/workbench/playground';
-import typescriptWorkerUrl from '@riftydev/workbench/typescript-worker?worker&url';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { type SnapshotProof, runSnapshotProof as proveSnapshot } from './snapshot-proof';
+
+import { proveCopiedToolchain } from './copied-worker-proof';
+import { proveSnapshotApplication } from './snapshot-application-proof';
+import { type SnapshotOnlyAcceptance, openSnapshotOnlyAcceptance } from './snapshot-only-proof';
+
+const assetUrl = (name: string): string => new URL(`./rifty/${name}`, document.baseURI).href;
+const quickjsWasmUrl = assetUrl('quickjs.wasm');
+const sqlWasmUrl = assetUrl('sql-wasm.wasm');
+const ownerWorkerUrl = assetUrl('owner-worker.js');
+const kernelWorkerUrl = assetUrl('kernel-worker.js');
+const nodeWorkerUrl = assetUrl('node-worker.js');
+const devServerWorkerUrl = assetUrl('dev-server-worker.js');
+const typescriptWorkerUrl = assetUrl('typescript-worker.js');
+const noCoiToolchainWorkerUrl = assetUrl('no-coi-toolchain-worker.js');
+const serviceWorkerUrl = assetUrl('sw.js');
 
 export interface PackedWorkbenchAcceptance {
   readonly previewUrl: string;
   readonly sqliteProof: string;
   readonly companionLoaded: boolean;
+  readonly sdkLoaded: boolean;
+  readonly noCoiToolchainWorkerUrl: string;
   readonly typescriptWorkerUrl: string;
   readonly hostWasm: {
+    readonly quickjs: string;
     readonly sqlite: string;
   };
   writeMessage(message: string): Promise<void>;
+  runSnapshotProof(assetUrl: string): Promise<SnapshotProof>;
+  proveCopiedAssets(): Promise<void>;
+  proveSnapshotApplication(assetUrl: string): Promise<void>;
   close(): Promise<void>;
+}
+
+interface PackedWorkbenchDiagnostics {
+  stage: string;
+  terminalOutput: string;
+  sqliteOutput: string;
 }
 
 declare global {
   interface Window {
     __RIFTY_PACKED_WORKBENCH__: Promise<PackedWorkbenchAcceptance>;
+    __RIFTY_PACKED_SNAPSHOT_ONLY__: Promise<SnapshotOnlyAcceptance>;
+    __RIFTY_PACKED_WORKBENCH_DIAGNOSTICS__: PackedWorkbenchDiagnostics;
   }
 }
 
@@ -37,6 +61,12 @@ function requiredElement<T extends Element>(selector: string): T {
 const status = requiredElement<HTMLParagraphElement>('#status');
 const previewLink = requiredElement<HTMLAnchorElement>('#preview-link');
 const previewFrame = requiredElement<HTMLIFrameElement>('#preview');
+const diagnostics: PackedWorkbenchDiagnostics = {
+  stage: 'opening Workbench',
+  terminalOutput: '',
+  sqliteOutput: '',
+};
+window.__RIFTY_PACKED_WORKBENCH_DIAGNOSTICS__ = diagnostics;
 
 const projectMain = `
 import { message } from './message.ts'
@@ -60,14 +90,15 @@ console.log('packed-sqlite-' + row.answer)
 db.close()
 `;
 
-async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
-  const workbench = await openWorkbench({
+function workbenchOptions() {
+  return {
     deployment: {
       workers: {
         owner: ownerWorkerUrl,
         kernel: kernelWorkerUrl,
         node: nodeWorkerUrl,
         devServer: devServerWorkerUrl,
+        typescript: typescriptWorkerUrl,
       },
       serviceWorker: { url: serviceWorkerUrl, scope: '/' },
       wasm: { sqlite: sqlWasmUrl },
@@ -76,8 +107,13 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     packageAcquisition: {
       registryUrl: new URL('/npm-registry/', globalThis.location.href).href,
     },
-    storage: { persistence: 'ephemeral' },
-  });
+    storage: { persistence: 'ephemeral' as const },
+  };
+}
+
+async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
+  const workbench = await openWorkbench(workbenchOptions());
+  diagnostics.stage = 'opening project';
   const project = await workbench.openProject(
     projects.vite({
       id: 'packed-vite-consumer',
@@ -91,11 +127,14 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
       },
     }),
   );
+  diagnostics.stage = 'starting project';
   const run = project.run();
   let terminalOutput = '';
   const detachTerminal = run.terminal.attach((chunk, stream) => {
     terminalOutput += `[${stream}] ${chunk}`;
+    diagnostics.terminalOutput = terminalOutput;
   });
+  diagnostics.stage = 'waiting for preview';
   let preview: PreviewHandle;
   try {
     preview = await run.ready;
@@ -108,15 +147,20 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     detachTerminal();
   }
 
+  diagnostics.stage = 'running sqlite proof';
   const sqliteTerminal = project.terminals.open();
   let sqliteOutput = '';
   const detachSqlite = sqliteTerminal.attach((chunk) => {
     sqliteOutput += chunk;
+    diagnostics.sqliteOutput = sqliteOutput;
   });
   try {
     const sqliteRun = sqliteTerminal.run('node sqlite-proof.cjs');
+    diagnostics.stage = 'waiting for sqlite exit';
     const exited = await sqliteRun.exited;
+    diagnostics.stage = 'closing sqlite run';
     const closed = await sqliteRun.close();
+    diagnostics.stage = 'validating sqlite proof';
     if (
       exited.code !== 0 ||
       exited.signal !== null ||
@@ -134,6 +178,7 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
   }
 
   status.textContent = 'ready';
+  diagnostics.stage = 'ready';
   previewLink.href = preview.url;
   previewLink.textContent = preview.url;
   previewFrame.src = preview.url;
@@ -142,8 +187,19 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
     previewUrl: preview.url,
     sqliteProof: sqliteOutput,
     companionLoaded: typeof openPlaygroundWorkbench === 'function',
+    sdkLoaded: typeof createSandbox === 'function',
+    noCoiToolchainWorkerUrl,
     typescriptWorkerUrl,
-    hostWasm: Object.freeze({ sqlite: sqlWasmUrl }),
+    hostWasm: Object.freeze({ quickjs: quickjsWasmUrl, sqlite: sqlWasmUrl }),
+    proveCopiedAssets(): Promise<void> {
+      return proveCopiedToolchain(noCoiToolchainWorkerUrl);
+    },
+    proveSnapshotApplication(assetUrl: string): Promise<void> {
+      return proveSnapshotApplication(workbenchOptions(), assetUrl);
+    },
+    runSnapshotProof(assetUrl: string): Promise<SnapshotProof> {
+      return proveSnapshot(workbenchOptions(), assetUrl);
+    },
     async writeMessage(message: string): Promise<void> {
       const current = await project.files.readFile('/src/message.ts');
       await project.files.writeFile(
@@ -160,9 +216,26 @@ async function openAcceptance(): Promise<PackedWorkbenchAcceptance> {
   });
 }
 
-const acceptance = openAcceptance().catch((error: unknown) => {
-  status.textContent = error instanceof Error ? error.message : String(error);
-  throw error;
-});
-void acceptance.catch(() => {});
-window.__RIFTY_PACKED_WORKBENCH__ = acceptance;
+if (new URL(location.href).searchParams.has('snapshot-only')) {
+  const options = workbenchOptions();
+  const { wasm: _wasm, ...deployment } = options.deployment;
+  const strict = openSnapshotOnlyAcceptance({ ...options, deployment })
+    .then((opened) => {
+      previewFrame.src = opened.previewUrl;
+      status.textContent = 'ready';
+      return opened;
+    })
+    .catch((error: unknown) => {
+      status.textContent = error instanceof Error ? error.message : String(error);
+      throw error;
+    });
+  void strict.catch(() => {});
+  window.__RIFTY_PACKED_SNAPSHOT_ONLY__ = strict;
+} else {
+  const acceptance = openAcceptance().catch((error: unknown) => {
+    status.textContent = error instanceof Error ? error.message : String(error);
+    throw error;
+  });
+  void acceptance.catch(() => {});
+  window.__RIFTY_PACKED_WORKBENCH__ = acceptance;
+}

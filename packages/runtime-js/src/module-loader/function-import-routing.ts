@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { rewriteDirectEvalImportArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 
 type DynamicImport = (specifier: unknown) => Promise<Record<string, unknown>>;
@@ -160,19 +161,31 @@ function rewriteConstructedSource(
   const objectMethodAliases = createObjectMethodAliases();
   const functionDescriptorAliases = new Set<string>();
   const functionDescriptorMapAliases = new Set<string>();
+  const evalBindings = new Set<string>();
+  if (params.some((param) => /\beval\b/.test(param))) evalBindings.add('eval');
   let hasDynamicScope = false;
   let evalMayImport = false;
   let nestedFunctionMayImport = false;
   let nestedDerivedFunctionMayImport = false;
-  const walk = (node: unknown): void => {
+  const walk = (node: unknown, functionDepth = 0): void => {
     if (!node || typeof node !== 'object') return;
     const n = node as AnyNodeShape;
     if (typeof n.type !== 'string') return;
+    const childFunctionDepth =
+      n.type === 'FunctionDeclaration' ||
+      n.type === 'FunctionExpression' ||
+      n.type === 'ArrowFunctionExpression'
+        ? functionDepth + 1
+        : functionDepth;
+    if (n.type === 'CatchClause') {
+      collectPatternBindingNames((n as unknown as { param?: unknown }).param, evalBindings);
+    }
     if (n.type === 'WithStatement') {
       hasDynamicScope = true;
     }
     if (n.type === 'VariableDeclarator') {
       const decl = n as unknown as { id?: AnyNodeShape; init?: unknown };
+      collectPatternBindingNames(decl.id, evalBindings);
       if (decl.id?.type === 'Identifier') {
         const name = (decl.id as unknown as { name?: string }).name;
         if (
@@ -460,10 +473,29 @@ function rewriteConstructedSource(
       );
     }
     if (n.type === 'CallExpression') {
-      const call = n as unknown as { callee?: unknown; arguments?: unknown[] };
+      const call = n as unknown as {
+        callee?: AnyNodeShape;
+        arguments?: unknown[];
+        optional?: boolean;
+      };
+      const isDirectEval =
+        functionDepth === 1 &&
+        call.optional !== true &&
+        call.callee?.type === 'Identifier' &&
+        (call.callee as unknown as { name?: string }).name === 'eval' &&
+        !evalBindings.has('eval');
+      const directEvalImportReplacement = isDirectEval
+        ? rewriteDirectEvalImportArgument(call.arguments?.[0], helperName)
+        : null;
+      if (directEvalImportReplacement !== null) {
+        const argument = call.arguments?.[0] as AnyNodeShape;
+        edits.push({ start: argument.start, end: argument.end, text: directEvalImportReplacement });
+      }
       if (calleeMayBeEval(call.callee, evalAliases, reflectAliases, reflectMethodAliases)) {
-        hasDynamicScope = true;
-        evalMayImport = evalMayImport || evalArgumentMayTouchImport(call.arguments?.[0]);
+        hasDynamicScope = hasDynamicScope || directEvalImportReplacement === null;
+        evalMayImport =
+          evalMayImport ||
+          (directEvalImportReplacement === null && evalArgumentMayTouchImport(call.arguments?.[0]));
       }
       if (
         callMayInvokeFunctionConstructor(
@@ -557,8 +589,8 @@ function rewriteConstructedSource(
         end: ie.start + 'import'.length,
         text: helperName,
       });
-      walk(ie.source);
-      if (ie.options) walk(ie.options);
+      walk(ie.source, functionDepth);
+      if (ie.options) walk(ie.options, functionDepth);
       return;
     }
     for (const key of Object.keys(n)) {
@@ -568,9 +600,9 @@ function rewriteConstructedSource(
       const value = n[key];
       if (!value) continue;
       if (Array.isArray(value)) {
-        for (const item of value) walk(item);
+        for (const item of value) walk(item, childFunctionDepth);
       } else if (typeof value === 'object') {
-        walk(value);
+        walk(value, childFunctionDepth);
       }
     }
   };
@@ -657,26 +689,22 @@ function createReflectMethodAliases(): ReflectMethodAliases {
     getOwnPropertyDescriptor: new Set<string>(),
   };
 }
-
 function createObjectMethodAliases(): ObjectMethodAliases {
   return {
     getOwnPropertyDescriptor: new Set<string>(),
     getOwnPropertyDescriptors: new Set<string>(),
   };
 }
-
 function deleteReflectMethodAlias(aliases: ReflectMethodAliases, name: string): void {
   aliases.apply.delete(name);
   aliases.construct.delete(name);
   aliases.get.delete(name);
   aliases.getOwnPropertyDescriptor.delete(name);
 }
-
 function deleteObjectMethodAlias(aliases: ObjectMethodAliases, name: string): void {
   aliases.getOwnPropertyDescriptor.delete(name);
   aliases.getOwnPropertyDescriptors.delete(name);
 }
-
 function addReflectMethodAlias(
   aliases: ReflectMethodAliases,
   method: ReflectMethodName,
@@ -685,7 +713,6 @@ function addReflectMethodAlias(
   deleteReflectMethodAlias(aliases, name);
   aliases[method].add(name);
 }
-
 function addObjectMethodAlias(
   aliases: ObjectMethodAliases,
   method: ObjectMethodName,
@@ -694,7 +721,6 @@ function addObjectMethodAlias(
   deleteObjectMethodAlias(aliases, name);
   aliases[method].add(name);
 }
-
 function collectReflectMethodAliasesFromPattern(
   pattern: unknown,
   value: unknown,
@@ -784,7 +810,6 @@ function collectReflectMethodAliasesFromPattern(
     );
   }
 }
-
 function collectObjectAliasesFromPattern(
   pattern: unknown,
   value: unknown,
@@ -838,7 +863,6 @@ function collectObjectAliasesFromPattern(
     collectObjectAliasesFromPattern(pat.left, value === undefined ? pat.right : value, aliases);
   }
 }
-
 function collectObjectMethodAliasesFromPattern(
   pattern: unknown,
   value: unknown,
@@ -921,7 +945,6 @@ function collectObjectMethodAliasesFromPattern(
     );
   }
 }
-
 function collectDerivedFunctionAliasesFromPattern(
   pattern: unknown,
   value: unknown,
@@ -1078,7 +1101,6 @@ function collectDerivedFunctionAliasesFromPattern(
     );
   }
 }
-
 function collectFunctionConstructorDescriptorAliasesFromPattern(
   pattern: unknown,
   value: unknown,
@@ -1221,7 +1243,6 @@ function collectFunctionConstructorDescriptorAliasesFromPattern(
     );
   }
 }
-
 function collectFunctionConstructorDescriptorMapAliasesFromPattern(
   pattern: unknown,
   value: unknown,
@@ -1339,7 +1360,6 @@ function collectFunctionConstructorDescriptorMapAliasesFromPattern(
     );
   }
 }
-
 function collectFunctionConstructorDescriptorPattern(
   pattern: unknown,
   descriptorAliases: Set<string>,
@@ -1378,7 +1398,6 @@ function collectFunctionConstructorDescriptorPattern(
     );
   }
 }
-
 function collectFunctionAliasesFromPattern(
   pattern: unknown,
   value: unknown,
@@ -1465,7 +1484,6 @@ function collectFunctionAliasesFromPattern(
     );
   }
 }
-
 function collectEvalAliasesFromPattern(
   pattern: unknown,
   value: unknown,
@@ -1569,7 +1587,6 @@ function collectEvalAliasesFromPattern(
     );
   }
 }
-
 function collectPatternBindingNames(pattern: unknown, out: Set<string>): void {
   if (!pattern || typeof pattern !== 'object') return;
   const pat = pattern as AnyNodeShape;
@@ -1593,7 +1610,6 @@ function collectPatternBindingNames(pattern: unknown, out: Set<string>): void {
   if (pat.type === 'RestElement') collectPatternBindingNames(pat.argument, out);
   if (pat.type === 'AssignmentPattern') collectPatternBindingNames(pat.left, out);
 }
-
 function expressionMayBeEval(node: unknown, aliases: ReadonlySet<string>): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = unwrapChain(node) as AnyNodeShape;
@@ -1606,7 +1622,6 @@ function expressionMayBeEval(node: unknown, aliases: ReadonlySet<string>): boole
   const member = n as unknown as { object?: unknown };
   return memberPropertyMayBeEval(n) && isKnownGlobalObjectExpression(member.object);
 }
-
 function expressionMayBeGlobalEval(
   node: unknown,
   evalAliases: ReadonlySet<string>,
@@ -1621,7 +1636,6 @@ function expressionMayBeGlobalEval(
     isReflectGetGlobalEvalCall(n, reflectAliases, reflectMethodAliases)
   );
 }
-
 function expressionMayBeFunctionConstructor(node: unknown, aliases: ReadonlySet<string>): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = unwrapChain(node) as AnyNodeShape;
@@ -1634,7 +1648,6 @@ function expressionMayBeFunctionConstructor(node: unknown, aliases: ReadonlySet<
   const member = n as unknown as { object?: unknown };
   return memberPropertyMayBeFunction(n) && isKnownGlobalObjectExpression(member.object);
 }
-
 function expressionMayBeGlobalFunctionConstructor(
   node: unknown,
   functionAliases: ReadonlySet<string>,
@@ -1649,7 +1662,6 @@ function expressionMayBeGlobalFunctionConstructor(
     isReflectGetGlobalFunctionCall(n, reflectAliases, reflectMethodAliases)
   );
 }
-
 function expressionMayBeReflect(node: unknown, aliases: ReadonlySet<string>): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = unwrapChain(node) as AnyNodeShape;
@@ -1657,7 +1669,6 @@ function expressionMayBeReflect(node: unknown, aliases: ReadonlySet<string>): bo
   const name = (n as unknown as { name?: string }).name;
   return name === 'Reflect' || (typeof name === 'string' && aliases.has(name));
 }
-
 function expressionMayBeObject(node: unknown, aliases: ReadonlySet<string>): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = unwrapChain(node) as AnyNodeShape;
@@ -1665,7 +1676,6 @@ function expressionMayBeObject(node: unknown, aliases: ReadonlySet<string>): boo
   const name = (n as unknown as { name?: string }).name;
   return name === 'Object' || (typeof name === 'string' && aliases.has(name));
 }
-
 function reflectMethodName(
   node: unknown,
   reflectAliases: ReadonlySet<string>,
@@ -1683,7 +1693,6 @@ function reflectMethodName(
     ? method
     : null;
 }
-
 function objectMethodName(
   node: unknown,
   objectAliases: ReadonlySet<string>,
@@ -1698,7 +1707,6 @@ function objectMethodName(
     ? method
     : null;
 }
-
 function callMayInvokeFunctionConstructor(
   callee: unknown,
   args: readonly unknown[],
@@ -1735,7 +1743,6 @@ function callMayInvokeFunctionConstructor(
   if (propertyName === 'bind') return functionConstructorArgsMayTouchImport(args.slice(1));
   return false;
 }
-
 function functionConstructorBindArgs(
   node: AnyNodeShape,
   aliases: ReadonlySet<string>,
@@ -1761,7 +1768,6 @@ function functionConstructorBindArgs(
   if (staticPropertyName(callee) !== 'bind') return null;
   return (call.arguments ?? []).slice(1);
 }
-
 function isReflectFunctionConstructorCall(
   callee: AnyNodeShape,
   args: readonly unknown[],
@@ -1790,7 +1796,6 @@ function isReflectFunctionConstructorCall(
   }
   return constructorArgArrayMayTouchImport(args[1]);
 }
-
 function expressionMayBeDerivedFunctionConstructor(
   node: unknown,
   aliases: ReadonlySet<string>,
@@ -1833,7 +1838,6 @@ function expressionMayBeDerivedFunctionConstructor(
   if (isKnownGlobalObjectExpression(member.object)) return false;
   return memberPropertyMayBeConstructor(n);
 }
-
 function calleeMayBeDerivedFunctionConstructor(
   node: unknown,
   aliases: ReadonlySet<string>,
@@ -1880,7 +1884,6 @@ function calleeMayBeDerivedFunctionConstructor(
   const propertyName = staticPropertyName(n);
   return propertyName === 'call' || propertyName === 'apply' || propertyName === 'bind';
 }
-
 function isReflectGetDerivedFunctionConstructorCall(
   node: AnyNodeShape,
   aliases: ReadonlySet<string>,
@@ -1896,7 +1899,6 @@ function isReflectGetDerivedFunctionConstructorCall(
     propertyMayBeConstructor(args[1]) && expressionMayHaveFunctionConstructor(args[0], aliases)
   );
 }
-
 function expressionMayBeFunctionConstructorDescriptor(
   node: unknown,
   aliases: ReadonlySet<string>,
@@ -1944,7 +1946,6 @@ function expressionMayBeFunctionConstructorDescriptor(
     )
   );
 }
-
 function isOwnPropertyDescriptorConstructorCall(
   node: AnyNodeShape,
   aliases: ReadonlySet<string>,
@@ -1989,7 +1990,6 @@ function isOwnPropertyDescriptorConstructorCall(
     )
   );
 }
-
 function expressionMayBeFunctionConstructorDescriptorMap(
   node: unknown,
   aliases: ReadonlySet<string>,
@@ -2281,17 +2281,17 @@ function evalArgumentMayTouchImport(node: unknown): boolean {
 
 function functionConstructorArgsMayTouchImport(args: readonly unknown[]): boolean {
   if (args.length === 0) return false;
-  const sourceParts: string[] = [];
-  for (const arg of args) {
-    const source = literalString(arg);
-    if (source === undefined) return true;
-    sourceParts.push(source);
-  }
-  if (!sourceParts.some((part) => importToken.test(part) || dynamicScopeToken.test(part))) {
+  const sourceParts = args.map(literalString);
+  const staticSources = sourceParts.filter((source): source is string => source !== undefined);
+  if (!staticSources.some((source) => importToken.test(source) || dynamicScopeToken.test(source))) {
     return false;
   }
+  const params = sourceParts
+    .slice(0, -1)
+    .map(
+      (source, index) => source ?? uniqueHelperName(staticSources, `__riftyOpaqueParam${index}`),
+    );
   const body = sourceParts[sourceParts.length - 1] ?? '';
-  const params = sourceParts.slice(0, -1);
   const wrapped = `function anonymous(${params.join(',')}) {\n${body}\n}`;
   try {
     const program = acornParse(wrapped, {
@@ -2302,14 +2302,14 @@ function functionConstructorArgsMayTouchImport(args: readonly unknown[]): boolea
     }) as Program;
     return sourceContainsImportOrEval(program);
   } catch {
-    return importToken.test(wrapped);
+    return importToken.test(wrapped) || dynamicScopeToken.test(wrapped);
   }
 }
 
 function constructorArgArrayMayTouchImport(node: unknown): boolean {
-  if (!node || typeof node !== 'object') return true;
+  if (!node || typeof node !== 'object') return false;
   const n = unwrapChain(node) as AnyNodeShape;
-  if (n.type !== 'ArrayExpression') return true;
+  if (n.type !== 'ArrayExpression') return false;
   const elements = (n as unknown as { elements?: unknown[] }).elements ?? [];
   return functionConstructorArgsMayTouchImport(elements);
 }

@@ -60,7 +60,7 @@ function adapter(
   installGate?: Promise<void>,
 ): PackageAcquisitionAdapter {
   return {
-    readTrustedPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
+    readPackageLock: async () => ({ lockfileVersion: 3, packages: {} }),
     attestEmptyPackageTree: async () => true,
     planSnapshotRestore: async () => ({ status: 'rejected', reason: 'not requested' }),
     install: async () => {

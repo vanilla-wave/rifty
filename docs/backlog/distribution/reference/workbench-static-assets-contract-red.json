@@ -1,0 +1,138 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS: advance this I2 unit to implementation. Keep PR #316 in progress; no asset implementation or whole-goal merge is certified.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/workbench-static-assets.md:14-58 at clean HEAD d25162b5afeeeafa8e77b6d3d212eaa3f5ab34cf; BASE c798a8e84a6d1489c89aeefe3788ceda7d0570e5 (accepted producer slice). Authority: docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:33, I2 at :77; ADR-0390:15-32, ADR-0352 corrected static bootstrap/proof contract, ADR-0381 lexical lazy compiler, ADR-0282 sealed custom entries. Fresh read-only reviewer assets_red_review read full AGENTS, rifty-review skill/review canon, raw diff and changed criteria at BASE. Independently read raw PR #316 title/body through gh pr view after a read-only network retry; copied runtime assets and same-PR packaging match the accepted goal. Goal document unchanged; new stable layout/build choices are attributed to ADR-0390, not invented user decisions. Existing no-COI worker probe exercises an existing exported entry/compiler with public SDK APIs and adds no SDK policy. Earlier producer bookkeeping and retained-acquisition test are accepted-slice carriers, not new asset obligations. Host main/config now use ordinary static URLs without Worker query imports, alias configuration or a bootstrap wrapper; the unused legacy wrapper/alias files remain exact prior-criterion carriers until implementation moves ownership. Existing browser Vite7.3.6 preview/native HMR, SQLite, raw/HTTP-decoded producer snapshot and network assertions remain unchanged. Independently executed pnpm test:packed-consumer at reviewed HEAD: expected exit1 after real package builds, packing, offline tarball install and successful consumer typecheck; AssertionError 'packed Workbench contains copyable runtime assets' at copy-assets.mjs:7, Node v24.16.0/Vitest2.1.9, duration65.77s; /tmp/rifty-316-assets-review-red.log. This reproduces supplied /tmp/rifty-316-assets-red.log and fails on the missing artifact, not an import/typecheck failure. Independently executed pnpm exec vitest run tests/integration/workbench-packed-consumer-contract.test.ts tests/integration/client-compiler-loading.test.ts packages/workbench/src/workers/kernel-worker-entry.test.ts packages/workbench/src/glue/dep-snapshot-producer.test.ts:25/25 GREEN, four files, /tmp/rifty-316-assets-review-carriers.log. Full browser GREEN and package-owned emitted-closure implementation remain the next stage. No tracked edits; clean HEAD rechecked. Evidence correction by the same independent reviewer (checkpoint-run Reception3): the original copied-worker-proof.ts:10 incorrectly required EvalResult.value===42. Raw BASE worker-entry.ts:84-88 executes the program, posts its completion value to stdout, and always returns value:undefined on success; BASE tests/integration/no-coi-vm-browser-proof.mjs:64-72 already observes stdout plus result.ok. The later real execution /tmp/rifty-316-assets-green-2.log:124-128 reaches both producer restores and then falsely rejects {id:1,ok:true}. I missed that carrier oracle mistake in this preparation review. Independently approve correcting only the observation: subscribe to stdout before eval, execute console.log(require('node:vm').runInNewContext('40 + 2')); void 0, require result.ok and exact stdout '42\\n', and retain disposal/failure propagation. This preserves actual VM/compiler execution and result discrimination; it changes no runtime policy. The original executed missing-assets RED remains valid. Corrected copied-worker browser GREEN has not yet run at this correction; no current implementation is certified.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:77",
+      "summary": "Current unit has accepted promise/RED only; copyable assets, emitted closure validation and real copied-asset browser GREEN remain to implement and independently review."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:80",
+      "summary": "Registry-free snapshot-only acquisition remains in distribution/workbench-snapshot-only."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:85",
+      "summary": "Selected OPFS namespace and former-project reopening remain in vfs/workbench-storage-namespace."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:88",
+      "summary": "Scoped preview, assets and HMR remain in service-worker/workbench-preview-prefix."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:91",
+      "summary": "Retained orphan downloads and fresh Scratch remain in playground/orphan-scratch-recovery."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:94",
+      "summary": "Effective configurable budgets and composed whole-goal proof remain in distribution/workbench-operation-budgets."
+    },
+    {
+      "clause": "I8",
+      "location": "docs/backlog/epics/self-hosted-snapshot-workbench/goal.md:98",
+      "summary": "Saved-state priority and explicit generic overwrite/error remain in distribution/workbench-snapshot-application-policy."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: published ready Worker/SW/WASM closure copied whole; host requires no worker compilation, builtin aliases or QuickJS wrapper; existing custom entries remain.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:6; tests/integration/fixtures/workbench-vite-consumer/src/main.ts:8; tests/integration/fixtures/workbench-vite-consumer/vite.config.ts:24; tests/integration/workbench-packed-consumer.mjs:1293; packages/workbench/tests/package-surface.contract.test.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: real fresh packed consumer boots copied assets, runs Vite7.3.6 preview/native HMR, SQLite and public producer snapshot restore with ordinary host-app compilation.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.test.ts:17; tests/integration/workbench-packed-consumer.mjs:1093; tests/integration/workbench-packed-consumer.mjs:1121; tests/integration/workbench-packed-consumer.mjs:1153; tests/integration/workbench-packed-consumer.mjs:1207; tests/integration/fixtures/workbench-vite-consumer/package.json:8",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: synchronous QuickJS sibling URL bootstrap before init; complete lazy QuickJS/compiler modules with existing lexical compiler boundary.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer-contract.test.ts:144; tests/integration/client-compiler-loading.test.ts:111; tests/integration/fixtures/workbench-vite-consumer/src/copied-worker-proof.ts:3; tests/integration/workbench-packed-consumer.mjs:1124; tests/integration/workbench-packed-consumer.mjs:1224",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix 1: missing/external asset edges cannot leave a supposedly usable copied runtime depending on consumer aliases or a CDN.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:7; tests/integration/workbench-packed-consumer.mjs:1040; tests/integration/workbench-packed-consumer.mjs:1228; tests/integration/fixtures/workbench-vite-consumer/src/copied-worker-proof.ts:10",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix 2: Worker/WASM acquisition or bootstrap failure rejects through existing owner readiness without fake success or another runtime.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1064; tests/integration/workbench-packed-consumer.mjs:1090; packages/workbench/src/workbench/workbench-owner-port.test.ts:137; packages/workbench/src/workbench/workbench-owner-port.test.ts:235; packages/workbench/src/workbench/workbench-owner-port.test.ts:319",
+      "note": ""
+    },
+    {
+      "row": "ADR-0390 published static surface: stable six Worker entries, SW and two WASM siblings under dist/assets, located relative to the published Workbench root and copied as one build.",
+      "source": "public-api",
+      "trace": "ADR-0390+I2",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:6; tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:8; tests/integration/fixtures/workbench-vite-consumer/copy-assets.mjs:22; tests/integration/fixtures/workbench-vite-consumer/src/main.ts:8",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "d25162b5afeeeafa8e77b6d3d212eaa3f5ab34cf"
+}

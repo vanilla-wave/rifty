@@ -1,6 +1,7 @@
 import type {
   NodeCliPlaygroundPlan,
   NodeServerPlaygroundPlan,
+  NpmDevServerPlaygroundPlan,
   PlaygroundFirstMaterialization,
   PlaygroundProjectPlan,
   VitePlaygroundPlan,
@@ -81,6 +82,12 @@ export function toPlaygroundProjectPlan(input: PlaygroundProjectPlanInput): Play
       entryPath: spec.entry.relativePath,
       port: spec.defaultPort,
     }) satisfies NodeServerPlaygroundPlan;
+  }
+  if (spec.runtime === 'npm-dev-server') {
+    return Object.freeze({
+      ...common,
+      kind: 'npm-dev-server',
+    }) satisfies NpmDevServerPlaygroundPlan;
   }
   return Object.freeze({
     ...common,

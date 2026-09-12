@@ -45,6 +45,15 @@ describe('installSharedMemoryTolerantTextDecoder (unconditional shared-buffer co
     expect(new Dec().decode(sharedBytes)).toBe('hello');
   });
 
+  it('copies only the addressed bytes of a shared-backed subview', () => {
+    const Dec = makeRejectingDecoder();
+    const sharedBytes = new Uint8Array(new SharedArrayBuffer(7));
+    sharedBytes.set([120, 104, 101, 108, 108, 111, 121]); // "xhelloy"
+    installSharedMemoryTolerantTextDecoder(Dec);
+
+    expect(new Dec().decode(sharedBytes.subarray(1, 6))).toBe('hello');
+  });
+
   it('passes a non-shared view straight through (no needless copy semantics change)', () => {
     const Dec = makeRejectingDecoder();
     installSharedMemoryTolerantTextDecoder(Dec);
@@ -55,7 +64,13 @@ describe('installSharedMemoryTolerantTextDecoder (unconditional shared-buffer co
   it('is idempotent — a second install on the same decoder is a no-op', () => {
     const Dec = makeRejectingDecoder();
     expect(installSharedMemoryTolerantTextDecoder(Dec)).toBe(true);
+    const patched = Dec.prototype.decode;
     expect(installSharedMemoryTolerantTextDecoder(Dec)).toBe(false);
+    expect(Dec.prototype.decode).toBe(patched);
+
+    const sharedBytes = new Uint8Array(new SharedArrayBuffer(2));
+    sharedBytes.set([111, 107]);
+    expect(new Dec().decode(sharedBytes)).toBe('ok');
   });
 });
 

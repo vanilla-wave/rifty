@@ -37,6 +37,7 @@ const STATE_HANDLING = 2;
 const successorPublicationGate =
   successorPublicationGateSab === undefined ? null : new Int32Array(successorPublicationGateSab);
 let probeSuccessorPublication = successorPublicationGate !== null;
+let replySequence = 0;
 
 parentPort.postMessage({ type: 'ready' });
 
@@ -66,6 +67,7 @@ for (;;) {
     Atomics.store(i32, VERSION_INDEX, protocolVersion ?? reqVersion);
     Atomics.store(i32, REP_STATE_INDEX, 1);
     Atomics.notify(i32, REP_STATE_INDEX);
+    parentPort.postMessage({ type: 'reply-published', sequence: replySequence++ });
     Atomics.wait(i32, REQ_STATE_INDEX, STATE_HANDLING);
     if (Atomics.load(i32, REQ_STATE_INDEX) !== STATE_IDLE) {
       throw new Error('sab-ring-echo: caller did not release HANDLING to IDLE');
@@ -80,9 +82,9 @@ for (;;) {
   Atomics.store(i32, VERSION_INDEX, protocolVersion ?? reqVersion);
   Atomics.store(i32, REP_STATE_INDEX, 1);
   Atomics.notify(i32, REP_STATE_INDEX);
+  parentPort.postMessage({ type: 'reply-published', sequence: replySequence++ });
   if (probeSuccessorPublication) {
     probeSuccessorPublication = false;
-    parentPort.postMessage({ type: 'reply-published' });
     Atomics.wait(successorPublicationGate, 0, STATE_IDLE);
   }
 }

@@ -2,7 +2,32 @@
 
 ## [Unreleased]
 
+- Expose EROFS for host-configured readonly project files; runtime Node errors retain errno -30.
+- Accept optional native-root/persistence boot configuration; share literal namespace validation with Workbench (ADR-0419).
+
+- Preserve selected roots and operation budgets through strict single-pass preload; acquired-tree failures remain distinct from unavailable roots (ADR-0411).
+
+### Added
+
+- OPFS paired installation accepts a captured per-instance IO report timeout; omission keeps30s, timeout retains native lanes/path fences and late completion heals without resend (ADR-0410).
+
+- OPFS initialization accepts a captured native root; paired installation uses the same handle for both surfaces. Conflicting async re-init rejects; omission preserves origin storage (ADR-0402).
+
 ### Fixed
+
+- Refuse sync read/copy of indexed OPFS files without acquired content; genuine empty files remain valid. Native read failure cannot silently persist an empty replacement (ADR-0406).
+- Expose scheduler/ledger-backed persistence eligibility for installer-only equality checks; pending and failed ancestors remain ineligible.
+
+- OPFS boot uses one native traversal and shared root; concurrent initialization
+  shares one retryable acquisition. Unreadable preload rejects; uncached sync
+  read/copy throws EIO instead of fabricating empty bytes (ADR-0393).
+
+- **Dedicated Workers select OPFS from sync-access-handle capability, not
+  COI (ADR-0372).** `detectVfsBackend()` now uses
+  `OpfsFsSync.isSupported()` as the paired-backend authority. Capable
+  headerless Chromium Workers therefore persist exact bytes across reload;
+  Node, main-window and missing-sync-handle realms stay memory, while OPFS
+  permission/init failures remain loud.
 
 - **Chromium `.crswap` atomic-swap temps no longer leak through the OPFS
   read surface (torn-state × Storage; born as the opfs-parallel-drain-kill

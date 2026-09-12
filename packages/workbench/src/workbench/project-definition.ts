@@ -1,12 +1,11 @@
 import { serializePackageJson } from '@riftydev/npm-client';
+import { preparePackageManifest } from '@riftydev/shadow-registry/runtime';
 import { nodeProjectRootShellCommand } from './internal/node-command.ts';
 import { defineOwnEnumerableProperty } from './internal/own-property.ts';
 import {
   DEFAULT_VITE8_CONFIG_JS,
   DEFAULT_VITE8_CONFIG_PATH,
   DEFAULT_VITE8_VERSION,
-  VITE8_WASI_RUNTIME_OVERRIDE,
-  VITE8_WASI_RUNTIME_OVERRIDE_NAME,
   VITE_CONFIG_FILENAMES,
 } from './internal/vite-project-policy.ts';
 import type { PreviewHandle } from './preview-readiness.ts';
@@ -24,6 +23,13 @@ export interface ViteProjectDefinitionOptions {
   readonly dependencies?: Readonly<Record<string, string>>;
   readonly devDependencies?: Readonly<Record<string, string>>;
   readonly viteVersion?: string;
+}
+
+export interface NpmDevServerProjectDefinitionOptions {
+  readonly id: string;
+  readonly files: Readonly<Record<string, string | Uint8Array>>;
+  readonly dependencies?: Readonly<Record<string, string>>;
+  readonly devDependencies?: Readonly<Record<string, string>>;
 }
 
 interface NodeProjectDefinitionOptions {
@@ -53,6 +59,10 @@ interface ViteProjectDefinitionData extends ProjectDefinitionBase {
   readonly kind: 'vite';
 }
 
+interface NpmDevServerProjectDefinitionData extends ProjectDefinitionBase {
+  readonly kind: 'npm-dev-server';
+}
+
 interface NodeServerProjectDefinitionData extends ProjectDefinitionBase {
   readonly kind: 'node-server';
   readonly entryPath: string;
@@ -67,6 +77,7 @@ interface NodeCliProjectDefinitionData extends ProjectDefinitionBase {
 
 type ProjectDefinitionData =
   | ViteProjectDefinitionData
+  | NpmDevServerProjectDefinitionData
   | NodeServerProjectDefinitionData
   | NodeCliProjectDefinitionData;
 
@@ -79,6 +90,10 @@ interface ProjectDefinitionWireBase {
 
 interface ViteProjectDefinitionWire extends ProjectDefinitionWireBase {
   readonly kind: 'vite';
+}
+
+interface NpmDevServerProjectDefinitionWire extends ProjectDefinitionWireBase {
+  readonly kind: 'npm-dev-server';
 }
 
 interface NodeServerProjectDefinitionWire extends ProjectDefinitionWireBase {
@@ -96,6 +111,7 @@ interface NodeCliProjectDefinitionWire extends ProjectDefinitionWireBase {
 /** Package-internal structured-clone payload; never part of the public root. */
 export type ProjectDefinitionWire =
   | ViteProjectDefinitionWire
+  | NpmDevServerProjectDefinitionWire
   | NodeServerProjectDefinitionWire
   | NodeCliProjectDefinitionWire;
 
@@ -227,6 +243,51 @@ function parseManifest(files: Record<string, Uint8Array>): Record<string, unknow
   return parsed;
 }
 
+function sameStringMap(
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>,
+): boolean {
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key, index) => key === rightKeys[index] && left[key] === right[key])
+  );
+}
+
+function assertManifestDependencyMap(
+  manifest: Record<string, unknown>,
+  field: 'dependencies' | 'devDependencies',
+  supplied: Readonly<Record<string, string>> | undefined,
+): void {
+  if (supplied === undefined) return;
+  const expected = dependencyMap(supplied, `Project ${field}`) ?? {};
+  const actual = dependencyMap(manifest[field], `package.json ${field}`);
+  if (actual === undefined || !sameStringMap(actual, expected)) {
+    throw new TypeError(`Project ${field} must exactly match package.json ${field}`);
+  }
+}
+
+function assertNpmDevServerManifest(
+  files: Record<string, Uint8Array>,
+  options?: Pick<NpmDevServerProjectDefinitionOptions, 'dependencies' | 'devDependencies'>,
+): void {
+  if (files['/package.json'] === undefined) {
+    throw new TypeError('npm dev-server project requires /package.json');
+  }
+  const manifest = parseManifest(files);
+  if (!isRecord(manifest.scripts)) {
+    throw new TypeError('npm dev-server package.json scripts must be an object');
+  }
+  if (typeof manifest.scripts.dev !== 'string' || manifest.scripts.dev.length === 0) {
+    throw new TypeError('npm dev-server package.json scripts.dev must be a non-empty string');
+  }
+  if (options !== undefined) {
+    assertManifestDependencyMap(manifest, 'dependencies', options.dependencies);
+    assertManifestDependencyMap(manifest, 'devDependencies', options.devDependencies);
+  }
+}
+
 function normalizeManifest(
   files: Record<string, Uint8Array>,
   options: ViteProjectDefinitionOptions,
@@ -263,24 +324,7 @@ function normalizeManifest(
   else manifest.dependencies = dependencies;
   if (devDependencies === undefined) Reflect.deleteProperty(manifest, 'devDependencies');
   else manifest.devDependencies = devDependencies;
-  if (finalViteVersion === DEFAULT_VITE8_VERSION) {
-    const suppliedOverrides = manifest.overrides;
-    if (suppliedOverrides !== undefined && !isRecord(suppliedOverrides)) {
-      throw new TypeError('package.json overrides must be an object');
-    }
-    const overrides: Record<string, unknown> = {};
-    for (const [name, value] of Object.entries(suppliedOverrides ?? {})) {
-      defineOwnEnumerableProperty(overrides, name, value);
-    }
-    if (!Object.prototype.hasOwnProperty.call(overrides, VITE8_WASI_RUNTIME_OVERRIDE_NAME)) {
-      defineOwnEnumerableProperty(
-        overrides,
-        VITE8_WASI_RUNTIME_OVERRIDE_NAME,
-        VITE8_WASI_RUNTIME_OVERRIDE,
-      );
-    }
-    manifest.overrides = overrides;
-  }
+  preparePackageManifest(manifest, finalViteVersion);
   // TODO(backlog: playground/workbench-implicit-vite-module-scope)
   files['/package.json'] = encoder.encode(serializePackageJson(manifest));
   return (
@@ -382,7 +426,11 @@ function bytesHex(bytes: Uint8Array): string {
   return result;
 }
 
-function exactIdentity(kind: 'vite', id: string, files: Record<string, Uint8Array>): string {
+function exactIdentity(
+  kind: 'vite' | 'npm-dev-server',
+  id: string,
+  files: Record<string, Uint8Array>,
+): string {
   const fields = [`kind:${kind}`, `id:${utf16Hex(id)}`];
   for (const path of Object.keys(files).sort()) {
     fields.push(`path:${utf16Hex(path)}`, `bytes:${bytesHex(files[path] as Uint8Array)}`);
@@ -429,6 +477,25 @@ function createViteDefinition(
     id,
     storageSegment: projectStorageSegment(id),
     identity: exactIdentity('vite', id, files),
+    files: frozenFileSnapshot(files),
+  });
+  const definition = Object.freeze({}) as ProjectDefinition<PreviewHandle>;
+  definitions.set(definition, stored);
+  return definition;
+}
+
+export function defineNpmDevServerProject(
+  options: NpmDevServerProjectDefinitionOptions,
+): ProjectDefinition<PreviewHandle> {
+  if (!isRecord(options)) throw new TypeError('npm dev-server project options must be an object');
+  const id = assertId(options.id);
+  const files = cloneFiles(options.files);
+  assertNpmDevServerManifest(files, options);
+  const stored: NpmDevServerProjectDefinitionData = Object.freeze({
+    kind: 'npm-dev-server',
+    id,
+    storageSegment: projectStorageSegment(id),
+    identity: exactIdentity('npm-dev-server', id, files),
     files: frozenFileSnapshot(files),
   });
   const definition = Object.freeze({}) as ProjectDefinition<PreviewHandle>;
@@ -551,6 +618,9 @@ export function projectDefinitionWire(
       args: Object.freeze([...definition.args]),
     });
   }
+  if (definition.kind === 'npm-dev-server') {
+    return Object.freeze({ ...base, kind: 'npm-dev-server' as const });
+  }
   return Object.freeze({ ...base, kind: 'vite' as const });
 }
 
@@ -563,11 +633,13 @@ export function inspectProjectDefinitionWire(value: unknown): InspectedProjectDe
   const expectedKeys =
     value.kind === 'vite'
       ? ['kind', 'id', 'identity', 'files']
-      : value.kind === 'node-server'
-        ? ['kind', 'id', 'identity', 'files', 'entryPath', 'port']
-        : value.kind === 'node-cli'
-          ? ['kind', 'id', 'identity', 'files', 'entryPath', 'args']
-          : null;
+      : value.kind === 'npm-dev-server'
+        ? ['kind', 'id', 'identity', 'files']
+        : value.kind === 'node-server'
+          ? ['kind', 'id', 'identity', 'files', 'entryPath', 'port']
+          : value.kind === 'node-cli'
+            ? ['kind', 'id', 'identity', 'files', 'entryPath', 'args']
+            : null;
   if (expectedKeys === null) throw new TypeError('Invalid project definition wire kind');
   if (!hasExactKeys(value, expectedKeys)) throw new TypeError('Invalid project definition wire');
   const id = assertId(value.id);
@@ -578,6 +650,7 @@ export function inspectProjectDefinitionWire(value: unknown): InspectedProjectDe
   let identity: string;
   let runtimeFields:
     | { readonly kind: 'vite' }
+    | { readonly kind: 'npm-dev-server' }
     | { readonly kind: 'node-server'; readonly entryPath: string; readonly port: number }
     | { readonly kind: 'node-cli'; readonly entryPath: string; readonly args: readonly string[] };
   if (value.kind === 'node-server') {
@@ -596,6 +669,10 @@ export function inspectProjectDefinitionWire(value: unknown): InspectedProjectDe
       args.map((argument) => `arg:${utf16Hex(argument)}`),
     );
     runtimeFields = { kind: 'node-cli', entryPath, args };
+  } else if (value.kind === 'npm-dev-server') {
+    assertNpmDevServerManifest(files);
+    identity = exactIdentity('npm-dev-server', id, files);
+    runtimeFields = { kind: 'npm-dev-server' };
   } else {
     identity = exactIdentity('vite', id, files);
     runtimeFields = { kind: 'vite' };

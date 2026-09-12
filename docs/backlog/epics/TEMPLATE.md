@@ -1,10 +1,10 @@
 # Epic template — directory format (goal/map/ledger)
 
 An epic is a directory `docs/backlog/epics/<slug>/` with three files split by
-owner × mutability. Procedure: `rifty-goal` skill (FIT mode). No new
-single-file epics.
+owner × mutability (`docs/process/artifacts/`). Procedure:
+`docs/process/stages/fit.md`. No new single-file epics.
 
-## `goal.md` — destination (frozen once `status: ready`)
+## `goal.md` — user-owned destination
 
 ```md
 ---
@@ -30,13 +30,14 @@ tier: <works|robust|production — required at ready>
 <!-- Drafted at FIT from Outcome/User scenario/Decisions — never new scope.
      Each checked false on current main (evidence comment above the list).
      Reported to the user at FIT completion (README §Report).
-     A run only proves them. Amending a ready goal = close + re-fit. -->
+     A run only proves them; every child row traces to one (RDY-3).
+     Amend a ready goal with the user's recorded decision (RDY-6). -->
 
 - I1. <user-observable statement>
 
 ## Challenge
 
-<!-- Advisory: fresh critic attacks invariants⇒value at FIT — README §Challenge. -->
+<!-- Premise critique at refine/FIT; reuse unchanged evidence — README §Challenge. -->
 
 challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
@@ -60,7 +61,7 @@ Index, not store: one line + link per entry; content lives on items/ledger.
 <!-- Fog: in-scope questions not yet phrasable as a contract. A child whose
      contract depends on an open question is not seeded. Don't pre-slice fog.
      Owner-typed: a user-owned observable-scope question answerable now is
-     ASKED at FIT, never parked here (rifty-goal FIT 3); owner: user lines
+     ASKED at FIT, never parked here (stages/fit.md 3); owner: user lines
      carry why they are not answerable yet and route to rifty-refine at
      PICKUP, never to a probe. Split a mixed question by owner. -->
 
@@ -74,14 +75,13 @@ Index, not store: one line + link per entry; content lives on items/ledger.
 
 ## `ledger.md` — append-only journal
 
-Budget bands (declared JIT at pickup, review-owned — `rifty-review` axis 5),
-one-line decisions (what + where the full answer lives), verdicts,
-observations/diagnoses (or links to `reference/`). Lines are never edited or
-removed; the closure walk (`rifty-goal` CLOSE) exports every line to a durable
-carrier or drops it explicitly.
+One-line decisions (what + where the full answer lives), reception verdicts,
+observations/diagnoses (or links to `reference/`), the landed slice's PASS
+(`docs/process/artifacts/ledger.md`). Lines are never edited or removed; the
+closure (`docs/process/stages/close.md`) resolves obligations and exports useful
+knowledge; routine observations remain git history.
 
 ```md
-- <YYYY-MM-DD> — <slice> band <lo>–<hi> declared at pickup
 - <YYYY-MM-DD> — decided <one line>; full answer: <link>
-- <YYYY-MM-DD> — ready-verdict <slice>: Contract+RED @ <sha>
+- <YYYY-MM-DD> — re-chart after <slice> (final-green PASS @ <sha>): <n> graduated / <m> invalidated
 ```

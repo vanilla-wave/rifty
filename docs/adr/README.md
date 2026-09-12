@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps history) and its load-bearing context grafted into the successor. When only a single *wrong/evolved clause* of an otherwise-active ADR is overtaken, it is corrected in place with a dated note and listed in [Corrections (active)](#corrections-active) — never a silent edit, never a remove of the still-active remainder. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
+ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW ADR citing it — nothing removed, nothing grafted. An ADR whose every decision is overturned is REMOVED (git keeps history) and listed under [Superseded (removed)](#superseded-removed), the successor naming the overturned decisions; when only some decisions (or a single *wrong/evolved clause*) are overtaken, the ADR stays active with a dated note listed in [Corrections (active)](#corrections-active) — never a silent edit, never a remove of the still-active remainder. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
 
 ## Index
 
@@ -18,6 +18,11 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0199 | VFS path contract: absolute-only, loud rejection of relative inputs |
 | 0276 | Semantic VFS replacements use applied owner evidence |
 | 0358 | Bounded per-path parallel OPFS write-through drain with ancestor fencing and stamp barrier |
+| 0372 | Dedicated-Worker sync capability selects OPFS without COI |
+| 0393 | Single-pass honest OPFS preload |
+| 0402 | Mount Workbench namespaces through one captured OPFS root |
+| 0406 | Refuse unavailable OPFS cache bytes |
+| 0411 | Preserve acquired-tree preload failures in Workbench storage selection |
 
 ### kernel
 
@@ -33,6 +38,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0333 | Descendant settlement barrier preserves recursive teardown ordering |
 | 0340 | Sequenced worker stdio reconstructs cross-port write order |
 | 0347 | Idempotent process-manager kill during settlement |
+| 0351 | Async pre-entry readiness gates worker entry |
 | 0366 | Binary request frames for hot fs sync-RPC |
 
 ### runtime-js
@@ -54,13 +60,13 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0068 | `with { type: "file" }` file-loader import attribute (asset → path) |
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings |
 | 0136 | Transformed-module stack remapping via scoped prepareStackTrace |
+| 0170 | Auto-discover tsconfig path aliases in runtime loader |
 | 0142 | node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud opt-in |
 | 0152 | Child realm event-loop drain + loud-fail exit contract |
 | 0153 | node:constants hybrid faithful static data syscall boundary gap |
 | 0158 | Count detached fetch in child-realm event-loop keepalive |
 | 0159 | node:zlib web-compression-backed async subset |
 | 0162 | Vite 8 Rolldown WASI browser-boot runtime surface |
-| 0170 | Auto-discover tsconfig path aliases in runtime loader |
 | 0171 | Function constructor dynamic import routing |
 | 0178 | node:zlib gzip Transform stream subset |
 | 0200 | Persistent ESM transform cache across dev-server child boots |
@@ -79,7 +85,16 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0342 | Release pending eval drain ownership when server branch wins |
 | 0345 | Expose exact Node 24.0.0 process.release identity |
 | 0348 | Synchronous require(ESM) on Node 24 |
+| 0350 | Buffer.from ArrayBufferLike aliases backing storage |
+| 0352 | Realm-wide QuickJS preload uses host-published WASM |
+| 0353 | Callable Node stream constructors preserve legacy initialization |
 | 0365 | Single-hop small-file sync-RPC reads |
+| 0380 | Lazy eval compiler and explicit loader paths |
+| 0381 | Browser scoped eval compiler distribution |
+| 0382 | Preserve tsconfig discovery through explicit compiler preload |
+| 0383 | No COI VM default and preboot worker selection |
+| 0385 | Keep one foreground drain across HTTP server close |
+| 0422 | Retire callbacks with completed command invocations |
 
 ### runtime-wasi
 
@@ -107,6 +122,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0186 | Cross-realm EADDRINUSE via per-port bind-claim broadcast |
 | 0189 | Preview loopback WebSocket bridge |
 | 0315 | Report the effective virtual server address |
+| 0354 | Preview WebSocket browser Origin propagation |
 
 ### service-worker
 
@@ -120,6 +136,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0160 | Window owner ports and anti-hijack ready-frame routing |
 | 0265 | Owner-correlated preview readiness by PTY run |
 | 0271 | Correlated service-worker control proofs fence Workbench preview revocation |
+| 0409 | Capture one preview prefix in static service worker configuration |
 
 ### npm-client
 
@@ -154,6 +171,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0363 | Eddy memory envelope and fail-fast admission |
 | 0364 | One npm package-bin normalization authority follows active npm package-json semantics |
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
+| 0384 | Registry ownership of bundled guest-package adaptations |
+| 0399 | Preserve declared companion policy through retained-lock acquisition |
 
 ### playground
 
@@ -197,8 +216,15 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0329 | Authority-owned project Save rebinds exact installed-tree trust |
 | 0336 | Exact Vite 8 projects pin the proven Rolldown WASI runtime |
 | 0346 | Baked dependency snapshots carry replay tarball cache |
+| 0349 | npm-owned dev-server project plan |
+| 0355 | Webpack starter trusts the exact deployed hostname |
 | 0359 | Durability-drain progress as a health-event kind on the workbench owner port |
 | 0360 | Owner operation deadline is a host-configurable budget of durability-progress silence |
+| 0407 | Retain orphan Scratch bytes in catalog transactions |
+| 0413 | Expose project opening persistence through Workbench health |
+| 0414 | Keep Scratch mutation policy in the companion |
+| 0415 | Open saved projects independently of installation proof |
+| 0416 | Optional Workbench SQLite deployment asset |
 
 ### toolchain-build
 
@@ -220,6 +246,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0312 | Keep synchronous SHA-256 implementations layer-local |
 | 0323 | Gate heavy PR tests on code-affecting changes |
 | 0338 | TTY parity composes exact one-axis native resize traces |
+| 0421 | Bind reusable package adapters to Node invocations |
 
 ### protocol
 
@@ -297,6 +324,26 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0311 | Registry-owned esbuild runtime removes the host asset URL |
 | 0319 | Preserve admitted mutations across project close |
 | 0341 | Project terminal runs expose authoritative shell status |
+| 0375 | Generic no-COI toolchain authority |
+| 0376 | No-COI toolchain operation lifecycle authority |
+| 0377 | No-COI resident tool and restart lifecycle |
+| 0378 | Causal resident port ownership |
+| 0379 | Resident entry admission authority |
+| 0386 | Publish deterministic dependency snapshot archives |
+| 0387 | Expose caller-pinned dependency snapshot production |
+| 0390 | Ship a copyable Workbench runtime asset closure |
+| 0391 | Attest copyable runtime asset exceptions to the esbuild retirement gate |
+| 0392 | Persisted no-COI warm activation and install-only durable equality |
+| 0394 | Apply dependency snapshots through catalog transactions and saved-state policy |
+| 0397 | Retire completed legacy migration receipts before catalog mutations |
+| 0398 | Select registry-free snapshot acquisition through the existing package owner |
+| 0410 | Configure existing Workbench operation deadlines end to end |
+| 0412 | Publish prepared dependency snapshot payloads |
+| 0417 | Open no-COI projects without installation status |
+| 0418 | No-COI project files and invocation commands |
+| 0419 | Configure no-COI sandbox worker startup |
+| 0420 | Apply no-COI snapshots through the SDK |
+| 0423 | Keep no-COI invocation settlement generic |
 
 ## Superseded (removed)
 
@@ -337,6 +384,9 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0318 | 0371 | verified exact bytes retained; separate manager-lifetime CAS falls to the installed registry twin |
 | 0320 | 0371 | instant offline availability retained; the restored installed tree replaces the separate runtime CAS |
 | 0321 | 0371 | strict lifecycle motive retained; the ninth correlation engine is deleted with its only consumer |
+| 0373 | 0374 | narrow install/run-bin control retained; Workbench entry ownership, nested-only URL, toolchain-only report, shared-WASM boundary and ADR-0371 registry-twin authority grafted |
+| 0374 | 0375 | explicit Worker/API/registry authority retained; Vite identity, lifecycle and build-only finalizer removed from generic no-COI control |
+
 
 ## Corrections (active)
 
@@ -345,9 +395,17 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
+| 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
+| 0349 webpack default-host clause | 0355 / note 2026-08-11 | deployed starter visibly allow-lists only the exact browser page hostname; generic plan/runtime stays zero-field |
+| 0354 no-allow-list consequence | 0355 / note 2026-08-11 | truthful Origin plus an exact singleton project allow-list preserves hosted WDS security; rewrites and unbounded allow-lists remain forbidden |
+| 0158 public-Body-only consumption proof | 0158 / note 2026-08-11 | WebAssembly streaming is an unconditional whole-realm loud gap; public Body consumers remain counted |
+| 0352 dynamic host bootstrap / publish-before-import proof | 0352 / note 2026-08-11 | static sealed entry admits one-shot init only after listener install and host URL publication |
+| 0351 no-other-pre-entry-consumer proof clause | 0351 / note 2026-08-11 | physical node-eval parity wrapper awaits runtime readiness; product registrations remain direct |
 | 0004 `require(ESM)` hard-error clause | 0348 / note 2026-08-10 | Node 24 synchronously links and evaluates ESM graphs without TLA |
 | 0009 unconditional async-wrapper assumption | 0348 / note 2026-08-10 | one AST transform feeds async import and synchronous require evaluators |
+| 0030 raw ArrayBuffer copy/deferred clauses | 0350 / note 2026-08-11 | ArrayBuffer and SharedArrayBuffer inputs alias backing storage; typed arrays still copy |
 | 0053 shared JS/TS extension-fallback clause | 0348 / note 2026-08-10 | TS-aware fallback stays on import; require uses Node's legacy suffix set |
 | 0032 request-state release / current-version clauses | 0331 / note 2026-07-27 | SyncRpc v3 retains a claimed request through versioned reply consumption |
 | 0084 #17 `inFlight` guard / #18 early release clauses | 0331 / note 2026-07-27 | shared `HANDLING` is sole exchange authority through caller consumption |
@@ -365,6 +423,7 @@ superseded.
 | 0130 D4 generated direct-command selector | 0327 / note 2026-07-26 | exact script bytes select canonical direct entry versus installed `.bin`; no template-ID dispatch |
 | 0146 PTY-over-fork-IPC clause | 0326 / note 2026-07-26 | PTY frames use the private control lane on the same physical port |
 | 0150 P6b fork-control / all-node-server dedicated path clauses | 0326 + 0327 / note 2026-07-26 | private frames carry control; only canonical direct-entry scripts use the dedicated controller |
+| 0155 §2 permanent serve handoff; 0342 Workbench release-on-port | 0385 / note 2026-09-08 | one foreground drain follows listening ports through final close; runtime terminal precedence retained |
 | 0155 public `rifty:node-listening` clause | 0326 / note 2026-07-26 | typed private descendant control reports listening/removal/physical exit |
 | 0157 unconditional process IPC / `postListening` clauses | 0326 / note 2026-07-26 | public JSON IPC exists only for fork; private host adapter reports lifecycle |
 | 0162 worker-thread IPC lane clause | 0326 / note 2026-07-26 | worker threads keep structured clone and thread identity, outside the process table |
@@ -380,6 +439,9 @@ superseded.
 | 0281 package-private durability operation clause | 0282 / note 2026-07-16 | `awaitDurability()` is public but exposes no backend, report, path, owner, or transport |
 | 0276 exact-preplan-or-loud-throw Git clause | 0276 note 2026-07-15 | opaque lower-level worktree plans may use a repo replacement candidate; applied owner endpoints remain the only reset evidence |
 | 0010 every-method-throws / terminal-state clause | 0181 | client `request`/`get` route over host `fetch()`; `createServer`/`Agent`/TLS options still loud-throw |
+| 0142 D1 no-COI toolchain default | 0383 | Tier defaults to rewrite with explicit quickjs opt-in; generic default and engine limits unchanged |
+| 0380 D1 discovery removal | 0382 | Missed example consumer retained; explicit compiler preload prepares synchronous discovery |
+| 0170 synchronous discovery prerequisite | 0382 | preloadTsconfigPaths before opt-in construction; explicit maps/default paths remain immediate |
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
 | 0015 preview1 redirect / `esbuildShimFiles` consolidation clauses | 0316 / note 2026-07-24 | registry remains the substitution owner; catalog-owned esbuild-wasm recipe replaces the legacy esbuild carriers |
@@ -413,7 +475,6 @@ superseded.
 | 0174 deferred curated-helper cleanup | 0174 note 2026-07-13 | direct Vite/helpers/file-change IPC deleted; installed `.bin/vite` is the only Vite path |
 | 0165 Starter bundle shape | 0165 note 2026-06-29 | preset `source` overlay removed; `files[]` is the ordinary file bundle and must include the template entry |
 | 0166 D-a vendored fallback clause | 0177 | workspace-installed `node_modules/typescript` is required; missing or broken workspace TS fails loudly |
-| 0066 explicit-only tsconfig paths clause | 0170 | `autoDiscoverTsconfigPaths` can opt into TypeScript-parser-backed tsconfig discovery; default remains explicit/off |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
@@ -505,6 +566,9 @@ Removed, no successor (resolve to git history):
 - `docs/opencode/`, `docs/opencode-rifty-feasibility-2026-05-30.md`, `docs/opencode/HANDOFF.md` — retired server-facade exploration, not retained
 - `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)
 - `docs/backlog/playground/terminal-node-command.md` — completed backlog item, removed on close; the record is ADR-0155 + the code (ADR-0130/0155 still cite it)
+- `docs/backlog/runtime-js/in-process-harness-vitest-ipc-noise.md` — completed backlog item, removed on close; physical-child runtime smokes and their lifecycle tests are the record (ADR-0130 still cites it)
+- `docs/backlog/npm-client/shadow-cache-ledger-independent-completion-order.md` — completed backlog item, removed on close; forced alternate completion plus exact-multiset shadow cache ledgers are the record
+- `docs/backlog/kernel/sab-ring-protocol-violation-flake.md` — completed backlog item, removed on close; explicit contender/reply phase proofs and owner-bounded Worker cleanup are the record
 - `docs/backlog/runtime-js/execsync-node-entry-loader.md` — completed backlog item, removed on close; `execSync`'s child now routes through the node-entry module loader (shebang + relative imports), the record is ADR-0137/0143/0150 + the code (ADR-0137/0143/0146 + `docs/backlog/shell/d-owner-worker-milestone.md` still cite it)
 - `docs/backlog/kernel/worker-per-process-residuals.md` — completed backlog item, removed on close; ADR-0230 + runtime stdin parity are the record (ADR-0155/0157 still cite it)
 - `docs/backlog/shell/pty-live-resize.md` — completed backlog item, removed on close; ADR-0225 + terminal/worker resize tests are the record
@@ -525,4 +589,39 @@ here.
 | Marker/merge-base goal gates (`goal_baseline`, `check:goal-contract`, `check:budget`) | 2026-08 | goal/map/ledger split makes frozen-ness = file immutability; bands live in the ledger, review-owned — the gate code priced more than it caught |
 | Shadow-registry debug-disable flag (`disableShadowRegistry` / env switch) | 2026-08-23 | all substituted packages are native and cannot run in-browser regardless; behavioral comparison lives in Node parity oracles; SCSS comparison exists via unsubstituted pure-JS `sass`; install-artifact audit does not justify a public surface. Record: git history of the `npm-client/shadow-registry-disable-flag` draft + ADR-0006 correction |
 | Child-side project-FS cache or owner sync-RPC bypass | 2026-08-26 | violates ADR-0150 owner-SSoT freshness; the completed hot-path goal removed one hop and JSON framing without a second state owner. Record: `docs/backlog/perf/reference/child-fs-rpc-hot-path.md` + ADR-0365/0366 |
+| SW-delivered COI as the existing-app no-COI tier | 2026-08-31 | works only by applying isolation headers to the whole host and reloading it, violating preserved host posture. Record: `docs/backlog/distribution/reference/sw-coi-shim-probe.md` |
 | Pending-ready session (executable guest before the trusted stamp / early `openProject` reply, deferred durability flush) | 2026-09-01 | measured C4: an early reply is not a ready Node session — `node -e` fails with `package tree readiness is not published` until the stamp; fetch/prepare/setup stay on the path and owner death in the window is the cold-restore path anyway; readiness stays binary at the stamp with `openProject` resolution as the one named await. Record: `docs/backlog/vfs/reference/storage-open-reopen-candidate-benchmarks-2026-09-01.md` §C4 + goal `docs/backlog/epics/fast-project-open-reopen/goal.md` Outcome (a) |
+| Runtime heartbeat for no-COI wedge detection | 2026-09-04 | the wedged realm cannot service it; caller timeout owns detection at tier `works`. Record: ADR-0377 |
+| Vite identity policy in no-COI SDK/runtime infrastructure | 2026-09-04 | destination is the shared-memory-free class; installed bytes select behavior and Vite 7 is only the oracle. Record: ADR-0375 |
+| Realm-wide async-source census for resident readiness | 2026-09-04 | browser promises/EventTargets have no complete handle census, while counting all sources rejects harmless Vite cleanup. Loader-generation port ownership proves cause instead. Record: ADR-0378 |
+| Fresh Worker before every initial resident start | 2026-09-04 | changes ADR-0377 existing-Worker start, emits an observable reset and duplicates the explicit restart lifecycle. Record: ADR-0378 |
+| COI-default plus an OPFS force/opt-in knob | 2026-09-04 | COI does not discriminate dedicated-Worker sync OPFS capability; the knob preserves silent memory fallback. Record: ADR-0372 |
+| Async-OPFS support as paired backend selector | 2026-09-04 | main windows expose async OPFS but cannot host the required sync mirror. Record: ADR-0372 |
+| Catch every OPFS init failure as memory | 2026-09-04 | collapses unsupported capability with permission/storage failure and hides durability loss. Record: ADR-0372 |
+| SDK-owned no-COI Worker with top-level and nested URLs | 2026-09-04 | admits sibling runtime mirrors and ambiguous ownership; Workbench owns the composed entry. Record: removed ADR-0374, retained by ADR-0375 |
+| Private eval globals or deep host imports for no-COI tooling | 2026-09-04 | hidden untyped API plus a second VFS authority. Record: removed ADR-0373/0374, retained by ADR-0375 |
+| Public Workbench project/terminal surface for the no-COI build tier | 2026-09-04 | imports the COI owner/kernel topology and unrelated dev lifecycle. Record: removed ADR-0373/0374, ADR-0377 |
+| Restore shadow-asset CAS/port delivery for no-COI tooling | 2026-09-04 | installed registry-twin bytes already own delivery; another cache/protocol authority has no forcing constraint. Record: removed ADR-0374, ADR-0371/0375 |
+| Broad `sandbox.exec()` inside the no-COI build tier | 2026-09-04 | shell parsing, streaming, stdin, cancellation and preview normalization are independent scope. Record: removed ADR-0373/0374 |
+| Queue overlapping no-COI toolchain calls | 2026-09-04 | one shared mutable realm makes overlap invalid; FIFO adds fairness/cancellation state instead of loud busy rejection. Record: removed ADR-0373/0374, ADR-0376 |
+| Host-side boolean as toolchain admission owner | 2026-09-04 | remote from delivered Worker frames; retaining Worker defence creates two owners. Record: ADR-0376 |
+| Package/project FIFO as toolchain admission | 2026-09-04 | queues and imports unrelated durability/lifecycle semantics. Record: ADR-0376 |
+| New Worker per finite toolchain operation | 2026-09-04 | loses one VFS/loader/binding authority and requires unproven cross-realm coherence. Record: ADR-0376 |
+| COI Workbench child-process fabric for no-COI resident tools | 2026-09-04 | SAB-backed topology is unavailable on the target page. Record: ADR-0377 |
+| New Worker per resident tool | 2026-09-04 | loses the authoritative VFS/runtime and introduces cross-Worker coherence. Record: ADR-0377 |
+| Caller-owned rebuild/reinstall/preview assembly after a wedge | 2026-09-04 | misses restart/death/dirty observability and hides network retry in application code. Record: ADR-0377 |
+| Independent patches at resident ownership escape sites | 2026-09-04 | repeated provenance-lie at one seam requires one deep admission module. Record: ADR-0379 |
+| Separate public `onLifecycle` subscription for no-COI sandbox | 2026-09-04 | duplicates existing `runtime.on` lifecycle authority. Record: no-COI dev-HMR Contract+RED correction |
+| From-scratch docs site as the no-COI existing-app persona | 2026-09-04 | it has no host posture to preserve and should use real isolation; third-party no-origin preview remains separate embed scope. Record: `docs/backlog/distribution/reference/sw-coi-shim-probe.md` |
+| Toolchain feature report on generic sandboxes | 2026-09-04 | generic sandboxes retain their hardware capability report; toolchain-only rows require explicit toolchain admission. Record: removed ADR-0373/0374, ADR-0375 |
+| No-op TextDecoder install as the SAB-less realm guard | 2026-09-04 | it does not exercise the private decode path that held the bare-SAB failure. Record: worker-realm-compat-bare-sab-referenceerror pickup, ADR-0162 |
+| Move N=1 declared-gap cause projection into runtime-js | 2026-09-04 | the policy is Workbench-local and runtime-js public/internal surfaces stay closed. Record: bounded-not-implemented-cause-projection Final correction |
+| Workflow-substring step for no-COI I5 inclusion | 2026-09-04 | raw text permits conditional skip and sends failures to a different report; moving the exact spec into `tests/no-coi` makes discovery authoritative. Record: `docs/backlog/distribution/reference/no-coi-ci-closure-proof-evidence.md` |
+| Ref-drain plus zero-live-timer resident readiness gate | 2026-09-04 | rejects harmless Vite cleanup yet misses native deferred sources; causal port ownership replaced it. Record: ADR-0377 correction, ADR-0378 |
+| Automatic preview reconnect after no-COI restart | 2026-09-04 | existing WebSocket does not reconnect; explicit iframe reload is the honest `works` policy. Record: ADR-0377 |
+| Workspace transaction or journal in no-COI tier `works` | 2026-09-04 | crash-atomic trees require robust-class machinery; the tier promises acknowledged flush plus a dirty marker only. Record: ADR-0377 |
+| Automatic retry during no-COI recovery | 2026-09-04 | peer loss cannot prove non-application; hidden retry risks duplicate effects. Record: ADR-0376/0377 |
+| Exactly-once no-COI recovery | 2026-09-04 | no durable operation journal exists at tier `works`; the contract makes no exactly-once claim. Record: ADR-0377 |
+| Hidden restart/recovery queue | 2026-09-04 | concurrent restart rejects; queueing adds order/cancellation state outside the tier. Record: ADR-0377 |
+| Crash-proof no-COI workspace durability | 2026-09-04 | termination before flush may cross generations; only the dirty marker is promised. Record: ADR-0377 |
+| Vite-specific build-only installed-tree finalizer | 2026-09-04 | generic installed-tree finalization must follow package bytes, not Vite identity. Record: ADR-0375 |

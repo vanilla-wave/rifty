@@ -15,8 +15,8 @@ describe('preview routing docs', () => {
     expect(readmeSource).not.toContain('Client.url');
   });
 
-  it('bumps the routing version for the localhost-Host synthesizePreviewUrl shape (ADR-0189 D3)', () => {
-    expect(SW_ROUTING_VERSION).toBe('6');
+  it('records configured-prefix routing and preserves localhost-Host synthesis (ADR-0409)', () => {
+    expect(SW_ROUTING_VERSION).toBe('7');
     expect(protocolSource).toContain('`synthesizePreviewUrl(path, port?)`');
     expect(readmeSource).toContain('`synthesizePreviewUrl` return shape / synthesized Host');
     expect(readmeSource).not.toContain('the synthetic host literal');

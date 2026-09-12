@@ -15,5 +15,5 @@ which absorbs steady load but not load spikes between phases). One observed
 spike flipped it RED with no product change. Options to settle at pickup:
 median-of-N phases, CPU-time instead of wall clock, or marking the ratio
 report-only on shared runners while asserting it locally. Judge against
-`docs/process/testing.md` before implementation; do not silently widen the
+`docs/process/rules/testing.md` before implementation; do not silently widen the
 threshold — that erases the regression signal the gate exists for.

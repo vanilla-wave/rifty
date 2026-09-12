@@ -42,7 +42,14 @@ const EPIC_TIER_SET = new Set(EPIC_TIERS);
 
 const ITEM_REQUIRED_KEYS = ['area', 'status', 'title', 'created', 'why'];
 const EPIC_REQUIRED_KEYS = ['kind', 'status', 'title', 'created', 'value'];
-const READY_ITEM_SECTIONS = ['Acceptance', 'Parity cases', 'Out of scope', 'Decisions'];
+// Parity cases only where an oracle exists (docs/backlog/README.md); the reviewer grades absence (REV-4).
+const READY_ITEM_SECTIONS = ['Acceptance', 'Out of scope', 'Decisions'];
+// Trace gate on ready items (docs/process/rules/readiness.md RDY-3); ratchet by
+// creation date — older ready items get traces at their next re-cut. No size
+// gate: one intent is a reviewer concern (RDY-4), not a count.
+const TRACE_SINCE = '2026-09-03';
+const TRACED_SECTIONS = ['Acceptance', 'Parity cases', 'Fault matrix'];
+const TRACE_RE = /→\s*(?:I\d+|scenario|ADR-\d{4}|[A-Z]{2,5}-\d+)\b/u;
 const READY_EPIC_SECTIONS = ['Outcome', 'User scenario', 'Items'];
 
 const SCAN_ROOTS = ['packages', 'apps', 'tools', 'services'];
@@ -107,13 +114,58 @@ function hasSection(text, name) {
   return new RegExp(`^##\\s+${escaped}\\b`, 'm').test(text);
 }
 
-// Advisory premise challenge — README §Challenge. Presence-only gate on docs
-// created at/after the cutoff; earlier docs grandfathered.
+/** Body of `## <name>` up to the next `## `, or null. */
+function sectionBody(text, name) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (
+    new RegExp(`^##\\s+${escaped}\\s*$\\r?\\n([\\s\\S]*?)(?=^##\\s+|$(?![\\s\\S]))`, 'mu').exec(
+      text,
+    )?.[1] ?? null
+  );
+}
+
+/** Obligation rows of a section: numbered/bulleted items (continuations joined) and table body rows. */
+function obligationRows(body) {
+  const rows = [];
+  const lines = (body ?? '').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line === '' || line.startsWith('<!--') || line.startsWith('-->')) continue;
+    if (line.startsWith('|')) {
+      const next = lines[i + 1]?.trim() ?? '';
+      if (/^\|\s*:?-+/u.test(line) || /^\|\s*:?-+/u.test(next)) continue; // separator / header
+      rows.push(line);
+    } else if (/^(?:\d+\.|[-*])\s/u.test(line)) rows.push(line);
+    else if (rows.length > 0 && !rows[rows.length - 1].startsWith('|')) {
+      rows[rows.length - 1] += ` ${line}`;
+    }
+  }
+  return rows;
+}
+
+// RDY-3 trace on ready items created at/after the cutoff.
+function checkTrace(rel, fm, text) {
+  if (fm?.status !== 'ready' || typeof fm.created !== 'string' || fm.created < TRACE_SINCE) return;
+  for (const name of TRACED_SECTIONS) {
+    const body = sectionBody(text, name);
+    if (body === null) continue;
+    for (const row of obligationRows(body)) {
+      if (TRACE_RE.test(row)) continue;
+      errors.push(
+        `${rel}: '## ${name}' row without trace (→ I# | → scenario | → ADR-NNNN | → <rule-id>; RDY-3): ${row.slice(0, 60)}`,
+      );
+    }
+  }
+}
+
+// Advisory premise challenge — README §Challenge. Presence-only gate at adoption
+// (ready), never for an observation captured as draft; older docs grandfathered.
 const CHALLENGE_SINCE = '2026-08-27';
 const CHALLENGE_LINE_RE = /^challenge: \d{4}-\d{2}-\d{2} — /m;
 
 function checkChallenge(rel, fm, text) {
-  if (typeof fm?.created !== 'string' || fm.created < CHALLENGE_SINCE) return;
+  if (fm?.status !== 'ready' || typeof fm?.created !== 'string' || fm.created < CHALLENGE_SINCE)
+    return;
   if (!hasSection(text, 'Challenge')) {
     errors.push(
       `${rel}: created ${fm.created} requires '## Challenge' (advisory premise challenge — README §Challenge)`,
@@ -227,6 +279,7 @@ for (const { rel, area, fm, text } of itemRecords) {
     }
   }
   checkChallenge(rel, fm, text);
+  checkTrace(rel, fm, text);
 
   const a = KNOWN_AREAS.has(area) ? area : area || '(none)';
   const bucket = ITEM_STATUS_SET.has(fm?.status) ? fm.status : 'invalid';

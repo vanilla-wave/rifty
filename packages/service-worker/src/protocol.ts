@@ -74,9 +74,8 @@ export const SW_FRAME_VERSION = '1';
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
  */
-// '6': synthesizePreviewUrl host preview.local -> localhost:<port> (generic
-// dev-server Host allow-lists pass without config injection, ADR-0189 D3).
-export const SW_ROUTING_VERSION = '6';
+// '7': one configurable preview pathname across producers/consumers (ADR-0409).
+export const SW_ROUTING_VERSION = '7';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';
@@ -104,6 +103,8 @@ export interface SwPongFrame {
   frameVersion: string;
   routingVersion: string;
   from: 'service-worker';
+  /** Captured SW configuration; omitted means /preview/ (ADR-0409). */
+  previewPrefix?: string;
 }
 
 /**

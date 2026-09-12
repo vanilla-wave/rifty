@@ -13,7 +13,16 @@
  */
 
 import variant from '@jitl/quickjs-wasmfile-release-sync';
-import { type QuickJSWASMModule, newQuickJSWASMModuleFromVariant } from 'quickjs-emscripten-core';
+import {
+  type QuickJSWASMModule,
+  newQuickJSWASMModuleFromVariant,
+  newVariant,
+} from 'quickjs-emscripten-core';
+import {
+  publishRuntimeGlobal,
+  readRuntimeGlobal,
+  unpublishRuntimeGlobal,
+} from '../../internal/worker-globals.ts';
 
 /** Bootstrap-global key carrying the QuickJS `.wasm` URL (playground/host). */
 export const QUICKJS_WASM_URL_ENV = '__RIFTY_QUICKJS_WASM_URL' as const;
@@ -29,13 +38,17 @@ export const QUICKJS_WASM_URL_ENV = '__RIFTY_QUICKJS_WASM_URL' as const;
  * {@link @riftydev/npm-client!getRegistryBaseUrl} and the `WASI_WASM_URL_ENV`
  * precedent in runtime-wasi.
  *
- * In Node (and vitest) the release-sync variant resolves its `.wasm` from
- * `node_modules` automatically, so {@link ensureVmEngineReady} does NOT thread
- * this URL today; it exists for the browser/worker host that serves the wasm
- * over HTTP (consumed when the worker variant loader is wired — later task).
- * TODO(backlog: runtime-js/vm-unwired-seams)
+ * In native Node the release-sync variant resolves its `.wasm` from
+ * `node_modules`. Browser workers instead need the host/bundler-published URL:
+ * Emscripten's relative guess points beside transformed JS chunks and can fetch
+ * the host's HTML fallback. `ensureVmEngineReady()` therefore supplies the
+ * configured URL and owner-fetched bytes to upstream.
  */
 export function getQuickjsWasmUrl(): string {
+  return getConfiguredQuickjsWasmUrl() ?? '/quickjs.wasm';
+}
+
+function getConfiguredQuickjsWasmUrl(): string | undefined {
   const g = globalThis as Record<string, unknown>;
   const fromBootstrap = g[QUICKJS_WASM_URL_ENV];
   if (typeof fromBootstrap === 'string' && fromBootstrap.length > 0) return fromBootstrap;
@@ -59,15 +72,57 @@ export function getQuickjsWasmUrl(): string {
     if (typeof fromEnv === 'string' && fromEnv.length > 0) return fromEnv;
   }
 
-  return '/quickjs.wasm';
+  return undefined;
 }
 
-let modulePromise: Promise<QuickJSWASMModule> | undefined;
-let moduleSync: QuickJSWASMModule | undefined;
+function isNativeNodeRuntime(): boolean {
+  const g = globalThis as {
+    readonly window?: unknown;
+    readonly WorkerGlobalScope?: unknown;
+    readonly importScripts?: unknown;
+  };
+  if (
+    typeof g.window !== 'undefined' ||
+    typeof g.WorkerGlobalScope !== 'undefined' ||
+    typeof g.importScripts === 'function'
+  ) {
+    return false;
+  }
+  if (typeof process === 'undefined') return false;
+  const versions = (process as { versions?: Record<string, string | undefined> }).versions;
+  return typeof versions?.node === 'string';
+}
+
+// Host artifact provenance is fixed before installNodeRuntime replaces `process`
+// and parity Workers publish browser-compatible globals.
+const nativeNodeArtifactResolution = isNativeNodeRuntime();
+
+function quickjsVariantWithLocation(): typeof variant {
+  const configured = getConfiguredQuickjsWasmUrl();
+  if (nativeNodeArtifactResolution) {
+    return configured === undefined ? variant : newVariant(variant, { wasmLocation: configured });
+  }
+  const wasmLocation = configured ?? getQuickjsWasmUrl();
+  return newVariant(variant, {
+    wasmLocation,
+    wasmBinary: () => fetchQuickjsWasm(wasmLocation),
+  });
+}
+
+async function fetchQuickjsWasm(wasmLocation: string): Promise<ArrayBuffer> {
+  const response = await globalThis.fetch(wasmLocation);
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error(
+      `runtime-js/quickjs-loader: fetch(${wasmLocation}) → ${response.status} ${response.statusText}`,
+    );
+  }
+  return response.arrayBuffer();
+}
 
 /** True once {@link ensureVmEngineReady} has resolved — sync engine available. */
 export function isVmEngineReady(): boolean {
-  return moduleSync !== undefined;
+  return readRuntimeGlobal('quickjsModuleSync') !== null;
 }
 
 /**
@@ -78,13 +133,21 @@ export function isVmEngineReady(): boolean {
  * {@link getQuickJsModuleSync} without awaiting.
  */
 export async function ensureVmEngineReady(): Promise<QuickJSWASMModule> {
-  if (!modulePromise) {
-    modulePromise = newQuickJSWASMModuleFromVariant(variant).then((m) => {
-      moduleSync = m;
-      return m;
-    });
+  const existing = readRuntimeGlobal('quickjsModulePromise');
+  if (existing !== null) return existing;
+  const modulePromise = newQuickJSWASMModuleFromVariant(quickjsVariantWithLocation()).then((m) => {
+    publishRuntimeGlobal('quickjsModuleSync', m);
+    return m;
+  });
+  publishRuntimeGlobal('quickjsModulePromise', modulePromise);
+  try {
+    return await modulePromise;
+  } catch (error) {
+    if (readRuntimeGlobal('quickjsModulePromise') === modulePromise) {
+      unpublishRuntimeGlobal('quickjsModulePromise');
+    }
+    throw error;
   }
-  return modulePromise;
 }
 
 /**
@@ -93,7 +156,8 @@ export async function ensureVmEngineReady(): Promise<QuickJSWASMModule> {
  * at boot, not lazily inside a sync sandbox call.
  */
 export function getQuickJsModuleSync(): QuickJSWASMModule {
-  if (!moduleSync) {
+  const moduleSync = readRuntimeGlobal('quickjsModuleSync');
+  if (moduleSync === null) {
     throw new Error(
       'QuickJS vm engine not preloaded. Call await ensureVmEngineReady() at boot ' +
         '(joined to the worker boot promise) before any synchronous vm.* sandbox call.',

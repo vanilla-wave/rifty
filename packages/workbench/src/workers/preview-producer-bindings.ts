@@ -1,7 +1,7 @@
+import { binNameOf, installedBinPreviewSource } from '@riftydev/shadow-registry/runtime';
 import type { CommandContext, ProcessExit } from '@riftydev/shell';
 import type { BinExecutorDeps, BinSpawnRequest } from '../glue/bin-executor.ts';
 import type { OwnerPtyRunAdmission } from '../glue/pty-protocol.ts';
-import { isBinShimPath } from './bin-entry-path.ts';
 import { type DevServerController, runDevServerShellCommand } from './dev-server-controller.ts';
 import type { NodeRunHooks } from './owner-child-node-executor.ts';
 import {
@@ -9,7 +9,6 @@ import {
   type PreviewProducerOrigin,
   type PreviewRegistry,
 } from './preview-registry.ts';
-import { binNameOf, viteCliMode } from './vite-cli-prep.ts';
 
 export type ActivePtyAdmission = (ptySid: string) => OwnerPtyRunAdmission | null;
 export type PreviewOriginCapture = () => PreviewProducerOrigin;
@@ -75,12 +74,7 @@ export function createInstalledBinPreviewHooks(options: {
         origin,
         cwd: ctx.cwd,
         labelBase: binNameOf(req.shimPath),
-        source:
-          isBinShimPath(req.shimPath) &&
-          binNameOf(req.shimPath) === 'vite' &&
-          viteCliMode(req.args) === 'preview'
-            ? 'preview'
-            : 'node',
+        source: installedBinPreviewSource(req.shimPath, req.args),
         ...(req.previewScope ? { previewScope: req.previewScope } : {}),
       });
     },

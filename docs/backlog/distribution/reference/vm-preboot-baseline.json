@@ -1,0 +1,35 @@
+{
+  "chromium": "148.0.7778.96",
+  "rows": [
+    {
+      "engine": "default",
+      "capability": null,
+      "stdout": ["{\"realm\":false}\n"],
+      "result": {
+        "id": 1,
+        "ok": true
+      },
+      "wasmRequests": 2
+    },
+    {
+      "engine": "quickjs",
+      "capability": null,
+      "stdout": ["{\"realm\":false}\n"],
+      "result": {
+        "id": 1,
+        "ok": true
+      },
+      "wasmRequests": 2
+    },
+    {
+      "engine": "rewrite",
+      "capability": null,
+      "stdout": ["{\"realm\":false}\n"],
+      "result": {
+        "id": 1,
+        "ok": true
+      },
+      "wasmRequests": 2
+    }
+  ]
+}

@@ -3,8 +3,8 @@ kind: epic
 status: ready
 title: Project open/reopen at Tracker scale — storage wait in seconds, honesty intact
 created: 2026-09-01
-value: Opening or reloading a Tracker-scale project (216 packages / 15.6k files / 74 MB) waits ≤2 s at the storage boundary instead of a measured 11.5 s drain inside a 13.4 s cold open and 8.4 s of walk + preload inside a 10.0 s reopen, every editor read scales with the entry it asks for, and reload honesty is exactly today's.
-user_story: As a developer or embedder whose project carries a Tracker-scale tree (216 packages / 15,568 files / 73.6 MB) that must survive reload without a network round trip, I want first open and every reload to be storage-fast and honestly ready, but today the per-file OPFS drain is 11.5 s of a 13.4 s cold open on main (16.3 s in the embedder), reopen walks and preloads every file for 8.4 s of 10.0 s, and each editor open copies the whole tree.
+value: Opening or reloading a Tracker-scale project (216 packages / 15.6k files / 74 MB) waits ≤2 s at the storage boundary instead of a measured 11.5 s drain inside a 13.4 s cold open and 8.4 s of walk + preload inside a 10.0 s reopen (both on 1a851d7bc; the reopen half predates ADR-0393's single-pass preload and is re-measured before slice A), every editor read scales with the entry it asks for, and reload honesty is exactly today's.
+user_story: As a developer or embedder whose project carries a Tracker-scale tree (216 packages / 15,568 files / 73.6 MB) that must survive reload without a network round trip, I want first open and every reload to be storage-fast and honestly ready, but today the per-file OPFS drain is 11.5 s of a 13.4 s cold open on main (16.3 s in the embedder), reopen walks and preloads every file (8.4 s of 10.0 s before ADR-0393's single pass; re-measured before slice A), and each editor open copies the whole tree.
 tier: production
 ---
 
@@ -33,6 +33,18 @@ reads few files escapes. A traced content-addressed segment replica measured
 T. ADR-0358 named this exit: ">10x needs a pack-format layout change —
 separate strategic decision".
 
+Re-checked 2026-09-12 against main (154 commits after 1a851d7bc). The drain
+path is unchanged (ADR-0358 is still the mechanism; I1 stands). The reopen
+figure is stale in shape: on 1a851d7bc `OpfsFsSync.init` ran `refreshIndex`
+(the walk) and then `preloadContent` (a second per-file pass resolving every
+path through the async surface — the 6.17 s); ADR-0393 (2026-09-08) replaced
+both with one `walkOpfsTree` traversal that reads bytes while enumerating,
+and `preloadContent` left the init path. The per-file floor still applies
+(C1: ≈ 0.14 ms/file handle open + read), so main's reopen is expected between
+that floor (≈ 3.6 s on S) and the old 8.4 s — unmeasured (ADR-0393's evidence
+is an 8-file fixture). The re-measure is a map probe before slice A
+Contract+RED; every I2 "today" figure below is the pre-0393 number until then.
+
 Independently, every page read-file / read-directory copies the whole owner
 tree: 46.5 ms per read on S (B0, 14,492 files; T has 7 % more files) and 82.4 % of a real
 `ProjectDocument.open()` on a 521-entry / 51 MB template tree where the
@@ -42,14 +54,20 @@ open on T exists yet.
 
 Clauses every slice keeps — the discriminators the rejected routes cite:
 
-- (a) readiness is binary at the trusted stamp: `openProject` resolution is
-  the ONE named await for an executable + durable session; no earlier session,
-  no pending state a host must guess or poll.
+- (a) readiness is binary at the trusted stamp for a FIRST materialization:
+  `openProject` resolution is the ONE named await for an executable + durable
+  session; no earlier session, no pending state a host must guess or poll. A
+  saved reopen already publishes the tree without install certification
+  (ADR-0415/0417, 2026-09-10; adapter faults surface at use), so the replica's
+  replay never waits on stamp trust either — the storage restore is the only
+  wait I2 measures.
 - (b) guest-visible fs unchanged: Node programs see the plain Memory VFS
   (ADR-0072); no overlay, whiteout, or copy-up semantics.
-- (c) one substrate under every writer (npm-client, editor, git, shell) under
-  the existing persist-failure ledger, drain scheduler, and stamp barrier
-  contracts (ADR-0358) — never a second writer, ledger, or publication journal.
+- (c) one substrate under every writer (npm-client, editor, git, shell, and
+  the no-COI toolchain installer — `no-coi-install-context.ts` writes through
+  the same `OpfsFsSync`, ADR-0372/0392) under the existing persist-failure
+  ledger, drain scheduler, and stamp barrier contracts (ADR-0358) — never a
+  second writer, ledger, or publication journal.
 - (d) reload honesty not weakened: every reachable storage fault (torn
   segment, corrupt frame/index, quota mid-append, cross-tab writer, compaction
   crash, legacy layout) ends in a consistent replay or the loud cold-restore
@@ -83,6 +101,8 @@ a consistent tree or the loud cold-restore path.
           (open-split reference). Embedder on 0.4.0: 16.3 s (quoted).
      I2 — measured reopen on main: walk 2,239.1 ms + preloadContent
           6,171.3 ms of a 10,029.5 ms reopen (open-split reference).
+          Pre-ADR-0393 shape (two-pass init); still false on main by the
+          per-file floor, magnitude re-measured (map.md probe).
      I3 — `packages/vfs/src/opfs-sync.ts` `refreshIndex`/`preloadContent` read
           the per-file layout as project state; the store namespace
           `/.rifty/workbench/v1` (`workbench-project-store.ts`) is the only
@@ -105,7 +125,8 @@ a consistent tree or the loud cold-restore path.
    under reference conditions — today 11.5 s measured on main.
 2. I2. Reopen of T in a fresh Chromium process, network off: storage restore
    before the session is executable takes ≤ 2.0 s median — today 8.4 s
-   (walk + preload) measured on main.
+   (walk + preload) measured on 1a851d7bc before ADR-0393's single-pass
+   preload; the main figure is re-measured before slice A (map probe).
 3. I3. A project last persisted by the per-file layout is never read as
    project state: the owner reports the legacy layout by name and
    re-materializes from the project definition; edits absent from that
@@ -182,7 +203,9 @@ user's call and they proceeded.
 - Precondition for the embedder, not a slice: the shipped 0.4.0 asset is
   unrestorable on main (install-artifact identity mismatch + shadow catalog
   drift → `EBROKENLOCK`; open-split reference §Blocker) — re-bake against
-  main; tracked in `playground/baked-snapshot-regeneration`. The embedder's
+  main; tracked in `playground/baked-snapshot-regeneration`. Since
+  ADR-0386/0387 the re-bake is the public `produceDependencySnapshot`
+  (tar.gz envelope; the v3 JSON asset stays readable). The embedder's
   own `createScratch`-on-every-open sequence rebuilds a clean scratch from
   scratch (40.7 s) — `playground/create-scratch-clean-same-starter-rematerializes`,
   outside this goal. OS page cache stayed warm in C3
@@ -190,7 +213,9 @@ user's call and they proceeded.
 - Migration = cold restore (user, 2026-09-01): the legacy per-file layout is
   not read; re-materialize from the definition; edits without a source are not
   kept (playground consequence: previous line). Carrier (critic, 2026-09-01):
-  bump the existing store namespace `/.rifty/workbench/v1` → `v2` in slice A;
+  bump the existing store namespace `/.rifty/workbench/v1` → `v2` in slice A
+  (under the selected `storage.namespace` root, ADR-0402 — one bump per
+  selected root; an omitted namespace is the historical origin root);
   `v1` bytes stay untouched — never read, never deleted by this goal; the
   existing `project-materialization.ts` open path re-materializes from the
   definition with no new authority; the format ADR records the no-migration
@@ -203,9 +228,10 @@ user's call and they proceeded.
   No new mechanism (user, 2026-09-01).
 - `storage.persistence: 'ephemeral'` = embedder recommendation in
   `packages/workbench/README.md` (this PR); public default unchanged → no ADR
-  (user, 2026-09-01). Ephemeral does not lift COI: guest `readFileSync` blocks
+  (user, 2026-09-01). Ephemeral does not lift COI for Workbench: guest `readFileSync` blocks
   on the SAB sync ring (`packages/kernel/src/worker-entry.ts` `syncRing`,
-  `packages/runtime-js/src/ipc/sync-rpc-fs.ts`).
+  `packages/runtime-js/src/ipc/sync-rpc-fs.ts`); the no-COI SDK toolchain is
+  a different entry over the same OPFS pair (ADR-0372).
 - Readiness observability (user, 2026-09-01) = Outcome (a): no new host
   event; the format ADR states `openProject` resolution as the named
   executable + durable await, citing C4 (early reply → `node -e` fails with
@@ -223,10 +249,12 @@ user's call and they proceeded.
   its rows on the new substrate (map.md fog) — never devalued silently.
 - rejected route: candidate B (per-file content + durable index + lazy
   hydration) — violates I2 on full-scan workloads (C1: +1.70 s over current
-  preload; the sync surface needs a 2.61 s pre-open of every handle). Holds
-  only while post-open workloads touch most of the tree — the touch fraction
-  is unmeasured (map.md probe, settle before ready). Its index stays a useful
-  component of the replica.
+  preload; the sync surface needs a 2.61 s pre-open of every handle). The
+  touch-fraction probe that could have re-opened B is closed (2026-09-12):
+  ADR-0393/0406/0411 fixed eager all-or-error preload — "no lazy sync I/O",
+  an indexed file without cached bytes is `EIO` — so B is a supersede of
+  three ADRs, not a re-fit; `vfs/opfs-lazy-content-preload` is declined by
+  the same ADRs. Its index stays a useful component of the replica.
 - rejected route: deferred flush / early `openProject` reply — violates
   Outcome (a) (C4: `node -e` in the window fails; owner death in the window is
   the cold restore path anyway).
@@ -245,7 +273,9 @@ user's call and they proceeded.
   violates Outcome (f).
 - Snapshot decode tax on the open path (base64 decode + plan 0.51 s,
   `JSON.parse` 14 ms, sha256 43 ms — 4 % of the open, measured) is NOT this
-  goal — owned by `playground/snapshot-carries-substituted-bytes-twice`.
+  goal — owned by `playground/snapshot-carries-substituted-bytes-twice`; ADR-0386's
+  tar.gz envelope drops the base64 carrier for new bakes, the v3 asset keeps
+  paying it.
 - not a lever for THIS goal: honest pnpm (content-addressable store +
   symlink/hardlink layout). The measured cost is per physical file at the
   OPFS boundary (0.737 ms/file write, ≈ 0.3 ms/file walk + open + read);
@@ -258,3 +288,19 @@ user's call and they proceeded.
   the fields (user, 2026-09-01).
 - not a lever (measured): owner `#assignSubtree` 20 ms / 0.4 % (B1); sync
   lockfile SHA-256 ≤ 11 ms at 3 MB (B5).
+- Re-check 2026-09-12 (user kept the plan; 154 commits on main since
+  1a851d7bc). no-COI tier is a consumer, not out of scope: ADR-0372/0392/
+  0393/0417 route the no-COI SDK (`sandbox.toolchain.open` / `install`)
+  through the same `OpfsFsSync` pair — per-file drain on install,
+  single-pass preload on reopen — so the replica serves it by construction
+  (Outcome (c)); its SDK API/protocol (#332, in flight on `owner-storage.ts`)
+  is not this goal's, and slice A lands after #332. Readiness: ADR-0415/0417
+  — a saved open never certifies installation; Outcome (a) is a
+  first-materialization clause, `package tree readiness is not published`
+  (C4) is still that gate. Legacy notice rides the health snapshot ADR-0413
+  extended (`projectOpen`); a new `storage-layout` scope is still needed.
+  Verified unchanged on main: one-writer Web Lock `rifty:workbench:v1` +
+  `WorkbenchOriginOccupiedError` (ADR-0402 retains the origin-wide lease);
+  page reads copy the tree (`authority.snapshot()` → `#snapshotEntry().slice()`,
+  I4); deep-link `createScratch` premise (ADR-0414 keeps the dirty
+  exclusions); sibling `fault-honest-opfs-persistence` — nothing landed.

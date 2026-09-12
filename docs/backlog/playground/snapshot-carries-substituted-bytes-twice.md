@@ -3,8 +3,8 @@ area: playground
 status: draft
 title: Can a baked snapshot satisfy zero-read replay without shipping the same package bytes twice?
 created: 2026-08-31
-why: every baked snapshot carries its substituted package both unpacked in the tree and whole as a tarball in the replay cache, and stores all of it as base64 inside JSON — on the three committed artifacts that is 3.77 MB of duplicate plus 2.54-4.71 MB of encoding tax a first-time user downloads
-user_story: As a browser-IDE user opening an instant template, I want to download it once, but today the artifact ships one package's bytes in two representations and encodes every byte at a 33% expansion before compression.
+why: Snapshot replay retains both source tarballs and installed bytes; the independent saving from deduplicating the selected tar.gz representation remains unmeasured, so this question stays unscheduled.
+user_story: As a browser-IDE user opening an instant template, I want a smaller download with exact offline replay, but the benefit of deduplicating the standard tar.gz beyond its container savings is not yet measured.
 sources: [PR-289, docs/adr/playground/0346-baked-dependency-snapshots-carry-replay-tarball-cache.md, docs/adr/npm-client/0371-registry-twins-carry-substituted-runtime-bytes-in-the-installed-tree.md, docs/backlog/playground/baked-snapshot-regeneration.md]
 code:
   - packages/workbench/src/glue/dep-snapshot.ts
@@ -16,18 +16,24 @@ code:
 A snapshot must restore an exact tree AND let the next `npm install` replay
 with zero registry reads (ADR-0346). Today it buys the second guarantee by
 shipping the package's tarball beside the very files that tarball unpacks to,
-and stores both as base64 in JSON. Two independent questions, cheapest first:
+and the legacy JSON baseline below stores both as base64. The selected standard
+container is delivered: browsable tar.gz with disjoint user/control namespaces
+(ADR-0386/0387; docs/backlog/distribution/reference/dep-snapshot-producer-evidence.md
+and docs/backlog/distribution/reference/self-hosted-snapshot-workbench-completion.md).
+This draft retains the independent, unmeasured deduplication question:
 
-1. Does the artifact need base64-in-JSON at all, or can the same content ride a
-   binary container with no change to either consumer's contract?
-2. Is one representation of the package enough — replay reading its bytes back
+Is one representation of the package enough — replay reading its bytes back
    from the restored tree, or a digest-addressed slot both consumers share — or
    is the duplication load-bearing (integrity is over the tarball, not the file
    set; re-packing at replay time may not be byte-reproducible)?
 
 No carrier is prescribed. Whether re-derivation is exact enough for an
 integrity-keyed cache is unproven and is the first thing a pickup must settle
-if it goes past question 1.
+before removing either representation.
+
+Before implementation pickup, measure deduplication against the delivered
+standard tar.gz baseline. Old JSON numbers below do not establish that future
+saving or its priority. No download-size promise is attached to this draft.
 
 ## Context
 
@@ -88,10 +94,8 @@ name the other.
 
 ## Options or Next
 
-- **Cheapest, no contract risk:** stop paying the base64-in-JSON tax. Same
-  content, binary envelope; neither the tree writer nor the replay cache
-  changes semantics. Measured floor above; needs a real format decision and a
-  drift-gate update.
+- Standard-container work is defined by ADR-0386/0387;
+  do not duplicate it here. This draft remains unscheduled for deduplication.
 - Replay reads member bytes from the restored tree instead of a cached tarball.
   Blocker to check first: the lockfile pins SRI integrity over the tarball, so
   this needs an exactness argument the current model may not give.
@@ -106,6 +110,10 @@ REVERSIBLE — snapshot format, bake script, and restore path each change
 independently; no public API and no ADR is contradicted by asking.
 
 ## Decisions
+
+- 2026-09-07 — challenge response: removed assigned encoding savings from why/user_story; independent tar.gz dedup value awaits measurement after producer delivery, so this draft remains unscheduled.
+
+- 2026-09-07 — user selected a standard archive for inspection in embedder refine; representation work assigned to distribution/dep-snapshot-producer, tree/cache deduplication remains here and unscheduled.
 
 - 2026-08-31, user (inline review of PR #289): worth optimizing, not now.
   Captured as a draft, deliberately unscheduled; no epic linkage.
@@ -128,3 +136,10 @@ The impact is sized against one of three artifacts and the doc says so ("only th
 A materially cheaper direct authority exists and the doc dismisses it in half a clause ("bake-time recompression") without sizing it. Every member is `encoding: base64` inside JSON (250/250 in `vite`); re-gzipping the same content as a binary container yields 9,682,812 B vs the shipped 12,221,954 B — 2,539,142 B recovered on `vite`, 4,708,619 B on `vite8`, 5,267,471 B on `typescript` — with no SRI-exactness argument, no change to either consumer's contract, and none of the ADR-0346 risk the item's first two options must clear. The doc's own "unavoidable" residual after dedup is almost entirely this tax.
 
 The item's only quantitative claim is left as an admitted estimate ("the exact saving of removing it is unmeasured") when one `gzipSync` call settles it: the true Vite saving is 3,772,791 B, not ~3,845,798 B. Against a queue where `docs/backlog/playground/baked-snapshot-regeneration.md` has tracked committed-snapshot size pressure since 2026-06-13 (and explicitly deferred the storage move), this doc neither cites that item nor explains why a third overlapping size concern should exist separately from it.
+
+
+### Rechallenge after container assignment
+
+challenge: 2026-09-07 — 1 problems
+
+Оставшаяся дедупликация оценена только на старом JSON/base64; `why` и user story включают уже переданный другому владельцу encoding tax. Экономия после выбранного tar.gz не измерена, поэтому самостоятельный выигрыш этого draft для скачивания пока не отделён от назначенной смены контейнера.

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- Restore ADR-0023/npm behavior for syntactically invalid package-lock JSON: resolve on explicit install and replace the lock only after success. This overturns the old blanket parse-error throw; preserve I/O, legacy-version and strict parsed-lock failures.
+
+- Optional registry capability retains real local replay across all install overloads; required network misses fail loudly and absent-registry Eddy rejects before effects (ADR-0398).
+- Shared installer/Eddy policy retains declared companion origin across caller-lock traversal; producer permission uses the existing companion-only role record and exact installed scope (ADR-0399).
+
+- Share lock-root and attested acquisition/bundled-path validation through the internal capsule for the published Workbench snapshot producer; resolution policy unchanged.
+
+- Installed esbuild facade reads the registry-owned realm carrier; substitution/admission semantics unchanged (ADR-0384).
+
 ### Changed
 
 - Test registry tarballs normalize the RFC 1952 OS byte, so fixture integrity
@@ -15,6 +24,8 @@
   orchestration, and public types (530 lines). Public API unchanged; the
   file-size ratchet pin is deleted.
 
+- Test ledgers accept scheduler-valid completion order for independent shadow
+  cache writes while retaining exact event membership and ordered publication.
 - Lockfile root entries preserve the project's declared dependency maps and
   requested ranges; hoisted transitive packages no longer acquire false root
   authority.

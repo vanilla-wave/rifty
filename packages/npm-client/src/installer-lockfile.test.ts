@@ -60,36 +60,44 @@ async function makeEntry(
   };
 }
 
-/**
- * If `package-lock.json` exists but is not valid JSON, `install` previously
- * caught the parse error and silently fell back to a full live re-resolve.
- * That hides corruption from the operator. We now throw with `{ cause }`
- * carrying the original SyntaxError.
- */
-describe('install — corrupt lockfile', () => {
-  it('throws a clear error with cause when package-lock.json is unparseable', async () => {
+// Native Node/npm probe in PR323 restores ADR-0023's unparseable-lock resolve policy.
+describe('install — syntactically corrupt lockfile', () => {
+  it('resolves afresh and replaces the invalid JSON only after successful installation', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
-    await vfs.writeFile(joinPath('/proj', 'package-lock.json'), '{not valid json');
-
-    // Registry never gets hit because we should fail before that.
+    await vfs.writeFile('/proj/package-lock.json', '{not valid json');
     const registry = new RegistryClient({
       baseUrl: '/never',
       fetch: async () => new Response('', { status: 599 }),
     });
+    await install('root', '1.0.0', {}, { vfs, cwd: '/proj', registry });
+    expect(JSON.parse(await vfs.readFileText('/proj/package-lock.json'))).toMatchObject({
+      name: 'root',
+      lockfileVersion: 3,
+    });
+  });
 
-    let caught: unknown;
-    try {
-      await install('root', '1.0.0', {}, { vfs, cwd: '/proj', registry });
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).toBeInstanceOf(Error);
-    const err = caught as Error;
-    expect(err.message).toContain('lockfile corrupt');
-    expect(err.message).toContain('/proj/package-lock.json');
-    // `cause` is the original JSON SyntaxError. Node typings expose it as unknown.
-    expect((err as { cause?: unknown }).cause).toBeInstanceOf(Error);
+  it('preserves invalid lock bytes when real resolution fails', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile('/proj/package-lock.json', 'not JSON');
+    const registry = new RegistryClient({
+      baseUrl: 'https://registry.test',
+      maxRetries: 0,
+      fetch: async () => {
+        throw new Error('registry offline');
+      },
+    });
+    await expect(
+      install('root', '1.0.0', { ms: '2.0.0' }, { vfs, cwd: '/proj', registry }),
+    ).rejects.toThrow();
+    expect(await vfs.readFileText('/proj/package-lock.json')).toBe('not JSON');
+  });
+
+  it('retains filesystem read errors rather than treating them as JSON syntax failures', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/package-lock.json', { recursive: true });
+    await expect(readExistingLockfile(vfs, '/proj')).rejects.toThrow(/EISDIR/);
   });
 });
 

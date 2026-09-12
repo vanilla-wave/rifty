@@ -31,6 +31,9 @@ same owner epoch/tree revision/path version and defensive content copy; the
 regression proof must exercise the real page request and detect a whole-tree
 read without source-grep assertions.
 
+Re-verified 2026-09-12 on main: `readFile` / `readDirectory` still call
+`options.authority.snapshot()` and `#snapshotEntry` still slices every file.
+
 Dedup scan: no backlog title/code/goal-map match. `perf/fs-rpc-chunk-perf`
 targets child RPC large-file chunking, not page editor/explorer reads.
 

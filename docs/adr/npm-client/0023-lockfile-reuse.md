@@ -58,3 +58,7 @@ Coverage: 3 unit tests in `packages/npm-client/src/installer-lockfile.test.ts` (
 ## Follow-ups
 
 - Per-subgraph partial reuse (recompute only the changed top-level dep's subgraph) instead of falling back to full live-resolve when any top-level pin no longer matches. The cache already softens the cost; the current full-fallback invariant is simpler to reason about.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0398 permits absent registry capability: network misses/corrupt-cache refetch fail loudly when unavailable; configured-registry and optional-dependency behavior remain.

@@ -1,0 +1,240 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted; proceed with implementation. Advisory carrier notes and baseline helper timeouts remain visible; merge requires independent Final+GREEN and green gates.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/distribution/no-coi-self-hosted-project-open.md at 5de9c1cfc34d7de865ca0a847dba8518098995a9; BASE de5ebd6f1; goal I3-I6, ADR-0417 and ADR-0420. Startup implementation is a separate unit. Raw native RED: /tmp/rifty-332-snapshot-red.log (8 missing runtime API), /tmp/rifty-332-saved-access-red.log (5 former installation admission failures); packed /tmp/rifty-332-packed-snapshot-red.log reaches missing public applySnapshot after offline install, typecheck/build and both published producers succeed.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3+I4+I5+I6",
+      "location": "docs/backlog/epics/no-coi-self-hosted-project/goal.md:57",
+      "summary": "Implement accepted snapshot/saved-access contract and prove native faults plus packed Vite journey in Final+GREEN; this checkpoint accepts the promise and runtime RED only."
+    },
+    {
+      "clause": "I1+I2",
+      "location": "docs/backlog/epics/no-coi-self-hosted-project/goal.md:44",
+      "summary": "Startup unit final verification is separate and in progress; this review does not substitute for its acceptance."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: packed producer to public SDK/copied Worker builds real Vite without registry/Eddy or dummy URL",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: missing/corrupt/wrong identity/template/runtime and bounded input reject, including force and same-ID validation",
+      "source": "acceptance",
+      "trace": "I3+I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:182; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:415; packages/workbench/src/workers/workbench-snapshot-apply-preparation.contract.test.ts:322",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: missing/pending/legacy proof and missing/corrupt lock permit ordinary local Node access without acquisition or rewriting",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-saved-access.spec.ts:4; tests/no-coi/no-coi-snapshot-application.spec.ts:141; tests/integration/no-coi-snapshot-browser-proof.mjs:74",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: valid facts activate real adapter; unusable facts grant none; actual missing/corrupt adapter fails only at use",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:93; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: conflict preflight precedes effects; force replaces targeted files/directory descendants and preserves unrelated paths; repeated validation",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:143; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:415",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: explicit changed artifact, saved source preservation, real Vite rebuild; ordinary open does not infer freshness",
+      "source": "acceptance",
+      "trace": "I4+I5",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:74; tests/integration/no-coi-snapshot-browser-proof.mjs:85; tests/no-coi/no-coi-snapshot-application.spec.ts:168",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: persistence precedes success; quota and tab death leave source/independent access and optional explicit reapply",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:215; tests/no-coi/no-coi-snapshot-application.spec.ts:239; tests/integration/no-coi-snapshot-browser-proof.mjs:107",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input \u00d7 source/application: reject without cache/payload effects; force cannot bypass",
+      "source": "fault-matrix",
+      "trace": "I3+I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:182; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:415",
+      "note": ""
+    },
+    {
+      "row": "unbounded-read \u00d7 acquisition: 128MiB and stall bounds; visible failure",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:182; packages/workbench/src/glue/bounded-asset-fetch.fault.test.ts:7; packages/workbench/src/glue/dep-snapshot.test.ts:732",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache \u00d7 replay: retain source/replay/runtime checks",
+      "source": "fault-matrix",
+      "trace": "I3+I5",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot.test.ts:363; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:415",
+      "note": ""
+    },
+    {
+      "row": "torn-state \u00d7 saved open: no status admission; local source survives; dependency errors at use",
+      "source": "fault-matrix",
+      "trace": "I4+I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-saved-access.spec.ts:4; tests/integration/no-coi-snapshot-browser-proof.mjs:93",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input \u00d7 adapter facts/payload: no fake capability or eager open refusal",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:93; tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "observable-order \u00d7 default conflict: unchanged native tree",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:143",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail \u00d7 application: reject while ordinary access survives",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:215; tests/integration/no-coi-snapshot-browser-proof.mjs:134",
+      "note": ""
+    },
+    {
+      "row": "torn-state \u00d7 tab death: pending operation, recreated page reads source, fails use, explicit reapply",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:239; tests/integration/no-coi-snapshot-browser-proof.mjs:107",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key \u00d7 toolchain: retain existing busy/resident owner",
+      "source": "fault-matrix",
+      "trace": "ADR-0376+ADR-0417",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-sandbox-build-loop.spec.ts:2956; tests/no-coi/no-coi-dev-hmr.spec.ts:866",
+      "note": ""
+    },
+    {
+      "row": "SDK applySnapshot({cwd,snapshot:{assetUrl,snapshotId,templateId},force?})",
+      "source": "public-api",
+      "trace": "ADR-0420",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-snapshot-application.spec.ts:125; tests/integration/fixtures/workbench-vite-consumer/src/no-coi-project-proof.ts:73",
+      "note": ""
+    },
+    {
+      "row": "SDK open({cwd,registryUrl?}) permits registry-free saved access and preserves legacy caller shape",
+      "source": "public-api",
+      "trace": "ADR-0420",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-saved-access.spec.ts:58; tests/no-coi/fixtures/no-coi-snapshot-page.ts:69; tests/integration/no-coi-snapshot-browser-proof.mjs:76",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:65",
+          "summary": "Update fixtures change only root package version; dependency payloads stay pinned to the same versions. The journey carries explicit update/rebuild, but a dependency-content change would improve discrimination for Acceptance 6. No executed surviving mutant; coverage remains pass under REV-4.",
+          "authority": "",
+          "evidence": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/no-coi-self-hosted-project-open.md:62",
+          "summary": "Existing lifecycle carriers exercise install/run/resident admission, not the new applySnapshot request. Reuse is appropriate; include apply in the existing admission cases when wiring the implementation. No executed bypass mutant; advisory, not missing coverage.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/glue/dep-snapshot.test.ts:363",
+          "authority": "",
+          "summary": "Independent reusable-helper verification is not fully green: unchanged dep-snapshot suite reproduces its 5000ms timeout in an isolated-file rerun. No product root cause or changed-unit regression established; retain this evidence for gate triage.",
+          "evidence": "pnpm exec vitest run packages/workbench/src/glue/bounded-asset-fetch.fault.test.ts packages/workbench/src/glue/dep-snapshot.test.ts tools/shadow-registry/src/runtime/entry-adapter-failure.contract.test.ts: 33 passed, 1 timeout (corrupt tar replay closure). Bounded 5/5 and adapter 2/2 passed. pnpm exec vitest run packages/workbench/src/glue/dep-snapshot.test.ts: 25 passed, 2 timeouts (restore lockfile replay bytes, corrupt tar replay closure); both 5000ms. Logs /tmp/rifty-332-contract-helper-review.log and /tmp/rifty-332-contract-helper-isolated.log. Production and test sources unchanged by reviewer."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/no-coi-snapshot-application.spec.ts:262",
+          "summary": "Interruption recovery is asserted in the same REPL after a failed invocation. If a partial empty CJS module loaded successfully before invocation failed, real Node retains that module after files change. I6 does not promise require-cache refresh. Verify post-reapply recovery in a fresh Worker/Node invocation, or explicitly remove the test-owned cache entry; do not add an unrequested SDK cache-reset guarantee.",
+          "authority": "",
+          "evidence": "Executed node --input-type=module with mkdtemp empty partial.cjs, require(target)(\"2 days\"), overwrite with a function returning 172800000, repeat, then delete require.cache[require.resolve(target)] and repeat. Node v24.16.0: partial={ok:false,error:\"require(...) is not a function\"}; afterWrite same error; fresh={ok:true,value:172800000}. /tmp/rifty-332-contract-node-cache-probe.log. This probes Node semantics, not the yet-unimplemented SDK application."
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "5de9c1cfc34d7de865ca0a847dba8518098995a9"
+}

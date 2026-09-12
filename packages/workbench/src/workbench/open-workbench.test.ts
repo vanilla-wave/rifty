@@ -797,6 +797,7 @@ describe('openWorkbench configuration and host admission', () => {
             },
           }),
           packageAcquisition: {
+            mode: 'registry',
             registryUrl: 'https://workbench.invalid/config/npm-registry',
             eddy: {
               resolverUrl: 'https://workbench.invalid/config/eddy/resolve',
@@ -851,6 +852,7 @@ describe('openWorkbench configuration and host admission', () => {
     expect(h.owner.start).toHaveBeenCalledWith(
       expect.objectContaining({
         packageAcquisition: {
+          mode: 'registry',
           registryUrl: 'https://workbench.invalid/npm-registry',
           eddy: {
             ...eddy,
@@ -891,7 +893,7 @@ describe('openWorkbench configuration and host admission', () => {
     const options = validOptions();
     const workbench = await h.open({
       ...options,
-      packageAcquisition: { ...options.packageAcquisition, registryUrl },
+      packageAcquisition: { ...options.packageAcquisition, mode: 'registry', registryUrl },
     });
 
     expect(h.owner.start).toHaveBeenCalledWith(

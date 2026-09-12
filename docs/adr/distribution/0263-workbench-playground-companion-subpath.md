@@ -252,3 +252,7 @@ ADR-0282 replaces the four-worker/extraction detail: the companion host also
 supplies a dedicated TypeScript worker, and sealed semantic recovery/durability/
 terminal-restore operations replace App imports of package-private functions.
 The generic root and every other decision above stand.
+
+## Corrections (active)
+
+- 2026-09-08 — ADR-0398 supersedes required registryUrl/no-mode and unconditional registry fallback with explicit registry/snapshot-only policy; all other clauses remain.

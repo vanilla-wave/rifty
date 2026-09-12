@@ -16,8 +16,12 @@ const DOCUMENT_BASENAMES = new Set([
   'SECURITY.MD',
 ]);
 
+// Agent instructions and workflows (`.agents/`, `.claude/`) are prose/prompts no
+// lane exercises: documentation for the heavy gates.
+const DOCUMENT_PREFIXES = ['docs/', '.agents/', '.claude/'];
+
 export function isDocumentationOnlyPath(path) {
-  if (path.startsWith('docs/')) return true;
+  if (DOCUMENT_PREFIXES.some((prefix) => path.startsWith(prefix))) return true;
   const basename = path.slice(path.lastIndexOf('/') + 1).toUpperCase();
   return DOCUMENT_BASENAMES.has(basename);
 }

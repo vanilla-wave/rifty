@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "vite build",
+    "build": "node copy-assets.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
+    "@riftydev/runtime-js": "0.1.0",
     "@riftydev/service-worker": "0.1.0",
-    "@riftydev/workbench": "0.1.0",
-    "sql.js": "1.14.1"
+    "@riftydev/workbench": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "22.19.19",

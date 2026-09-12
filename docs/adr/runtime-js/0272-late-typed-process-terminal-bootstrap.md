@@ -49,3 +49,7 @@ pollution); a second IPC handshake (unneeded ordering/race mechanism).
   migrate atomically to the typed function; there is no dual-read fallback.
 - This is a narrow public host API on an already public subpath. Shape changes
   are observable and require a superseding decision.
+
+## Corrections (active)
+
+2026-09-10 — ADR-0416: Dev-server entry now uses v2 for optional SQLite host configuration; terminal semantics unchanged.

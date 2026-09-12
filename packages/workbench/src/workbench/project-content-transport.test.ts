@@ -226,7 +226,7 @@ describe('ProjectContentTransport', () => {
     const content = await h.transport.ready;
     const initial = content.files.snapshot();
     expect(initial).toMatchObject({
-      excludedDirectoryNames: ['node_modules', '.git', '.vite', 'dist'],
+      excludedDirectoryNames: ['node_modules', '.git', 'dist'],
       entries: [
         { path: '/src', kind: 'dir', size: 0 },
         { path: '/src/main.ts', kind: 'file', size: 7 },

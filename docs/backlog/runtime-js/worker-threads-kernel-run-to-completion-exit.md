@@ -54,3 +54,24 @@ REVERSIBLE provisional today (a documented divergence + TODO marker). The robust
 fix touches the kernel keepalive/drain contract for ports — promote to an ADR if
 it changes kernel public behavior (same gate as
 [[server-shaped-worker-process-lifecycle]]).
+
+## Related parent-lifetime question (2026-09-10)
+
+Does a pending kernel Worker message keep its CJS parent alive? During optional
+SQLite acceptance, the packed CJS parent started execSync + a Worker, then used
+`prove().then(console.log)`. It exited 0 with empty output, also after
+`await command.close()`. Cause is unproven; do not equate it with the child-exit issue.
+Exact attempted fixture: git `c689192c5`,
+`tests/integration/fixtures/workbench-vite-consumer/src/sqlite-omission-proof.ts`;
+run `node tests/integration/workbench-packed-consumer.mjs` at that revision.
+Observed: `No-SQLite recursive Node proof: {"exit":{"code":0,"signal":null},"output":""}`.
+The SQLite option suite uses explicit ESM top-level await to isolate configuration
+propagation; no artificial keepalive. This question is outside #281's option change.
+
+Minimal Node v24.16.0 reference (separate, not a differential proof of that fixture):
+`node -e 'const {Worker}=require("node:worker_threads"); const w=new Worker("require(\"node:worker_threads\").parentPort.postMessage(\"worker-ready\")",{eval:true}); new Promise(r=>w.once("message",r)).then(console.log)'`
+prints `worker-ready`, exit 0. Pickup must reduce the browser failure and run the
+same program against Node before claiming a lifecycle defect or selecting a fix.
+Owner: runtime-js; trigger: pickup of this existing Worker lifecycle item.
+Dedup: this item + kernel/server-shaped-worker-process-lifecycle own the adjacent
+lifetime boundary; no new mechanism proposed.

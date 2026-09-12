@@ -28,6 +28,7 @@
  * only the `install` overloads and their orchestration.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import type { Vfs } from '@riftydev/vfs';
 import { existingLockfilePreemptsEddy, tryEddyFastPath } from './eddy-fast-path.ts';
 import type { EddyPrefetchHandle } from './eddy-prefetch.ts';
@@ -91,7 +92,8 @@ export interface PackumentCacheLike {
 export interface InstallOptions {
   vfs: Vfs;
   cwd: string;
-  registry: RegistryClient;
+  /** Absent capability permits local replay; required network misses fail (ADR-0398). */
+  registry?: RegistryClient;
   /** Caller-owned lifecycle cancellation, forwarded through every network wait. */
   signal?: AbortSignal;
   overrides?: OverrideMap;
@@ -290,8 +292,17 @@ export async function install(
   const tarballCache: TarballCache = opts.tarballCache ?? new VfsTarballCache(opts.vfs);
   const fetchCtx: FetchAndUnpackCtx = {
     cache: tarballCache,
-    getTarball: (url) =>
-      opts.registry.getTarball(url, opts.signal === undefined ? {} : { signal: opts.signal }),
+    getTarball: (url) => {
+      if (opts.registry === undefined)
+        throw new NotImplementedError(
+          'npm-client.registry.tarball',
+          'registry unavailable; required tarball is not cached',
+        );
+      return opts.registry.getTarball(
+        url,
+        opts.signal === undefined ? {} : { signal: opts.signal },
+      );
+    },
     ...(opts.signal === undefined ? {} : { signal: opts.signal }),
   };
   const substitutions = createSubstitutionReporter(
@@ -525,6 +536,10 @@ export async function install(
     ...(eddyResolvedAt === undefined ? {} : { resolvedAt: eddyResolvedAt }),
     ...(eddyResolvedVia === undefined ? {} : { resolvedVia: eddyResolvedVia }),
   };
-  recordShadowSubstitutionPlanForInstallResult(result, shadowPlan);
+  recordShadowSubstitutionPlanForInstallResult(
+    result,
+    shadowPlan,
+    resolved.companionOnlyBinInstallPaths,
+  );
   return result;
 }

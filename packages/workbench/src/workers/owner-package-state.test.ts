@@ -12,6 +12,10 @@ import {
   createOwnerPackageState,
 } from './owner-package-state.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
+import {
+  createPlaygroundNpmObserver,
+  playgroundInitialInstallFinalizer,
+} from './playground-package-mutations.ts';
 
 const ROOT = '/project';
 const BASE_PACKAGE_JSON = `${JSON.stringify({
@@ -94,7 +98,7 @@ async function packageMutationHarness(
       if (installInvocation > 0) await options.afterInstallFlush?.();
       return { failures: [], total: 0 };
     },
-    amendGeneratedBaseline,
+    finalizeFirstInstall: playgroundInitialInstallFinalizer(amendGeneratedBaseline),
     nodeWorkerRuntimeEnv: {},
     log: () => {},
     registry: new RegistryClient({
@@ -131,7 +135,7 @@ async function packageMutationHarness(
   shell.registerCommand(
     'npm',
     state.createNpmCommand(async () => 0, {
-      recordMutation,
+      observeOperation: createPlaygroundNpmObserver(authority, recordMutation),
       ...(options.mapInvocationContext === undefined
         ? {}
         : { mapInvocationContext: options.mapInvocationContext }),

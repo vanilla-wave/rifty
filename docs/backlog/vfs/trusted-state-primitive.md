@@ -8,7 +8,7 @@ user_story: As a contributor adding a trust claim over stored state (cache valid
 epic: trusted-state-authority
 blocked_by: []
 sources: [docs/adr/playground/0261-root-bound-serialized-install-trust-claims-and-non-transferable-claim-ingress.md]
-code: [apps/playground/src/glue/eddy-learned-pins.ts]
+code: [packages/workbench/src/glue/eddy-learned-pins.ts]
 ---
 
 ## Context

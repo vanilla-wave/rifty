@@ -1,0 +1,111 @@
+{
+  "node": "v24.16.0",
+  "chromium": "148.0.7778.96",
+  "results": [
+    {
+      "kind": "http",
+      "name": null,
+      "early": { "name": "", "href": "http://127.0.0.1:60528/worker.js?existing=1#preserved" },
+      "late": { "name": "", "href": "http://127.0.0.1:60528/worker.js?existing=1#preserved" }
+    },
+    {
+      "kind": "http",
+      "name": "custom-worker-label",
+      "early": {
+        "name": "custom-worker-label",
+        "href": "http://127.0.0.1:60528/worker.js?existing=1#preserved"
+      },
+      "late": {
+        "name": "custom-worker-label",
+        "href": "http://127.0.0.1:60528/worker.js?existing=1#preserved"
+      }
+    },
+    {
+      "kind": "http",
+      "name": "rifty-vm-engine=quickjs",
+      "early": {
+        "name": "rifty-vm-engine=quickjs",
+        "href": "http://127.0.0.1:60528/worker.js?existing=1#preserved"
+      },
+      "late": {
+        "name": "rifty-vm-engine=quickjs",
+        "href": "http://127.0.0.1:60528/worker.js?existing=1#preserved"
+      }
+    },
+    {
+      "kind": "http",
+      "name": "rifty-vm-engine=rewrite",
+      "early": {
+        "name": "rifty-vm-engine=rewrite",
+        "href": "http://127.0.0.1:60528/worker.js?existing=1#preserved"
+      },
+      "late": {
+        "name": "rifty-vm-engine=rewrite",
+        "href": "http://127.0.0.1:60528/worker.js?existing=1#preserved"
+      }
+    },
+    {
+      "kind": "blob",
+      "name": null,
+      "early": {
+        "name": "",
+        "href": "blob:http://127.0.0.1:60528/b8af6c85-25da-41c4-9e2b-598ac7457842"
+      },
+      "late": {
+        "name": "",
+        "href": "blob:http://127.0.0.1:60528/b8af6c85-25da-41c4-9e2b-598ac7457842"
+      }
+    },
+    {
+      "kind": "blob",
+      "name": "custom-worker-label",
+      "early": {
+        "name": "custom-worker-label",
+        "href": "blob:http://127.0.0.1:60528/b8af6c85-25da-41c4-9e2b-598ac7457842"
+      },
+      "late": {
+        "name": "custom-worker-label",
+        "href": "blob:http://127.0.0.1:60528/b8af6c85-25da-41c4-9e2b-598ac7457842"
+      }
+    },
+    {
+      "kind": "blob",
+      "name": "rifty-vm-engine=quickjs",
+      "early": {
+        "name": "rifty-vm-engine=quickjs",
+        "href": "blob:http://127.0.0.1:60528/b8af6c85-25da-41c4-9e2b-598ac7457842"
+      },
+      "late": {
+        "name": "rifty-vm-engine=quickjs",
+        "href": "blob:http://127.0.0.1:60528/b8af6c85-25da-41c4-9e2b-598ac7457842"
+      }
+    },
+    {
+      "kind": "blob",
+      "name": "rifty-vm-engine=rewrite",
+      "early": {
+        "name": "rifty-vm-engine=rewrite",
+        "href": "blob:http://127.0.0.1:60528/b8af6c85-25da-41c4-9e2b-598ac7457842"
+      },
+      "late": {
+        "name": "rifty-vm-engine=rewrite",
+        "href": "blob:http://127.0.0.1:60528/b8af6c85-25da-41c4-9e2b-598ac7457842"
+      }
+    }
+  ],
+  "requests": [
+    "/",
+    "/worker.js?existing=1",
+    "/late.js",
+    "/worker.js?existing=1",
+    "/late.js",
+    "/worker.js?existing=1",
+    "/late.js",
+    "/worker.js?existing=1",
+    "/late.js",
+    "/late.js",
+    "/late.js",
+    "/late.js",
+    "/late.js"
+  ]
+}

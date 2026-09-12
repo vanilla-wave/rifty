@@ -58,8 +58,16 @@ export interface PlaygroundTrustedSnapshot {
   readonly templateId: string;
 }
 
+export type PlaygroundSnapshotApplication =
+  | { readonly mode: 'initial-deployment-only' }
+  | { readonly mode: 'apply-snapshot'; readonly conflict?: 'error' | 'overwrite' };
+
 export type PlaygroundFirstMaterialization =
-  | { readonly kind: 'snapshot'; readonly snapshot: PlaygroundTrustedSnapshot }
+  | {
+      readonly kind: 'snapshot';
+      readonly snapshot: PlaygroundTrustedSnapshot;
+      readonly application?: PlaygroundSnapshotApplication;
+    }
   | { readonly kind: 'install' };
 
 interface PlaygroundPlanBase {
@@ -90,10 +98,15 @@ export interface NodeCliPlaygroundPlan extends PlaygroundPlanBase {
   readonly args?: readonly string[];
 }
 
+export interface NpmDevServerPlaygroundPlan extends PlaygroundPlanBase {
+  readonly kind: 'npm-dev-server';
+}
+
 export type PlaygroundProjectPlan =
   | VitePlaygroundPlan
   | NodeServerPlaygroundPlan
-  | NodeCliPlaygroundPlan;
+  | NodeCliPlaygroundPlan
+  | NpmDevServerPlaygroundPlan;
 
 export type PlaygroundProjectRef =
   | { readonly kind: 'scratch' }
@@ -118,9 +131,27 @@ export interface PlaygroundCatalogSnapshot {
   readonly projects: readonly PlaygroundProject[];
 }
 
+export interface PlaygroundRetainedScratch {
+  readonly id: string;
+}
+
+export interface PlaygroundScratchRecoveryArchiveV1 {
+  readonly format: 'rifty-scratch-recovery';
+  readonly version: 1;
+  readonly root: '/';
+  readonly directories: readonly string[];
+  readonly files: readonly {
+    readonly path: string;
+    readonly encoding: 'base64';
+    readonly content: string;
+  }[];
+}
+
 export interface PlaygroundProjectCatalog {
   snapshot(): PlaygroundCatalogSnapshot;
   subscribe(listener: (snapshot: PlaygroundCatalogSnapshot) => void): () => void;
+  listRetainedScratch(): Promise<readonly PlaygroundRetainedScratch[]>;
+  exportRetainedScratch(id: string): Promise<string>;
   createScratch(input: {
     readonly definition: ProjectDefinition<unknown>;
     readonly preserveDirtySameStarter?: boolean;
@@ -316,6 +347,7 @@ export interface PlaygroundWorkbench extends Workbench {
   readonly playground: {
     define(plan: VitePlaygroundPlan): ProjectDefinition<PreviewHandle>;
     define(plan: NodeServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
+    define(plan: NpmDevServerPlaygroundPlan): ProjectDefinition<PreviewHandle>;
     define(plan: NodeCliPlaygroundPlan): ProjectDefinition<void>;
     define(plan: PlaygroundProjectPlan): ProjectDefinition<unknown>;
     readonly catalog: PlaygroundProjectCatalog;

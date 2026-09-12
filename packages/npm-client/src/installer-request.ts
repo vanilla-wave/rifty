@@ -50,6 +50,8 @@ export async function normalizeInstallArgs(
   }
 
   if (!opts) throw new TypeError('install() missing InstallOptions');
+  if (opts.registry === undefined && opts.resolverUrl !== undefined)
+    throw new TypeError('Eddy acquisition requires a registry');
 
   if (shouldReadPackageJson) {
     const manifest = await readRootPackageJson(opts.vfs, opts.cwd);
@@ -94,7 +96,7 @@ export async function normalizeInstallArgs(
 function isInstallOptions(value: unknown): value is InstallOptions {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<InstallOptions>;
-  return !!candidate.vfs && typeof candidate.cwd === 'string' && !!candidate.registry;
+  return typeof candidate.vfs?.readFileText === 'function' && typeof candidate.cwd === 'string';
 }
 
 interface RootPackageJson {

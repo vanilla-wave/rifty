@@ -1,44 +1,13 @@
 /// <reference lib="webworker" />
 /**
- * `OpfsFsSync` — synchronous {@link FsSync} backed by OPFS via
- * `FileSystemSyncAccessHandle` (ADR-0013). Worker realm only; main-thread
- * construction throws `NotImplementedError`.
+ * Worker-only synchronous OPFS mirror (ADR-0013/0072). Content and directory
+ * reads use memory preloaded by {@link init}; mutations enqueue OPFS
+ * write-through. {@link flush} reports durability before a reload.
  *
- * Scope: all seven `FsSync` methods are implemented. File **content** I/O
- * goes through a synchronous in-memory content cache with async OPFS
- * write-through (ADR-0072): `writeFileSync` updates the cache immediately
- * and enqueues an async `OpfsVfs.writeFile`; `readFileBytesSync` serves the
- * cache, which {@link init} preloads from OPFS at boot so reads after a page
- * reload return the persisted bytes synchronously. This replaces the earlier
- * `FileSystemSyncAccessHandle`-on-the-hot-path design (ADR-0013), which
- * couldn't service a sync read/write on a brand-new path without an async
- * handle open mid-call. The handle machinery (`openSync`/`ensureHandle`) is
- * retained but off the read/write hot path. Callers can drain the
- * write-through deterministically via {@link flush} before a reload.
- *
- * Directory-shape ops (`readdirSync`, `mkdirSync`, `rmSync`, `renameSync`)
- * read/write an in-memory directory tree mirror that is **seeded** at boot
- * from the OPFS root and kept in sync as the page runs. Persistence of
- * directory-shape mutations back to OPFS happens via async helpers
- * (`getDirectoryHandle`/`removeEntry`) tracked in the same `flush` queue; if
- * the page is closed before a flush completes, the on-disk tree is slightly
- * behind the in-memory mirror — acceptable for a dev runtime.
- *
- * Warm index (ADR-0014): {@link init} walks the OPFS tree and caches
- * `{ kind, size, children? }` so `existsSync`/`statSync`/`readdirSync`
- * see the same tree the async {@link OpfsVfs} sees. `writeFileSync`
- * mutates the cache in place; async writes through the paired async
- * surface make it stale until {@link refreshIndex} is called.
- *
- * Handle lifecycle: a `Map<path, FileSystemSyncAccessHandle>` opens
- * lazily on `openSync(path)` and is reused (browsers serialise handle
- * access). No cross-instance eviction — Worker owns its filesystem
- * view for life.
- *
- * atime/mtime side-table (ADR-0029): `FileSystemSyncAccessHandle`
- * exposes no mtime mutation; `utimes` records into an in-memory map and
- * `statSync` prefers it over the default `0`. Not persisted across page
- * reloads.
+ * The warm index (ADR-0014) tracks kind/size/children. Writes through the paired
+ * async surface require {@link refreshIndex}; sync mutations update it locally.
+ * Sync-access handles open lazily and remain owned by this instance.
+ * atime/mtime overrides are memory-only (ADR-0029), lost on reload.
  */
 
 import { NotImplementedError, VfsError } from './errors.ts';
@@ -46,10 +15,11 @@ import type { FsSync } from './fs-sync.ts';
 import {
   type FlushProgressSnapshot,
   OpfsDrainScheduler,
-  PERSIST_OPERATION_REPORT_TIMEOUT_MS,
   type PersistOperation,
 } from './opfs-drain-scheduler.ts';
-import { assertNotCrswapReserved, isCrswapArtifactName } from './opfs-errors.ts';
+import { assertNotCrswapReserved } from './opfs-errors.ts';
+import { type IndexEntry, OpfsPreloadError, walkOpfsTree } from './opfs-preload.ts';
+export { walkOpfsTree } from './opfs-preload.ts';
 import {
   basename,
   basenameNormalized,
@@ -61,26 +31,6 @@ import {
 import type { VfsDirent } from './types.ts';
 
 declare const navigator: { storage?: { getDirectory(): Promise<FileSystemDirectoryHandle> } };
-
-interface IndexEntry {
-  readonly kind: 'file' | 'dir';
-  /** Last-known size in bytes (files only; `0` for dirs). */
-  size: number;
-  /**
-   * For directories: the set of child names (one segment, no slash).
-   * Maintained in lockstep with the prefix-keyed `index` map so dir-shape
-   * ops are O(children) instead of O(tree). `undefined` for files.
-   */
-  children?: Set<string>;
-  /**
-   * For directories: memoised sorted dirent list (perf audit 2026-06-05).
-   * Invalidated to `null` on attach/detach/removeSubtree of a child AND on a
-   * per-child index.set (a child's kind/identity can flip — e.g. writeFileSync
-   * over an existing name — and each dirent's isFile/isDirectory is derived
-   * per-child). Cleared wholesale on refreshIndex. `null`/absent = rebuild.
-   */
-  sortedDirents?: readonly VfsDirent[] | null;
-}
 
 /**
  * Minimal structural view of the paired async OPFS surface
@@ -142,49 +92,6 @@ interface TrackedPersistFailure {
   readonly operationSequence: number;
 }
 
-/**
- * Walks an OPFS directory tree and yields `{ path, kind, size, children? }`
- * for every entry under `root`. The root itself is reported as
- * `'/' → dir`. Exported for unit tests; not part of the public surface.
- */
-export async function walkOpfsTree(
-  root: FileSystemDirectoryHandle,
-): Promise<Map<string, IndexEntry>> {
-  const out = new Map<string, IndexEntry>();
-  out.set('/', { kind: 'dir', size: 0, children: new Set() });
-
-  async function recurse(dir: FileSystemDirectoryHandle, prefix: string): Promise<void> {
-    const parentEntry = out.get(prefix);
-    const parentChildren = parentEntry?.children;
-    // FileSystemDirectoryHandle is async-iterable yielding [name, handle].
-    for await (const [name, handle] of dir as unknown as AsyncIterable<
-      [string, FileSystemHandle]
-    >) {
-      // Platform atomic-swap temps are not tree content (see opfs-errors.ts).
-      if (handle.kind === 'file' && isCrswapArtifactName(name)) continue;
-      const childPath = prefix === '/' ? `/${name}` : `${prefix}/${name}`;
-      parentChildren?.add(name);
-      if (handle.kind === 'file') {
-        let size = 0;
-        try {
-          const file = await (handle as FileSystemFileHandle).getFile();
-          size = file.size;
-        } catch {
-          // Keep size 0 so the entry stays discoverable; statSync surfaces
-          // the real error if the file is later opened.
-        }
-        out.set(childPath, { kind: 'file', size });
-      } else if (handle.kind === 'directory') {
-        out.set(childPath, { kind: 'dir', size: 0, children: new Set() });
-        await recurse(handle as FileSystemDirectoryHandle, childPath);
-      }
-    }
-  }
-
-  await recurse(root, '/');
-  return out;
-}
-
 export class OpfsFsSync implements FsSync {
   private readonly handles = new Map<string, FileSystemSyncAccessHandle>();
   private readonly index = new Map<string, IndexEntry>();
@@ -206,24 +113,7 @@ export class OpfsFsSync implements FsSync {
    * its drain-scoped dir-handle cache. The ledger stays HERE (single ledger
    * owner); the scheduler reports timeouts/blocked fences via these hooks.
    */
-  private readonly scheduler = new OpfsDrainScheduler({
-    onReportTimeout: (operation) => {
-      this.recordOperationFailure(
-        operation,
-        new Error(
-          `OPFS ${operation.op} did not settle within ${PERSIST_OPERATION_REPORT_TIMEOUT_MS}ms`,
-        ),
-      );
-    },
-    onBlockedBehindTimeout: (operation, blocker) => {
-      this.recordOperationFailure(
-        operation,
-        new Error(
-          `OPFS ${operation.op} blocked behind timed out ${blocker.op} ${blocker.paths[0] ?? '/'}`,
-        ),
-      );
-    },
-  });
+  private readonly scheduler: OpfsDrainScheduler;
   /**
    * Paired async OPFS surface used for content write-through, content
    * preload, and durable file-bearing structural moves/deletes. `null` when
@@ -261,7 +151,11 @@ export class OpfsFsSync implements FsSync {
    * inject only a fake root keep compiling and behaving identically; when
    * omitted, sync writes stay in-cache only (no OPFS persistence).
    */
-  constructor(root: FileSystemDirectoryHandle, paired?: PairedAsyncSurface) {
+  constructor(
+    root: FileSystemDirectoryHandle,
+    paired?: PairedAsyncSurface,
+    options: { readonly ioReportTimeoutMs?: number } = {},
+  ) {
     if (!OpfsFsSync.isSupported()) {
       throw new NotImplementedError(
         'OpfsFsSync',
@@ -270,64 +164,73 @@ export class OpfsFsSync implements FsSync {
     }
     this.root = root;
     this.asyncSurface = paired ?? null;
+    this.scheduler = new OpfsDrainScheduler(
+      {
+        onReportTimeout: (operation) => {
+          this.recordOperationFailure(
+            operation,
+            new Error(
+              `OPFS ${operation.op} did not settle within ${this.scheduler.reportTimeoutMs}ms`,
+            ),
+          );
+        },
+        onBlockedBehindTimeout: (operation, blocker) => {
+          this.recordOperationFailure(
+            operation,
+            new Error(
+              `OPFS ${operation.op} blocked behind timed out ${blocker.op} ${blocker.paths[0] ?? '/'}`,
+            ),
+          );
+        },
+      },
+      options.ioReportTimeoutMs,
+    );
     // Seed root so `readdirSync('/')` works before `refreshIndex` runs.
     this.index.set('/', { kind: 'dir', size: 0, children: new Set() });
   }
 
-  /**
-   * Acquires the OPFS root via `navigator.storage.getDirectory()`,
-   * builds the warm path index, preloads file content into the sync cache,
-   * and returns a ready-to-use `OpfsFsSync`. Throws (via the constructor)
-   * if called outside a Worker realm that supports `createSyncAccessHandle`.
-   *
-   * `paired` is the async OPFS surface ({@link OpfsVfs}); passing it enables
-   * content write-through and the boot preload (ADR-0072). Omitting it
-   * keeps the no-persistence test path working.
-   */
-  static async init(paired?: PairedAsyncSurface): Promise<OpfsFsSync> {
+  /** Worker-only mount/index/preload; paired surface owns write-through (ADR-0072/0402). */
+  static async init(
+    paired?: PairedAsyncSurface,
+    root?: FileSystemDirectoryHandle,
+    options: { readonly ioReportTimeoutMs?: number } = {},
+  ): Promise<OpfsFsSync> {
+    const ioReportTimeoutMs = options.ioReportTimeoutMs;
     if (!OpfsFsSync.isSupported()) {
       throw new NotImplementedError(
         'OpfsFsSync',
         'sync OPFS only available inside a Web Worker realm',
       );
     }
-    if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
-      throw new VfsError('EPERM', '/', 'OPFS navigator.storage.getDirectory unavailable');
+    let dir = root;
+    if (dir === undefined) {
+      if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
+        throw new VfsError('EPERM', '/', 'OPFS navigator.storage.getDirectory unavailable');
+      }
+      dir = await navigator.storage.getDirectory();
     }
-    const dir = await navigator.storage.getDirectory();
-    const instance = new OpfsFsSync(dir, paired);
-    await instance.refreshIndex();
-    await instance.preloadContent();
+    const instance = new OpfsFsSync(dir, paired, { ioReportTimeoutMs });
+    const fresh = await walkOpfsTree(dir, paired ? instance.content : undefined);
+    for (const [path, entry] of fresh) instance.index.set(path, entry);
     return instance;
   }
 
-  /**
-   * Reads every known file's bytes from the paired async OPFS surface into
-   * the sync {@link content} cache so post-reload `readFileSync` serves the
-   * persisted bytes synchronously (ADR-0072). No-op without a paired
-   * surface. Failures per file are swallowed (the file stays out of the
-   * cache and reads as empty until a fresh write) so one unreadable entry
-   * never blocks boot.
-   */
+  /** Explicit content refresh publishes bytes only after every read succeeds. */
   async preloadContent(): Promise<void> {
     const surface = this.asyncSurface;
     if (!surface) return;
-    const reads: Array<Promise<void>> = [];
-    for (const [path, entry] of this.index) {
-      if (entry.kind !== 'file') continue;
-      reads.push(
-        (async () => {
-          try {
-            const bytes = await surface.readFile(path);
-            this.content.set(path, bytes);
-          } catch {
-            // Unreadable at boot — leave uncached; a later sync read returns
-            // empty bytes, a later write re-establishes content.
-          }
-        })(),
+    const fresh = new Map<string, Uint8Array>();
+    try {
+      await Promise.all(
+        [...this.index].map(async ([path, entry]) => {
+          if (entry.kind === 'file') fresh.set(path, await surface.readFile(path));
+        }),
       );
+    } catch (cause) {
+      throw new OpfsPreloadError(cause);
     }
-    await Promise.allSettled(reads);
+    this.content.clear();
+    for (const [path, bytes] of fresh) this.content.set(path, bytes);
   }
 
   /**
@@ -606,11 +509,15 @@ export class OpfsFsSync implements FsSync {
       throw new VfsError('ENOENT', path);
     }
     if (entry.kind === 'dir') throw new VfsError('EISDIR', path);
-    // Content cache (ADR-0072) is authoritative for sync reads. The
-    // `?? new Uint8Array()` covers a file the boot preload couldn't read
-    // (e.g. transient OPFS error): empty read is the safe degenerate, not a
-    // thrown stub.
-    return this.content.get(normalized) ?? new Uint8Array();
+    return this.readCachedContent(normalized, path);
+  }
+
+  private readCachedContent(normalized: string, reportPath: string): Uint8Array {
+    const bytes = this.content.get(normalized);
+    if (bytes === undefined) {
+      throw new VfsError('EIO', reportPath, `OPFS content is unavailable: ${reportPath}`);
+    }
+    return bytes;
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
@@ -788,6 +695,22 @@ export class OpfsFsSync implements FsSync {
    * is NOT this barrier. Never rejects. Caller: install-stamp `promote()`,
    * immediately before its trusted-stamp write (one per transition).
    */
+  /** Installer eligibility only; equality still requires a fresh native read (ADR-0392). */
+  isPersistenceClean(path: string): boolean {
+    const normalized = normalizeAbsolute(path);
+    if (
+      !this.asyncSurface ||
+      !this.index.has(normalized) ||
+      this.scheduler.hasPendingAtOrAbove(normalized)
+    )
+      return false;
+    for (const failed of this.persistFailures.keys()) {
+      if (failed === normalized || failed === '/' || normalized.startsWith(`${failed}/`))
+        return false;
+    }
+    return true;
+  }
+
   fence(): Promise<void> {
     return this.scheduler.settledBarrier();
   }
@@ -997,7 +920,7 @@ export class OpfsFsSync implements FsSync {
       throw new VfsError('ENOENT', dst);
     }
     if (parentEntry.kind !== 'dir') throw new VfsError('ENOTDIR', dst);
-    const bytes = (this.content.get(s) ?? new Uint8Array()).slice();
+    const bytes = this.readCachedContent(s, src).slice();
     // writeFileSync updates content/index/attachChild + enqueues OPFS write-through.
     this.writeFileSync(d, bytes);
     // A copy is a new file → dst mtime = now (ADR-0090; OPFS mtime via side-table).

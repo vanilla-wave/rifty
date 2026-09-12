@@ -1,0 +1,150 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS; merge after the in-flight final pr:check and pass-binding gates complete.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "ca574a4c5f5a9905b22b2b6bdbf45b894fac1034",
+  "unit_goal_source": "docs/backlog/playground/optional-sqlite-url.md @ ca574a4c5f5a9905b22b2b6bdbf45b894fac1034; BASE 2c7f9bbf4c88c34c40ac4d83411ba2dda27eafae; PR #330 / issue #281. Independent reviewer /root/sqlite_final_review read the raw issue and handoff, ADR-0065/0267/0272/0339/0390/0391/0416, BASE criteria, complete changed tree and Contract+RED preparation at 18ffa13020f531b1031e9ccf639e7867b8f1f9e1. Fresh noninstrumented packed GREEN at this reviewed SHA: /tmp/rifty-sqlite-packed-green.log, 15 first-party + 83 external tarballs, published TypeScript/build, configured real SQLite, fresh Chromium without the SQLite asset, Vite build/dev/HMR, recursive Node/dev-server missing-option errors and zero SQLite requests. Independently executed 7 suites: 232/232, /tmp/rifty-sqlite-independent-green.log. Independently reproduced both TypeScript-worker SHA pins with write:false BASE/HEAD builds: /tmp/rifty-sqlite-worker-pin-proof.json; equal 10,022,664 bytes, content differs only in emitted import hashes. PR-4: protocol assertions advance per ADR-0416 with old-version rejection retained; direct sql.js fixture dependency removal uses the existing copied Workbench asset; no payload criterion was weakened. Fixture corrections preserve configuration assertions: real matching snapshot, explicit ESM await, and versioned public scripts.dev edit for its declared Node server. Prior CJS parent-lifetime symptom remains an explicitly unproven question in the existing lifecycle backlog, outside this option contract; no keepalive workaround or lifecycle repair claim. Full pr:check 25/25 already passed on identical production code (/tmp/rifty-sqlite-pr-check-green.log); final rerun is in flight. Independently verified production Chromium CI SUCCESS at source-identical 0668a927bd01be41f8c6d2ed575a14e37b8eaa3d: https://github.com/vanilla-wave/rifty/actions/runs/34485844878/job/102899917053, saved /tmp/rifty-sqlite-independent-prod-proof.json.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: omitted wasm/sqlite accepted; supplied malformed objects/URLs rejected by public validation.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/sqlite-options.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: packed snapshot-only Vite build/dev/HMR and ordinary Node execute without configured/deployed SQLite; recursive execSync, worker_threads and dev-server use name deployment.wasm.sqlite.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sqlite-omission-proof.ts:105; tests/integration/fixtures/workbench-vite-consumer/src/snapshot-only-proof.ts:96; tests/integration/workbench-packed-consumer.mjs:1246",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: configured packed SQLite executes real CREATE/INSERT/SELECT; provider is lazy and preserves exact inherited URL.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/main.ts:84; packages/workbench/src/glue/sqlite-wasm-provider.fault.test.ts:46",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: host snapshots preserve absence, required/unknown fields stay strict, and prior Node/dev-server protocol versions are rejected.",
+      "source": "acceptance",
+      "trace": "ADR-0267 + ADR-0416",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/node-worker-runtime-config.test.ts:14; packages/workbench/src/workers/dev-server-child-config.test.ts:88; packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:472",
+      "note": ""
+    },
+    {
+      "row": "Absent asset \u00d7 boot/build: success with zero SQLite requests.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:1223; tests/integration/workbench-packed-consumer.mjs:1321",
+      "note": ""
+    },
+    {
+      "row": "Absent URL \u00d7 SQLite use in child/recursive/dev-server: missing-option error without guest-env fallback.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sqlite-omission-proof.ts:20; tests/integration/fixtures/workbench-vite-consumer/src/sqlite-omission-proof.ts:129",
+      "note": ""
+    },
+    {
+      "row": "Supplied invalid URL/object \u00d7 admission: reject before startup.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/sqlite-options.test.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Missing/extra host fields or old protocol \u00d7 decode: reject while accepting optional SQLite alone.",
+      "source": "fault-matrix",
+      "trace": "ADR-0267 + ADR-0416",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/node-worker-runtime-config.test.ts:38; packages/workbench/src/workbench/owner-protocol.test.ts:1088; packages/workbench/src/workers/dev-server-child-config.test.ts:244; packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:472",
+      "note": ""
+    },
+    {
+      "row": "Public WorkbenchOptions/derived PlaygroundWorkbenchOptions accept typed omitted deployment.wasm and empty wasm.",
+      "source": "public-api",
+      "trace": "scenario + ADR-0416",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/main.ts:220; tests/integration/fixtures/workbench-vite-consumer/src/sqlite-omission-proof.ts:50; packages/workbench/src/workbench/sqlite-options.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Public Node entry bootstrap builder/reader uses v4 and rejects retired v2/v3 without fallback.",
+      "source": "public-api",
+      "trace": "ADR-0267 + ADR-0416",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:63; packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:472",
+      "note": ""
+    },
+    {
+      "row": "Public SQLite engine use without initialization names the missing Workbench option, retaining direct engine initialization guidance.",
+      "source": "public-api",
+      "trace": "scenario + ADR-0416",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/sqlite-wasm-provider.fault.test.ts:29; packages/net/src/sqlite/engine.ts:206",
+      "note": ""
+    },
+    {
+      "row": "TypeScript worker exact compiler inventory pin admits the updated emitted imports while retaining the 10,022,664-byte ceiling and all payload-negative checks.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:49",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

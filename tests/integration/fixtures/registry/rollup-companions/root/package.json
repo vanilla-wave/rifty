@@ -1,0 +1,8 @@
+{
+  "name": "companion-root",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "rollup": "4.63.1"
+  }
+}

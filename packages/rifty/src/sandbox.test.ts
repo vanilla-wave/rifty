@@ -1,23 +1,81 @@
 import type { RuntimeController } from '@riftydev/runtime-js';
-import type { FsReadEncoding } from '@riftydev/runtime-js';
-import { describe, expect, it, vi } from 'vitest';
+import { createRuntimeFs, handleWorkerFsRequest } from '@riftydev/runtime-js/internal';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CapabilityCheck } from './capabilities.ts';
-import { COI_REQUIRED_MESSAGE, type SandboxDeps, createSandbox } from './sandbox.ts';
+import {
+  COI_REQUIRED_MESSAGE,
+  type CreateSandboxOptions,
+  type Sandbox,
+  type SandboxDeps,
+  type SandboxResidentBin,
+  type SandboxRestartReport,
+  type SandboxStartBinInput,
+  type ToolchainCreateSandboxOptions,
+  type ToolchainSandbox,
+  createSandbox,
+} from './sandbox.ts';
+
+function publicCreateSandboxTypeCarrier(options: CreateSandboxOptions): void {
+  const union: Promise<Sandbox | ToolchainSandbox> = createSandbox(options);
+  const generic: Promise<Sandbox> = createSandbox({ workerUrl: '/generic-worker.js' });
+  const toolchain: Promise<ToolchainSandbox> = createSandbox({
+    requireCrossOriginIsolation: false,
+    toolchain: { workerUrl: '/toolchain-worker.js' },
+  });
+  // @ts-expect-error toolchain admission requires an explicit literal false.
+  const omittedFalse: ToolchainCreateSandboxOptions = {
+    toolchain: { workerUrl: '/toolchain-worker.js' },
+  };
+  const trueFlag: ToolchainCreateSandboxOptions = {
+    // @ts-expect-error true cannot admit the shared-memory-free toolchain tier.
+    requireCrossOriginIsolation: true,
+    toolchain: { workerUrl: '/toolchain-worker.js' },
+  };
+  const legacyTopLevelWorker: ToolchainCreateSandboxOptions = {
+    requireCrossOriginIsolation: false,
+    toolchain: { workerUrl: '/toolchain-worker.js' },
+    // @ts-expect-error toolchain mode selects only its nested Worker URL.
+    workerUrl: '/legacy-worker.js',
+  };
+  const spawnToolchainIsNotPublic: false = false as 'spawnToolchain' extends keyof SandboxDeps
+    ? true
+    : false;
+  void [
+    union,
+    generic,
+    toolchain,
+    omittedFalse,
+    trueFlag,
+    legacyTopLevelWorker,
+    spawnToolchainIsNotPublic,
+  ];
+}
+void publicCreateSandboxTypeCarrier;
+
+async function publicResidentLifecycleTypeCarrier(
+  sandbox: ToolchainSandbox,
+  input: SandboxStartBinInput,
+): Promise<void> {
+  const resident: SandboxResidentBin = await sandbox.toolchain.startBin(input);
+  const report: SandboxRestartReport = await sandbox.restart({
+    preview: { src: resident.previewUrl },
+    beforeStart: async (fs) => fs.writeFile('/project/repair.js', 'export const ok = true;'),
+  });
+  void report;
+}
+void publicResidentLifecycleTypeCarrier;
 
 /** A typed no-op controller — these tests assert wiring, never drive eval. */
 function fakeRuntime(onDispose: () => void = () => {}): RuntimeController {
-  function readFile(path: string): Promise<Uint8Array>;
-  function readFile(path: string, encoding: FsReadEncoding): Promise<string>;
-  function readFile(_path: string, encoding?: FsReadEncoding): Promise<Uint8Array | string> {
-    return Promise.resolve(encoding === undefined ? new Uint8Array() : '');
-  }
+  const memory = new MemoryFsSync();
+  const fs = createRuntimeFs((operation) =>
+    handleWorkerFsRequest({ ...operation, id: 0 }, { fs: memory, invalidate() {} }),
+  );
 
   return {
     eval: () => Promise.resolve({ id: 0, ok: true, value: undefined }),
-    fs: {
-      readFile,
-      writeFile: () => Promise.resolve(),
-    },
+    fs,
     reset: () => Promise.resolve(),
     dispose: onDispose,
     on: () => () => {},
@@ -55,6 +113,10 @@ function deps(over: Partial<SandboxDeps> = {}): SandboxDeps {
   };
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('createSandbox', () => {
   it('wires capabilities, OPFS backend, and the runtime on the happy path', async () => {
     const runtime = fakeRuntime();
@@ -74,18 +136,24 @@ describe('createSandbox', () => {
     expect(spawn).toHaveBeenCalledWith({ workerUrl: 'http://x/worker.js' });
   });
 
-  it('throws and boots nothing when COI is required but absent', async () => {
-    const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>('opfs'));
-    const spawn = vi.fn(() => fakeRuntime());
-    await expect(
-      createSandbox(
-        { workerUrl: 'w' },
+  it.each([undefined, true] as const)(
+    'throws and boots nothing when COI is required but absent (%s)',
+    async (requireCrossOriginIsolation) => {
+      const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>('opfs'));
+      const spawn = vi.fn(() => fakeRuntime());
+      const error = await createSandbox(
+        {
+          workerUrl: 'w',
+          ...(requireCrossOriginIsolation === undefined ? {} : { requireCrossOriginIsolation }),
+        },
         deps({ detect: () => capabilityCheck(false), initVfs, spawn }),
-      ),
-    ).rejects.toThrow(COI_REQUIRED_MESSAGE);
-    expect(initVfs).not.toHaveBeenCalled();
-    expect(spawn).not.toHaveBeenCalled();
-  });
+      ).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(COI_REQUIRED_MESSAGE);
+      expect(initVfs).not.toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
+    },
+  );
 
   it('boots without COI when requireCrossOriginIsolation is false', async () => {
     const spawn = vi.fn(() => fakeRuntime());
@@ -95,6 +163,691 @@ describe('createSandbox', () => {
     );
     expect(spawn).toHaveBeenCalledOnce();
     expect(sandbox.capabilities.capabilities.crossOriginIsolated).toBe(false);
+    expect('toolchain' in sandbox).toBe(false);
+    expect('capabilityReport' in sandbox).toBe(false);
+  });
+
+  it.each([undefined, true] as const)(
+    'rejects toolchain admission unless the runtime flag is literal false (%s)',
+    async (requireCrossOriginIsolation) => {
+      const options = {
+        ...(requireCrossOriginIsolation === undefined ? {} : { requireCrossOriginIsolation }),
+        toolchain: { workerUrl: '/toolchain-worker.js' },
+      };
+      const error = await createSandbox(
+        options as unknown as CreateSandboxOptions,
+        deps({ detect: () => capabilityCheck(false) }),
+      ).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(TypeError);
+      expect(error).toMatchObject({
+        name: 'TypeError',
+        message: expect.stringContaining('false'),
+      });
+    },
+  );
+
+  it('rejects every non-boolean no-COI admission before boot — designed RED', async () => {
+    const values = [
+      { label: 'explicit-undefined', value: undefined },
+      { label: 'zero', value: 0 },
+      { label: 'empty-string', value: '' },
+      { label: 'NaN', value: Number.NaN },
+      { label: 'null', value: null },
+      { label: 'one', value: 1 },
+      { label: 'string-false', value: 'false' },
+      { label: 'bigint-zero', value: 0n },
+      { label: 'bigint-one', value: 1n },
+      { label: 'symbol', value: Symbol('isolation') },
+      { label: 'function', value: () => false },
+      { label: 'object', value: {} },
+      { label: 'array', value: [] },
+    ] as const;
+    const outcomes: Array<Record<string, unknown>> = [];
+
+    for (const mode of ['generic', 'toolchain'] as const) {
+      for (const { label, value } of values) {
+        const trace: string[] = [];
+        let workerConstructions = 0;
+        class UnexpectedWorker {
+          constructor() {
+            trace.push('toolchain-worker');
+            workerConstructions += 1;
+          }
+        }
+        vi.stubGlobal('Worker', UnexpectedWorker);
+        const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>('opfs'));
+        const registerSw = vi.fn(() => Promise.resolve());
+        const spawn = vi.fn(() => fakeRuntime());
+        const options =
+          mode === 'generic'
+            ? { workerUrl: '/generic-worker.js', requireCrossOriginIsolation: value }
+            : {
+                requireCrossOriginIsolation: value,
+                toolchain: { workerUrl: '/toolchain-worker.js' },
+              };
+        let error: unknown;
+        try {
+          await createSandbox(
+            options as unknown as CreateSandboxOptions,
+            deps({
+              detect: () => {
+                trace.push('detect');
+                return capabilityCheck(false);
+              },
+              initVfs: () => {
+                trace.push('vfs');
+                return initVfs();
+              },
+              registerSw: () => {
+                trace.push('sw');
+                return registerSw();
+              },
+              spawn: () => {
+                trace.push('generic-worker');
+                return spawn();
+              },
+            }),
+          );
+        } catch (caught) {
+          error = caught;
+        }
+        outcomes.push({
+          mode,
+          value: label,
+          error:
+            error instanceof Error
+              ? {
+                  name: error.name,
+                  message: error.message,
+                  canonicalTypeError: error instanceof TypeError,
+                }
+              : {
+                  name: typeof error,
+                  message: String(error),
+                  canonicalTypeError: false,
+                },
+          sideEffects: {
+            initVfs: initVfs.mock.calls.length,
+            registerSw: registerSw.mock.calls.length,
+            spawn: spawn.mock.calls.length,
+            worker: workerConstructions,
+            order: trace,
+          },
+        });
+      }
+    }
+
+    expect(outcomes).toEqual(
+      (['generic', 'toolchain'] as const).flatMap((mode) =>
+        values.map(({ label }) => ({
+          mode,
+          value: label,
+          error: {
+            name: 'TypeError',
+            message: expect.stringMatching(/boolean.*false/u),
+            canonicalTypeError: true,
+          },
+          sideEffects: { initVfs: 0, registerSw: 0, spawn: 0, worker: 0, order: [] },
+        })),
+      ),
+    );
+  });
+
+  it('pins exact boot-effect vectors for omitted, true, false and invalid admission', async () => {
+    const cases = [
+      {
+        mode: 'generic',
+        flag: 'omitted',
+        own: false,
+        value: undefined,
+        expected: { status: 'rejected', name: 'Error', trace: ['detect'] },
+      },
+      {
+        mode: 'generic',
+        flag: 'true',
+        own: true,
+        value: true,
+        expected: { status: 'rejected', name: 'Error', trace: ['detect'] },
+      },
+      {
+        mode: 'generic',
+        flag: 'false',
+        own: true,
+        value: false,
+        expected: {
+          status: 'resolved',
+          name: undefined,
+          trace: ['detect', 'vfs', 'sw', 'generic-worker'],
+        },
+      },
+      {
+        mode: 'generic',
+        flag: 'bigint-zero',
+        own: true,
+        value: 0n,
+        expected: { status: 'rejected', name: 'TypeError', trace: [] },
+      },
+      {
+        mode: 'toolchain',
+        flag: 'omitted',
+        own: false,
+        value: undefined,
+        expected: { status: 'rejected', name: 'TypeError', trace: ['detect'] },
+      },
+      {
+        mode: 'toolchain',
+        flag: 'true',
+        own: true,
+        value: true,
+        expected: { status: 'rejected', name: 'TypeError', trace: ['detect'] },
+      },
+      {
+        mode: 'toolchain',
+        flag: 'false',
+        own: true,
+        value: false,
+        expected: {
+          status: 'resolved',
+          name: undefined,
+          trace: ['detect', 'sw', 'toolchain-worker'],
+        },
+      },
+      {
+        mode: 'toolchain',
+        flag: 'bigint-zero',
+        own: true,
+        value: 0n,
+        expected: { status: 'rejected', name: 'TypeError', trace: [] },
+      },
+    ] as const;
+    const outcomes: Array<Record<string, unknown>> = [];
+
+    for (const testCase of cases) {
+      const trace: string[] = [];
+      let resolveWorker: (worker: VectorWorker) => void = () => {};
+      const workerConstructed = new Promise<VectorWorker>((resolve) => {
+        resolveWorker = resolve;
+      });
+      class VectorWorker {
+        readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+
+        constructor() {
+          trace.push('toolchain-worker');
+          resolveWorker(this);
+        }
+
+        addEventListener(type: string, listener: EventListener): void {
+          if (type === 'message') {
+            this.listeners.add(listener as (event: MessageEvent<unknown>) => void);
+          }
+        }
+
+        postMessage(): void {}
+
+        terminate(): void {}
+
+        emit(data: unknown): void {
+          const event = { data } as MessageEvent<unknown>;
+          for (const listener of this.listeners) listener(event);
+        }
+      }
+      vi.stubGlobal('Worker', VectorWorker);
+      const flag = testCase.own ? { requireCrossOriginIsolation: testCase.value } : {};
+      const options =
+        testCase.mode === 'generic'
+          ? { workerUrl: '/generic-worker.js', ...flag }
+          : { ...flag, toolchain: { workerUrl: '/toolchain-worker.js' } };
+      const creating = createSandbox(
+        options as unknown as CreateSandboxOptions,
+        deps({
+          detect: () => {
+            trace.push('detect');
+            return capabilityCheck(false);
+          },
+          initVfs: () => {
+            trace.push('vfs');
+            return Promise.resolve('opfs');
+          },
+          registerSw: () => {
+            trace.push('sw');
+            return Promise.resolve();
+          },
+          spawn: () => {
+            trace.push('generic-worker');
+            return fakeRuntime();
+          },
+        }),
+      ).then(
+        (sandbox) => ({ status: 'resolved', name: undefined, sandbox }),
+        (error: Error) => ({ status: 'rejected', name: error.name, sandbox: undefined }),
+      );
+      if (testCase.mode === 'toolchain' && testCase.value === false) {
+        const worker = await workerConstructed;
+        worker.emit({ type: 'ready' });
+        worker.emit({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v5',
+          vfsBackend: 'opfs',
+        });
+      }
+      const result = await creating;
+      outcomes.push({
+        mode: testCase.mode,
+        flag: testCase.flag,
+        status: result.status,
+        name: result.name,
+        trace,
+      });
+      result.sandbox?.dispose();
+    }
+
+    expect(outcomes).toEqual(
+      cases.map((testCase) => ({
+        mode: testCase.mode,
+        flag: testCase.flag,
+        ...testCase.expected,
+      })),
+    );
+  });
+
+  it('projects either admitted Worker backend through one public runtime authority', async () => {
+    for (const workerBackend of ['opfs', 'memory'] as const) {
+      const workers: Array<{
+        readonly url: string;
+        emit(data: unknown): void;
+        terminate(): void;
+      }> = [];
+      let resolveWorker: (worker: (typeof workers)[number]) => void = () => {};
+      const workerConstructed = new Promise<(typeof workers)[number]>((resolve) => {
+        resolveWorker = resolve;
+      });
+      class ProjectedBackendWorker {
+        readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
+
+        constructor(readonly url: string) {
+          workers.push(this);
+          resolveWorker(this);
+        }
+
+        addEventListener(type: string, listener: EventListener): void {
+          if (type === 'message') {
+            this.listeners.add(listener as (event: MessageEvent<unknown>) => void);
+          }
+        }
+
+        postMessage(): void {}
+
+        terminate(): void {}
+
+        emit(data: unknown): void {
+          const event = { data } as MessageEvent<unknown>;
+          for (const listener of this.listeners) listener(event);
+        }
+      }
+      vi.stubGlobal('Worker', ProjectedBackendWorker);
+      const pageBackend = workerBackend === 'opfs' ? 'memory' : 'opfs';
+      const initVfs = vi.fn(() => Promise.resolve<'opfs' | 'memory'>(pageBackend));
+      const genericSpawn = vi.fn(() => fakeRuntime());
+      const creating = createSandbox(
+        {
+          requireCrossOriginIsolation: false,
+          skipServiceWorker: true,
+          toolchain: { workerUrl: `/toolchain-${workerBackend}.js` },
+        },
+        deps({ detect: () => capabilityCheck(false), initVfs, spawn: genericSpawn }),
+      );
+      const worker = await workerConstructed;
+      worker.emit({ type: 'ready' });
+      worker.emit({
+        type: 'toolchain-ready',
+        protocol: 'rifty.sandbox-toolchain/v5',
+        vfsBackend: workerBackend,
+      });
+      const sandbox = await creating;
+
+      expect(workers).toHaveLength(1);
+      expect(worker.url).toBe(`/toolchain-${workerBackend}.js`);
+      expect(initVfs).not.toHaveBeenCalled();
+      expect(genericSpawn).not.toHaveBeenCalled();
+      expect(sandbox.vfs).toEqual({ backend: workerBackend });
+      expect(sandbox.vfs.backend).not.toBe(pageBackend);
+      expect(sandbox.fs).toBe(sandbox.runtime.fs);
+      expect(sandbox.toolchain).toBe(
+        (sandbox.runtime as RuntimeController & { readonly toolchain: unknown }).toolchain,
+      );
+      sandbox.dispose();
+    }
+  });
+
+  it('keeps public operations outside the replacement Worker before activation restore', async () => {
+    class ControlledToolchainWorker {
+      static instances: ControlledToolchainWorker[] = [];
+      readonly messages = new Set<EventListener>();
+      readonly errors = new Set<EventListener>();
+      readonly sent: unknown[] = [];
+
+      constructor() {
+        ControlledToolchainWorker.instances.push(this);
+      }
+
+      addEventListener(type: string, listener: EventListener): void {
+        if (type === 'message') this.messages.add(listener);
+        if (type === 'error') this.errors.add(listener);
+      }
+
+      postMessage(message: unknown): void {
+        this.sent.push(message);
+      }
+
+      terminate(): void {}
+
+      emit(data: unknown): void {
+        const event = { data } as MessageEvent<unknown>;
+        for (const listener of this.messages) listener(event);
+      }
+    }
+    vi.stubGlobal('Worker', ControlledToolchainWorker);
+    const creating = createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: { workerUrl: '/toolchain-worker.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    );
+    await Promise.resolve();
+    const first = ControlledToolchainWorker.instances[0];
+    if (!first) throw new Error('first Worker missing');
+    first.emit({ type: 'ready' });
+    first.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v5',
+      vfsBackend: 'memory',
+    });
+    const sandbox = (await creating) as ToolchainSandbox;
+    const installing = sandbox.toolchain.install({ cwd: '/dev', registryUrl: '/registry' });
+    await Promise.resolve();
+    first.emit({
+      type: 'toolchain-result',
+      result: {
+        id: 1,
+        ok: true,
+        value: {
+          activationState: {
+            cwd: '/dev',
+            bindings: [],
+            vfsBackend: 'memory',
+            files: [{ path: '/dev/package.json', data: new Uint8Array([1]) }],
+          },
+        },
+      },
+    });
+    await installing;
+
+    const restarting = sandbox.restart({ preview: { src: '' } });
+    const second = ControlledToolchainWorker.instances[1];
+    if (!second) throw new Error('replacement Worker missing');
+    const calls = await Promise.allSettled([
+      sandbox.runtime.eval('42'),
+      sandbox.fs.readFile('/dev/package.json'),
+      sandbox.fs.writeFile('/dev/lost.txt', 'lost'),
+      sandbox.toolchain.install({ cwd: '/dev', registryUrl: '/registry' }),
+      sandbox.toolchain.runBin({
+        cwd: '/dev',
+        binPath: '/dev/node_modules/.bin/tool',
+        args: [],
+      }),
+      sandbox.toolchain.startBin({
+        cwd: '/dev',
+        binPath: '/dev/node_modules/.bin/tool',
+        args: [],
+        port: 5174,
+      }),
+    ]);
+    expect(
+      calls.map((entry) => (entry.status === 'rejected' ? entry.reason.name : 'fulfilled')),
+    ).toEqual(Array.from({ length: 6 }, () => 'SandboxRestartBusyError'));
+    expect(() => sandbox.runtime.writeFile('/dev/lost-sync.txt', 'lost')).toThrowError(
+      expect.objectContaining({ name: 'SandboxRestartBusyError' }),
+    );
+    expect(() => sandbox.runtime.writeStdin('lost')).toThrowError(
+      expect.objectContaining({ name: 'SandboxRestartBusyError' }),
+    );
+    expect(sandbox.runtime.isReady()).toBe(false);
+    expect(second.sent).toEqual([]);
+
+    second.emit({ type: 'ready' });
+    second.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v5',
+      vfsBackend: 'memory',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(second.sent).toEqual([
+      {
+        type: 'toolchain',
+        request: {
+          id: 1,
+          op: 'restore',
+          input: {
+            cwd: '/dev',
+            bindings: [],
+            vfsBackend: 'memory',
+            files: [{ path: '/dev/package.json', data: new Uint8Array([1]) }],
+          },
+        },
+      },
+    ]);
+    second.emit({ type: 'toolchain-result', result: { id: 1, ok: true } });
+    await expect(restarting).resolves.toEqual({ unflushedWrites: false, resident: null });
+    sandbox.dispose();
+  });
+
+  it('reports the last booted storage while a replacement Worker is still starting', async () => {
+    class StorageWorker {
+      static instances: StorageWorker[] = [];
+      private receive?: (event: MessageEvent<unknown>) => void;
+      constructor() {
+        StorageWorker.instances.push(this);
+      }
+      addEventListener(type: string, listener: (event: MessageEvent<unknown>) => void) {
+        if (type === 'message') this.receive = listener;
+      }
+      postMessage() {}
+      terminate() {}
+      emit(data: unknown) {
+        this.receive?.({ data } as MessageEvent<unknown>);
+      }
+    }
+    vi.stubGlobal('Worker', StorageWorker);
+    const creating = createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: { workerUrl: '/toolchain-worker.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    );
+    await Promise.resolve();
+    const first = StorageWorker.instances[0];
+    if (!first) throw new Error('first Worker missing');
+    first.emit({ type: 'ready' });
+    first.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v5',
+      vfsBackend: 'memory',
+      vfsReason: 'first boot fallback',
+    });
+    const sandbox = (await creating) as ToolchainSandbox;
+    const booted = { backend: 'memory', reason: 'first boot fallback' };
+    expect(sandbox.vfs).toEqual(booted);
+
+    const restarting = sandbox.restart({ preview: { src: '' } });
+    const second = StorageWorker.instances[1];
+    if (!second) throw new Error('replacement Worker missing');
+    // The replacement has not reported storage yet; the last booted report stays readable.
+    expect(sandbox.vfs).toEqual(booted);
+
+    second.emit({ type: 'ready' });
+    second.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v5',
+      vfsBackend: 'opfs',
+    });
+    await expect(restarting).resolves.toEqual({ unflushedWrites: false, resident: null });
+    expect(sandbox.vfs).toEqual({ backend: 'opfs' });
+    sandbox.dispose();
+    expect(sandbox.vfs).toEqual({ backend: 'opfs' });
+  });
+
+  it.each(['boot', 'restore', 'beforeStart'] as const)(
+    'retains recovery across replacement %s failure and a later retry',
+    async (fault) => {
+      type HostMessage = import('@riftydev/runtime-js/internal').ToolchainHostMessage;
+      type WorkerMessage = import('@riftydev/runtime-js/internal').ToolchainWorkerMessage;
+      const restores: unknown[] = [];
+      let generations = 0;
+      class RecoveryWorker {
+        readonly generation = ++generations;
+        private receive?: (event: MessageEvent<WorkerMessage>) => void;
+        constructor() {
+          queueMicrotask(() => {
+            this.emit({ type: 'ready' });
+            this.emit({
+              type: 'toolchain-ready',
+              protocol:
+                this.generation === 2 && fault === 'boot' ? 'broken' : 'rifty.sandbox-toolchain/v5',
+              vfsBackend: 'memory',
+            } as WorkerMessage);
+          });
+        }
+        addEventListener(type: string, listener: (event: MessageEvent<WorkerMessage>) => void) {
+          if (type === 'message') this.receive = listener;
+        }
+        terminate() {}
+        emit(data: WorkerMessage) {
+          this.receive?.({ data } as MessageEvent<WorkerMessage>);
+        }
+        postMessage(message: HostMessage) {
+          if (message.type === 'fs' && message.request.op === 'writeFile') {
+            this.emit({ type: 'fs-result', result: { id: message.request.id, ok: true } });
+          }
+          if (message.type !== 'toolchain') return;
+          const request = message.request;
+          if (request.op === 'install') {
+            this.emit({
+              type: 'toolchain-result',
+              result: {
+                id: request.id,
+                ok: true,
+                value: {
+                  activationState: {
+                    cwd: '/dev',
+                    bindings: [],
+                    vfsBackend: 'memory',
+                    files: [{ path: '/dev/package.json', data: new Uint8Array([1]) }],
+                  },
+                },
+              },
+            });
+          } else if (request.op === 'restore') {
+            restores.push(structuredClone(request.input.files));
+            this.emit({
+              type: 'toolchain-result',
+              result:
+                this.generation === 2 && fault === 'restore'
+                  ? {
+                      id: request.id,
+                      ok: false,
+                      error: { name: 'Error', message: 'restore failed' },
+                    }
+                  : { id: request.id, ok: true },
+            });
+          }
+        }
+      }
+      vi.stubGlobal('Worker', RecoveryWorker);
+      const sandbox = await createSandbox(
+        {
+          requireCrossOriginIsolation: false,
+          skipServiceWorker: true,
+          toolchain: { workerUrl: '/toolchain.js' },
+        },
+        deps({ detect: () => capabilityCheck(false) }),
+      );
+      await sandbox.toolchain.install({ cwd: '/dev', registryUrl: '/registry' });
+      await sandbox.fs.writeFile('/dev/package.json', new Uint8Array([2]));
+      await expect(
+        sandbox.restart({
+          preview: { src: '' },
+          beforeStart: async (fs) => {
+            await fs.writeFile('/dev/package.json', new Uint8Array([3]));
+            throw new Error('repair failed');
+          },
+        }),
+      ).rejects.toBeInstanceOf(Error);
+      await sandbox.restart({ preview: { src: '' } });
+      const expected = [
+        { path: '/dev/package.json', data: new Uint8Array([fault === 'beforeStart' ? 3 : 2]) },
+      ];
+      expect(restores.at(-1)).toEqual(expected);
+      await sandbox.restart({ preview: { src: '' } });
+      expect(restores.at(-1)).toEqual(expected);
+      sandbox.dispose();
+    },
+  );
+
+  it('public admission rejects and terminates a valid-backend mismatched-protocol Worker', async () => {
+    const listeners = new Set<(event: MessageEvent<unknown>) => void>();
+    const terminate = vi.fn();
+    let resolveConstructed: (worker: MismatchedProtocolWorker) => void = () => {};
+    const constructed = new Promise<MismatchedProtocolWorker>((resolve) => {
+      resolveConstructed = resolve;
+    });
+    class MismatchedProtocolWorker {
+      constructor() {
+        resolveConstructed(this);
+      }
+
+      addEventListener(type: string, listener: EventListener): void {
+        if (type === 'message') {
+          listeners.add(listener as (event: MessageEvent<unknown>) => void);
+        }
+      }
+
+      postMessage(): void {}
+
+      terminate(): void {
+        terminate();
+      }
+
+      emit(data: unknown): void {
+        const event = { data } as MessageEvent<unknown>;
+        for (const listener of listeners) listener(event);
+      }
+    }
+    vi.stubGlobal('Worker', MismatchedProtocolWorker);
+    const creating = createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        toolchain: { workerUrl: '/toolchain-worker.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    );
+    const worker = await constructed;
+    worker.emit({ type: 'ready' });
+    worker.emit({
+      type: 'toolchain-ready',
+      protocol: 'rifty.sandbox-toolchain/v0',
+      vfsBackend: 'memory',
+    });
+
+    await expect(creating).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'sandbox.toolchain.worker',
+    });
+    expect(terminate).toHaveBeenCalledOnce();
   });
 
   it('falls back to memory and records the reason when VFS init throws', async () => {
@@ -173,5 +926,131 @@ describe('createSandbox', () => {
     );
     expect(depWarn).toHaveBeenCalled();
     expect(optWarn).not.toHaveBeenCalled();
+  });
+});
+
+describe('sandbox.project invocations', () => {
+  type HostMessage = import('@riftydev/runtime-js/internal').ToolchainHostMessage;
+  type WorkerMessage = import('@riftydev/runtime-js/internal').ToolchainWorkerMessage;
+  type ToolchainRequest = Extract<HostMessage, { type: 'toolchain' }>['request'];
+
+  class ScriptedWorker {
+    static instances: ScriptedWorker[] = [];
+    static reply: (request: ToolchainRequest, worker: ScriptedWorker) => void = () => {};
+    readonly sent: HostMessage[] = [];
+    private receive?: (event: MessageEvent<WorkerMessage>) => void;
+    constructor() {
+      ScriptedWorker.instances.push(this);
+      queueMicrotask(() => {
+        this.emit({ type: 'ready' });
+        this.emit({
+          type: 'toolchain-ready',
+          protocol: 'rifty.sandbox-toolchain/v5',
+          vfsBackend: 'memory',
+        });
+      });
+    }
+    addEventListener(type: string, listener: (event: MessageEvent<WorkerMessage>) => void) {
+      if (type === 'message') this.receive = listener;
+    }
+    terminate() {}
+    emit(data: WorkerMessage) {
+      this.receive?.({ data } as MessageEvent<WorkerMessage>);
+    }
+    postMessage(message: HostMessage) {
+      this.sent.push(message);
+      if (message.type === 'toolchain') ScriptedWorker.reply(message.request, this);
+    }
+  }
+
+  async function bootProjectSandbox(
+    reply: (request: ToolchainRequest, worker: ScriptedWorker) => void,
+  ): Promise<ToolchainSandbox> {
+    ScriptedWorker.instances = [];
+    ScriptedWorker.reply = reply;
+    vi.stubGlobal('Worker', ScriptedWorker);
+    return (await createSandbox(
+      {
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: { workerUrl: '/toolchain.js' },
+      },
+      deps({ detect: () => capabilityCheck(false) }),
+    )) as ToolchainSandbox;
+  }
+
+  it('reports a never-admitted command as failed when Stop precedes the busy rejection', async () => {
+    const sandbox = await bootProjectSandbox(() => {});
+    const worker = ScriptedWorker.instances[0];
+    if (!worker) throw new Error('toolchain Worker missing');
+    const run = sandbox.project({ root: '/dev' }).run('echo hi');
+    const stopping = run.stop();
+    const request = worker.sent.find(
+      (message): message is Extract<HostMessage, { type: 'toolchain' }> =>
+        message.type === 'toolchain' && message.request.op === 'command',
+    );
+    if (!request) throw new Error('command request missing');
+    const id = request.request.id;
+    expect(
+      worker.sent.some((message) => message.type === 'toolchain-command-stop' && message.id === id),
+    ).toBe(true);
+    worker.emit({
+      type: 'toolchain-result',
+      result: {
+        id,
+        ok: false,
+        error: {
+          name: 'SandboxToolchainBusyError',
+          message: 'another sandbox toolchain operation is already active',
+        },
+      },
+    });
+    const outcome = await run.completion;
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      exitCode: null,
+      worker: 'retained',
+      effects: { applied: 'no', persistence: 'unknown' },
+      error: { name: 'SandboxToolchainBusyError' },
+    });
+    expect(await stopping).toBe(outcome);
+    sandbox.dispose();
+  });
+
+  it('marks unflushedWrites for the next restart after a settled command reports failed persistence', async () => {
+    const sandbox = await bootProjectSandbox((request, worker) => {
+      if (request.op !== 'command') return;
+      worker.emit({
+        type: 'toolchain-result',
+        result: {
+          id: request.id,
+          ok: true,
+          value: {
+            command: {
+              status: 'failed',
+              exitCode: 0,
+              effects: { applied: 'yes', persistence: 'failed' },
+              error: { name: 'SandboxPersistenceError', message: 'OPFS persistence failed' },
+            },
+          },
+        },
+      });
+    });
+    const outcome = await sandbox.project({ root: '/dev' }).run('echo x > file').completion;
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      worker: 'retained',
+      effects: { applied: 'yes', persistence: 'failed' },
+    });
+    await expect(sandbox.restart({ preview: { src: '' } })).resolves.toEqual({
+      unflushedWrites: true,
+      resident: null,
+    });
+    expect(ScriptedWorker.instances).toHaveLength(2);
+    await expect(sandbox.restart({ preview: { src: '' } })).resolves.toEqual({
+      unflushedWrites: false,
+      resident: null,
+    });
+    sandbox.dispose();
   });
 });

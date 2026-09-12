@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BASELINE, RECORD_DELTA, THRESHOLD, evaluate, measureFiles } from './file-size.mjs';
 
@@ -51,6 +51,27 @@ describe('evaluate', () => {
 describe('measureFiles', () => {
   let root: string;
   afterEach(() => rmSync(root, { recursive: true, force: true }));
+
+  it('excludes only the generated App SW while sibling public and handwritten files stay capped', () => {
+    root = mkdtempSync(join(tmpdir(), 'file-size-'));
+    const paths = [
+      'apps/playground/public/sw.js',
+      'apps/playground/public/other.js',
+      'apps/other/public/sw.js',
+      'packages/service-worker/src/sw.ts',
+    ];
+    for (const path of paths) {
+      const target = join(root, path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, 'line\n'.repeat(THRESHOLD));
+    }
+    const measured = [...measureFiles(root, 'apps'), ...measureFiles(root, 'packages')];
+    expect(measured.map(({ file }) => file).sort()).toEqual(paths.slice(1).sort());
+    const violations = evaluate(measured, []);
+    expect(violations).toHaveLength(3);
+    for (const path of paths.slice(1))
+      expect(violations.some((line) => line.includes(path))).toBe(true);
+  });
 
   it('counts prod sources only — no tests, .d.ts, or generated/vendor dirs', () => {
     root = mkdtempSync(join(tmpdir(), 'file-size-'));

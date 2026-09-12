@@ -99,7 +99,7 @@ export interface ParityCase {
    *   process-control MessagePort. The case prints one explicit result marker
    *   so PTY transcript noise cannot become the oracle.
    * - `'node-cli-eval'` — physical node-entry eval mode. Native Node receives
-   *   exact CLI argv; rifty receives one `rifty.node-entry/v3` eval launch in a
+   *   exact CLI argv; rifty receives one `rifty.node-entry/v4` eval launch in a
    *   real kernel Worker. Results include stdout, scoped stderr, ordered stream
    *   frames, and exit status.
    */

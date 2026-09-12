@@ -102,6 +102,11 @@ explicit `paths` contract remains, but the resolver can now read tsconfig when
 includes `extends`, `baseUrl`, `paths`, and `baseUrl` bare-specifier fallback when
 no `paths` pattern matches.
 
+## Corrections (active)
+
+2026-09-07: ADR-0382 supersedes ADR-0380 D1; ADR-0170 discovery remains after
+explicit compiler preload. Explicit `paths` still wins and requires no preload.
+
 ## References
 
 - ADR-0052 (TS-on-import transform hook on `ModuleLoaderOptions`) + ADR-0053 (`.ts`/`.tsx`

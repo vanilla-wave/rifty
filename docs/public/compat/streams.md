@@ -22,7 +22,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `Duplex.from` | ⚠️ | Accepted shapes are parity-tested. Iterable branches are eager through a second Readable; the returned Duplex incorrectly remains writable and silently discards writes — backlog `runtime-js/duplex-from-source-ownership` |
 | `destroy` / cleanup | ✅ | Writable destroy and async-iterator cleanup parity |
 | `stream/consumers` | ✅ | Text/buffer/json-style consumers covered |
-| Legacy pipe/unpipe | ✅ | Pipe/unpipe and backpressure parity cases |
+| Legacy streams | ✅ | Pipe/unpipe and callable core constructor parity |
 | `Readable.fromWeb` | ⚠️ | Cold demand, chunks, option/error/acquisition order, and invalid-signal lock behavior are parity-tested; terminal reason/events/lock release still diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle` |
 | `node:stream/web` module | ✅ | Re-exports the host WHATWG globals (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/`TextEncoderStream`/`TextDecoderStream`); each `=== globalThis.<Name>`, parity-tested |
 | `Readable.toWeb` | ✅ | Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested) |

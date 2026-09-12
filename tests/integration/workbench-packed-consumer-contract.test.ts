@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
-import { hostBuiltinAliases } from './fixtures/workbench-vite-consumer/host-builtins';
+import { hostBuiltinAliases } from '../../tools/publishing/workbench-asset-builtins.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
 import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
@@ -11,9 +11,42 @@ const integrationRoot = dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = resolve(integrationRoot, 'fixtures/workbench-vite-consumer');
 const fixtureTsconfig = resolve(fixtureRoot, 'tsconfig.json');
 const fixtureMain = resolve(fixtureRoot, 'src/main.ts');
+const quickjsHostWrappers = [
+  resolve(integrationRoot, '../../tools/publishing/workbench-kernel-asset.ts'),
+  resolve(integrationRoot, '../../apps/playground/src/workers/quickjs-kernel-worker-host.ts'),
+];
+const parityKernelWorker = resolve(
+  integrationRoot,
+  '../../tools/node-parity-runner/src/worker-env-kernel-worker.ts',
+);
 const runtimeJsManifest = JSON.parse(
   ts.sys.readFile(resolve(integrationRoot, '../../packages/runtime-js/package.json')) ?? '',
 );
+
+const EXPECTED_RUNTIME_JS_PUBLISHED_SUBPATHS = [
+  '.',
+  './internal',
+  './worker',
+  './install-process',
+  './ipc/exec-sync-handler',
+  './loader',
+  './env/capabilities',
+  './builtins',
+  './builtins/fs-watch',
+  './builtins/process',
+  './builtins/timers',
+  './builtins/buffer',
+  './builtins/console',
+  './builtins/module',
+  './builtins/child_process',
+  './builtins/node-entry',
+  './builtins/node-entry-url',
+  './builtins/process-identity',
+  './builtins/os',
+  './builtins/path',
+  './builtins/perf_hooks',
+  './builtins/fs',
+] as const;
 
 function readFixtureTypeScriptConfig(): ts.ParsedCommandLine {
   const config = ts.readConfigFile(fixtureTsconfig, ts.sys.readFile);
@@ -21,6 +54,44 @@ function readFixtureTypeScriptConfig(): ts.ParsedCommandLine {
     throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, '\n'));
   }
   return ts.parseJsonConfigFileContent(config.config, ts.sys, fixtureRoot);
+}
+
+interface ModuleImport {
+  readonly specifier: string;
+  readonly isStatic: boolean;
+  readonly named: readonly string[];
+}
+
+function moduleImports(file: string): readonly ModuleImport[] {
+  const source = ts.sys.readFile(file);
+  if (source === undefined) throw new Error(`Missing TypeScript source: ${file}`);
+  const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS);
+  const imports: ModuleImport[] = [];
+  function visit(node: ts.Node): void {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const namedBindings = node.importClause?.namedBindings;
+      imports.push({
+        specifier: node.moduleSpecifier.text,
+        isStatic: true,
+        named:
+          namedBindings !== undefined && ts.isNamedImports(namedBindings)
+            ? namedBindings.elements.map(
+                (element) => element.propertyName?.text ?? element.name.text,
+              )
+            : [],
+      });
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteral(node.arguments[0])
+    ) {
+      imports.push({ specifier: node.arguments[0].text, isStatic: false, named: [] });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(parsed);
+  return imports;
 }
 
 describe('packed Workbench resource cleanup', () => {
@@ -72,6 +143,29 @@ describe('packed Workbench resource cleanup', () => {
 });
 
 describe('packed Workbench consumer TypeScript contract', () => {
+  it('installs the kernel listener before either host wrapper can yield', () => {
+    for (const wrapper of quickjsHostWrappers) {
+      const imports = moduleImports(wrapper);
+      expect(
+        imports.filter(({ specifier }) => specifier === '@riftydev/workbench/kernel-worker'),
+      ).toEqual([{ specifier: '@riftydev/workbench/kernel-worker', isStatic: true, named: [] }]);
+      expect(
+        imports
+          .filter(({ specifier }) => specifier === '@riftydev/runtime-js/install-process')
+          .flatMap(({ named }) => named),
+      ).toContain('QUICKJS_WASM_URL_ENV');
+      expect(
+        imports.some(({ specifier }) => specifier === '@riftydev/runtime-js/quickjs-host'),
+      ).toBe(false);
+    }
+    const parityInstallerImports = moduleImports(parityKernelWorker)
+      .filter(({ specifier }) => specifier === '@riftydev/runtime-js/install-process')
+      .flatMap(({ named }) => named);
+    expect(parityInstallerImports).toEqual(
+      expect.arrayContaining(['QUICKJS_WASM_URL_ENV', 'installNodeRuntime']),
+    );
+  });
+
   it('skips known dependency declaration internals but typechecks consumer source', () => {
     const config = readFixtureTypeScriptConfig();
 
@@ -111,6 +205,12 @@ describe('packed Workbench consumer TypeScript contract', () => {
       const subpath = `.${target.slice('@riftydev/runtime-js'.length)}`;
       expect(runtimeJsManifest.publishConfig.exports[subpath].import).toMatch(/^\.\/dist\//u);
     }
+  });
+
+  it('publishes exactly the existing runtime surface plus the one internal seam', () => {
+    expect(Object.keys(runtimeJsManifest.publishConfig.exports).sort()).toEqual(
+      [...EXPECTED_RUNTIME_JS_PUBLISHED_SUBPATHS].sort(),
+    );
   });
 });
 

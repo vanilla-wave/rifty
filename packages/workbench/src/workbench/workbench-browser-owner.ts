@@ -3,6 +3,7 @@ import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame, PageToOwnerFrame, PtyPreview } from '../glue/pty-protocol.ts';
 import type { OwnerStorageSnapshot } from '../workers/owner-storage.ts';
 import { ClosedHandleError, ProjectBusyError, deserializeWorkbenchOwnerError } from './errors.ts';
+import { createBrowserProjectRuntime } from './internal/browser-project-runtime.ts';
 import {
   type PageToPlaygroundOwnerMessage,
   type PlaygroundCatalogCommand,
@@ -34,10 +35,6 @@ import {
   projectTerminalStateFromOwner,
 } from './internal/playground-terminal-state.ts';
 import {
-  createNodeCliProjectRuntime,
-  createNodeServerProjectRuntime,
-} from './node-project-runtime.ts';
-import {
   type OwnerProjectToken,
   type PageToWorkbenchOwnerMessage,
   type WorkbenchOwnerBootConfig,
@@ -49,13 +46,10 @@ import type {
   PlaygroundCatalogSnapshot,
   PlaygroundProjectCatalog,
   PlaygroundProjectOpenOptions,
+  PlaygroundRetainedScratch,
   PlaygroundScmSnapshot,
 } from './playground.ts';
-import {
-  type PreviewAdvertisement,
-  type PreviewHandle,
-  createPreviewReadiness,
-} from './preview-readiness.ts';
+import { type PreviewAdvertisement, createPreviewReadiness } from './preview-readiness.ts';
 import {
   type ProjectContentTransport,
   createProjectContentTransport,
@@ -78,7 +72,6 @@ import {
   createProjectTerminal,
 } from './project-terminal.ts';
 import { proveRiftyServiceWorkerControl } from './service-worker-control.ts';
-import { createViteProjectRuntime } from './vite-project-runtime.ts';
 import {
   type BrowserOwnerDependencies,
   browserDependencies,
@@ -94,9 +87,7 @@ import {
 } from './workbench-owner-port.ts';
 
 const PROJECT_VFS_COMMIT_TIMEOUT_MS = 60_000;
-/** ADR-0360: shipped budget of owner durability-progress SILENCE, not of total
- *  operation duration. One authority for the default; hosts override it with
- *  `deployment.ownerOperationSilenceTimeoutMs`. */
+/** ADR-0360: only durability progress re-arms this owner-wide silence budget. */
 const OWNER_OPERATION_SILENCE_TIMEOUT_MS = 60_000;
 
 interface OpenedProject {
@@ -122,6 +113,8 @@ type PendingOperation =
   | (Deferred<OpenedProject> & { readonly kind: 'open' })
   | (Deferred<OpenedPlaygroundProject> & { readonly kind: 'playground-open' })
   | (Deferred<PlaygroundCatalogSnapshot> & { readonly kind: 'playground-catalog' })
+  | (Deferred<readonly PlaygroundRetainedScratch[]> & { readonly kind: 'retained-scratch-list' })
+  | (Deferred<string> & { readonly kind: 'retained-scratch-export' })
   | (Deferred<void> & { readonly kind: 'close'; readonly projectToken: OwnerProjectToken })
   | (Deferred<void> & { readonly kind: 'delete'; readonly id: string });
 
@@ -182,7 +175,6 @@ function errorFrom(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
 
-/** Browser composition: one physical owner, then typed control IPC only. */
 export function createBrowserWorkbenchOwnerPort(
   dependencies?: BrowserOwnerDependencies,
 ): WorkbenchOwnerPort {
@@ -196,22 +188,26 @@ export function startBrowserWorkspaceOwner(
   input: WorkbenchOwnerStartInput,
   dependencies: BrowserOwnerDependencies,
 ): RawWorkspaceOwnerHandle {
+  const deployment = input.deployment;
+  const { previewPrefix, ownerStartupTimeoutMs, ioReportTimeoutMs } = deployment;
   const worker = dependencies.spawnOwner(input);
-  const ownerStderrDecoder = new TextDecoder();
+  const stderrDecoder = new TextDecoder();
   let ownerStderr = '';
   worker.stderr().on('data', (chunk: unknown) => {
     if (!(chunk instanceof Uint8Array)) return;
-    ownerStderr = `${ownerStderr}${ownerStderrDecoder.decode(chunk, { stream: true })}`.slice(
-      -16_384,
-    );
+    ownerStderr = `${ownerStderr}${stderrDecoder.decode(chunk, { stream: true })}`.slice(-16_384);
   });
   const silenceBudgetMs =
-    input.deployment.ownerOperationSilenceTimeoutMs ?? OWNER_OPERATION_SILENCE_TIMEOUT_MS;
+    deployment.ownerOperationSilenceTimeoutMs ?? OWNER_OPERATION_SILENCE_TIMEOUT_MS;
   const playgroundUrlContext = input.playgroundUrlContext;
   const companionMode = playgroundUrlContext !== undefined;
   const readyState = deferred<void>();
   const closedState = deferred<void>();
   const pending = new Map<string, PendingOperation>();
+  const isPendingOpen = (opId?: string): boolean => {
+    const kind = opId === undefined ? undefined : pending.get(opId)?.kind;
+    return kind === 'open' || kind === 'playground-open';
+  };
   const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const catalogListeners = new Set<(snapshot: PlaygroundCatalogSnapshot) => void>();
   const healthListeners = new Set<(event: WorkbenchOwnerHealthEvent) => void>();
@@ -323,12 +319,7 @@ export function startBrowserWorkspaceOwner(
     pendingTimers.set(opId, timer);
   };
 
-  /**
-   * ADR-0360: a durability-progress frame proves the owner is alive and
-   * flushing, so it re-arms EVERY pending operation — they share one owner and
-   * one flush. Nothing else resets the deadline: an any-traffic reset would let
-   * a chatty transport mask a wedged flush forever (`unbounded-read`).
-   */
+  // One owner flush sustains every pending operation; unrelated traffic cannot re-arm it.
   const rearmSilenceDeadlines = (): void => {
     for (const [opId, operation] of pending) {
       const timer = pendingTimers.get(opId);
@@ -394,6 +385,12 @@ export function startBrowserWorkspaceOwner(
         operation.resolve(currentCatalog());
         return;
       }
+      case 'workbench:playground-retained-scratch-listed':
+        takePending(message.opId, 'retained-scratch-list').resolve(message.records);
+        return;
+      case 'workbench:playground-retained-scratch-exported':
+        takePending(message.opId, 'retained-scratch-export').resolve(message.archiveJson);
+        return;
       case 'workbench:playground-project-opened': {
         const operation = takePending(message.opId, 'playground-open');
         operation.resolve(message);
@@ -478,12 +475,11 @@ export function startBrowserWorkspaceOwner(
           activeProject.acceptVfs(message);
           return;
         case 'workbench:durability-progress':
-          // Owner-level: the first-open drain predates project tokens (ADR-0359).
-          // ADR-0360: arrival is the liveness proof the deadline measures.
           rearmSilenceDeadlines();
           publishHealth(
             Object.freeze({
               kind: 'durability-progress',
+              ...(isPendingOpen(message.opId) ? { projectOpen: true } : {}),
               persisted: message.persisted,
               total: message.total,
             }),
@@ -535,7 +531,7 @@ export function startBrowserWorkspaceOwner(
       (normal
         ? new ClosedHandleError('Workbench owner')
         : new Error(
-            `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} (code ${String(code)}, signal ${String(signal)})${ownerStderr === '' ? '' : `\n${ownerStderr}${ownerStderrDecoder.decode()}`}`,
+            `Workbench owner exited${closeRequested ? '' : ' unexpectedly'} (code ${String(code)}, signal ${String(signal)})${ownerStderr === '' ? '' : `\n${ownerStderr}${stderrDecoder.decode()}`}`,
           ));
     readyState.reject(exitError);
     rejectPending(exitError);
@@ -547,17 +543,18 @@ export function startBrowserWorkspaceOwner(
   const bootConfig: WorkbenchOwnerBootConfig = Object.freeze({
     deployment: Object.freeze({
       workers: Object.freeze({
-        kernel: input.deployment.workers.kernel,
-        node: input.deployment.workers.node,
-        devServer: input.deployment.workers.devServer,
-        ...(input.deployment.workers.typescript === undefined
+        kernel: deployment.workers.kernel,
+        node: deployment.workers.node,
+        devServer: deployment.workers.devServer,
+        ...(deployment.workers.typescript === undefined
           ? {}
-          : { typescript: input.deployment.workers.typescript }),
+          : { typescript: deployment.workers.typescript }),
       }),
-      wasm: Object.freeze({
-        sqlite: input.deployment.wasm.sqlite,
-      }),
-      previewProbeTimeoutMs: input.deployment.previewProbeTimeoutMs,
+      wasm: Object.freeze({ ...deployment.wasm }),
+      previewProbeTimeoutMs: deployment.previewProbeTimeoutMs,
+      ...(previewPrefix === undefined ? {} : { previewPrefix }),
+      ...(ownerStartupTimeoutMs === undefined ? {} : { ownerStartupTimeoutMs }),
+      ...(ioReportTimeoutMs === undefined ? {} : { ioReportTimeoutMs }),
     }),
     packageAcquisition: input.packageAcquisition,
     storage: input.storage,
@@ -675,7 +672,8 @@ export function startBrowserWorkspaceOwner(
     const provePreviewControl = (signal: AbortSignal): Promise<void> =>
       proveRiftyServiceWorkerControl({
         container: dependencies.serviceWorker,
-        timeoutMs: input.deployment.previewProbeTimeoutMs,
+        timeoutMs: deployment.previewProbeTimeoutMs,
+        previewPrefix: deployment.previewPrefix,
         signal,
         timers: dependencies.timers,
       });
@@ -683,7 +681,12 @@ export function startBrowserWorkspaceOwner(
       subscribe: subscribeRawPreview,
       requestSnapshot: requestRawPreview,
       mountRoute: (entry) =>
-        dependencies.mountPreview(entry.port, entry.ownerToken, entry.previewScope),
+        dependencies.mountPreview(
+          entry.port,
+          entry.ownerToken,
+          entry.previewScope,
+          deployment.previewPrefix,
+        ),
       proveServiceWorkerControl: provePreviewControl,
       onDegraded(error) {
         currentPreviewHealth = Object.freeze({
@@ -736,7 +739,8 @@ export function startBrowserWorkspaceOwner(
         !exited &&
         (activeProject === null || activeProject.token === opened.projectToken),
       generateRequestId: dependencies.operationId,
-      commitTimeoutMs: PROJECT_VFS_COMMIT_TIMEOUT_MS,
+      commitTimeoutMs: deployment.projectFileCommitTimeoutMs ?? PROJECT_VFS_COMMIT_TIMEOUT_MS,
+      durabilityAckTimeoutMs: deployment.projectFileCommitTimeoutMs,
       reportProtocolError: failInvariant,
       onDurabilityState(state) {
         if (disconnected || exited || activeProject?.token !== opened.projectToken) return;
@@ -775,9 +779,7 @@ export function startBrowserWorkspaceOwner(
         try {
           listener(currentOperationalHealth);
           listener(currentPreviewHealth);
-        } catch {
-          // Replay follows the same observer isolation as live delivery.
-        }
+        } catch {}
         return () => operationalHealthListeners.delete(listener);
       },
       subscribePlaygroundTools(listener) {
@@ -858,12 +860,10 @@ export function startBrowserWorkspaceOwner(
     const terminal = openTerminal();
     const previewReadiness = () =>
       createPreviewReadiness({
-        timeoutMs: input.deployment.previewProbeTimeoutMs,
+        timeoutMs: deployment.previewProbeTimeoutMs,
         subscribe: transport.previews.subscribeRouted,
         requestSnapshot: transport.previews.requestSnapshot,
-        // The registry admits only already-mounted, SW-control-proven routes.
-        // Readiness observes that authority, adds only HTTP proof, then composes
-        // the same route-operation barrier on run retirement.
+        // Mounted, SW-proven routes add HTTP proof and share retirement's route barrier.
         mountRoute: () => () => {},
         proveServiceWorkerControl: () => transport.previews.settleRoutes(),
         probe: async (url, signal) => {
@@ -901,103 +901,21 @@ export function startBrowserWorkspaceOwner(
         throw new AggregateError(failures, 'Workbench project owner and preview close failed');
       }
     };
-
-    if (companion !== undefined) {
-      const runtime = companion.runtime;
-      let session: ProjectSession<unknown>;
-      if (runtime.kind === 'node-cli') {
-        if (definition.kind !== 'node-cli') {
-          throw new TypeError('Owner Playground runtime does not match the project definition');
-        }
-        session = createProjectSession<void>({
-          content,
-          runtime: createNodeCliProjectRuntime({
-            terminal,
-            entryPath: definition.entryPath,
-            args: definition.args,
-            acquisition: companion.acquisition,
-          }),
-          terminal,
-          createTerminal: openTerminal,
-          closeOwner,
-        });
-      } else {
-        if (runtime.kind === 'node-server') {
-          if (definition.kind !== 'node-server') {
-            throw new TypeError('Owner Playground runtime does not match the project definition');
-          }
-          session = createProjectSession<PreviewHandle>({
-            content,
-            runtime: createNodeServerProjectRuntime({
-              terminal,
-              ownerToken: transport.token,
-              entryPath: definition.entryPath,
-              port: definition.port,
-              createPreviewReadiness: previewReadiness,
-              acquisition: companion.acquisition,
-            }),
-            terminal,
-            createTerminal: openTerminal,
-            closeOwner,
-          });
-        } else {
-          if (definition.kind !== 'vite') {
-            throw new TypeError('Owner Playground runtime does not match the project definition');
-          }
-          session = createProjectSession<PreviewHandle>({
-            content,
-            runtime: createViteProjectRuntime({
-              terminal,
-              ownerToken: transport.token,
-              port: runtime.port,
-              createPreviewReadiness: previewReadiness,
-              acquisition: companion.acquisition,
-            }),
-            terminal,
-            createTerminal: openTerminal,
-            closeOwner,
-          });
-        }
-      }
-      // The owner-born finite runtime decision is the authority for readiness.
-      return session as ProjectSession<TReady>;
-    }
-
-    const session =
-      definition.kind === 'node-cli'
-        ? createProjectSession<void>({
-            content,
-            runtime: createNodeCliProjectRuntime({
-              terminal,
-              entryPath: definition.entryPath,
-              args: definition.args,
-            }),
-            terminal,
-            createTerminal: openTerminal,
-            closeOwner,
-          })
-        : createProjectSession<PreviewHandle>({
-            content,
-            runtime:
-              definition.kind === 'node-server'
-                ? createNodeServerProjectRuntime({
-                    terminal,
-                    ownerToken: transport.token,
-                    entryPath: definition.entryPath,
-                    port: definition.port,
-                    createPreviewReadiness: previewReadiness,
-                  })
-                : createViteProjectRuntime({
-                    terminal,
-                    ownerToken: transport.token,
-                    createPreviewReadiness: previewReadiness,
-                  }),
-            terminal,
-            createTerminal: openTerminal,
-            closeOwner,
-          });
-    // ProjectDefinition<TReady> is package-branded; the exhaustive finite kind
-    // dispatch above is the sole place that maps its phantom readiness type.
+    const session = createProjectSession({
+      content,
+      runtime: createBrowserProjectRuntime({
+        definition,
+        terminal,
+        ownerToken: transport.token,
+        createPreviewReadiness: previewReadiness,
+        ...(companion === undefined
+          ? {}
+          : { acquisition: companion.acquisition, decision: companion.runtime }),
+      }),
+      terminal,
+      createTerminal: openTerminal,
+      closeOwner,
+    });
     return session as ProjectSession<TReady>;
   };
 
@@ -1062,6 +980,30 @@ export function startBrowserWorkspaceOwner(
   const catalog: PlaygroundProjectCatalog | undefined = companionMode
     ? Object.freeze({
         snapshot: currentCatalog,
+        listRetainedScratch() {
+          currentCatalog();
+          const opId = dependencies.operationId();
+          return request<readonly PlaygroundRetainedScratch[]>(
+            { ...deferred<readonly PlaygroundRetainedScratch[]>(), kind: 'retained-scratch-list' },
+            {
+              type: 'workbench:playground-catalog',
+              opId,
+              command: { kind: 'list-retained-scratch' },
+            },
+          );
+        },
+        exportRetainedScratch(id: string) {
+          currentCatalog();
+          const opId = dependencies.operationId();
+          return request<string>(
+            { ...deferred<string>(), kind: 'retained-scratch-export' },
+            {
+              type: 'workbench:playground-catalog',
+              opId,
+              command: { kind: 'export-retained-scratch', id },
+            },
+          );
+        },
         subscribe(listener: (snapshot: PlaygroundCatalogSnapshot) => void) {
           if (typeof listener !== 'function') {
             throw new TypeError('Catalog listener must be a function');
@@ -1167,6 +1109,7 @@ export function startBrowserWorkspaceOwner(
                   },
                   subscribe: (listener) => state.transport.subscribePlaygroundTools(listener),
                   generateRequestId: dependencies.operationId,
+                  requestTimeoutMs: deployment.playgroundRequestTimeoutMs,
                 });
               state.lifecycle = Object.freeze({
                 tools: core.tools,
@@ -1226,9 +1169,7 @@ export function startBrowserWorkspaceOwner(
       if (invariantHealth !== null) {
         try {
           listener(invariantHealth);
-        } catch {
-          // Replay follows the same listener isolation as live delivery.
-        }
+        } catch {}
       }
       return () => healthListeners.delete(listener);
     },

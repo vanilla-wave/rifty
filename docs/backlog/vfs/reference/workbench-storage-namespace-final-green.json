@@ -1,0 +1,230 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS I4 Final+GREEN; привязать source SHA и продолжить RECHART в PR316. Цель не завершена: I6/I5/I7 обязательны.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/vfs/workbench-storage-namespace.md at clean source HEAD71d5837158953c2ac1f3ac53d712162c3ea04cd7 against prior accepted I3 BASE0f8ec6f96b35983a141937e86fbadcff2ed3c85b. Fresh independent reviewer /root/storage_namespace_final_review; read-only tracked tree, no children. Authority: unchanged accepted goal I4/scenario5/recorded decisions, ADR-0402 plus retained ADR-0072/0263/0279/0358/0372. No separate original raw user report/transcript exists; this review checks the already accepted hand-off and records without asserting fresh raw-user attribution. Required Contract+RED is bound to1bf453c0ed35ee6dc1734384ab4c79a14f815a9c; original committed carriers retain their criteria. Independently executed current unit45/45 GREEN (/tmp/rifty-316-i4-final-review-unit.json) and actual Chromium13/13 GREEN13.7s, Chrome148.0.7778.96 (/tmp/rifty-316-i4-final-review-browser.log). Browser sandbox listener EPERM occurred before tests; authorized escalated retry exits0. Independently checked original native lease test remains exact, namespace Contract+RED cases unchanged except two additive native selected-proof refusal/recovery cases, accepted goal unchanged, source hashes match the independent pin build, exact old/new worker hashes and full bytes differ only in hash-imports (/tmp/rifty-316-i4-final-review-pr4.json). Full current pr:check25/25 GREEN inspected in /tmp/rifty-316-i4-pr-check-final.log: unit209.7s/parity61.3s; confirmed complete by driver. Actual packed87.62s GREEN raw /tmp/rifty-316-i4-packed-green.log inspected with committed unconditional browser call and unchanged zero-egress assertions; no independent packed rerun claimed. VFS124passed/1historicalskip and Workbench355 controls inspected in supplied raw artifacts. Reviewed pin reproducer, original builder options and native artifact copies: /tmp/rifty-316-i4-pin-reproducer.mjs/.log and /tmp/rifty-316-i4-pin-review.json. Only TS-worker SHA changed at fixed10022664bytes; all other gate criteria unchanged, file-size ratchet lowered1215→1193. No runtime coordinator, namespace lease, prefix adapter, identity field or new source module. The added proof fault tests already passed on integrated source; no new baseline RED claimed. Catalog recovery remains the existing mechanism under the selected handle; unreadable-cache preservation is explicitly required next I6, not claimed repaired by I4.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6",
+      "location": "docs/backlog/playground/orphan-scratch-recovery.md",
+      "summary": "Required next unit: retain/enumerate/download orphan Scratch bytes; include captured unreadable-preload preservation defect. I4 does not repair or certify that defect."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/service-worker/workbench-preview-prefix.md",
+      "summary": "Host-selected scoped preview prefix with real iframe/assets/HMR remains linked."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/distribution/workbench-operation-budgets.md",
+      "summary": "Effective public operation budgets and composed whole-goal packed acceptance remain linked."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: both public entries capture literal optional namespace; omission preserves origin selection; every persistence policy rejects invalid input before admission effects; owner wire revalidates selection.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:40; packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:51; packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:68; tests/browser-unit/workbench-web-lock.spec.ts:275; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: one native handle bounds paired index/preload, reads/writes, directories, cache, proof and catalog/claim paths; logical identities remain; conflicting async re-init rejects.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0402 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/opfs-storage-namespace.spec.ts:92; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:94; tests/browser-unit/workbench-storage-namespace.spec.ts:203; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:152",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: fresh namespace has no old projects; A/B/default preserve independent same-id projects and exact source/binary bytes; scoped preload/writes leave outside files untouched.",
+      "source": "acceptance",
+      "trace": "I4 + scenario5",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/workbench-storage-namespace.spec.ts:24; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:152",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: valid ephemeral stays memory-only; native namespace file conflict and selected proof refusal reject required or visibly fall back preferred; existing selected/default/sibling bytes survive and clean reopen succeeds.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:98; tests/browser-unit/workbench-storage-namespace.spec.ts:133; tests/browser-unit/workbench-storage-namespace.spec.ts:157; tests/browser-unit/workbench-storage-namespace.spec.ts:203; packages/workbench/src/workers/workbench-owner-storage.test.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: origin-wide real lease excludes distinct persistent namespaces before another Worker; cooperative close and page crash release it.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0263",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-web-lock.spec.ts:181; tests/browser-unit/workbench-web-lock.spec.ts:241",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: acknowledged namespace writes survive uncooperative page/Worker reload; catalog/claim storage inherits selected root and other selections remain exact.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0279 + ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:56; tests/browser-unit/workbench-storage-namespace.spec.ts:74; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:200",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: mandatory external installed consumer uses copied assets and producer snapshots; A/B/default same-id saved projects reopen byte-exactly and execute against real Node output with zero registry/Eddy egress.",
+      "source": "acceptance",
+      "trace": "I1 + I2 + I3 + I4 + scenario5",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:64; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:152; tests/integration/workbench-packed-consumer.mjs:1293",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: actual native Chromium A/B/default physical entries and byte-exact data agree with paired VFS and public reopen.",
+      "source": "acceptance",
+      "trace": "I4 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/workbench-storage-namespace.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input × namespace ingress: literal validation rejects escaping/normalization input before public effects and on owner wire.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:40; packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:51; packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:81; tests/browser-unit/workbench-web-lock.spec.ts:275",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift × paired root: sync/async preload and writes plus cache/proof/catalog/claim paths descend from selected handle.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:94; tests/browser-unit/workbench-storage-namespace.spec.ts:203; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:200",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × changed selection/re-init: former files remain at former mount; conflicting async initialization cannot silently switch or ignore root.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:92; tests/browser-unit/workbench-storage-namespace.spec.ts:24; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:217",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail × namespace open/proof: required refuses and preferred exposes memory fallback while native selected/sibling/default bytes survive.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:133; tests/browser-unit/workbench-storage-namespace.spec.ts:157; tests/browser-unit/workbench-storage-namespace.spec.ts:203",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key × A/B owner open: real origin-wide Web Lock rejects distinct-namespace second owner before Worker construction.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0263",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-web-lock.spec.ts:241",
+      "note": ""
+    },
+    {
+      "row": "torn-state × durable write then owner/page death: fresh same-namespace owner restores acknowledged bytes without modifying other selections.",
+      "source": "fault-matrix",
+      "trace": "I4 + ADR-0279 + ADR-0358",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:56; tests/browser-unit/workbench-storage-namespace.spec.ts:74",
+      "note": ""
+    },
+    {
+      "row": "openWorkbench storage.namespace optional literal public option and historical default.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-storage-namespace.contract.test.ts:40; tests/browser-unit/workbench-web-lock.spec.ts:241; tests/browser-unit/workbench-web-lock.spec.ts:275",
+      "note": ""
+    },
+    {
+      "row": "openPlaygroundWorkbench inherited storage.namespace option composes with persistent catalog/snapshot programs.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-storage-namespace.spec.ts:24; tests/integration/fixtures/workbench-vite-consumer/src/storage-namespace-proof.ts:73",
+      "note": ""
+    },
+    {
+      "row": "installOpfsFs(root?) installs a pair on one captured native handle; omission retains origin root.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:73; packages/vfs/src/sync-mirror.ts:144",
+      "note": ""
+    },
+    {
+      "row": "OpfsVfs.init(root?) fixes instance mount, accepts no-arg/same-entry re-init and rejects different entry.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:92; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:42; packages/vfs/src/opfs.ts:52",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.init(paired?, root?) scopes index/preload and paired write-through through real paired installation.",
+      "source": "public-api",
+      "trace": "I4 + ADR-0402 + ADR-0072",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-storage-namespace.spec.ts:11; tests/browser-unit/fixtures/opfs-storage-namespace-worker.ts:73; packages/vfs/src/opfs-sync.ts:278",
+      "note": ""
+    },
+    {
+      "row": "Exact TypeScript-worker frozen exception updated for reviewed namespace source graph; unchanged size, compiler content, other pins and negative payload checks; actual packed browser proof.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:51; tests/integration/workbench-packed-consumer.mjs:1293",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "71d5837158953c2ac1f3ac53d712162c3ea04cd7"
+}

@@ -12,6 +12,7 @@ import { Buffer, EventEmitter, NotImplementedError, Writable, loadBuiltin } from
 import type { ProcessHandle, ProcessIO } from '@riftydev/kernel';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
 import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import { Console } from './console.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import {
   attachNodeProcessBootstrapIdentity,
@@ -342,6 +343,10 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       pid: a.ownHandle.pid,
       ppid: a.ownHandle.ppid,
     });
+    const childConsole = new Console(childProcess.stdout, childProcess.stderr) as Console & {
+      Console: typeof Console;
+    };
+    childConsole.Console = Console;
     const trackOwnedChild = <T>(value: T, event: 'close' | 'exit'): T => {
       if ((typeof value !== 'object' || value === null) && typeof value !== 'function') {
         return value;
@@ -426,6 +431,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       globalThis: { value: childGlobal, configurable: true },
       global: { value: childGlobal, configurable: true },
       self: { value: childGlobal, configurable: true },
+      console: { value: childConsole, configurable: true, writable: true },
       setTimeout: { value: localSetTimeout, configurable: true },
       clearTimeout: { value: localClearTimeout, configurable: true },
       setInterval: { value: localSetInterval, configurable: true },
@@ -433,7 +439,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       setImmediate: { value: localSetImmediate, configurable: true },
       clearImmediate: { value: localClearImmediate, configurable: true },
     });
-    const fn = new Function(
+    const validatedFunction = new Function(
       '__stdout_write',
       '__stderr_write',
       '__process',
@@ -450,6 +456,11 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       'require',
       `${code}\n//# sourceURL=${scriptPath}`,
     ) as (...args: unknown[]) => unknown;
+    const createChildFunction = new Function(
+      'console',
+      `return (${Function.prototype.toString.call(validatedFunction)});`,
+    ) as (console: Console) => (...args: unknown[]) => unknown;
+    const fn = createChildFunction(childConsole);
     const result = withChildProcess(() =>
       fn(
         writeStdout,
@@ -471,6 +482,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
           }
           const name = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
           if (name === 'process') return childProcess;
+          if (name === 'console') return childConsole;
           const builtin = loadBuiltin(specifier);
           if (builtin !== null) {
             if (name === 'child_process') return bindChildProcessBuiltin(builtin);

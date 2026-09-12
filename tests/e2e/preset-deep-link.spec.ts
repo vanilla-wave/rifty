@@ -23,7 +23,18 @@ test('?preset=real-vite&autorun=1 cold-boots real-vite and auto-installs', async
     timeout: 20_000,
   });
   await expectTerminalContains(page, /npm install/u, 90_000);
+  // The tile identity, not just "some from-scratch Vite": the installer's own
+  // per-package line for React 19 and the issue-tracker dashboard in the preview.
+  await expectTerminalContains(page, /npm: \+ react@19\./u, 120_000);
   await expectViteDevServerReady(page, 5174, 120_000);
+  await expect(
+    page.locator('.rf-livepill[data-state="running"]', { hasText: 'LIVE :5174' }),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(
+    page
+      .frameLocator('iframe[title="Preview port 5174"]')
+      .locator('.stat-card--total .stat-card__value'),
+  ).toHaveText('25', { timeout: 60_000 });
 
   await openShellTerminal(page);
   await runTerminalLineSettled(page, 'git status --porcelain && echo STATUS_DONE', 60_000);

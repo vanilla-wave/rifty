@@ -13,17 +13,17 @@ import {
   inspectProjectDefinition,
   projects,
 } from '../../../packages/workbench/src/workbench/project-definition.ts';
+import { internalsShims } from '../src/index.ts';
 import {
   type EmnapiCorePatchFormat,
   applyEmnapiCoreOrphanedReferencePatch,
   emnapiCoreOrphanedReferencePatchPolicy,
-} from '../../../packages/workbench/src/workers/emnapi-core-install-policy.ts';
+} from '../src/runtime/emnapi-core-install-policy.ts';
 import {
   applyViteCliActionPatch,
   applyViteRootWatchPatch,
   viteRootWatchPatchPolicy,
-} from '../../../packages/workbench/src/workers/vite-cli-install-policy.ts';
-import { internalsShims } from '../src/index.ts';
+} from '../src/runtime/vite-cli-install-policy.ts';
 import { assertSnapshotArtifactCurrent } from '../src/snapshot-artifact-check.ts';
 
 const publicDir = fileURLToPath(new URL('../../../apps/playground/public/', import.meta.url));

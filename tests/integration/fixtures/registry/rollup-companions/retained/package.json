@@ -1,0 +1,9 @@
+{
+  "name": "companion-retained",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "rollup": "4.63.1",
+    "@rollup/wasm-node": "4.63.1"
+  }
+}
