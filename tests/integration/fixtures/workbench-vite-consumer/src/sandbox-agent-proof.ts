@@ -14,12 +14,23 @@ export const toolResults = (trace: AgentTrace) =>
 export async function sandboxAgentPolicy(sandbox: ToolchainSandbox) {
   await sandbox.fs.writeFile('/agent/locked/keep.txt', 'keep');
   await sandbox.fs.writeFile('/outside.txt', 'outside');
+  await sandbox.fs.writeFile(
+    '/agent/out.cjs',
+    "process.stdout.write('next\\n'); process.stderr.write('stderr\\n');",
+  );
+  const projectOptions = {
+    root: '/agent',
+    readonlyPaths: ['locked'],
+    allowedCommands: ['pwd', 'echo', 'cd', 'export', 'node'],
+  };
+  const priorCommand = 'cd src && export RUN_VALUE=prior && pwd';
+  const nextCommand = 'pwd && echo "$RUN_VALUE" && node out.cjs';
   const provider = scriptedProvider([
     [
       { name: 'write_file', args: { path: 'src/created.txt', content: 'retained' } },
       {
         name: 'edit_file',
-        args: { path: 'src/created.txt', oldText: 'retained', newText: 'saved' },
+        args: { path: 'src/created.txt', old: 'retained', new: 'saved' },
       },
       { name: 'read_file', args: { path: 'src/created.txt' } },
       { name: 'glob', args: { pattern: '**/*.txt' } },
@@ -27,15 +38,16 @@ export async function sandboxAgentPolicy(sandbox: ToolchainSandbox) {
       { name: 'write_file', args: { path: 'locked/keep.txt', content: 'bad' } },
       { name: 'write_file', args: { path: '../outside.txt', content: 'bad' } },
       { name: 'shell', args: { command: 'touch forbidden.txt' } },
+      { name: 'shell', args: { command: priorCommand } },
     ],
     { error: 'provider failed after committed write' },
-    [{ name: 'shell', args: { command: 'pwd && echo next' } }],
+    [{ name: 'shell', args: { command: nextCommand } }],
     'Continued with the retained write.',
   ]);
   const agent = createAgentSession({
     host: createSandboxAgentHost({
       sandbox,
-      project: { root: '/agent', readonlyPaths: ['locked'], allowedCommands: ['pwd', 'echo'] },
+      project: projectOptions,
       mode: () => 'commands',
     }),
     settings,
@@ -46,11 +58,30 @@ export async function sandboxAgentPolicy(sandbox: ToolchainSandbox) {
     const failed = await agent.exportTrace();
     await agent.send('Continue; run the next command.');
     const trace = await agent.exportTrace();
-    const project = sandbox.project({ root: '/agent' });
+    const project = sandbox.project(projectOptions);
+    await project.run(priorCommand).completion;
+    const nativeRun = project.run(nextCommand);
+    const nativeOutput: { stream: 'stdout' | 'stderr'; chunk: string }[] = [];
+    nativeRun.onOutput((event) => nativeOutput.push(event));
+    const reference = await nativeRun.completion;
+    const denied = await project.fs.writeFile('locked/keep.txt', 'bad').then(
+      () => null,
+      (error: Error & { code?: string; path?: string; effects?: unknown }) => ({
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        path: error.path,
+        effects: error.effects,
+      }),
+    );
     return {
       failed,
       trace,
       requests: provider.requests,
+      reference,
+      nativeOutput,
+      denied,
+      nextCommand,
       saved: await project.fs.readFile('src/created.txt', 'utf8'),
       locked: await project.fs.readFile('locked/keep.txt', 'utf8'),
       outside: await sandbox.fs.readFile('/outside.txt', 'utf8'),

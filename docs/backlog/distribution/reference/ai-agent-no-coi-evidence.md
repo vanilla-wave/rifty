@@ -16,6 +16,16 @@ project owner and ADR-0377 replacement owner. Route-only addition: ADR-0426.
 - Repeat `/tmp/pr333-no-coi-red2.log`: five intended RED, zero timeouts; four
   `NotImplementedError: agent.sandbox-host`, one `sandbox.stopResident`.
   Agent TypeScript and `pnpm backlog:check` PASS.
+- Independent reviewer reproduced five RED, SDK baseline 5/5 PASS, and scratch
+  packed entry reached `agent.sandbox-host` after restoring the original
+  producer snapshot. Scratch JS rebuild is not a tarball/type declaration proof.
+- Native Pi validation exposed fixture `edit_file` oldText/newText instead of
+  its real old/new schema. No product implementation yet. Corrected those keys,
+  retained expected saved/search results, and strengthened Stop event assertions
+  plus direct SDK outcome/output/failure comparison after cd/export. Third run
+  `/tmp/pr333-no-coi-red3.log`: same five intended RED, zero timeouts.
+  Original independent finding retained in
+  `ai-agent-no-coi-contract-red-before-fixture-fix.json`.
 
 Scaffolding exports typed APIs throwing named NotImplementedError only; no
 adapter or replacement implementation precedes independent Contract+RED.

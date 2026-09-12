@@ -42,7 +42,7 @@ test('Pi no-COI host preserves project policy, file effects and provider-error h
   expect(value).toMatchObject({ saved: 'saved', locked: 'keep', outside: 'outside' });
   expect(value.files.some((entry) => entry.name === 'forbidden.txt')).toBe(false);
   const tools = results(value.trace);
-  expect(tools).toHaveLength(9);
+  expect(tools).toHaveLength(10);
   expect(tools.slice(0, 5).every((entry) => !entry.isError)).toBe(true);
   expect(JSON.stringify(tools[2]?.content)).toContain('saved');
   expect(JSON.stringify(tools[3]?.content)).toContain('src/created.txt');
@@ -50,12 +50,22 @@ test('Pi no-COI host preserves project policy, file effects and provider-error h
   expect(tools.slice(5, 8).every((entry) => entry.isError)).toBe(true);
   expect(JSON.stringify(tools[5])).toMatch(/read.only|EROFS/i);
   expect(JSON.stringify(tools[6])).toContain('escapes project root');
-  expect(tools[8]?.details).toMatchObject({
-    stdout: '/agent\nnext\n',
+  expect(tools[8]?.isError).toBe(false);
+  expect(tools[9]?.details).toMatchObject(value.reference);
+  expect(value.reference).toMatchObject({
+    stdout: '/agent\n\nnext\n',
+    stderr: 'stderr\n',
     exitCode: 0,
     worker: 'retained',
   });
-  expect(value.requests[2]?.body.messages.filter((entry) => entry.role === 'tool')).toHaveLength(8);
+  expect(tools[5]?.details).toHaveProperty('error', value.denied);
+  const output = value.trace.events.flatMap(({ event }) =>
+    event.type === 'output' && event.command === value.nextCommand
+      ? [{ stream: event.stream, chunk: event.chunk }]
+      : [],
+  );
+  expect(output).toEqual(value.nativeOutput);
+  expect(value.requests[2]?.body.messages.filter((entry) => entry.role === 'tool')).toHaveLength(9);
   const offered = value.requests[0]?.body.tools.map((entry) => entry.function.name);
   expect(offered).toContain('shell');
   expect(offered).not.toContain('diagnostics');
@@ -82,6 +92,11 @@ for (const hard of [false, true]) {
     });
     expect(tools[0]?.isError).toBe(true);
     expect(tools[1]?.isError).toBe(true);
+    const emitted = value.stopped.events.flatMap(({ event }) =>
+      event.type === 'agent' && event.event.type === 'tool_execution_end' ? [event.event] : [],
+    );
+    expect(emitted[0]?.result.details).toEqual(tools[0]?.details);
+    expect(emitted[0]?.isError).toBe(true);
     if (hard)
       expect(tools[0]?.details).toHaveProperty('effects', {
         applied: 'unknown',

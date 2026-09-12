@@ -1,0 +1,235 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "Исправить аргументы edit_file в RED fixture; повторить scoped Contract+RED перед IMPLEMENT.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "7a0202a9d2e9f6c5e87490f2a0fdba375842faa0",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-no-coi-host.md @ 7a0202a9d2e9f6c5e87490f2a0fdba375842faa0; BASE prior core Final+GREEN 523628b0cc4828e4ae802445e683f84a7f0359cc. Authority: accepted goal/map, raw ai-agent-mode-refine-evidence.md and ai-agent-mode-fit-evidence.md, ADR-0377/0418/0424/0426.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance 1 → I6: successful exact edit in policy carrier",
+      "location": "tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:22",
+      "summary": "Correct model argument names oldText/newText to native old/new and independently verify the unchanged policy assertions/RED."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I3 + I6 + I7: no-COI host delivery",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:74",
+      "summary": "Preparation accepted only. Implement adapter/resident exit and prove the complete source React and actual packed snapshot cycle GREEN; independent Final+GREEN remains."
+    },
+    {
+      "clause": "I5: playground hands-on agent",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:70",
+      "summary": "Implement linked playground/ai-mode-chat child, including visible terminal/settings/Stop/Reset/export, live endpoint and preview acceptance."
+    },
+    {
+      "clause": "I8: three-lane benchmark",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:80",
+      "summary": "Implement linked distribution/agent-bench child: accepted tasks/runs, all three deterministic smoke lanes, evidence/classification/report and tool-context caveat."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: project files/search/edit/shell preserve readonly, allowlist and root policy; missing capabilities are omitted and named",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "missing",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:34",
+      "note": "Native Pi validation rejects the edit fixture before the claimed successful edit; blocker at sandbox-agent-proof.ts:22."
+    },
+    {
+      "row": "Acceptance 2: provider failure retains completed write/results; continuation executes only next command",
+      "source": "acceptance",
+      "trace": "I3 + I7",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:40",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: cooperative/forced Stop settles active and skipped calls, preserves uncertainty, permits next command",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: real headerless React edit/build/preview/exit/syntax-error/repair/render cycle with host capability changes and loud resident admission",
+      "source": "acceptance",
+      "trace": "I6 + I7",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:103",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: stopResident preserves acknowledged files, clears replay and shares restart overlap rejection; restart keeps replay until exit",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0377 + ADR-0426",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-resident-exit.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: packed public imports execute shared cycle on existing fixed Vite snapshot with zero runtime registry acquisition",
+      "source": "acceptance",
+      "trace": "I6 + I7",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-pi-agent-browser-proof.mjs:6",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: native command completion/output/Worker/effects and invocation cwd/env semantics survive adapter",
+      "source": "acceptance",
+      "trace": "I3 + I6 + ADR-0418",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: file policy failure retains SDK facts; ordinary transforms do not claim CAS or rollback",
+      "source": "acceptance",
+      "trace": "I6 + ADR-0418",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:43",
+      "note": ""
+    },
+    {
+      "row": "Provider torn state after write: retained write/results and explicit provider error",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Command cancellation: await cooperative settlement, skipped call error and next command",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Worker forced Stop peer loss: physical replacement, unknown effects, no replay",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:85",
+      "note": ""
+    },
+    {
+      "row": "File/shell corrupt policy input: denied write/command leaves protected files unchanged",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:42",
+      "note": ""
+    },
+    {
+      "row": "Host mode sibling drift: new tools/prompt; stale project operations fail at owner",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:192",
+      "note": ""
+    },
+    {
+      "row": "Replacement torn state/overlap: same restart owner/report, no competing generation or resident replay",
+      "source": "fault-matrix",
+      "trace": "I6 + ADR-0377",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-resident-exit.spec.ts:42",
+      "note": ""
+    },
+    {
+      "row": "createSandboxAgentHost public factory binds the existing SDK project and does not own sandbox lifetime",
+      "source": "public-api",
+      "trace": "I6 + ADR-0426",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:125",
+      "note": ""
+    },
+    {
+      "row": "SandboxAgentHostOptions accepts SDK policy plus caller-owned mode and optional preview",
+      "source": "public-api",
+      "trace": "I6 + ADR-0426",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:145",
+      "note": ""
+    },
+    {
+      "row": "ToolchainSandbox.stopResident exposes explicit replacement returning SandboxRestartReport",
+      "source": "public-api",
+      "trace": "I6 + ADR-0377 + ADR-0426",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-resident-exit.spec.ts:42",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tests/integration/fixtures/workbench-vite-consumer/src/sandbox-agent-proof.ts:22",
+          "summary": "Policy carrier sends oldText/newText to edit_file, but native Pi validates required old/new. Its claimed successful edit/search assertions cannot pass after an honest adapter exists; missing-adapter stub masks an independent fixture failure. Repair the two keys without weakening expected saved/search results.",
+          "authority": "Acceptance 1 → I6; RDY-8: valid pre-implementation oracle/RED proof",
+          "evidence": "Native Pi 0.85.1 / Node v24.16.0 probe copied the exact schema expression from packages/agent/src/tools.ts and exact argument object from this fixture, then called validateToolArguments. /tmp/pr333-no-coi-reviewer-edit-schema.log: Validation failed for tool edit_file: old: must have required properties old, new. Correcting only keys to old/new validates successfully. Command and extraction recorded in /tmp/pr333-no-coi-contract-review-evidence.md."
+        },
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/no-coi-pi-agent.spec.ts:77",
+          "summary": "NOTE: Stop checks native uncertainty and skipped calls in transcript, but does not inspect stopped.events. Acceptance 3 also names events. Existing core event proof is reusable; an explicit no-COI event assertion would make this host-specific evidence clearer. No executed surviving mutant; coverage remains pass under REV-4/5.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/no-coi-pi-agent.spec.ts:79",
+          "summary": "NOTE: Parity 1 currently composes SDK oracle with selected adapter outcome checks. New adapter tests do not directly compare all completion fields/stdout-stderr events, or distinguish fresh cwd/env after a prior cd/export invocation. A same-command direct SDK/agent comparison would strengthen the declared preservation proof. No executed surviving mutant; advisory only under REV-4/5.",
+          "authority": "",
+          "evidence": ""
+        }
+      ]
+    }
+  ]
+}
