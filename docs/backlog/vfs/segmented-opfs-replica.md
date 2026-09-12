@@ -3,8 +3,8 @@ area: vfs
 status: draft
 title: One segmented OPFS substrate for base, mutations and compaction
 created: 2026-08-31
-why: per-file OPFS persistence takes 7.18 s and eager reopen 4.91 s on a 98.2 MB / 14,492-file tree; a traced validated mini-journal measured 1.15 s append and 1.08 s read+replay
-user_story: As an SDK embedder opening and reopening a project with a baked 98.2 MB dependency snapshot, I want the multi-second storage wait reduced without weakening reload honesty.
+why: current per-file drain is 10.320 s and fresh offline restore 4.465 s on Tracker; both storage budgets are 2 s
+user_story: As an embedder or developer with a Tracker-scale persistent project, I want fast first storage flush and offline reload after package-scale edits without weakening durability honesty.
 epic: fast-project-open-reopen
 blocked_by: []
 sources: ["issues #255/#256", ADR-0072, ADR-0358, docs/backlog/vfs/reference/storage-journal-design-benchmarks-2026-08-31.md, docs/backlog/vfs/reference/storage-open-reopen-candidate-benchmarks-2026-09-01.md]

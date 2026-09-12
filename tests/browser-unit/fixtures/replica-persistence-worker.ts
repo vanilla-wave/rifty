@@ -246,7 +246,7 @@ async function run(input: Input) {
   await seed(current);
   if (input.kind === 'corrupt' || input.kind === 'native-read-error') {
     let damagedFile: FileSystemFileHandle | undefined;
-    let damagedBytes: Uint8Array | undefined;
+    let damagedBytes: Uint8Array<ArrayBuffer> | undefined;
     if (input.kind === 'corrupt') {
       let file: FileSystemFileHandle;
       try {
