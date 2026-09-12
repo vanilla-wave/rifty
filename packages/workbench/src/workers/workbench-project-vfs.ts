@@ -1,7 +1,6 @@
 import {
   type VfsMutationGuard,
   type VfsMutationIntent,
-  basename,
   isAbsolute,
   normalizePath,
 } from '@riftydev/vfs';
@@ -13,7 +12,6 @@ import type {
   HostCommitAck,
   HostCommitRequest,
   OwnerVfsDurabilityReceipt,
-  OwnerVfsSnapshotEntry,
 } from '../glue/owner-vfs-protocol.ts';
 import { VfsCommitAppliedError, VfsCommitProtocolError } from '../glue/owner-vfs-protocol.ts';
 import {
@@ -27,7 +25,6 @@ import type {
   OwnerProjectVfsFrame,
   PageProjectVfsFrame,
   ProjectVfsAppliedMutation,
-  ProjectVfsDirectoryEntry,
 } from '../workbench/project-vfs-protocol.ts';
 import type {
   OwnerVfsAppliedMutation,
@@ -35,6 +32,7 @@ import type {
   OwnerVfsAppliedRevision,
 } from './owner-vfs-applied-journal.ts';
 import type { OwnerVfsAuthority } from './owner-vfs-authority.ts';
+import { atomicDirectory, atomicFile } from './workbench-project-vfs-reads.ts';
 
 export interface WorkbenchProjectVfsOptions {
   readonly projectRoot: string;
@@ -202,61 +200,6 @@ function projectMutations(
     }
   }
   return Object.freeze(mutations);
-}
-
-type AtomicFileEntry = Extract<OwnerVfsSnapshotEntry, { readonly kind: 'file' }>;
-
-function requiredVersion(authority: OwnerVfsAuthority, path: string): string {
-  const version = authority.versionOf(path);
-  if (version === null) throw new Error(`owner VFS version missing for ${path}`);
-  return version;
-}
-
-function atomicFile(authority: OwnerVfsAuthority, path: string): AtomicFileEntry {
-  if (authority.statSyncOrNull(path)?.isFile !== true) {
-    throw new Error(`No file exists at ${path}`);
-  }
-  const content = authority.readFileBytesSync(path);
-  return {
-    path,
-    kind: 'file',
-    size: content.byteLength,
-    content,
-    version: requiredVersion(authority, path),
-  };
-}
-
-function atomicDirectory(
-  authority: OwnerVfsAuthority,
-  path: string,
-): readonly ProjectVfsDirectoryEntry[] {
-  if (authority.statSyncOrNull(path)?.isDirectory !== true) {
-    throw new Error(`No directory exists at ${path}`);
-  }
-  return authority
-    .readdirSync(path)
-    .map((child) => {
-      const childPath = `${path}/${child.name}`;
-      const kind = child.isDirectory ? ('dir' as const) : ('file' as const);
-      const size = kind === 'dir' ? 0 : authority.statSync(childPath).size;
-      if (size === undefined) throw new Error(`owner VFS file size missing for ${childPath}`);
-      return Object.freeze({
-        path: childPath,
-        kind,
-        size,
-        version: requiredVersion(authority, childPath),
-      });
-    })
-    .sort((left, right) => {
-      if (left.kind !== right.kind) return left.kind === 'dir' ? -1 : 1;
-      const leftName = basename(left.path).toLowerCase();
-      const rightName = basename(right.path).toLowerCase();
-      return leftName < rightName
-        ? -1
-        : leftName > rightName
-          ? 1
-          : left.path.localeCompare(right.path);
-    });
 }
 
 /** Active-project namespace gate over the lifetime owner VFS authorities. */
