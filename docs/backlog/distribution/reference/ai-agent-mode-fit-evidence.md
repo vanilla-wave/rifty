@@ -33,3 +33,16 @@ evidence. Tier `works` adds no unaccepted scope. The stale frontmatter's
 
 The real no-auth endpoint/model was requested in-session for the carried
 manual live-streaming acceptance; deterministic preparation is independent.
+
+## Final written-result check
+
+`final-check: 2026-09-12 — clear`, fresh read-only `/root/fit_review`, reviewed
+`5d46fb9debeb067a014bbdc3ac464dbf4a665fe4`. Entire goal/map/ledger + four drafts,
+raw refine sources and carried PR #111 conditions checked. No new material fork
+or attribution error; tier retains recovery obligations. Resident exit stays
+technical fog; a test stopping at that gap cannot close I6. `pnpm docs:check`+PASS. This is RDY-6's written-result check, not product Final+GREEN.
+
+User supplied `~/codex-proxy.mjs` and authorized repairs if needed. It started
+at `http://127.0.0.1:10530/v1`; model `gpt-5.6-sol`, real streaming request
+"Reply with exactly PROXY_OK." returned HTTP 200, `PROXY_OK`, terminal
+`finish_reason: stop` and `[DONE]`. No key supplied. Full agent/tool proof remains.

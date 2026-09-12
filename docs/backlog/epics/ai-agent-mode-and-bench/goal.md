@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 tier: works
 title: AI agent mode over rifty hosts + agent-bench (revives PR #111)
 created: 2026-09-12
