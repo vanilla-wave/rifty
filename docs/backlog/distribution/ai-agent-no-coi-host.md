@@ -112,6 +112,8 @@ challenge: 2026-09-11 — 6 problems (goal-level, verbatim in the evidence file;
 
 ## Decisions
 
+ready-verdict: 2026-09-12 — Contract+RED @ f9593e5e8f472dba51041a70d2345ff7019b0d3c
+- 2026-09-12 — independent /root/no_coi_contract_review PASS, 17/17 coverage; same raw JSON in `reference/ai-agent-no-coi-contract-red.json`; fixture typo corrected before implementation.
 - 2026-09-12 — PICKUP reuses the final-checked goal/source frontier and unchanged premise; ADR-0426 chooses a public adapter and explicit exit over the existing replacement owner; core delivered @ 523628b0c. Original substrate question is resolved by this unit, not a user stop.
 - 2026-09-12 — proof shape follows `tests/no-coi/no-coi-agent-installed-cli.spec.ts` / `tests/integration/no-coi-agent-browser-proof.mjs`: packed no-COI page, mock model, scripted session edits the react-vite sources → `npm run build` → Stop mid-run → next command; readonly violation surfaces as a tool error.
 - 2026-09-12 — user (plan validation): one e2e proves the full cycle edit → build → preview (host `startBin`, agent `preview_*`) → host ends the resident → edit → failed `vite build` → fix → successful build; the agent sees each capability change; commands/project fs in preview mode surface the host's loud error, never a raw-fs bypass. Blocker recorded: no public resident exit on main (`restart` re-runs it) — a host-side exit is new SDK surface → ADR at pickup, or the e2e stops at the loud `resident-concurrency` error and names the gap.

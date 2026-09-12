@@ -152,9 +152,12 @@ export function createWorkbenchAgentHost(options: WorkbenchAgentHostOptions): Ag
 
 export function hostError(error: unknown): Record<string, unknown> {
   const inspected = error instanceof Error ? error : new Error(String(error));
+  const fields = inspected as Error & { code?: unknown; path?: unknown };
   return {
     name: inspected.name,
     message: inspected.message,
+    ...(typeof fields.code === 'string' ? { code: fields.code } : {}),
+    ...(typeof fields.path === 'string' ? { path: fields.path } : {}),
     ...(error instanceof ProjectFileOperationError
       ? { mutationOutcome: error.mutationOutcome }
       : {}),

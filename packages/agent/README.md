@@ -24,6 +24,32 @@ dedicated terminal unless the caller supplies a terminal (caller-owned).
 It never closes the ProjectSession. Attach the supplied terminal to the UI
 to display agent commands/output beside user terminals.
 
+For a no-COI `ToolchainSandbox` use `createSandboxAgentHost`:
+
+```ts
+import { createBrowserAgentPreview, createSandboxAgentHost } from '@riftydev/agent';
+
+const host = createSandboxAgentHost({
+  sandbox,
+  project: { root: '/project', readonlyPaths: ['locked'], allowedCommands: ['npm', 'node'] },
+  mode: () => mode, // host sets 'commands' or 'preview'
+  preview: () => {
+    const current = resident;
+    return current
+      ? createBrowserAgentPreview({ url: () => current.previewUrl, frame: () => iframe })
+      : undefined;
+  },
+});
+```
+
+Host owns `startBin` and `await sandbox.stopResident()` plus its preview element.
+Set preview mode after start; return to commands mode after exit. Preview mode
+omits file/shell tools. No raw FS fallback, automatic mode switch or sandbox
+disposal occurs in this adapter. SDK readonly/command policy stays authoritative;
+root bounds standard file tools, not arbitrary guest code. Each command starts
+with fresh cwd/env. File edits use ordinary read/transform/write without CAS;
+forced Stop returns the SDK's unknown effects. Diagnostics/SCM are unavailable.
+
 `send` continues retained history, including after errors. `stop` resolves after
 the host command settles and the slot is reusable. `reset` requires an idle
 session. No automatic retries, approvals or action replay. Host failures retain

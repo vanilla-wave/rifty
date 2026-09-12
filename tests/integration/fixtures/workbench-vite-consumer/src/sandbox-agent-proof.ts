@@ -21,9 +21,9 @@ export async function sandboxAgentPolicy(sandbox: ToolchainSandbox) {
   const projectOptions = {
     root: '/agent',
     readonlyPaths: ['locked'],
-    allowedCommands: ['pwd', 'echo', 'cd', 'export', 'node'],
+    allowedCommands: ['pwd', 'echo', 'cd', 'node'],
   };
-  const priorCommand = 'cd src && export RUN_VALUE=prior && pwd';
+  const priorCommand = 'cd src && RUN_VALUE=prior && pwd';
   const nextCommand = 'pwd && echo "$RUN_VALUE" && node out.cjs';
   const provider = scriptedProvider([
     [

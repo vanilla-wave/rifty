@@ -40,3 +40,41 @@ Mechanism sweep: SDK restarting/activation/dirty state and Worker admission;
 project command completion/Stop already owns cancellation. Adapter owns no mode
 or generation state; `mode()` comes from caller. Whole replacement body will
 serve restart and stopResident. No additional lock/correlation/FIFO/journal.
+
+## Implementation observations
+
+- `/tmp/pr333-no-coi-green1.log`: React full cycle, cooperative/forced Stop and
+  resident-exit proof PASS. Policy assertion failed: fixture assumed `export`
+  exists. Real direct SDK probe (Chromium, current code; no adapter) captured:
+  `cd src && export RUN_VALUE=prior && pwd` → exit127, `export: command not found`;
+  `cd src && RUN_VALUE=prior && pwd` → exit0, `/agent/src\n`;
+  next invocation `pwd && echo "$RUN_VALUE"` → exit0, `/agent\n\n`.
+  Command: `pnpm exec playwright test -c playwright.no-coi.config.ts
+  tests/no-coi/agent-input-probe.spec.ts`; source retained at
+  `/tmp/pr333-no-coi-shell-input-probe.spec.ts`, output
+  `/tmp/pr333-no-coi-shell-input-oracle.log` (1 PASS).
+  Existing `docs/backlog/shell/shell-state-environment-profile.md` already names
+  export/unset as absent and bare assignment as supported. Corrected only the
+  fixture's setup syntax to the measured supported assignment. Same success,
+  fresh cwd/env and full native outcome/output comparisons remain; no SDK
+  behavior was changed to satisfy a false shell assumption (PR-4).
+- `/tmp/pr333-no-coi-green2.log`: all five new scenarios PASS, 36.5s; real
+  React source cycle, native SDK field/output/failure comparison, cooperative
+  and forced Stop events, explicit resident exit/replay semantics.
+- Core regression: `RIFTY_PLAYGROUND_PORT=5297 pnpm test:browser-unit
+  tests/browser-unit/agent-core.spec.ts tests/browser-unit/agent-core-snapshot.spec.ts`
+  → 17/17 PASS, 18.9s (`/tmp/pr333-no-coi-core-regression2.log`). First launch
+  on default 5299 stopped before tests because another server owned that port;
+  it was not reused or terminated.
+- SDK regression: `pnpm exec playwright test -c playwright.no-coi.config.ts
+  tests/no-coi/no-coi-agent-sdk.spec.ts tests/no-coi/no-coi-dev-hmr.spec.ts`
+  → 22/22 PASS, 1.1m (`/tmp/pr333-no-coi-sdk-regression.log`), including memory
+  recovery, dirty acknowledgements, restart reentrancy, ports and actual HMR.
+- Agent/SDK TypeScript, architecture/file-size, backlog and refs checks PASS.
+- `node tests/integration/workbench-packed-consumer.mjs --keep` → PASS:
+  16 first-party + 177 external tarballs, strict installed TypeScript/build,
+  new no-COI Pi snapshot cycle and all existing Workbench/snapshot/scoped/HMR/
+  SQLite checks. `/tmp/pr333-no-coi-packed.log`; retained consumer root
+  `/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-workbench-packed-consumer-98cR43`.
+  New no-COI agent used the published producer archive, public installed
+  agent/SDK exports and copied Worker/SW assets; zero runtime registry requests.

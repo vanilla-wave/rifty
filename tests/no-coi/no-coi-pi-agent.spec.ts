@@ -50,7 +50,7 @@ test('Pi no-COI host preserves project policy, file effects and provider-error h
   expect(tools.slice(5, 8).every((entry) => entry.isError)).toBe(true);
   expect(JSON.stringify(tools[5])).toMatch(/read.only|EROFS/i);
   expect(JSON.stringify(tools[6])).toContain('escapes project root');
-  expect(tools[8]?.isError).toBe(false);
+  expect(tools[8]?.isError, JSON.stringify(tools[8])).toBe(false);
   expect(tools[9]?.details).toMatchObject(value.reference);
   expect(value.reference).toMatchObject({
     stdout: '/agent\n\nnext\n',
