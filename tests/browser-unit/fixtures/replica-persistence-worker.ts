@@ -8,6 +8,7 @@ declare const self: DedicatedWorkerGlobalScope;
 interface Input {
   namespace: string;
   kind:
+    | 'spin'
     | 'roundtrip'
     | 'quota'
     | 'hold'
@@ -268,6 +269,10 @@ async function run(input: Input) {
   if (input.kind === 'verify')
     return { tree: snapshot(current), segments: await referencedSegments(pair.root) };
   await seed(current);
+  if (input.kind === 'spin') {
+    self.postMessage({ ok: true, result: { tree: snapshot(current) } });
+    while (true) {}
+  }
   if (input.kind === 'corrupt' || input.kind === 'native-read-error') {
     let damagedFile: FileSystemFileHandle | undefined;
     let damagedBytes: Uint8Array<ArrayBuffer> | undefined;

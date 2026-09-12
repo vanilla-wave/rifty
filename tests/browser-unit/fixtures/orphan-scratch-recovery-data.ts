@@ -1,5 +1,6 @@
+import { nativeReplicaEntries } from './native-replica-observer.ts';
 export const recoveryNamespace = ' recovery-A ';
-export const orphanRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+export const orphanRoot = '/.rifty/workbench/v2/projects/scratch/tree';
 export const retainedRoot = '/.rifty/workbench/playground/retained-scratch';
 export const catalogPath = '/.rifty/workbench/playground/catalog.json';
 export const originalBytes = [0, 1, 2, 127, 128, 254, 255, 13, 10];
@@ -50,19 +51,32 @@ export async function seedNativeOrphan(): Promise<void> {
       dir = await dir.getDirectoryHandle(part, { create: true });
     return dir;
   }
-  const source = `${recoveryNamespace}${orphanRoot}`;
-  for (const path of ordinaryDirectories) await directory(`${source}/${path}`);
+
   const files = {
-    ...Object.fromEntries(
-      Object.entries({ ...ordinaryFiles, ...excludedFiles }).map(([path, content]) => [
-        `${source}/${path}`,
-        content,
-      ]),
-    ),
     'default-sentinel.bin': [91, 0, 255],
     [`${orphanRoot.slice(1)}/default.bin`]: [92, 128, 1],
     'recovery-B/sibling.bin': [93, 255, 2],
   };
+  const url = new URL('./replica-native-reader-worker.ts', import.meta.url).href;
+  const worker = new Worker(url, { type: 'module' });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      worker.onmessage = ({ data }) => (data.error ? reject(new Error(data.error)) : resolve());
+      worker.onerror = (event) => reject(new Error(event.message));
+      worker.postMessage({
+        namespace: recoveryNamespace,
+        directories: ordinaryDirectories.map((path) => `${orphanRoot}/${path}`),
+        files: Object.fromEntries(
+          Object.entries({ ...ordinaryFiles, ...excludedFiles }).map(([path, content]) => [
+            `${orphanRoot}/${path}`,
+            content,
+          ]),
+        ),
+      });
+    });
+  } finally {
+    worker.terminate();
+  }
   for (const [path, content] of Object.entries(files)) {
     const parts = path.split('/');
     const name = parts.pop();
@@ -90,6 +104,21 @@ export interface NativeTree {
 
 export async function nativeTree(path: string): Promise<NativeTree | null> {
   let root = await navigator.storage.getDirectory();
+  if (path === recoveryNamespace || path.startsWith(`${recoveryNamespace}/`)) {
+    const entries = await nativeReplicaEntries(await root.getDirectoryHandle(recoveryNamespace));
+    const logical = path.slice(recoveryNamespace.length) || '/';
+    if (!entries.has(logical)) return null;
+    const files: Record<string, number[]> = {};
+    const directories: string[] = [];
+    const prefix = logical === '/' ? '/' : `${logical}/`;
+    for (const entry of entries.values()) {
+      if (entry.path === logical || !entry.path.startsWith(prefix)) continue;
+      const relative = entry.path.slice(prefix.length);
+      if (entry.kind === 'dir') directories.push(relative);
+      if (entry.kind === 'file') files[relative] = [...(entry.bytes ?? [])];
+    }
+    return { files, directories: directories.sort() };
+  }
   try {
     for (const part of path.split('/').filter(Boolean)) root = await root.getDirectoryHandle(part);
   } catch (error) {

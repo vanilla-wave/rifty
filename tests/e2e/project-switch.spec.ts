@@ -7,6 +7,7 @@
  * exclusively through user-visible controls and the active project's shell.
  */
 import { type Page, expect, test } from '@playwright/test';
+import { accessNativeReplica } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
 import {
   bootProjectFiles,
   expectViteDevServerReady,
@@ -111,27 +112,61 @@ async function mismatchPersistedDefinitionIdentity(
   projectId: string,
   replacement: string,
 ): Promise<void> {
-  await page.evaluate(
-    async ({ projectId, replacement }) => {
-      let directory = await navigator.storage.getDirectory();
-      for (const segment of ['.rifty', 'workbench', 'v1', 'projects', projectId]) {
-        directory = await directory.getDirectoryHandle(segment);
-      }
-      const handle = await directory.getFileHandle('definition.json');
-      const metadata = JSON.parse(await (await handle.getFile()).text()) as Record<string, unknown>;
-      if (
-        metadata.version !== 1 ||
-        metadata.projectKey !== projectId ||
-        typeof metadata.definitionIdentity !== 'string'
-      ) {
-        throw new Error(`Unexpected persisted definition metadata for ${projectId}`);
-      }
-      const writable = await handle.createWritable();
-      await writable.write(JSON.stringify({ ...metadata, definitionIdentity: replacement }));
-      await writable.close();
-    },
-    { projectId, replacement },
-  );
+  const ownerUrl = await page.evaluate(async () => {
+    const url = '/src/adapters/playground-workbench-host.ts';
+    const { playgroundWorkbenchOptions } = await import(/* @vite-ignore */ url);
+    return new URL(playgroundWorkbenchOptions().deployment.workers.owner, location.href).href;
+  });
+  let resume!: () => void;
+  let entered!: () => void;
+  let handled!: () => void;
+  const continued = new Promise<void>((resolve) => {
+    handled = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const handler = async (route: import('@playwright/test').Route) => {
+    entered();
+    await held;
+    await route.continue();
+    handled();
+  };
+  await page.route(ownerUrl, handler);
+  try {
+    // Previous native writer is terminated; hold the replacement before it acquires storage.
+    await page.reload();
+    await reached;
+    const path = `/.rifty/workbench/v2/projects/${projectId}/definition.json`;
+    const bytes = (await accessNativeReplica(page, { paths: [path] }))[path];
+    if (bytes === null || bytes === undefined) throw new Error('Persisted definition is absent');
+    const metadata = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes))) as Record<
+      string,
+      unknown
+    >;
+    if (
+      metadata.version !== 1 ||
+      metadata.projectKey !== projectId ||
+      typeof metadata.definitionIdentity !== 'string'
+    )
+      throw new Error(`Unexpected persisted definition metadata for ${projectId}`);
+    await accessNativeReplica(page, {
+      files: {
+        [path]: [
+          ...new TextEncoder().encode(
+            JSON.stringify({ ...metadata, definitionIdentity: replacement }),
+          ),
+        ],
+      },
+    });
+  } finally {
+    resume();
+    await continued;
+    await page.unroute(ownerUrl, handler);
+  }
 }
 
 async function armFirstMismatchToastState(
@@ -231,7 +266,6 @@ test.describe('Project activation/open compensation', () => {
     const betaId = await saveScratchAs(page, betaName);
 
     await mismatchPersistedDefinitionIdentity(page, alphaId, `mismatch-${tag}`);
-    await page.reload();
     await expect(page.locator('.rf-app[data-project-index="ready"]')).toBeVisible({
       timeout: PROJECT_TRANSITION_TIMEOUT,
     });

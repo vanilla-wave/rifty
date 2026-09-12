@@ -280,3 +280,30 @@ for (const rounds of [0, 63]) {
     });
   }
 }
+
+test('busy Worker termination waits for real native guard release before replay', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  const result = await page.evaluate(async (url) => {
+    const module = await import(/* @vite-ignore */ url);
+    const namespace = crypto.randomUUID();
+    const once = (worker: Worker, kind: string) =>
+      new Promise<{ tree: Entry[] }>((resolve, reject) => {
+        worker.onmessage = ({ data }) =>
+          data.ok ? resolve(data.result) : reject(new Error(data.error));
+        worker.onerror = (event) => reject(new Error(event.message));
+        worker.postMessage({ kind, namespace });
+      });
+    const old = new Worker(module.default, { type: 'module' });
+    const expected = await once(old, 'spin');
+    old.terminate();
+    const fresh = new Worker(module.default, { type: 'module' });
+    try {
+      return { expected: expected.tree, actual: (await once(fresh, 'verify')).tree };
+    } finally {
+      fresh.terminate();
+    }
+  }, workerModuleUrl);
+  expect(result.actual).toEqual(result.expected);
+});

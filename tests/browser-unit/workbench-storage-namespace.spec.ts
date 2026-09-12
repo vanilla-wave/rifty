@@ -10,6 +10,7 @@ import {
   writeOwnerFile,
 } from './fixtures.ts';
 import {
+  accessNativeReplica,
   denyNamespaceProofWrites,
   encoded,
   nativeRootNames,
@@ -18,7 +19,7 @@ import {
   seedNamespaceOrigin,
 } from './fixtures/opfs-storage-namespace.ts';
 
-const markerPath = '/.rifty/workbench/v1/projects/scratch/tree/marker.txt';
+const markerPath = '/.rifty/workbench/v2/projects/scratch/tree/marker.txt';
 
 for (const persistence of ['required', 'preferred'] as const) {
   test(`public ${persistence} owner uses selected namespace and reopens A/B/default independently`, async ({
@@ -74,21 +75,21 @@ for (const persistence of ['required', 'preferred'] as const) {
         .soft(await readOwnerFile(page, '/scratch/marker.txt'))
         .toEqual({ ok: true, text: 'default-owner', error: '' });
       await closeOwner(page);
-      expect
-        .soft(
-          await readNativeFiles(page, [
-            markerPath,
-            `/ owner-A ${markerPath}`,
-            `/owner-B${markerPath}`,
-            '/outside-sentinel.bin',
-          ]),
-        )
-        .toEqual({
-          [markerPath]: encoded('default-owner'),
-          [`/ owner-A ${markerPath}`]: encoded('A-owner'),
-          [`/owner-B${markerPath}`]: encoded('B-owner'),
-          '/outside-sentinel.bin': outsideBytes,
-        });
+      for (const [namespace, content] of [
+        [undefined, 'default-owner'],
+        [' owner-A ', 'A-owner'],
+        ['owner-B', 'B-owner'],
+      ] as const) {
+        expect(
+          await accessNativeReplica(page, {
+            ...(namespace === undefined ? {} : { namespace }),
+            paths: [markerPath],
+          }),
+        ).toEqual({ [markerPath]: encoded(content) });
+      }
+      expect(await readNativeFiles(page, ['/outside-sentinel.bin'])).toEqual({
+        '/outside-sentinel.bin': outsideBytes,
+      });
     } finally {
       await closeOwner(page);
     }
@@ -230,7 +231,7 @@ for (const persistence of ['required', 'preferred'] as const) {
         expect.soft(attempt.ok).toBe(false);
         expect
           .soft(attempt.messages.join('\n'))
-          .toContain('namespace-proof-denied:A/.rifty/workbench/v1/storage-proof/');
+          .toContain('namespace-proof-denied:A/.rifty-replica-v1/segment-');
       } else {
         expect(attempt).toEqual({ ok: true, messages: [] });
         expect
@@ -246,7 +247,7 @@ for (const persistence of ['required', 'preferred'] as const) {
             durability: 'ephemeral',
             fallback: {
               reason: expect.stringContaining(
-                'namespace-proof-denied:A/.rifty/workbench/v1/storage-proof/',
+                'namespace-proof-denied:A/.rifty-replica-v1/segment-',
               ),
             },
           });

@@ -3,7 +3,6 @@ import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { installOpfsFs } from '@riftydev/vfs/internal';
-/// <reference lib="webworker" />
 import { EventEmitter } from '../../../packages/io/src/index.ts';
 import {
   validateUrlContext,
@@ -20,6 +19,8 @@ import {
   nativePause,
   observe,
 } from './operation-budget-native-boundary.ts';
+/// <reference lib="webworker" />
+import { replicaProofPause } from './replica-proof-native-boundary.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 interface Request {
@@ -152,9 +153,7 @@ async function proof(request: Request) {
   bootstrapOwnerRealm();
   const clock = manualClock();
   const namespace = `i7-proof-${crypto.randomUUID()}`;
-  const pause = await nativePause(namespace, request.boundary ?? 'close', (path) =>
-    path.includes('/.rifty/workbench/v1/storage-proof/'),
-  );
+  const pause = replicaProofPause(request.boundary ?? 'close');
   const processBoundary = new NativeOwnerProcess();
   let close: (() => Promise<unknown>) | undefined;
   try {

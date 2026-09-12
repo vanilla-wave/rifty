@@ -110,3 +110,71 @@ Replica native prewarm/external per-file refresh controls are retired as named
 NotImplementedError (VFS README); ordinary FsSync is unchanged. No production
 call-site uses those controls. Final image capture uses the existing scheduler
 watermark and live front; no queued second byte mirror is introduced.
+
+## IMPLEMENT gate evidence — 2026-09-12
+
+- Native replica suite: 16/16; per-file OPFS + v2 Store unit: 96 pass / 1 existing skip;
+  Workbench: 159 files / 3,099 tests pass. Configured no-COI native roundtrip passes.
+- Three fresh Chromium processes, T manifest, all bytes checked after replay:
+  flush 323.145/340.575/359.975 ms; restore 216.855/215.865/215.650 ms;
+  post-5,000-mutation restore 278.990/286.450/249.460 ms.
+  Medians 340.575 / 215.865 / 278.990 ms, all ≤2 s. Native storage proof only;
+  public real-install composition remains in the map.
+- PR-4 compiler pin: full gate + isolated `check:esbuild-legacy-retirement`
+  rejected `typescript-worker.js` after the replica changed imported chunk hashes.
+  Rebuilt BASE 93c05f4 sources with identical esbuild options: exact old
+  10,022,694-byte SHA bd7eb420…eb936 reproduced. Diff is solely seven static
+  chunk import references and one dynamic module-loader reference; after normalizing
+  those emitted names, files are byte-identical. New exact SHA
+  bda2365a4f089e9e897869e3d3acef6cc1c6504c6bb6a0e8d98c5e2e09687b59;
+  byte ceiling, finite inventory and all raw/gzip/base64 rejection checks retained.
+- PR-4 first-open progress: original native per-file walk returned -1 under replica
+  despite successful v2 open. Replace physical-path enumeration with fresh-Worker
+  validated replay after terminating the owner. File-count and pre-reply progress
+  assertions remain; no cache from the writing owner can satisfy durability.
+- Supplemental paired Vfs probe initially used Node stream's inclusive end by mistake.
+  Vfs `openReadable` is `[start,end)` (existing MemoryVfs range contract).
+  Request corrected from end=2 to end=3; expected bytes [255,128] retained.
+  No production stream change. Other own-result, dirty-ledger, metadata and
+  timeout assertions passed in that first run.
+- PR-4 existing browser carriers: namespace proof faults now select native segment
+  records; preload refusal targets committed HEAD; first-open proof uses a fresh
+  reader Worker. Same namespace isolation, original bytes, error and recovery checks.
+- Orphan Scratch seeds and all custody/kill/quota/read/metadata-kind rows now use
+  the replica. Native observers decode actual HEAD/segments independently of VFS
+  caches. Deletion cuts match a covering tombstone (empty-parent cleanup coalesces
+  the removed source). All 18 orphan rows pass, including public retain/export/reopen.
+- Historical per-file catalog adoption expectation is superseded by ADR-0425's
+  accepted no-adoption decision: public test now checks empty catalog and exact
+  retained historical bytes for selected and decoy workspaces. Low-level migration
+  receipt cases keep their real per-file backend, now at the active v2 project path.
+- Interrupted real npm install: after the HEAD containing lodash LICENSE, the
+  complete package is executable (observed exit 0); per-file's forced partial-package
+  expectation is inapplicable. Test both exact boundaries: before HEAD → missing
+  package; after HEAD → full working package. Both preserve local source, no arrival
+  on saved open, and explicit install/build still work. Both pass.
+- E2E definition mismatch edits committed metadata only after old-owner teardown
+  and before new-owner admission. Compensation passes. Real cowsay install/exec/
+  reload with complete native scope hashes also passes; no page-cache oracle.
+
+## Busy-Worker guard defect — RED, 2026-09-12
+
+- CI and isolated `no-coi-agent-sdk --grep agentStopScenario` reproduce terminated
+  instead of replaced. Runtime's new peer rejects OpfsPreloadError: native guard
+  still occupied. Minimal `replica-persistence --grep 'busy Worker termination'`
+  reproduces before any repair.
+- Native standalone probe: terminate of a busy Worker does not immediately stop
+  its JS or release locks. SyncAccessHandle reacquires after ~2,005 ms; independent
+  DEC-2 probe matches ~2 s for sync handle, Web Lock and exclusive writable.
+  A live competitor stays refused; another namespace opens immediately. Counter
+  observations rule out stealing custody merely because terminate() was called.
+- Axis: concurrent-same-key / observable-order at Worker death → OPFS admission.
+  Existing one guard remains the physical settlement authority. No duplicate/reorder
+  transport model, no epoch/steal/second owner; bounded admission waits for real release.
+  Independent decision: /root/busy_guard_decision; repair/evidence follows.
+- DEC-2 conclusion retains native SyncAccessHandle; ADR-0428 records a separate
+  acquisition deadline using captured ioReportTimeoutMs, retrying only real
+  NoModificationAllowedError. Late grant closes, no publication/fallback.
+- A second RED holds a genuinely acquired native handle past the deadline;
+  requires preferred refusal, eventual close and clean reacquisition. It fails
+  before the repair. Existing busy-stop assertion stays unchanged.
