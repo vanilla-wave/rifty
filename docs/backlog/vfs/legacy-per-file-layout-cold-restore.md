@@ -1,7 +1,7 @@
 ---
 area: vfs
-status: draft
-title: Legacy per-file OPFS namespace — one-time notice, playground honesty, and reclaim after the format switch
+status: ready
+title: Name excluded legacy or corrupt storage through existing public diagnostics
 created: 2026-09-01
 why: slice A moves the workbench store to a new versioned namespace so the per-file layout is never read again; nothing yet tells the user that projects persisted before the switch were not carried over, and their bytes stay in OPFS uncounted
 user_story: As a developer reopening the playground after the format switch, I want to be told once that projects saved under the previous storage layout are gone and why, but today the catalog would simply be empty and the old bytes would sit in OPFS with no explanation.
@@ -13,18 +13,13 @@ code: [packages/workbench/src/workbench/project-materialization.ts, packages/wor
 
 ## Context
 
-Goal invariant I3 (`epics/fast-project-open-reopen`), user-facing half.
-The mechanism is NOT here: slice A (`vfs/segmented-opfs-replica`) bumps the
-already-versioned store namespace (`workbench-project-store.ts` `ROOT =
-'/.rifty/workbench/v1'`, `StoredCatalog.version: 1`) to `v2`, so a per-file
-tree is never read as state, and the existing open path
-(`project-materialization.ts` `open()`: store record absent → stage
-`definition.files` → promote) re-materializes the project from its
-definition with zero new authority. `project-deps.ts` (stamp / snapshot /
-install, ADR-0135) then owns `node_modules` only. `v1` bytes are left
-untouched — never read, never deleted by this goal — so the switch destroys
-nothing by itself; quota accounting of the dead namespace belongs to
-`vfs/storage-pressure-and-eviction-ux`.
+Goal I3 and Outcome (d), public diagnosis. Replica accepted at `631615fb9`
+(ADR-0425); Workbench uses v2 and never adopts native per-file v1. Existing
+project materialization restores definitions; old native bytes remain untouched.
+This unit closes the missing health/startup carrier, including corruption whose
+first storage proof would otherwise erase its only diagnostic evidence.
+ADR-0432 records the existing health/logger route and private corruption record.
+Reclaim remains with `vfs/storage-pressure-and-eviction-ux`.
 
 What this item owns beyond the trigger:
 
@@ -92,3 +87,61 @@ clone` = loss), 6 (loss sized as total per project), 7 (accepted, stated),
 Advisory 8: the bounded migration-reuse route is recorded for the user's
 final say in the FIT report; the breaking-change decision stands until they
 reverse it.
+
+
+## Reference contract
+
+Accepted goal I3/Outcome (c,d), ADR-0285/0413 health and ADR-0425 replica.
+Browser storage/health behavior has no Node equivalent; actual Worker, native
+OPFS, public Workbench/SDK and actual Playground banner are the oracles.
+
+## Acceptance
+
+1. Selected namespace (including omitted/default), native v1 present, no complete
+   v2 project: health names legacy per-file OPFS v1 and excluded projects/edits/
+   npm/clones/history, `degraded/storage-layout`, `recovery:none`; catalog empty,
+   native v1 bytes unchanged. Fresh definition opens without old-only edits. → I3
+2. Notice replays to late subscribers, survives project switches, offers no
+   recovery action, and preserves real project-opening progress. Healthy/no-v1
+   and ephemeral opens do not invent a notice. → I3 + ADR-0285 + ADR-0413
+3. Proof-only/stage-only reload repeats notice; successful complete project
+   suppresses it next open. Malformed orphan alone cannot suppress or brick boot.
+   No legacy contents read, migration, seen marker or new writer. → I3 + ADR-0432
+4. Corrupt replica uses canonical redacted storage-layout notice; a first-proof
+   crash retains either original corruption or ordinary logical diagnosis. → scenario + ADR-0432
+5. Public no-COI SDK logger receives named legacy/corrupt startup diagnosis,
+   before any automatic HEAD write; native acquired-read failure stays an error.
+   Public API/protocol and fallback reason semantics remain. → scenario + ADR-0432
+
+## Parity cases
+
+- Browser-owned diagnosis: native OPFS + public Workbench health and SDK logger;
+  no emulated native outcome. Existing Node parity baseline retained. → I3
+
+## Fault matrix
+
+| Axis × operation | Honest outcome | Carrier / target → trace |
+|---|---|---|
+| legacy × cold open | Empty catalog, named notice, new definition only, old bytes untouched | legacy-layout-notice browser public owner → I3 |
+| quota × stage/promotion | Failed open, old native bytes intact, retry/repeated notice | native segment write denial during stage → I3 |
+| page/owner death × stage | No adopted partial project, retry with notice | native staged HEAD cut then page death → I3 |
+| page death × first proof HEAD | Original corrupt HEAD or durable private diagnosis; next health names cold restore | before/after actual HEAD close → ADR-0432 |
+| quota × diagnosis record | Proof/open fails, never clean ready without diagnosis | native record-bearing segment write denial → ADR-0432 |
+| late subscriber / generation switch | Same global notice; no stale generation clears it | legacy-layout-notice + storage-layout-notice e2e → ADR-0285 + I3 |
+| informational issue × progress | Active open still publishes real persistence counts | public-project-open-progress legacy case → ADR-0413 |
+| malformed orphan × complete-record probe | Not completion proof; valid sibling can suppress notice; normal explicit-open error remains | existing project-store validation → ADR-0432 |
+| no-COI × early stderr | Existing SDK logger observes diagnosis before ready/any HEAD write | configured native Worker + public SDK → ADR-0432 |
+| native read failure × init | OpfsPreloadError; no false layout notice or memory success | inherited replica owner/native read carrier → ADR-0425 |
+| concurrent writer × open | Excluded by existing origin lease/native guard; no takeover | inherited replica guard tests → ADR-0425 |
+
+## Out of scope
+
+Legacy migration/export prompt/reclaim; editor conflict recovery; new SDK storage
+API; original Tracker asset regeneration. Public T/npm/offline composition proof
+rides this branch as goal acceptance; it introduces no new product behavior.
+
+## Decisions
+
+- 2026-09-13 — DEC-2 /root/replica_decision: ADR-0432; narrow global health variant, canonical summaries, existing logger, same-replica diagnosis custody.
+
+- 2026-09-13 — preparation: reference/legacy-layout-diagnosis-pickup.md; native/browser/SDK/UI RED, existing healthy controls PASS; original goal/challenge unchanged.
