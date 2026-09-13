@@ -26,6 +26,17 @@ import {
   assertClientBundleBudgets,
 } from '../../tools/checks/client-bundle-budget.mjs';
 import { provePackedCompilerLoading } from './client-bundle-browser-proof.mjs';
+import {
+  closeServer,
+  findInstalledPackage,
+  installedClosure,
+  listen,
+  packInstalledPackages,
+  readJson,
+  registryEntries,
+  startInstalledRegistry,
+  tarballIntegrity,
+} from './installed-registry.mjs';
 import { provePackedAgent } from './no-coi-agent-browser-proof.mjs';
 import { provePackedInstallLoading } from './no-coi-install-browser-proof.mjs';
 import { provePackedNoCoiPiAgent } from './no-coi-pi-agent-browser-proof.mjs';
@@ -33,7 +44,6 @@ import { provePackedNoCoiSnapshots } from './no-coi-snapshot-browser-proof.mjs';
 import { provePackedVmSelection } from './no-coi-vm-browser-proof.mjs';
 import { proveSdkPackaging } from './sdk-packaging-proof.mjs';
 import { assertExactFirstPartyImports } from './workbench-packed-consumer-package-contract.mjs';
-import { installedPackagePackPlan } from './workbench-packed-consumer-package-manager.mjs';
 import { createResourceCleanup } from './workbench-packed-consumer-resource-cleanup.mjs';
 import { provePackedScopedPreview } from './workbench-scoped-preview-proof.mjs';
 
@@ -153,27 +163,6 @@ function run(command, args, options = {}) {
   });
 }
 
-async function readJson(path) {
-  return JSON.parse(await readFile(path, 'utf8'));
-}
-
-async function findInstalledPackage(name, startingDirectory) {
-  let directory = startingDirectory;
-  while (true) {
-    const candidate = resolve(directory, 'node_modules', ...name.split('/'));
-    try {
-      return await realpath(candidate);
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error;
-    }
-    const parent = dirname(directory);
-    if (parent === directory) {
-      throw new Error(`Cannot resolve installed package ${name} from ${startingDirectory}`);
-    }
-    directory = parent;
-  }
-}
-
 async function workspacePackages() {
   const roots = [resolve(repoRoot, 'packages'), resolve(repoRoot, 'tools')];
   const packages = new Map();
@@ -222,23 +211,6 @@ function externalDependencyNames(manifest) {
     .map(([name]) => name);
 }
 
-function installedDependencyNames(manifest) {
-  return [
-    ...new Set([
-      ...Object.keys(manifest.dependencies ?? {}),
-      ...Object.keys(manifest.optionalDependencies ?? {}),
-      ...Object.keys(manifest.peerDependencies ?? {}),
-    ]),
-  ];
-}
-
-function isOptionalInstalledDependency(manifest, name) {
-  return (
-    Object.hasOwn(manifest.optionalDependencies ?? {}, name) ||
-    manifest.peerDependenciesMeta?.[name]?.optional === true
-  );
-}
-
 async function resolveFixtureExternal(name, version, contexts) {
   const mismatches = [];
   for (const context of contexts) {
@@ -280,22 +252,7 @@ async function externalDependencyClosure(workspaceClosure) {
     pending.push(await resolveFixtureExternal(name, version, fixtureContexts));
   }
 
-  const closure = new Map();
-  while (pending.length > 0) {
-    const dir = pending.pop();
-    if (dir === undefined) continue;
-    const manifest = await readJson(resolve(dir, 'package.json'));
-    const identity = `${manifest.name}@${manifest.version}`;
-    if (closure.has(identity)) continue;
-    closure.set(identity, { dir, manifest });
-    for (const name of installedDependencyNames(manifest)) {
-      try {
-        pending.push(await findInstalledPackage(name, dir));
-      } catch (error) {
-        if (!isOptionalInstalledDependency(manifest, name)) throw error;
-      }
-    }
-  }
+  const closure = await installedClosure(pending);
   return [...closure.entries()].sort(([left], [right]) => left.localeCompare(right));
 }
 
@@ -346,36 +303,6 @@ async function packPackages(packages, tarballRoot) {
   return tarballs;
 }
 
-async function packInstalledPackages(packages, tarballRoot, npmCacheRoot) {
-  const tarballs = new Map();
-  const stagingRoot = resolve(
-    dirname(tarballRoot),
-    `${basename(tarballRoot)}-installed-package-staging`,
-  );
-  await mkdir(stagingRoot, { recursive: true });
-  let packageIndex = 0;
-  for (const [name, packageEntry] of packages) {
-    const before = new Set(await readdir(tarballRoot));
-    const packPlan = installedPackagePackPlan(
-      packageEntry.dir,
-      resolve(stagingRoot, String(packageIndex)),
-      tarballRoot,
-      npmCacheRoot,
-    );
-    packageIndex += 1;
-    await cp(packPlan.copy.source, packPlan.copy.destination, packPlan.copy.options);
-    await run(packPlan.command.command, packPlan.command.args, packPlan.command.options);
-    const created = (await readdir(tarballRoot)).filter(
-      (entry) => entry.endsWith('.tgz') && !before.has(entry),
-    );
-    if (created.length !== 1) {
-      throw new Error(`Packing ${name} created ${created.length} tarballs: ${created.join(', ')}`);
-    }
-    tarballs.set(name, resolve(tarballRoot, created[0]));
-  }
-  return tarballs;
-}
-
 function lockfilePackageName(path) {
   const prefix = 'node_modules/';
   if (!path.startsWith(prefix)) throw new Error(`Unsupported snapshot lock path: ${path}`);
@@ -388,10 +315,6 @@ function lockfilePackageName(path) {
   }
   if (segments.length === 1) return segments[0];
   throw new Error(`Packed consumer snapshot requires a flat package tree: ${path}`);
-}
-
-function tarballIntegrity(bytes) {
-  return `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
 }
 
 async function browserRegistryPackages() {
@@ -445,192 +368,6 @@ async function browserRegistryPackages() {
   return packages;
 }
 
-function listen(server, port = 0) {
-  return new Promise((resolveListen, rejectListen) => {
-    const onError = (error) => {
-      server.off('listening', onListening);
-      rejectListen(error);
-    };
-    const onListening = () => {
-      server.off('error', onError);
-      resolveListen();
-    };
-    server.once('error', onError);
-    server.once('listening', onListening);
-    server.listen(port, '127.0.0.1');
-  });
-}
-
-function closeServer(server) {
-  return new Promise((resolveClose, rejectClose) => {
-    server.close((error) => (error === undefined ? resolveClose() : rejectClose(error)));
-  });
-}
-
-function sendResponse(request, response, status, headers, body) {
-  response.writeHead(status, {
-    'Access-Control-Allow-Origin': '*',
-    'Cross-Origin-Resource-Policy': 'cross-origin',
-    ...headers,
-  });
-  if (request.method === 'HEAD' || body === undefined) response.end();
-  else response.end(body);
-}
-
-async function startBrowserRegistry(packages) {
-  const requests = [];
-  const responses = [];
-  let origin = '';
-  let denied = false;
-  const tarballRoutes = new Map();
-  const server = createServer((request, response) => {
-    void (async () => {
-      const requestUrl = new URL(request.url ?? '/', origin || 'http://127.0.0.1');
-      requests.push(`${request.method ?? 'GET'} ${requestUrl.pathname}`);
-      if (denied) {
-        sendResponse(
-          request,
-          response,
-          503,
-          { 'Content-Type': 'text/plain' },
-          'Registry denied by snapshot-only proof',
-        );
-        return;
-      }
-      if (request.method === 'OPTIONS') {
-        sendResponse(request, response, 204, { 'Access-Control-Allow-Methods': 'GET, HEAD' });
-        return;
-      }
-      if (request.method !== 'GET' && request.method !== 'HEAD') {
-        sendResponse(request, response, 405, { Allow: 'GET, HEAD' });
-        return;
-      }
-
-      const tarballPackage = tarballRoutes.get(requestUrl.pathname);
-      if (tarballPackage !== undefined) {
-        const bytes = await readFile(tarballPackage.tarball);
-        responses.push({
-          kind: 'tarball',
-          packageName: tarballPackage.name,
-          status: 200,
-        });
-        sendResponse(
-          request,
-          response,
-          200,
-          {
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': String(bytes.byteLength),
-          },
-          bytes,
-        );
-        return;
-      }
-
-      let name;
-      try {
-        name = decodeURIComponent(requestUrl.pathname.slice(1));
-      } catch {
-        sendResponse(request, response, 400, { 'Content-Type': 'application/json' }, '{}');
-        return;
-      }
-      const entries = [...packages.values()].filter((entry) => entry.manifest.name === name);
-      if (entries.length === 0) {
-        sendResponse(request, response, 404, { 'Content-Type': 'application/json' }, '{}');
-        return;
-      }
-      const versions = {};
-      for (const entry of entries) {
-        const tarballPath = [...tarballRoutes].find(([, candidate]) => candidate === entry)?.[0];
-        if (tarballPath === undefined)
-          throw new Error(`Missing registry tarball route for ${name}`);
-        versions[entry.manifest.version] = {
-          ...entry.manifest,
-          dist: {
-            tarball: `${origin}${tarballPath}`,
-            integrity: entry.integrity,
-            shasum: entry.shasum,
-          },
-        };
-      }
-      const body = Buffer.from(
-        JSON.stringify({
-          _id: name,
-          name,
-          'dist-tags': entries.length === 1 ? { latest: entries[0].manifest.version } : {},
-          versions,
-        }),
-      );
-      responses.push({ kind: 'packument', packageName: name, status: 200 });
-      sendResponse(
-        request,
-        response,
-        200,
-        { 'Content-Type': 'application/json', 'Content-Length': String(body.byteLength) },
-        body,
-      );
-    })().catch((error) => {
-      if (!response.headersSent) {
-        sendResponse(
-          request,
-          response,
-          500,
-          { 'Content-Type': 'text/plain' },
-          Buffer.from(error instanceof Error ? error.message : String(error)),
-        );
-      } else {
-        response.destroy(error instanceof Error ? error : new Error(String(error)));
-      }
-    });
-  });
-  const listening = listen(server);
-  const registryResource = resources.register(async () => {
-    await withDeadline(
-      listening.catch(() => {}),
-      5_000,
-      'Packed consumer registry did not settle before cleanup',
-    );
-    if (!server.listening) return;
-    server.closeAllConnections();
-    await withDeadline(
-      closeServer(server),
-      5_000,
-      'Packed consumer registry did not close during cleanup',
-    );
-  });
-  await listening;
-  const address = server.address();
-  if (address === null || typeof address === 'string') {
-    throw new Error('Packed consumer registry did not bind a TCP port');
-  }
-  origin = `http://127.0.0.1:${address.port}`;
-  for (const packageEntry of packages.values()) {
-    const tarballPath = `/-/tarballs/${encodeURIComponent(packageEntry.manifest.name)}-${packageEntry.manifest.version}.tgz`;
-    tarballRoutes.set(tarballPath, packageEntry);
-  }
-  server.unref();
-  return {
-    origin,
-    requests,
-    responses,
-    assertResolution(entry) {
-      const url = new URL(entry.resolved);
-      const artifact = url.origin === origin ? tarballRoutes.get(url.pathname) : undefined;
-      if (
-        !artifact ||
-        entry.integrity !== artifact.integrity ||
-        entry.version !== artifact.manifest.version
-      ) {
-        throw new Error(`Consumer resolution is not an exact local tarball: ${entry.resolved}`);
-      }
-    },
-    deny: () => {
-      denied = true;
-    },
-    close: () => registryResource.cleanup(),
-  };
-}
-
 function delay(milliseconds) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
 }
@@ -653,6 +390,15 @@ async function runCleanups(label, cleanups) {
   }
   if (errors.length === 1) throw errors[0];
   if (errors.length > 1) throw new AggregateError(errors, label);
+}
+
+function startBrowserRegistry(packages) {
+  return startInstalledRegistry(packages, {
+    registerClose: (close) =>
+      resources.register(() =>
+        withDeadline(close(), 5_000, 'Packed consumer registry did not close during cleanup'),
+      ),
+  });
 }
 
 async function reserveLoopbackPort() {
@@ -1450,20 +1196,9 @@ async function main() {
       externalClosure,
       tarballRoot,
       npmPackCacheRoot,
+      run,
     );
-    const installedPackages = new Map();
-    for (const [identity, entry] of externalClosure) {
-      const tarball = externalTarballs.get(identity);
-      if (!tarball) throw new Error(`Missing installed tarball ${identity}`);
-      const bytes = await readFile(tarball);
-      installedPackages.set(identity, {
-        name: entry.manifest.name,
-        manifest: entry.manifest,
-        tarball,
-        integrity: tarballIntegrity(bytes),
-        shasum: createHash('sha1').update(bytes).digest('hex'),
-      });
-    }
+    const installedPackages = await registryEntries(externalClosure, externalTarballs);
     const installedRegistry = await startBrowserRegistry(installedPackages);
     try {
       await writePackedConsumerManifest(consumerRoot, workspaceTarballs);

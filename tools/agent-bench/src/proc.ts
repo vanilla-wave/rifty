@@ -1,6 +1,6 @@
 /** Process/network helpers shared by the lane drivers. */
 import { type ChildProcess, spawn } from 'node:child_process';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 
 export function freePort(): Promise<number> {
@@ -104,15 +104,6 @@ export async function waitHttpReady(url: string, timeoutMs: number, what: string
   throw new Error(`agent-bench: ${what} not ready at ${url} after ${timeoutMs}ms (${lastError})`);
 }
 
-export function tailOf(path: string, bytes: number): string {
-  try {
-    const text = readFileSync(path, 'utf8');
-    return text.length > bytes ? text.slice(-bytes) : text;
-  } catch {
-    return `(no output captured at ${path})`;
-  }
-}
-
 export function spawnLoggedServer(
   cmd: string,
   args: string[],
@@ -152,17 +143,6 @@ export function killProcessGroup(child: ChildProcess | null): Promise<void> {
     signal('SIGTERM');
     setTimeout(() => {
       if (child.exitCode === null && child.signalCode === null) signal('SIGKILL');
-    }, 2000).unref();
-  });
-}
-
-export function killChild(child: ChildProcess | null): Promise<void> {
-  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolve) => {
-    child.once('exit', () => resolve());
-    child.kill('SIGTERM');
-    setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
     }, 2000).unref();
   });
 }
