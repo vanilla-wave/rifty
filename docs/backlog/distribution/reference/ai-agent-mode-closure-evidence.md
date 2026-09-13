@@ -43,7 +43,8 @@ Closure-tree full pr:check also passed25/25 (unit187.9s/parity60.7s).
 Post-closure review fixes (2026-09-13, inline review NOTEs repaired in place):
 owned incomplete terminal line discarded (RED `tests/browser-unit/agent-ui-terminal.spec.ts:134`),
 shared installed-tarball registry `tests/integration/installed-registry.mjs`, unused
-helpers/lint. Independent Final+GREEN PASS on the fixes (`pr-333-final-review-1.json`, f756a8573) and
-on the tree merged with origin/main (`pr-333-final-green.json`, reviewed cdad87352):
-browser-unit 22/22, no-COI 5/5, e2e ai-mode 10/10, pr:check 25/25, packed-consumer 1/1,
-agent-bench contract 12/12 re-executed on the merged tree.
+helpers/lint. Independent Final+GREEN PASS on the fixes (`pr-333-final-review-1.json`, f756a8573), on
+the first merge with origin/main (`pr-333-final-review-2.json`, cdad87352) and on the
+second (`pr-333-final-green.json`, reviewed 43673ab99): browser-unit 22/22, no-COI 5/5,
+e2e ai-mode 10/10, pr:check 25/25, packed-consumer 1/1, agent-bench contract 12/12
+re-executed on each merged tree.
