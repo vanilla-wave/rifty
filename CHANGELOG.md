@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- `rifty-review-inline` output opens with the outcomes (`W1…`) one level above the diff; map, findings and Open tie to them — what before how.
 - Complete AI agent mode and benchmark goal I1–I8; retain independent reviews, real-host/live evidence and explicit external preview/product follow-ups.
 - Add three-lane coding-agent benchmark, live diagnostic artifacts and native project isolation; common form judges accept actual link/input/textarea workflows.
 - Add private headless Pi agent package and public-host browser proofs; enforce SDK/agent layer direction (ADR-0424).
