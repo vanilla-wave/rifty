@@ -11,8 +11,8 @@ import { MemoryVfs, type Vfs } from '@riftydev/vfs';
 import { describe, expect, it, vi } from 'vitest';
 import { createPlaygroundScmAdapter as createAdapter } from './playground-scm.ts';
 
-const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
-const FOREIGN_OWNER_FILE = '/.rifty/workbench/v1/projects/project-b/tree/src/foreign.bin';
+const PROJECT_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
+const FOREIGN_OWNER_FILE = '/.rifty/workbench/v2/projects/project-b/tree/src/foreign.bin';
 const MIXED = '/src/mixed.bin';
 const DISCARD = '/src/discard.bin';
 const UNTRACKED = '/src/untracked.bin';

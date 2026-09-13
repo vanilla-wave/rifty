@@ -1,71 +1,66 @@
 ---
 name: rifty-review-inline
-description: Run the rifty-review rubric inline, in this agent, against a PR or the current branch. Invoke only when the user explicitly requests rifty-review-inline.
+description: User-driven inline review of a PR or branch along the rifty-review axes. Not a checkpoint - no verdict.json, no merge authority. Invoke only on explicit user request.
 argument-hint: "[PR number | base ref]  (default: origin/main)"
 disable-model-invocation: true
 ---
 
-Run the `rifty-review` rubric yourself, in this context. Do not spawn an agent,
-do not run `codex exec`, do not write `verdict.json`, do not run
-`tools/review/blockers.mjs`.
+Review here, in this context. No subagent, no `codex exec`, no `verdict.json`,
+no `tools/review/blockers.mjs`. A look at work, not a checkpoint.
 
-**This is not a checkpoint.** Contract+RED and Final+GREEN require a fresh
-isolated reviewer that never saw the implementer's reasoning
-(`docs/process/rules/review.md` `REV-11`,
-`docs/process/stages/checkpoint-run.md`). You share that context, so this run
-cannot satisfy either gate, cannot issue a verdict, and cannot authorize a
-merge. If a checkpoint is what's needed, say so and stop. Use this for a
-user-driven look at work in progress.
+## Input
 
-## Setup
+- PR number → `gh pr view <n> --json body,headRefName,baseRefName`; diff the
+  branch against `origin/<baseRefName>`.
+- base ref → current branch against it.
+- empty → `origin/main`.
 
-Invocation input: a PR number, a base ref, or empty.
+Uncommitted changes are part of the review, not a reason to stop.
+Read the full diff and every changed test. Judge evidence, never the
+implementer's summary.
 
-- PR number → `gh pr view <n> --json body,headRefName,baseRefName`; review that
-  branch against `origin/<baseRefName>`; the raw body is the unit's claim.
-- base ref → review the current branch against it.
-- empty → `BASE=origin/main`.
+## The claim
 
-Refuse a dirty tree — report it and stop. Read the raw unit contract
-(`docs/backlog/**` item the work claims), the named goal directory when the PR
-body declares one, the full diff against BASE, and every changed test. Read
-evidence, never the implementer's summary of it.
+Three axes (Completeness, Goal drift, Scope) compare the diff to what the
+work says it delivers. That is the claim. Take the first that exists:
 
-## Report these axes once, in order
+1. what the user names on invocation — a backlog item, a `goal.md`, or a
+   sentence;
+2. the PR body;
+3. commit messages on the branch.
 
-1. **Completeness** — every unit clause covered; no required deferral.
-2. **Mission and architecture** — fits rifty's mission and boundaries
-   (premise: `REV-6`).
-3. **Goal drift** — delivery matches the named `goal.md`, else the ready
-   contract; required reference/RED preparation is evidenced (`RDY-8`); user scope changes carry their recorded decision (`RDY-6`).
-4. **Approach cost** — identify removable machinery: contract deliverable
-   without it → blocker, first instance included; pure code shrinkage → goal
-   residual or capture, never a checkpoint condition. Apply `REV-7`.
-5. **Scope** — modified files inspected against the contract; a change no clause requires is `REV-7`.
-6. **Bugs** — no correctness defect.
+Nothing usable → say so, judge the other five axes, and ask the user what the
+change was meant to do.
+
+## Axes, once, in order
+
+1. **Completeness** — everything the claim promises is delivered; nothing
+   deferred.
+2. **Mission and architecture** — fits rifty's mission and layer boundaries.
+3. **Goal drift** — delivery matches the claim; scope changes explicit, not
+   silent.
+4. **Approach cost** — machinery the claim is deliverable without → blocker;
+   plain shrinkage → note.
+5. **Scope** — every changed file justified by the claim.
+6. **Bugs** — correctness defects; say whether a test pins each.
 7. **Regressions** — existing behavior holds.
-8. **Ecosystem UX** — observable behavior matches real Node software.
+8. **Ecosystem UX** — observable behavior matches real Node.
 
-Blockers cite their authority (`REV-2`): correctness blockers name fault class,
-missing RED, and sibling sweep; goal and process blockers cite the rule id.
-Untraced rows and strengthening beyond the clause are concerns (`REV-3`). Cite
-`file:line` from the diff. A finding you cannot cite is not a finding.
+Every finding cites `file:line` from the diff; no citation, no finding.
+Blocker = breaks the claim or correctness. Concern = everything else.
+
+## Take
+
+After the axes: what you think of this set of changes as a whole. First
+person, opinions allowed, no citations required. Direction; what feels off
+or surprisingly good; what you would have done differently; what worries you
+that no axis caught; questions you would ask the author. Do not repeat axis
+findings. Five to fifteen lines.
 
 ## Output
 
-Markdown, mirroring `tools/review/review-schema.json` field order so it stays
-comparable to a real checkpoint verdict — but plainly labelled as an inline
-run:
-
 - verdict (`pass` / `concern` / `blocker`) + one-line merge call;
-- `unit_goal_source` — exact contract path and baseline used;
-- the eight axes in rubric order (`REV-10`), each with its own verdict and cited
-  findings;
-- `coverage` — traced obligations only, each with its trace (`REV-4`);
-- `unit_residuals` — current-slice clauses not covered (any entry blocks the
-  slice);
-- `goal_residuals` — frozen-goal clauses still open (continuation, not a block);
-- `goal_complete` only after end-to-end proof with both residual sets empty.
-
-Close with one line naming what this run cannot do: no checkpoint spent, no
-verdict issued, no merge authorized.
+- big diff → 5–10 line map of the change by area first;
+- eight axes in order, each: verdict + findings, grouped by area when large;
+- **Open** — one list of what the claim still leaves uncovered;
+- **Take** — the informal section above.

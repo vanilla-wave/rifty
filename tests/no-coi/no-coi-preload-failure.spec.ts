@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { accessNativeReplica, encoded } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 
@@ -6,12 +7,8 @@ test('unreadable saved OPFS rejects toolchain boot instead of activating memory'
   page,
 }) => {
   await page.goto('/no-coi-harness.html');
+  await accessNativeReplica(page, { files: { '/unreadable.txt': encoded('saved bytes') } });
   const outcome = await page.evaluate(async (root) => {
-    const directory = await navigator.storage.getDirectory();
-    const file = await directory.getFileHandle('unreadable.txt', { create: true });
-    const writer = await file.createWritable();
-    await writer.write('saved bytes');
-    await writer.close();
     const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
     let result: { resolved: boolean; message?: string };
     try {
@@ -32,7 +29,16 @@ test('unreadable saved OPFS rejects toolchain boot instead of activating memory'
     } catch (error) {
       result = { resolved: false, message: (error as Error).message };
     }
-    return { ...result, bytes: await (await file.getFile()).text() };
+    const { nativeReplicaEntries } = await import(
+      `/@fs${root}/tests/browser-unit/fixtures/native-replica-observer.ts`
+    );
+    return {
+      ...result,
+      bytes: new TextDecoder().decode(
+        (await nativeReplicaEntries(await navigator.storage.getDirectory())).get('/unreadable.txt')
+          ?.bytes,
+      ),
+    };
   }, root);
   expect(outcome).toMatchObject({
     resolved: false,

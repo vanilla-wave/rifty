@@ -1,0 +1,107 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS: unit RED воспроизведён (1 failed / 39 passed), Chromium RED — лишние чтения; T 42.381/46.154 ms. Разрешён IMPLEMENT; merge требует Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "e1de2db6694fc34c949a6f3310070ab82b66d025",
+  "unit_goal_source": "docs/backlog/perf/project-vfs-targeted-page-reads.md; docs/backlog/epics/fast-project-open-reopen/goal.md I4; BASE 76827da3231e95d2991a9c5cdb63972fc29e66d4",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md",
+      "summary": "Durable-flush ≤2 s: последующие replica slices."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md",
+      "summary": "Fresh-process offline restore ≤2 s: последующие replica slices."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md",
+      "summary": "Именованное обнаружение legacy layout и cold restore: последующий slice."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md",
+      "summary": "Единый persistence substrate и reopen после ≥5 000 mutations: последующий slice."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: targeted file content, no directory content copies; прежние epoch/revision/version/order/defensive bytes.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-project-vfs.test.ts:282; tests/browser-unit/targeted-page-reads.spec.ts:60",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: Chromium Worker, 4 KB file и 33-entry directory ≤1 ms и ≤2× small-tree median.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/targeted-page-reads.spec.ts:71; tests/browser-unit/fixtures/targeted-page-reads-worker.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Parity: прежние ответы, invalid paths, missing entries, текущие версии и изолированное содержимое.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-project-vfs.test.ts:308; packages/workbench/src/workers/workbench-project-vfs.test.ts:1348; packages/workbench/src/workers/workbench-project-vfs.test.ts:1419; tests/browser-unit/targeted-page-reads.spec.ts:63",
+      "note": ""
+    },
+    {
+      "row": "Pinned T manifest: 15 568 уникальных файлов, 73 637 414 bytes, snapshot SHA-256.",
+      "source": "frozen-artifact",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/tracker-tree-manifest.json:1; tests/browser-unit/fixtures/targeted-page-reads-worker.ts:31",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

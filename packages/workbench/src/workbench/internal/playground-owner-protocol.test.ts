@@ -179,7 +179,7 @@ describe('Playground owner protocol', () => {
       type: 'workbench:playground-project-opened',
       opId: 'open-1',
       projectToken: 'project-token',
-      projectRoot: '/.rifty/workbench/v1/projects/scratch/tree',
+      projectRoot: '/.rifty/workbench/v2/projects/scratch/tree',
       acquisition: {
         kind: 'install',
         snapshotFailures: [{ snapshotId: `sha256:${'a'.repeat(64)}`, reason: 'hash mismatch' }],

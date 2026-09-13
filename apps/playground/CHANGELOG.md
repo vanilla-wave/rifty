@@ -12,6 +12,7 @@
 - Refresh clean editor models and exact Document captures after public owner writes; preserve unpublished buffers/CAS, never write a refresh back (ADR-0430).
 - Prebundle the same Pi provider graph in the headerless no-COI test host.
 - Prepare lazy agent consumption; predeclare Pi optimizer dependencies so first use cannot reload the live project (ADR-0424).
+- Show legacy/corrupt storage loss through health without a false Retry or Reload action; retain real opening progress (ADR-0432).
 
 - Rebuild all dependency snapshots for the esbuild invocation cwd/ref artifact identity (ADR-0421).
 

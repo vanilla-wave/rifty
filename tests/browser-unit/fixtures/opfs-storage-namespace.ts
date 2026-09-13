@@ -98,17 +98,26 @@ export async function denyNamespaceProofWrites(
     const { workbenchViteHostAssets } = await import(/* @vite-ignore */ assetsUrl);
     return new URL(workbenchViteHostAssets.workers.owner, location.href).href;
   });
-  const prefix = `${namespace}/.rifty/workbench/v1/storage-proof/`;
+  const prefix = `${namespace}/.rifty-replica-v1/segment-`;
   const nativeFault = `
+import { nativeSegmentRecords, nativeWriteBytes } from '/@fs${workspacePath}/tests/browser-unit/fixtures/native-replica-observer.ts';
 (() => {
   const createWritable = FileSystemFileHandle.prototype.createWritable;
   FileSystemFileHandle.prototype.createWritable = async function(options) {
     const origin = await navigator.storage.getDirectory();
     const path = await origin.resolve(this);
+    const writer = await createWritable.call(this, options);
     if (path !== null && path.join('/').startsWith(${JSON.stringify(prefix)})) {
-      throw new DOMException('namespace-proof-denied:' + path.join('/'), 'NotAllowedError');
+      const write = writer.write.bind(writer);
+      writer.write = async data => {
+        const records = nativeSegmentRecords(await nativeWriteBytes(data));
+        if (records.some(record => record.kind === 'file' && record.path.startsWith('/.rifty/workbench/v2/storage-proof/'))) {
+          throw new DOMException('namespace-proof-denied:' + path.join('/'), 'NotAllowedError');
+        }
+        return write(data);
+      };
     }
-    return createWritable.call(this, options);
+    return writer;
   };
 })();
 `;
@@ -131,7 +140,7 @@ export async function denyNamespacePreloadReads(
     const { workbenchViteHostAssets } = await import(/* @vite-ignore */ assetsUrl);
     return new URL(workbenchViteHostAssets.workers.owner, location.href).href;
   });
-  const target = `${namespace}/existing.bin`;
+  const target = `${namespace}/.rifty-replica-v1/HEAD`;
   const nativeFault = `
 (() => {
   const getFile = FileSystemFileHandle.prototype.getFile;
@@ -160,4 +169,36 @@ export async function denyNamespacePreloadReads(
   };
   await page.route(ownerUrl, handler);
   return () => page.unroute(ownerUrl, handler);
+}
+
+/** Fresh Worker/native replica access, with no cache from the writing owner. */
+export function accessNativeReplica(
+  page: Page,
+  request: {
+    namespace?: string;
+    files?: Record<string, readonly number[]>;
+    directories?: readonly string[];
+    paths?: readonly string[];
+    remove?: readonly string[];
+  },
+): Promise<Record<string, number[] | null>> {
+  return page.evaluate(
+    async ({ url, request }) => {
+      const worker = new Worker(url, { type: 'module' });
+      try {
+        return await new Promise<Record<string, number[] | null>>((resolve, reject) => {
+          worker.onmessage = ({ data }) =>
+            data.error ? reject(new Error(data.error)) : resolve(data.result);
+          worker.onerror = (event) => reject(new Error(event.message));
+          worker.postMessage(request);
+        });
+      } finally {
+        worker.terminate();
+      }
+    },
+    {
+      url: `/@fs${workspacePath}/tests/browser-unit/fixtures/replica-native-reader-worker.ts`,
+      request,
+    },
+  );
 }

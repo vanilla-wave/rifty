@@ -1,0 +1,259 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED accepted with advisory notes; implement ADR-0432, then independent Final+GREEN. This is not merge approval.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "90bcbba4ed37e255b2d1a70a79b3738c011e512a",
+  "unit_goal_source": "docs/backlog/vfs/legacy-per-file-layout-cold-restore.md; accepted user-owned goal docs/backlog/epics/fast-project-open-reopen/goal.md; BASE 631615fb94e4d027371ac972aada93b2deeec55d; HEAD 90bcbba4ed37e255b2d1a70a79b3738c011e512a. Fresh reviewer /root/layout_red_review. Raw authorities ADR-0285/0413/0425/0432 and git diff read. Independent scratch command RIFTY_PLAYGROUND_PORT=5799 node node_modules/@playwright/test/cli.js test --config playwright.browser-unit.config.ts tests/browser-unit/legacy-layout-notice.spec.ts tests/browser-unit/public-project-open-progress.spec.ts: /tmp/rifty-pr299-layout-independent-red.log, 10 behavioral RED / 2 baseline PASS (16.8s), no import/typecheck failure. Native stage observation in scratch only: /tmp/rifty-pr299-layout-independent-stage.log, stage-before {ok:true,error:stage-before}, stage-quota {ok:false,error:8 unhealed persistence failure(s): stage quota}; both fail later at absent storage-layout health. Supplied no-COI raw: 2 diagnosis RED / clean PASS, zero HEAD writes; supplied e2e raw: missing actual banner RED. Public proof /tmp/rifty-pr299-public-scale-committed-carrier.log passes; independent Python verifies raw JSON equals committed evidence, all 10 new archive SHA512 and package identity fields, first flush median 147.810ms, offline boot 411.795ms, post-install 439.615ms. PR-4: baseline public-project-open-progress assertions unchanged, legacy case additive; goal.md unchanged, ledger append-only, no weakened accepted criteria. RDY-6 final-written-result check includes docs/backlog/runtime-js/workbench-close-after-npm-acquisition-failure.md against raw /tmp/rifty-pr299-public-open.log and prototype /tmp/rifty-pr299-public-open.mjs: npm 404/exit1, later T-after exit0, close rejection with same tarball stack. Draft honestly keeps settlement owner, prior-baseline comparison and shared root cause unresolved; no live-owner crash, storage-loss, regression or repair attribution. No original user amendment is invented.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I3 + Outcome (d): public legacy/corrupt cold-restore diagnosis",
+      "location": "docs/backlog/epics/fast-project-open-reopen/map.md:8",
+      "summary": "New diagnosis behavior is deliberately unimplemented at Contract+RED; implement and pass the committed native/public/UI carriers, then independent Final+GREEN before goal closure."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: selected/default namespace; named legacy diagnosis, empty catalog, unchanged native bytes, definition-only restore",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:77; tests/e2e/storage-layout-notice.spec.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: replay, project-switch survival, no recovery, real progress, healthy/ephemeral controls",
+      "source": "acceptance",
+      "trace": "I3 + ADR-0285 + ADR-0413",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:112; tests/browser-unit/legacy-layout-notice.spec.ts:185; tests/browser-unit/public-project-open-progress.spec.ts:10",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: proof/stage reload repeats, completed project suppresses, malformed orphan tolerated, no legacy hydration",
+      "source": "acceptance",
+      "trace": "I3 + ADR-0432",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:77; tests/browser-unit/legacy-layout-notice.spec.ts:162; tests/browser-unit/legacy-layout-notice.spec.ts:223; tests/browser-unit/replica-persistence.spec.ts:95",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: redacted corruption diagnosis survives first-proof HEAD publication and page death",
+      "source": "acceptance",
+      "trace": "scenario + ADR-0432",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:129",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: public no-COI logger sees legacy/corrupt startup diagnosis before HEAD write; acquired native failures remain errors",
+      "source": "acceptance",
+      "trace": "scenario + ADR-0432",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-layout-notice.spec.ts:4; tests/browser-unit/replica-persistence.spec.ts:103",
+      "note": ""
+    },
+    {
+      "row": "Parity: browser-owned diagnosis uses actual OPFS, Worker, Workbench health and SDK logger; existing Node behavior retained",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:77; tests/no-coi/no-coi-layout-notice.spec.ts:4; tests/browser-unit/replica-public-scale.spec.ts:60",
+      "note": ""
+    },
+    {
+      "row": "legacy × cold open: empty catalog, named notice, definition only, old bytes untouched",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:77",
+      "note": ""
+    },
+    {
+      "row": "quota × stage/promotion: failed open, old native bytes intact, retry/repeated notice",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:162; tests/browser-unit/fixtures/legacy-layout-fault-owner.ts:34",
+      "note": ""
+    },
+    {
+      "row": "page/owner death × stage: no adopted partial project, retry with notice",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:162; tests/browser-unit/fixtures/legacy-layout-fault-owner.ts:42",
+      "note": ""
+    },
+    {
+      "row": "page death × first proof HEAD: original corruption or durable diagnosis survives before/after close",
+      "source": "fault-matrix",
+      "trace": "ADR-0432",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:129; tests/browser-unit/fixtures/legacy-layout-fault-owner.ts:42",
+      "note": ""
+    },
+    {
+      "row": "quota × diagnosis record: proof/open fails instead of clean readiness without diagnosis",
+      "source": "fault-matrix",
+      "trace": "ADR-0432",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:145; tests/browser-unit/fixtures/legacy-layout-fault-owner.ts:29",
+      "note": ""
+    },
+    {
+      "row": "late subscriber / generation switch: one global replayed notice",
+      "source": "fault-matrix",
+      "trace": "ADR-0285 + I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:185; tests/e2e/storage-layout-notice.spec.ts:20",
+      "note": ""
+    },
+    {
+      "row": "informational issue × progress: active open publishes actual persistence counts",
+      "source": "fault-matrix",
+      "trace": "ADR-0413",
+      "status": "pass",
+      "citation": "tests/browser-unit/public-project-open-progress.spec.ts:73; tests/browser-unit/public-project-open-progress.spec.ts:114",
+      "note": ""
+    },
+    {
+      "row": "malformed orphan × complete-record probe: orphan neither completes nor bricks boot; valid sibling suppresses; explicit-open errors remain",
+      "source": "fault-matrix",
+      "trace": "ADR-0432",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:223; packages/workbench/src/workers/workbench-project-store.test.ts:76",
+      "note": ""
+    },
+    {
+      "row": "no-COI × early stderr: existing SDK startup logger, zero automatic HEAD writes",
+      "source": "fault-matrix",
+      "trace": "ADR-0432",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-layout-notice.spec.ts:4; tests/no-coi/fixtures/no-coi-layout-observer-worker.ts:2",
+      "note": ""
+    },
+    {
+      "row": "native read failure × init: OpfsPreloadError without false cold restore or memory success",
+      "source": "fault-matrix",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:103",
+      "note": ""
+    },
+    {
+      "row": "concurrent writer × open: existing lease/native guard excludes takeover",
+      "source": "fault-matrix",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:195; tests/browser-unit/replica-guard-deadline.spec.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Public health planned extension: degraded/storage-layout with recovery none through existing Workbench health",
+      "source": "public-api",
+      "trace": "ADR-0432",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:85; tests/browser-unit/legacy-layout-notice.spec.ts:210",
+      "note": ""
+    },
+    {
+      "row": "Public SDK existing logger: captured named startup diagnosis without new public backend/protocol semantics",
+      "source": "public-api",
+      "trace": "ADR-0432",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-layout-notice.spec.ts:33; tests/no-coi/no-coi-layout-notice.spec.ts:54",
+      "note": ""
+    },
+    {
+      "row": "Public T first open: real Node execution after openProject; first-open durable flush tail median <=2s",
+      "source": "acceptance",
+      "trace": "I1 + scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-public-scale.spec.ts:60; tests/browser-unit/replica-public-scale.spec.ts:121",
+      "note": ""
+    },
+    {
+      "row": "Public T offline fresh-process reopen: edited source and executable tree remain with <=2s storage restore",
+      "source": "acceptance",
+      "trace": "I2 + scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-public-scale.spec.ts:23; tests/browser-unit/replica-public-scale.spec.ts:60; tests/browser-unit/replica-public-scale.spec.ts:129",
+      "note": ""
+    },
+    {
+      "row": "Public post-init npm mutates >=5000 ordinary paths, then fresh offline process executes installed code and preserves T on one substrate",
+      "source": "acceptance",
+      "trace": "I5 + scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-public-scale.spec.ts:75; tests/browser-unit/replica-public-scale.spec.ts:99",
+      "note": ""
+    },
+    {
+      "row": "Frozen public-scale evidence: 12 raw samples, native Node oracle, 5420 writes/sample, flush and offline medians",
+      "source": "frozen-artifact",
+      "trace": "I1 + I2 + I5 + scenario",
+      "status": "pass",
+      "citation": "docs/backlog/vfs/reference/replica-public-scale-evidence.json:1; tests/browser-unit/fixtures/replica-public-scale-fixture.ts:87",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/legacy-layout-notice.spec.ts:85",
+          "evidence": "Read-only: legacy assertion matches only /legacy per-file OPFS v1/; corruption assertion at line 140 matches /corrupt/i and excludes only the malformed HEAD sentinel. No executed surviving mutant; coverage remains pass under REV-4.",
+          "summary": "Acceptance names excluded projects/edits/npm/clones/history and canonical redaction, but current assertions mostly check the diagnosis name. Add the required loss terms and a path-bearing corruption input when implementing, so Final+GREEN can discriminate those text obligations.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/legacy-layout-notice.spec.ts:194",
+          "evidence": "Read-only: states collects subscription snapshots during materialize/closeProject/materialize but is returned without an assertion; lines 210-220 check only the final state, immediate late replay and final banner. No executed surviving mutant; coverage remains pass under REV-4.",
+          "summary": "The switch carrier checks the final notice, not every emitted transition. Assert collected states retain the global storage-layout issue to distinguish transient generation clearing.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

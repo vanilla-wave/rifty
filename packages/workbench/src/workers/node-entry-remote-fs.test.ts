@@ -3,7 +3,7 @@ import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installNodeEntryRemoteFs } from './node-entry-remote-fs.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 
 describe('node-entry remote FS namespace', () => {
   afterEach(() => resetSyncMirror());

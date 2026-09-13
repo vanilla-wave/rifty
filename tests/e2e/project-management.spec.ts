@@ -261,7 +261,7 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     await newShell(page);
     await runTerminalLineSettled(
       page,
-      `echo corrupted > '/.rifty/workbench/v1/projects/${alphaProjectId}/tree/project-proof.txt'`,
+      `echo corrupted > '/.rifty/workbench/v2/projects/${alphaProjectId}/tree/project-proof.txt'`,
       30_000,
     );
 

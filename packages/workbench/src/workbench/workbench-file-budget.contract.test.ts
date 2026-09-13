@@ -14,7 +14,7 @@ import type { OwnerProjectVfsFrame, PageProjectVfsFrame } from './project-vfs-pr
 import type { BrowserOwnerDependencies } from './workbench-browser-owner-spawn.ts';
 import { startBrowserWorkspaceOwner } from './workbench-browser-owner.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/file-budget/tree';
+const ROOT = '/.rifty/workbench/v2/projects/file-budget/tree';
 const SOURCE = `${ROOT}/src/main.ts`;
 const TOKEN = 'file-budget-project';
 const encoder = new TextEncoder();

@@ -1,0 +1,281 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "B1/B2/B3 закрыты; HEAD пока не готов: packed main 86094 > 86000 B. TS formatting CI RED требует выяснения причины.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5936b2356fbba656419044504ec79a0923a8a83a",
+  "unit_goal_source": "docs/backlog/vfs/segmented-opfs-replica.md; accepted goal docs/backlog/epics/fast-project-open-reopen/goal.md; BASE 93c05f463cc266eb47f36b4fd8cf528c9ad1d0b3. Независимый verify после f06caca: прочитаны actual diff, ADR-0429, committed RED 77b269cd0/13e8e4695, raw GREEN и пять mutant RED. PR-4: прежние criteria остаются принятыми; repair добавляет carriers без ослабления assertions; compiler pin сохраняет exact size/hash policy ADR-0391. Независимо исполнен RIFTY_PLAYGROUND_PORT=5396 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/opfs-structural-repair.spec.ts tests/browser-unit/replica-native-read.spec.ts tests/browser-unit/replica-persistence.spec.ts tests/browser-unit/replica-paired-vfs.spec.ts tests/browser-unit/replica-guard-deadline.spec.ts tests/browser-unit/replica-storage-budget.spec.ts: 38/38 PASS, /tmp/rifty-replica-independent-verify.log. T medians flush/replay/post-mutation: 335.840/223.420/274.860 ms. Исходные reviewer probes пересобраны на HEAD: run-verify.mjs сохраняет dirty.total=1 после entry-only repair; run-verify-concurrent.mjs даёт 369 reads, errors=[], reports=[]; /tmp/rifty-replica-review-probe/verify-{result,concurrent}.log. Raw current pr:check 25/25 и old OPFS 95 pass/1 skip прочитаны; broader browser/packed proof предыдущего review сохранён. Tracked tree чистый, HEAD не менялся. B1 сохраняет causal subtree scope в одном ledger; B2 держит readers до GC/guard release; B3 покрывает named refusal всех трёх controls. Дополнительный corruption/append overlap исправлен и проверен. Позднее raw CI /tmp/rifty-pr299-5936-ci-failed.log открыл B4: packed main 86094 > 86000 B. TS formatting трижды возвращает loading placeholder; причина пока не установлена (NOTE C1). Ранее принятый native verify остаётся GREEN; общий verdict изменён на BLOCK по новой evidence REV-12. End-to-end T/npm/offline и legacy notice остаются goal work.",
+  "unit_residuals": [
+    {
+      "clause": "Named baseline: packed client main min ceiling 86000 B",
+      "location": "tools/checks/client-bundle-budget.mjs:15",
+      "summary": "B4: восстановить существующий packed main budget; CI измеряет 86094 B."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:123",
+      "summary": "Public T openProject → executable Node command с durable flush ≤2 s; isolated storage proof не закрывает композицию."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:126",
+      "summary": "Public fresh-process offline T reopen: executable session после storage restore ≤2 s."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/fast-project-open-reopen/map.md:12",
+      "summary": "Linked legacy unit: именованный storage-layout health notice и definition materialization end-to-end."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/fast-project-open-reopen/goal.md:138",
+      "summary": "Public offline T reopen ≤2 s после настоящего post-init npm install с ≥5000 изменёнными путями."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: Workbench/configured no-COI используют replica под captured root; standalone per-file сохранён; eager replay.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:12; tests/no-coi/replica-storage.spec.ts:5; tests/browser-unit/workbench-storage-namespace.spec.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: binary bytes, shape, copy/rename/delete и timestamps переживают replay точно; healthy paired reads возвращают committed bytes.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:120; tests/browser-unit/opfs-structural-repair.spec.ts:6; tests/browser-unit/replica-native-read.spec.ts:30; tests/browser-unit/replica-native-read.spec.ts:51",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: T manifest, per-path discriminator, три fresh offline samples, flush/replay ≤2 s до и после 5000 изменений; проверены все bytes.",
+      "source": "acceptance",
+      "trace": "I1+I2+I5",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-storage-budget.spec.ts:10; tests/browser-unit/fixtures/replica-persistence-worker.ts:233",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: v2 не принимает valid v1 definition/project; материализация использует definition, старые bytes сохранены.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-project-store-layout.contract.test.ts:6; tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/workbench-playground-companion.spec.ts:1230",
+      "note": ""
+    },
+    {
+      "row": "Parity: FsSync reference сохранён; binary/structural/metadata-only utimes roundtrip и существующие sync/owner suites.",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/replica-persistence-worker.ts:430; packages/vfs/src/opfs-sync.test.ts:505; /tmp/rifty-pr299-replica-review-pr-check.log:28",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input: invalid HEAD/segment/truncation даёт diagnosed cold restoration без old file/claim; native evidence сохранена.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/fixtures/replica-persistence-worker.ts:275",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie: live cache не скрывает corrupt native bytes; paired read отвергает их, healthy read успешен.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0392+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:52; tests/browser-unit/replica-persistence.spec.ts:311",
+      "note": ""
+    },
+    {
+      "row": "native read failure: NotReadableError остаётся OpfsPreloadError с причиной, без cold restore/memory success.",
+      "source": "fault-matrix",
+      "trace": "ADR-0393+ADR-0411",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/workbench-preload-honesty.spec.ts:17",
+      "note": ""
+    },
+    {
+      "row": "quota-perm-fail + lossy-aggregate: failed batch сохраняет footprint 230 writes за пределами sample 20; один repair лечит один путь.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0358+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:151; tests/browser-unit/fixtures/replica-persistence-worker.ts:446",
+      "note": ""
+    },
+    {
+      "row": "quota during compaction: dirty report, prior HEAD/tree доступны, reachable old segments не удалены.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:42; tests/browser-unit/fixtures/replica-persistence-worker.ts:410",
+      "note": ""
+    },
+    {
+      "row": "concurrent-same-key: competing writer не принят до real settle; timeout держит guard/fence; late success heals.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0358+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:185; tests/browser-unit/fixtures/replica-persistence-worker.ts:462",
+      "note": ""
+    },
+    {
+      "row": "Worker death/torn-state: kill before/after HEAD close при append и compaction даёт complete old/new tree.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:236; tests/browser-unit/fixtures/replica-persistence-worker.ts:486",
+      "note": ""
+    },
+    {
+      "row": "Native admission deadline: busy Worker release ожидается; preferred не скрывает expiry; late granted handle закрывается.",
+      "source": "acceptance",
+      "trace": "ADR-0428",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:282; tests/browser-unit/replica-guard-deadline.spec.ts:4; /tmp/rifty-pr299-late-handle-mutant.log:18",
+      "note": ""
+    },
+    {
+      "row": "initBackend configured storage выбирает replica; существующий standalone default сохраняется.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0419",
+      "status": "pass",
+      "citation": "tests/no-coi/replica-storage.spec.ts:5; tests/browser-unit/opfs-no-coi-policy.spec.ts:1",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.utimes регистрирует собственную durable metadata mutation.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0029",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/replica-persistence-worker.ts:437; tests/browser-unit/replica-persistence.spec.ts:120",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.closeAll сохраняет guard до настоящего settlement.",
+      "source": "public-api",
+      "trace": "ADR-0425+ADR-0428",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:182; tests/browser-unit/replica-native-read.spec.ts:61",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.persistMutation: paired mutations ожидают собственный real outcome, включая failure/repair/report timeout.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-paired-vfs.spec.ts:4; tests/browser-unit/fixtures/replica-paired-vfs-worker.ts:6",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.preloadContent в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:35; tests/browser-unit/fixtures/replica-native-read-worker.ts:24",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.refreshIndex в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:35; tests/browser-unit/fixtures/replica-native-read-worker.ts:24",
+      "note": ""
+    },
+    {
+      "row": "OpfsFsSync.openSync в replica выбрасывает named NotImplementedError; default per-file control сохранён.",
+      "source": "public-api",
+      "trace": "ADR-0425",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:35; tests/browser-unit/fixtures/replica-native-read-worker.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Exact TypeScript worker fingerprint обновлён без расширения compiler exception; browser proof сохранён.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; tools/checks/esbuild-legacy-retirement.test.ts:1; /tmp/rifty-pr299-repair-review-pr-check.log:22",
+      "note": ""
+    },
+    {
+      "row": "Structural failure: entry success не снимает unproven subtree; full-scope proof лечит только покрытые sequences. Both modes: rm/rename/failed mkdir/late rm.",
+      "source": "fault-matrix",
+      "trace": "Acceptance 2+ADR-0429",
+      "status": "pass",
+      "citation": "tests/browser-unit/opfs-structural-repair.spec.ts:6; tests/browser-unit/fixtures/opfs-structural-repair-worker.ts:63",
+      "note": ""
+    },
+    {
+      "row": "Reader reclamation: admitted readFile/stat/readdir/content завершаются до удаления старых сегментов; новые readers используют новый committed map.",
+      "source": "fault-matrix",
+      "trace": "Acceptance 2+ADR-0429",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:30; tests/browser-unit/replica-native-read.spec.ts:51; tests/browser-unit/fixtures/replica-native-read-worker.ts:110",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/vfs/src/opfs-replica-store.ts:275",
+          "authority": "Named baseline: tools/checks/client-bundle-budget.mjs:15 main min ≤86000 B; accepted client artifact budget I4 @974cc355e.",
+          "summary": "B4: изменённый runtime graph превышает существующий packed main budget на 94 B. Это новый regression после repair, не повод ослаблять критерий.",
+          "evidence": "Raw current-HEAD CI /tmp/rifty-pr299-5936-ci-failed.log:103-108: Packed agentFiles/Commands/Stop/InstalledBuild passed; assertClientBundleBudgets rejects main: min 86094 B exceeds 86000 B. Предыдущий reviewed packed log: main 85395/86000 B. Потолок в current source и BASE неизменён."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/e2e/ts-language-service.spec.ts:1501",
+          "authority": "",
+          "summary": "C1: existing TS formatting scenario RED в CI, initial + 2 retries. Пока не установлено, дефект продукта это или readiness race carrier; не приписываю причинность replica без изоляции. Driver уже воспроизводит.",
+          "evidence": "Raw /tmp/rifty-pr299-5936-ci-failed.log:210-242: Expected /a:\\s*number,\\s+b:\\s*number/, Received \"// loading…            \"; editCount >0 проходит. Сам TS test между BASE и reviewed HEAD не изменён."
+        }
+      ]
+    }
+  ]
+}

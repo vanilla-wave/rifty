@@ -54,7 +54,7 @@ async function seed(endpoint: Endpoint = 'scratch') {
     expect(saved.acquisition).toMatchObject({ kind: 'saved' });
     await saved.close();
   }
-  const root = `/.rifty/workbench/v1/projects/${id}/tree`;
+  const root = `/.rifty/workbench/v2/projects/${id}/tree`;
   const stamp = readInstallStampSync(h.authority, root);
   expect(stamp !== null && stampTrusted(stamp)).toBe(true);
   expect(network.requests).toEqual([first.descriptor.assetUrl]);

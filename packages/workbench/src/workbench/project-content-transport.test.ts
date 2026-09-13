@@ -10,7 +10,7 @@ import type {
   ProjectVfsAppliedMutation,
 } from './project-vfs-protocol.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const OWNER = 'owner-a';
 const encoder = new TextEncoder();
 

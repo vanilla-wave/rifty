@@ -83,7 +83,7 @@ import {
   writeJson,
 } from './playground-catalog-tree.ts';
 
-const WORKBENCH_ROOT = '/.rifty/workbench/v1';
+const WORKBENCH_ROOT = '/.rifty/workbench/v2';
 const PROJECTS_ROOT = `${WORKBENCH_ROOT}/projects`;
 const STAGES_ROOT = `${WORKBENCH_ROOT}/stages`;
 const PLAYGROUND_ROOT = '/.rifty/workbench/playground';

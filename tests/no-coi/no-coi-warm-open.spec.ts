@@ -1,4 +1,6 @@
 import { type Page, expect, test } from '@playwright/test';
+import { accessNativeReplica, encoded } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
+import { nativeReplicaTree } from './fixtures/native-replica-page.ts';
 
 const workspace = process.cwd().replaceAll('\\', '/');
 const pageFixtureUrl = `/@fs${workspace}/tests/no-coi/fixtures/no-coi-warm-open-page.ts`;
@@ -54,48 +56,13 @@ async function seed(page: Page, vite = false): Promise<void> {
 }
 
 /** Inspect persisted bytes independently of the runtime mirror/activation authority. */
-async function durableTree(page: Page): Promise<readonly { path: string; sha256: string }[]> {
-  return page.evaluate(async (root) => {
-    let handle = await navigator.storage.getDirectory();
-    for (const part of root.slice(1).split('/')) handle = await handle.getDirectoryHandle(part);
-    const result: Array<{ path: string; sha256: string }> = [];
-    const walk = async (directory: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
-      for await (const [name, entry] of directory.entries()) {
-        if (entry.kind === 'directory')
-          await walk(entry as FileSystemDirectoryHandle, `${prefix}/${name}`);
-        else {
-          const bytes = await (await (entry as FileSystemFileHandle).getFile()).arrayBuffer();
-          const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-          result.push({
-            path: `${prefix}/${name}`,
-            sha256: [...digest].map((n) => n.toString(16).padStart(2, '0')).join(''),
-          });
-        }
-      }
-    };
-    await walk(handle, root);
-    return result.toSorted((a, b) => a.path.localeCompare(b.path));
-  }, root);
+function durableTree(page: Page) {
+  return nativeReplicaTree(page, undefined, root);
 }
-
 async function replaceNative(page: Page, path: string, text: string | null): Promise<void> {
-  await page.evaluate(
-    async ({ path, text }) => {
-      const parts = path.slice(1).split('/');
-      const name = parts.pop();
-      if (name === undefined) throw new Error('native test path missing basename');
-      let directory = await navigator.storage.getDirectory();
-      for (const part of parts) directory = await directory.getDirectoryHandle(part);
-      if (text === null) await directory.removeEntry(name);
-      else {
-        const writer = await (
-          await directory.getFileHandle(name, { create: true })
-        ).createWritable();
-        await writer.write(text);
-        await writer.close();
-      }
-    },
-    { path, text },
+  await accessNativeReplica(
+    page,
+    text === null ? { remove: [path] } : { files: { [path]: encoded(text) } },
   );
 }
 

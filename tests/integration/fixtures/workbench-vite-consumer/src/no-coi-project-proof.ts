@@ -13,14 +13,34 @@ const api = {
           new Blob(
             [
               `
-      const writable = FileSystemFileHandle.prototype.createWritable;
-      FileSystemFileHandle.prototype.createWritable = function(...args) {
-        if (this.name === 'esbuild.wasm') {
-          if (${JSON.stringify(fault)} === 'quota') return Promise.reject(new DOMException('packed snapshot quota', 'QuotaExceededError'));
-          self.postMessage({type:'snapshot-native-held'});
-          return new Promise(() => {});
-        }
-        return Reflect.apply(writable, this, args);
+      const createWritable = FileSystemFileHandle.prototype.createWritable;
+      FileSystemFileHandle.prototype.createWritable = async function(...args) {
+        const stream = await Reflect.apply(createWritable, this, args);
+        const write = stream.write.bind(stream);
+        stream.write = async data => {
+          if (this.name.startsWith('segment-') && data instanceof Uint8Array) {
+            const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+            const decoder = new TextDecoder();
+            let offset = 12 + view.getUint32(8, true);
+            const count = view.getUint32(offset, true);
+            offset += 4;
+            let wasm = false;
+            for (let i = 0; i < count; i++) {
+              const length = view.getUint32(offset, true);
+              offset += 4;
+              const record = JSON.parse(decoder.decode(data.subarray(offset, offset + length)));
+              offset += length;
+              if (record.kind === 'file' && record.path.endsWith('/esbuild.wasm')) wasm = true;
+            }
+            if (wasm) {
+              if (${JSON.stringify(fault)} === 'quota') throw new DOMException('packed snapshot quota', 'QuotaExceededError');
+              self.postMessage({type:'snapshot-native-held'});
+              return new Promise(() => {});
+            }
+          }
+          return write(data);
+        };
+        return stream;
       };
       await import(${JSON.stringify(workerUrl)});
     `,

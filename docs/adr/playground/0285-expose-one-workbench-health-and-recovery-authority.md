@@ -69,3 +69,9 @@ their ownership decisions.
   generation and correlation validation before it reaches the authority.
 - Boot retry remains host-owned; augmenting the opening Promise with partial
   health state is rejected.
+
+## Corrections — 2026-09-13
+
+ADR-0432 adds informational `degraded/storage-layout`, `recovery: 'none'`.
+It partially supersedes only the exhaustive degraded-scope list and retry-only
+clause; existing recovery, fatal handling, redaction and one authority remain.

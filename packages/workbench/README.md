@@ -136,6 +136,31 @@ host-owned storage remains the host's responsibility. After a root is acquired,
 preload read failure rejects both required and preferred storage; it cannot
 open an empty memory project instead. See ADR-0402/0411.
 
+## Persistence policy
+
+`storage.persistence` is `required | preferred | ephemeral` (ADR-0263). An
+embedder whose source of truth lives outside the browser (every open
+re-materializes from a definition: baked snapshot, archive, remote tree)
+should pass `ephemeral`: OPFS is never opened or proven, so open pays only
+fetch + prepare + apply and reopen is the same open again; nothing survives a
+reload. `required`/`preferred` are for projects whose edits must survive
+reload. Both use a checksum-validated segmented OPFS replica; every writer shares
+its persistence barrier, and reopen validates the full image before readiness.
+Neither mode lifts
+cross-origin isolation for Workbench: guest `readFileSync` blocks on the SAB
+sync ring. The no-COI SDK toolchain Worker uses the same OPFS pair without
+it (ADR-0372). Reopening a starter: call `catalog.createScratch` only when the
+catalog snapshot has no scratch for that starter; otherwise `activate` it. A
+clean same-starter `createScratch` reseeds the whole tree by contract
+(ADR-0278), which on a large tree costs more than a cold open.
+
+Legacy per-file v1 projects are excluded; their native bytes remain untouched.
+The existing health snapshot reports `degraded/storage-layout` with
+`recovery: 'none'` for legacy exclusion or corrupt-data cold restoration. It
+names the loss without offering a retry that cannot recover those bytes.
+The notice survives project switches and repeats on reopen until a complete
+current project record exists. Opening progress remains available (ADR-0432).
+
 ## Orphan Scratch recovery
 
 When `catalog.createScratch()` finds Scratch files without a catalog reference

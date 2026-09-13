@@ -269,6 +269,10 @@ function createWorkbench(
   };
   void owner.closed.then(reportUnexpectedOwnerExit, reportUnexpectedOwnerExit);
   const unsubscribeOwnerHealth = owner.subscribeHealth((event) => {
+    if (event.kind === 'storage-layout') {
+      healthAuthority.storageLayout(event.summary);
+      return;
+    }
     if (event.kind === 'fatal-invariant') {
       healthAuthority.projectOpen(undefined);
       healthAuthority.invariant.fatal({ summary: event.summary });
@@ -278,7 +282,7 @@ function createWorkbench(
       if (
         event.projectOpen &&
         state.kind === 'opening' &&
-        healthAuthority.health.snapshot().disposition === 'healthy'
+        healthAuthority.health.snapshot().issues.every((issue) => issue.scope === 'storage-layout')
       ) {
         healthAuthority.projectOpen({
           projectId: state.projectId,

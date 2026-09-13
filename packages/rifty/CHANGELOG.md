@@ -4,6 +4,8 @@
 
 - Add stopResident: reuse whole-Worker replacement without resident replay,
   preserving activation recovery and dirty reporting; restart keeps its replay. ADR-0426.
+- Deliver startup storage diagnostics to the existing logger on initial boot and restart; keep default backend loading separate from host namespace exports.
+
 - Report a never-admitted command as failed even after Stop; a settled command's failed/unknown persistence marks the next restart's unflushedWrites.
 
 - Add no-COI project filesystem methods and stateless command handles with streamed output, owned Stop and explicit Worker replacement.

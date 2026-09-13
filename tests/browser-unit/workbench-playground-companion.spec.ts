@@ -1,5 +1,8 @@
 import { type Page, expect, test } from '@playwright/test';
+import type * as CompanionEntry from '../../apps/playground/src/browser-unit/workbench-playground-entry.ts';
+import type * as CompanionAssets from '../../apps/playground/src/browser-unit/workbench-vite-host-assets.ts';
 import { gotoHarness, sealedWorkbenchFixtureUrl, seedLegacyWorkspace } from './fixtures.ts';
+import { readNativeFiles } from './fixtures/opfs-storage-namespace.ts';
 
 const OUTPUT_MARKER = 'WORKBENCH_COMPANION_KLEUR_OK';
 const ARGUMENT_MARKER = '--from-companion';
@@ -1224,286 +1227,50 @@ test('real instant Vite preset keeps port 5174 and closes its open session throu
   expect(snapshotRequests).toHaveLength(1);
 });
 
-test('selected historical workspace migrates through one physical Workbench owner across project sessions', async ({
+test('per-file historical workspaces remain native-only and never populate the new catalog', async ({
   page,
 }) => {
-  test.setTimeout(300_000);
   await gotoHarness(page);
-  await seedLegacyCatalog(page, {
-    workspaceId: DECOY_LEGACY_WORKSPACE_ID,
-    label: 'Decoy',
-    marker: 'decoy-workspace',
+  for (const [workspaceId, label, marker] of [
+    [DECOY_LEGACY_WORKSPACE_ID, 'Decoy', 'decoy-workspace'],
+    [SELECTED_LEGACY_WORKSPACE_ID, 'Selected', 'selected-workspace'],
+  ] as const)
+    await seedLegacyCatalog(page, { workspaceId, label, marker });
+  const paths = [DECOY_LEGACY_WORKSPACE_ID, SELECTED_LEGACY_WORKSPACE_ID].flatMap((id) => {
+    const prefix = `/workspaces/${id.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+    return [
+      `${prefix}/.rifty-project-index.json`,
+      ...['a', 'b'].map((suffix) => `${prefix}/projects/project-${suffix}/legacy-marker.txt`),
+    ];
   });
-  await seedLegacyCatalog(page, {
-    workspaceId: SELECTED_LEGACY_WORKSPACE_ID,
-    label: 'Selected',
-    marker: 'selected-workspace',
-  });
-  await page.evaluate((workspaceId) => {
+  const before = await readNativeFiles(page, paths);
+  expect(Object.values(before).every((bytes) => bytes !== null)).toBe(true);
+  const catalog = await page.evaluate(async (workspaceId) => {
     sessionStorage.setItem('rifty.workspaceId', workspaceId);
-  }, SELECTED_LEGACY_WORKSPACE_ID);
-
-  const result = await page.evaluate(async () => {
-    type ProjectDefinition = object;
-    type ProjectSession = {
-      readonly files: {
-        readFile(path: string): Promise<{ readonly bytes: Uint8Array }>;
-      };
-      close(): Promise<void>;
-    };
-    type CatalogSnapshot = {
-      readonly active:
-        | { readonly kind: 'scratch' }
-        | { readonly kind: 'project'; readonly id: string }
-        | null;
-      readonly scratch: {
-        readonly starterId: string;
-        readonly dirty: boolean;
-        readonly editedAt: string;
-      } | null;
-      readonly projects: readonly {
-        readonly id: string;
-        readonly name: string;
-        readonly starterId: string;
-        readonly editedAt: string;
-      }[];
-    };
-    type PlaygroundWorkbench = {
-      readonly playground: {
-        define(plan: {
-          readonly kind: 'node-cli';
-          readonly id: string;
-          readonly starterId: string;
-          readonly templateId: string;
-          readonly files: Readonly<Record<string, string | Uint8Array>>;
-          readonly firstMaterialization: { readonly kind: 'install' };
-          readonly entryPath: string;
-          readonly args: readonly string[];
-        }): ProjectDefinition;
-        readonly catalog: {
-          snapshot(): CatalogSnapshot;
-          activate(target: {
-            readonly kind: 'project';
-            readonly id: string;
-          }): Promise<CatalogSnapshot>;
-        };
-      };
-      openProject(definition: ProjectDefinition): Promise<ProjectSession>;
-      close(): Promise<void>;
-    };
-    type CompanionEntry = {
-      openPlaygroundWorkbench(options: {
-        readonly deployment: {
-          readonly workers: {
-            readonly owner: string;
-            readonly kernel: string;
-            readonly node: string;
-            readonly devServer: string;
-            readonly typescript: string;
-          };
-          readonly serviceWorker: { readonly url: string; readonly scope: string };
-          readonly wasm: { readonly sqlite: string };
-          readonly previewProbeTimeoutMs: number;
-        };
-        readonly packageAcquisition: { readonly registryUrl: string };
-        readonly storage: { readonly persistence: 'required' };
-      }): Promise<PlaygroundWorkbench>;
-    };
-    type HostAssets = {
-      readonly workers: {
-        readonly owner: string;
-        readonly kernel: string;
-        readonly node: string;
-        readonly devServer: string;
-        readonly typescript: string;
-      };
-      readonly wasm: { readonly sqlite: string };
-    };
-
-    const withTimeout = <T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> =>
-      new Promise<T>((resolve, reject) => {
-        const timer = window.setTimeout(
-          () => reject(new Error(`${label} timed out after ${String(timeoutMs)}ms`)),
-          timeoutMs,
-        );
-        operation.then(
-          (value) => {
-            clearTimeout(timer);
-            resolve(value);
-          },
-          (error: unknown) => {
-            clearTimeout(timer);
-            reject(error);
-          },
-        );
-      });
-
-    const hostAssetsModule = await import('/src/browser-unit/workbench-vite-host-assets.ts');
-    const hostAssets = (hostAssetsModule as { readonly workbenchViteHostAssets: HostAssets })
-      .workbenchViteHostAssets;
-    const ownerWorkerUrl = new URL(hostAssets.workers.owner, location.href);
-    const ownerWorkerBaseUrl = new URL('.', ownerWorkerUrl);
-    const ownerWorkerReference = ownerWorkerUrl.href.slice(ownerWorkerBaseUrl.href.length);
-    const baseElement = document.createElement('base');
-    baseElement.href = ownerWorkerBaseUrl.href;
-    document.head.prepend(baseElement);
-
-    const workerSpawns: { readonly argv: readonly string[]; readonly entryUrl: string }[] = [];
-    const NativeWorker = window.Worker;
-    const ObservedWorker = new Proxy(NativeWorker, {
-      construct(target, args) {
-        const worker = Reflect.construct(target, args, target) as Worker;
-        const postMessage = worker.postMessage.bind(worker);
-        worker.postMessage = ((
-          message: unknown,
-          transferOrOptions?: StructuredSerializeOptions | Transferable[],
-        ): void => {
-          const frame = message as {
-            readonly type?: unknown;
-            readonly spec?: {
-              readonly argv?: readonly unknown[];
-              readonly entry?: { readonly url?: unknown };
-            };
-          };
-          if (frame.type === 'init' && Array.isArray(frame.spec?.argv)) {
-            workerSpawns.push({
-              argv: frame.spec.argv.map(String),
-              entryUrl: String(frame.spec.entry?.url),
-            });
-          }
-          Reflect.apply(
-            postMessage,
-            worker,
-            transferOrOptions === undefined ? [message] : [message, transferOrOptions],
-          );
-        }) as Worker['postMessage'];
-        return worker;
+    const sdkUrl = '/src/browser-unit/workbench-playground-entry.ts';
+    const assetsUrl = '/src/browser-unit/workbench-vite-host-assets.ts';
+    const sdk = (await import(/* @vite-ignore */ sdkUrl)) as typeof CompanionEntry;
+    const { workbenchViteHostAssets: assets } = (await import(
+      /* @vite-ignore */ assetsUrl
+    )) as typeof CompanionAssets;
+    const workbench = await sdk.openPlaygroundWorkbench({
+      deployment: {
+        ...assets,
+        workers: { ...assets.workers, owner: new URL(assets.workers.owner, location.href).href },
+        serviceWorker: { url: '/sw.js', scope: '/' },
       },
+      packageAcquisition: { registryUrl: '/npm-registry' },
+      storage: { persistence: 'required' },
     });
-    (window as unknown as { Worker: typeof Worker }).Worker = ObservedWorker;
-
-    const defineLegacyProject = (
-      workbench: PlaygroundWorkbench,
-      id: 'project-a' | 'project-b',
-      starterId: 'starter-a' | 'starter-b',
-    ): ProjectDefinition =>
-      workbench.playground.define({
-        kind: 'node-cli',
-        id,
-        starterId,
-        templateId: 'legacy-browser-cli-v1',
-        files: {
-          '/package.json': '{"name":"legacy-baseline","private":true,"type":"module"}\n',
-          '/src/cli.mjs': 'console.log("legacy baseline");\n',
-        },
-        firstMaterialization: { kind: 'install' },
-        entryPath: '/src/cli.mjs',
-        args: [],
-      });
-
-    let workbench: PlaygroundWorkbench | null = null;
-    let session: ProjectSession | null = null;
     try {
-      const companionModule = await import(
-        /* @vite-ignore */ '/src/browser-unit/workbench-playground-entry.ts'
-      );
-      const companionEntry = companionModule as unknown as CompanionEntry;
-      workbench = await withTimeout(
-        companionEntry.openPlaygroundWorkbench({
-          deployment: {
-            workers: { ...hostAssets.workers, owner: ownerWorkerReference },
-            serviceWorker: { url: '/sw.js', scope: '/' },
-            wasm: hostAssets.wasm,
-            previewProbeTimeoutMs: 30_000,
-          },
-          packageAcquisition: { registryUrl: '/npm-registry' },
-          storage: { persistence: 'required' },
-        }),
-        'legacy Playground Workbench open',
-        120_000,
-      );
-      const migrated = workbench.playground.catalog.snapshot();
-      const projectA = defineLegacyProject(workbench, 'project-a', 'starter-a');
-      session = await withTimeout(
-        workbench.openProject(projectA),
-        'legacy project A adoption',
-        120_000,
-      );
-      const markerA = new TextDecoder().decode(
-        (
-          await withTimeout(
-            session.files.readFile('/legacy-marker.txt'),
-            'legacy project A marker read',
-            30_000,
-          )
-        ).bytes,
-      );
-      await withTimeout(session.close(), 'legacy project A close', 60_000);
-      session = null;
-
-      await withTimeout(
-        workbench.playground.catalog.activate({ kind: 'project', id: 'project-b' }),
-        'legacy project B activation',
-        30_000,
-      );
-      const projectB = defineLegacyProject(workbench, 'project-b', 'starter-b');
-      session = await withTimeout(
-        workbench.openProject(projectB),
-        'legacy project B adoption',
-        120_000,
-      );
-      const markerB = new TextDecoder().decode(
-        (
-          await withTimeout(
-            session.files.readFile('/legacy-marker.txt'),
-            'legacy project B marker read',
-            30_000,
-          )
-        ).bytes,
-      );
-      await withTimeout(session.close(), 'legacy project B close', 60_000);
-      session = null;
-      const afterSwitch = workbench.playground.catalog.snapshot();
-      await withTimeout(workbench.close(), 'legacy Playground Workbench close', 60_000);
-      workbench = null;
-
-      return { migrated, afterSwitch, markerA, markerB, workerSpawns };
+      return workbench.playground.catalog.snapshot();
     } finally {
-      if (session !== null) await session.close().catch(() => {});
-      if (workbench !== null) await workbench.close().catch(() => {});
-      (window as unknown as { Worker: typeof Worker }).Worker = NativeWorker;
+      await workbench.close();
       sessionStorage.removeItem('rifty.workspaceId');
-      baseElement.remove();
     }
-  });
-
-  expect(result.migrated).toEqual({
-    active: { kind: 'project', id: 'project-a' },
-    scratch: null,
-    projects: [
-      {
-        id: 'project-a',
-        name: 'Selected A',
-        starterId: 'starter-a',
-        editedAt: '2026-07-01T01:00:00.000Z',
-      },
-      {
-        id: 'project-b',
-        name: 'Selected B',
-        starterId: 'starter-b',
-        editedAt: '2026-07-02T02:00:00.000Z',
-      },
-    ],
-  });
-  expect(result.markerA).toBe('selected-workspace:a');
-  expect(result.markerB).toBe('selected-workspace:b');
-  expect(result.afterSwitch.active).toEqual({ kind: 'project', id: 'project-b' });
-  expect(result.workerSpawns).toEqual([
-    {
-      argv: ['rifty', 'workbench-owner'],
-      entryUrl: expect.stringContaining('workbench-owner-bootstrap'),
-    },
-  ]);
+  }, SELECTED_LEGACY_WORKSPACE_ID);
+  expect(catalog).toEqual({ active: null, scratch: null, projects: [] });
+  expect(await readNativeFiles(page, paths)).toEqual(before);
 });
 
 test('forSession TypeScript uses the real owner service and returns only project-rooted paths', async ({

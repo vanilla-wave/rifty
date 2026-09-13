@@ -44,3 +44,7 @@ supersession to preload failure; root-denial rejection was an unsupported expans
 
 Eager sync reads, async write-through and native error mapping remain. No atomic
 tree snapshot, lazy sync I/O or foreign-owner coherence claim.
+
+## Corrections (active)
+
+2026-09-12 — ADR-0425: Replica mode hydrates through validated segment replay; native acquired-state I/O errors still reject, deterministic format corruption uses diagnosed cold restoration.

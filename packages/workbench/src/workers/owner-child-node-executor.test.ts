@@ -19,7 +19,7 @@ const NODE_WORKER_RUNTIME_ENV = {
   RIFTY_NODE_ENTRY_WORKER_URL: 'blob:node-entry-url',
   RIFTY_SQLITE_WASM_URL: 'blob:sqlite-wasm',
 };
-const REMOTE_FS_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const REMOTE_FS_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const RUNTIME_BINDINGS = [
   {
     adapterId: 'rifty.runtime-adapter.esbuild.v1',

@@ -14,7 +14,7 @@ import type {
 const workerModuleUrl = `/@fs${process.cwd().replaceAll('\\', '/')}/tests/browser-unit/fixtures/workbench-legacy-receipt-worker.ts?worker&url`;
 const journalFile = '/.rifty/workbench/playground/migration-journal.json';
 const transactionFile = '/.rifty/workbench/playground/transaction.json';
-const projectRoot = '/.rifty/workbench/v1/projects/legacy-target/tree';
+const projectRoot = '/.rifty/workbench/v2/projects/legacy-target/tree';
 const legacyPrefix = '/workspaces/legacy_receipt_opfs';
 const siblingRoot = `${legacyPrefix}/projects/legacy-pending`;
 const encoder = new TextEncoder();
@@ -133,7 +133,7 @@ for (const boundary of ['before-close', 'after-close'] as const) {
     );
     expect(
       result.fresh.current.some((row) =>
-        row.path.startsWith('/.rifty/workbench/v1/projects/legacy-pending'),
+        row.path.startsWith('/.rifty/workbench/v2/projects/legacy-pending'),
       ),
     ).toBe(false);
     console.log(
