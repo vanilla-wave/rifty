@@ -39,3 +39,9 @@ all I1–I8, empty residuals, docs-only delta and completed-item cleanup verifie
 Final+GREEN retains reviewed_sha f5ff8b848 so the accepted contract is read from
 that revision; delete-on-done is handled by the normal pass-binding gate.
 Closure-tree full pr:check also passed25/25 (unit187.9s/parity60.7s).
+
+Post-closure review fixes (2026-09-13, inline review NOTEs repaired in place):
+owned incomplete terminal line discarded (RED `tests/browser-unit/agent-ui-terminal.spec.ts:134`),
+shared installed-tarball registry `tests/integration/installed-registry.mjs`, unused
+helpers/lint. Independent Final+GREEN PASS: `pr-333-final-green.json` (reviewed f756a8573);
+packed-consumer 1/1, agent-bench contract 12/12, pr:check rerun before merge.
