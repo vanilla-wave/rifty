@@ -5,7 +5,7 @@ Date: 2026-09-12
 
 ## Context
 
-Goal: `docs/backlog/epics/fast-project-open-reopen/goal.md`. T has 15,568
+Delivery: PR #299; evidence `docs/backlog/vfs/reference/replica-public-scale-evidence.md`. T has 15,568
 files / 73,637,414 bytes. Current native per-file median: drain 10.320 s,
 fresh-process offline preload 4.465 s; target ≤2 s each. Independent DEC-2:
 `/root/replica_decision`; evidence and mechanism inventory:
