@@ -1,0 +1,1692 @@
+{
+  "sourceRevision": "25391197516ee5ce9bc5c9b7afdc0b5a997f8ad3",
+  "bundle": {
+    "path": "source-artifacts.json.gz",
+    "bytes": 6355970,
+    "sha256": "501a2feccc1440c287abcb2de37362a396df41498f42ce7ccc35b7ab15bb8e8b",
+    "format": "gzip JSON array of {id,trace,before,after}; not a Playwright ZIP"
+  },
+  "rawBrowserTraces": "Original Playwright ZIPs remain in the local run directory; hashes below identify the actual captured archives.",
+  "files": [
+    {
+      "run": "fix-date-sort/rifty/1",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/rifty/1/trace.json",
+      "bytes": 1472783,
+      "sha256": "2189306a534a96d0fdba1f3d5f94abe54d9c9042e7def2181c6d8fe19ef83cc9",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/1",
+      "kind": "before",
+      "originalPath": "fix-date-sort/rifty/1/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/1",
+      "kind": "after",
+      "originalPath": "fix-date-sort/rifty/1/after.json",
+      "bytes": 60136,
+      "sha256": "55b3d6c8772d60434a4273bd39b3a4cc9ee26246b14d736d3c1797430b994d29",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/1",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/rifty/1/browser.zip",
+      "bytes": 5336101,
+      "sha256": "c3d4285e9882263a36251cb2e2fc980eb9c5726f408cc62604ea333e9d70aad6",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty/1",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/rifty/1/screen.png",
+      "bytes": 236560,
+      "sha256": "d9572b3e01ea308ca3b124852fdc18f7355691fb83a87cc8f764f0b8f97e261b",
+      "committed": "screens/fix-date-sort-rifty-1.png"
+    },
+    {
+      "run": "fix-date-sort/rifty/2",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/rifty/2/trace.json",
+      "bytes": 2162647,
+      "sha256": "0874f3078fc8b51a3699b2144ae6a9499005951e97d0bc3a7e4d4c6efb3721ce",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/2",
+      "kind": "before",
+      "originalPath": "fix-date-sort/rifty/2/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/2",
+      "kind": "after",
+      "originalPath": "fix-date-sort/rifty/2/after.json",
+      "bytes": 60126,
+      "sha256": "8f474828b90597fb8f19fbeea9c0616efe49dbb585077f6633bbbeee7b829afb",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/2",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/rifty/2/browser.zip",
+      "bytes": 5800164,
+      "sha256": "58248d1287bac998d5f0e854f3ff3aa4ff07791f48a4b9439da0519de6751de4",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty/2",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/rifty/2/screen.png",
+      "bytes": 238749,
+      "sha256": "fcc9afa8ddae4236a4c60267a09249fd9ab30ab20fd753cd8fc4c5708c567654",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty/3",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/rifty/3/trace.json",
+      "bytes": 977060,
+      "sha256": "fd9c11faa3c614a34bf5518fc47adec19aa8d2abe4845baabe67b24263604e74",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/3",
+      "kind": "before",
+      "originalPath": "fix-date-sort/rifty/3/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/3",
+      "kind": "after",
+      "originalPath": "fix-date-sort/rifty/3/after.json",
+      "bytes": 59975,
+      "sha256": "7eb10294bcdd3f3556fd9116570f282ed4213ad2a363b003bc8724c6ecb767aa",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty/3",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/rifty/3/browser.zip",
+      "bytes": 5444745,
+      "sha256": "7180b2ec8ead36d1d88123b7bbce03ed5fa724672468ee5b083fb6cc1b9c0533",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty/3",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/rifty/3/screen.png",
+      "bytes": 233830,
+      "sha256": "9e67eeb40b2022bafa7301384dc9a0927a065cff904a6e17f95248599659e07d",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/1",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/rifty-no-coi/1/trace.json",
+      "bytes": 1069385,
+      "sha256": "9e6fbf2be5037b86bd5dceeb6a46a44ab294faf7edab8f3f201c35d238fb064d",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/1",
+      "kind": "before",
+      "originalPath": "fix-date-sort/rifty-no-coi/1/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/1",
+      "kind": "after",
+      "originalPath": "fix-date-sort/rifty-no-coi/1/after.json",
+      "bytes": 60157,
+      "sha256": "d7227406f3e5eff316c2da8c43208c30b769da7a9c8ae2623d068d70ea11c2e7",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/1",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/rifty-no-coi/1/browser.zip",
+      "bytes": 90909,
+      "sha256": "3625e408cb30aa613aef3c4c2096abd17b2403d7f7774d0e835dc6f22295b4e5",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/1",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/rifty-no-coi/1/screen.png",
+      "bytes": 60477,
+      "sha256": "ddc92e2d602bab1744e72fa404b32c361900198d5a7b8e83041dade3bf162653",
+      "committed": "screens/fix-date-sort-rifty-no-coi-1.png"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/2",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/rifty-no-coi/2/trace.json",
+      "bytes": 933057,
+      "sha256": "b4c513bec4b0dce32a756b3783a9c1721308a2d70c60ecf2aa10429968364299",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/2",
+      "kind": "before",
+      "originalPath": "fix-date-sort/rifty-no-coi/2/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/2",
+      "kind": "after",
+      "originalPath": "fix-date-sort/rifty-no-coi/2/after.json",
+      "bytes": 59959,
+      "sha256": "c8b4edffb494496bd0cb0f76f197faa80e234226cd90528710c698533562f6a2",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/2",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/rifty-no-coi/2/browser.zip",
+      "bytes": 113586,
+      "sha256": "fb43fdf5eb79b454de153eb9d402cc10fd707dca48e7d36564a8bb4a344addfa",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/2",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/rifty-no-coi/2/screen.png",
+      "bytes": 60499,
+      "sha256": "be90151b07230046e60af65e68785e37dded88e70e6464b52f11b73f4cf38c05",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/3",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/rifty-no-coi/3/trace.json",
+      "bytes": 855784,
+      "sha256": "85b54bc529b17461c95a1d450c9495a1e01bd776dd6ad094190b51eb5c20b0ae",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/3",
+      "kind": "before",
+      "originalPath": "fix-date-sort/rifty-no-coi/3/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/3",
+      "kind": "after",
+      "originalPath": "fix-date-sort/rifty-no-coi/3/after.json",
+      "bytes": 59959,
+      "sha256": "c8b4edffb494496bd0cb0f76f197faa80e234226cd90528710c698533562f6a2",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/3",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/rifty-no-coi/3/browser.zip",
+      "bytes": 86427,
+      "sha256": "9a99625d27119d72f0895aff0ebec42397ee520f9e8c0fdc6bd577cf19bbfc8c",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/rifty-no-coi/3",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/rifty-no-coi/3/screen.png",
+      "bytes": 60477,
+      "sha256": "ddc92e2d602bab1744e72fa404b32c361900198d5a7b8e83041dade3bf162653",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/local-reference/1",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/local-reference/1/trace.json",
+      "bytes": 432566,
+      "sha256": "22a9f376fa6df384132a8ada1cce1037e1e489a9eadb9bf02dc12e0d6e978ef3",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/1",
+      "kind": "before",
+      "originalPath": "fix-date-sort/local-reference/1/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/1",
+      "kind": "after",
+      "originalPath": "fix-date-sort/local-reference/1/after.json",
+      "bytes": 96999,
+      "sha256": "e7cf24566913b9823555ce24082490f241bb8b4a22ea802f771c13bf99404010",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/1",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/local-reference/1/browser.zip",
+      "bytes": 67424,
+      "sha256": "6ffcc3fa02ee473a78f2a5b466b310995f061112c76b1e959302fc7ef8756065",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/local-reference/1",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/local-reference/1/screen.png",
+      "bytes": 60104,
+      "sha256": "e021e04d0b7d47e47382d76935448a52d9f6f0a9079d9b08ac2561c08dd5aefb",
+      "committed": "screens/fix-date-sort-local-reference-1.png"
+    },
+    {
+      "run": "fix-date-sort/local-reference/2",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/local-reference/2/trace.json",
+      "bytes": 577354,
+      "sha256": "e644b1cf6e7425c3e8bf89974bbbf37813039bef855d2fa1a7a1374210fe1c12",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/2",
+      "kind": "before",
+      "originalPath": "fix-date-sort/local-reference/2/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/2",
+      "kind": "after",
+      "originalPath": "fix-date-sort/local-reference/2/after.json",
+      "bytes": 97176,
+      "sha256": "0c91214e5e86789acd061a4403f97d90035ce7da6340b77491d208124ec8dcc0",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/2",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/local-reference/2/browser.zip",
+      "bytes": 67430,
+      "sha256": "60658dfb85aed5f83aec8997ef6af0a2eefe9e85c5f00aa5a492970f52757dc4",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/local-reference/2",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/local-reference/2/screen.png",
+      "bytes": 60104,
+      "sha256": "e021e04d0b7d47e47382d76935448a52d9f6f0a9079d9b08ac2561c08dd5aefb",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/local-reference/3",
+      "kind": "trace",
+      "originalPath": "fix-date-sort/local-reference/3/trace.json",
+      "bytes": 529829,
+      "sha256": "e1ac13cda08f672edb338f2159d4aa04a9e4c8cc3d0e5458b72327677fc1ff37",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/3",
+      "kind": "before",
+      "originalPath": "fix-date-sort/local-reference/3/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/3",
+      "kind": "after",
+      "originalPath": "fix-date-sort/local-reference/3/after.json",
+      "bytes": 96999,
+      "sha256": "e7cf24566913b9823555ce24082490f241bb8b4a22ea802f771c13bf99404010",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "fix-date-sort/local-reference/3",
+      "kind": "browserTrace",
+      "originalPath": "fix-date-sort/local-reference/3/browser.zip",
+      "bytes": 67419,
+      "sha256": "51699f7c3a050ff4404d4a8a42be01d9dfbeae13fbae12661ceea67354237c05",
+      "committed": null
+    },
+    {
+      "run": "fix-date-sort/local-reference/3",
+      "kind": "screen",
+      "originalPath": "fix-date-sort/local-reference/3/screen.png",
+      "bytes": 60104,
+      "sha256": "e021e04d0b7d47e47382d76935448a52d9f6f0a9079d9b08ac2561c08dd5aefb",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty/1",
+      "kind": "trace",
+      "originalPath": "add-search/rifty/1/trace.json",
+      "bytes": 4792316,
+      "sha256": "b7e3f3b8cb8b39952d5190b3ed248e30fcc9cc1182084e2e7af5afc94ec660c4",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/1",
+      "kind": "before",
+      "originalPath": "add-search/rifty/1/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/1",
+      "kind": "after",
+      "originalPath": "add-search/rifty/1/after.json",
+      "bytes": 60621,
+      "sha256": "849c52bf8a5f9bf7499f6e61d01fef14f6e28eb74151558648e6b93c06d1b015",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/1",
+      "kind": "browserTrace",
+      "originalPath": "add-search/rifty/1/browser.zip",
+      "bytes": 6851996,
+      "sha256": "cb107dcde04684e9a8423d9f1a037a29ffffb7a5c42dac649c7f8ac582e97ef0",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty/1",
+      "kind": "screen",
+      "originalPath": "add-search/rifty/1/screen.png",
+      "bytes": 241936,
+      "sha256": "d73e033de0f25f31a44cea7503237e2a1c6acfb4693ecd5bd9cfe6e10d6a2975",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty/2",
+      "kind": "trace",
+      "originalPath": "add-search/rifty/2/trace.json",
+      "bytes": 5488282,
+      "sha256": "fc8abee44110a4cad4fe4ab002cb3b7b6f1c3b760a2761e976504e45bee43217",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/2",
+      "kind": "before",
+      "originalPath": "add-search/rifty/2/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/2",
+      "kind": "after",
+      "originalPath": "add-search/rifty/2/after.json",
+      "bytes": 60730,
+      "sha256": "340c5490e8c164cdfb3a01a5c6b7f9c8f3c56ad9594b84d9cd1c035a01858fb1",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/2",
+      "kind": "browserTrace",
+      "originalPath": "add-search/rifty/2/browser.zip",
+      "bytes": 6935945,
+      "sha256": "9835c1d88a1e8c62117a78eda65115431cb9b820b17b6204e39fcebfa1d286cd",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty/2",
+      "kind": "screen",
+      "originalPath": "add-search/rifty/2/screen.png",
+      "bytes": 247303,
+      "sha256": "5e54458b49be1a9fdd2a565e1d058fa492b8f7ec46c9134083df3980e3ce1acf",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty/3",
+      "kind": "trace",
+      "originalPath": "add-search/rifty/3/trace.json",
+      "bytes": 8872528,
+      "sha256": "ec5c04fc202995723dabddfb944501192a08c3ae55a479f7febd591ce7e3372b",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/3",
+      "kind": "before",
+      "originalPath": "add-search/rifty/3/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/3",
+      "kind": "after",
+      "originalPath": "add-search/rifty/3/after.json",
+      "bytes": 60648,
+      "sha256": "9427a852552271c96950f3113a94663cfd3035fa0b2dfe7b5623d60b99768ff1",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty/3",
+      "kind": "browserTrace",
+      "originalPath": "add-search/rifty/3/browser.zip",
+      "bytes": 6552854,
+      "sha256": "1aa5cfef78642c096d50589185aa61cf51ddf05041de773898e7a9b7fd3b87c4",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty/3",
+      "kind": "screen",
+      "originalPath": "add-search/rifty/3/screen.png",
+      "bytes": 243452,
+      "sha256": "8e1590f3d590ee0a50fa1cf1de445d1326feb681fbf2f639883afb1ab64851d5",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty-no-coi/1",
+      "kind": "trace",
+      "originalPath": "add-search/rifty-no-coi/1/trace.json",
+      "bytes": 6732085,
+      "sha256": "c016ce0a3a8f963a864a1c9fe51d9c0e7b4a196ac938ddf44994d706a36b29bf",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/1",
+      "kind": "before",
+      "originalPath": "add-search/rifty-no-coi/1/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/1",
+      "kind": "after",
+      "originalPath": "add-search/rifty-no-coi/1/after.json",
+      "bytes": 60574,
+      "sha256": "2f6acb4364a202efc1ea3c9fda6c60b33adbe638e86f4fa2ada28f8e2cdbef6a",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/1",
+      "kind": "browserTrace",
+      "originalPath": "add-search/rifty-no-coi/1/browser.zip",
+      "bytes": 313649,
+      "sha256": "292f66fd26615342e7913ea31dd98dff3d89a16c3687101f57cb824f9616248f",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty-no-coi/1",
+      "kind": "screen",
+      "originalPath": "add-search/rifty-no-coi/1/screen.png",
+      "bytes": 97322,
+      "sha256": "53c8b062cd15cd90cfffc889efa80a3000bc26e911710f50150082a31d67541c",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty-no-coi/2",
+      "kind": "trace",
+      "originalPath": "add-search/rifty-no-coi/2/trace.json",
+      "bytes": 7462740,
+      "sha256": "8a364cd4cb1d8f6bc9c75616dc6e7d31b03a16abc29fac836cadb54457687d85",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/2",
+      "kind": "before",
+      "originalPath": "add-search/rifty-no-coi/2/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/2",
+      "kind": "after",
+      "originalPath": "add-search/rifty-no-coi/2/after.json",
+      "bytes": 60659,
+      "sha256": "ef4f96533e50af042d11f1b6f90e70ebb023613cf5b4232966691876ec968401",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/2",
+      "kind": "browserTrace",
+      "originalPath": "add-search/rifty-no-coi/2/browser.zip",
+      "bytes": 317251,
+      "sha256": "5ab3a78e4d084bc403ae9fac0150557d940e1529e4421e5455fb494850d11669",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty-no-coi/2",
+      "kind": "screen",
+      "originalPath": "add-search/rifty-no-coi/2/screen.png",
+      "bytes": 97322,
+      "sha256": "53c8b062cd15cd90cfffc889efa80a3000bc26e911710f50150082a31d67541c",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty-no-coi/3",
+      "kind": "trace",
+      "originalPath": "add-search/rifty-no-coi/3/trace.json",
+      "bytes": 10962467,
+      "sha256": "e32f564143431921894fc1f5ace9f9aa44d59631c2b7b8811c240da8f508b30d",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/3",
+      "kind": "before",
+      "originalPath": "add-search/rifty-no-coi/3/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/3",
+      "kind": "after",
+      "originalPath": "add-search/rifty-no-coi/3/after.json",
+      "bytes": 60754,
+      "sha256": "03455ce63c4358b04aaf6ee395d2ba4a79bb4f5282ac0c84a5b1baccc208e453",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/rifty-no-coi/3",
+      "kind": "browserTrace",
+      "originalPath": "add-search/rifty-no-coi/3/browser.zip",
+      "bytes": 372378,
+      "sha256": "acf8da0db1ad9f51acce005f36847c42ddcc7e72cba4aad297f7030ceccc6b97",
+      "committed": null
+    },
+    {
+      "run": "add-search/rifty-no-coi/3",
+      "kind": "screen",
+      "originalPath": "add-search/rifty-no-coi/3/screen.png",
+      "bytes": 97844,
+      "sha256": "27c20a3844b73055a277c06bb79e6b99ec9e80b3d2bdf8e10c09f89a9dd641bb",
+      "committed": null
+    },
+    {
+      "run": "add-search/local-reference/1",
+      "kind": "trace",
+      "originalPath": "add-search/local-reference/1/trace.json",
+      "bytes": 967701,
+      "sha256": "87c67bbd77ebfd59f09354baef4dcec1ddc1503dd24c8dee22ca29ec8fa09289",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/1",
+      "kind": "before",
+      "originalPath": "add-search/local-reference/1/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/1",
+      "kind": "after",
+      "originalPath": "add-search/local-reference/1/after.json",
+      "bytes": 98009,
+      "sha256": "e0a1c088a0126b09c629fd64114abb58b8aaa4f5fe7aa3d915d28e5659641c24",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/1",
+      "kind": "browserTrace",
+      "originalPath": "add-search/local-reference/1/browser.zip",
+      "bytes": 278426,
+      "sha256": "e7c3af727e1737a51204699fbfe2460f6f3c4e6ad8286bb873a45b3ed78295c8",
+      "committed": null
+    },
+    {
+      "run": "add-search/local-reference/1",
+      "kind": "screen",
+      "originalPath": "add-search/local-reference/1/screen.png",
+      "bytes": 97537,
+      "sha256": "6c2a0ec5699900571768f4eb433c0698354fb079e8005efc09331d3b269b27c2",
+      "committed": null
+    },
+    {
+      "run": "add-search/local-reference/2",
+      "kind": "trace",
+      "originalPath": "add-search/local-reference/2/trace.json",
+      "bytes": 883323,
+      "sha256": "08b5511600d9ada6957cdd2b2733199afa7e538dbd97524043a559e541c6532e",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/2",
+      "kind": "before",
+      "originalPath": "add-search/local-reference/2/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/2",
+      "kind": "after",
+      "originalPath": "add-search/local-reference/2/after.json",
+      "bytes": 97682,
+      "sha256": "aa9e7b7ba02ab13aafbd604c43c33c2bc03c828798328248150788c3abd8f8dc",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/2",
+      "kind": "browserTrace",
+      "originalPath": "add-search/local-reference/2/browser.zip",
+      "bytes": 197553,
+      "sha256": "d43c93efcc33222c74ec0eff5fe2597ebe2a07641c389a6044558797b92b8604",
+      "committed": null
+    },
+    {
+      "run": "add-search/local-reference/2",
+      "kind": "screen",
+      "originalPath": "add-search/local-reference/2/screen.png",
+      "bytes": 97344,
+      "sha256": "cdc6cadb607a47c5f7592501a2815cc4bef76066a1bc6d658af5209eaf32820e",
+      "committed": null
+    },
+    {
+      "run": "add-search/local-reference/3",
+      "kind": "trace",
+      "originalPath": "add-search/local-reference/3/trace.json",
+      "bytes": 994221,
+      "sha256": "55e23050bfbaa1d3fcbdfb9cb70c99c453414a255fed3d109aa2b0a2456f89a2",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/3",
+      "kind": "before",
+      "originalPath": "add-search/local-reference/3/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/3",
+      "kind": "after",
+      "originalPath": "add-search/local-reference/3/after.json",
+      "bytes": 97981,
+      "sha256": "ec1a51aff47e6af0ecced46228af7db06daf021d9461740f36f1de178d08b046",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "add-search/local-reference/3",
+      "kind": "browserTrace",
+      "originalPath": "add-search/local-reference/3/browser.zip",
+      "bytes": 240583,
+      "sha256": "bc5851664aadd355c93a07ba6e361072b184a12a81ee6328d31db30adc615c4d",
+      "committed": null
+    },
+    {
+      "run": "add-search/local-reference/3",
+      "kind": "screen",
+      "originalPath": "add-search/local-reference/3/screen.png",
+      "bytes": 97405,
+      "sha256": "4f7807c0f83c63e3f63be2a444812245e32e405af566487a5b0e230f699f5421",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty/1",
+      "kind": "trace",
+      "originalPath": "url-filters/rifty/1/trace.json",
+      "bytes": 12960767,
+      "sha256": "d642632494c1bc4b114021d35bdfdf6b562f77bf87c0a051ea3ff3f37490ff97",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/1",
+      "kind": "before",
+      "originalPath": "url-filters/rifty/1/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/1",
+      "kind": "after",
+      "originalPath": "url-filters/rifty/1/after.json",
+      "bytes": 60815,
+      "sha256": "76d9787e9ae1e2bf20fc58a8a7c22f5dd76d5e86614ea55f35e35cd391d043c5",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/1",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/rifty/1/browser.zip",
+      "bytes": 8870190,
+      "sha256": "e0cc2b7000249fdff24b66bf9abd161b02d2a60d8ef3e19f49b4af70ab637e0a",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty/1",
+      "kind": "screen",
+      "originalPath": "url-filters/rifty/1/screen.png",
+      "bytes": 244568,
+      "sha256": "9606e82fe39d5e8e4fcce809a28efa98a774a33944bd468afc555090767cd4c9",
+      "committed": "screens/url-filters-rifty-1.png"
+    },
+    {
+      "run": "url-filters/rifty/2",
+      "kind": "trace",
+      "originalPath": "url-filters/rifty/2/trace.json",
+      "bytes": 10383709,
+      "sha256": "d8ddf78598dc74f1f59f1aab11c83209fcba45aadb87f468cc6469b2edb9dbee",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/2",
+      "kind": "before",
+      "originalPath": "url-filters/rifty/2/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/2",
+      "kind": "after",
+      "originalPath": "url-filters/rifty/2/after.json",
+      "bytes": 60763,
+      "sha256": "49cc4be4551ec13965c4c78a37f7350ae6ae6aa50741bd54860dfceab71941ca",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/2",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/rifty/2/browser.zip",
+      "bytes": 9070490,
+      "sha256": "f5bb7e54b4f4b4e33fc6b2cce728499b6954fa2b387325ddd11d8875c0ae5798",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty/2",
+      "kind": "screen",
+      "originalPath": "url-filters/rifty/2/screen.png",
+      "bytes": 235108,
+      "sha256": "55cc476711b36a591ef91623a1a30dd1fd6fe43e3a4586cf0950297934e91b2a",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty/3",
+      "kind": "trace",
+      "originalPath": "url-filters/rifty/3/trace.json",
+      "bytes": 10884963,
+      "sha256": "b004346fb42a5beee2229031e1d885df42fbe86a923efb76c64fe8610aa9598f",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/3",
+      "kind": "before",
+      "originalPath": "url-filters/rifty/3/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/3",
+      "kind": "after",
+      "originalPath": "url-filters/rifty/3/after.json",
+      "bytes": 60810,
+      "sha256": "5a6764cca1e345ce396caa4697729a874c9e1b378ba8f9e8c26d93de5fa0db05",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty/3",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/rifty/3/browser.zip",
+      "bytes": 10236642,
+      "sha256": "14d47f6bdb053dffacfa2437541d57c30d4f24c49801091baa5d3ec1a6427300",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty/3",
+      "kind": "screen",
+      "originalPath": "url-filters/rifty/3/screen.png",
+      "bytes": 236569,
+      "sha256": "eb1debd1847883040e15fe021e1a8a03a0e13e3b9637b84f94b3ccfd509d3fcc",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty-no-coi/1",
+      "kind": "trace",
+      "originalPath": "url-filters/rifty-no-coi/1/trace.json",
+      "bytes": 10207346,
+      "sha256": "65f2876c460861cd2d556f9e76e336543851f299cf9fe6179ad53b98d394104b",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/1",
+      "kind": "before",
+      "originalPath": "url-filters/rifty-no-coi/1/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/1",
+      "kind": "after",
+      "originalPath": "url-filters/rifty-no-coi/1/after.json",
+      "bytes": 60771,
+      "sha256": "2ef42327ed3b6347bbf2076052dd82dc0e92abe5e009b8311fe050a38dea703b",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/1",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/rifty-no-coi/1/browser.zip",
+      "bytes": 362665,
+      "sha256": "d6169337c235c4817e444f7031230728c6f226b9e5c14576654f822f41dd6829",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty-no-coi/1",
+      "kind": "screen",
+      "originalPath": "url-filters/rifty-no-coi/1/screen.png",
+      "bytes": 29314,
+      "sha256": "99fc1460835004e712c05927f1626bdbffbabffd6be539b438c98a6cc5ebcb0c",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty-no-coi/2",
+      "kind": "trace",
+      "originalPath": "url-filters/rifty-no-coi/2/trace.json",
+      "bytes": 10012686,
+      "sha256": "06c5c3c72b5b236e5ebd3b7206efbacd76bd2a8de19f38d10e3ef78ca1740b70",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/2",
+      "kind": "before",
+      "originalPath": "url-filters/rifty-no-coi/2/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/2",
+      "kind": "after",
+      "originalPath": "url-filters/rifty-no-coi/2/after.json",
+      "bytes": 60781,
+      "sha256": "9b43267cf2ea4d44101c399e6e230c5a5f98c8694a3225c27b46ad8fa286aecb",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/2",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/rifty-no-coi/2/browser.zip",
+      "bytes": 345380,
+      "sha256": "e6b8f2e59f30bf150861bc69e8099ed332e68bf0cd67c6ee3f9ecc9debb1353f",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty-no-coi/2",
+      "kind": "screen",
+      "originalPath": "url-filters/rifty-no-coi/2/screen.png",
+      "bytes": 29314,
+      "sha256": "99fc1460835004e712c05927f1626bdbffbabffd6be539b438c98a6cc5ebcb0c",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty-no-coi/3",
+      "kind": "trace",
+      "originalPath": "url-filters/rifty-no-coi/3/trace.json",
+      "bytes": 5564870,
+      "sha256": "b0ca33b52aac3cc61e4d95a3ad05f13c232ae710989f69f25b878ea72fea3eb2",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/3",
+      "kind": "before",
+      "originalPath": "url-filters/rifty-no-coi/3/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/3",
+      "kind": "after",
+      "originalPath": "url-filters/rifty-no-coi/3/after.json",
+      "bytes": 60698,
+      "sha256": "05b18c84fac327dd4fa9664d0a326a5e418ab1aeeea8be489fa1c58798aff3cc",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/rifty-no-coi/3",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/rifty-no-coi/3/browser.zip",
+      "bytes": 301433,
+      "sha256": "3182251a1daa43a23352f5db1cd10bca2fafad9f0609bd55f69926357c15b5d3",
+      "committed": null
+    },
+    {
+      "run": "url-filters/rifty-no-coi/3",
+      "kind": "screen",
+      "originalPath": "url-filters/rifty-no-coi/3/screen.png",
+      "bytes": 29314,
+      "sha256": "99fc1460835004e712c05927f1626bdbffbabffd6be539b438c98a6cc5ebcb0c",
+      "committed": null
+    },
+    {
+      "run": "url-filters/local-reference/1",
+      "kind": "trace",
+      "originalPath": "url-filters/local-reference/1/trace.json",
+      "bytes": 892969,
+      "sha256": "62d529d11a7da38d6f87c13ce1c8cefb639b741ed22b12e582f664488b3b5440",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/1",
+      "kind": "before",
+      "originalPath": "url-filters/local-reference/1/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/1",
+      "kind": "after",
+      "originalPath": "url-filters/local-reference/1/after.json",
+      "bytes": 97672,
+      "sha256": "3217dc4b9821064d62ae9d45c746da083abfb6859057e51ec26073f497f4b132",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/1",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/local-reference/1/browser.zip",
+      "bytes": 179662,
+      "sha256": "eb49e65e978f427a94c5df46951af13784d84a5f2189b102aea944088faee30d",
+      "committed": null
+    },
+    {
+      "run": "url-filters/local-reference/1",
+      "kind": "screen",
+      "originalPath": "url-filters/local-reference/1/screen.png",
+      "bytes": 29079,
+      "sha256": "1e8eb724f6ec8b3833c178637213c76461b76d305d8dfc9d128c9644427d46c6",
+      "committed": null
+    },
+    {
+      "run": "url-filters/local-reference/2",
+      "kind": "trace",
+      "originalPath": "url-filters/local-reference/2/trace.json",
+      "bytes": 901026,
+      "sha256": "9a473ac41c61ec1b4d19337b5aad4a8a8ac447473ec835ab405491c182ad15b8",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/2",
+      "kind": "before",
+      "originalPath": "url-filters/local-reference/2/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/2",
+      "kind": "after",
+      "originalPath": "url-filters/local-reference/2/after.json",
+      "bytes": 97823,
+      "sha256": "d0d19a1b58df40fe0dd056bfdb427afcbc8eb875247785e3aa41d2b123dd6534",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/2",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/local-reference/2/browser.zip",
+      "bytes": 160866,
+      "sha256": "a9623ed3426b42835ed03cffc7e136ec057c6c8d848e13ad967037acf3d8c5a0",
+      "committed": null
+    },
+    {
+      "run": "url-filters/local-reference/2",
+      "kind": "screen",
+      "originalPath": "url-filters/local-reference/2/screen.png",
+      "bytes": 29079,
+      "sha256": "1e8eb724f6ec8b3833c178637213c76461b76d305d8dfc9d128c9644427d46c6",
+      "committed": null
+    },
+    {
+      "run": "url-filters/local-reference/3",
+      "kind": "trace",
+      "originalPath": "url-filters/local-reference/3/trace.json",
+      "bytes": 880020,
+      "sha256": "8d78d33dca163e2a411ec0a378b8c60b024bf1bf9840113f8372d3b617de6e43",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/3",
+      "kind": "before",
+      "originalPath": "url-filters/local-reference/3/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/3",
+      "kind": "after",
+      "originalPath": "url-filters/local-reference/3/after.json",
+      "bytes": 97855,
+      "sha256": "bf66a5bcd9aacfd11f1bbb66f98e40d82a6b0b410d3c2adc98aeb85ee15902bb",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "url-filters/local-reference/3",
+      "kind": "browserTrace",
+      "originalPath": "url-filters/local-reference/3/browser.zip",
+      "bytes": 146273,
+      "sha256": "1dc49ce856aa6006cc407cfd9c1e5764292cdd27eac6f6841d998c61a923254d",
+      "committed": null
+    },
+    {
+      "run": "url-filters/local-reference/3",
+      "kind": "screen",
+      "originalPath": "url-filters/local-reference/3/screen.png",
+      "bytes": 29079,
+      "sha256": "1e8eb724f6ec8b3833c178637213c76461b76d305d8dfc9d128c9644427d46c6",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty/1",
+      "kind": "trace",
+      "originalPath": "new-issue-form/rifty/1/trace.json",
+      "bytes": 73288764,
+      "sha256": "a8b6c88a467e50105e143bda81095a18a89e5c8ef791726c8bb674f536208809",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/1",
+      "kind": "before",
+      "originalPath": "new-issue-form/rifty/1/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/1",
+      "kind": "after",
+      "originalPath": "new-issue-form/rifty/1/after.json",
+      "bytes": 63886,
+      "sha256": "b8b5a373180502e4da59de79edebf8b4591d48df126700cf9cbdc035d1960381",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/1",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/rifty/1/browser.zip",
+      "bytes": 12766973,
+      "sha256": "78140b8a363c0f7d212dc2cbb30ce4f6579feb2d6e4c182f3c33027ab8a39ac3",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty/1",
+      "kind": "screen",
+      "originalPath": "new-issue-form/rifty/1/screen.png",
+      "bytes": 249916,
+      "sha256": "b5c81a6910bd79afafb40b486a233828b7acaa9e8d286a5c5f544e4ea38a8bcf",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty/2",
+      "kind": "trace",
+      "originalPath": "new-issue-form/rifty/2/trace.json",
+      "bytes": 20741150,
+      "sha256": "6fd9f90f38d1f720aae59947bb9fe21c8d6e9fa8e1ef6d8122a230e4df21668d",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/2",
+      "kind": "before",
+      "originalPath": "new-issue-form/rifty/2/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/2",
+      "kind": "after",
+      "originalPath": "new-issue-form/rifty/2/after.json",
+      "bytes": 64969,
+      "sha256": "c5a4420ce936a263262df7cf56e785c6d466cc36cfa2a4ff5cb5c03b7bededc8",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/2",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/rifty/2/browser.zip",
+      "bytes": 11646479,
+      "sha256": "9ff532678e07dd5c4d5f4bd14de536a53b48423cac0500a43e30a65e0648a9b9",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty/2",
+      "kind": "screen",
+      "originalPath": "new-issue-form/rifty/2/screen.png",
+      "bytes": 247302,
+      "sha256": "420a7833450cf47d974fb43791cb0241299068680e7335bfb7ca5468ae55107d",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty/3",
+      "kind": "trace",
+      "originalPath": "new-issue-form/rifty/3/trace.json",
+      "bytes": 49823461,
+      "sha256": "fd5aca2319e50a27bc62e766a72f18f86ef884336c8faa3e172ccea35fc8774b",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/3",
+      "kind": "before",
+      "originalPath": "new-issue-form/rifty/3/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/3",
+      "kind": "after",
+      "originalPath": "new-issue-form/rifty/3/after.json",
+      "bytes": 64272,
+      "sha256": "71cf0819f52cced5312a0043db1630e6a1d4b53a16a76f4942f3160b198a8273",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty/3",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/rifty/3/browser.zip",
+      "bytes": 13797417,
+      "sha256": "d10e578198b6888b20a28fa39afff4238b78e8b4eb9207151c3ec6d7949c1b43",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty/3",
+      "kind": "screen",
+      "originalPath": "new-issue-form/rifty/3/screen.png",
+      "bytes": 246476,
+      "sha256": "90a6698c485c889f44ed222b9e0dc54cb20f2ff0e1d347760b42944943927790",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/1",
+      "kind": "trace",
+      "originalPath": "new-issue-form/rifty-no-coi/1/trace.json",
+      "bytes": 13464972,
+      "sha256": "28aec7b3517dc0d060a29f1b612d6b32462a8b17e6540a499ced1431bc744f53",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/1",
+      "kind": "before",
+      "originalPath": "new-issue-form/rifty-no-coi/1/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/1",
+      "kind": "after",
+      "originalPath": "new-issue-form/rifty-no-coi/1/after.json",
+      "bytes": 64344,
+      "sha256": "c8c51f0e4ff0abf5218b7d3375315ef332b389de534940c2338fc928a1dbc7df",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/1",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/rifty-no-coi/1/browser.zip",
+      "bytes": 549564,
+      "sha256": "223e95cd9bf5549559db6dc21555c3e2a5909b6ffd979408d6de938d4326938c",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/1",
+      "kind": "screen",
+      "originalPath": "new-issue-form/rifty-no-coi/1/screen.png",
+      "bytes": 96318,
+      "sha256": "20875cf801fca5da479617d4a98b83f01a802a434255dd33c432f488464197e0",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/2",
+      "kind": "trace",
+      "originalPath": "new-issue-form/rifty-no-coi/2/trace.json",
+      "bytes": 52916570,
+      "sha256": "d016f19380abb57ef53d128600bbd6659657e7cde53f80f2ec3c120b8dcc4a2b",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/2",
+      "kind": "before",
+      "originalPath": "new-issue-form/rifty-no-coi/2/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/2",
+      "kind": "after",
+      "originalPath": "new-issue-form/rifty-no-coi/2/after.json",
+      "bytes": 64340,
+      "sha256": "de89588d7094b4b8c92dac35765d765abaad0c7ef9a0338ce813497665a0eada",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/2",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/rifty-no-coi/2/browser.zip",
+      "bytes": 1009425,
+      "sha256": "78dad1feb57bbfc9f6802ea918fc28e8affcfdc33b6539837e34d85be115f015",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/2",
+      "kind": "screen",
+      "originalPath": "new-issue-form/rifty-no-coi/2/screen.png",
+      "bytes": 96265,
+      "sha256": "0bd6f50a5e48ed442578279ad1ebbc3b23d18504e794a71553623365d2b14c49",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/3",
+      "kind": "trace",
+      "originalPath": "new-issue-form/rifty-no-coi/3/trace.json",
+      "bytes": 22814022,
+      "sha256": "b7ee2f754f1359690023bb7d866f21d66d1be2585cad65e5c4dd5406d3f866d9",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/3",
+      "kind": "before",
+      "originalPath": "new-issue-form/rifty-no-coi/3/before.json",
+      "bytes": 59934,
+      "sha256": "d39b0f82d478c7518761ba0e57921cae1144e7c5f1c80cc1dc193dd0d8009854",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/3",
+      "kind": "after",
+      "originalPath": "new-issue-form/rifty-no-coi/3/after.json",
+      "bytes": 64288,
+      "sha256": "6494b052e88f8567bef2bf73aba72560cb0e5e110074db25545d4d3d094085cd",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/3",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/rifty-no-coi/3/browser.zip",
+      "bytes": 632625,
+      "sha256": "bb35dad14d54c3c7e45f8a4fb203d7785615684284d1b125ca540f5e3db3df94",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/rifty-no-coi/3",
+      "kind": "screen",
+      "originalPath": "new-issue-form/rifty-no-coi/3/screen.png",
+      "bytes": 96265,
+      "sha256": "0bd6f50a5e48ed442578279ad1ebbc3b23d18504e794a71553623365d2b14c49",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/local-reference/1",
+      "kind": "trace",
+      "originalPath": "new-issue-form/local-reference/1/trace.json",
+      "bytes": 1709873,
+      "sha256": "bd8f2fd5049fbebe72ab5b808a094700d25be4d99e3fec886155ba7b259f9c44",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/1",
+      "kind": "before",
+      "originalPath": "new-issue-form/local-reference/1/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/1",
+      "kind": "after",
+      "originalPath": "new-issue-form/local-reference/1/after.json",
+      "bytes": 101113,
+      "sha256": "df38f93ec78c7c74e084c5319ffa5553f348e364307dcf70dab61b4941132d03",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/1",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/local-reference/1/browser.zip",
+      "bytes": 129796,
+      "sha256": "9722ac777362d1c7b10c76426439f3a4bbae3d520a4db2e27ef917162efa3be2",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/local-reference/1",
+      "kind": "screen",
+      "originalPath": "new-issue-form/local-reference/1/screen.png",
+      "bytes": 96753,
+      "sha256": "29fdb10370fc1f7c395405fafb2109dcea3c54155347d2883264a3224cda53a9",
+      "committed": "screens/new-issue-form-local-reference-1.png"
+    },
+    {
+      "run": "new-issue-form/local-reference/2",
+      "kind": "trace",
+      "originalPath": "new-issue-form/local-reference/2/trace.json",
+      "bytes": 2385079,
+      "sha256": "e62a519ba0a1f5396d4c5a16c6e6c59daf531a15f717bd436350b350791d012c",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/2",
+      "kind": "before",
+      "originalPath": "new-issue-form/local-reference/2/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/2",
+      "kind": "after",
+      "originalPath": "new-issue-form/local-reference/2/after.json",
+      "bytes": 102515,
+      "sha256": "50f0a13598d42d2aa37712444864fc4426886e17f3036f775778d92a59dbc6cd",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/2",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/local-reference/2/browser.zip",
+      "bytes": 129599,
+      "sha256": "8fe4cf7b61165b994195ee7c2b11a30ea616af16e0e288ee7be5b286a7ae6501",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/local-reference/2",
+      "kind": "screen",
+      "originalPath": "new-issue-form/local-reference/2/screen.png",
+      "bytes": 96830,
+      "sha256": "568f923a7ff99af48c13e93dc3251870cb2bd3d321887bc091111af0929596d0",
+      "committed": "screens/new-issue-form-local-reference-2.png"
+    },
+    {
+      "run": "new-issue-form/local-reference/3",
+      "kind": "trace",
+      "originalPath": "new-issue-form/local-reference/3/trace.json",
+      "bytes": 2095878,
+      "sha256": "563ef70c8ea28d157158037e97593eb393c83aac5ed53a38b9555890cd7de06e",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/3",
+      "kind": "before",
+      "originalPath": "new-issue-form/local-reference/3/before.json",
+      "bytes": 96974,
+      "sha256": "a254cfbceadac77e0643bdafa2cebb1b24356950eafe8efea57fca21714fa995",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/3",
+      "kind": "after",
+      "originalPath": "new-issue-form/local-reference/3/after.json",
+      "bytes": 101930,
+      "sha256": "d7fd94bc1344b56a400d795aa88e76261187cfbf7205736c3c5a187d67455f83",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "new-issue-form/local-reference/3",
+      "kind": "browserTrace",
+      "originalPath": "new-issue-form/local-reference/3/browser.zip",
+      "bytes": 129795,
+      "sha256": "bda42b1119c2b7e4f3e2b6dbae28711c336d335e7f35de51ab6e233d6e4f0af9",
+      "committed": null
+    },
+    {
+      "run": "new-issue-form/local-reference/3",
+      "kind": "screen",
+      "originalPath": "new-issue-form/local-reference/3/screen.png",
+      "bytes": 96753,
+      "sha256": "29fdb10370fc1f7c395405fafb2109dcea3c54155347d2883264a3224cda53a9",
+      "committed": "screens/new-issue-form-local-reference-3.png"
+    },
+    {
+      "run": "node-endpoint/rifty/1",
+      "kind": "trace",
+      "originalPath": "node-endpoint/rifty/1/trace.json",
+      "bytes": 2118296,
+      "sha256": "514ddd4e257a89bf27fea97b1412cd2a18d3771c0f3a29da5e7c6da8a47db88e",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/1",
+      "kind": "before",
+      "originalPath": "node-endpoint/rifty/1/before.json",
+      "bytes": 18798,
+      "sha256": "6e617b213e14a725a207a4fe6f37823bfb5d7febb92bfffb30cdff98898c76bb",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/1",
+      "kind": "after",
+      "originalPath": "node-endpoint/rifty/1/after.json",
+      "bytes": 19095,
+      "sha256": "2582294d912c390ad4da54c34b9b441d6a7a0afa7135dfffdd48a3d3911aefe6",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/1",
+      "kind": "browserTrace",
+      "originalPath": "node-endpoint/rifty/1/browser.zip",
+      "bytes": 6532280,
+      "sha256": "71bd53d70a7660fef0822960bc50758b2dac70639998cd215aee525b7ceec6ba",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/rifty/1",
+      "kind": "screen",
+      "originalPath": "node-endpoint/rifty/1/screen.png",
+      "bytes": 244373,
+      "sha256": "ade04f2de2de2837237df87236fb8f9465e1981284215069e59aa142f19538d8",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/rifty/2",
+      "kind": "trace",
+      "originalPath": "node-endpoint/rifty/2/trace.json",
+      "bytes": 1349430,
+      "sha256": "30cc69783e257035602bd14358a15441c3e84a624132ab6758792d8dae707743",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/2",
+      "kind": "before",
+      "originalPath": "node-endpoint/rifty/2/before.json",
+      "bytes": 18798,
+      "sha256": "6e617b213e14a725a207a4fe6f37823bfb5d7febb92bfffb30cdff98898c76bb",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/2",
+      "kind": "after",
+      "originalPath": "node-endpoint/rifty/2/after.json",
+      "bytes": 19126,
+      "sha256": "1d2209519b7c65aaef476ea4b80d6408ce10d6c2495f9ccdb442b74899280faa",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/2",
+      "kind": "browserTrace",
+      "originalPath": "node-endpoint/rifty/2/browser.zip",
+      "bytes": 5327971,
+      "sha256": "54f16923263c2ec13ff58b011caad97565c30a3bd051c48a6bca214aaec52f3a",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/rifty/2",
+      "kind": "screen",
+      "originalPath": "node-endpoint/rifty/2/screen.png",
+      "bytes": 194679,
+      "sha256": "143d0783cd1ea06bff50889fcf4ba00ebbc93d691b4a8da0820e0fd92f24e7d6",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/rifty/3",
+      "kind": "trace",
+      "originalPath": "node-endpoint/rifty/3/trace.json",
+      "bytes": 3746748,
+      "sha256": "1e0d7e3d9c434ac6c16a883935f91497c6fe17513db5c62c516f8dbc23035c05",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/3",
+      "kind": "before",
+      "originalPath": "node-endpoint/rifty/3/before.json",
+      "bytes": 18798,
+      "sha256": "6e617b213e14a725a207a4fe6f37823bfb5d7febb92bfffb30cdff98898c76bb",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/3",
+      "kind": "after",
+      "originalPath": "node-endpoint/rifty/3/after.json",
+      "bytes": 19108,
+      "sha256": "1945f63a8a8bc4dbeb2238f3096f8775f2d2c9f96d61465178acf790a7eac5dc",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/rifty/3",
+      "kind": "browserTrace",
+      "originalPath": "node-endpoint/rifty/3/browser.zip",
+      "bytes": 7051711,
+      "sha256": "e7eca3e00112e4cae642c9a0123dd6d7244d686dae6cbc12a8ba95ef049f1b4b",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/rifty/3",
+      "kind": "screen",
+      "originalPath": "node-endpoint/rifty/3/screen.png",
+      "bytes": 235163,
+      "sha256": "452fdf05b2214b89908556c164708ebd543ccafedef427e1bf1fe1f8944350f7",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/local-reference/1",
+      "kind": "trace",
+      "originalPath": "node-endpoint/local-reference/1/trace.json",
+      "bytes": 463028,
+      "sha256": "34a7c3381ed9a1db80d0c40e8096883ebab4b1c4f67512e5b33bb3a95c73ddba",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/1",
+      "kind": "before",
+      "originalPath": "node-endpoint/local-reference/1/before.json",
+      "bytes": 22796,
+      "sha256": "38c0617ae437fefad07de770a61b5f4311b8029eb76b91309aa390d6aefc0587",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/1",
+      "kind": "after",
+      "originalPath": "node-endpoint/local-reference/1/after.json",
+      "bytes": 23047,
+      "sha256": "c4b74721d7a69b7db3d0538e7d3c0f8db904dc7c437c6cc3cab89c403986001a",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/1",
+      "kind": "browserTrace",
+      "originalPath": "node-endpoint/local-reference/1/browser.zip",
+      "bytes": 41890,
+      "sha256": "41bcf67f2febb7aae53c1a476275079fbd2cc916e1ae9d2b69dbdf3b9bd95a4f",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/local-reference/1",
+      "kind": "screen",
+      "originalPath": "node-endpoint/local-reference/1/screen.png",
+      "bytes": 32804,
+      "sha256": "cb160a557246e51ea29cebf05aa3c11ffa9e38fc43bec6e0374df7a9daba56fa",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/local-reference/2",
+      "kind": "trace",
+      "originalPath": "node-endpoint/local-reference/2/trace.json",
+      "bytes": 413301,
+      "sha256": "5c543dc806b04beb0ef18b1d2b04b6595d9d896a3d3847ae9ee20e7fecf7539b",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/2",
+      "kind": "before",
+      "originalPath": "node-endpoint/local-reference/2/before.json",
+      "bytes": 22796,
+      "sha256": "38c0617ae437fefad07de770a61b5f4311b8029eb76b91309aa390d6aefc0587",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/2",
+      "kind": "after",
+      "originalPath": "node-endpoint/local-reference/2/after.json",
+      "bytes": 23047,
+      "sha256": "c4b74721d7a69b7db3d0538e7d3c0f8db904dc7c437c6cc3cab89c403986001a",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/2",
+      "kind": "browserTrace",
+      "originalPath": "node-endpoint/local-reference/2/browser.zip",
+      "bytes": 36882,
+      "sha256": "c131950546604f619a39daf94fdea6c2fe527b0083b0bccde8fd1cf6a3a39705",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/local-reference/2",
+      "kind": "screen",
+      "originalPath": "node-endpoint/local-reference/2/screen.png",
+      "bytes": 32803,
+      "sha256": "f2d14626bbecab969f51a28cb3aa12ec15a8786bdd7ff69e25ccba27b755f462",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/local-reference/3",
+      "kind": "trace",
+      "originalPath": "node-endpoint/local-reference/3/trace.json",
+      "bytes": 475515,
+      "sha256": "4ab57668496f2df34edd84018a13009418dc86cfd38bc43b440537d603695fcc",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/3",
+      "kind": "before",
+      "originalPath": "node-endpoint/local-reference/3/before.json",
+      "bytes": 22796,
+      "sha256": "38c0617ae437fefad07de770a61b5f4311b8029eb76b91309aa390d6aefc0587",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/3",
+      "kind": "after",
+      "originalPath": "node-endpoint/local-reference/3/after.json",
+      "bytes": 23093,
+      "sha256": "135e2ae491ed98ab0a3a8d47cf1cb3dcece2a4ec734a7294cf6e2580bc33f5b6",
+      "committed": "source-artifacts.json.gz"
+    },
+    {
+      "run": "node-endpoint/local-reference/3",
+      "kind": "browserTrace",
+      "originalPath": "node-endpoint/local-reference/3/browser.zip",
+      "bytes": 36878,
+      "sha256": "d8d745624e234ddac7380d28e9a87e7ec2949197f25fdf6c80ac8f529526e187",
+      "committed": null
+    },
+    {
+      "run": "node-endpoint/local-reference/3",
+      "kind": "screen",
+      "originalPath": "node-endpoint/local-reference/3/screen.png",
+      "bytes": 32803,
+      "sha256": "f2d14626bbecab969f51a28cb3aa12ec15a8786bdd7ff69e25ccba27b755f462",
+      "committed": null
+    }
+  ]
+}

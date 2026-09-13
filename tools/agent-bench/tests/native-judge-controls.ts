@@ -73,9 +73,60 @@ const selected = (await loadTasks()).filter(
   (task) => !process.argv[2] || task.id === process.argv[2],
 );
 assert.ok(selected.length);
+const controls = selected.flatMap((task) => {
+  const fixed = repaired(task);
+  if (task.id === 'url-filters') {
+    fixed.judge = async (ctx) => {
+      const page = 'context' in ctx.view ? ctx.view : ctx.view.page();
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
+      await ctx.view.goto(new URL('issues?status=open&assignee=Deniz', ctx.previewUrl).href);
+      await page.getByRole('heading', { name: 'Issues', exact: true }).waitFor();
+      return task.judge(ctx);
+    };
+  }
+  if (task.id !== 'new-issue-form') return [fixed];
+  const source = fixed.files['src/pages/IssueList.tsx']!;
+  return [
+    fixed,
+    {
+      ...fixed,
+      id: `${task.id}-textarea`,
+      files: {
+        ...fixed.files,
+        'src/pages/IssueList.tsx': source.replace('<input required', '<textarea required'),
+      },
+    },
+    {
+      ...fixed,
+      id: `${task.id}-link`,
+      files: {
+        ...fixed.files,
+        'src/App.tsx': fixed.files['src/App.tsx']!.replace(
+          '<Route path="/issues/:id"',
+          '<Route path="/issues/new" element={<IssueList />} /><Route path="/issues/:id"',
+        ),
+        'src/pages/IssueList.tsx': source
+          .replace(
+            "import { useState } from 'react';",
+            "import { useState } from 'react';\nimport { Link, useLocation, useNavigate } from 'react-router-dom';",
+          )
+          .replace(
+            'const [creating, setCreating] = useState(false);',
+            "const creating = useLocation().pathname === '/issues/new'; const navigate = useNavigate();",
+          )
+          .replace(
+            '<button onClick={() => setCreating(true)}>New issue</button>',
+            '<Link to="/issues/new">New issue</Link>',
+          )
+          .replace('setCreating(false)', "navigate('/issues')"),
+      },
+    },
+  ];
+});
 const out = await mkdtemp(join(tmpdir(), 'rifty-bench-native-judges-'));
 try {
-  const report = await run(config, selected.map(repaired), ['local-reference'], out);
+  const report = await run(config, controls, ['local-reference'], out);
   console.log(
     JSON.stringify(
       {
@@ -94,9 +145,9 @@ try {
   );
   assert.deepEqual(
     report.runs.map(({ task, outcome }) => ({ task, outcome })),
-    selected.map((task) => ({ task: task.id, outcome: 'pass' })),
+    controls.map((task) => ({ task: task.id, outcome: 'pass' })),
   );
-  assert.equal(model.requests.length, selected.length * 2);
+  assert.equal(model.requests.length, controls.length * 2);
 } finally {
   await model.close();
 }

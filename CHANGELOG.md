@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Add three-lane coding-agent benchmark, live diagnostic artifacts and native project isolation; common form judges accept actual link/input/textarea workflows.
 - Add private headless Pi agent package and public-host browser proofs; enforce SDK/agent layer direction (ADR-0424).
 - Packed consumer fixture resolves multiple real dependency versions through its existing loopback registry and checks each lockfile resolution against tarball integrity.
 

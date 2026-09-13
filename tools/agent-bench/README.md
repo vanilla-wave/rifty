@@ -28,7 +28,7 @@ playground port5289; override `playgroundPort` in config.
 Tasks: fix-date-sort, add-search, url-filters, new-issue-form, node-endpoint.
 Node control is explicitly excluded from rifty-no-coi; full default matrix42 runs.
 
-- rifty: real launcher/+chat/settings/prompt entry, visible native terminal,
+- rifty: real launcher/+chat/settings/prompt entry, visible Agent terminal,
   editor/SCM/preview. Benchmark hooks only seed/task metadata/export. Ordinary
   workspace archives capture baseline/final bytes, including changes an agent commits.
 - rifty-no-coi: SDK/agent installed from first-party tarballs in an external
@@ -38,6 +38,8 @@ Node control is explicitly excluded from rifty-no-coi; full default matrix42 run
 - local-reference: fresh native npm/Node project, pinned Pi CLI0.85.1. Public
   extension hooks remove auth when omitted, admit tool budgets and abort deadlines.
   Native tools remain read/bash/edit/write; full actual provider prompts recorded.
+  Project lives outside the checkout even when reports live inside it; native
+  children omit inherited `NODE_PATH`. The retained workspace path is in the report.
 
 Smoke model reads the actual package.json and stops. Planted defects remain:
 `agentStatus: done` + `outcome: fail` is the expected baseline, with identical
@@ -60,4 +62,8 @@ pnpm exec tsx tools/agent-bench/tests/native-judge-controls.ts
 
 The external smoke observer checks28 actual provider requests/14 tool replies,
 shared policy text and common-judge actions inside real Playwright ZIPs. Positive
-controls execute ordinary repaired React/Hono programs through the same judges.
+controls execute seven ordinary repaired React/Hono programs through the same
+judges, including link entry and native required textarea variants.
+
+[Live42-run diagnostic](reports/summaries/2026-09-13-gpt-5.6-sol/README.md):
+original measurements, classified judge repairs, retained-source rechecks and traces.

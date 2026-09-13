@@ -1,5 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -391,3 +392,54 @@ for (const lane of ['rifty', 'rifty-no-coi', 'local-reference'] as const) {
     }
   });
 }
+
+test('native project cannot inherit checkout dependencies when reports live in the repository', async () => {
+  const out = resolve('tools/agent-bench/reports', `isolation-${randomUUID()}`);
+  await mkdir(out, { recursive: true });
+  const model = await agentModelServer([
+    [
+      {
+        name: 'bash',
+        args: {
+          command: `node -e "console.log('NATIVE_PROCESS:' + JSON.stringify({cwd:process.cwd(), executable:process.execPath})); try { console.log('LEAKED_CHECKOUT_PACKAGE:' + require.resolve('@riftydev/agent')); } catch (error) { if (error.code !== 'MODULE_NOT_FOUND') throw error; console.log('NATIVE_PROJECT_ISOLATED'); }"`,
+        },
+      },
+    ],
+    'Dependency boundary observed.',
+  ]);
+  const config = join(out, 'config.json');
+  await writeFile(
+    config,
+    JSON.stringify({ endpoint: { baseUrl: model.baseUrl, model: 'scripted' } }),
+  );
+  try {
+    const result = await cli(
+      [
+        'run',
+        '--lane',
+        'local-reference',
+        '--task',
+        'fix-date-sort',
+        '--runs',
+        '1',
+        '--config',
+        config,
+        '--output',
+        out,
+      ],
+      { NODE_PATH: resolve('node_modules') },
+    );
+    expect(result.code, result.output).toBe(0);
+    expect(model.requests).toHaveLength(2);
+    const resultMessages = model.requests[1]!.body.messages.filter(
+      (message) => message.role === 'tool',
+    );
+    expect(JSON.stringify(resultMessages)).toContain('NATIVE_PROJECT_ISOLATED');
+    const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
+    const workspace = report.runs[0]?.artifacts.workspace;
+    expect(workspace).toBeDefined();
+    expect(resolve(out, workspace!).startsWith(`${process.cwd()}/`)).toBe(false);
+  } finally {
+    await model.close();
+  }
+});

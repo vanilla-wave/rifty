@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { redact } from '../config.ts';
 import { readTree, writeTree } from '../files.ts';
@@ -15,12 +16,16 @@ import type { Input, Observation, Prepared } from './types.ts';
 
 export async function prepareLocal(input: Input): Promise<Prepared> {
   const { task, endpoint, config, dir, key } = input;
-  const workspace = join(dir, 'workspace');
+  const workspace = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-native-'));
+  const nativeEnv = { ...process.env };
+  // Package-manager launchers can inject checkout modules into every child Node process.
+  delete nativeEnv.NODE_PATH;
   const home = join(dir, 'pi-home');
   await mkdir(home, { recursive: true });
   await writeTree(workspace, task.files);
   const installed = await runOrThrow('npm', ['install', '--no-audit', '--no-fund'], {
     cwd: workspace,
+    env: nativeEnv,
     timeoutMs: 300000,
   });
   await writeFile(
@@ -51,7 +56,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
       task.node ? ['src/main.js'] : ['--host', '127.0.0.1', '--port', String(port), '--strictPort'],
       {
         cwd: workspace,
-        env: { ...process.env, PORT: String(port) },
+        env: { ...nativeEnv, PORT: String(port) },
         logPath: join(dir, 'dev-server.log'),
         detached: true,
       },
@@ -120,7 +125,7 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
           ],
           {
             cwd: workspace,
-            env: { ...process.env, PI_CODING_AGENT_DIR: home, PI_OFFLINE: '1', PI_TELEMETRY: '0' },
+            env: { ...nativeEnv, PI_CODING_AGENT_DIR: home, PI_OFFLINE: '1', PI_TELEMETRY: '0' },
             stdio: ['ignore', 'pipe', 'pipe'],
           },
         );
