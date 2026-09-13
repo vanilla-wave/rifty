@@ -98,3 +98,20 @@ failure reproduced once in isolation (163 expected, 164 actual). ADR-0432 adds
 `workbench-storage-layout.ts`; exact inventory updated, complete reachable-closure
 comparison unchanged. Three JSON files required repository formatting; parsed
 fixture/evidence data unchanged. No product/test/bundle ceiling increased.
+
+CI at `7df33326b` exposed 32 obsolete no-COI physical per-file carriers.
+Namespace/saved-access/build-fault failures reproduced in isolation. Current
+configured consumers use replica; standalone unconfigured preload remains per-file.
+Seeds and between-owner edits now use a fresh real replica Worker; custody hashes
+read committed native HEAD/segments independently. Quota/hold probes select the
+same logical entry from actual native segment bytes. Existing outcome assertions
+remain, including zero package-entry writes on cached install and Node stream parity.
+Targeted set: 46 PASS plus one fixture eval-scope error; corrected helper injection,
+then isolated dedup PASS including quota rejection and repair.
+
+CI's progress UI observation timed out; unchanged isolated case passed. It now
+holds a real Vite-package segment write until the existing text/count/geometry
+assertions finish, checks the hold was reached, releases, and checks settlement.
+Actual application state is observed throughout; no synthetic progress. PASS.
+Hosted webpack launcher timeout did not reproduce unchanged in isolation; no
+product repair claimed. Final CI still required.

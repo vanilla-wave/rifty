@@ -4,7 +4,6 @@ export interface NativeReplicaRecord {
   readonly kind: 'dir' | 'file' | 'delete';
   readonly bytes?: Uint8Array<ArrayBuffer>;
 }
-const decoder = new TextDecoder();
 
 export async function nativeWriteBytes(
   data: FileSystemWriteChunkType,
@@ -19,6 +18,7 @@ export async function nativeWriteBytes(
 }
 
 export function nativeSegmentRecords(bytes: Uint8Array): readonly NativeReplicaRecord[] {
+  const decoder = new TextDecoder();
   if (decoder.decode(bytes.subarray(0, 8)) !== 'RIFTYRP1')
     throw new Error('Unknown native segment');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -49,6 +49,27 @@ export function nativeSegmentRecords(bytes: Uint8Array): readonly NativeReplicaR
         }
       : {}),
   }));
+}
+
+/** Hook only actual native segment writes; the caller selects logical records. */
+export function observeNativeReplicaWrites(
+  visit: (records: readonly NativeReplicaRecord[]) => void | Promise<void>,
+): () => void {
+  const createWritable = FileSystemFileHandle.prototype.createWritable;
+  FileSystemFileHandle.prototype.createWritable = async function (...args) {
+    const writer = await Reflect.apply(createWritable, this, args);
+    if (this.name.startsWith('segment-') && this.name.endsWith('.bin')) {
+      const write = writer.write.bind(writer);
+      writer.write = async (data) => {
+        await visit(nativeSegmentRecords(await nativeWriteBytes(data)));
+        return write(data);
+      };
+    }
+    return writer;
+  };
+  return () => {
+    FileSystemFileHandle.prototype.createWritable = createWritable;
+  };
 }
 
 export async function nativeReplicaEntries(

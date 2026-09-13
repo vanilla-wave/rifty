@@ -1,17 +1,20 @@
 /// <reference lib="webworker" />
+import { observeNativeReplicaWrites } from '../../browser-unit/fixtures/native-replica-observer.ts';
 declare const self: DedicatedWorkerGlobalScope;
 
 const fault = new URL(import.meta.url).searchParams.get('fault');
-const createWritable = FileSystemFileHandle.prototype.createWritable;
-FileSystemFileHandle.prototype.createWritable = function (...args) {
-  if (this.name === 'index.js') {
+observeNativeReplicaWrites(async (records) => {
+  if (
+    records.some(
+      (record) => record.kind === 'file' && record.path === '/project/node_modules/ms/index.js',
+    )
+  ) {
     if (fault === 'quota')
-      return Promise.reject(new DOMException('snapshot native quota probe', 'QuotaExceededError'));
+      throw new DOMException('snapshot native quota probe', 'QuotaExceededError');
     if (fault === 'hold') {
       self.postMessage({ type: 'snapshot-native-held' });
-      return new Promise<FileSystemWritableFileStream>(() => {});
+      await new Promise<void>(() => {});
     }
   }
-  return Reflect.apply(createWritable, this, args);
-};
+});
 await import('../../../packages/workbench/src/workers/no-coi-toolchain-worker.ts');

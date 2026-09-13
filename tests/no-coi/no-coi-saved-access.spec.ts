@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { accessNativeReplica, encoded } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 for (const state of ['missing', 'pending', 'legacy', 'corrupt-lock', 'missing-lock'] as const) {
@@ -9,48 +10,25 @@ for (const state of ['missing', 'pending', 'legacy', 'corrupt-lock', 'missing-lo
         requests.push(request.url());
     });
     await page.goto('/no-coi-harness.html');
+    const files: Record<string, readonly number[]> = {
+      '/project/local.cjs': encoded('module.exports = 6 * 7;'),
+      '/project/package.json': encoded('{"name":"saved-access","dependencies":{"absent":"1.0.0"}}'),
+    };
+    if (state !== 'missing-lock')
+      files['/project/package-lock.json'] = encoded(
+        state === 'corrupt-lock' ? '{broken' : '{"lockfileVersion":3,"packages":{}}',
+      );
+    if (state === 'pending' || state === 'legacy')
+      files['/project/node_modules/.rifty-install-stamp.json'] = encoded(
+        JSON.stringify({
+          version: state === 'legacy' ? 3 : 4,
+          durability: 'pending',
+          epoch: 'interrupted',
+        }),
+      );
+    await accessNativeReplica(page, { namespace: 'saved-access', files });
     const result = await page.evaluate(
-      async ({ root, state }) => {
-        const namespace = await (await navigator.storage.getDirectory()).getDirectoryHandle(
-          'saved-access',
-          { create: true },
-        );
-        const project = await namespace.getDirectoryHandle('project', { create: true });
-        const write = async (
-          directory: FileSystemDirectoryHandle,
-          name: string,
-          content: string,
-        ) => {
-          const writer = await (
-            await directory.getFileHandle(name, { create: true })
-          ).createWritable();
-          await writer.write(content);
-          await writer.close();
-        };
-        await write(project, 'local.cjs', 'module.exports = 6 * 7;');
-        await write(
-          project,
-          'package.json',
-          '{"name":"saved-access","dependencies":{"absent":"1.0.0"}}',
-        );
-        if (state !== 'missing-lock')
-          await write(
-            project,
-            'package-lock.json',
-            state === 'corrupt-lock' ? '{broken' : '{"lockfileVersion":3,"packages":{}}',
-          );
-        if (state === 'pending' || state === 'legacy') {
-          const dependencies = await project.getDirectoryHandle('node_modules', { create: true });
-          await write(
-            dependencies,
-            '.rifty-install-stamp.json',
-            JSON.stringify({
-              version: state === 'legacy' ? 3 : 4,
-              durability: 'pending',
-              epoch: 'interrupted',
-            }),
-          );
-        }
+      async ({ root }) => {
         const fixture = await import(`/@fs${root}/tests/no-coi/fixtures/no-coi-snapshot-page.ts`);
         await fixture.boot(
           `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
