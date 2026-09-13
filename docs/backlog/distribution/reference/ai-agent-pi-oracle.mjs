@@ -89,7 +89,7 @@ async function recovery(effects, via) {
       model,
       systemPrompt: 'Never repeat a completed write.',
       tools: [
-        tool(async (id, params, signal, onUpdate) => {
+        tool(async (id, params, _signal, onUpdate) => {
           writes++;
           await effects.write(name, params.text);
           onUpdate?.({ content: text('write completed'), details: { phase: 'written' } });
@@ -100,7 +100,7 @@ async function recovery(effects, via) {
         }),
       ],
     },
-    streamFn: (selected, context, options) => {
+    streamFn: (_selected, context, _options) => {
       requests.push(copy(context));
       if (requests.length === 1) return response(assistant([call('call_write')], 'toolUse'));
       if (requests.length === 2)
@@ -156,7 +156,7 @@ async function abortTool(effects, preserveErrorDetails) {
   const ready = new Promise((resolve) => {
     started = resolve;
   });
-  const active = tool(async (id, params, signal) => {
+  const active = tool(async (_id, _params, signal) => {
     activeSignal = signal;
     await effects.write(`abort-${preserveErrorDetails}`, 'started');
     started();
@@ -180,11 +180,11 @@ async function abortTool(effects, preserveErrorDetails) {
     toolExecution: 'sequential',
     ...(preserveErrorDetails
       ? {
-          afterToolCall: async (context, signal) =>
+          afterToolCall: async (_context, signal) =>
             signal?.aborted ? { isError: true } : undefined,
         }
       : {}),
-    streamFn: (selected, context, options) => {
+    streamFn: (_selected, context, options) => {
       requests.push({ signalAborted: options.signal.aborted, context: copy(context) });
       if (options.signal.aborted) return response(assistant([], 'aborted', 'Operation aborted'));
       if (requests.length === 1)
@@ -257,7 +257,7 @@ async function ignoresAbort() {
         }),
       ],
     },
-    streamFn: (selected, context, options) => {
+    streamFn: (_selected, _context, options) => {
       requestCount++;
       if (options.signal.aborted) return response(assistant([], 'aborted', 'Operation aborted'));
       return response(assistant([call('call_slow')], 'toolUse'));
@@ -392,7 +392,7 @@ async function openAIRecovery(effects) {
       model,
       systemPrompt: 'Integrator instructions',
       tools: [
-        tool(async (id, params) => {
+        tool(async (_id, params) => {
           writes++;
           await effects.write('openai-recovery', params.text);
           return { content: text('committed:openai-written'), details: { worker: 'retained' } };
