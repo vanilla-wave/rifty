@@ -153,3 +153,42 @@ Followup historical BLOCK /tmp/pr333-bench-final-review-judge-followup.json is v
 (blockers.mjs exit1). It names the in-flight verification tree and intentionally has
 no clean SHA/PASS claim. F1–F3 original BLOCK stays unchanged. Current final committed
 source/URL fix and full diagnostic classification still await verification.
+
+## Final unit verification — f5ff8b8484af6575d5761afd94c75f98cfda2da1
+
+Tree clean. Whole diff from accepted UI BASE remains the reviewed benchmark/support
+unit.34292 added only the observed native-isolation/judge repairs and their honest
+artifacts; final f5ff changed NODE_PATH omission from delete to undefined and removed
+only each isolation test's own generated report directory. Native actual isolation
+carrier remains GREEN with explicitly injected checkout NODE_PATH. Three formatted
+JSON artifacts independently deep-equal34292; no observation or criterion changed.
+
+Read raw final gates:
+- /tmp/pr333-pr-check-delivery.log:25/25 PASS (test:run188.0s, parity60.5s); no hidden
+  isolated reruns/timeouts or lane exceptions.
+- /tmp/pr333-bench-contract-final.log:12/12 PASS,10.7m;14 real all-three smoke runs,
+  shared provider requests/judge actions, budgets, privacy/provider faults/isolation.
+- /tmp/pr333-native-isolation-cleanup-green.log:current final representation/cleanup
+  test1PASS11.2s; /tmp/pr333-native-judges-settled-green.log:7 native controlsPASS.
+
+Independent artifact audit /tmp/pr333-bench-review-artifact-seal.log:
+42 bundled trace/before/after records deep-equal raw live sources;210 original file
+sizes/SHA256 match; all live provider requests use declared model/common policy.
+Gzip SHA256501a2feccc1440c287abcb2de37362a396df41498f42ce7ccc35b7ab15bb8e8b.
+Original38/42 and audited42/42 differ in precisely four outcome/judge/class/note
+rows; original metrics/usage/source/diffs unchanged. Embedded native replay records
+exactly equal my independent outputs; current judge hashes match. Parent's actual
+COI rejudge script read: public src-only seed, ordinary Reload preview/new Frame,
+actual common judge and source byte assertions; no agent.run/send/model request.
+
+Measurement presentation is honest: raw and audited counts, four task-bad repairs,
+no model retries, version/context caveats and slow native outliers remain explicit.
+Existing baseline ceilings are named; no accepted product obligation deferred.
+F1–F5 FIX verified; historical original/F4 BLOCKs preserved with raw evidence.
+
+Final unit JSON /tmp/pr333-bench-final-review.json:35/35 coverage,8 axesPASS,
+zero findings/unit residuals; blockers.mjs exit0. reviewed_sha remains f5ff8b8484af6575d5761afd94c75f98cfda2da1.
+Goal flag remainsfalse while map still links the benchmark child; driver RECHART/CLOSE
+and docs-only closure review next. Prior accepted core/no-COI/UI proof reused perREV1,
+with current unchanged default prompt, repaired installation snapshots and actual
+three-lane/live proof covering changed dependencies.
