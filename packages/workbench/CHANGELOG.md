@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Stabilize resident ownership fault fixtures against delayed host admission; retain native foreign-loader checks.
+
+
 - Refresh dependency artifact identity for Vite root-URL preparation; root projects retain live React component updates (ADR-0433).
 
 - Saved-toolchain and Node-entry adapter preparation carry the live cwd and event-loop refs (ADR-0421).
