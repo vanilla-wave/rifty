@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
@@ -441,5 +441,6 @@ test('native project cannot inherit checkout dependencies when reports live in t
     expect(resolve(out, workspace!).startsWith(`${process.cwd()}/`)).toBe(false);
   } finally {
     await model.close();
+    await rm(out, { recursive: true, force: true });
   }
 });

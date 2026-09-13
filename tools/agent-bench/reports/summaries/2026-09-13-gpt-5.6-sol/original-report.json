@@ -21,9 +21,7 @@
     },
     "runsPerTask": 3,
     "toolContextCaveat": "Tool/context non-equivalence: shared model, Pi version and common policy do not isolate an environment-only effect. Native CLI has read/bash/edit/write and native shell; browser hosts expose their real capabilities. Full provider prompts and tool schemas are retained per run.",
-    "unsupported": [
-      "rifty-no-coi/node-endpoint: installed-bin resident preview only"
-    ]
+    "unsupported": ["rifty-no-coi/node-endpoint: installed-bin resident preview only"]
   },
   "runs": [
     {
@@ -49,20 +47,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -107,20 +93,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -165,20 +139,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -223,20 +185,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -281,20 +231,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -339,20 +277,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -484,20 +410,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -630,20 +544,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -776,20 +678,8 @@
             "name": "five newest calendar dates first",
             "pass": true,
             "evidence": {
-              "actual": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ],
-              "expected": [
-                25,
-                24,
-                23,
-                22,
-                21
-              ]
+              "actual": [25, 24, 23, 22, 21],
+              "expected": [25, 24, 23, 22, 21]
             }
           }
         ]
@@ -835,12 +725,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -907,12 +793,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -979,12 +861,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -1051,12 +929,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -1123,12 +997,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -1195,12 +1065,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -1384,12 +1250,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -1544,12 +1406,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -1734,12 +1592,8 @@
             "name": "case insensitive title search while typing",
             "pass": true,
             "evidence": {
-              "upper": [
-                6
-              ],
-              "lower": [
-                6
-              ]
+              "upper": [6],
+              "lower": [6]
             }
           },
           {
@@ -1809,13 +1663,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                1,
-                6,
-                10,
-                16,
-                21
-              ]
+              "selected": [1, 6, 10, 16, 21]
             }
           },
           {
@@ -1826,13 +1674,7 @@
                 "status": "all",
                 "assignee": "Mara"
               },
-              "restored": [
-                1,
-                6,
-                10,
-                16,
-                21
-              ]
+              "restored": [1, 6, 10, 16, 21]
             }
           }
         ]
@@ -1884,9 +1726,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                6
-              ]
+              "selected": [6]
             }
           },
           {
@@ -1897,9 +1737,7 @@
                 "status": "closed",
                 "assignee": "Mara"
               },
-              "restored": [
-                6
-              ]
+              "restored": [6]
             }
           }
         ]
@@ -1951,9 +1789,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                6
-              ]
+              "selected": [6]
             }
           },
           {
@@ -1964,9 +1800,7 @@
                 "status": "closed",
                 "assignee": "Mara"
               },
-              "restored": [
-                6
-              ]
+              "restored": [6]
             }
           }
         ]
@@ -2018,9 +1852,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                6
-              ]
+              "selected": [6]
             }
           },
           {
@@ -2031,9 +1863,7 @@
                 "status": "closed",
                 "assignee": "Mara"
               },
-              "restored": [
-                6
-              ]
+              "restored": [6]
             }
           }
         ]
@@ -2085,9 +1915,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                6
-              ]
+              "selected": [6]
             }
           },
           {
@@ -2098,9 +1926,7 @@
                 "status": "closed",
                 "assignee": "Mara"
               },
-              "restored": [
-                6
-              ]
+              "restored": [6]
             }
           }
         ]
@@ -2152,9 +1978,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                6
-              ]
+              "selected": [6]
             }
           },
           {
@@ -2165,9 +1989,7 @@
                 "status": "closed",
                 "assignee": "Mara"
               },
-              "restored": [
-                6
-              ]
+              "restored": [6]
             }
           }
         ]
@@ -2336,9 +2158,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                6
-              ]
+              "selected": [6]
             }
           },
           {
@@ -2349,9 +2169,7 @@
                 "status": "closed",
                 "assignee": "Mara"
               },
-              "restored": [
-                6
-              ]
+              "restored": [6]
             }
           }
         ]
@@ -2506,9 +2324,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                6
-              ]
+              "selected": [6]
             }
           },
           {
@@ -2519,9 +2335,7 @@
                 "status": "closed",
                 "assignee": "Mara"
               },
-              "restored": [
-                6
-              ]
+              "restored": [6]
             }
           }
         ]
@@ -2706,9 +2520,7 @@
             "evidence": {
               "statusChangedAddress": true,
               "assigneeChangedAddress": true,
-              "selected": [
-                6
-              ]
+              "selected": [6]
             }
           },
           {
@@ -2719,9 +2531,7 @@
                 "status": "closed",
                 "assignee": "Mara"
               },
-              "restored": [
-                6
-              ]
+              "restored": [6]
             }
           }
         ]

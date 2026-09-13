@@ -17,9 +17,8 @@ import type { Input, Observation, Prepared } from './types.ts';
 export async function prepareLocal(input: Input): Promise<Prepared> {
   const { task, endpoint, config, dir, key } = input;
   const workspace = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-native-'));
-  const nativeEnv = { ...process.env };
   // Package-manager launchers can inject checkout modules into every child Node process.
-  delete nativeEnv.NODE_PATH;
+  const nativeEnv = { ...process.env, NODE_PATH: undefined };
   const home = join(dir, 'pi-home');
   await mkdir(home, { recursive: true });
   await writeTree(workspace, task.files);
