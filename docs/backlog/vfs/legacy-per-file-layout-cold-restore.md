@@ -6,7 +6,7 @@ created: 2026-09-01
 why: slice A moves the workbench store to a new versioned namespace so the per-file layout is never read again; nothing yet tells the user that projects persisted before the switch were not carried over, and their bytes stay in OPFS uncounted
 user_story: As a developer reopening the playground after the format switch, I want to be told once that projects saved under the previous storage layout are gone and why, but today the catalog would simply be empty and the old bytes would sit in OPFS with no explanation.
 epic: fast-project-open-reopen
-blocked_by: [vfs/segmented-opfs-replica]
+blocked_by: []
 sources: [docs/adr/playground/0165-multi-project-management-with-durable-scratch.md, docs/adr/playground/0286-workspace-archives-round-trip-observable-git-and-nested-dot-rifty-state.md, docs/backlog/vfs/storage-pressure-and-eviction-ux.md]
 code: [packages/workbench/src/workbench/project-materialization.ts, packages/workbench/src/workers/workbench-project-store.ts, packages/workbench/src/workbench/health.ts, packages/workbench/src/workers/playground-project-authority.ts]
 ---
