@@ -7,7 +7,6 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import {
   type IDisposable,
-  type ILinkHandler,
   type IMarker,
   type ITerminalAddon,
   type ITerminalOptions,
@@ -20,6 +19,14 @@ import { isEditRedoKey } from './edit-redo-keys.ts';
 import { type KeyEvent, classifyKey } from './keys.ts';
 import { extractOsc52Writes } from './osc52.ts';
 import type { TerminalStream } from './types.ts';
+
+import {
+  type TerminalWebLinksOptions,
+  createOsc8LinkHandler,
+  openTerminalLink,
+  webLinksOptions,
+} from './terminal-links.ts';
+export type { TerminalWebLinksOptions } from './terminal-links.ts';
 
 const ANSI_RED = '\x1b[31m';
 const ANSI_GREY = '\x1b[90m';
@@ -131,43 +138,6 @@ export type TerminalRawInput = string | Uint8Array;
 export interface TerminalBusyInputEvent {
   readonly data: TerminalRawInput;
   readonly binary: boolean;
-}
-
-export interface TerminalWebLinksOptions {
-  /** Require Ctrl/Cmd when opening a detected URL. Defaults to true. */
-  readonly requireModifier?: boolean;
-  /** Host-owned opener. Defaults to `window.open(uri, '_blank', 'noopener,noreferrer')`. */
-  readonly onLink?: (uri: string, event: MouseEvent) => void;
-}
-
-function webLinksOptions(
-  webLinks: boolean | TerminalWebLinksOptions | undefined,
-): TerminalWebLinksOptions {
-  return typeof webLinks === 'object' ? webLinks : {};
-}
-
-function shouldOpenTerminalLink(event: MouseEvent, options: TerminalWebLinksOptions): boolean {
-  return !(options.requireModifier ?? true) || event.ctrlKey || event.metaKey;
-}
-
-function openTerminalLink(uri: string, event: MouseEvent, options: TerminalWebLinksOptions): void {
-  if (!shouldOpenTerminalLink(event, options)) return;
-  if (options.onLink) {
-    options.onLink(uri, event);
-    return;
-  }
-  globalThis.window?.open(uri, '_blank', 'noopener,noreferrer');
-}
-
-function createOsc8LinkHandler(
-  webLinks: boolean | TerminalWebLinksOptions | undefined,
-): ILinkHandler | null {
-  if (webLinks === false) return null;
-  const options = webLinksOptions(webLinks);
-  return {
-    allowNonHttpProtocols: Boolean(options.onLink),
-    activate: (event, text) => openTerminalLink(text, event, options),
-  };
 }
 
 export interface TerminalSearchAddonOptions {
@@ -734,6 +704,14 @@ export class RiftyTerminal {
   async submitLine(line?: string): Promise<void> {
     if (line != null) this.replaceLine(line);
     await this.handleEnter();
+  }
+
+  /** Present an externally owned command through the ordinary echo/input/busy lifetime. */
+  async executeLine(line: string, execute: TerminalInputHandler): Promise<TerminalInputResult> {
+    if (this.disposed) throw new Error('Terminal is disposed');
+    if (this.busy) throw new Error('Terminal input is busy');
+    this.replaceLine(line);
+    return this.executeBuffer(execute);
   }
 
   findNext(term: string, options: TerminalSearchOptions = {}): boolean {
@@ -1435,6 +1413,10 @@ export class RiftyTerminal {
   }
 
   private async handleEnter(): Promise<void> {
+    await this.executeBuffer(this.opts.onInput);
+  }
+
+  private async executeBuffer(execute: TerminalInputHandler): Promise<TerminalInputResult> {
     this.applyRewriteAtCursor();
     if (this.opts.inputValidator?.(this.buffer, this.cursorPos) === 'incomplete') {
       this.insertPrintable('\n');
@@ -1460,11 +1442,15 @@ export class RiftyTerminal {
     }
     this.busy = true;
     try {
-      const exitCode = await this.opts.onInput(line);
+      const exitCode = await execute(line);
       this.finishCommandBlock(block, typeof exitCode === 'number' ? exitCode : undefined);
+      return typeof exitCode === 'number' ? exitCode : undefined;
+    } catch (error) {
+      this.finishCommandBlock(block, undefined);
+      throw error;
     } finally {
       this.busy = false;
-      this.writePrompt();
+      if (!this.disposed) this.writePrompt();
     }
   }
 
@@ -1485,7 +1471,7 @@ export class RiftyTerminal {
     block: MutableCommandBlock | null,
     exitCode: number | undefined,
   ): void {
-    if (!block) return;
+    if (!block || this.disposed) return;
     block.exitCode = exitCode;
     block.endMarker = this.term.registerMarker(0);
     if (exitCode == null) {

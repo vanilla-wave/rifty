@@ -14,3 +14,15 @@ The browser-side playground for rifty. SolidJS + Monaco + xterm.js.
 
 - `solid-js` is a hard-isolated dep: no other package in `packages/` may import it (D-002, enforced by Biome).
 - No external CDN deps — everything must come from the same origin for `COEP: credentialless` to keep working.
+
+## Chat
+
+Open a starter, then **+chat**. Set an OpenAI-compatible Base URL and model in
+Settings. API key is optional and memory-only; only endpoint/model survive reload.
+The agent edits the current project's files and uses a visible **Agent** terminal.
+Stop retains results; Reset, Close, project switch and Apply settings start fresh
+conversations without reverting files. Export session downloads the trace/diff.
+
+For an endpoint blocked by browser CORS, run dev with
+`RIFTY_AI_PROXY_TARGET=http://localhost:<port> pnpm dev` and set Base URL to
+`/ai-proxy/v1`. This proxy exists only in the development server.

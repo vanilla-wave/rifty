@@ -1,0 +1,39 @@
+{
+  "status": "done",
+  "url": "http://localhost:5288/issues?search=DARK&status=closed&assignee=Mara",
+  "search": "DARK",
+  "statusFilter": "closed",
+  "assignee": "Mara",
+  "restored": true,
+  "selected": 2,
+  "src": "/preview/5174/",
+  "before": "Trackline\nDashboard\nIssues\nSettings\nIssues\nSearch titles\nStatus\nAll\nopen\nin-progress\nresolved\nclosed\nAssignee\nAll\nMara\nDeniz\nKofi\nPriya\nTomas\nClear\n\n1 of 25 issues\n\n#6\nClosed\nDark mode: table stripes are unreadable\nMara\n2025-9-14\nbug\nui\na11y",
+  "requests": 16,
+  "usage": {
+    "input": 187620,
+    "output": 4630,
+    "totalTokens": 241274
+  },
+  "endpoint": "http://127.0.0.1:10530/v1",
+  "model": "gpt-5.6-sol",
+  "prompt": "Add case-insensitive title search to the Issues page. Persist search, status and assignee filters in the URL so a reload restores them. Preserve the existing tracker UI. Inspect the project first, implement the change, run its build, and use the available preview tools to verify the actual page. Do not start another dev server.",
+  "authorizationHeaders": 0,
+  "profile": "pi-0.85.1+rifty-adapter-v1",
+  "config": {
+    "baseUrl": "http://127.0.0.1:10530/v1",
+    "model": "gpt-5.6-sol",
+    "maxToolCalls": 100,
+    "runTimeoutMs": 600000
+  },
+  "timings": [
+    {
+      "startedAt": 1789260477446,
+      "endedAt": 1789260634119
+    }
+  ],
+  "toolResults": 35,
+  "exportSha256": "8e4ab7758c0f7e0760fb2c9e815d7b36035a8026c2aa50d48ac51cee53555dc6",
+  "exportBytes": 11451806,
+  "exportArtifact": "ai-mode-chat-live-trace.json.gz",
+  "screenshot": "ai-mode-chat-live.png"
+}

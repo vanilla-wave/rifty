@@ -66,6 +66,7 @@ const CHOKIDAR_DIR_ENTRY_CALL_SITE = [
   '  }',
   '}',
   'globalThis.__riftyTestDirEntry = TestDirEntry;',
+  'function normalizedId(root, resolved) { return resolved.id.slice(root.length); }',
 ].join('\n');
 
 interface TestGlobals {
@@ -266,6 +267,23 @@ describe('prepareViteCliAcquisitionFiles — rooted Chokidar catalog', () => {
       /expected exactly one Chokidar DirEntry\.add anchor; found 0/,
     );
   });
+});
+
+it('trusted Vite entry refuses a tree whose URL preparation was lost', async () => {
+  const fs = bootFs({ [CLI_PATH]: CAC_CALL_SITE });
+  await prepareViteCliAcquisitionFiles('/app');
+  fs.writeFileSync(
+    CONFIG_PATH,
+    new TextEncoder().encode(
+      readText(fs, CONFIG_PATH).replace(
+        'resolved.id.slice(root === "/" ? 0 : root.length)',
+        'resolved.id.slice(root.length)',
+      ),
+    ),
+  );
+  await expect(
+    prepareViteCli({ root: '/app', executedBinPath: VITE_BIN, mode: 'info' }),
+  ).rejects.toThrow('vite root watcher/URL must be prepared by acquisition');
 });
 
 describe('Vite action keepalive admission', () => {

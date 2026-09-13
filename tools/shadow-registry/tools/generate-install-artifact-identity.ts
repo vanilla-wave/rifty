@@ -7,6 +7,7 @@ import { builtinShadowSubstitutionCatalog } from '../src/internal/index.ts';
 import { emnapiCoreOrphanedReferencePatchPolicy } from '../src/runtime/emnapi-core-install-policy.ts';
 import {
   viteCliActionPatchPolicy,
+  viteRootUrlPatchPolicy,
   viteRootWatchPatchPolicy,
 } from '../src/runtime/vite-cli-install-policy.ts';
 
@@ -65,6 +66,7 @@ export async function buildInstallArtifactRecipe() {
     emnapiCoreOrphanedReferencePatch: emnapiCoreOrphanedReferencePatchPolicy,
     viteCliActionPatch: viteCliActionPatchPolicy,
     viteRootWatchPatch: viteRootWatchPatchPolicy,
+    viteRootUrlPatch: viteRootUrlPatchPolicy,
     esbuildRuntimePolicy: identityPolicyProjection(await readJson(policyUrl)),
     esbuildRuntimeOutput: await readRuntimeOutputIdentity(),
   };

@@ -38,3 +38,26 @@ export function applyViteRootWatchPatch(source: string): string {
   }
   return source.replace(viteRootWatchPatchPolicy.needle, viteRootWatchPatchPolicy.replacement);
 }
+
+/** Vite strips the leading slash when its project root is the filesystem root. */
+export const viteRootUrlPatchPolicy = {
+  needle: 'resolved.id.slice(root.length)',
+  replacement: 'resolved.id.slice(root === "/" ? 0 : root.length)',
+} as const;
+
+export function viteRootUrlPatchApplied(source: string): boolean {
+  return source.includes(viteRootUrlPatchPolicy.replacement);
+}
+
+/** Preserve ordinary module URLs, including the single React Refresh module identity. */
+export function applyViteRootUrlPatch(source: string): string {
+  const original = source.split(viteRootUrlPatchPolicy.needle).length - 1;
+  const prepared = source.split(viteRootUrlPatchPolicy.replacement).length - 1;
+  if (original + prepared !== 1)
+    throw new Error(
+      `vite root URL patch failed: expected exactly one resolved-id root slice; found ${original + prepared}`,
+    );
+  return prepared
+    ? source
+    : source.replace(viteRootUrlPatchPolicy.needle, viteRootUrlPatchPolicy.replacement);
+}

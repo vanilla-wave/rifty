@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Refresh dependency artifact identity for Vite root-URL preparation; root projects retain live React component updates (ADR-0433).
+
 - Saved-toolchain and Node-entry adapter preparation carry the live cwd and event-loop refs (ADR-0421).
 
 - Remove completed Node command process/stdio listeners before admitting the next command (ADR-0422).

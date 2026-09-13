@@ -41,8 +41,8 @@ import { fileURLToPath } from 'node:url';
 export const ALLOWLIST = [
   {
     file: 'apps/playground/src/App.test.ts',
-    count: 40,
-    digest: 'f4aaffe99107',
+    count: 39,
+    digest: '01224c09cbc1',
     why: 'browser App imports xterm; residual pins only client JSX/composition bindings, including admitted Workbench handoff and persistence-risk beforeunload wiring; semantic lifecycle and diagnostics behavior lives in adapter contracts + browser e2e',
   },
   {

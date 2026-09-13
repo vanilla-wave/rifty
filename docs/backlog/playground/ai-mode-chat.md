@@ -106,6 +106,8 @@ Raw source decisions remain in the goal's refine/FIT evidence.
 
 ## Decisions
 
+ready-verdict: 2026-09-13 — Contract+RED @ d33b8de82a7ceeb26f749a627e33473bedab0774
+- 2026-09-13 — fresh /root/ui_contract_review: 15/15 coverage, no blockers; three proof concerns retained for GREEN (late lifecycle, expanded results, lazy graph); same raw JSON in `reference/ai-mode-chat-contract-red.json`.
 - 2026-09-12 — PICKUP: reuse final-checked goal/source frontier and unchanged premise; ADR-0427 binds current public hosts and existing terminal UI owner. Close follows PR-111 unmount/dispose; Stop retains history; endpoint/model-only persistence follows the user's amendment.
 - 2026-09-12 — preparation/evidence and executed RED: `docs/backlog/playground/reference/ai-mode-chat-evidence.md`; per-session limit controls expose the already-delivered core limits, never persist them.
 - 2026-09-12 — e2e (CI, no real model): mock OpenAI-compatible streaming endpoint → send message → agent writes a file + runs a shell line → both tool calls visible → file visible in editor/preview → exported trace holds transcript, tool calls, diff.

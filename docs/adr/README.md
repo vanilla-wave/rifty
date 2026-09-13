@@ -173,6 +173,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
 | 0384 | Registry ownership of bundled guest-package adaptations |
 | 0399 | Preserve declared companion policy through retained-lock acquisition |
+| 0433 | Preserve Vite module URLs at the filesystem root |
 
 ### playground
 
@@ -226,6 +227,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0415 | Open saved projects independently of installation proof |
 | 0416 | Optional Workbench SQLite deployment asset |
 | 0427 | Lazy chat over the public Pi agent session |
+| 0430 | Refresh clean editor captures from public owner writes |
 
 ### toolchain-build
 
@@ -309,6 +311,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0225 | Cross-realm PTY resize control plane |
 | 0230 | Owner PTY stdin pump for supervised Node children |
 | 0264 | Owner-acknowledged idle PTY dimensions |
+| 0431 | Present owned commands through the existing input lifetime |
 
 ### distribution
 

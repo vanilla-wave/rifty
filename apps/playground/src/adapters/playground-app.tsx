@@ -7,7 +7,6 @@ import {
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import type { ProjectTerminalSnapshot } from '@riftydev/workbench';
 import type {
-  PlaygroundCatalogSnapshot,
   PlaygroundPreview,
   PlaygroundProjectPlan,
   PlaygroundScmSnapshot,
@@ -23,7 +22,7 @@ import { CommandPalette, type PaletteItem } from '../components/CommandPalette.t
 import { DegradedBanner } from '../components/DegradedBanner.tsx';
 import { FileExplorer, type FileExplorerMutations } from '../components/FileExplorer.tsx';
 import { Launcher } from '../components/Launcher.tsx';
-import { PreviewPanel } from '../components/PreviewPanel.tsx';
+import { PreviewPanel, type PreviewPanelTarget } from '../components/PreviewPanel.tsx';
 import { ProjectDialogs } from '../components/ProjectDialogs.tsx';
 import { ProjectSwitcherChip } from '../components/ProjectSwitcherChip.tsx';
 import type { RowAction } from '../components/ProjectsTab.tsx';
@@ -43,6 +42,7 @@ import {
   storageModeFromBoot,
   workspaceSaveMessage,
 } from '../glue/degraded-storage.ts';
+import { downloadBlob, projectFileName } from '../glue/download.ts';
 import { looksBinary } from '../glue/fs-ops.ts';
 import { initialEditorFilesForPreset } from '../glue/initial-editor-files.ts';
 import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from '../glue/launcher-prefs.ts';
@@ -55,7 +55,7 @@ import {
   shouldOpenInstantProjectChoice,
 } from '../glue/project-boot-policy.ts';
 import { scratchDisplayName } from '../glue/project-display-name.ts';
-import type { ActiveId, ProjectIndex } from '../glue/project-index.ts';
+import type { ActiveId } from '../glue/project-index.ts';
 import { withProjectOpenProgress } from '../glue/project-open-progress.ts';
 import type { ScmResourceRow } from '../glue/scm-status.ts';
 import type { StarterGroup } from '../glue/starter.ts';
@@ -80,7 +80,10 @@ import {
 } from './playground-app-runtime.ts';
 import { rebindAfterPlaygroundTransitionFailure } from './playground-app-transition-recovery.ts';
 import { createPlaygroundAppWorkbenchOwnership } from './playground-app-workbench-ownership.ts';
+import { catalogIndex } from './playground-catalog-view.ts';
 import { createDelayedCatalogDelete } from './playground-delete-policy.ts';
+import { bindPlaygroundEditorOwner } from './playground-editor-owner.ts';
+import { warmEditorStack } from './playground-editor-warmup.ts';
 import { PlaygroundHealthBanner, createPlaygroundHealthUi } from './playground-health-ui.tsx';
 import { toPlaygroundProjectPlan } from './playground-project-plan.ts';
 import {
@@ -110,42 +113,12 @@ import { useMode } from './useMode.ts';
 const EditorHost = lazy(() =>
   import('../components/EditorHost.tsx').then((module) => ({ default: module.EditorHost })),
 );
-
-let editorStackWarm: Promise<unknown> | undefined;
-function warmEditorStack(): void {
-  if (editorStackWarm !== undefined) return;
-  editorStackWarm = Promise.all([
-    import('../components/EditorHost.tsx'),
-    import('../glue/ts-ls-monaco-providers.ts'),
-  ]).catch((error: unknown) => {
-    editorStackWarm = undefined;
-    console.warn('[editor] lazy stack warm failed', error);
-  });
-}
+const AiChatPanel = lazy(() =>
+  import('../ai/AiChatPanel.tsx').then((module) => ({ default: module.AiChatPanel })),
+);
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-function catalogIndex(snapshot: PlaygroundCatalogSnapshot, hiddenProjectId?: string): ProjectIndex {
-  return {
-    activeId: snapshot.active?.kind === 'project' ? snapshot.active.id : ('scratch' as const),
-    scratch:
-      snapshot.scratch === null
-        ? null
-        : {
-            starter: snapshot.scratch.starterId,
-            dirty: snapshot.scratch.dirty,
-            editedAt: snapshot.scratch.editedAt,
-          },
-    projects: snapshot.projects
-      .filter((project) => project.id !== hiddenProjectId)
-      .map((project) => ({
-        id: project.id,
-        name: project.name,
-        starter: project.starterId,
-        editedAt: project.editedAt,
-      })),
-  };
 }
 
 function presetForId(id: string): Preset {
@@ -161,10 +134,6 @@ function planFor(projectId: string, starterId: string): PlaygroundProjectPlan {
   });
 }
 
-function projectFileName(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1) || 'project';
-}
-
 function decodeText(label: string, bytes: Uint8Array): string {
   if (looksBinary(bytes)) throw new Error(`${label} is binary; text diff is unavailable`);
   try {
@@ -172,15 +141,6 @@ function decodeText(label: string, bytes: Uint8Array): string {
   } catch {
     throw new Error(`${label} is not valid UTF-8; text diff is unavailable`);
   }
-}
-
-function downloadBlob(name: string, blob: Blob): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = name;
-  anchor.click();
-  queueMicrotask(() => URL.revokeObjectURL(url));
 }
 
 interface BoundProject {
@@ -226,6 +186,8 @@ export function App(props: AppProps) {
   }>();
   const [workbenchReady, setWorkbenchReady] = createSignal(false);
   const [bound, setBound] = createSignal<BoundProject>();
+  const [chatOpen, setChatOpen] = createSignal(false);
+  const [agentPreview, setAgentPreview] = createSignal<PreviewPanelTarget>();
   const [sessions, setSessions] = createSignal<readonly TerminalSessionSnapshot[]>([]);
   const [activeSessionId, setActiveSessionId] = createSignal('');
   const [terminalFocusEpoch, setTerminalFocusEpoch] = createSignal(0);
@@ -482,7 +444,15 @@ export function App(props: AppProps) {
       return run;
     };
     diagnosticSync = sync;
-    editorDocumentUnsubscribe = api.onDocument(sync.handleDocument);
+    editorDocumentUnsubscribe = bindPlaygroundEditorOwner({
+      api,
+      files: project.context.session.files,
+      mirror: project.mirror,
+      documents: project.documents,
+      isCurrent,
+      onDocument: sync.handleDocument,
+      onError: flashError,
+    });
     editorOpQueue.flush(api, project.editorContextKey);
     void Promise.all([
       import('../glue/ts-ls-monaco-providers.ts'),
@@ -515,7 +485,11 @@ export function App(props: AppProps) {
     const project = bound();
     if (project === undefined) return;
     try {
-      project.mirror.admitFile(await project.documents.open(path));
+      project.mirror.admitFile(
+        await project.documents.open(path, {
+          fresh: !editorApi?.openPathsUnder(path).includes(path),
+        }),
+      );
       withProjectEditor(project, (api) => api.openFile(path, options));
     } catch (error) {
       if (bound() === project) flashError(`Open failed: ${errorMessage(error)}`);
@@ -1524,6 +1498,15 @@ export function App(props: AppProps) {
         >
           <Icon name="github" size={16} />
         </a>
+        <button
+          type="button"
+          class="rf-btn"
+          disabled={!bound()}
+          aria-pressed={chatOpen()}
+          onClick={() => setChatOpen((open) => !open)}
+        >
+          {chatOpen() ? 'Close chat' : '+chat'}
+        </button>
         <button type="button" class="rf-share" data-action="share" onClick={() => void share()}>
           <Icon name="users" size={13} /> Share
         </button>
@@ -1532,6 +1515,7 @@ export function App(props: AppProps) {
       <Show when={capabilities.sufficient} fallback={<CapabilitiesPanel check={capabilities} />}>
         <div
           class="rf-shell"
+          data-chat={chatOpen() && bound() ? 'open' : 'closed'}
           data-sidebar={layout.sidebarCollapsed() ? 'collapsed' : 'open'}
           style={{
             '--rf-sidebar-w': `${layout.sidebarW()}px`,
@@ -1690,6 +1674,7 @@ export function App(props: AppProps) {
                   onOpenTab={openPreviewTab}
                   onNotify={flashToast}
                   ports={previewPorts}
+                  onPreviewChange={setAgentPreview}
                 />
               </Show>
             </div>
@@ -1738,12 +1723,26 @@ export function App(props: AppProps) {
               onRawInput={(id, data) => void bound()?.terminal.write(id, data)}
               onResize={(id, dims) => void bound()?.terminal.resize(id, dims.cols, dims.rows)}
               onLine={runTerminalLine}
+              bindPresenter={(id, run) => bound()?.terminal.bindPresenter(id, run) ?? (() => {})}
               diagnostics={diagnostics()}
               onOpenProblem={(path, line, column) =>
                 void openEditorFile(path, { reveal: { line, column } })
               }
             />
           </main>
+          <Show when={chatOpen() && bound()} keyed>
+            {(project) => (
+              <AiChatPanel
+                context={project.context}
+                terminalUi={project.terminal}
+                preview={() => (bound() === project ? agentPreview() : undefined)}
+                showTerminal={() => {
+                  if (layout.consoleCollapsed()) layout.toggleConsole();
+                }}
+                onClose={() => setChatOpen(false)}
+              />
+            )}
+          </Show>
         </div>
 
         <Show

@@ -72,6 +72,7 @@ const crossOriginIsolationHeaders = {
 // Overridable so parallel checkouts (git worktrees) can run dev/e2e side by
 // side; playwright.config.ts reads the same env. Default stays 5273.
 const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
+const aiProxyTarget = process.env.RIFTY_AI_PROXY_TARGET;
 
 export default defineConfig({
   customLogger: quietLogger,
@@ -82,6 +83,15 @@ export default defineConfig({
     headers: crossOriginIsolationHeaders,
     // Dev proxy for npm registry (D-004) — keeps M9 wiring testable from day 1.
     proxy: {
+      ...(aiProxyTarget
+        ? {
+            '/ai-proxy': {
+              target: aiProxyTarget,
+              changeOrigin: true,
+              rewrite: (path: string) => path.replace(/^\/ai-proxy/, ''),
+            },
+          }
+        : {}),
       '/npm-registry': {
         target: 'https://registry.npmjs.org',
         changeOrigin: true,

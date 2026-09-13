@@ -18,6 +18,7 @@ import {
   searchTerminalHistory,
 } from '@riftydev/terminal';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import type { TerminalCommandPresenter } from '../adapters/playground-terminal-ui.ts';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
@@ -54,6 +55,7 @@ export interface TerminalModeHint {
 
 export function TerminalPanel(props: {
   attach(write: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
+  bindPresenter?(presenter: TerminalCommandPresenter): () => void;
   onLine(line: string, dims: TerminalDims): TerminalInputResult | Promise<TerminalInputResult>;
   modeHint?: TerminalModeHint;
   active?: boolean;
@@ -78,6 +80,7 @@ export function TerminalPanel(props: {
   let paletteInput: HTMLInputElement | undefined;
   let historyInput: HTMLInputElement | undefined;
   let term: RiftyTerminal | undefined;
+  let disposePresenter: (() => void) | undefined;
   let disposeTheme: (() => void) | undefined;
   const [findOpen, setFindOpen] = createSignal(false);
   const [findQuery, setFindQuery] = createSignal('');
@@ -379,6 +382,15 @@ export function TerminalPanel(props: {
     });
     disposeTheme = watchPreferredTerminalTheme(globalThis, (theme) => term?.setTheme(theme));
     term.mount(container);
+    const mounted = term;
+    disposePresenter = props.bindPresenter?.(async (line, execute) => {
+      const result = await mounted.executeLine(line, (submitted) =>
+        execute(submitted, { cols: mounted.cols, rows: mounted.rows }),
+      );
+      scheduleTerminalBufferRefresh();
+      if (result === undefined) throw new Error('Terminal did not execute a complete command');
+      return result;
+    });
     if ((props.focusEpoch ?? 0) > 0) focusTerminalSoon();
     scheduleTerminalBufferRefresh();
     props.attach((chunk, stream) => {
@@ -462,6 +474,7 @@ export function TerminalPanel(props: {
   });
 
   onCleanup(() => {
+    disposePresenter?.();
     if (busyNoticeTimer) clearTimeout(busyNoticeTimer);
     bufferRefresh.cancel();
     disposeTheme?.();

@@ -5,7 +5,7 @@
 
 ## Open questions
 
-- `tsc --noEmit` via `.bin`, vitest under rifty, and the no-COI ⚠️ rows (`node -e/-p`, shell built-ins, `git`, foreground pipes) of the believed baseline — owner: agent — measured by the bench lanes, not pre-probed.
+- `tsc --noEmit` via `.bin`, vitest under rifty, and the no-COI ⚠️ rows (`node -e/-p`, shell built-ins, `git`, foreground pipes) of the believed baseline — owner: agent — measured by the bench lanes. UI live trace additionally reports TS7016/7026 for React declarations; distinguish missing installed types from host resolution when measuring this baseline.
 - no-COI resident/finite coexistence (agent project fs/commands while the dev server lives) — owner: agent — `distribution/public-api-ai-agent-preview-question` pickup; not prescribed by this goal.
 
 ## Out of scope

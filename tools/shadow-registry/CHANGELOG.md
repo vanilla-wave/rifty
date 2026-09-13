@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve Vite module URLs at project root `/`, restoring one React Refresh runtime and live component edits (ADR-0433).
+
 - Forward optional adapter cwd/ref ownership through package entry preparation (ADR-0421).
 
 - Bind reusable esbuild adapters to Node module-acquisition cwd and upstream request/context refs; preserve exact CJS identity and caught-error settlement (ADR-0421).
