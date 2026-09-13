@@ -1,7 +1,6 @@
 ## Items
 
-1. `playground/ai-mode-chat` — **hands-on** — next: "+chat" panel over delivered core; settings; `?agentBench=1` hooks.
-2. `distribution/agent-bench` — **measurement** — lanes `rifty` (over 1), delivered `rifty-no-coi` host, `local-reference`; 5 tasks on the #300 template; report — depends on 1.
+1. `distribution/agent-bench` — **measurement** — next: three real lanes over delivered hosts/UI; five tasks (four in no-COI), three runs, common judges, reports and explicit baseline classification.
 
 ## Open questions
 

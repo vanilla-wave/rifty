@@ -6,7 +6,7 @@ created: 2026-09-12
 why: "where does rifty lose coding-agent quality vs a real local environment" is still anecdote; PR #111's harness (`tools/agent-bench`, decision record 0191 on that branch) never merged and its judges target the retired #111 template
 user_story: As the rifty maintainer, I want `pnpm agent-bench` to run one task suite through the real playground chat (lane `rifty`), through the headless agent over a packed no-COI `sandbox.project()` page (lane `rifty-no-coi`) and through a local temp dir + real npm + pinned Pi CLI (lane `local-reference`) with the same model and prompt profile, and read a per-run failure class, but today no harness, tasks or judges exist on main
 epic: ai-agent-mode-and-bench
-blocked_by: [playground/ai-mode-chat]
+blocked_by: []
 sources: [docs/backlog/epics/ai-agent-mode-and-bench/goal.md, docs/backlog/distribution/reference/ai-agent-mode-refine-evidence.md, docs/backlog/playground/react-vite-starter.md]
 code: [apps/playground/src/templates/react-vite, tests/e2e/react-vite-preset.spec.ts, tools/perf/bench.mjs, playwright.config.ts, pnpm-workspace.yaml]
 ---

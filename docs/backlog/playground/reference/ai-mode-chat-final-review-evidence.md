@@ -28,3 +28,18 @@ Live gzip decoded independently: 11,451,806 bytes, SHA256 8e4ab7758c0f7e0760fb2c
 Decoded all three changed snapshots: current acquisition identity/root-URL bytes, plus fresh original Rollup4.63.2 selection in Vite/TS. Added two original tarballs independently match provenance byte sizes and SHA512, metadata integrity/URL. Original retained fixture inputs unchanged.
 
 Goal file unchanged; map keeps I8 and React declaration diagnostics measurement. No goal closure asserted.
+
+
+## Independent F1 verification — 0bcf3340bc96e6d819e6fa54c48de1c50a447f05
+
+Clean committed tree independently checked before/after execution. BASE stays 1989bdfca. Actual delta from cd1c7979c inspected: one production statement signals the existing terminalFocusEpoch in showTerminal; two regression cases (expanded/collapsed Problems), CHANGELOG and evidence. No new owner/coordination, no hidden criterion edits. Unit/goal/map/ledger unchanged. `cmp` confirms preserved original BLOCK JSON matches the original independent report exactly.
+
+Raw `/tmp/pr333-ai-problems-red.log`: both committed-carrier cases fail visible terminal with `Received:hidden` after native stdout. Assertions retained in GREEN. Existing BottomPanel effect responds to terminalFocusEpoch by selecting terminal view; prior collapse behavior still expands the console. Both defects are closed through the existing presentation owner.
+
+Independent current-tree command:
+`RIFTY_PLAYGROUND_PORT=5287 pnpm exec playwright test --project=chromium-heavy --workers=1 tests/e2e/ai-mode.spec.ts`
+→ `/tmp/pr333-ai-ui-review-verify.log`: **10 PASS, 1.7m**, no retries/timeouts. Both F1 cases prove actual stdout, visible active terminal, Agent tab selected, terminal pane active and expanded console. All eight earlier UI acceptance/regression scenarios rerun, including real React/HMR, Stop/close/switch, settings/reset/export, native failed results and split stdout.
+
+Read current complete gate `/tmp/pr333-ai-review-fix-check.log`: 25 PASS, test:run192.0s/parity60.5s, no isolated reruns. Previous independent browser/terminal/acquisition evidence and raw production/packed/live evidence remain applicable: dependency source/artifacts and loading graph unchanged by the single reveal signal.
+
+F1 FIX independently verified. Current report: 24/24 pass coverage, all eight axes pass, zero findings/unit residuals. Goal I8 plus its retained React declaration measurement remain open; goal_complete=false. No tracked files changed by reviewer.
