@@ -67,3 +67,19 @@ SHA-256 to `018ea49b3a1971609fdd02fb3f5b9db85daf0a4398fb500bbbf39bdda149b422`;
 `RIFTY_PLAYGROUND_PORT=5399 pnpm test:e2e:prod`: 7/7, 3.0 min, including
 owner boot, Buffer identity, Express/sqlite, Hono, Koa, TypeScript editor and
 Webpack cold install/HMR/reload in emitted assets.
+
+## Full gate
+
+`pnpm pr:check`: 25/25, including parity. Initial test-run: 10,387 tests,
+10,367 pass / 2 fail / 18 skipped; both failing files passed the gate's single
+isolated rerun. Zero Vitest test timeouts. Recorded host load at rerun:
+33.2 / 39.1 / 23.4 on 12 CPUs.
+
+- `dep-snapshot-preparation.contract.test.ts`: actual compression progress guard
+  fired (`no body progress for 10000ms`).
+- `no-coi-project-watches.test.ts:79`: timer-driven poller notification was still
+  absent at its assertion (`expected false to be true`).
+
+Both are unchanged tests outside the repaired storage paths. Host contention
+is a hypothesis, not an established cause. Neither failure reproduced in the
+required isolated run; no speculative source/test change or extra retry.
