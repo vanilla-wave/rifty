@@ -17,8 +17,8 @@ A standalone request needs no invented backlog item or goal to carry it.
 ## PR-3 Packaging is the driver's
 
 One draft PR per goal by default; combine or split when that makes the delivered
-behavior easier to assess. No mandatory separate PR per stage, discovery,
-referee, or retry. Open a draft at the first commit; keep its body aligned with
+behavior easier to assess. No mandatory separate PR per stage or entry
+(refine, FIT, PICKUP included), discovery, referee, or retry. Open a draft at the first commit; keep its body aligned with
 the delivered behavior. Merge permission persists (`DEC-3`). Goal slices are
 reviewed against the prior accepted slice; splitting PRs does not change proof.
 

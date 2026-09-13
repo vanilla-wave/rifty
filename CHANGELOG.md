@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Process: FIT runs in the refine session for a refined epic — same branch and PR (Invariants, tier, ready); a `draft` goal dir is FIT's input at the next hand-off, never a merge boundary. Seed: PR #333 ended at draft and planned FIT after merge. `rifty-refine` §3.6/§4 (dual Invariants ownership removed), `stages/fit.md`, backlog README §Epic fit/§Report, `rifty-goal` state table (draft goal dir row), `PR-3`, epic template. A user question unanswered at FIT keeps the goal `draft` — `owner: user` fog removed from ready goals (runs stay autonomous; `STOP-4` mid-run fog unchanged): backlog README §Epic fit, epic template, `RDY-6` 4, `fit.md` 3-4, `artifacts/map.md`. Rehearsals re-run on the changed clauses.
 - `rifty-review-inline` output opens with the outcomes (`W1…`) one level above the diff; map, findings and Open tie to them — what before how.
 - Complete AI agent mode and benchmark goal I1–I8; retain independent reviews, real-host/live evidence and explicit external preview/product follow-ups.
 - Add three-lane coding-agent benchmark, live diagnostic artifacts and native project isolation; common form judges accept actual link/input/textarea workflows.

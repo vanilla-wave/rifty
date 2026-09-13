@@ -1,31 +1,37 @@
 # FIT — chart a goal
 
-Input: a ratified outcome (user hand-off, refined draft, legacy single-file
-epic). Output: a ready goal directory (`../artifacts/goal.md`, `map.md`,
-`ledger.md`). Derive, never invent scope. Interactive: the user is present.
+Input: a ratified outcome (a refine session's settled epic, a draft left on
+an unanswered user question or a just-file, a user hand-off, a legacy
+single-file epic). Output: a ready goal directory (`../artifacts/goal.md`,
+`map.md`, `ledger.md`). Derive, never invent scope. Interactive: the user is
+present — for a refined epic that is the refine session itself, on its branch
+(`rifty-refine` §4); a hand-off or legacy epic starts FIT in the hand-off
+session. A stage is never a PR boundary; packaging per `../rules/pr.md`
+`PR-3`.
 
 1. **Bounded-destination test.** Provably closable, or it is not a goal: a
    direction, theme, or standing invariant routes to `docs/ROADMAP.md`, an
    owner doc, or a ratchet — stop. A legacy epic failing the test is re-typed
    the same way and its file deleted.
 2. **Destination.** Create `goal.md` (`status: draft`): frontmatter,
-   `## Outcome`, `## User scenario`. Legacy epic: carry ratified content
-   verbatim; delete the old file in the same commit.
+   `## Outcome`, `## User scenario`; an existing draft dir is verified, not
+   re-created. Legacy epic: carry ratified content verbatim; delete the old
+   file in the same commit.
 3. **Owner first, then probe-or-fog.** Apply `RDY-6` §Establishing scope to
    material assumptions, including mappings such as "path X is the issue
    scenario"; reuse refine evidence for unchanged scope. Type each
    by OWNER before choosing an exit — a probe settles facts, never value:
    - user-owned (observable scope: what the value requires, what must NOT
-     change, whose scenario counts) and answerable now → ask now;
+     change, whose scenario counts) → ask now; no answer → the goal stays
+     `draft`, the question an `owner: user` fog line (step 9 does not flip);
    - agent-owned fact → discriminating probe (command + output + version;
      disposable spike subagents in parallel; artifact kept) or a fog line when
      it only shapes the route.
-   A mixed question is split; the value half stays the user's. An answer that
-   could invalidate the destination is never fog. Each material assumption
-   has an answer, artifact or owner-tagged fog line under `RDY-6`.
+   A mixed question is split; the value half stays the user's. Each material
+   assumption has an answer, artifact or agent-owned fog line under `RDY-6`.
 4. **Invariants + tier.** Number `## Invariants` from Outcome/scenario/decisions
-   only; an invariant needing unsettled scope → request `rifty-refine` for that
-   statement. Check each false on current main; record evidence above the
+   only; an invariant needing unsettled scope → ask now (step 3); no answer
+   → `draft`. Check each false on current main; record evidence above the
    list. Pick `tier` with one `## Decisions` line. A rejected rival route lands
    as `rejected route: <route> — violates <I#|Outcome clause>`; no invariant
    excludes it = add the missing invariant (step 3 asked).

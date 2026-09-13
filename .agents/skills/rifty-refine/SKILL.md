@@ -1,9 +1,9 @@
 ---
 name: rifty-refine
-description: Single human entry for rifty backlog input. Dedup, research observable choices, independently challenge a proposed direction when it could change the user's choice, resolve scope forks, formalize and report before implementation. Mid-task observations use rifty-to-backlog.
+description: Single human entry for rifty backlog input. Dedup, research observable choices, independently challenge a proposed direction when it could change the user's choice, resolve scope forks, formalize (an epic: FIT in-session), fresh final check and report before implementation. Mid-task observations use rifty-to-backlog.
 ---
 
-Refine = scan → research ↔ informed choices → formalize → fresh final check → report.
+Refine = scan → research ↔ informed choices → formalize (epic: FIT) → fresh final check → report.
 `rifty-to-backlog` is its formalize tail plus the mid-task intake — never offer
 it to the user as an alternative entry.
 
@@ -48,15 +48,21 @@ completion, not a refusal.
 3. Do not ask what code/ADR/Node already answers. Apply reachability and refine-altitude rules (`docs/process/rules/readiness.md` `RDY-6`, `RDY-7`).
 4. For infra, ask only physically reachable fault branches within the epic tier; use `docs/process/rules/fault-classes.md` and `docs/backlog/README.md` §Tier.
 5. Treat dropping or weakening a traced (`I#` / `scenario`) row as user-owned (`RDY-5`); never soften it through ADR, backlog, Out of scope, or rewritten acceptance.
-6. For an epic, land the outcome as numbered `## Invariants` (shape: `docs/backlog/README.md` §Epic fit) — each false on main before the run.
+6. For an epic, grill until the outcome is statable as numbered `## Invariants`, each false on main (shape: `docs/backlog/README.md` §Epic fit); FIT step 4 lands them in this session (§4).
 
 ## 4. Formalize and report
 
 Hand the settled result to `rifty-to-backlog` in this invocation: mint/update
-with evidence, decisions and any early Challenge record. Before completion,
-run `RDY-6` §Final check of the written result on the actual final drafts in
-a fresh context; early Challenge does not replace it. FIT/PICKUP can reuse
-that final check only for an unchanged result. Document shape, `draft → ready`
-and `backlog:check` stay with the ordinary workflow. The driver delivers `docs/backlog/README.md`
-§Report before implementation. Refine-only ends with preparation; already
-authorized implementation continues without another permission request.
+with evidence, decisions and any early Challenge record. An epic not yet
+`ready` continues into `docs/process/stages/fit.md` here, in this session on
+its branch — Invariants, tier, final check, `status: ready`. A goal stays
+`draft` only when the user asked to just file it or a user question is still
+unanswered (`STOP-1a`): a ready goal carries no `owner: user` fog, its run is
+autonomous. FIT resumes when the answer arrives — here (§3) or at the next
+hand-off (`rifty-goal`); no merge is required in between (`PR-3`). A
+ready `goal.md` is amended in place (`RDY-6`). One `RDY-6` §Final check in a
+fresh context on the actual final drafts (fit.md 8 for an epic); FIT/PICKUP
+reuse it only for an unchanged result. Item `draft → ready` stays with PICKUP
+(`RDY-1`). The driver delivers `docs/backlog/README.md` §Report before
+implementation; a build authorized in this session continues to PICKUP on
+this branch without another permission request.

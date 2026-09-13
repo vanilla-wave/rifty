@@ -6,7 +6,7 @@ obligations, not every observation in the journal.
 | Section | Contents |
 |---|---|
 | `## Items` | ordered item keys, result and dependencies; choose the first unblocked unit |
-| `## Open questions` | question, `owner: user|agent`, dependency and what settles it |
+| `## Open questions` | question, `owner: agent` (`owner: user` only in a `draft` goal — unanswered at FIT — or mid-run, `STOP-4`), dependency and what settles it |
 | `## Out of scope` | accepted exclusions with authority and date |
 
 A user question requires a real scope/tier/tradeoff choice; a technical
