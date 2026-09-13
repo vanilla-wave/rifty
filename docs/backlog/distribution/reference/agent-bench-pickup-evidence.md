@@ -146,3 +146,13 @@ Supporting baseline repair: current native/COI/no-COI results and retained trace
 are in agent-bench-baseline-results.md. The existing no-COI2 CI fixtures now gate
 per port (2PASS8.1s). Native git short alias RED→GREEN, plus guard revert-check;
 known untracked-directory shaping remains linked to its existing independent draft.
+
+Final runtime smoke completed all14 runs; the added terminal assertion exposed a
+carrier error: Playwright's inherited color flags produce real Node stderr warnings.
+The report correctly retained stderr. Assertion now compares the native stderr
+artifact exactly (browser read-only runs remain empty), preserving discrimination
+against the earlier file-read-as-terminal bug. /tmp/pr333-bench-smoke-final.log.
+
+Observed context detail: +chat trims its composer before send; native CLI/no-COI
+retain the task file's final newline. The same source prompt is typed into +chat;
+actual request payloads retain this UI behavior, within the accepted context caveat.

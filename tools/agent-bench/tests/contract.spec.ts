@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { AgentPromptProfile } from '@riftydev/agent';
 import { agentModelServer } from '../../../tests/e2e/fixtures/agent-model-server.ts';
@@ -132,7 +132,11 @@ test('all three real mock-model lanes run the entire task set with identical jud
       expect(run.judge.pass).toBe(false);
       expect(run.judge.probes.length).toBeGreaterThan(0);
       expect(run.toolCalls).toBe(1);
-      expect(run.terminalTail).toBe('');
+      const nativeStderr =
+        run.lane === 'local-reference'
+          ? await readFile(join(out, dirname(run.artifacts.trace), 'native-stderr.log'), 'utf8')
+          : '';
+      expect(run.terminalTail).toBe(nativeStderr.slice(-16000));
       expect(run.profile).toBe(profile.id);
       expect((await stat(join(out, run.artifacts.trace))).size).toBeGreaterThan(100);
       {
