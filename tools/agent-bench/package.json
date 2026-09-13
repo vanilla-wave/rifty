@@ -1,0 +1,14 @@
+{
+  "name": "@riftydev/agent-bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@riftydev/agent": "workspace:*",
+    "@riftydev/sdk": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
+    "@playwright/test": "^1.49.0"
+  }
+}

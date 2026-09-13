@@ -92,6 +92,13 @@ const dependencyPolicyRules = [
     },
   },
   {
+    name: 'no-browser-imports-agent-bench',
+    severity: 'error',
+    comment: 'I8: the external diagnostic harness is never a browser/runtime dependency',
+    from: { path: seg(ALL) },
+    to: { path: '(?:^|/)agent-bench/' },
+  },
+  {
     name: 'no-browser-imports-eddy',
     severity: 'error',
     comment: 'ADR-0182: services/eddy is server-side; no browser-layer package may import it',

@@ -4,19 +4,30 @@
   "private": true,
   "type": "module",
   "description": "Headless Pi coding agent over public rifty project hosts.",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "files": ["dist", "README.md", "CHANGELOG.md"],
   "publishConfig": {
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
-    "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } }
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
   },
-  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit", "build": "tsup" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsup"
+  },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.85.1",
     "@earendil-works/pi-ai": "0.85.1",
     "@riftydev/io": "workspace:*",
     "@riftydev/sdk": "workspace:*",
-    "@riftydev/workbench": "workspace:*"
+    "@riftydev/workbench": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
   }
 }
