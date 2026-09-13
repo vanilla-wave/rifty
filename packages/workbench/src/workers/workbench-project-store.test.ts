@@ -36,7 +36,7 @@ describe('Workbench project store', () => {
     });
     await h.store.waitForDurability(promoted.revision);
 
-    expect(promoted.projectRoot).toBe('/.rifty/workbench/v1/projects/alpha/tree');
+    expect(promoted.projectRoot).toBe('/.rifty/workbench/v2/projects/alpha/tree');
     expect(
       decoder.decode(h.authority.readFileBytesSync(`${promoted.projectRoot}/index.html`)),
     ).toBe('<h1>A</h1>');
@@ -75,16 +75,16 @@ describe('Workbench project store', () => {
 
   it('rejects corrupt partial project metadata instead of silently reseeding over it', async () => {
     const h = harness();
-    h.authority.mkdirSync('/.rifty/workbench/v1/projects/corrupt/tree', { recursive: true });
+    h.authority.mkdirSync('/.rifty/workbench/v2/projects/corrupt/tree', { recursive: true });
     h.authority.writeFileSync(
-      '/.rifty/workbench/v1/projects/corrupt/tree/user.txt',
+      '/.rifty/workbench/v2/projects/corrupt/tree/user.txt',
       encoder.encode('must-survive-diagnosis'),
     );
 
     await expect(h.store.readProject('corrupt')).rejects.toThrow(/metadata.*missing/i);
     expect(
       decoder.decode(
-        h.authority.readFileBytesSync('/.rifty/workbench/v1/projects/corrupt/tree/user.txt'),
+        h.authority.readFileBytesSync('/.rifty/workbench/v2/projects/corrupt/tree/user.txt'),
       ),
     ).toBe('must-survive-diagnosis');
   });
@@ -94,7 +94,7 @@ describe('Workbench project store', () => {
     const report: PersistFailureReport = {
       failures: [
         {
-          path: '/.rifty/workbench/v1/projects/alpha/tree/index.html',
+          path: '/.rifty/workbench/v2/projects/alpha/tree/index.html',
           op: 'write',
           message: 'quota exceeded',
         },

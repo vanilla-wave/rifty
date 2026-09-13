@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { nativeReplicaProbeSource } from './fixtures/native-replica-page.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 
@@ -6,7 +7,7 @@ for (const operation of ['install', 'build'] as const) {
   test(`toolchain ${operation} rejects a reported native persistence failure`, async ({ page }) => {
     await page.goto('/no-coi-harness.html');
     const result = await page.evaluate(
-      async ({ root, operation }) => {
+      async ({ root, operation, nativeReplicaProbeSource }) => {
         const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
         const sandbox = await createSandbox({
           requireCrossOriginIsolation: false,
@@ -28,13 +29,12 @@ for (const operation of ['install', 'build'] as const) {
             "require('node:fs').writeFileSync('/fault/output.txt', 'built');\n",
           );
           const injected = await sandbox.runtime.eval(`
-          const original = FileSystemFileHandle.prototype.createWritable;
-          FileSystemFileHandle.prototype.createWritable = function (...args) {
-            if (this.name === ${JSON.stringify(operation === 'install' ? 'package-lock.json' : 'output.txt')}) {
-              return Promise.reject(new DOMException('native quota probe', 'QuotaExceededError'));
+          ${nativeReplicaProbeSource}
+          observeNativeReplicaWrites(records => {
+            if (records.some(record => record.kind === 'file' && record.path === ${JSON.stringify(operation === 'install' ? '/fault/package-lock.json' : '/fault/output.txt')})) {
+              throw new DOMException('native quota probe', 'QuotaExceededError');
             }
-            return Reflect.apply(original, this, args);
-          };
+          });
         `);
           if (!injected.ok) throw new Error('native fault injection failed');
           try {
@@ -60,7 +60,7 @@ for (const operation of ['install', 'build'] as const) {
           sandbox.dispose();
         }
       },
-      { root, operation },
+      { root, operation, nativeReplicaProbeSource },
     );
     expect(result.coi).toBe(false);
     expect(result).toMatchObject({

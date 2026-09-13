@@ -16,6 +16,12 @@ type ExpectedRecoveryScope = 'scm' | 'preview' | 'persistence' | 'reload';
 type ExpectedHealthIssue =
   | {
       readonly kind: 'degraded';
+      readonly scope: 'storage-layout';
+      readonly summary: string;
+      readonly recovery: 'none';
+    }
+  | {
+      readonly kind: 'degraded';
       readonly scope: 'scm' | 'preview' | 'persistence';
       readonly summary: string;
       readonly recovery: 'scm' | 'preview' | 'persistence';

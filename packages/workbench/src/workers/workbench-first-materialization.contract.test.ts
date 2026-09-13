@@ -1169,7 +1169,7 @@ function isDeferredInstallPlan(value: unknown): value is Extract<
 }
 
 function projectRoot(definition: PlaygroundDefinition): string {
-  return `/.rifty/workbench/v1/projects/${definition.storageSegment}/tree`;
+  return `/.rifty/workbench/v2/projects/${definition.storageSegment}/tree`;
 }
 
 afterEach(() => {

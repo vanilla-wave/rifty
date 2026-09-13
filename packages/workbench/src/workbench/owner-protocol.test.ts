@@ -200,6 +200,17 @@ describe('Workbench owner protocol', () => {
     ).toThrow(TypeError);
   });
 
+  it('admits the optional layout notice and refuses a blank or non-string diagnosis', () => {
+    const frame = {
+      type: 'workbench:owner-ready',
+      storage: REQUIRED_STORAGE,
+      storageLayout: 'Legacy storage was excluded',
+    };
+    expect(ownerMessage(frame)).toEqual(frame);
+    for (const storageLayout of [undefined, null, '', '   ', 3, {}])
+      expect(() => ownerMessage({ ...frame, storageLayout })).toThrow(TypeError);
+  });
+
   it('admits owner-ready storage, correlated lifecycle replies, and exact failures', () => {
     const storageCases: readonly OwnerStorageSnapshot[] = [
       REQUIRED_STORAGE,

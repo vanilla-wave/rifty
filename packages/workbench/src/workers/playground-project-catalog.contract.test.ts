@@ -56,8 +56,8 @@ const CAPTURED_URL_CONTEXT = Object.freeze({
 const EDITED_AT = '2026-07-16T12:00:00.000Z';
 const CATALOG_FILE = '/.rifty/workbench/playground/catalog.json';
 const CATALOG_TRANSACTION_FILE = '/.rifty/workbench/playground/transaction.json';
-const SCRATCH_ROOT = '/.rifty/workbench/v1/projects/scratch/tree';
-const SCRATCH_ARCHIVE_TRANSACTION = '/.rifty/workbench/v1/projects/scratch/.playground-archive-v1';
+const SCRATCH_ROOT = '/.rifty/workbench/v2/projects/scratch/tree';
+const SCRATCH_ARCHIVE_TRANSACTION = '/.rifty/workbench/v2/projects/scratch/.playground-archive-v1';
 
 type OpenedProject = Awaited<ReturnType<PlaygroundProjectAuthority['openProject']>>;
 
@@ -297,8 +297,8 @@ async function expectUntrustedSaveOfflineOpen(
   });
   const projectRoot =
     endpoint === 'scratch'
-      ? '/.rifty/workbench/v1/projects/scratch/tree'
-      : '/.rifty/workbench/v1/projects/project-a/tree';
+      ? '/.rifty/workbench/v2/projects/scratch/tree'
+      : '/.rifty/workbench/v2/projects/project-a/tree';
   const projectDefinition =
     endpoint === 'scratch' ? definition('scratch') : definition('project-a');
   const slug = endpoint === 'scratch' ? 'scratch' : 'project-a';
@@ -308,9 +308,9 @@ async function expectUntrustedSaveOfflineOpen(
       endpoint === 'scratch' ? { kind: 'scratch' } : { kind: 'project', id: 'project-a' },
     );
     if (endpoint === 'scratch') {
-      expect(fs.existsSync('/.rifty/workbench/v1/projects/project-a')).toBe(false);
+      expect(fs.existsSync('/.rifty/workbench/v2/projects/project-a')).toBe(false);
     } else {
-      expect(fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
+      expect(fs.existsSync('/.rifty/workbench/v2/projects/scratch')).toBe(false);
       expect(composition.installStampClaims.read(projectRoot)).toBeNull();
     }
     const stamps = createInstallStampAuthority({
@@ -457,8 +457,8 @@ describe('PlaygroundProjectCatalog public contract', () => {
   it('saves Scratch as a real owner-backed session project in ephemeral storage', async () => {
     const h = await harness(new MemoryFsSync(), () => EDITED_AT, 'ephemeral');
     await h.catalog.createScratch({ definition: definition('scratch') });
-    const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
-    const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const scratchRoot = '/.rifty/workbench/v2/projects/scratch/tree';
+    const projectRoot = '/.rifty/workbench/v2/projects/project-a/tree';
     const editedBytes = encoder.encode('document.body.dataset.saved = "session";\n');
     h.authority.writeFileSync(`${scratchRoot}/src/main.ts`, editedBytes);
 
@@ -480,7 +480,7 @@ describe('PlaygroundProjectCatalog public contract', () => {
         },
       ],
     });
-    expect(h.fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
+    expect(h.fs.existsSync('/.rifty/workbench/v2/projects/scratch')).toBe(false);
     expect(h.fs.readFileBytesSync(`${projectRoot}/src/main.ts`)).toEqual(editedBytes);
     expect(h.fs.existsSync(CATALOG_FILE)).toBe(true);
 
@@ -1352,7 +1352,7 @@ describe('Playground catalog crash recovery', () => {
     { phase: 'commit' as const, expected: 'after' as const },
   ])('recovers a durable v1 inline-tree $phase leftover to exact $expected state', async (row) => {
     const fs = new MemoryFsSync();
-    const scratchContainer = '/.rifty/workbench/v1/projects/scratch';
+    const scratchContainer = '/.rifty/workbench/v2/projects/scratch';
     const legacyBytes = encoder.encode('legacy inline transaction bytes');
     fs.mkdirSync(`${scratchContainer}/tree`, { recursive: true });
     fs.writeFileSync(`${scratchContainer}/tree/partial.txt`, encoder.encode('partial'));
@@ -1416,7 +1416,7 @@ describe('Playground catalog crash recovery', () => {
     const fs = new DurableOwnerFs();
     const h = await harness(fs);
     await h.catalog.createScratch({ definition: definition('scratch') });
-    const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+    const scratchRoot = '/.rifty/workbench/v2/projects/scratch/tree';
     const dependencyPath = `${scratchRoot}/node_modules/large/index.js`;
     const dependencyBytes = new Uint8Array(512 * 1024).fill(0xab);
     h.authority.mkdirSync(dependencyPath.slice(0, dependencyPath.lastIndexOf('/')), {
@@ -1450,7 +1450,7 @@ describe('Playground catalog crash recovery', () => {
     expect(transactionSizes.length).toBeGreaterThan(0);
     expect(Math.max(...transactionSizes)).toBeLessThan(64 * 1024);
     expect(Math.max(...dependencyCopyCounts)).toBeLessThanOrEqual(2);
-    const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const projectRoot = '/.rifty/workbench/v2/projects/project-a/tree';
     expect(h.fs.readFileBytesSync(`${projectRoot}/node_modules/large/index.js`)).toEqual(
       dependencyBytes,
     );
@@ -1458,15 +1458,15 @@ describe('Playground catalog crash recovery', () => {
     await expect(h.stamps.check({ root: projectRoot, slug: 'project-a' })).resolves.toEqual({
       status: 'absent',
     });
-    expect(h.fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
+    expect(h.fs.existsSync('/.rifty/workbench/v2/projects/scratch')).toBe(false);
     await h.owner.close();
   });
 
   it('rebinds only the trusted top Scratch claim after a claim-free Save copy', async () => {
     const h = await harness();
     await h.catalog.createScratch({ definition: definition('scratch') });
-    const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
-    const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const scratchRoot = '/.rifty/workbench/v2/projects/scratch/tree';
+    const projectRoot = '/.rifty/workbench/v2/projects/project-a/tree';
     const nestedRelative = 'node_modules/pkg/examples/nested';
     const nestedScratchRoot = `${scratchRoot}/${nestedRelative}`;
     const nestedProjectRoot = `${projectRoot}/${nestedRelative}`;
@@ -1507,7 +1507,7 @@ describe('Playground catalog crash recovery', () => {
     expect(h.authority.readFileBytesSync(`${projectRoot}/node_modules/pkg/marker.txt`)).toEqual(
       markerBytes,
     );
-    expect(h.fs.existsSync('/.rifty/workbench/v1/projects/scratch')).toBe(false);
+    expect(h.fs.existsSync('/.rifty/workbench/v2/projects/scratch')).toBe(false);
     await h.owner.close();
   });
 
@@ -1771,7 +1771,7 @@ function boundedExistingTreeMutationCases(): readonly BoundedExistingTreeMutatio
     '/package.json': Object.freeze([...encoder.encode('{"devDependencies":{"vite":"8.0.0"}}\n')]),
     '/replacement.txt': Object.freeze([...encoder.encode(replacement)]),
   });
-  const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+  const projectRoot = '/.rifty/workbench/v2/projects/project-a/tree';
   const prepareProject = async (h: CatalogHarness): Promise<string> => {
     await h.catalog.createScratch({ definition: definition('scratch') });
     await h.catalog.saveScratch({
@@ -1791,7 +1791,7 @@ function boundedExistingTreeMutationCases(): readonly BoundedExistingTreeMutatio
       name: 'createScratch reseed',
       prepare: async (h: CatalogHarness) => {
         await h.catalog.createScratch({ definition: definition('scratch') });
-        return '/.rifty/workbench/v1/projects/scratch/tree';
+        return '/.rifty/workbench/v2/projects/scratch/tree';
       },
       mutate: (h: CatalogHarness) =>
         h.catalog.createScratch({
@@ -1849,7 +1849,7 @@ function catalogMutationCases(): readonly CatalogMutationCase[] {
       name: 'saveScratch untrusted',
       prepare: async (h: CatalogHarness) => {
         await h.catalog.createScratch({ definition: definition('scratch') });
-        const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+        const scratchRoot = '/.rifty/workbench/v2/projects/scratch/tree';
         const dependency = `${scratchRoot}/node_modules/pkg/index.js`;
         const privateMetadata = `${scratchRoot}/.rifty/session.json`;
         h.authority.mkdirSync(dependency.slice(0, dependency.lastIndexOf('/')), {
@@ -1872,7 +1872,7 @@ function catalogMutationCases(): readonly CatalogMutationCase[] {
           name: 'Project A',
           definition: definition('project-a'),
         });
-        const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+        const projectRoot = '/.rifty/workbench/v2/projects/project-a/tree';
         await expect(h.stamps.check({ root: projectRoot, slug: 'project-a' })).resolves.toEqual({
           status: 'absent',
         });
@@ -1888,7 +1888,7 @@ function catalogMutationCases(): readonly CatalogMutationCase[] {
       name: 'saveScratch trusted',
       prepare: async (h: CatalogHarness) => {
         await h.catalog.createScratch({ definition: definition('scratch') });
-        const scratchRoot = '/.rifty/workbench/v1/projects/scratch/tree';
+        const scratchRoot = '/.rifty/workbench/v2/projects/scratch/tree';
         const dependency = `${scratchRoot}/node_modules/pkg/index.js`;
         const nestedRoot = `${scratchRoot}/node_modules/pkg/examples/nested`;
         h.authority.mkdirSync(dependency.slice(0, dependency.lastIndexOf('/')), {
@@ -1913,7 +1913,7 @@ function catalogMutationCases(): readonly CatalogMutationCase[] {
           name: 'Project A',
           definition: definition('project-a'),
         });
-        const projectRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+        const projectRoot = '/.rifty/workbench/v2/projects/project-a/tree';
         await expect(
           h.stamps.check({ root: projectRoot, slug: 'project-a' }),
         ).resolves.toMatchObject({

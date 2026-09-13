@@ -23,7 +23,7 @@ const decoder = new TextDecoder();
 const prefix = '/workspaces/legacy_receipt_opfs';
 const targetId = 'legacy-target';
 const siblingId = 'legacy-pending';
-const projectRoot = `/.rifty/workbench/v1/projects/${targetId}/tree`;
+const projectRoot = `/.rifty/workbench/v2/projects/${targetId}/tree`;
 const journalFile = '/.rifty/workbench/playground/migration-journal.json';
 const transactionFile = '/.rifty/workbench/playground/transaction.json';
 const editedIndex = 'module.exports = () => "retained before retirement";\n';

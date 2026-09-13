@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import { createTsLspOwnerRelay } from './ts-lsp-owner-relay.ts';
 
-const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const PROJECT_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 
 class FakeChild extends EventEmitter {
   readonly kind = 'worker' as const;

@@ -66,3 +66,7 @@ ADR-0263/0279 retain owner/lease/catalog authority; ADR-0072 retains paired cach
 write-through, ADR-0358 drain semantics and ADR-0372 actual backend truth.
 The separately captured unreadable-cache-as-empty defect stays linked to I6's
 preservation prerequisite; namespace addressing does not certify that defect.
+
+## Corrections (active)
+
+2026-09-12 — ADR-0425: Replica mode is a narrow backend exception at the captured-root installation seam; its physical exclusive file guard does not replace the origin-wide Workbench lease.

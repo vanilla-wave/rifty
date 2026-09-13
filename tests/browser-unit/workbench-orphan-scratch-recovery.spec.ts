@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { accessNativeReplica } from './fixtures/opfs-storage-namespace.ts';
 import { checkpoints } from './fixtures/orphan-scratch-recovery-boundary.ts';
 import {
   excludedFiles,
@@ -301,22 +302,12 @@ for (const metadata of ['catalog.json', 'migration-journal.json'] as const) {
       } finally {
         await publicCall(page, 'close');
       }
-      await page.evaluate(
-        async ({ namespace, metadata, nonempty }) => {
-          let dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(namespace);
-          for (const part of ['.rifty', 'workbench', 'playground'])
-            dir = await dir.getDirectoryHandle(part, { create: true });
-          const malformed = await dir.getDirectoryHandle(metadata, { create: true });
-          if (nonempty) {
-            const writer = await (
-              await malformed.getFileHandle('sentinel.bin', { create: true })
-            ).createWritable();
-            await writer.write(new Uint8Array([77, 0, 128, 255]));
-            await writer.close();
-          }
-        },
-        { namespace: recoveryNamespace, metadata, nonempty },
-      );
+      const malformed = `/.rifty/workbench/playground/${metadata}`;
+      await accessNativeReplica(page, {
+        namespace: recoveryNamespace,
+        directories: [malformed],
+        ...(nonempty ? { files: { [`${malformed}/sentinel.bin`]: [77, 0, 128, 255] } } : {}),
+      });
       const selectedTree = () =>
         page.evaluate(
           async ({ url, namespace }) =>
@@ -344,15 +335,7 @@ for (const metadata of ['catalog.json', 'migration-journal.json'] as const) {
       expect.soft(failure).toBeInstanceOf(Error);
       expect(await selectedTree()).toEqual(before);
       expect(await outside(page)).toEqual(external);
-      await page.evaluate(
-        async ({ namespace, metadata }) => {
-          let dir = await (await navigator.storage.getDirectory()).getDirectoryHandle(namespace);
-          for (const part of ['.rifty', 'workbench', 'playground'])
-            dir = await dir.getDirectoryHandle(part);
-          await dir.removeEntry(metadata, { recursive: true });
-        },
-        { namespace: recoveryNamespace, metadata },
-      );
+      await accessNativeReplica(page, { namespace: recoveryNamespace, remove: [malformed] });
       let records: { id: string }[] = [];
       try {
         await publicCall(page, 'open', recoveryNamespace);

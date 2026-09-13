@@ -49,7 +49,7 @@ interface CreateSandboxCommonOptions {
   readonly serviceWorkerUrl?: string;
   /** Skip service-worker registration (eval-only / headless use). Default false. */
   readonly skipServiceWorker?: boolean;
-  /** Sink for the non-fatal fallback warnings. Default `console`. */
+  /** Sink for fallback and startup storage diagnostics. Default `console`. */
   readonly logger?: Pick<Console, 'warn' | 'error'>;
 }
 
@@ -293,17 +293,20 @@ export async function createSandbox(
     });
     const workerUrl = String(options.toolchain.workerUrl);
     const { swError } = await bootServiceWorker(options, deps, logger);
-    return bootToolchainSandbox({
-      ...startup,
-      workerUrl,
-      vmEngine: startup.vmEngine ?? 'rewrite',
-      capabilities,
-      ...(swError === undefined ? {} : { swError }),
-    });
+    return bootToolchainSandbox(
+      {
+        ...startup,
+        workerUrl,
+        vmEngine: startup.vmEngine ?? 'rewrite',
+        capabilities,
+        ...(swError === undefined ? {} : { swError }),
+      },
+      logger,
+    );
   }
 
   const vfs = await bootVfs(
-    deps.initVfs ?? (async () => (await import('@riftydev/vfs')).initBackend()),
+    deps.initVfs ?? (async () => (await import('./default-vfs.ts')).initBackend()),
     logger,
   );
   const { swError } = await bootServiceWorker(options, deps, logger);
@@ -354,6 +357,15 @@ function mountToolchainPreview(port: number, ownerToken: string): () => void {
   };
 }
 
+function logToolchainStartup(
+  runtime: ToolchainRuntimeController,
+  logger: Pick<Console, 'warn' | 'error'>,
+): () => void {
+  return runtime.on((event) => {
+    if (event.type === 'stderr') logger.warn(event.chunk);
+  });
+}
+
 async function bootToolchainSandbox(
   options: ToolchainRuntimeOptions & {
     readonly workerUrl: string;
@@ -361,15 +373,19 @@ async function bootToolchainSandbox(
     readonly capabilities: CapabilityCheck;
     readonly swError?: string;
   },
+  logger: Pick<Console, 'warn' | 'error'>,
 ): Promise<ToolchainSandbox> {
   let current: ToolchainRuntimeController = spawnToolchainRuntime(options);
   let vfs: VfsBootInfo;
+  const detachStartup = logToolchainStartup(current, logger);
   try {
     await current.toolchainReady;
     vfs = current.toolchainVfs;
   } catch (error) {
     current.dispose();
     throw error;
+  } finally {
+    detachStartup();
   }
 
   const ownerToken = `sdk-${crypto.randomUUID()}`;
@@ -551,8 +567,13 @@ async function bootToolchainSandbox(
 
       current = spawnToolchainRuntime(options);
       attachCurrent();
-      await current.toolchainReady;
-      vfs = current.toolchainVfs;
+      const detachStartup = logToolchainStartup(current, logger);
+      try {
+        await current.toolchainReady;
+        vfs = current.toolchainVfs;
+      } finally {
+        detachStartup();
+      }
       if (activation !== null) await current.restoreToolchainState(activation);
       // The restored controller owns recovery now, including writes from a failing callback.
       activation = null;

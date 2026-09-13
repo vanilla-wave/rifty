@@ -25,6 +25,7 @@
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import { installOpfsFs } from '@riftydev/vfs/internal';
 import {
   defineNodeCliProject,
   inspectProjectDefinition,
@@ -162,25 +163,28 @@ async function resetOpfs(): Promise<void> {
   }
 }
 
-/** Post-reply proof the drain flushed through REAL OPFS: walk the persisted tree. */
+/** A fresh Worker replays committed native segments after the owner is killed. */
 async function countPersistedProjectFiles(): Promise<number> {
-  const segments = ['.rifty', 'workbench', 'v1', 'projects', PROJECT_ID, 'tree'];
-  let dir: OpfsDirHandle;
+  const pair = await installOpfsFs(undefined, { layout: 'replica' });
   try {
-    dir = await opfsRoot();
-    for (const segment of segments) dir = await dir.getDirectoryHandle(segment);
-  } catch {
-    return -1;
+    const root = `/.rifty/workbench/v2/projects/${PROJECT_ID}/tree`;
+    if (!pair.fsSync.existsSync(root)) return -1;
+    let files = 0;
+    const walk = (path: string): void => {
+      for (const entry of pair.fsSync.readdirSync(path)) {
+        const child = `${path}/${entry.name}`;
+        if (entry.isDirectory) walk(child);
+        else {
+          pair.fsSync.readFileBytesSync(child);
+          files += 1;
+        }
+      }
+    };
+    walk(root);
+    return files;
+  } finally {
+    pair.fsSync.closeAll();
   }
-  let files = 0;
-  const walk = async (handle: OpfsDirHandle): Promise<void> => {
-    for await (const [, entry] of handle.entries()) {
-      if (entry.kind === 'file') files += 1;
-      else await walk(entry as unknown as OpfsDirHandle);
-    }
-  };
-  await walk(dir);
-  return files;
 }
 
 function describeOwnerMessage(raw: unknown): { readonly type: string; readonly detail?: string } {
@@ -338,7 +342,7 @@ async function runFirstOpen(deployment: FirstOpenDeployment): Promise<FirstOpenR
   deliver({ type: 'workbench:open-project', opId: OPEN_OP_ID, definition: wire });
   const reply = await replyPromise;
   const openMs = Math.round(performance.now() - tOpen);
-  const persistedProjectFiles = await countPersistedProjectFiles();
+  const persistedProjectFiles = -1; // Filled by fresh-Worker replay in the page fixture.
   console.log(
     `[first-open-256] reply=${reply.type} files=${fileCount} dirs=${dirCount} persisted=${persistedProjectFiles} openMs=${openMs}`,
   );
@@ -356,9 +360,11 @@ scope.addEventListener(
   (event: MessageEvent<{ phase?: string; deployment?: FirstOpenDeployment }>) => {
     const { phase, deployment } = event.data ?? {};
     const run =
-      phase === 'first-open' && deployment !== undefined
-        ? runFirstOpen(deployment)
-        : Promise.reject(new Error(`unknown phase: ${String(phase)}`));
+      phase === 'verify'
+        ? countPersistedProjectFiles()
+        : phase === 'first-open' && deployment !== undefined
+          ? runFirstOpen(deployment)
+          : Promise.reject(new Error(`unknown phase: ${String(phase)}`));
     void run
       .then((result) => scope.postMessage({ ok: true, result }))
       .catch((err: unknown) => {

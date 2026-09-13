@@ -36,6 +36,7 @@ export interface PlaygroundOwnerSessionToolLifecycle {
 }
 
 export type WorkbenchOwnerHealthEvent =
+  | Readonly<{ kind: 'storage-layout'; summary: string }>
   | Readonly<{
       kind: 'fatal-invariant';
       summary: string;

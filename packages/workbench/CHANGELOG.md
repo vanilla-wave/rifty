@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Report excluded legacy/corrupt storage through persistent, non-retryable health; retain corruption diagnosis across first-proof crashes (ADR-0432).
+
+- Use segmented OPFS storage and the v2 project namespace; per-file v1 projects are excluded and their native bytes retained (ADR-0425).
+
+- Read project files/directories through targeted owner access; avoid full-tree byte copies on editor reads.
+
 - Saved-toolchain and Node-entry adapter preparation carry the live cwd and event-loop refs (ADR-0421).
 
 - Remove completed Node command process/stdio listeners before admitting the next command (ADR-0422).

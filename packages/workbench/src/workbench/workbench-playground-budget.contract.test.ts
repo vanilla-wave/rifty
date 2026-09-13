@@ -523,7 +523,7 @@ describe('public Playground request budget with real owner composition', () => {
     expect(outcome.state).toBe('rejected');
     expect(String(outcome.error)).toContain('1000ms without owner durability progress');
     expect(h.worker.killed).toBe(true);
-    const tree = '/.rifty/workbench/v1/projects/scratch/tree/src/main.ts';
+    const tree = '/.rifty/workbench/v2/projects/scratch/tree/src/main.ts';
     expect(new TextDecoder().decode(syncMirror().readFileBytesSync(tree))).toBe(
       'export const value = 1;\n',
     );

@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import { observeNativeReplicaWrites } from '../../browser-unit/fixtures/native-replica-observer.ts';
 declare const self: DedicatedWorkerGlobalScope;
 let writable = 0;
 let mkdir = 0;
@@ -10,12 +11,17 @@ let failures = 0;
 const nativeWritable = FileSystemFileHandle.prototype.createWritable;
 FileSystemFileHandle.prototype.createWritable = function (...args) {
   writable++;
-  if (this.name === fault) {
-    failures++;
-    return Promise.reject(new DOMException('warm-open native quota probe', 'QuotaExceededError'));
-  }
   return Reflect.apply(nativeWritable, this, args);
 };
+observeNativeReplicaWrites((records) => {
+  if (
+    fault &&
+    records.some((record) => record.kind === 'file' && record.path.endsWith(`/${fault}`))
+  ) {
+    failures++;
+    throw new DOMException('warm-open native quota probe', 'QuotaExceededError');
+  }
+});
 const nativeDirectory = FileSystemDirectoryHandle.prototype.getDirectoryHandle;
 FileSystemDirectoryHandle.prototype.getDirectoryHandle = function (...args) {
   if (args[1]?.create) mkdir++;

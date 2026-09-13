@@ -55,6 +55,7 @@
 ## Browser runtime & bundling
 
 - **copied-asset-fingerprints**: Workbench `dist/assets` bundles the runtime; shared-chunk changes can rename imports in the large TypeScript worker. `check:esbuild-legacy-retirement` pins its complete bytes plus the lexical compiler (ADR-0391). After a reviewed source change, rebuild, inspect the new compiler outputs and update only their filename/size/SHA pins; keep negative payload tests and packed-browser proof. SW stays classic; Workers are ESM.
+- **docs-only-pr-check-needs-dist**: `check:esbuild-legacy-retirement` reads `packages/*/dist`; the docs-only `pr:check` lane skips `build:libs`, so a fresh worktree fails with "emitted generated esbuild client count is 0" — environment, not source: run `pnpm build:libs` once, then re-run.
 
 - **worker-console-invisible**: worker-realm logs never reach page/Playwright console; BroadcastChannel is shimmed in workers → route diagnostics via `process.stdout.write`; an eval-crashed kernel worker shows only as `page.on('worker')` create→close ~0.1s apart (DOM `error`, no exit frame).
 - **pre-entry-hook-lives-in-host**: refactoring runtime-js's install path silently breaks the browser → `setKernelPreEntryHook` is last-writer-wins and the playground `kernel-worker-entry.ts` registration is the one that runs (ADR-0157) → update the host hook with any shim refactor; failure = silent emnapi pthread crash, preview 503, only the SW-preview e2e catches it.

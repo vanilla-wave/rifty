@@ -1,4 +1,9 @@
 import {
+  type NativeReplicaRecord,
+  nativeSegmentRecords,
+  nativeWriteBytes,
+} from './native-replica-observer.ts';
+import {
   catalogPath,
   nativeCatalog,
   nativeTree,
@@ -27,20 +32,11 @@ export type NativeFault =
 
 export async function custody() {
   const { raw: catalogBytes, value: catalog } = await nativeCatalog();
-  const selected = await navigator.storage
-    .getDirectory()
-    .then((root) => root.getDirectoryHandle(recoveryNamespace));
   const retained: Record<string, Awaited<ReturnType<typeof nativeTree>>> = {};
-  try {
-    let root = selected;
-    for (const part of retainedRoot.split('/').filter(Boolean))
-      root = await root.getDirectoryHandle(part);
-    for await (const [id, handle] of root as unknown as AsyncIterable<[string, FileSystemHandle]>) {
-      if (handle.kind === 'directory')
-        retained[id] = await nativeTree(`${recoveryNamespace}${retainedRoot}/${id}/tree`);
-    }
-  } catch (error) {
-    if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error;
+  const retainedTree = await nativeTree(`${recoveryNamespace}${retainedRoot}`);
+  for (const path of retainedTree?.directories ?? []) {
+    if (path.includes('/')) continue;
+    retained[path] = await nativeTree(`${recoveryNamespace}${retainedRoot}/${path}/tree`);
   }
   return {
     catalog,
@@ -58,83 +54,102 @@ export async function installNativeBoundary(
   const origin = await navigator.storage.getDirectory();
   const createWritable = FileSystemFileHandle.prototype.createWritable;
   const getFile = FileSystemFileHandle.prototype.getFile;
-  const removeEntry = FileSystemDirectoryHandle.prototype.removeEntry;
   let armed = fault === 'export-read' || fault === 'source-read';
   let deniedReads = 0;
+  let pending: readonly NativeReplicaRecord[] = [];
   const hold = async (checkpoint: RecoveryCheckpoint): Promise<never> => {
     armed = false;
     await reached(checkpoint);
     return new Promise<never>(() => {});
   };
-  const physicalPath = async (handle: FileSystemHandle) =>
-    (await origin.resolve(handle))?.join('/') ?? '';
-  const prefix = `${recoveryNamespace}${retainedRoot}/`;
+  const selected = async (handle: FileSystemHandle) =>
+    (await origin.resolve(handle))?.[0] === recoveryNamespace;
+  const prefix = `${retainedRoot}/`;
   FileSystemFileHandle.prototype.getFile = async function () {
-    const path = await physicalPath(this);
-    if (
-      armed &&
-      ((fault === 'export-read' && path.startsWith(prefix) && path.endsWith('/tree/user.bin')) ||
-        (fault === 'source-read' && path === `${recoveryNamespace}${orphanRoot}/user.bin`))
-    ) {
-      deniedReads += 1;
-      throw new DOMException('orphan-native-read-denied', 'NotAllowedError');
+    const file = await getFile.call(this);
+    if (armed && this.name.startsWith('segment-') && (await selected(this))) {
+      const records = nativeSegmentRecords(new Uint8Array(await file.arrayBuffer()));
+      if (
+        records.some(
+          (record) =>
+            record.kind === 'file' &&
+            ((fault === 'export-read' &&
+              record.path.startsWith(prefix) &&
+              record.path.endsWith('/tree/user.bin')) ||
+              (fault === 'source-read' && record.path === `${orphanRoot}/user.bin`)),
+        )
+      ) {
+        deniedReads += 1;
+        throw new DOMException('orphan-native-read-denied', 'NotAllowedError');
+      }
     }
-    return getFile.call(this);
+    return file;
   };
   FileSystemFileHandle.prototype.createWritable = async function (options) {
-    const path = await physicalPath(this);
-    if (
-      armed &&
-      fault === 'copy-quota' &&
-      path.startsWith(prefix) &&
-      path.endsWith('/tree/user.bin')
-    )
-      throw new DOMException('orphan-native-copy-quota', 'QuotaExceededError');
+    const inNamespace = await selected(this);
     const stream = await createWritable.call(this, options);
-    let written = '';
-    return new Proxy(stream, {
-      get(target, key) {
-        if (key === 'write')
-          return async (data: FileSystemWriteChunkType) => {
-            if (typeof data === 'string') written = data;
-            else if (data instanceof Uint8Array) written = new TextDecoder().decode(data);
-            return target.write(data);
+    const write = stream.write.bind(stream);
+    const close = stream.close.bind(stream);
+    stream.write = async (data) => {
+      if (inNamespace && this.name.startsWith('segment-')) {
+        pending = nativeSegmentRecords(await nativeWriteBytes(data));
+        if (
+          armed &&
+          fault === 'copy-quota' &&
+          pending.some(
+            (record) =>
+              record.kind === 'file' &&
+              record.path.startsWith(prefix) &&
+              record.path.endsWith('/tree/user.bin'),
+          )
+        )
+          throw new DOMException('orphan-native-copy-quota', 'QuotaExceededError');
+      }
+      await write(data);
+    };
+    stream.close = async () => {
+      let kind: 'copy' | 'retention-pointer' | 'fresh-pointer' | undefined;
+      let source = false;
+      if (inNamespace && this.name === 'HEAD') {
+        if (
+          pending.some(
+            (record) =>
+              record.kind === 'file' &&
+              record.path.startsWith(prefix) &&
+              record.path.endsWith('/tree/user.bin'),
+          )
+        )
+          kind = 'copy';
+        const record = pending.find(
+          (record) => record.kind === 'file' && record.path === catalogPath,
+        );
+        if (record) {
+          const catalog = JSON.parse(new TextDecoder().decode(record.bytes)) as {
+            retainedScratch?: unknown[];
+            scratch?: unknown;
           };
-        if (key === 'close')
-          return async () => {
-            let kind: 'copy' | 'retention-pointer' | 'fresh-pointer' | undefined;
-            if (path.startsWith(prefix) && path.endsWith('/tree/user.bin')) kind = 'copy';
-            if (path === `${recoveryNamespace}${catalogPath}`) {
-              const catalog = JSON.parse(written) as {
-                retainedScratch?: unknown[];
-                scratch?: unknown;
-              };
-              if (Array.isArray(catalog.retainedScratch) && catalog.retainedScratch.length > 0)
-                kind = catalog.scratch === null ? 'retention-pointer' : 'fresh-pointer';
-            }
-            if (armed && kind === 'fresh-pointer' && fault === 'fresh-pointer-permission') {
-              await target.abort();
-              throw new DOMException('orphan-native-fresh-pointer-denied', 'NotAllowedError');
-            }
-            if (armed && kind !== undefined && fault === `${kind}-before-close`)
-              await hold(`${kind}-before-close`);
-            await target.close();
-            if (armed && kind !== undefined && fault === `${kind}-after-close`)
-              await hold(`${kind}-after-close`);
-          };
-        const value: unknown = Reflect.get(target, key, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
-  };
-  FileSystemDirectoryHandle.prototype.removeEntry = async function (name, options) {
-    const path = `${await physicalPath(this)}/${name}`;
-    const source =
-      path === `${recoveryNamespace}${orphanRoot}` ||
-      path === `${recoveryNamespace}/.rifty/workbench/v1/projects/scratch`;
-    if (armed && source && fault === 'source-remove-before') await hold(fault);
-    await removeEntry.call(this, name, options);
-    if (armed && source && fault === 'source-remove-after') await hold(fault);
+          if (Array.isArray(catalog.retainedScratch) && catalog.retainedScratch.length > 0)
+            kind = catalog.scratch === null ? 'retention-pointer' : 'fresh-pointer';
+        }
+        source = pending.some(
+          (record) =>
+            record.kind === 'delete' &&
+            (record.path === orphanRoot || orphanRoot.startsWith(`${record.path}/`)),
+        );
+      }
+      if (armed && kind === 'fresh-pointer' && fault === 'fresh-pointer-permission') {
+        await stream.abort();
+        throw new DOMException('orphan-native-fresh-pointer-denied', 'NotAllowedError');
+      }
+      if (armed && kind !== undefined && fault === `${kind}-before-close`)
+        await hold(`${kind}-before-close`);
+      if (armed && source && fault === 'source-remove-before') await hold(fault);
+      await close();
+      if (armed && kind !== undefined && fault === `${kind}-after-close`)
+        await hold(`${kind}-after-close`);
+      if (armed && source && fault === 'source-remove-after') await hold(fault);
+    };
+    return stream;
   };
   return {
     deniedReads: () => deniedReads,
@@ -144,7 +159,6 @@ export async function installNativeBoundary(
     restore() {
       FileSystemFileHandle.prototype.createWritable = createWritable;
       FileSystemFileHandle.prototype.getFile = getFile;
-      FileSystemDirectoryHandle.prototype.removeEntry = removeEntry;
     },
   };
 }

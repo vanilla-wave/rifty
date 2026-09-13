@@ -215,27 +215,31 @@ export function PlaygroundHealthBanner(props: {
             data-health-scope={issue.scope}
           >
             <span class="rf-banner__msg">{issue.summary}</span>
-            <Show
-              when={issue.recovery !== 'reload'}
-              fallback={
+            <Show when={issue.recovery !== 'none'}>
+              <Show
+                when={issue.recovery !== 'reload'}
+                fallback={
+                  <button
+                    type="button"
+                    class="rf-btn rf-btn--warn-ghost"
+                    data-action="reload-workbench"
+                    onClick={() => props.onReload()}
+                  >
+                    Reload
+                  </button>
+                }
+              >
                 <button
                   type="button"
                   class="rf-btn rf-btn--warn-ghost"
-                  data-action="reload-workbench"
-                  onClick={() => props.onReload()}
+                  data-action={`recover-${issue.recovery}`}
+                  onClick={() =>
+                    props.onRecover(issue.recovery as 'scm' | 'preview' | 'persistence')
+                  }
                 >
-                  Reload
+                  Retry {issue.scope}
                 </button>
-              }
-            >
-              <button
-                type="button"
-                class="rf-btn rf-btn--warn-ghost"
-                data-action={`recover-${issue.recovery}`}
-                onClick={() => props.onRecover(issue.recovery as 'scm' | 'preview' | 'persistence')}
-              >
-                Retry {issue.scope}
-              </button>
+              </Show>
             </Show>
           </div>
         )}

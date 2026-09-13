@@ -347,7 +347,9 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0414/0415: companion package policy and pure package-runtime tree composition.
     // ADR-0418: project policy view and invocation command composition.
     // ADR-0420: explicit no-COI snapshot application composition.
-    expect(packageProductionFiles).toHaveLength(162);
+    // PR #299: targeted page reads extracted from the ratcheted owner module.
+    // ADR-0432: native storage diagnosis shares the owner's existing publication point.
+    expect(packageProductionFiles).toHaveLength(164);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 

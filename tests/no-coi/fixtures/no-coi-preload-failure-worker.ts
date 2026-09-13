@@ -2,7 +2,7 @@
 
 const getFile = FileSystemFileHandle.prototype.getFile;
 FileSystemFileHandle.prototype.getFile = function (...args) {
-  if (this.name === 'unreadable.txt') {
+  if (this.name === 'HEAD') {
     return Promise.reject(new DOMException('native preload failure', 'NotReadableError'));
   }
   return Reflect.apply(getFile, this, args);

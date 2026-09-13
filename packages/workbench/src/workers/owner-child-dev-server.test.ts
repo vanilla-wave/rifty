@@ -125,7 +125,7 @@ describe('buildDevServerChildSpawnSpec', () => {
   });
 
   it('keeps guest cwd and argv public while carrying the private remote root out-of-band', () => {
-    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const remoteFsRoot = '/.rifty/workbench/v2/projects/project-a/tree';
     const cfg: NodeServerPackageConfig = {
       ...nodeServerConfig,
       root: '/',
@@ -304,7 +304,7 @@ describe('createOwnerChildDevServer', () => {
         root: '/',
         entryPath: '/packages/nested/server.mjs',
       },
-      remoteFsRoot: '/.rifty/workbench/v1/projects/project-a/tree',
+      remoteFsRoot: '/.rifty/workbench/v2/projects/project-a/tree',
     };
     const boot = driver.boot({
       signal: new AbortController().signal,
@@ -322,7 +322,7 @@ describe('createOwnerChildDevServer', () => {
 
   it('projects an admitted ancestor binding through dev-server metadata into guest FsSync', async () => {
     const fake = new FakeHandle();
-    const remoteFsRoot = '/.rifty/workbench/v1/projects/project-a/tree';
+    const remoteFsRoot = '/.rifty/workbench/v2/projects/project-a/tree';
     const physicalPackagePath = `${remoteFsRoot}/node_modules/esbuild-wasm`;
     const reserve: ReserveOwnerChildAdmission = async () => ({
       snapshot: Object.freeze({

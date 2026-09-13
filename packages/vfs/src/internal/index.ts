@@ -26,3 +26,6 @@ export {
   MemoryFsSync,
 } from '../sync-mirror.ts';
 export { MemoryBackend } from '../memory-backend.ts';
+
+export { initializeBackend } from '../boot.ts';
+export type { OpfsLayoutIssue } from '../opfs-replica-types.ts';

@@ -36,3 +36,7 @@ a failed preload. No second error ledger, partial-ready mode or preload policy k
 
 The accepted goal is unchanged. Native tests preserve exact selected/outside bytes,
 rejection reasons, retry, root-conflict and durability-proof fallback controls.
+
+## Corrections (active)
+
+2026-09-12 — ADR-0425: Replica mode uses validated replay instead of native per-file traversal; partial readiness and false memory fallback remain forbidden.

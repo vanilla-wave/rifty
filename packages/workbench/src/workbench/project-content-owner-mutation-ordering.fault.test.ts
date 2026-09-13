@@ -19,7 +19,7 @@ import {
 } from './project-content-transport.ts';
 import type { OwnerProjectVfsFrame, PageProjectVfsFrame } from './project-vfs-protocol.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const SOURCE = `${ROOT}/src/main.ts`;
 const TARGET = `${ROOT}/src/renamed.ts`;
 const OWNER_EPOCH = 'owner-mutation-ordering';
