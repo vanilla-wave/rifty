@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Slim `rifty-review-inline` to the eight axes for user-driven review: drop
+  schema mirroring, residual sets, rule-id citations and the dirty-tree
+  refusal; add a claim source order and an informal **Take** section.
+
 - Include the esbuild runtime-service-refs patch in generated compatibility inventory (ADR-0421).
 
 - Add manual `rifty-release` skill for GitHub Releases with concise capability and fix bullet lists.
