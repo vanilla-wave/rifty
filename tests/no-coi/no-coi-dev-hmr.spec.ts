@@ -558,6 +558,7 @@ setTimeout(() => selected.listen(5196, '127.0.0.1'), 100);`,
   }
 });
 
+// Gate foreign callbacks on real entry admission; page→Worker RPC can exceed20ms in CI.
 test('resident readiness rejects native deferred target-port rivals', async ({ page }) => {
   const sources = [
     `const signal = AbortSignal.timeout(20);
@@ -587,6 +588,7 @@ setTimeout(() => sender.postMessage(null), 20).unref();`,
         }),
         '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
 const selected = http.createServer((_req, res) => res.end('selected'));
+require('node:fs').writeFileSync('/port-proof/selected-entered-${targetPort}', 'ready');
 setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
       });
       const outcome = await page.evaluate(
@@ -598,7 +600,15 @@ setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
           });
           const scheduled = await sandbox.runtime.eval(`const http = require('node:http');
 const rival = http.createServer((_req, res) => res.end('rival'));
-${schedule.replaceAll('PORT', String(port))}
+const fs = require('node:fs');
+function afterSelectedEntry() {
+  if (!fs.existsSync('/port-proof/selected-entered-${port}')) {
+    setTimeout(afterSelectedEntry, 5).unref();
+    return;
+  }
+  ${schedule.replaceAll('PORT', String(port))}
+}
+afterSelectedEntry();
 'scheduled';`);
           if (!scheduled.ok) throw new Error(scheduled.error.message);
           let failure: unknown;
@@ -649,7 +659,15 @@ test('late createRequire cannot borrow resident ownership across prior loaders',
           ? `.createServer((_req, res) => res.end('rival'))`
           : `.createServer((socket) => socket.end('rival'))`;
       const schedule = `const lateRequire = createRequire;
-setTimeout(() => lateRequire('/port-proof/late.cjs')('${testCase.builtin}')${createServer}.listen(${targetPort}, '127.0.0.1'), 20).unref();`;
+const fs = lateRequire('/port-proof/gate.cjs')('node:fs');
+function afterSelectedEntry() {
+  if (!fs.existsSync('/port-proof/selected-entered-${targetPort}')) {
+    setTimeout(afterSelectedEntry, 5).unref();
+    return;
+  }
+  setTimeout(() => lateRequire('/port-proof/late.cjs')('${testCase.builtin}')${createServer}.listen(${targetPort}, '127.0.0.1'), 20).unref();
+}
+afterSelectedEntry();`;
       const rivalSource =
         testCase.format === 'cjs'
           ? `const { createRequire } = require('node:module');\n${schedule}`
@@ -663,6 +681,7 @@ setTimeout(() => lateRequire('/port-proof/late.cjs')('${testCase.builtin}')${cre
         }),
         '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
 const selected = http.createServer((_req, res) => res.end('selected'));
+require('node:fs').writeFileSync('/port-proof/selected-entered-${targetPort}', 'ready');
 setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
         '/port-proof/node_modules/.bin/rival': `#!/usr/bin/env node
 import('../rival/index.${testCase.format === 'cjs' ? 'cjs' : 'mjs'}');
@@ -684,7 +703,15 @@ import('../rival/index.${testCase.format === 'cjs' ? 'cjs' : 'mjs'}');
                 : `.createServer((socket) => socket.end('rival'))`;
             const source = `const { createRequire } = require('node:module');
 const lateRequire = createRequire;
-setTimeout(() => lateRequire('/port-proof/late.cjs')('${builtin}')${createServer}.listen(${port}, '127.0.0.1'), 20).unref();
+const fs = require('node:fs');
+function afterSelectedEntry() {
+  if (!fs.existsSync('/port-proof/selected-entered-${port}')) {
+    setTimeout(afterSelectedEntry, 5).unref();
+    return;
+  }
+  setTimeout(() => lateRequire('/port-proof/late.cjs')('${builtin}')${createServer}.listen(${port}, '127.0.0.1'), 20).unref();
+}
+afterSelectedEntry();
 'scheduled';`;
             const scheduled = await sandbox.runtime.eval(source);
             if (!scheduled.ok) throw new Error(scheduled.error.message);

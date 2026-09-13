@@ -226,6 +226,13 @@ Recovery never replays a command or promises rollback. Memory recovery uses the
 retained image; unknown effects can be lost. Concurrent finite operations reject
 busy. Project methods alongside a resident bin reject resident-concurrency.
 
+To return from preview to project commands, call `await sandbox.stopResident()`.
+It replaces the Worker using the same recovery owner as restart, clears resident
+replay and returns `{unflushedWrites, resident: null}`. The host clears its iframe.
+It is an explicit realm replacement even without a current resident; acknowledged
+files follow existing recovery guarantees. Ordinary `restart({preview})` still
+relaunches the resident. Both reject overlapping replacement.
+
 Raw sandbox.fs also provides readdir/stat/mkdir/rename/rm/flush; relative paths
 remain VFS-rooted. Stat/dirent results are plain VFS metadata records. New
 mutations/flush return applied/persistence receipts (memory/flushed); writeFile

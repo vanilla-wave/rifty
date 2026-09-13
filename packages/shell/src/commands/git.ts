@@ -303,7 +303,7 @@ function parseCommit(args: string[]): CommitPlan {
 }
 
 async function doStatus(g: Git, args: string[], ctx: CommandContext): Promise<number> {
-  const porcelain = args.includes('--porcelain') || args.includes('-s');
+  const porcelain = args.some((arg) => ['--porcelain', '-s', '--short'].includes(arg));
   try {
     const entries = await strictStatus(g);
     if (porcelain) {

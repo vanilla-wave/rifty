@@ -1,0 +1,1 @@
+I need to file issues from the app itself. Add a way to create a new issue starting from the Issues page — a "New issue" button that opens a form with at least a title field. Submitting with an empty title must not create anything and should tell me the title is required. After I submit a valid title, the new issue should show up in the issues list.

@@ -18,6 +18,8 @@ export interface SnapshotOnlyAcceptance {
   readonly previewUrl: string;
   readonly buildOutput: string;
   writeMessage(message: string): Promise<void>;
+  proveAgent(message: string): Promise<unknown>;
+  agentWriteMessage(message: string): Promise<void>;
   closeAndProveSavedState(): Promise<void>;
   proveStorageNamespaces(): Promise<void>;
   proveOrphanScratchRecovery(): Promise<void>;
@@ -108,7 +110,7 @@ export async function openSnapshotOnlyAcceptance(
 import { message } from './message.ts'
 const render = (value) => { document.querySelector('#app').textContent = value }
 render(message)
-if (import.meta.hot) import.meta.hot.accept('./message.ts', (module) => render(module.message))
+if (import.meta.hot) import.meta.hot.accept('./message.ts', (module) => { if (module) render(module.message) })
 `,
       '/src/message.ts': 'export const message = "snapshot-only-vite-ready";\n',
       '/probe.cjs': "console.log('snapshot-only-local-script')\n",
@@ -148,6 +150,19 @@ if (import.meta.hot) import.meta.hot.accept('./message.ts', (module) => render(m
   return Object.freeze({
     previewUrl: preview.url,
     buildOutput: built.output,
+    async proveAgent(message: string) {
+      const { provePackedAgent } = await import('./agent-proof');
+      return provePackedAgent(
+        project,
+        workbench.playground.forSession(project),
+        preview.url,
+        message,
+      );
+    },
+    async agentWriteMessage(message: string) {
+      const { agentWriteMessage } = await import('./agent-proof');
+      await agentWriteMessage(project, message);
+    },
     async writeMessage(message: string) {
       const current = await project.files.readFile('/src/message.ts');
       await project.files.writeFile(

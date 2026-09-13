@@ -72,7 +72,8 @@
     "docs:check": "pnpm backlog:check && pnpm refs:check",
     "pr:check": "node tools/checks/pr-check.mjs",
     "postinstall": "playwright install chromium firefox webkit || true",
-    "snapshots:bake": "pnpm --filter @riftydev/playground snapshots:bake"
+    "snapshots:bake": "pnpm --filter @riftydev/playground snapshots:bake",
+    "agent-bench": "tsx tools/agent-bench/src/cli.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

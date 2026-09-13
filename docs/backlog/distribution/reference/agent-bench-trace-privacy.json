@@ -1,0 +1,14 @@
+[
+  {
+    "snapshots": true,
+    "actualAuth": true,
+    "containsKey": true,
+    "containsClick": true
+  },
+  {
+    "snapshots": false,
+    "actualAuth": true,
+    "containsKey": true,
+    "containsClick": true
+  }
+]

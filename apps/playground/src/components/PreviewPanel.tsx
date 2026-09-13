@@ -45,6 +45,11 @@ export interface PreviewPanelEntry {
   readonly source: 'dev-server' | 'preview' | 'node';
 }
 
+export interface PreviewPanelTarget {
+  readonly url: string;
+  readonly frame: HTMLIFrameElement;
+}
+
 // `unreachable` = the route never answered ok (dev server down); `error` = the
 // route responded but the in-page frame didn't commit. Distinct so the overlay
 // never claims a running server it hasn't observed.
@@ -83,6 +88,7 @@ export function PreviewPanel(props: {
   onNotify?: (message: string, tone: 'error' | 'success') => void;
   /** Live previews published by the owner registry (ADR-0278). */
   ports?: Accessor<readonly PreviewPanelEntry[]>;
+  onPreviewChange?: (target: PreviewPanelTarget | undefined) => void;
 }) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
   const [phase, setPhase] = createSignal<Phase>('starting');
@@ -96,6 +102,11 @@ export function PreviewPanel(props: {
   );
   const previewUrl = (): string | undefined => selectedEntry()?.url;
   const frameKey = createMemo(() => ({ epoch: frameEpoch() }));
+  createEffect(() => {
+    const url = previewUrl();
+    props.onPreviewChange?.(url && phase() === 'live' && frame ? { url, frame } : undefined);
+  });
+  onCleanup(() => props.onPreviewChange?.(undefined));
 
   // Keep the selected port valid against the live set. Any newly published
   // server auto-selects; a hand-picked switcher choice survives until its port

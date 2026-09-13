@@ -1,0 +1,231 @@
+{
+  "root": "/tmp/pr333-cli-public-extension-eDlWli",
+  "results": [
+    {
+      "scenario": "tools",
+      "activeProgramStopped": null,
+      "sentinel": true,
+      "exitCode": 0,
+      "admitted": "one",
+      "blockedExists": false,
+      "budget": "{\"calls\":1,\"blocked\":\"write\"}",
+      "requests": [
+        {
+          "authorization": "absent",
+          "tools": ["read", "bash", "edit", "write"]
+        },
+        {
+          "authorization": "absent",
+          "tools": ["read", "bash", "edit", "write"]
+        }
+      ],
+      "stderr": "",
+      "events": [
+        {
+          "type": "session"
+        },
+        {
+          "type": "agent_start"
+        },
+        {
+          "type": "turn_start"
+        },
+        {
+          "type": "message_start"
+        },
+        {
+          "type": "message_end"
+        },
+        {
+          "type": "message_start",
+          "stopReason": "pending"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_end",
+          "stopReason": "toolUse"
+        },
+        {
+          "type": "tool_execution_start"
+        },
+        {
+          "type": "tool_execution_end"
+        },
+        {
+          "type": "message_start"
+        },
+        {
+          "type": "message_end"
+        },
+        {
+          "type": "turn_end",
+          "stopReason": "toolUse"
+        },
+        {
+          "type": "turn_start"
+        },
+        {
+          "type": "message_start",
+          "stopReason": "pending"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_end",
+          "stopReason": "toolUse"
+        },
+        {
+          "type": "tool_execution_start"
+        },
+        {
+          "type": "tool_execution_end"
+        },
+        {
+          "type": "message_start"
+        },
+        {
+          "type": "message_end"
+        },
+        {
+          "type": "turn_end",
+          "stopReason": "toolUse"
+        },
+        {
+          "type": "turn_start"
+        },
+        {
+          "type": "message_start",
+          "stopReason": "error",
+          "errorMessage": "This operation was aborted"
+        },
+        {
+          "type": "message_end",
+          "stopReason": "error",
+          "errorMessage": "This operation was aborted"
+        },
+        {
+          "type": "turn_end",
+          "stopReason": "error",
+          "errorMessage": "This operation was aborted"
+        },
+        {
+          "type": "agent_end"
+        },
+        {
+          "type": "agent_settled"
+        }
+      ]
+    },
+    {
+      "scenario": "time",
+      "activeProgramStopped": true,
+      "sentinel": true,
+      "exitCode": 0,
+      "admitted": null,
+      "blockedExists": false,
+      "budget": "{\"kind\":\"time\",\"calls\":1}",
+      "requests": [
+        {
+          "authorization": "absent",
+          "tools": ["read", "bash", "edit", "write"]
+        }
+      ],
+      "stderr": "",
+      "events": [
+        {
+          "type": "session"
+        },
+        {
+          "type": "agent_start"
+        },
+        {
+          "type": "turn_start"
+        },
+        {
+          "type": "message_start"
+        },
+        {
+          "type": "message_end"
+        },
+        {
+          "type": "message_start",
+          "stopReason": "pending"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_update"
+        },
+        {
+          "type": "message_end",
+          "stopReason": "toolUse"
+        },
+        {
+          "type": "tool_execution_start"
+        },
+        {
+          "type": "tool_execution_update"
+        },
+        {
+          "type": "tool_execution_update"
+        },
+        {
+          "type": "tool_execution_end"
+        },
+        {
+          "type": "message_start"
+        },
+        {
+          "type": "message_end"
+        },
+        {
+          "type": "turn_end",
+          "stopReason": "toolUse"
+        },
+        {
+          "type": "turn_start"
+        },
+        {
+          "type": "message_start",
+          "stopReason": "error",
+          "errorMessage": "This operation was aborted"
+        },
+        {
+          "type": "message_end",
+          "stopReason": "error",
+          "errorMessage": "This operation was aborted"
+        },
+        {
+          "type": "turn_end",
+          "stopReason": "error",
+          "errorMessage": "This operation was aborted"
+        },
+        {
+          "type": "agent_end"
+        },
+        {
+          "type": "agent_settled"
+        }
+      ]
+    }
+  ]
+}

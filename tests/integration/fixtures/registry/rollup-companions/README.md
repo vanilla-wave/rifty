@@ -18,7 +18,7 @@ manifest and npm-authored v3 lock. Generated in an empty temporary directory:
 from each `dist.tarball`; never repacked or patched. `provenance.json` records
 URLs, exact versions, SHA512 SRI and byte sizes; fixture loader verifies them.
 Metadata JSON is formatted; original metadata fields and tarball bytes remain.
-17tarballs, 8,323,806bytes. Native optional tarballs are omitted: actual npm locks
+20tarballs, 9,727,725bytes. Native optional tarballs are omitted: actual npm locks
 retain their pins; retained traversal skips them before HTTP. Fresh-install
 controls model their missing fixture metadata as unavailable optional HTTP.
 
@@ -37,3 +37,7 @@ Independent real Node oracle: the same Vite7.3.6/Rollup4.63.1/esbuild0.28.0 pins
 passed `npm ci --ignore-scripts` then real `vite build` (3modules, exit0).
 Producer contract also executes the extracted adapted Rollup through real Node;
 WASM parser must produce an executable bundle returning42.
+
+2026-09-13: original Rollup/@rollup/wasm-node4.63.2 responses added for the
+current Vite snapshot regenerated after ADR-0433. Exact URL/version/SHA512 were
+checked against that producer's lock; existing manifests/locks remain unchanged.

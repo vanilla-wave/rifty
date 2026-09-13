@@ -25,6 +25,7 @@ const HEAVY_SPECS = [
   // + dep-optimizer cold boot — far past the light lane's per-test budget.
   '**/react-vite-preset.spec.ts',
   '**/react-vite-build.spec.ts',
+  '**/ai-mode.spec.ts',
   '**/preset-deep-link.spec.ts',
   '**/webpack-dev-server.spec.ts',
 ];

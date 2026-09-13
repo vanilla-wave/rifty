@@ -163,6 +163,24 @@
       "tarball": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.19.tgz",
       "integrity": "sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==",
       "bytes": 5694
+    },
+    {
+      "name": "rollup",
+      "version": "4.63.2",
+      "file": "rollup-4.63.2",
+      "metadataUrl": "https://registry.npmjs.org/rollup/4.63.2",
+      "tarball": "https://registry.npmjs.org/rollup/-/rollup-4.63.2.tgz",
+      "integrity": "sha512-l5eyksV4tPBj6lJyEa37YzIOCSOV7lkZzEHUdpjWZbtD7wTcFYmEYXSgm5bT4vV+dZLb9rBG1W9GROOG4NS4Ew==",
+      "bytes": 576183
+    },
+    {
+      "name": "@rollup/wasm-node",
+      "version": "4.63.2",
+      "file": "rollup-wasm-node-4.63.2",
+      "metadataUrl": "https://registry.npmjs.org/%40rollup%2Fwasm-node/4.63.2",
+      "tarball": "https://registry.npmjs.org/@rollup/wasm-node/-/wasm-node-4.63.2.tgz",
+      "integrity": "sha512-Qj0Lrr0LNWQxWfJ/k6t6PBR4dCO6koTZ5TW8l7urr0sK4GfDdj7iLuraZo1mTmZFj1znFSWya4mukuPvnFQTVg==",
+      "bytes": 822042
     }
   ]
 }

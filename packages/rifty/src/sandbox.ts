@@ -166,6 +166,8 @@ export interface ToolchainSandbox extends Sandbox {
   readonly toolchain: SandboxToolchain;
   readonly capabilityReport: SandboxCapabilityReport;
   restart(options: SandboxRestartOptions): Promise<SandboxRestartReport>;
+  /** Replace the Worker without relaunching its resident; host owns the preview element. */
+  stopResident(): Promise<SandboxRestartReport>;
 }
 
 /**
@@ -536,22 +538,35 @@ async function bootToolchainSandbox(
   }
 
   async function restart(restartOptions: SandboxRestartOptions): Promise<SandboxRestartReport> {
+    return replaceWorker({ restart: restartOptions });
+  }
+
+  async function replaceWorker(
+    operation: { readonly restart: SandboxRestartOptions } | { readonly stop: true },
+  ): Promise<SandboxRestartReport> {
     assertLive();
     if (restarting) {
       throw restartBusyError();
     }
     restarting = true;
     try {
-      if (restartOptions === null || typeof restartOptions !== 'object') {
-        throw new TypeError('sandbox restart options must be an object');
-      }
-      const preview = restartOptions.preview;
-      const beforeStart = restartOptions.beforeStart;
-      if (preview === null || typeof preview !== 'object' || typeof preview.src !== 'string') {
-        throw new TypeError('sandbox restart preview must expose a string src');
-      }
-      if (beforeStart !== undefined && typeof beforeStart !== 'function') {
-        throw new TypeError('sandbox restart beforeStart must be a function');
+      let relaunch: SandboxRestartOptions | null = null;
+      if ('restart' in operation) {
+        const restartOptions = operation.restart;
+        if (restartOptions === null || typeof restartOptions !== 'object') {
+          throw new TypeError('sandbox restart options must be an object');
+        }
+        const preview = restartOptions.preview;
+        const beforeStart = restartOptions.beforeStart;
+        if (preview === null || typeof preview !== 'object' || typeof preview.src !== 'string') {
+          throw new TypeError('sandbox restart preview must expose a string src');
+        }
+        if (beforeStart !== undefined && typeof beforeStart !== 'function') {
+          throw new TypeError('sandbox restart beforeStart must be a function');
+        }
+        relaunch = { preview, beforeStart };
+      } else {
+        residentRequest = null;
       }
 
       const currentActivation = current.snapshotToolchainState();
@@ -577,15 +592,15 @@ async function bootToolchainSandbox(
       if (activation !== null) await current.restoreToolchainState(activation);
       // The restored controller owns recovery now, including writes from a failing callback.
       activation = null;
-      await beforeStart?.(callbackFs(current));
+      await relaunch?.beforeStart?.(callbackFs(current));
 
       let resident: SandboxResidentBin | null = null;
-      if (residentRequest !== null) {
+      if (relaunch !== null && residentRequest !== null) {
         const started = await current.toolchain.startBin(residentRequest);
         residentRequest = current.snapshotResidentRequest();
         resident = mountResidentPreview(started.port);
         generation += 1;
-        preview.src = `${resident.previewUrl}?riftyRestart=${generation}`;
+        relaunch.preview.src = `${resident.previewUrl}?riftyRestart=${generation}`;
       }
       const unflushedWrites = unflushedMarker;
       unflushedMarker = false;
@@ -646,6 +661,9 @@ async function bootToolchainSandbox(
     }),
     ...(options.swError === undefined ? {} : { swError: options.swError }),
     restart,
+    stopResident() {
+      return replaceWorker({ stop: true });
+    },
     dispose: disposeSandbox,
   };
 }

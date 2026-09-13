@@ -21,6 +21,7 @@ import {
 } from '../src/runtime/emnapi-core-install-policy.ts';
 import {
   applyViteCliActionPatch,
+  applyViteRootUrlPatch,
   applyViteRootWatchPatch,
   viteRootWatchPatchPolicy,
 } from '../src/runtime/vite-cli-install-policy.ts';
@@ -123,7 +124,7 @@ function proveViteCliPatchInput(files: ReadonlyMap<string, Uint8Array>): void {
   }
   for (const path of candidates) {
     try {
-      applyViteRootWatchPatch(decoder.decode(files.get(path)));
+      applyViteRootUrlPatch(applyViteRootWatchPatch(decoder.decode(files.get(path))));
     } catch (error) {
       throw new Error(`${path} is not patchable by the current Vite root watcher transform`, {
         cause: error,

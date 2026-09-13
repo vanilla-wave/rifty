@@ -50,6 +50,9 @@ export default defineConfig({
     // dependency. Explicit includes below are the only prebundled graph.
     noDiscovery: true,
     include: [
+      '@riftydev/agent > @earendil-works/pi-agent-core',
+      '@riftydev/agent > @earendil-works/pi-ai',
+      '@riftydev/agent > @earendil-works/pi-ai/api/openai-completions',
       '@riftydev/runtime-js > @jitl/quickjs-wasmfile-release-sync',
       '@riftydev/runtime-js > acorn',
       '@riftydev/runtime-js > cjs-module-lexer',

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Retire materialized dependency claims produced by the old npm tar-root layout; fresh installation restores declaration-file paths.
+
+
+- Stabilize resident ownership fault fixtures against delayed host admission; retain native foreign-loader checks.
+
+
+- Refresh dependency artifact identity for Vite root-URL preparation; root projects retain live React component updates (ADR-0433).
 - Reject malformed persisted storage diagnoses under preferred too; pin all legacy-loss categories and document same-origin SDK namespace exclusion.
 
 - Report excluded legacy/corrupt storage through persistent, non-retryable health; retain corruption diagnosis across first-proof crashes (ADR-0432).
