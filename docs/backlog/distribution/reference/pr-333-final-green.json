@@ -1,9 +1,9 @@
 {
-  "reviewed_sha": "f756a85730e1335c6802f5d7ebd756eee72ad085",
+  "reviewed_sha": "cdad87352cd76f3e54aed0f16d3dc08001a7fce8",
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN PASS — merge. Three baseline defects repaired with real carriers; no blocker, no unit/goal residual; 2 advisory concerns (carrier depth, uncarried presenter message) and 2 nits (ADR-0431 wording, recorded registry semantic delta).",
+  "merge_call": "Final+GREEN PASS — merge. Three repairs carry real carriers (RED reproduced independently, GREEN at HEAD), the packed-consumer gate keeps every checking criterion after the registry extraction (PR-4), and the merge of origin/main is byte-identical to the automatic merge except a correctly hand-resolved docs/adr/README.md hunk; every agent/no-COI/UI/bench proof was re-executed on the merged tree (six lanes exit 0). No blocker, no unit/goal residual; 2 advisory concerns (uncarried presenter message, carrier depth) and 6 nits. Binding note: the committed record pr-333-final-green.json (reviewed f756a8573) cannot bind at HEAD because the merge adds main's non-documentation paths after that SHA (tools/checks/pass-binding.mjs diffSince) — this verdict, recorded with reviewed_sha cdad87352, is the binding record.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "PR #333 review fixes c04c976d6..f756a8573 (HEAD f756a8573); BASE cba328d99 (accepted goal-closure tree; landing record docs/backlog/distribution/reference/agent-bench-final-green.json reviewed_sha f5ff8b848); goal I5/I8 + ADR-0431 read at f5ff8b848 (goal epics/ai-agent-mode-and-bench/goal file deleted at closure); REV-7; PR-4. No-doc repair; observed baseline verified from raw evidence: (1) RiftyTerminal.executeLine left an owned incomplete line in the interactive buffer (RED tests/browser-unit/agent-ui-terminal.spec.ts:134 fails with guard removed — reproduced independently, mutant M1); (2) installed-tarball loopback registry duplicated between tests/integration/workbench-packed-consumer.mjs and tools/agent-bench/src/installed-registry.ts at BASE (git show cba328d99: both); (3) unused proc.ts helpers and biome unused-parameter warnings in the Pi oracle. Executed at HEAD: typecheck terminal/playground/agent-bench 0; biome check . 0; check:arch 0; check:file-size 0; check:dir-owner 0; vitest packages/terminal/src/terminal.test.ts 136/136; browser-unit agent-ui-terminal.spec.ts 3/3 (port 5361); implementer logs read: /tmp/pr333-fix-red.log EXIT=1, /tmp/pr333-fix-green-terminal.log 3 passed, /tmp/pr333-fix-surface.log EXIT=0, /tmp/pr333-fix-heavy.log PACKED_EXIT=0 (workbench-packed-consumer.test.ts 1/1, 186s) and BENCH_EXIT=0 (contract.spec.ts 12/12, 11.4m). Closure record at BASE reused for untouched invariants (REV-1); I5 and I8 dependencies changed by this diff re-proven above.",
+  "unit_goal_source": "PR #333 post-closure review fixes plus merge of origin/main: commits c04c976d6 (owned incomplete terminal line discarded; agent shell failure names it), cca1f3027 (installed-tarball loopback registry shared via tests/integration/installed-registry.mjs + .d.mts; unused proc.ts helpers removed), f756a8573 (biome unused-parameter renames in the frozen Pi oracle), afdb5c020 (landing record pr-333-final-green.json reviewed f756a8573 + closure-evidence note), cdad87352 (Merge origin/main = 48dacb1f4: PR #299 storage-replica, PR #335). HEAD cdad87352; BASE cba328d99 (accepted goal-closure tree; landing record agent-bench-final-green.json reviewed_sha f5ff8b848). Authority: goal I1–I8 @ f5ff8b848 (goal file deleted at closure), ADR-0431 §1, ADR-0424, ADR-0426; REV-1 changed dependency (main's packages/vfs, packages/workbench storage and packages/rifty/src/sandbox.ts logger/startup diagnostics); REV-7; PR-4. No-doc repair; observed baseline verified from raw evidence: (1) at BASE packages/terminal executeBuffer always insertPrintable('\\n') on an incomplete validator result, so RiftyTerminal.executeLine left the owned line in the interactive buffer — RED tests/browser-unit/agent-ui-terminal.spec.ts:134 fails with the guard reverted (implementer /tmp/pr333-fix-red.log EXIT=1; reproduced independently in scratch cdad87352: /tmp/pr333-review2-mutant-m1.log M1_EXIT=1, received submitted ['echo \"open\\n']; control at HEAD /tmp/pr333-review2-green-head.log 3 passed); (2) git show cba328d99: the loopback registry existed twice (tests/integration/workbench-packed-consumer.mjs startBrowserRegistry vs tools/agent-bench/src/installed-registry.ts); (3) proc.ts tailOf/killChild had no importer; oracle params unused. Merge verified: git merge-tree --write-tree afdb5c020 48dacb1f4 conflicts only in docs/adr/README.md; git diff <auto-tree> cdad87352 = exactly the three conflict markers removed, both sides' rows kept (0427/0430 + 0432); every ADR file 0400+ indexed; the merged file set vs main equals the PR-side file set vs merge-base acf594da9 (234 = 234, no extras); merged sandbox.ts: stopResident() → replaceWorker (sandbox.ts:664, :544) shares the one respawn path that main instrumented with logToolchainStartup (sandbox.ts:583-590); fixture package.json carries both @riftydev/agent and @riftydev/vfs. Executed on the merged tree (/tmp/pr333-merge-gates.log): browser-unit 22 passed BU_EXIT=0; no-COI 5 passed NOCOI_EXIT=0; e2e ai-mode 10 passed E2E_EXIT=0; pr:check 25/25 (test:run 206s, test:parity 63s) PRCHECK_EXIT=0; packed consumer 1/1 (163s) PACKED_EXIT=0; agent-bench contract 12/12 (10.7m; three-lane smoke 5.0m) BENCH_EXIT=0. Own runs at HEAD: tsc tools/agent-bench 0; biome check on the 11 changed files 0; check:arch 0; check:file-size 0; check:dir-owner 0; vitest packages/terminal/src/terminal.test.ts 136/136; landing record validator exit 0. Prior independent Final+GREEN of the three fix commits (/tmp/pr333-review/verdict.json, M1/M2/M3 artifacts) read as evidence, not immunity (REV-12).",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -13,11 +13,11 @@
       "source": "acceptance",
       "trace": "I5 + ADR-0431",
       "status": "pass",
-      "citation": "tests/browser-unit/agent-ui-terminal.spec.ts:134; tests/browser-unit/agent-ui-terminal.spec.ts:163; packages/terminal/src/terminal.ts:1424",
+      "citation": "tests/browser-unit/agent-ui-terminal.spec.ts:134; tests/browser-unit/agent-ui-terminal.spec.ts:163; packages/terminal/src/terminal.ts:1425",
       "note": ""
     },
     {
-      "row": "Interactive Enter on incomplete input still inserts a continuation newline (submitLine contract retained)",
+      "row": "Interactive Enter on incomplete input still inserts a continuation newline; submitLine retains its void contract",
       "source": "acceptance",
       "trace": "ADR-0431",
       "status": "pass",
@@ -25,7 +25,7 @@
       "note": ""
     },
     {
-      "row": "Public API RiftyTerminal.executeLine: number/undefined/original error, busy/disposed reject unchanged; incomplete path now discards the line",
+      "row": "Public API RiftyTerminal.executeLine(line, execute): number/undefined/original error, busy/disposed reject; incomplete input now discards the line",
       "source": "public-api",
       "trace": "ADR-0431",
       "status": "pass",
@@ -33,27 +33,51 @@
       "note": ""
     },
     {
-      "row": "Packed-consumer gate criteria retained after registry extraction: exact local tarball resolution (assertResolution), request/response accounting, snapshot-only deny",
-      "source": "acceptance",
-      "trace": "I8 + PR-4 (criteria at BASE cba328d99 vs HEAD)",
-      "status": "pass",
-      "citation": "tests/integration/workbench-packed-consumer.mjs:647; tests/integration/workbench-packed-consumer.mjs:972; tests/integration/workbench-packed-consumer.mjs:984; tests/integration/installed-registry.mjs:283",
-      "note": ""
-    },
-    {
-      "row": "agent-bench packed no-COI host installs its real installed-dependency closure from the shared loopback registry",
+      "row": "Packed-consumer gate criteria retained after the registry extraction: exact local tarball resolution (assertResolution), registry request/response accounting, snapshot-only deny (old criteria inspected at BASE cba328d99, PR-4)",
       "source": "acceptance",
       "trace": "I8",
       "status": "pass",
-      "citation": "tools/agent-bench/src/installed-registry.ts:15; tools/agent-bench/src/services.ts:75; tools/agent-bench/tests/contract.spec.ts:78",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:647; tests/integration/workbench-packed-consumer.mjs:972; tests/integration/workbench-packed-consumer.mjs:984; tests/integration/installed-registry.mjs:283; tests/integration/workbench-packed-consumer.test.ts (PACKED_EXIT=0, 1/1)",
       "note": ""
     },
     {
-      "row": "Frozen Pi 0.85.1 oracle behavior unchanged by unused-parameter renames",
+      "row": "agent-bench rifty-no-coi packed host installs its real installed-dependency closure from the shared loopback registry; all three lanes pass mock-model smoke with identical judge evidence",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/installed-registry.ts:15; tools/agent-bench/src/services.ts:75; tools/agent-bench/tests/contract.spec.ts:78 (BENCH_EXIT=0, 12/12)",
+      "note": ""
+    },
+    {
+      "row": "Same headless agent over no-COI sandbox.project() on the merged sandbox.ts/vfs: project policy, file effects, provider-error history, Stop → next command, edit → build → preview → resident exit → repair",
+      "source": "acceptance",
+      "trace": "I3 + I6",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pi-agent.spec.ts:34; tests/no-coi/no-coi-pi-agent.spec.ts:79; tests/no-coi/no-coi-pi-agent.spec.ts:118; tests/no-coi/no-coi-resident-exit.spec.ts:3 (NOCOI_EXIT=0, 5/5)",
+      "note": ""
+    },
+    {
+      "row": "Playground +chat on the merged tree: streams edits/build/preview into editor, SCM, Agent terminal and export; settings persist endpoint/model only; Stop/Reset/export; unreachable endpoint names the proxy remedy; budgets distinct; agent terminal keeps the same split stdout as a user command",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:60; tests/e2e/ai-mode.spec.ts:174; tests/e2e/ai-mode.spec.ts:231; tests/e2e/ai-mode.spec.ts:300; tests/e2e/ai-mode.spec.ts:384 (E2E_EXIT=0, 10/10)",
+      "note": ""
+    },
+    {
+      "row": "Deterministic real-host embedding proofs on the merged Workbench storage: fixed deps/no registry, custom tool/transport, absent diagnostics/preview, failed build → fix → build, provider error after a write → continuation, Stop → next command",
+      "source": "acceptance",
+      "trace": "I7 + I1 + I2 + I3",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core-snapshot.spec.ts:5; tests/browser-unit/agent-core.spec.ts:16; tests/browser-unit/agent-core.spec.ts:49; tests/browser-unit/agent-core.spec.ts:79 (BU_EXIT=0, 22/22)",
+      "note": ""
+    },
+    {
+      "row": "Frozen Pi 0.85.1 oracle behavior unchanged by the unused-parameter renames",
       "source": "frozen-artifact",
       "trace": "ADR-0424 + I2 + I3",
       "status": "pass",
-      "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:92; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:159; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:395",
+      "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:92; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:103; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:159; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:183; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:187; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:260; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:395",
       "note": ""
     }
   ],
@@ -64,9 +88,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "apps/playground/src/components/TerminalPanel.tsx:392",
-          "evidence": "grep -rn 'Command input is incomplete|did not execute a complete command' apps packages tests tools → only TerminalPanel.tsx:392 and apps/playground/CHANGELOG.md:5; no test asserts the presenter failure. Honesty of result===undefined ⇔ incomplete holds by types: TerminalCommandPresenter.execute → Promise<number> (apps/playground/src/adapters/playground-terminal-ui.ts:22-28), runLine → Promise<number> (:73-81, returns run.exitCode), executeBuffer returns undefined only when the owner result is not a number or validation is incomplete (packages/terminal/src/terminal.ts:1424-1447).",
-          "summary": "Presenter failure 'Command input is incomplete (open quote or block); nothing executed' carries no test; the throw-on-undefined path predates this unit (BASE TerminalPanel.tsx:391) and the number-typed owner makes undefined equivalent to incomplete, so the message cannot mislabel an executed command. Advisory.",
+          "location": "apps/playground/src/components/TerminalPanel.tsx:391",
+          "evidence": "grep -rn 'incomplete|nothing executed|open quote' tests/e2e/ai-mode.spec.ts tests/browser-unit/*.spec.ts apps/playground/src/ai/*.ts → only the terminal spec (:134/:147); no test asserts the presenter failure text or the agent shell tool receiving it. Path read: apps/playground/src/ai/playground-agent-host.ts:60 awaits terminalUi.presentLine → apps/playground/src/adapters/playground-terminal-ui.ts:288-294 → presenter → mounted.executeLine; the owner callback returns runLine's number (playground-terminal-ui.ts:22-28, :296-300), so result === undefined ⇔ incomplete validator result (packages/terminal/src/terminal.ts:1424-1428, :1447). The throw-on-undefined path itself predates the unit (BASE TerminalPanel.tsx:391 threw 'Terminal did not execute a complete command'); only the text changed.",
+          "summary": "The agent-facing failure 'Command input is incomplete (open quote or block); nothing executed' has no carrier; honesty of the message holds by types (undefined ⇔ incomplete) and the path is pre-existing. Advisory.",
           "authority": ""
         }
       ]
@@ -74,7 +98,15 @@
     {
       "axis": "Mission and architecture",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tools/agent-bench/src/installed-registry.ts:11",
+          "evidence": "pnpm check:arch → OK (tools/checks/check-arch.mjs scopes packages apps tools services; tests/ is not a modeled layer). tsc -p tools/agent-bench/tsconfig.json → 0 via the sibling .d.mts.",
+          "summary": "A tools/ package now imports referee code from tests/integration (relative ../../../ path). Acceptable for the private bench (both are referee machinery guarded by PR-4), but no arch rule governs this direction; note only.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Goal drift",
@@ -84,7 +116,7 @@
           "severity": "nit",
           "location": "docs/adr/terminal/0431-present-owned-commands-through-the-existing-input-lifetime.md:19",
           "evidence": "",
-          "summary": "ADR-0431 §1 states 'Validation that leaves incomplete input returns undefined, never invented success' but not that an owned incomplete line is discarded (packages/terminal/src/terminal.ts:1425-1427); packages/terminal/CHANGELOG.md:5 cites the ADR for it. No contradiction; a dated one-line note would keep the ADR reading the shipped lifetime.",
+          "summary": "ADR-0431 §1 states 'Validation that leaves incomplete input returns undefined, never invented success' but not that an owned incomplete line is discarded (packages/terminal/src/terminal.ts:1425-1427); packages/terminal/CHANGELOG.md:5 cites the ADR for the discard. Consistent (an owned line has no continuation), a dated one-line note would make the ADR state the shipped lifetime.",
           "authority": ""
         }
       ]
@@ -106,8 +138,22 @@
         {
           "severity": "concern",
           "location": "tests/browser-unit/agent-ui-terminal.spec.ts:163",
-          "evidence": "Scratch worktree /tmp/pr333-review-scratch @ f756a8573. M1 (guard reverted: always insertPrintable('\\n')): RIFTY_PLAYGROUND_PORT=5362 playwright browser-unit agent-ui-terminal.spec.ts → test :134 FAILS, Received submitted ['echo \"open\\n'], M1_EXIT=1 (/tmp/pr333-review/mutant-m1.log). M2 (always replaceLine(''), interactive ignored): vitest packages/terminal/src/terminal.test.ts → 3 failed (:1187, :1207, :1226), M2_EXIT=1 (/tmp/pr333-review/mutant-m2.log). M3 (else { this.buffer=''; this.cursorPos=0 } — no re-render, no edit-state reset): browser-unit 3 passed, M3_EXIT=0 (/tmp/pr333-review/mutant-m3.log).",
-          "summary": "Carrier depth: mutant M3 (buffer zeroed without replaceLine('')) leaves the echoed incomplete line rendered and edit state stale yet passes the new spec, which observes only owner calls, result and the next submitted line. Beyond the clause as declared (nothing reaches the next Enter — which M3 satisfies); HEAD's replaceLine('') re-renders and resets state (packages/terminal/src/terminal.ts:687-694). Advisory.",
+          "evidence": "Prior reviewer artifact read: /tmp/pr333-review/mutant-m3.log — mutant M3 (else { this.buffer=''; this.cursorPos=0 } without replaceLine('')) → 3 passed, M3_EXIT=0; /tmp/pr333-review/mutant-m2.log (always replaceLine(''), interactive ignored) → terminal.test.ts 3 failed, M2_EXIT=1. Own M1 (guard reverted): /tmp/pr333-review2-mutant-m1.log M1_EXIT=1.",
+          "summary": "Carrier depth: a mutant that zeroes the buffer without re-rendering (echoed incomplete line stays on screen, edit state stale) passes the spec, which observes only owner calls, result and the next submitted line. Beyond the clause as declared ('nothing left for the next Enter' — satisfied); HEAD's replaceLine('') re-renders and resets state (packages/terminal/src/terminal.ts:687-694). Advisory.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "apps/playground/src/components/TerminalPanel.tsx:392",
+          "evidence": "packages/shell/src/language-service.ts:247 returns 'incomplete' for quote || escaped || stack.length > 0.",
+          "summary": "Message names '(open quote or block)' but the validator also reports a trailing backslash continuation ('escaped') as incomplete; 'nothing executed' stays true in every case.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "tests/integration/installed-registry.d.mts:1",
+          "evidence": "comm of `export function` names: listen, closeServer, sendResponse are exported by installed-registry.mjs but undeclared in the .d.mts; their only importer is the JS gate (tests/integration/workbench-packed-consumer.mjs:27-37).",
+          "summary": "Typing surface omits three exported helpers; harmless today (no TS consumer), drifts if a TS consumer appears.",
           "authority": ""
         }
       ]
@@ -118,9 +164,16 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "tests/integration/installed-registry.mjs:158",
-          "evidence": "git diff --color-moved=plain cba328d99..f756a8573 -- workbench-packed-consumer.mjs installed-registry.mjs installed-registry.ts: every non-moved line is a signature/import/export or the cleanup consolidation (BASE two 5s deadlines 'did not settle'/'did not close' → one 5s deadline over close(), workbench-packed-consumer.mjs:395-402); registry request handler, assertResolution, deny, requests/responses bodies moved verbatim. Bench side vs BASE tools/agent-bench/src/installed-registry.ts: tarball route /-/tarballs/<name>-<ver>.tgz (was /-/<index>), dist-tags.latest only for a single version (was last-pushed), shasum + CORS/HEAD/OPTIONS added, npm_config_offline env (was --offline). Executed: /tmp/pr333-fix-heavy.log PACKED_EXIT=0 (packed consumer 1/1) and BENCH_EXIT=0 (contract.spec.ts:78 all three lanes incl. rifty-no-coi packed host, 12/12).",
-          "summary": "Recorded semantic delta of the bench's loopback registry after adopting the packed-consumer implementation (route scheme, dist-tags.latest, shasum, CORS/HEAD/OPTIONS); the only consumer is native npm install (tools/agent-bench/src/services.ts:77-88), which the packed-consumer gate already proves against these semantics, and the bench contract suite passed. No criterion of the gate weakened (PR-4).",
+          "location": "tools/agent-bench/src/installed-registry.ts:26",
+          "evidence": "git diff cba328d99 cca1f3027 -- tools/agent-bench/src/installed-registry.ts: tarball route /-/tarballs/<name>-<ver>.tgz (was /-/<index>); dist-tags.latest only for a single version (was last-pushed); shasum + CORS/HEAD/OPTIONS added; offline via npm_config_offline env from installedPackagePackPlan (was --offline flag); the bench wrapper merges process.env (installed-registry.ts:30-31) because runToCompletion substitutes opts.env wholesale (tools/agent-bench/src/proc.ts:37). Executed: BENCH_EXIT=0, contract.spec.ts:78 three lanes incl. the packed rifty-no-coi host (5.0m) and :213/:359 rifty-no-coi (1.6m/1.7m) on the merged tree.",
+          "summary": "Recorded semantic delta of the bench's loopback registry after adopting the packed-consumer implementation; its only consumer is native npm install (tools/agent-bench/src/services.ts:77-88), proven by the executed bench lane. No packed-consumer criterion weakened (PR-4): request handler, assertResolution, deny, requests/responses bodies moved verbatim; cleanup collapsed two 5 s deadlines into one over close() (workbench-packed-consumer.mjs:395-402) after listening already settled.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:1",
+          "evidence": "Execution attempt of the HEAD oracle bytes from a scratch worktree (cdad87352, pnpm install --offline --ignore-scripts) from tools/agent-bench → ERR_MODULE_NOT_FOUND '@earendil-works/pi-agent-core'; from packages/agent → ERR_MODULE_NOT_FOUND 'typebox' (pnpm strict layout; the oracle is a docs artifact whose pickup recipe npm-installs pi-agent-core/pi-ai into a temp dir from the network — ai-agent-pi-pickup-evidence.md:12) — environment, not the diff. Renamed parameters verified unused by reading each body (:92-99 uses id/params/onUpdate; :103 uses context; :159-169 uses signal; :183 uses signal; :187 uses context/options; :260 uses options; :395-399 uses params); biome check 0.",
+          "summary": "Frozen oracle row is settled by reading, not by a fresh run: the file has no runnable package context in the tree (its pickup recipe lives in the evidence note). Behavior-neutral renames.",
           "authority": ""
         }
       ]
