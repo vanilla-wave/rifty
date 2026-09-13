@@ -19,6 +19,7 @@ import {
 } from './opfs-drain-scheduler.ts';
 import { assertNotCrswapReserved } from './opfs-errors.ts';
 import { type IndexEntry, OpfsPreloadError, walkOpfsTree } from './opfs-preload.ts';
+import type { ReplicaImage, ReplicaPersistence, ReplicaRecord } from './opfs-replica-types.ts';
 export { walkOpfsTree } from './opfs-preload.ts';
 import {
   basename,
@@ -90,6 +91,8 @@ const PERSIST_REPORT_SAMPLE = 20;
 interface TrackedPersistFailure {
   readonly failure: PersistFailure;
   readonly operationSequence: number;
+  /** Settled structural failure; timeouts instead retain the scheduler's real-operation fence. */
+  subtreeSequence?: number;
 }
 
 export class OpfsFsSync implements FsSync {
@@ -99,6 +102,7 @@ export class OpfsFsSync implements FsSync {
   private readonly times = new Map<string, { atime: number; mtime: number }>();
 
   private readonly root: FileSystemDirectoryHandle;
+  private readonly replica: ReplicaPersistence | undefined;
   /**
    * Synchronous file-content cache (ADR-0072). `readFileBytesSync` /
    * `writeFileSync` operate on this map so they never need a mid-call async
@@ -141,20 +145,15 @@ export class OpfsFsSync implements FsSync {
     return typeof proto?.createSyncAccessHandle === 'function';
   }
 
-  /**
-   * Constructs an instance bound to an already-obtained OPFS root. Use
-   * {@link OpfsFsSync.init} in normal code; the constructor is exposed
-   * for tests that want to inject a fake root.
-   *
-   * `paired` is the async OPFS surface used for content write-through and
-   * the boot content preload (ADR-0072). It is optional so unit tests that
-   * inject only a fake root keep compiling and behaving identically; when
-   * omitted, sync writes stay in-cache only (no OPFS persistence).
-   */
+  /** Bind a Worker mirror to one captured root and its physical writer. */
   constructor(
     root: FileSystemDirectoryHandle,
     paired?: PairedAsyncSurface,
-    options: { readonly ioReportTimeoutMs?: number } = {},
+    options: {
+      readonly ioReportTimeoutMs?: number;
+      readonly replica?: ReplicaPersistence;
+      readonly initialImage?: readonly ReplicaImage[];
+    } = {},
   ) {
     if (!OpfsFsSync.isSupported()) {
       throw new NotImplementedError(
@@ -163,6 +162,8 @@ export class OpfsFsSync implements FsSync {
       );
     }
     this.root = root;
+    this.replica = options.replica;
+    if (this.replica && !paired) throw new TypeError('Replica requires its paired native surface');
     this.asyncSurface = paired ?? null;
     this.scheduler = new OpfsDrainScheduler(
       {
@@ -172,6 +173,7 @@ export class OpfsFsSync implements FsSync {
             new Error(
               `OPFS ${operation.op} did not settle within ${this.scheduler.reportTimeoutMs}ms`,
             ),
+            true,
           );
         },
         onBlockedBehindTimeout: (operation, blocker) => {
@@ -180,13 +182,26 @@ export class OpfsFsSync implements FsSync {
             new Error(
               `OPFS ${operation.op} blocked behind timed out ${blocker.op} ${blocker.paths[0] ?? '/'}`,
             ),
+            true,
           );
         },
       },
       options.ioReportTimeoutMs,
+      this.replica ? (operations) => this.persistReplicaBatch(operations) : undefined,
     );
     // Seed root so `readdirSync('/')` works before `refreshIndex` runs.
     this.index.set('/', { kind: 'dir', size: 0, children: new Set() });
+    for (const entry of options.initialImage ?? []) {
+      this.index.set(
+        entry.path,
+        entry.kind === 'dir'
+          ? { kind: 'dir', size: 0, children: new Set() }
+          : { kind: 'file', size: entry.bytes.length },
+      );
+      this.times.set(entry.path, { atime: entry.atime, mtime: entry.mtime });
+      if (entry.kind === 'file') this.content.set(entry.path, entry.bytes);
+    }
+    for (const path of this.index.keys()) this.attachChild(path);
   }
 
   /** Worker-only mount/index/preload; paired surface owns write-through (ADR-0072/0402). */
@@ -217,6 +232,11 @@ export class OpfsFsSync implements FsSync {
 
   /** Explicit content refresh publishes bytes only after every read succeeds. */
   async preloadContent(): Promise<void> {
+    if (this.replica)
+      throw new NotImplementedError(
+        'OpfsFsSync.preloadContent.replica',
+        'replica has no external per-file surface',
+      );
     const surface = this.asyncSurface;
     if (!surface) return;
     const fresh = new Map<string, Uint8Array>();
@@ -233,14 +253,13 @@ export class OpfsFsSync implements FsSync {
     for (const [path, bytes] of fresh) this.content.set(path, bytes);
   }
 
-  /**
-   * Re-walks the OPFS tree and rebuilds the warm path index. Callers that
-   * have done async writes through the paired {@link OpfsVfs} surface
-   * (which the sync index can't observe directly) should invoke this to
-   * see the new entries through {@link existsSync} / {@link statSync} /
-   * {@link readdirSync}.
-   */
+  /** Per-file mode: rebuild metadata after external paired writes. */
   async refreshIndex(): Promise<void> {
+    if (this.replica)
+      throw new NotImplementedError(
+        'OpfsFsSync.refreshIndex.replica',
+        'replica has no external per-file surface',
+      );
     const fresh = await walkOpfsTree(this.root);
     this.index.clear();
     for (const [k, v] of fresh) this.index.set(k, v);
@@ -273,16 +292,7 @@ export class OpfsFsSync implements FsSync {
     );
   }
 
-  /**
-   * Returns a memoised sync access handle for `path`, opening the file
-   * (creating if absent) and acquiring a handle on first call.
-   *
-   * Async helper *invoked from sync methods* via a pre-warm step: sync
-   * methods only call it after the handle is known-present in `handles`.
-   * The first read/write to a brand-new path must therefore be preceded by
-   * `await openSync(path)` or by an `OpfsVfs.writeFile` through the paired
-   * async surface — the intended bootstrap path.
-   */
+  /** Per-file mode: acquire a native handle for explicit prewarming. */
   private async ensureHandle(path: string, create: boolean): Promise<FileSystemSyncAccessHandle> {
     const normalized = normalizeAbsolute(path);
     const existing = this.handles.get(normalized);
@@ -301,28 +311,25 @@ export class OpfsFsSync implements FsSync {
     return handle;
   }
 
-  /**
-   * Pre-warms a sync access handle for `path` so subsequent sync ops on
-   * the same path are fully synchronous. Callers that know the working
-   * set ahead of time should warm it once at bootstrap.
-   */
+  /** Per-file native prewarm; ordinary reads use the eager content cache. */
   async openSync(path: string, create = false): Promise<void> {
+    if (this.replica)
+      throw new NotImplementedError(
+        'OpfsFsSync.openSync.replica',
+        'replica has no external per-file surface',
+      );
     if (create) assertNotCrswapReserved(normalizeAbsolute(path));
     await this.ensureHandle(path, create);
   }
 
   /** Releases all open sync access handles. Idempotent. */
   closeAll(): void {
+    this.replica?.closeAfter(this.scheduler.settledBarrier());
     for (const handle of this.handles.values()) handle.close();
     this.handles.clear();
   }
 
-  /**
-   * Adds `path`'s basename to its parent directory's `children` set.
-   * Idempotent. No-op if the parent isn't in the index — callers must
-   * ensure parent exists (sync mkdir does this; async paths arrive via
-   * `walkOpfsTree`).
-   */
+  /** Keep the parent child set and sorted-dirent cache coherent. */
   private attachChild(path: string): void {
     if (path === '/') return;
     // `path` is always a normalized index key here (#10) — skip the re-normalize.
@@ -346,10 +353,7 @@ export class OpfsFsSync implements FsSync {
     }
   }
 
-  /**
-   * Recursively removes `path` and all descendants from the in-memory
-   * index, closing any open sync access handles along the way.
-   */
+  /** Remove a cached subtree and release any native prewarm handles. */
   private removeSubtree(path: string): void {
     const entry = this.index.get(path);
     if (!entry) return;
@@ -376,12 +380,7 @@ export class OpfsFsSync implements FsSync {
     this.content.delete(path);
   }
 
-  /**
-   * Fire-and-forget async persist of a directory creation to OPFS. Caller
-   * already mutated the in-memory mirror; this brings disk in line.
-   * Errors never reject the queue — they land in the persist-failure ledger
-   * ({@link flush} reports them); the next `refreshIndex` reconciles disk.
-   */
+  /** Per-file mkdir effect; the shared ledger owns failures. */
   private persistMkdirAsync(path: string, recursive: boolean): void {
     // Scope = the WHOLE chain this persist may create ('/a','/a/b','/a/b/c'
     // for a recursive mkdir), never just the leaf: a later '/a/f' write's
@@ -404,7 +403,7 @@ export class OpfsFsSync implements FsSync {
     this.enqueuePending({ paths, op: 'mkdir' }, async (operation) => {
       try {
         await this.persistDirectoryPath(path, recursive);
-        this.healPersistFailure(path, operation.sequence);
+        this.healPersistFailure(path, operation.sequence, true);
         // A persisted dir proves its ancestors exist on disk too — heal any
         // stale ancestor mkdir failure.
         this.healAncestorPersistFailures(path, operation.sequence);
@@ -420,12 +419,7 @@ export class OpfsFsSync implements FsSync {
     });
   }
 
-  /**
-   * Async persist of an `rm` to OPFS, tracked in {@link pending} so
-   * {@link flush} drains deletes too (ADR-0072). Errors never reject the
-   * queue — they land in the persist-failure ledger; the next `refreshIndex`
-   * reconciles any mismatch.
-   */
+  /** Per-file removal; an absent native path is already durable removal. */
   private persistRmAsync(path: string, recursive: boolean): void {
     this.enqueuePending({ paths: [path], op: 'rm' }, async (operation) => {
       try {
@@ -471,7 +465,7 @@ export class OpfsFsSync implements FsSync {
     if (this.persistFailures.size === 0) return;
     let parent = dirnameNormalized(path);
     while (parent !== '/') {
-      this.healPersistFailure(parent, operationSequence);
+      this.healPersistFailure(parent, operationSequence, true);
       const next = dirnameNormalized(parent);
       if (next === parent) break;
       parent = next;
@@ -521,6 +515,7 @@ export class OpfsFsSync implements FsSync {
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
+    this.replica?.assertWritable();
     const normalized = normalizeAbsolute(path);
     assertNotCrswapReserved(normalized);
     // `normalized` (#10) — skip dirname's redundant normalize.
@@ -564,11 +559,7 @@ export class OpfsFsSync implements FsSync {
     this.enqueueWriteThrough(normalized, copy);
   }
 
-  /**
-   * Enqueues a fire-and-forget async OPFS write-through for `normalized`
-   * and tracks the promise in {@link pending} so {@link flush} can drain it
-   * before a page reload (ADR-0072). No-op without a paired async surface.
-   */
+  /** Register the already-applied write with the one drain owner. */
   private enqueueWriteThrough(normalized: string, data: Uint8Array): void {
     const surface = this.asyncSurface;
     if (!surface) return;
@@ -593,16 +584,7 @@ export class OpfsFsSync implements FsSync {
     });
   }
 
-  /**
-   * Persist-failure ledger: paths whose LAST persist attempt failed, i.e.
-   * where OPFS is known to lag the in-memory mirror. A later successful
-   * persist of the same path heals its entry (re-install after a freed
-   * quota). Deliberately UNCAPPED: keyed by path, so growth is bounded by the
-   * distinct paths written this session — the same order as the mirror's own
-   * `index`/`content` maps (which hold the actual bytes). A truncated ledger
-   * would make over-cap failures unhealable (`total` never returns to 0 after
-   * a big quota event); only the REPORT is sampled.
-   */
+  /** Exact, uncapped logical-path failures; later successful state heals them. */
   private readonly persistFailures = new Map<string, TrackedPersistFailure>();
 
   private recordPersistFailure(
@@ -610,26 +592,45 @@ export class OpfsFsSync implements FsSync {
     op: PersistFailure['op'],
     err: unknown,
     operationSequence: number,
+    provisional = false,
   ): void {
     const current = this.persistFailures.get(path);
-    if (current && current.operationSequence > operationSequence) return;
+    const subtreeSequence =
+      !provisional && (op === 'rm' || op === 'rename')
+        ? Math.max(operationSequence, current?.subtreeSequence ?? 0)
+        : current?.subtreeSequence;
+    if (current && current.operationSequence > operationSequence) {
+      current.subtreeSequence = subtreeSequence;
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     this.persistFailures.set(path, {
       failure: { path, op, message },
       operationSequence,
+      subtreeSequence,
     });
   }
 
-  private healPersistFailure(path: string, operationSequence: number): void {
+  private healPersistFailure(path: string, operationSequence: number, entryOnly = false): void {
     const current = this.persistFailures.get(path);
-    if (current && current.operationSequence <= operationSequence) {
+    if (!current || (entryOnly && current.subtreeSequence !== undefined)) return;
+    if (current.operationSequence <= operationSequence) {
       this.persistFailures.delete(path);
+    } else if (
+      current.subtreeSequence !== undefined &&
+      current.subtreeSequence <= operationSequence
+    ) {
+      current.subtreeSequence = undefined;
     }
   }
 
-  private recordOperationFailure(operation: PersistOperation, err: unknown): void {
+  private recordOperationFailure(
+    operation: PersistOperation,
+    err: unknown,
+    provisional = false,
+  ): void {
     for (const path of operation.paths) {
-      this.recordPersistFailure(path, operation.op, err, operation.sequence);
+      this.recordPersistFailure(path, operation.op, err, operation.sequence, provisional);
     }
   }
 
@@ -644,27 +645,96 @@ export class OpfsFsSync implements FsSync {
     // persist-failure ledger gate. A ready op still starts SYNCHRONOUSLY so
     // it captures its already-defensively-copied bytes before the caller can
     // reuse a buffer.
-    this.scheduler.enqueue(operation.op, operation.paths, task);
+    this.scheduler.enqueue(operation.op, operation.paths, this.replica ? undefined : task);
   }
 
-  /**
-   * Drains all in-flight async OPFS write-through / structural operations
-   * (ADR-0072). Callers invoke this before a deterministic boundary —
-   * e.g. the runtime worker awaits it before resolving an `eval` result so
-   * persistence completes before any page reload. Never rejects — instead it
-   * RETURNS the persist-failure ledger (ADR-0358, carried from ADR-0187):
-   * paths where OPFS still lags the mirror because their last persist attempt
-   * failed. Callers that only order writes ignore the result; callers that
-   * PROMISE durability (the install stamp) gate on `report.total === 0`.
-   * Bounded: a timed-out lane releases its own reporting without settling,
-   * AND once any lane holder times out, capacity-starved queued ops get
-   * bounded blocked reporting too (healed on later success) — so flush()
-   * resolves even when every lane is wedged.
-   *
-   * `options.onProgress` (ADR-0359) observes the drain: one synchronous REAL
-   * snapshot per watermark op that settles successfully. Counts can stop
-   * short of `total` (wedge/failure) even though the bounded report resolves.
-   */
+  /** Capture final batch state before any async native work; no queued byte mirror. */
+  private replicaImage(path: string): ReplicaImage {
+    const entry = this.index.get(path);
+    if (!entry) throw new VfsError('EIO', path, 'Replica image lost an indexed path');
+    const times = this.times.get(path) ?? { atime: 0, mtime: 0 };
+    return entry.kind === 'dir'
+      ? { kind: 'dir', path, ...times }
+      : { kind: 'file', path, ...times, bytes: this.readCachedContent(path, path).slice() };
+  }
+
+  private captureReplicaRecords(operations: readonly PersistOperation[]): readonly ReplicaRecord[] {
+    const touched = new Set(operations.flatMap((operation) => operation.paths));
+    const removed = new Set<string>();
+    for (const operation of operations) {
+      for (const path of operation.paths) {
+        if (operation.op === 'rm' || operation.op === 'rename' || !this.index.has(path))
+          removed.add(path);
+      }
+    }
+    const roots = new Set<string>();
+    for (const path of [...removed].sort((a, b) => a.length - b.length)) {
+      let parent = path;
+      let covered = false;
+      for (;;) {
+        if (roots.has(parent)) {
+          covered = true;
+          break;
+        }
+        if (parent === '/') break;
+        parent = dirnameNormalized(parent);
+      }
+      if (!covered) roots.add(path);
+    }
+    const current = new Set<string>();
+    for (const path of touched) {
+      if (!this.index.has(path)) continue;
+      let parent = path;
+      for (;;) {
+        current.add(parent);
+        if (parent === '/') break;
+        parent = dirnameNormalized(parent);
+      }
+    }
+    return [
+      ...[...roots].map((path) => ({ kind: 'delete' as const, path })),
+      ...[...current]
+        .sort((a, b) => a.length - b.length || a.localeCompare(b))
+        .map((path) => this.replicaImage(path)),
+    ];
+  }
+
+  private async persistReplicaBatch(operations: readonly PersistOperation[]): Promise<void> {
+    const replica = this.replica;
+    const last = operations.at(-1);
+    if (!replica || !last) throw new Error('Invalid replica batch');
+    try {
+      const records = this.captureReplicaRecords(operations);
+      const result = await replica.commit(operations, records, () =>
+        [...this.index.keys()]
+          .sort((a, b) => a.length - b.length || a.localeCompare(b))
+          .map((path) => this.replicaImage(path)),
+      );
+      if (result.base) {
+        // A complete image also proves absent paths and earlier failed state.
+        for (const path of this.persistFailures.keys())
+          this.healPersistFailure(path, last.sequence);
+      } else {
+        for (const record of records) {
+          if (record.kind === 'delete') this.clearPersistFailuresUnder(record.path, last.sequence);
+          else {
+            this.healPersistFailure(record.path, last.sequence, record.kind === 'dir');
+            this.healAncestorPersistFailures(record.path, last.sequence);
+          }
+        }
+      }
+    } catch (error) {
+      for (const operation of operations) this.recordOperationFailure(operation, error);
+      throw error;
+    }
+  }
+
+  /** Private pairing bridge; errors belong to these admitted operations only. */
+  persistMutation(apply: () => void): Promise<void> {
+    return this.scheduler.afterMutations(apply);
+  }
+
+  /** Bounded reporting, never real-settle release; full ledger, sampled report. */
   async flush(options?: FlushOptions): Promise<PersistFailureReport> {
     const onProgress = options?.onProgress;
     if (onProgress !== undefined) this.scheduler.observeFlushProgress(onProgress);
@@ -764,20 +834,20 @@ export class OpfsFsSync implements FsSync {
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
+    this.replica?.assertWritable();
     const normalized = normalizeAbsolute(path);
     if (!this.index.has(normalized)) {
       this.assertNoFileAncestor(normalized, path);
       throw new VfsError('ENOENT', path);
     }
     this.times.set(normalized, { atime: atimeMs, mtime: mtimeMs });
+    if (this.replica)
+      this.scheduler.enqueue(this.index.get(normalized)?.kind === 'dir' ? 'mkdir' : 'write', [
+        normalized,
+      ]);
   }
 
-  /**
-   * Lists immediate children of `path`. Reads the in-memory dir-tree
-   * mirror that was seeded by {@link refreshIndex} / boot. Result is
-   * sorted lexicographically for deterministic iteration (matches
-   * `MemoryBackend.readdir`).
-   */
+  /** Cached immediate dirents, sorted and frozen. */
   readdirSync(path: string): readonly VfsDirent[] {
     const normalized = normalizeAbsolute(path);
     const entry = this.index.get(normalized);
@@ -805,18 +875,9 @@ export class OpfsFsSync implements FsSync {
     return frozen;
   }
 
-  /**
-   * Creates the directory at `path` in the in-memory mirror and kicks
-   * off a fire-and-forget async persist to OPFS. With `recursive`, any
-   * missing parent segments are also created.
-   *
-   * If `recursive` is false and the parent does not exist, throws
-   * `VfsError('ENOENT')`. If the target already exists as a directory,
-   * non-recursive callers get `VfsError('EEXIST')`; recursive callers
-   * are tolerated. If the target exists as a file, throws
-   * `VfsError('EEXIST')`; traversal through a file remains `ENOTDIR`.
-   */
+  /** Apply mkdir synchronously, then register its persistence footprint. */
   mkdirSync(path: string, options: { recursive?: boolean } = {}): void {
+    this.replica?.assertWritable();
     const recursive = options.recursive ?? false;
     const normalized = normalizeAbsolute(path);
     assertNotCrswapReserved(normalized);
@@ -851,17 +912,9 @@ export class OpfsFsSync implements FsSync {
     this.persistMkdirAsync(normalized, recursive);
   }
 
-  /**
-   * Removes `path` from the in-memory mirror and kicks off a
-   * fire-and-forget async persist to OPFS. `recursive: true` deletes a
-   * non-empty directory subtree; `force: true` makes missing paths a
-   * no-op.
-   *
-   * Throws `VfsError('ENOTEMPTY')` for non-empty directories without
-   * `recursive` (Node `fs.rmSync` parity). Throws `VfsError('ENOENT')`
-   * for unknown paths unless `force` is set.
-   */
+  /** Apply removal synchronously, preserving the mounted root. */
   rmSync(path: string, options: { recursive?: boolean; force?: boolean } = {}): void {
+    this.replica?.assertWritable();
     const recursive = options.recursive ?? false;
     const force = options.force ?? false;
     const normalized = normalizeAbsolute(path);
@@ -903,6 +956,7 @@ export class OpfsFsSync implements FsSync {
   }
 
   copyFileSync(src: string, dst: string): void {
+    this.replica?.assertWritable();
     const s = normalizeAbsolute(src);
     const d = normalizeAbsolute(dst);
     const srcEntry = this.index.get(s);
@@ -925,10 +979,11 @@ export class OpfsFsSync implements FsSync {
     this.writeFileSync(d, bytes);
     // A copy is a new file → dst mtime = now (ADR-0090; OPFS mtime via side-table).
     const now = Date.now();
-    this.times.set(d, { atime: now, mtime: now });
+    this.utimes(d, now, now);
   }
 
   cpSync(src: string, dst: string, options: { recursive?: boolean } = {}): void {
+    this.replica?.assertWritable();
     const recursive = options.recursive ?? false;
     const s = normalizeAbsolute(src);
     const d = normalizeAbsolute(dst);
@@ -954,6 +1009,7 @@ export class OpfsFsSync implements FsSync {
   }
 
   renameSync(src: string, dst: string): void {
+    this.replica?.assertWritable();
     const s = normalizeAbsolute(src);
     const d = normalizeAbsolute(dst);
     assertNotCrswapReserved(d);
@@ -1015,7 +1071,7 @@ export class OpfsFsSync implements FsSync {
         fileMoves.push({
           oldPath: oldP,
           newPath: newP,
-          ...(bytes !== undefined ? { bytes: bytes.slice() } : {}),
+          ...(bytes !== undefined && !this.replica ? { bytes: bytes.slice() } : {}),
         });
       }
       const t = this.times.get(oldP);
@@ -1034,21 +1090,13 @@ export class OpfsFsSync implements FsSync {
       }
     }
     this.attachChild(d);
-    this.persistRenameAsync(s, [...dirCreates], fileMoves);
+    this.persistRenameAsync(s, dirCreates, fileMoves);
   }
 
-  /**
-   * Best-effort async OPFS persist of a rename: recreate moved directories
-   * and files at their new paths from the captured snapshot, then remove the
-   * old subtree.
-   * `FileSystemSyncAccessHandle` has no native rename; the SYNC view is
-   * already atomic (the in-memory re-key above), so on-disk lag is acceptable
-   * (ADR-0072/0083) and reconciles on the next `refreshIndex`. Tracked in
-   * `pending` so `flush()` drains it before a reload.
-   */
+  /** Per-file rename effect; replica mode captures final images at admission. */
   private persistRenameAsync(
     srcRoot: string,
-    dirCreates: readonly string[],
+    dirCreates: ReadonlySet<string>,
     fileMoves: ReadonlyArray<{
       readonly oldPath: string;
       readonly newPath: string;
@@ -1069,7 +1117,7 @@ export class OpfsFsSync implements FsSync {
           );
           for (const dir of orderedDirs) {
             await this.persistDirectoryPath(dir, true);
-            this.healPersistFailure(dir, operation.sequence);
+            this.healPersistFailure(dir, operation.sequence, true);
             this.healAncestorPersistFailures(dir, operation.sequence);
           }
           if (surface) {
@@ -1100,7 +1148,7 @@ export class OpfsFsSync implements FsSync {
           // moved path would read as torn forever.
           for (const path of operation.paths) {
             if (path === srcRoot) continue;
-            this.healPersistFailure(path, operation.sequence);
+            this.healPersistFailure(path, operation.sequence, dirCreates.has(path));
             this.healAncestorPersistFailures(path, operation.sequence);
           }
           this.clearPersistFailuresUnder(srcRoot, operation.sequence);

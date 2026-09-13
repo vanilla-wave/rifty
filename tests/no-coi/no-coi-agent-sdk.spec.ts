@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { nativeReplicaProbeSource } from './fixtures/native-replica-page.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 const scenarioPath =
@@ -21,33 +22,35 @@ test('Stop retains an applied mutation through the pending native flush', async 
   });
   await page.goto('/no-coi-harness.html');
   try {
-    await page.evaluate(async (root) => {
-      const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
-      const sandbox = await createSandbox({
-        requireCrossOriginIsolation: false,
-        skipServiceWorker: true,
-        toolchain: {
-          workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
-        },
-      });
-      Reflect.set(globalThis, 'agentFaultSandbox', sandbox);
-      if (typeof sandbox.project !== 'function')
-        throw new Error('Missing public sandbox.project method');
-      await sandbox.fs.writeFile('/mutation/seed', 'seed');
-      const patched = await sandbox.runtime.eval(`
-        const nativeWritable = FileSystemFileHandle.prototype.createWritable;
-        FileSystemFileHandle.prototype.createWritable = async function (...args) {
-          if (this.name === 'held.txt') await fetch('/agent-flush-barrier');
-          return Reflect.apply(nativeWritable, this, args);
-        };
+    await page.evaluate(
+      async ({ root, nativeReplicaProbeSource }) => {
+        const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+        const sandbox = await createSandbox({
+          requireCrossOriginIsolation: false,
+          skipServiceWorker: true,
+          toolchain: {
+            workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+          },
+        });
+        Reflect.set(globalThis, 'agentFaultSandbox', sandbox);
+        if (typeof sandbox.project !== 'function')
+          throw new Error('Missing public sandbox.project method');
+        await sandbox.fs.writeFile('/mutation/seed', 'seed');
+        const patched = await sandbox.runtime.eval(`
+        ${nativeReplicaProbeSource}
+        observeNativeReplicaWrites(async records => {
+          if (records.some(record => record.path === '/mutation/held.txt' && record.kind === 'file')) await fetch('/agent-flush-barrier');
+        });
       `);
-      if (!patched.ok) throw new Error('native boundary injection failed');
-      const project = sandbox.project({ root: '/mutation' });
-      const run = project.run('echo applied > held.txt');
-      Reflect.set(globalThis, 'agentFaultRun', run);
-      Reflect.set(globalThis, 'agentFaultSettled', false);
-      run.completion.then(() => Reflect.set(globalThis, 'agentFaultSettled', true));
-    }, root);
+        if (!patched.ok) throw new Error('native boundary injection failed');
+        const project = sandbox.project({ root: '/mutation' });
+        const run = project.run('echo applied > held.txt');
+        Reflect.set(globalThis, 'agentFaultRun', run);
+        Reflect.set(globalThis, 'agentFaultSettled', false);
+        run.completion.then(() => Reflect.set(globalThis, 'agentFaultSettled', true));
+      },
+      { root, nativeReplicaProbeSource },
+    );
     await request;
     await page.evaluate(() => {
       void Reflect.get(globalThis, 'agentFaultRun').stop();
@@ -79,52 +82,54 @@ test('Stop retains an applied mutation through the pending native flush', async 
 test('project mutation and command report a native OPFS write failure', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('/no-coi-harness.html');
-  const observed = await page.evaluate(async (root) => {
-    const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
-    const sandbox = await createSandbox({
-      requireCrossOriginIsolation: false,
-      skipServiceWorker: true,
-      toolchain: {
-        workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
-      },
-    });
-    try {
-      if (typeof sandbox.project !== 'function')
-        throw new Error('Missing public sandbox.project method');
-      await sandbox.fs.writeFile('/quota/seed', 'seed');
-      await sandbox.runtime.eval(`
-        const nativeWritable = FileSystemFileHandle.prototype.createWritable;
-        FileSystemFileHandle.prototype.createWritable = function (...args) {
-          if (this.name === 'fault.txt') return Promise.reject(new DOMException('agent quota fault', 'QuotaExceededError'));
-          return Reflect.apply(nativeWritable, this, args);
-        };
+  const observed = await page.evaluate(
+    async ({ root, nativeReplicaProbeSource }) => {
+      const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+      const sandbox = await createSandbox({
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: {
+          workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+        },
+      });
+      try {
+        if (typeof sandbox.project !== 'function')
+          throw new Error('Missing public sandbox.project method');
+        await sandbox.fs.writeFile('/quota/seed', 'seed');
+        await sandbox.runtime.eval(`
+        ${nativeReplicaProbeSource}
+        observeNativeReplicaWrites(records => {
+          if (records.some(record => record.path === '/quota/fault.txt' && record.kind === 'file')) throw new DOMException('agent quota fault', 'QuotaExceededError');
+        });
       `);
-      const project = sandbox.project({ root: '/quota' });
-      let fileError: { name: string; effects?: unknown } | undefined;
-      try {
-        await project.fs.writeFile('fault.txt', 'file');
-      } catch (error) {
-        const e = error as Error & { effects?: unknown };
-        fileError = { name: e.name, effects: e.effects };
+        const project = sandbox.project({ root: '/quota' });
+        let fileError: { name: string; effects?: unknown } | undefined;
+        try {
+          await project.fs.writeFile('fault.txt', 'file');
+        } catch (error) {
+          const e = error as Error & { effects?: unknown };
+          fileError = { name: e.name, effects: e.effects };
+        }
+        const command = await project.run('echo command > fault.txt').completion;
+        const content = await project.fs.readFile('fault.txt', 'utf8');
+        const evalResult = await sandbox.runtime.eval(
+          "require('node:fs').writeFileSync('/quota/fault.txt', 'eval')",
+        );
+        const evalContent = await project.fs.readFile('fault.txt', 'utf8');
+        let flushError: { name: string; effects?: unknown } | undefined;
+        try {
+          await sandbox.fs.flush();
+        } catch (error) {
+          const e = error as Error & { effects?: unknown };
+          flushError = { name: e.name, effects: e.effects };
+        }
+        return { fileError, command, content, evalResult, evalContent, flushError };
+      } finally {
+        sandbox.dispose();
       }
-      const command = await project.run('echo command > fault.txt').completion;
-      const content = await project.fs.readFile('fault.txt', 'utf8');
-      const evalResult = await sandbox.runtime.eval(
-        "require('node:fs').writeFileSync('/quota/fault.txt', 'eval')",
-      );
-      const evalContent = await project.fs.readFile('fault.txt', 'utf8');
-      let flushError: { name: string; effects?: unknown } | undefined;
-      try {
-        await sandbox.fs.flush();
-      } catch (error) {
-        const e = error as Error & { effects?: unknown };
-        flushError = { name: e.name, effects: e.effects };
-      }
-      return { fileError, command, content, evalResult, evalContent, flushError };
-    } finally {
-      sandbox.dispose();
-    }
-  }, root);
+    },
+    { root, nativeReplicaProbeSource },
+  );
   expect(observed.fileError).toMatchObject({
     name: 'SandboxPersistenceError',
     effects: { applied: 'yes', persistence: 'failed' },

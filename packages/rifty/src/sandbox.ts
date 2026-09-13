@@ -49,7 +49,7 @@ interface CreateSandboxCommonOptions {
   readonly serviceWorkerUrl?: string;
   /** Skip service-worker registration (eval-only / headless use). Default false. */
   readonly skipServiceWorker?: boolean;
-  /** Sink for the non-fatal fallback warnings. Default `console`. */
+  /** Sink for fallback and startup storage diagnostics. Default `console`. */
   readonly logger?: Pick<Console, 'warn' | 'error'>;
 }
 
@@ -166,6 +166,8 @@ export interface ToolchainSandbox extends Sandbox {
   readonly toolchain: SandboxToolchain;
   readonly capabilityReport: SandboxCapabilityReport;
   restart(options: SandboxRestartOptions): Promise<SandboxRestartReport>;
+  /** Replace the Worker without relaunching its resident; host owns the preview element. */
+  stopResident(): Promise<SandboxRestartReport>;
 }
 
 /**
@@ -293,17 +295,20 @@ export async function createSandbox(
     });
     const workerUrl = String(options.toolchain.workerUrl);
     const { swError } = await bootServiceWorker(options, deps, logger);
-    return bootToolchainSandbox({
-      ...startup,
-      workerUrl,
-      vmEngine: startup.vmEngine ?? 'rewrite',
-      capabilities,
-      ...(swError === undefined ? {} : { swError }),
-    });
+    return bootToolchainSandbox(
+      {
+        ...startup,
+        workerUrl,
+        vmEngine: startup.vmEngine ?? 'rewrite',
+        capabilities,
+        ...(swError === undefined ? {} : { swError }),
+      },
+      logger,
+    );
   }
 
   const vfs = await bootVfs(
-    deps.initVfs ?? (async () => (await import('@riftydev/vfs')).initBackend()),
+    deps.initVfs ?? (async () => (await import('./default-vfs.ts')).initBackend()),
     logger,
   );
   const { swError } = await bootServiceWorker(options, deps, logger);
@@ -354,6 +359,15 @@ function mountToolchainPreview(port: number, ownerToken: string): () => void {
   };
 }
 
+function logToolchainStartup(
+  runtime: ToolchainRuntimeController,
+  logger: Pick<Console, 'warn' | 'error'>,
+): () => void {
+  return runtime.on((event) => {
+    if (event.type === 'stderr') logger.warn(event.chunk);
+  });
+}
+
 async function bootToolchainSandbox(
   options: ToolchainRuntimeOptions & {
     readonly workerUrl: string;
@@ -361,15 +375,19 @@ async function bootToolchainSandbox(
     readonly capabilities: CapabilityCheck;
     readonly swError?: string;
   },
+  logger: Pick<Console, 'warn' | 'error'>,
 ): Promise<ToolchainSandbox> {
   let current: ToolchainRuntimeController = spawnToolchainRuntime(options);
   let vfs: VfsBootInfo;
+  const detachStartup = logToolchainStartup(current, logger);
   try {
     await current.toolchainReady;
     vfs = current.toolchainVfs;
   } catch (error) {
     current.dispose();
     throw error;
+  } finally {
+    detachStartup();
   }
 
   const ownerToken = `sdk-${crypto.randomUUID()}`;
@@ -520,22 +538,35 @@ async function bootToolchainSandbox(
   }
 
   async function restart(restartOptions: SandboxRestartOptions): Promise<SandboxRestartReport> {
+    return replaceWorker({ restart: restartOptions });
+  }
+
+  async function replaceWorker(
+    operation: { readonly restart: SandboxRestartOptions } | { readonly stop: true },
+  ): Promise<SandboxRestartReport> {
     assertLive();
     if (restarting) {
       throw restartBusyError();
     }
     restarting = true;
     try {
-      if (restartOptions === null || typeof restartOptions !== 'object') {
-        throw new TypeError('sandbox restart options must be an object');
-      }
-      const preview = restartOptions.preview;
-      const beforeStart = restartOptions.beforeStart;
-      if (preview === null || typeof preview !== 'object' || typeof preview.src !== 'string') {
-        throw new TypeError('sandbox restart preview must expose a string src');
-      }
-      if (beforeStart !== undefined && typeof beforeStart !== 'function') {
-        throw new TypeError('sandbox restart beforeStart must be a function');
+      let relaunch: SandboxRestartOptions | null = null;
+      if ('restart' in operation) {
+        const restartOptions = operation.restart;
+        if (restartOptions === null || typeof restartOptions !== 'object') {
+          throw new TypeError('sandbox restart options must be an object');
+        }
+        const preview = restartOptions.preview;
+        const beforeStart = restartOptions.beforeStart;
+        if (preview === null || typeof preview !== 'object' || typeof preview.src !== 'string') {
+          throw new TypeError('sandbox restart preview must expose a string src');
+        }
+        if (beforeStart !== undefined && typeof beforeStart !== 'function') {
+          throw new TypeError('sandbox restart beforeStart must be a function');
+        }
+        relaunch = { preview, beforeStart };
+      } else {
+        residentRequest = null;
       }
 
       const currentActivation = current.snapshotToolchainState();
@@ -551,20 +582,25 @@ async function bootToolchainSandbox(
 
       current = spawnToolchainRuntime(options);
       attachCurrent();
-      await current.toolchainReady;
-      vfs = current.toolchainVfs;
+      const detachStartup = logToolchainStartup(current, logger);
+      try {
+        await current.toolchainReady;
+        vfs = current.toolchainVfs;
+      } finally {
+        detachStartup();
+      }
       if (activation !== null) await current.restoreToolchainState(activation);
       // The restored controller owns recovery now, including writes from a failing callback.
       activation = null;
-      await beforeStart?.(callbackFs(current));
+      await relaunch?.beforeStart?.(callbackFs(current));
 
       let resident: SandboxResidentBin | null = null;
-      if (residentRequest !== null) {
+      if (relaunch !== null && residentRequest !== null) {
         const started = await current.toolchain.startBin(residentRequest);
         residentRequest = current.snapshotResidentRequest();
         resident = mountResidentPreview(started.port);
         generation += 1;
-        preview.src = `${resident.previewUrl}?riftyRestart=${generation}`;
+        relaunch.preview.src = `${resident.previewUrl}?riftyRestart=${generation}`;
       }
       const unflushedWrites = unflushedMarker;
       unflushedMarker = false;
@@ -625,6 +661,9 @@ async function bootToolchainSandbox(
     }),
     ...(options.swError === undefined ? {} : { swError: options.swError }),
     restart,
+    stopResident() {
+      return replaceWorker({ stop: true });
+    },
     dispose: disposeSandbox,
   };
 }

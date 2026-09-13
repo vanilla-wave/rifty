@@ -1,0 +1,134 @@
+{
+  "reviewed_sha": "f756a85730e1335c6802f5d7ebd756eee72ad085",
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS — merge. Three baseline defects repaired with real carriers; no blocker, no unit/goal residual; 2 advisory concerns (carrier depth, uncarried presenter message) and 2 nits (ADR-0431 wording, recorded registry semantic delta).",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #333 review fixes c04c976d6..f756a8573 (HEAD f756a8573); BASE cba328d99 (accepted goal-closure tree; landing record docs/backlog/distribution/reference/agent-bench-final-green.json reviewed_sha f5ff8b848); goal I5/I8 + ADR-0431 read at f5ff8b848 (goal epics/ai-agent-mode-and-bench/goal file deleted at closure); REV-7; PR-4. No-doc repair; observed baseline verified from raw evidence: (1) RiftyTerminal.executeLine left an owned incomplete line in the interactive buffer (RED tests/browser-unit/agent-ui-terminal.spec.ts:134 fails with guard removed — reproduced independently, mutant M1); (2) installed-tarball loopback registry duplicated between tests/integration/workbench-packed-consumer.mjs and tools/agent-bench/src/installed-registry.ts at BASE (git show cba328d99: both); (3) unused proc.ts helpers and biome unused-parameter warnings in the Pi oracle. Executed at HEAD: typecheck terminal/playground/agent-bench 0; biome check . 0; check:arch 0; check:file-size 0; check:dir-owner 0; vitest packages/terminal/src/terminal.test.ts 136/136; browser-unit agent-ui-terminal.spec.ts 3/3 (port 5361); implementer logs read: /tmp/pr333-fix-red.log EXIT=1, /tmp/pr333-fix-green-terminal.log 3 passed, /tmp/pr333-fix-surface.log EXIT=0, /tmp/pr333-fix-heavy.log PACKED_EXIT=0 (workbench-packed-consumer.test.ts 1/1, 186s) and BENCH_EXIT=0 (contract.spec.ts 12/12, 11.4m). Closure record at BASE reused for untouched invariants (REV-1); I5 and I8 dependencies changed by this diff re-proven above.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Owned incomplete line: executeLine returns undefined, calls no owner, and leaves nothing in the interactive input for the next Enter",
+      "source": "acceptance",
+      "trace": "I5 + ADR-0431",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-ui-terminal.spec.ts:134; tests/browser-unit/agent-ui-terminal.spec.ts:163; packages/terminal/src/terminal.ts:1424",
+      "note": ""
+    },
+    {
+      "row": "Interactive Enter on incomplete input still inserts a continuation newline (submitLine contract retained)",
+      "source": "acceptance",
+      "trace": "ADR-0431",
+      "status": "pass",
+      "citation": "packages/terminal/src/terminal.test.ts:1187; packages/terminal/src/terminal.test.ts:1207; packages/terminal/src/terminal.test.ts:1226",
+      "note": ""
+    },
+    {
+      "row": "Public API RiftyTerminal.executeLine: number/undefined/original error, busy/disposed reject unchanged; incomplete path now discards the line",
+      "source": "public-api",
+      "trace": "ADR-0431",
+      "status": "pass",
+      "citation": "packages/terminal/src/terminal.ts:711; tests/browser-unit/agent-ui-terminal.spec.ts:39; tests/browser-unit/agent-ui-terminal.spec.ts:134",
+      "note": ""
+    },
+    {
+      "row": "Packed-consumer gate criteria retained after registry extraction: exact local tarball resolution (assertResolution), request/response accounting, snapshot-only deny",
+      "source": "acceptance",
+      "trace": "I8 + PR-4 (criteria at BASE cba328d99 vs HEAD)",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs:647; tests/integration/workbench-packed-consumer.mjs:972; tests/integration/workbench-packed-consumer.mjs:984; tests/integration/installed-registry.mjs:283",
+      "note": ""
+    },
+    {
+      "row": "agent-bench packed no-COI host installs its real installed-dependency closure from the shared loopback registry",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/installed-registry.ts:15; tools/agent-bench/src/services.ts:75; tools/agent-bench/tests/contract.spec.ts:78",
+      "note": ""
+    },
+    {
+      "row": "Frozen Pi 0.85.1 oracle behavior unchanged by unused-parameter renames",
+      "source": "frozen-artifact",
+      "trace": "ADR-0424 + I2 + I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:92; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:159; docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:395",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "apps/playground/src/components/TerminalPanel.tsx:392",
+          "evidence": "grep -rn 'Command input is incomplete|did not execute a complete command' apps packages tests tools → only TerminalPanel.tsx:392 and apps/playground/CHANGELOG.md:5; no test asserts the presenter failure. Honesty of result===undefined ⇔ incomplete holds by types: TerminalCommandPresenter.execute → Promise<number> (apps/playground/src/adapters/playground-terminal-ui.ts:22-28), runLine → Promise<number> (:73-81, returns run.exitCode), executeBuffer returns undefined only when the owner result is not a number or validation is incomplete (packages/terminal/src/terminal.ts:1424-1447).",
+          "summary": "Presenter failure 'Command input is incomplete (open quote or block); nothing executed' carries no test; the throw-on-undefined path predates this unit (BASE TerminalPanel.tsx:391) and the number-typed owner makes undefined equivalent to incomplete, so the message cannot mislabel an executed command. Advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/terminal/0431-present-owned-commands-through-the-existing-input-lifetime.md:19",
+          "evidence": "",
+          "summary": "ADR-0431 §1 states 'Validation that leaves incomplete input returns undefined, never invented success' but not that an owned incomplete line is discarded (packages/terminal/src/terminal.ts:1425-1427); packages/terminal/CHANGELOG.md:5 cites the ADR for it. No contradiction; a dated one-line note would keep the ADR reading the shipped lifetime.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/agent-ui-terminal.spec.ts:163",
+          "evidence": "Scratch worktree /tmp/pr333-review-scratch @ f756a8573. M1 (guard reverted: always insertPrintable('\\n')): RIFTY_PLAYGROUND_PORT=5362 playwright browser-unit agent-ui-terminal.spec.ts → test :134 FAILS, Received submitted ['echo \"open\\n'], M1_EXIT=1 (/tmp/pr333-review/mutant-m1.log). M2 (always replaceLine(''), interactive ignored): vitest packages/terminal/src/terminal.test.ts → 3 failed (:1187, :1207, :1226), M2_EXIT=1 (/tmp/pr333-review/mutant-m2.log). M3 (else { this.buffer=''; this.cursorPos=0 } — no re-render, no edit-state reset): browser-unit 3 passed, M3_EXIT=0 (/tmp/pr333-review/mutant-m3.log).",
+          "summary": "Carrier depth: mutant M3 (buffer zeroed without replaceLine('')) leaves the echoed incomplete line rendered and edit state stale yet passes the new spec, which observes only owner calls, result and the next submitted line. Beyond the clause as declared (nothing reaches the next Enter — which M3 satisfies); HEAD's replaceLine('') re-renders and resets state (packages/terminal/src/terminal.ts:687-694). Advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tests/integration/installed-registry.mjs:158",
+          "evidence": "git diff --color-moved=plain cba328d99..f756a8573 -- workbench-packed-consumer.mjs installed-registry.mjs installed-registry.ts: every non-moved line is a signature/import/export or the cleanup consolidation (BASE two 5s deadlines 'did not settle'/'did not close' → one 5s deadline over close(), workbench-packed-consumer.mjs:395-402); registry request handler, assertResolution, deny, requests/responses bodies moved verbatim. Bench side vs BASE tools/agent-bench/src/installed-registry.ts: tarball route /-/tarballs/<name>-<ver>.tgz (was /-/<index>), dist-tags.latest only for a single version (was last-pushed), shasum + CORS/HEAD/OPTIONS added, npm_config_offline env (was --offline). Executed: /tmp/pr333-fix-heavy.log PACKED_EXIT=0 (packed consumer 1/1) and BENCH_EXIT=0 (contract.spec.ts:78 all three lanes incl. rifty-no-coi packed host, 12/12).",
+          "summary": "Recorded semantic delta of the bench's loopback registry after adopting the packed-consumer implementation (route scheme, dist-tags.latest, shasum, CORS/HEAD/OPTIONS); the only consumer is native npm install (tools/agent-bench/src/services.ts:77-88), which the packed-consumer gate already proves against these semantics, and the bench contract suite passed. No criterion of the gate weakened (PR-4).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

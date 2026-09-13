@@ -30,7 +30,7 @@ import { workbenchFirstMaterializationPackageConfig } from './workbench-package-
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const container = '/.rifty/workbench/v1/projects/scratch';
+const container = '/.rifty/workbench/v2/projects/scratch';
 const scratchRoot = `${container}/tree`;
 const catalogFile = '/.rifty/workbench/playground/catalog.json';
 const transactionFile = '/.rifty/workbench/playground/transaction.json';
@@ -279,7 +279,7 @@ describe('I6 catalog-owned orphan Scratch retention', () => {
     });
     await original.close();
     const fs = await seedOrphan(original.fs.restartFromDurableState());
-    const namedRoot = '/.rifty/workbench/v1/projects/saved-project';
+    const namedRoot = '/.rifty/workbench/v2/projects/saved-project';
     const namedBefore = treeAt(fs.durableSnapshot(), namedRoot);
     network.requests.length = 0;
     const h = await openSnapshotOnlyOwner(network, fs);
@@ -343,7 +343,7 @@ describe('I6 catalog-owned orphan Scratch retention', () => {
 
   it('does not scan or steal an unindexed named project or unknown retained root', async () => {
     const fs = new DurableOwnerFs();
-    const namedRoot = '/.rifty/workbench/v1/projects/unjournaled-named/tree';
+    const namedRoot = '/.rifty/workbench/v2/projects/unjournaled-named/tree';
     writeRaw(fs, `${namedRoot}/user.bin`, binary);
     writeRaw(fs, `${unknownRetainedRoot}/sentinel.bin`, binary);
     await fs.flush();

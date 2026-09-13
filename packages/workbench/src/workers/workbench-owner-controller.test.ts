@@ -82,7 +82,7 @@ function harness(options: { readonly generateProjectToken?: () => string } = {})
     events.push(`materialize:${definition.id}`);
     return Object.freeze({
       projectKey: definition.storageSegment,
-      projectRoot: `/.rifty/workbench/v1/projects/${definition.storageSegment}/tree`,
+      projectRoot: `/.rifty/workbench/v2/projects/${definition.storageSegment}/tree`,
       acquisition: Object.freeze({ provenance: 'registry' }),
     });
   });
@@ -201,7 +201,7 @@ describe('Workbench owner controller', () => {
     });
     const openedProject = Object.freeze({
       projectKey: 'scratch',
-      projectRoot: '/.rifty/workbench/v1/projects/scratch/tree',
+      projectRoot: '/.rifty/workbench/v2/projects/scratch/tree',
       acquisition: Object.freeze({ kind: 'install' as const, snapshotFailures: Object.freeze([]) }),
       initialTerminalState: Object.freeze({
         cwd: '/',
@@ -268,7 +268,7 @@ describe('Workbench owner controller', () => {
         type: 'workbench:playground-project-opened',
         opId: 'open-companion',
         projectToken: 'companion-token',
-        projectRoot: '/.rifty/workbench/v1/projects/scratch/tree',
+        projectRoot: '/.rifty/workbench/v2/projects/scratch/tree',
         acquisition: { kind: 'install', snapshotFailures: [] },
         runtime: { kind: 'vite', port: 5174 },
         initialScmSnapshot: { history: [], changes: [] },
@@ -378,13 +378,13 @@ describe('Workbench owner controller', () => {
       type: 'workbench:project-opened',
       opId: 'open-valid',
       projectToken: 'owner-project-1',
-      projectRoot: '/.rifty/workbench/v1/projects/project-a/tree',
+      projectRoot: '/.rifty/workbench/v2/projects/project-a/tree',
     });
     expect(h.createProject).toHaveBeenCalledTimes(1);
     expect(h.runtime().input.definition.id).toBe('project-a');
     expect(h.runtime().input.materialized).toMatchObject({
       projectKey: 'project-a',
-      projectRoot: '/.rifty/workbench/v1/projects/project-a/tree',
+      projectRoot: '/.rifty/workbench/v2/projects/project-a/tree',
     });
 
     await h.controller.handle({ type: 'workbench:initialize', config: {} });

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
+
 - Retire invocation watcher and promise-timer abort callbacks with their existing timer owner (ADR-0422).
 
 - Add structured FS RPC with checked persistence receipts (console eval keeps reporting evaluation only), console-only eval result typing and command protocol v5; preserve recovery mutations and clear completed Node invocation timers.

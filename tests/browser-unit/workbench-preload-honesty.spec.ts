@@ -7,6 +7,7 @@ import {
   sealedWorkbenchFixtureUrl,
 } from './fixtures.ts';
 import {
+  accessNativeReplica,
   denyNamespacePreloadReads,
   nativeRootNames,
   readNativeFiles,
@@ -20,6 +21,10 @@ for (const persistence of ['required', 'preferred'] as const) {
     }) => {
       await gotoHarness(page);
       await seedNamespaceOrigin(page);
+      await accessNativeReplica(page, {
+        namespace: 'A',
+        files: { '/existing.bin': [7, 0, 128, 255] },
+      });
       const paths = ['/outside-sentinel.bin', '/existing.bin', '/A/existing.bin', '/blocked'];
       const before = await readNativeFiles(page, paths);
       const rootNames = await nativeRootNames(page);
@@ -47,7 +52,7 @@ for (const persistence of ['required', 'preferred'] as const) {
         expect.soft(attempt.messages.join('\n')).toContain('OPFS persisted tree preload failed');
         expect
           .soft(attempt.messages.join('\n'))
-          .toContain(`namespace-preload-denied:${mode}:A/existing.bin`);
+          .toContain(`namespace-preload-denied:${mode}:A/.rifty-replica-v1/HEAD`);
         expect.soft(storage).toBeNull();
       } finally {
         await closeOwner(page);

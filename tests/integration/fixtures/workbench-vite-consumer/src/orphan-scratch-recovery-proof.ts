@@ -28,9 +28,6 @@ function encode(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
   return btoa(binary);
 }
-function decode(content: string): Uint8Array<ArrayBuffer> {
-  return Uint8Array.from(atob(content), (character) => character.charCodeAt(0));
-}
 const textFile = (path: string, text: string): FileEntry => ({
   path,
   encoding: 'base64',
@@ -96,30 +93,26 @@ export async function proveOrphanScratchRecovery(
   ];
   const expected = new Map(files.map((file) => [file.path, file.content]));
   if (expected.size !== files.length) throw new Error('Orphan fixture duplicate source paths');
-  const origin = await navigator.storage.getDirectory();
   const namespace = 'packed-orphan-recovery';
-  const mount = await origin.getDirectoryHandle(namespace, { create: true });
-  const directory = async (root: FileSystemDirectoryHandle, path: string) => {
-    let current = root;
-    for (const part of path.split('/').filter(Boolean))
-      current = await current.getDirectoryHandle(part, { create: true });
-    return current;
-  };
-  const root = await directory(mount, '.rifty/workbench/v1/projects/scratch/tree');
-  for (const path of directories) await directory(root, path);
-  const write = async (file: FileEntry) => {
-    const parts = file.path.split('/');
-    const name = parts.pop();
-    if (name === undefined) throw new Error('Orphan fixture file name missing');
-    const parent = await directory(root, parts.join('/'));
-    const handle = await parent.getFileHandle(name, { create: true });
-    const stream = await handle.createWritable();
-    await stream.write(decode(file.content));
-    await stream.close();
-  };
-  for (const file of files) await write(file);
-  await write(textFile('.rifty/private.txt', 'private control must not be downloaded'));
-  await write(textFile('node_modules/.rifty-install-stamp.json', 'unproven claim'));
+  // Native fault seed through installed public VFS, before any guarded Workbench owner.
+  const seed = new Worker(new URL('./orphan-seed-worker.ts', import.meta.url), { type: 'module' });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      seed.onmessage = ({ data }) => (data.error ? reject(new Error(data.error)) : resolve());
+      seed.onerror = (event) => reject(new Error(event.message));
+      seed.postMessage({
+        namespace,
+        directories,
+        files: [
+          ...files,
+          textFile('.rifty/private.txt', 'private control must not be downloaded'),
+          textFile('node_modules/.rifty-install-stamp.json', 'unproven claim'),
+        ],
+      });
+    });
+  } finally {
+    seed.terminate();
+  }
 
   const response = await fetch('/producer-snapshot.json');
   if (!response.ok) throw new Error('Fresh project producer metadata unavailable');

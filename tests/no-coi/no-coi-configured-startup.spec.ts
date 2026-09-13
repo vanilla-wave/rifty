@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { accessNativeReplica, encoded } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 
@@ -40,14 +41,10 @@ test('SDK namespace scopes native preload, writes and restart; omission keeps or
   page,
 }) => {
   await page.goto('/no-coi-harness.html');
+  await accessNativeReplica(page, { files: { '/outside.txt': encoded('unrelated') } });
   const result = await page.evaluate(async (root) => {
     const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
     const origin = await navigator.storage.getDirectory();
-    const writer = await (
-      await origin.getFileHandle('outside.txt', { create: true })
-    ).createWritable();
-    await writer.write('unrelated');
-    await writer.close();
     const boot = (namespace?: string) =>
       createSandbox({
         requireCrossOriginIsolation: false,
@@ -74,12 +71,14 @@ test('SDK namespace scopes native preload, writes and restart; omission keeps or
     const defaultSandbox = await boot();
     const defaultFile = await defaultSandbox.fs.readFile('/outside.txt', 'utf8');
     defaultSandbox.dispose();
+    const { nativeReplicaEntries } = await import(
+      `/@fs${root}/tests/browser-unit/fixtures/native-replica-observer.ts`
+    );
     const native = async (namespace: string) =>
-      (
-        await (
-          await (await origin.getDirectoryHandle(namespace)).getFileHandle('saved.txt')
-        ).getFile()
-      ).text();
+      new TextDecoder().decode(
+        (await nativeReplicaEntries(await origin.getDirectoryHandle(namespace))).get('/saved.txt')
+          ?.bytes,
+      );
     return {
       aOutside,
       restarted,
@@ -137,13 +136,8 @@ test('configured deadline covers real native preload beyond 10 seconds, includin
   page,
 }) => {
   await page.goto('/no-coi-harness.html');
+  await accessNativeReplica(page, { files: { '/delayed.txt': encoded('persisted') } });
   const result = await page.evaluate(async (root) => {
-    const origin = await navigator.storage.getDirectory();
-    const writer = await (
-      await origin.getFileHandle('delayed.txt', { create: true })
-    ).createWritable();
-    await writer.write('persisted');
-    await writer.close();
     const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
     const sandbox = await createSandbox({
       requireCrossOriginIsolation: false,
@@ -164,14 +158,9 @@ test('configured deadline covers real native preload beyond 10 seconds, includin
 for (const fault of ['timeout', 'close'] as const) {
   test(`native preload ${fault} rejects and tears down its Worker`, async ({ page }) => {
     await page.goto('/no-coi-harness.html');
+    await accessNativeReplica(page, { files: { '/delayed.txt': encoded('persisted') } });
     const result = await page.evaluate(
       async ({ root, fault }) => {
-        const origin = await navigator.storage.getDirectory();
-        const writer = await (
-          await origin.getFileHandle('delayed.txt', { create: true })
-        ).createWritable();
-        await writer.write('persisted');
-        await writer.close();
         const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
         let terminated = 0;
         const terminate = Worker.prototype.terminate;

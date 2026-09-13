@@ -8,7 +8,7 @@ import {
   preparePlaygroundArchiveV1Import,
 } from './playground-archive.ts';
 
-const PROJECT_ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const PROJECT_ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const MEBIBYTE = 1024 * 1024;
 const encoder = new TextEncoder();
 

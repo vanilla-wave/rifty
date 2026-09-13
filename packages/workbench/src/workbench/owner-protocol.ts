@@ -116,7 +116,11 @@ export type WorkbenchOwnerFailure =
     };
 
 export type WorkbenchOwnerToPageMessage =
-  | { readonly type: 'workbench:owner-ready'; readonly storage: OwnerStorageSnapshot }
+  | {
+      readonly type: 'workbench:owner-ready';
+      readonly storage: OwnerStorageSnapshot;
+      readonly storageLayout?: string;
+    }
   | {
       readonly type: 'workbench:project-opened';
       readonly opId: string;
@@ -340,8 +344,20 @@ export function inspectWorkbenchOwnerToPageMessage(value: unknown): WorkbenchOwn
   const message = record(value, 'owner-to-page message');
   switch (message.type) {
     case 'workbench:owner-ready': {
-      exact(message, ['type', 'storage'], 'owner-ready message');
-      return Object.freeze({ type: message.type, storage: inspectStorage(message.storage) });
+      exact(
+        message,
+        optionalKeys(message, ['type', 'storage'], ['storageLayout']),
+        'owner-ready message',
+      );
+      const storageLayout = own(message, 'storageLayout')
+        ? nonEmptyString(message.storageLayout, 'owner storage layout')
+        : undefined;
+      if (storageLayout?.trim() === '') throw invalid('owner storage layout');
+      return Object.freeze({
+        type: message.type,
+        storage: inspectStorage(message.storage),
+        ...(storageLayout === undefined ? {} : { storageLayout }),
+      });
     }
     case 'workbench:project-opened': {
       exact(message, ['type', 'opId', 'projectToken', 'projectRoot'], 'project-opened message');

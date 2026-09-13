@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.
+
+
 - Restore ADR-0023/npm behavior for syntactically invalid package-lock JSON: resolve on explicit install and replace the lock only after success. This overturns the old blanket parse-error throw; preserve I/O, legacy-version and strict parsed-lock failures.
 
 - Optional registry capability retains real local replay across all install overloads; required network misses fail loudly and absent-registry Eddy rejects before effects (ADR-0398).

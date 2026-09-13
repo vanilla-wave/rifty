@@ -22,6 +22,7 @@ const ROOT_WATCH_SOURCE = [
   'const ONE_DOT = ".";',
   'const TWO_DOTS = "..";',
   'if (item !== ONE_DOT && item !== TWO_DOTS) items.add(item);',
+  'function normalizedId(root, resolved) { return resolved.id.slice(root.length); }',
 ].join('\n');
 
 function seedViteFiles(

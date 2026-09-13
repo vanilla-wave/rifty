@@ -52,6 +52,18 @@ it('init then status --porcelain shows an untracked file', async () => {
   expect(st.out()).toContain('?? a.txt');
 });
 
+it.each(['--short', '-s', '--porcelain'])(
+  'status %s preserves native short output without a summary header',
+  async (flag) => {
+    await seedRepoDir();
+    await writeFile('/repo/a.txt', 'hi\n');
+    await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+    const result = makeCtx({ cwd: '/repo', env: ENV });
+    expect(await git(['status', flag], result.ctx)).toBe(0);
+    expect(result.out()).toBe('?? a.txt\n');
+  },
+);
+
 it('after add, status --porcelain shows a staged-new file', async () => {
   await seedRepoDir();
   await writeFile('/repo/a.txt', 'hi\n');

@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
+import { nativeReplicaProbeSource } from './fixtures/native-replica-page.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 const payload = [0, 255, 17, 128, 65, 0, 234, 42, 99];
@@ -43,13 +44,7 @@ test('toolchain createReadStream sees sync-written bytes while native OPFS persi
 
   await page.goto('/no-coi-harness.html');
   const result = await page.evaluate(
-    async ({ root, payload, probe }) => {
-      const opfs = await navigator.storage.getDirectory();
-      const directory = await opfs.getDirectoryHandle('stream-visibility', { create: true });
-      const file = await directory.getFileHandle('bytes.bin', { create: true });
-      const writable = await file.createWritable();
-      await writable.write('old durable bytes');
-      await writable.close();
+    async ({ root, payload, probe, nativeReplicaProbeSource }) => {
       const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
       const sandbox = await createSandbox({
         requireCrossOriginIsolation: false,
@@ -60,6 +55,7 @@ test('toolchain createReadStream sees sync-written bytes while native OPFS persi
       });
       try {
         while (!sandbox.runtime.isReady()) await new Promise((resolve) => setTimeout(resolve, 10));
+        await sandbox.fs.writeFile('/stream-visibility/bytes.bin', 'old durable bytes');
         const output: string[] = [];
         const off = sandbox.runtime.on((event: { type: string; chunk?: string }) => {
           if (event.type === 'stdout' && event.chunk) output.push(event.chunk);
@@ -68,24 +64,21 @@ test('toolchain createReadStream sees sync-written bytes while native OPFS persi
           const fs = require('node:fs');
           const dir = '/stream-visibility';
           const opfs = await navigator.storage.getDirectory();
-          const nativeDir = await opfs.getDirectoryHandle('stream-visibility');
-          const nativeFile = await nativeDir.getFileHandle('bytes.bin');
-          const nativeBytes = async () => Array.from(new Uint8Array(await (await nativeFile.getFile()).arrayBuffer()));
-          const nativeWrite = FileSystemFileHandle.prototype.createWritable;
+          ${nativeReplicaProbeSource}
+          const nativeBytes = async () => Array.from((await nativeReplicaEntries(opfs)).get('/stream-visibility/bytes.bin').bytes);
           let release;
           let entered;
           let held = false;
           const gate = new Promise(resolve => { release = resolve; });
           const pending = new Promise(resolve => { entered = resolve; });
-          FileSystemFileHandle.prototype.createWritable = async function (...args) {
-            if (this.name === 'bytes.bin') {
+          const restoreNative = observeNativeReplicaWrites(async records => {
+            if (records.some(record => record.path === '/stream-visibility/bytes.bin' && record.kind === 'file')) {
               held = true;
               entered();
               await gate;
               held = false;
             }
-            return Reflect.apply(nativeWrite, this, args);
-          };
+          });
           try {
             fs.writeFileSync(dir + '/bytes.bin', Buffer.from(${JSON.stringify(payload)}));
             await pending;
@@ -97,20 +90,27 @@ test('toolchain createReadStream sees sync-written bytes while native OPFS persi
             console.log(JSON.stringify({ streams, heldDuringStreams, nativeBefore, nativeAfterStreams }));
           } finally {
             release();
-            FileSystemFileHandle.prototype.createWritable = nativeWrite;
+            restoreNative();
           }
         })()`);
         off();
         if (!evaluated.ok) throw new Error(`stream probe failed: ${JSON.stringify(evaluated)}`);
         // runtime.eval resolves after its real OPFS flush; do not race getFile
         // snapshots against the in-flight native replacement on Linux.
-        const persisted = Array.from(new Uint8Array(await (await file.getFile()).arrayBuffer()));
+        const { nativeReplicaEntries } = await import(
+          `/@fs${root}/tests/browser-unit/fixtures/native-replica-observer.ts`
+        );
+        const persisted = Array.from(
+          (await nativeReplicaEntries(await navigator.storage.getDirectory())).get(
+            '/stream-visibility/bytes.bin',
+          ).bytes,
+        );
         return { coi: crossOriginIsolated, ...JSON.parse(output.join('').trim()), persisted };
       } finally {
         sandbox.dispose();
       }
     },
-    { root, payload, probe },
+    { root, payload, probe, nativeReplicaProbeSource },
   );
   expect(result.coi).toBe(false);
   expect(result.heldDuringStreams).toBe(true);

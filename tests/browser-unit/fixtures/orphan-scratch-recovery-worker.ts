@@ -32,7 +32,7 @@ async function run(input: RecoveryRequest) {
     const root = await navigator.storage
       .getDirectory()
       .then((origin) => origin.getDirectoryHandle(recoveryNamespace));
-    pair = await installOpfsFs(root);
+    pair = await installOpfsFs(root, { layout: 'replica' });
     const composition = createOwnerVfsAuthorityComposition(pair.fsSync, {
       initialRoots: ['/', '/.rifty'],
     });

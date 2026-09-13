@@ -29,6 +29,7 @@ import {
   inspectWorkbenchOwnerToPageMessage,
 } from '../workbench/owner-protocol.ts';
 import type { PlaygroundCatalogSnapshot } from '../workbench/playground.ts';
+import { projectStorageSegment } from '../workbench/project-definition.ts';
 import {
   type ProjectMaterializer,
   createProjectMaterializer,
@@ -62,7 +63,10 @@ import {
 } from './workbench-package-config.ts';
 import { createWorkbenchProjectComposition } from './workbench-project-composition.ts';
 import { createWorkbenchProjectRuntime } from './workbench-project-runtime.ts';
-import { createWorkbenchProjectStore } from './workbench-project-store.ts';
+import {
+  createWorkbenchProjectStore,
+  hasStoredWorkbenchProject,
+} from './workbench-project-store.ts';
 import { createWorkbenchProjectVfs } from './workbench-project-vfs.ts';
 import type { KernelIpc } from './worker-runtime-globals.ts';
 
@@ -618,6 +622,18 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
       void controller.handle(message).catch(reject);
     };
   });
+  const currentKeys =
+    initialPlaygroundCatalog === undefined
+      ? undefined
+      : [
+          ...(initialPlaygroundCatalog.scratch === null ? [] : ['scratch']),
+          ...initialPlaygroundCatalog.projects.map((project) => projectStorageSegment(project.id)),
+        ];
+  const storageLayout =
+    storageAuthority.layoutSummary !== undefined &&
+    !(await hasStoredWorkbenchProject(authority, currentKeys))
+      ? storageAuthority.layoutSummary
+      : undefined;
   const queued = inbox.drain();
   let shutdownQueued = false;
   for (const message of queued) {
@@ -638,7 +654,11 @@ export async function runWorkbenchOwner(ipc: KernelIpc): Promise<void> {
         catalog: initialPlaygroundCatalog,
       });
     }
-    sendOwnerMessage(ipc, { type: 'workbench:owner-ready', storage });
+    sendOwnerMessage(ipc, {
+      type: 'workbench:owner-ready',
+      storage,
+      ...(storageLayout === undefined ? {} : { storageLayout }),
+    });
   }
 
   try {

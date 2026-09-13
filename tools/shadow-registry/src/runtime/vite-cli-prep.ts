@@ -8,8 +8,10 @@ import {
 } from './launch.ts';
 import {
   applyViteCliActionPatch,
+  applyViteRootUrlPatch,
   applyViteRootWatchPatch,
   viteCliActionPatchApplied,
+  viteRootUrlPatchApplied,
   viteRootWatchPatchApplied,
   viteRootWatchPatchPolicy,
 } from './vite-cli-install-policy.ts';
@@ -107,8 +109,10 @@ function validateCliActionPatch(vitePackageRoot: string): void {
 
 function validateRootWatchPatch(vitePackageRoot: string): void {
   const { path, source } = rootWatchPatchSite(vitePackageRoot);
-  if (!viteRootWatchPatchApplied(source)) {
-    throw new Error(`vite root watcher must be prepared by acquisition before promotion: ${path}`);
+  if (!viteRootWatchPatchApplied(source) || !viteRootUrlPatchApplied(source)) {
+    throw new Error(
+      `vite root watcher/URL must be prepared by acquisition before promotion: ${path}`,
+    );
   }
 }
 
@@ -139,7 +143,7 @@ export function planViteCliAcquisitionFiles(
   const cli = applyViteCliActionPatch(cliSource);
   if (cli !== cliSource) changes.push({ path: cliPath, bytes: enc.encode(cli) });
   const site = rootWatchPatchSite(packageRoot, fs);
-  const watcher = applyViteRootWatchPatch(site.source);
+  const watcher = applyViteRootUrlPatch(applyViteRootWatchPatch(site.source));
   if (watcher !== site.source) changes.push({ path: site.path, bytes: enc.encode(watcher) });
   return changes;
 }

@@ -23,7 +23,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const catalogFile = '/.rifty/workbench/playground/catalog.json';
 const transactionFile = '/.rifty/workbench/playground/transaction.json';
-const projectRoot = '/.rifty/workbench/v1/projects/saved-opfs/tree';
+const projectRoot = '/.rifty/workbench/v2/projects/saved-opfs/tree';
 const indexPath = `${projectRoot}/node_modules/ms/index.js`;
 
 interface Input {

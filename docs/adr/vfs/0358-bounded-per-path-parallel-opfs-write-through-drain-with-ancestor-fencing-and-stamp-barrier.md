@@ -137,3 +137,7 @@ epic.
 - ADR-0261's scope note "Its persist-ledger, checked-drain, FIFO, and
   pending-boot rules stand" is overtaken for the FIFO clause only (corrected
   in place there).
+
+## Corrections (active)
+
+2026-09-12 — ADR-0425: Replica mode replaces per-file admission/cache/fences with one batched execution mode; logical ordering, ledger and full reporting/settle contracts remain.

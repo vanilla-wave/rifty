@@ -9,7 +9,7 @@ import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import { createProjectTerminalNamespace } from './project-terminal-namespace.ts';
 
-const ROOT = '/.rifty/workbench/v1/projects/project-a/tree';
+const ROOT = '/.rifty/workbench/v2/projects/project-a/tree';
 const GUESSED_PHYSICAL_ROOT = '/projects/project-files';
 const enc = new TextEncoder();
 const dec = new TextDecoder();

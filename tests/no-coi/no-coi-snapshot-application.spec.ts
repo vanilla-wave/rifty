@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type BrowserContext, type Page, expect, test } from '@playwright/test';
+import { accessNativeReplica, encoded } from '../browser-unit/fixtures/opfs-storage-namespace.ts';
 import type { bakeApplicationPackage } from '../browser-unit/fixtures/snapshot-application-package.ts';
+import { nativeReplicaTree } from './fixtures/native-replica-page.ts';
 
 const root = process.cwd().replaceAll('\\', '/');
 const fixture = `/@fs${root}/tests/no-coi/fixtures/no-coi-snapshot-page.ts`;
@@ -95,55 +97,22 @@ async function serve(context: BrowserContext, snapshot = first) {
     }),
   );
 }
-async function tree(page: Page) {
-  return page.evaluate(async () => {
-    const root = await (await navigator.storage.getDirectory()).getDirectoryHandle('sdk-snapshot');
-    const entries: { path: string; sha256: string }[] = [];
-    const walk = async (directory: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
-      for await (const [name, handle] of directory.entries()) {
-        const path = `${prefix}/${name}`;
-        if (handle.kind === 'directory') await walk(handle as FileSystemDirectoryHandle, path);
-        else {
-          const bytes = await (await (handle as FileSystemFileHandle).getFile()).arrayBuffer();
-          entries.push({
-            path,
-            sha256: [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
-              .map((n) => n.toString(16).padStart(2, '0'))
-              .join(''),
-          });
-        }
-      }
-    };
-    await walk(root, '');
-    return entries.toSorted((a, b) => a.path.localeCompare(b.path));
-  });
+function tree(page: Page) {
+  return nativeReplicaTree(page, 'sdk-snapshot');
 }
 async function nativeReplace(page: Page, path: string, directory: boolean) {
-  await page.evaluate(
-    async ({ path, directory }) => {
-      let root = await (await navigator.storage.getDirectory()).getDirectoryHandle('sdk-snapshot');
-      const parts = path.slice(1).split('/');
-      const name = parts.pop();
-      if (!name) throw new Error('missing basename');
-      for (const part of parts) root = await root.getDirectoryHandle(part);
-      await root.removeEntry(name, { recursive: true });
-      if (directory) {
-        const target = await root.getDirectoryHandle(name, { create: true });
-        const writer = await (
-          await target.getFileHandle('descendant.txt', { create: true })
-        ).createWritable();
-        await writer.write('overwritten target descendant');
-        await writer.close();
-        const nested = await target.getDirectoryHandle('node_modules', { create: true });
-        const claim = await (
-          await nested.getFileHandle('.rifty-install-stamp.json', { create: true })
-        ).createWritable();
-        await claim.write('{"durability":"pending"}');
-        await claim.close();
-      }
-    },
-    { path, directory },
-  );
+  await accessNativeReplica(page, {
+    namespace: 'sdk-snapshot',
+    remove: [path],
+    ...(directory
+      ? {
+          files: {
+            [`${path}/descendant.txt`]: encoded('overwritten target descendant'),
+            [`${path}/node_modules/.rifty-install-stamp.json`]: encoded('{"durability":"pending"}'),
+          },
+        }
+      : {}),
+  });
 }
 
 test('producer application, saved edits, same-ID conflicts/force and explicit changed artifact', async ({

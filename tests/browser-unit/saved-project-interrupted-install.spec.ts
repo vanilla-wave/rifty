@@ -7,160 +7,193 @@ import type * as Fixture from './fixtures/sealed-playground-workbench.ts';
 
 const ownerModuleUrl = `/@fs${process.cwd()}/tests/browser-unit/fixtures/interrupted-install-owner.ts?worker&url`;
 
-test('saved Vite opens after a page dies during real npm install lodash and explicit retry completes', async ({
-  page,
-  context,
-}) => {
-  test.setTimeout(300_000);
-  const metadata = JSON.parse(
-    readFileSync(
-      new URL('../integration/fixtures/registry/lodash-4.17.21.json', import.meta.url),
-      'utf8',
-    ),
-  ) as { name: string; version: string; dist: { tarball: string; integrity: string } };
-  const tarball = readFileSync(
-    new URL('../integration/fixtures/registry/lodash-4.17.21.tgz', import.meta.url),
-  );
-  await context.route('**/npm-registry/lodash', (route) =>
-    route.fulfill({
-      json: {
-        name: 'lodash',
-        'dist-tags': { latest: metadata.version },
-        versions: { [metadata.version]: metadata },
-      },
-    }),
-  );
-  await context.route('**/lodash-4.17.21.tgz', (route) => route.fulfill({ body: tarball }));
-  const arrivals: string[] = [];
-  context.on('request', (request) => {
-    if (/npm-registry|\.tar\.gz/.test(request.url())) arrivals.push(request.url());
-  });
-  await gotoHarness(page);
-  const prepare = async (input: { fixtureUrl: string; ownerModuleUrl?: string }) => {
-    const sdkUrl = '/src/browser-unit/workbench-playground-entry.ts';
-    const assetsUrl = '/src/browser-unit/workbench-vite-host-assets.ts';
-    const sdk = (await import(/* @vite-ignore */ sdkUrl)) as typeof Companion;
-    const { workbenchViteHostAssets: assets } = (await import(
-      /* @vite-ignore */ assetsUrl
-    )) as typeof Assets;
-    const fixture = (await import(/* @vite-ignore */ input.fixtureUrl)) as typeof Fixture;
-    const plan = await fixture.projectPlan({
-      workspaceId: 'pr323-interrupted',
-      template: 'vite',
-      setup: 'instant',
+for (const boundary of ['before', 'after'] as const) {
+  test(`saved Vite opens after npm install dies ${boundary} HEAD publication and explicit retry completes`, async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(300_000);
+    const metadata = JSON.parse(
+      readFileSync(
+        new URL('../integration/fixtures/registry/lodash-4.17.21.json', import.meta.url),
+        'utf8',
+      ),
+    ) as { name: string; version: string; dist: { tarball: string; integrity: string } };
+    const tarball = readFileSync(
+      new URL('../integration/fixtures/registry/lodash-4.17.21.tgz', import.meta.url),
+    );
+    await context.route('**/npm-registry/lodash', (route) =>
+      route.fulfill({
+        json: {
+          name: 'lodash',
+          'dist-tags': { latest: metadata.version },
+          versions: { [metadata.version]: metadata },
+        },
+      }),
+    );
+    await context.route('**/lodash-4.17.21.tgz', (route) => route.fulfill({ body: tarball }));
+    const arrivals: string[] = [];
+    context.on('request', (request) => {
+      if (/npm-registry|\.tar\.gz/.test(request.url())) arrivals.push(request.url());
     });
-    let owner = assets.workers.owner;
-    if (input.ownerModuleUrl)
-      owner = ((await import(/* @vite-ignore */ input.ownerModuleUrl)) as { default: string })
-        .default;
-    const workbench = await sdk.openPlaygroundWorkbench({
-      deployment: {
-        ...assets,
-        workers: { ...assets.workers, owner },
-        serviceWorker: { url: '/sw.js', scope: '/' },
-      },
-      packageAcquisition: { registryUrl: '/npm-registry' },
-      storage: { persistence: 'required', namespace: 'pr323-interrupted' },
-    });
-    const definition = workbench.playground.define({ ...plan, id: 'saved-interrupted' });
-    if (input.ownerModuleUrl) {
-      const scratchDefinition = workbench.playground.define(plan);
-      await workbench.playground.catalog.createScratch({ definition: scratchDefinition });
-      const scratch = await workbench.openProject(scratchDefinition);
-      await scratch.files.writeFile(
-        '/local.cjs',
-        new TextEncoder().encode("console.log('retained local source');"),
-        { expectedVersion: null },
-      );
-      await scratch.close();
-      await workbench.playground.catalog.saveScratch({
-        id: 'saved-interrupted',
-        name: 'Interrupted Vite',
-        definition,
+    await gotoHarness(page);
+    const prepare = async (input: {
+      fixtureUrl: string;
+      ownerModuleUrl?: string;
+      boundary: 'before' | 'after';
+    }) => {
+      const sdkUrl = '/src/browser-unit/workbench-playground-entry.ts';
+      const assetsUrl = '/src/browser-unit/workbench-vite-host-assets.ts';
+      const sdk = (await import(/* @vite-ignore */ sdkUrl)) as typeof Companion;
+      const { workbenchViteHostAssets: assets } = (await import(
+        /* @vite-ignore */ assetsUrl
+      )) as typeof Assets;
+      const fixture = (await import(/* @vite-ignore */ input.fixtureUrl)) as typeof Fixture;
+      const plan = await fixture.projectPlan({
+        workspaceId: 'pr323-interrupted',
+        template: 'vite',
+        setup: 'instant',
       });
-    }
-    const project = await workbench.openProject(definition);
-    const terminal = project.terminals.open();
-    const run = async (line: string) => {
-      let out = '';
-      const detach = terminal.attach((chunk) => {
-        out += chunk;
+      let owner = assets.workers.owner;
+      if (input.ownerModuleUrl) {
+        const module = (await import(/* @vite-ignore */ input.ownerModuleUrl)) as {
+          default: string;
+        };
+        const url = new URL(module.default, location.href);
+        url.searchParams.set('interrupt', input.boundary);
+        owner = url.href;
+      }
+      const workbench = await sdk.openPlaygroundWorkbench({
+        deployment: {
+          ...assets,
+          workers: { ...assets.workers, owner },
+          serviceWorker: { url: '/sw.js', scope: '/' },
+        },
+        packageAcquisition: { registryUrl: '/npm-registry' },
+        storage: { persistence: 'required', namespace: 'pr323-interrupted' },
       });
+      const definition = workbench.playground.define({ ...plan, id: 'saved-interrupted' });
+      if (input.ownerModuleUrl) {
+        const scratchDefinition = workbench.playground.define(plan);
+        await workbench.playground.catalog.createScratch({ definition: scratchDefinition });
+        const scratch = await workbench.openProject(scratchDefinition);
+        await scratch.files.writeFile(
+          '/local.cjs',
+          new TextEncoder().encode("console.log('retained local source');"),
+          { expectedVersion: null },
+        );
+        await scratch.close();
+        await workbench.playground.catalog.saveScratch({
+          id: 'saved-interrupted',
+          name: 'Interrupted Vite',
+          definition,
+        });
+      }
+      const project = await workbench.openProject(definition);
+      const terminal = project.terminals.open();
+      const run = async (line: string) => {
+        let out = '';
+        const detach = terminal.attach((chunk) => {
+          out += chunk;
+        });
+        try {
+          const command = terminal.run(line);
+          const exit = await command.exitCode;
+          await command.close();
+          return { exit, out };
+        } finally {
+          detach();
+        }
+      };
+      const local = await run('node local.cjs');
+      if (input.ownerModuleUrl) {
+        const channel = new BroadcastChannel('pr323-interrupted-install');
+        const armed = new Promise<void>((resolve) => {
+          channel.onmessage = ({ data }) => {
+            if (data.armed) resolve();
+          };
+        });
+        channel.postMessage({ boundary: input.boundary });
+        await armed;
+        const reached = new Promise<{ persistedBytes: number }>((resolve) => {
+          channel.onmessage = (event) => resolve(event.data);
+        });
+        void run('npm install lodash').catch(() => {});
+        return { local, paused: await reached };
+      }
       try {
-        const command = terminal.run(line);
-        const exit = await command.exitCode;
-        await command.close();
-        return { exit, out };
+        const lodashPresent = (await project.files.readdir('/node_modules')).some(
+          (entry) => entry.path === '/node_modules/lodash',
+        );
+        const savedLicense = lodashPresent
+          ? await project.files.readFile('/node_modules/lodash/LICENSE')
+          : null;
+        const beforeRetry = await run(
+          'node -e "console.log(require(\'lodash\').chunk([1,2,3],2))"',
+        );
+        const reopenArrivals = await (
+          globalThis as unknown as { pr323BeforeExplicitInstall(): Promise<string[]> }
+        ).pr323BeforeExplicitInstall();
+        const install = await run('npm install lodash');
+        const repaired = await run('node -e "console.log(require(\'lodash\').chunk([1,2,3],2))"');
+        const server = project.run();
+        let previewStatus: number;
+        let servedByVite: boolean;
+        try {
+          const preview = (await server.ready) as { readonly url: string };
+          const response = await fetch(new URL(preview.url, location.href));
+          previewStatus = response.status;
+          servedByVite = (await response.text()).includes('/@vite/client');
+        } finally {
+          await server.close();
+        }
+        return {
+          local,
+          savedBytes: savedLicense?.bytes.byteLength ?? 0,
+          beforeRetry,
+          install,
+          repaired,
+          reopenArrivals,
+          previewStatus,
+          servedByVite,
+        };
       } finally {
-        detach();
+        await terminal.close();
+        await project.close();
+        await workbench.close();
       }
     };
-    const local = await run('node local.cjs');
-    if (input.ownerModuleUrl) {
-      const channel = new BroadcastChannel('pr323-interrupted-install');
-      const reached = new Promise<{ persistedBytes: number }>((resolve) => {
-        channel.onmessage = (event) => resolve(event.data);
-      });
-      void run('npm install lodash').catch(() => {});
-      return { local, paused: await reached };
+    const victim = await page.evaluate(prepare, {
+      fixtureUrl: sealedWorkbenchFixtureUrl,
+      ownerModuleUrl,
+      boundary,
+    });
+    console.log('[pr323-interrupted]', JSON.stringify(victim));
+    expect(victim.local.exit).toBe(0);
+    expect(victim.paused?.persistedBytes).toBeGreaterThan(100);
+    await page.close();
+    const fresh = await context.newPage();
+    await gotoHarness(fresh);
+    const beforeReopen = arrivals.length;
+    await fresh.exposeFunction('pr323BeforeExplicitInstall', () => arrivals.slice(beforeReopen));
+    const recovered = await fresh.evaluate(prepare, {
+      fixtureUrl: sealedWorkbenchFixtureUrl,
+      boundary,
+    });
+    expect(recovered.reopenArrivals).toEqual([]);
+    expect(recovered.previewStatus).toBe(200);
+    expect(recovered.servedByVite).toBe(true);
+    expect(recovered.local.exit).toBe(0);
+    expect(recovered.local.out).toContain('retained local source');
+    expect(recovered.savedBytes).toBe(boundary === 'before' ? 0 : victim.paused?.persistedBytes);
+    if (boundary === 'before') expect(recovered.beforeRetry?.exit).not.toBe(0);
+    else {
+      expect(recovered.beforeRetry?.exit).toBe(0);
+      expect(recovered.beforeRetry?.out).toContain('[ 1, 2 ]');
     }
-    try {
-      const savedLicense = await project.files.readFile('/node_modules/lodash/LICENSE');
-      const missing = await run('node -e "require(\'lodash\')"');
-      const reopenArrivals = await (
-        globalThis as unknown as { pr323BeforeExplicitInstall(): Promise<string[]> }
-      ).pr323BeforeExplicitInstall();
-      const install = await run('npm install lodash');
-      const repaired = await run('node -e "console.log(require(\'lodash\').chunk([1,2,3],2))"');
-      const server = project.run();
-      let previewStatus: number;
-      let servedByVite: boolean;
-      try {
-        const preview = (await server.ready) as { readonly url: string };
-        const response = await fetch(new URL(preview.url, location.href));
-        previewStatus = response.status;
-        servedByVite = (await response.text()).includes('/@vite/client');
-      } finally {
-        await server.close();
-      }
-      return {
-        local,
-        savedBytes: savedLicense.bytes.byteLength,
-        missing,
-        install,
-        repaired,
-        reopenArrivals,
-        previewStatus,
-        servedByVite,
-      };
-    } finally {
-      await terminal.close();
-      await project.close();
-      await workbench.close();
-    }
-  };
-  const victim = await page.evaluate(prepare, {
-    fixtureUrl: sealedWorkbenchFixtureUrl,
-    ownerModuleUrl,
+    expect(recovered.install?.exit).toBe(0);
+    expect(recovered.repaired?.exit).toBe(0);
+    expect(recovered.repaired?.out).toContain('[ 1, 2 ]');
+    expect(arrivals.some((url) => url.includes('lodash'))).toBe(true);
   });
-  console.log('[pr323-interrupted]', JSON.stringify(victim));
-  expect(victim.local.exit).toBe(0);
-  expect(victim.paused?.persistedBytes).toBeGreaterThan(100);
-  await page.close();
-  const fresh = await context.newPage();
-  await gotoHarness(fresh);
-  const beforeReopen = arrivals.length;
-  await fresh.exposeFunction('pr323BeforeExplicitInstall', () => arrivals.slice(beforeReopen));
-  const recovered = await fresh.evaluate(prepare, { fixtureUrl: sealedWorkbenchFixtureUrl });
-  expect(recovered.reopenArrivals).toEqual([]);
-  expect(recovered.previewStatus).toBe(200);
-  expect(recovered.servedByVite).toBe(true);
-  expect(recovered.local.exit).toBe(0);
-  expect(recovered.local.out).toContain('retained local source');
-  expect(recovered.savedBytes).toBe(victim.paused?.persistedBytes);
-  expect(recovered.missing?.exit).not.toBe(0);
-  expect(recovered.install?.exit).toBe(0);
-  expect(recovered.repaired?.exit).toBe(0);
-  expect(recovered.repaired?.out).toContain('[ 1, 2 ]');
-  expect(arrivals.some((url) => url.includes('lodash'))).toBe(true);
-});
+}

@@ -79,7 +79,7 @@ async function seed(endpoint: Endpoint, edited: boolean) {
     expect(network.requests).toEqual([snapshotAssetUrl]);
   }
   await h.authority.flush();
-  const root = `/.rifty/workbench/v1/projects/${id}/tree`;
+  const root = `/.rifty/workbench/v2/projects/${id}/tree`;
   return { h, network, definition, id, root };
 }
 

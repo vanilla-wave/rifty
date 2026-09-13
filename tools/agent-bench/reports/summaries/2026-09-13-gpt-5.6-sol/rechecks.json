@@ -1,0 +1,1273 @@
+{
+  "method": "Same retained source, no new model execution. Native forms independently replayed on matching native React19.2.8; URL replayed on actual COI playground after native React19.3 scheduling discriminator. Original live measurements remain in original-report.json.",
+  "judgeHashes": {
+    "url-filters": "a1d3a1412786313953a5b486982092b7b31dee7e6bc2a8c6ed0cfd109020de7d",
+    "new-issue-form": "2ea314e9e6c7a84d50d9bfab78aa5799e4cc0c99e9799394e30dca8631d4438c"
+  },
+  "rechecks": [
+    {
+      "id": "url-filters/rifty/1",
+      "originalOutcome": "fail",
+      "originalJudge": {
+        "pass": false,
+        "probes": [
+          {
+            "name": "selected filters encoded in shareable URL",
+            "pass": true,
+            "evidence": {
+              "statusChangedAddress": true,
+              "assigneeChangedAddress": true,
+              "selected": [1, 6, 10, 16, 21]
+            }
+          },
+          {
+            "name": "reload restores filters and list",
+            "pass": false,
+            "evidence": {
+              "controls": {
+                "status": "all",
+                "assignee": "Mara"
+              },
+              "restored": [1, 6, 10, 16, 21]
+            }
+          }
+        ]
+      },
+      "judge": {
+        "pass": true,
+        "probes": [
+          {
+            "name": "selected filters encoded in shareable URL",
+            "pass": true,
+            "evidence": {
+              "statusChangedAddress": true,
+              "assigneeChangedAddress": true,
+              "selected": [6]
+            }
+          },
+          {
+            "name": "reload restores filters and list",
+            "pass": true,
+            "evidence": {
+              "controls": {
+                "status": "closed",
+                "assignee": "Mara"
+              },
+              "restored": [6]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-issue-form/local-reference/1",
+      "originalOutcome": "fail",
+      "originalJudge": {
+        "pass": false,
+        "probes": [
+          {
+            "name": "new issue entry exists",
+            "pass": false,
+            "evidence": {
+              "button": false
+            }
+          }
+        ]
+      },
+      "judge": {
+        "pass": true,
+        "probes": [
+          {
+            "name": "empty title rejected with required feedback",
+            "pass": true,
+            "evidence": {
+              "required": true,
+              "before": 25,
+              "afterEmpty": 0
+            }
+          },
+          {
+            "name": "valid issue appears in list",
+            "pass": true,
+            "evidence": {
+              "visible": false,
+              "inList": 1,
+              "finalCount": 26,
+              "before": 25
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-issue-form/local-reference/2",
+      "originalOutcome": "fail",
+      "originalJudge": {
+        "pass": false,
+        "probes": [
+          {
+            "name": "new issue entry exists",
+            "pass": false,
+            "evidence": {
+              "button": false
+            }
+          }
+        ]
+      },
+      "judge": {
+        "pass": true,
+        "probes": [
+          {
+            "name": "empty title rejected with required feedback",
+            "pass": true,
+            "evidence": {
+              "required": true,
+              "before": 25,
+              "afterEmpty": 0
+            }
+          },
+          {
+            "name": "valid issue appears in list",
+            "pass": true,
+            "evidence": {
+              "visible": false,
+              "inList": 1,
+              "finalCount": 26,
+              "before": 25
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-issue-form/local-reference/3",
+      "originalOutcome": "fail",
+      "originalJudge": {
+        "pass": false,
+        "probes": [
+          {
+            "name": "new issue entry exists",
+            "pass": false,
+            "evidence": {
+              "button": false
+            }
+          }
+        ]
+      },
+      "judge": {
+        "pass": true,
+        "probes": [
+          {
+            "name": "empty title rejected with required feedback",
+            "pass": true,
+            "evidence": {
+              "required": true,
+              "before": 25,
+              "afterEmpty": 0
+            }
+          },
+          {
+            "name": "valid issue appears in list",
+            "pass": true,
+            "evidence": {
+              "visible": false,
+              "inList": 1,
+              "finalCount": 26,
+              "before": 25
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "nativeForms": {
+    "output": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-ZYAT5P",
+    "programs": [
+      {
+        "name": "title-input",
+        "cwd": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-ZYAT5P/title-input",
+        "sourceTreeSha256": "560aff727f7ed0c6bdc05867f401ea1e0ea85e804b7d1fb0614f5150d08384cb",
+        "sourceLockVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "executionVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "contextCaveat": "Exact retained source executed on existing real native npm dependencies; versions shown separately, source lock not falsely claimed as installed."
+      },
+      {
+        "name": "title-textarea",
+        "cwd": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-ZYAT5P/title-textarea",
+        "sourceTreeSha256": "b8c5be4b36347b84d13e67b4f8d27c617a0d5121b4d3773aeb5ef6f0f9dd05a4",
+        "sourceLockVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "executionVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "contextCaveat": "Exact retained source executed on existing real native npm dependencies; versions shown separately, source lock not falsely claimed as installed."
+      },
+      {
+        "name": "live-link-form-1",
+        "cwd": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-ZYAT5P/live-link-form-1",
+        "sourceTreeSha256": "6ab0c566995ceea2efe77fa671d4df83e8970e1b8f14ceaa991e42e8e65be88d",
+        "sourceLockVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "executionVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "contextCaveat": "Exact retained source executed on existing real native npm dependencies; versions shown separately, source lock not falsely claimed as installed."
+      },
+      {
+        "name": "live-link-form-2",
+        "cwd": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-ZYAT5P/live-link-form-2",
+        "sourceTreeSha256": "1b5c436ceda6912e7f92719bcac6014ed6283d34d972db008c08305ada6f7c99",
+        "sourceLockVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "executionVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "contextCaveat": "Exact retained source executed on existing real native npm dependencies; versions shown separately, source lock not falsely claimed as installed."
+      },
+      {
+        "name": "live-link-form-3",
+        "cwd": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-ZYAT5P/live-link-form-3",
+        "sourceTreeSha256": "bd6a9e565fc90bb3e8dcbb37d5c0e75aedad044466be7af536072869df737aee",
+        "sourceLockVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "executionVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "contextCaveat": "Exact retained source executed on existing real native npm dependencies; versions shown separately, source lock not falsely claimed as installed."
+      }
+    ],
+    "results": [
+      {
+        "name": "title-input",
+        "verdict": {
+          "pass": true,
+          "probes": [
+            {
+              "name": "empty title rejected with required feedback",
+              "pass": true,
+              "evidence": {
+                "required": true,
+                "before": 25,
+                "afterEmpty": 25
+              }
+            },
+            {
+              "name": "valid issue appears in list",
+              "pass": true,
+              "evidence": {
+                "visible": true,
+                "inList": 1,
+                "finalCount": 26,
+                "before": 25
+              }
+            }
+          ]
+        },
+        "nativeFeedback": {
+          "tag": "INPUT",
+          "valid": false,
+          "message": "Please fill out this field."
+        },
+        "before": 25,
+        "after": 26
+      },
+      {
+        "name": "title-textarea",
+        "verdict": {
+          "pass": true,
+          "probes": [
+            {
+              "name": "empty title rejected with required feedback",
+              "pass": true,
+              "evidence": {
+                "required": true,
+                "before": 25,
+                "afterEmpty": 25
+              }
+            },
+            {
+              "name": "valid issue appears in list",
+              "pass": true,
+              "evidence": {
+                "visible": true,
+                "inList": 1,
+                "finalCount": 26,
+                "before": 25
+              }
+            }
+          ]
+        },
+        "nativeFeedback": {
+          "tag": "TEXTAREA",
+          "valid": false,
+          "message": "Please fill out this field."
+        },
+        "before": 25,
+        "after": 26
+      },
+      {
+        "name": "live-link-form-1",
+        "verdict": {
+          "pass": true,
+          "probes": [
+            {
+              "name": "empty title rejected with required feedback",
+              "pass": true,
+              "evidence": {
+                "required": true,
+                "before": 25,
+                "afterEmpty": 0
+              }
+            },
+            {
+              "name": "valid issue appears in list",
+              "pass": true,
+              "evidence": {
+                "visible": false,
+                "inList": 1,
+                "finalCount": 26,
+                "before": 25
+              }
+            }
+          ]
+        },
+        "initial": 25,
+        "afterEmpty": 25,
+        "requiredFeedback": true,
+        "finalCount": 26
+      },
+      {
+        "name": "live-link-form-2",
+        "verdict": {
+          "pass": true,
+          "probes": [
+            {
+              "name": "empty title rejected with required feedback",
+              "pass": true,
+              "evidence": {
+                "required": true,
+                "before": 25,
+                "afterEmpty": 0
+              }
+            },
+            {
+              "name": "valid issue appears in list",
+              "pass": true,
+              "evidence": {
+                "visible": false,
+                "inList": 1,
+                "finalCount": 26,
+                "before": 25
+              }
+            }
+          ]
+        },
+        "initial": 25,
+        "afterEmpty": 25,
+        "requiredFeedback": true,
+        "finalCount": 26
+      },
+      {
+        "name": "live-link-form-3",
+        "verdict": {
+          "pass": true,
+          "probes": [
+            {
+              "name": "empty title rejected with required feedback",
+              "pass": true,
+              "evidence": {
+                "required": true,
+                "before": 25,
+                "afterEmpty": 0
+              }
+            },
+            {
+              "name": "valid issue appears in list",
+              "pass": true,
+              "evidence": {
+                "visible": false,
+                "inList": 1,
+                "finalCount": 26,
+                "before": 25
+              }
+            }
+          ]
+        },
+        "initial": 25,
+        "afterEmpty": 25,
+        "requiredFeedback": true,
+        "finalCount": 26
+      }
+    ]
+  },
+  "nativeUrlScheduling": {
+    "output": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-tq5W4l",
+    "programs": [
+      {
+        "name": "live-url",
+        "cwd": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-tq5W4l/live-url",
+        "sourceTreeSha256": "995d90d8f747b161607aba217b8a6d0a41e0bdcd65340aa4dcb0ec796a9a62ac",
+        "sourceLockVersions": {
+          "react": "19.3.0",
+          "react-dom": "19.3.0",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.28.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.3.0",
+          "@types/react-dom": "19.3.0"
+        },
+        "executionVersions": {
+          "react": "19.3.0",
+          "react-dom": "19.3.0",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.28.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.3.0",
+          "@types/react-dom": "19.3.0"
+        },
+        "contextCaveat": "Exact retained source executed on existing real native npm dependencies; versions shown separately, source lock not falsely claimed as installed."
+      },
+      {
+        "name": "positive-url",
+        "cwd": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-review-native-judges-tq5W4l/positive-url",
+        "sourceTreeSha256": "4a602d383cd74ed794e56f8fc5d2f169d6b199ef60a75bb2172a46c928a7233b",
+        "sourceLockVersions": {
+          "react": "19.2.8",
+          "react-dom": "19.2.8",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.27.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.2.18",
+          "@types/react-dom": "19.2.5"
+        },
+        "executionVersions": {
+          "react": "19.3.0",
+          "react-dom": "19.3.0",
+          "react-router-dom": "7.18.3",
+          "react-router": "7.18.3",
+          "scheduler": "0.28.0",
+          "vite": "7.3.6",
+          "@vitejs/plugin-react": "5.2.0",
+          "@types/react": "19.3.0",
+          "@types/react-dom": "19.3.0"
+        },
+        "contextCaveat": "Exact retained source executed on existing real native npm dependencies; versions shown separately, source lock not falsely claimed as installed."
+      }
+    ],
+    "results": [
+      {
+        "name": "live-url",
+        "original": [
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 0,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 1,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 2,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 3,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 4,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 5,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 6,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 7,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 8,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 9,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 6,
+            "index": 0,
+            "verdict": {
+              "pass": false,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6, 14, 23]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": false,
+                  "evidence": {
+                    "controls": {
+                      "status": "all",
+                      "assignee": "Mara"
+                    },
+                    "restored": [1, 6, 10, 16, 21]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "settled": {
+          "initial": "issues",
+          "cpuRate": 6,
+          "url": "?status=closed&assignee=Mara",
+          "status": "closed",
+          "assignee": "Mara",
+          "ids": ["#6"]
+        }
+      },
+      {
+        "name": "positive-url",
+        "original": [
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 0,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 1,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 2,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 3,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 4,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 5,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 6,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 7,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 8,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 1,
+            "index": 9,
+            "verdict": {
+              "pass": true,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": true,
+                  "evidence": {
+                    "controls": {
+                      "status": "closed",
+                      "assignee": "Mara"
+                    },
+                    "restored": [6]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "initial": "issues",
+            "cpuRate": 6,
+            "index": 0,
+            "verdict": {
+              "pass": false,
+              "probes": [
+                {
+                  "name": "selected filters encoded in shareable URL",
+                  "pass": true,
+                  "evidence": {
+                    "statusChangedAddress": true,
+                    "assigneeChangedAddress": true,
+                    "selected": [6, 14, 23]
+                  }
+                },
+                {
+                  "name": "reload restores filters and list",
+                  "pass": false,
+                  "evidence": {
+                    "controls": {
+                      "status": "all",
+                      "assignee": "Mara"
+                    },
+                    "restored": [1, 6, 10, 16, 21]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "settled": {
+          "initial": "issues",
+          "cpuRate": 6,
+          "url": "?status=closed&assignee=Mara",
+          "status": "closed",
+          "assignee": "Mara",
+          "ids": ["#6"]
+        }
+      }
+    ]
+  },
+  "coiUrl": {
+    "originalRun": "url-filters/rifty/1",
+    "modelRequests": 0,
+    "artifactSha256": "76d9787e9ae1e2bf20fc58a8a7c22f5dd76d5e86614ea55f35e35cd391d043c5",
+    "judgeSha256": "a1d3a1412786313953a5b486982092b7b31dee7e6bc2a8c6ed0cfd109020de7d",
+    "sourceFilesUnchanged": true,
+    "judge": {
+      "pass": true,
+      "probes": [
+        {
+          "name": "selected filters encoded in shareable URL",
+          "pass": true,
+          "evidence": {
+            "statusChangedAddress": true,
+            "assigneeChangedAddress": true,
+            "selected": [6]
+          }
+        },
+        {
+          "name": "reload restores filters and list",
+          "pass": true,
+          "evidence": {
+            "controls": {
+              "status": "closed",
+              "assignee": "Mara"
+            },
+            "restored": [6]
+          }
+        }
+      ]
+    },
+    "out": "/var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/pr333-coi-url-rejudge-FOuhPx"
+  }
+}

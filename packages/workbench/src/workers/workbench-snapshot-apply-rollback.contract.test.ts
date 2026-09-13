@@ -19,7 +19,7 @@ import {
 } from './test-fixtures/snapshot-saved-state.ts';
 
 const id = 'rollback-project';
-const root = `/.rifty/workbench/v1/projects/${id}/tree`;
+const root = `/.rifty/workbench/v2/projects/${id}/tree`;
 const catalogFile = '/.rifty/workbench/playground/catalog.json';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();

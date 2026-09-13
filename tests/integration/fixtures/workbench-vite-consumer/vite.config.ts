@@ -69,6 +69,7 @@ export default defineConfig({
         root: resolve('index.html'),
         sandbox: resolve('sandbox/index.html'),
         noCoiProject: resolve('src/no-coi-project-proof.ts'),
+        noCoiAgent: resolve('src/sandbox-agent-packed-proof.ts'),
       },
     },
   },

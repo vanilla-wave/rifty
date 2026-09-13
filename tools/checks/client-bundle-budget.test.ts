@@ -11,7 +11,7 @@ const evidence = JSON.parse(
     'utf8',
   ),
 ) as {
-  historical: Snapshot;
+  leaked: Snapshot;
   cleaned: Snapshot;
 };
 interface Snapshot {
@@ -34,8 +34,8 @@ describe('CI client bundle budgets against real packed reports', () => {
     }
   });
 
-  it('rejects every historical io/TypeScript leak on both byte metrics and preserves compiler guard', () => {
-    const { report, boot } = evidence.historical;
+  it('rejects every remeasured io/TypeScript leak on both byte metrics and preserves compiler guard', () => {
+    const { report, boot } = evidence.leaked;
     for (const name of Object.keys(CLIENT_BUNDLE_BUDGETS)) {
       for (const metric of ['min', 'gzip']) {
         expect(() => assertClientBundleBudgets(report, boot)).toThrow(`${name}: ${metric} `);

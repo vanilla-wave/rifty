@@ -221,7 +221,7 @@ export function startBrowserWorkspaceOwner(
   let closeRequested = false;
   let protocolFailure: Error | null = null;
   let invariantHealth: WorkbenchOwnerHealthEvent | null = null;
-
+  let storageLayoutHealth: WorkbenchOwnerHealthEvent | null = null;
   const ownerClosed = closedState.promise;
 
   const resolveReady = (): void => {
@@ -263,22 +263,6 @@ export function startBrowserWorkspaceOwner(
     if (!exited) worker.kill('SIGTERM');
   };
 
-  const failInvariant = (failure: unknown): void => {
-    if (protocolFailure !== null) return;
-    invariantHealth ??= Object.freeze({
-      kind: 'fatal-invariant',
-      summary: 'Workbench protocol invariant failed',
-    });
-    for (const listener of [...healthListeners]) {
-      try {
-        listener(invariantHealth);
-      } catch {
-        // Health observation cannot replace the authoritative protocol failure.
-      }
-    }
-    failProtocol(failure);
-  };
-
   const publishHealth = (event: WorkbenchOwnerHealthEvent): void => {
     for (const listener of [...healthListeners]) {
       try {
@@ -289,6 +273,15 @@ export function startBrowserWorkspaceOwner(
     }
   };
 
+  const failInvariant = (failure: unknown): void => {
+    if (protocolFailure !== null) return;
+    invariantHealth ??= Object.freeze({
+      kind: 'fatal-invariant',
+      summary: 'Workbench protocol invariant failed',
+    });
+    publishHealth(invariantHealth);
+    failProtocol(failure);
+  };
   const send = (message: PageToPhysicalOwnerMessage): void => {
     if (exited || protocolFailure !== null) {
       throw new ClosedHandleError('Workbench owner transport', protocolFailure ?? 'owner exited');
@@ -430,6 +423,13 @@ export function startBrowserWorkspaceOwner(
             throw new Error('Workbench owner sent duplicate readiness');
           }
           storage = message.storage;
+          if (message.storageLayout !== undefined) {
+            storageLayoutHealth = Object.freeze({
+              kind: 'storage-layout',
+              summary: message.storageLayout,
+            });
+            publishHealth(storageLayoutHealth);
+          }
           resolveReady();
           return;
         case 'workbench:project-opened': {
@@ -1166,9 +1166,10 @@ export function startBrowserWorkspaceOwner(
         throw new TypeError('Workbench owner health listener must be a function');
       }
       healthListeners.add(listener);
-      if (invariantHealth !== null) {
+      for (const event of [invariantHealth, storageLayoutHealth]) {
+        if (event === null) continue;
         try {
-          listener(invariantHealth);
+          listener(event);
         } catch {}
       }
       return () => healthListeners.delete(listener);

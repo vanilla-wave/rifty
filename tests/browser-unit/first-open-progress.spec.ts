@@ -57,7 +57,7 @@ test('first project open publishes durability progress over owner ipc (#256 — 
   test.setTimeout(240_000);
   await gotoHarness(page);
 
-  const result = await page.evaluate(
+  const opened = await page.evaluate(
     async ({ moduleUrl, assetsUrl }): Promise<FirstOpenResult> => {
       const assets = (await import(/* @vite-ignore */ assetsUrl)) as {
         readonly workbenchViteHostAssets: {
@@ -111,6 +111,22 @@ test('first project open publishes durability progress over owner ipc (#256 — 
     },
     { moduleUrl: workerModuleUrl, assetsUrl: hostAssetsUrl },
   );
+
+  const persistedProjectFiles = await page.evaluate(async (url) => {
+    const module = await import(/* @vite-ignore */ url);
+    const fresh = new Worker(module.default, { type: 'module' });
+    try {
+      return await new Promise<number>((resolve, reject) => {
+        fresh.onmessage = ({ data }) =>
+          data.ok ? resolve(data.result) : reject(new Error(data.error));
+        fresh.onerror = (event) => reject(new Error(event.message));
+        fresh.postMessage({ phase: 'verify' });
+      });
+    } finally {
+      fresh.terminate();
+    }
+  }, workerModuleUrl);
+  const result = { ...opened, persistedProjectFiles };
 
   // PR-record line — printed BEFORE the designed-RED assert so the RED run's
   // captured message stream lands in the log too.

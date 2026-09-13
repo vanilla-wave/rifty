@@ -14,6 +14,8 @@ const TIERS = [
   ['runtime-js', 'runtime-wasi'],
   ['shell', 'terminal', 'npm-client', 'ts-language-service'],
   ['workbench'],
+  ['rifty'],
+  ['agent'],
   ['playground'],
 ];
 
@@ -88,6 +90,13 @@ const dependencyPolicyRules = [
       // allow same-package internal, and a declared `./internal` export entry
       pathNot: ['(?:^|/)$1/src/internal/', '/internal/index\\.[tj]sx?$'],
     },
+  },
+  {
+    name: 'no-browser-imports-agent-bench',
+    severity: 'error',
+    comment: 'I8: the external diagnostic harness is never a browser/runtime dependency',
+    from: { path: seg(ALL) },
+    to: { path: '(?:^|/)agent-bench/' },
   },
   {
     name: 'no-browser-imports-eddy',

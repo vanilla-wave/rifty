@@ -83,7 +83,7 @@ const MAX_ACTIVE_PERSIST_LANES = 16;
 interface ScheduledOp {
   readonly operation: PersistOperation;
   readonly structural: boolean;
-  readonly run: (operation: PersistOperation) => Promise<void>;
+  readonly run: ((operation: PersistOperation) => Promise<void>) | null;
   phase: 'queued' | 'active';
   timedOut: boolean;
   /** While QUEUED: the timed-out op this one was blocked-reported behind. */
@@ -93,8 +93,12 @@ interface ScheduledOp {
   reporting: Promise<void>;
   reportingSettled: boolean;
   settleReporting: () => void;
-  readonly settled: Promise<void>;
-  readonly settleOp: () => void;
+  readonly settled: Promise<
+    { readonly ok: true } | { readonly ok: false; readonly error: unknown }
+  >;
+  readonly settleOp: (
+    result: { readonly ok: true } | { readonly ok: false; readonly error: unknown },
+  ) => void;
 }
 
 function resetReporting(op: ScheduledOp): void {
@@ -225,11 +229,13 @@ export class OpfsDrainScheduler {
   /** Live flush-progress observers (ADR-0359); each dies with its watermark. */
   private readonly progressObservers = new Set<WatermarkProgressObserver>();
   private readonly hooks: DrainSchedulerHooks;
+  private batchScheduled = false;
   readonly dirHandles = new DrainDirHandleCache();
 
   constructor(
     hooks: DrainSchedulerHooks,
     readonly reportTimeoutMs = PERSIST_OPERATION_REPORT_TIMEOUT_MS,
+    private readonly batch?: (operations: readonly PersistOperation[]) => Promise<void>,
   ) {
     this.hooks = hooks;
   }
@@ -240,24 +246,26 @@ export class OpfsDrainScheduler {
   enqueue(
     kind: PersistOperationKind,
     paths: readonly string[],
-    run: (operation: PersistOperation) => Promise<void>,
+    run?: (operation: PersistOperation) => Promise<void>,
   ): void {
+    if ((this.batch === undefined) === (run === undefined))
+      throw new Error('OPFS drain requires exactly one execution mode');
     const structural = kind === 'rm' || kind === 'rename';
     // Structural REGISTRATION invalidates the whole dir-handle cache: no
     // later resolution may serve a pre-rm/pre-rename handle. Whole-clear is
     // the smallest honest scope (subtree bookkeeping buys nothing the pins
     // observe; extra fresh resolutions are always admissible).
-    if (structural) this.dirHandles.clear();
+    if (structural && !this.batch) this.dirHandles.clear();
     this.sequence += 1;
-    const operation: PersistOperation = { paths, op: kind, sequence: this.sequence };
-    let settleOp: () => void = () => {};
-    const settled = new Promise<void>((resolve) => {
+    const operation: PersistOperation = { paths: [...paths], op: kind, sequence: this.sequence };
+    let settleOp!: ScheduledOp['settleOp'];
+    const settled = new Promise<Awaited<ScheduledOp['settled']>>((resolve) => {
       settleOp = resolve;
     });
     const op: ScheduledOp = {
       operation,
       structural,
-      run,
+      run: run ?? null,
       phase: 'queued',
       timedOut: false,
       blockedBehind: null,
@@ -271,6 +279,19 @@ export class OpfsDrainScheduler {
     };
     resetReporting(op);
     this.pending.set(operation.sequence, op);
+    if (this.batch) {
+      for (const path of operation.paths) this.registry.set(path, op);
+      this.ready.push(op);
+      this.reportCapacityStarved();
+      if (!this.batchScheduled && this.activeCount === 0) {
+        this.batchScheduled = true;
+        queueMicrotask(() => {
+          this.batchScheduled = false;
+          this.admit();
+        });
+      }
+      return;
+    }
     const deps = this.collectDependencies(op);
     for (const dep of deps) dep.dependents.add(op);
     op.pendingDeps = deps.size;
@@ -332,9 +353,18 @@ export class OpfsDrainScheduler {
    * fence): resolves only when each has settled at the OPFS surface —
    * cap-queued and past-report-timeout ops included. Never rejects. */
   settledBarrier(): Promise<void> {
-    const barriers: Promise<void>[] = [];
+    const barriers: ScheduledOp['settled'][] = [];
     for (const op of this.pending.values()) barriers.push(op.settled);
     return Promise.all(barriers).then(() => undefined);
+  }
+
+  /** Paired native mutations await their own real result, not a later ledger snapshot. */
+  async afterMutations(apply: () => void): Promise<void> {
+    const before = this.sequence;
+    apply();
+    const admitted = [...this.pending.values()].filter((op) => op.operation.sequence > before);
+    const results = await Promise.all(admitted.map((op) => op.settled));
+    for (const result of results) if (!result.ok) throw result.error;
   }
 
   private collectDependencies(op: ScheduledOp): Set<ScheduledOp> {
@@ -366,6 +396,10 @@ export class OpfsDrainScheduler {
   }
 
   private admit(): void {
+    if (this.batch) {
+      this.admitBatch();
+      return;
+    }
     while (this.activeCount < MAX_ACTIVE_PERSIST_LANES) {
       const op = this.ready.shift();
       if (!op) return;
@@ -374,6 +408,43 @@ export class OpfsDrainScheduler {
     // Lanes full with ready ops left over: if a holder already timed out,
     // the leftovers are starved behind an uncancellable wedge — bound them.
     this.reportCapacityStarved();
+  }
+
+  /** One immutable capture/commit; logical operation identities retain the old barriers. */
+  private admitBatch(): void {
+    if (this.activeCount > 0 || this.ready.length === 0) return;
+    const batch = this.batch;
+    if (!batch) throw new Error('Missing OPFS batch executor');
+    const ops = this.ready.splice(0);
+    this.activeCount = ops.length;
+    for (const op of ops) {
+      op.phase = 'active';
+      op.blockedBehind = null;
+      if (op.reportingSettled) resetReporting(op);
+    }
+    const timer = setTimeout(() => {
+      for (const op of ops) {
+        op.timedOut = true;
+        this.timedOutHolders.add(op);
+        this.hooks.onReportTimeout(op.operation);
+        op.settleReporting();
+      }
+      this.reportCapacityStarved();
+    }, this.reportTimeoutMs);
+    const finish = (ok: boolean, error?: unknown) => {
+      clearTimeout(timer);
+      for (const op of ops) this.settle(op, ok, error);
+    };
+    let outcome: Promise<void>;
+    try {
+      outcome = batch(ops.map((op) => op.operation));
+    } catch (error) {
+      outcome = Promise.reject(error);
+    }
+    outcome.then(
+      () => finish(true),
+      (error) => finish(false, error),
+    );
   }
 
   private activate(op: ScheduledOp): void {
@@ -392,12 +463,13 @@ export class OpfsDrainScheduler {
       this.reportBlockedDependents(op);
       this.reportCapacityStarved();
     }, this.reportTimeoutMs);
-    const finish = (succeeded: boolean): void => {
+    const finish = (succeeded: boolean, error?: unknown): void => {
       clearTimeout(timer);
-      this.settle(op, succeeded);
+      this.settle(op, succeeded, error);
     };
     let outcome: Promise<void>;
     try {
+      if (!op.run) throw new Error('Missing per-file OPFS executor');
       outcome = op.run(op.operation);
     } catch (error) {
       // Tasks record their own failures in the ledger; a synchronous throw
@@ -408,13 +480,13 @@ export class OpfsDrainScheduler {
     // ledger failure, then rethrow; it never escapes the scheduler.
     outcome.then(
       () => finish(true),
-      () => finish(false),
+      (error) => finish(false, error),
     );
   }
 
-  private settle(op: ScheduledOp, succeeded: boolean): void {
+  private settle(op: ScheduledOp, succeeded: boolean, error?: unknown): void {
     op.settleReporting();
-    op.settleOp();
+    op.settleOp(succeeded ? { ok: true } : { ok: false, error });
     this.timedOutHolders.delete(op);
     this.pending.delete(op.operation.sequence);
     for (const path of op.operation.paths) {
@@ -429,7 +501,7 @@ export class OpfsDrainScheduler {
     }
     op.dependents.clear();
     // Drain idle — the dir-handle cache dies with its drain (ADR-0358).
-    if (this.pending.size === 0) this.dirHandles.clear();
+    if (this.pending.size === 0 && !this.batch) this.dirHandles.clear();
     this.notifyProgress(op, succeeded);
     this.admit();
   }
@@ -473,7 +545,7 @@ export class OpfsDrainScheduler {
    * when a lane REALLY frees. Healthy saturation never sweeps: capacity wait
    * is not I/O time. */
   private reportCapacityStarved(): void {
-    if (this.activeCount < MAX_ACTIVE_PERSIST_LANES) return;
+    if (!this.batch && this.activeCount < MAX_ACTIVE_PERSIST_LANES) return;
     const wedge: ScheduledOp | undefined = this.timedOutHolders.values().next().value;
     if (!wedge) return;
     for (const op of this.ready) {

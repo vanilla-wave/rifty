@@ -1,0 +1,1 @@
+On the Issues page I can filter by status and assignee, but I can't search. Add a search box to the Issues page that filters the list by issue title as I type. Matching should be case-insensitive, and the result count should update with the search.

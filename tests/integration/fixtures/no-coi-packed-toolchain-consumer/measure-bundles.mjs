@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -6,7 +6,7 @@ import { build, version } from 'esbuild';
 
 const root = dirname(fileURLToPath(import.meta.url));
 
-export async function measureClientBundles() {
+export async function measureClientBundles({ injectLeaks = false } = {}) {
   const rows = [];
   const compilerInputs = new Map();
   async function isCompilerInput(input) {
@@ -23,6 +23,15 @@ export async function measureClientBundles() {
     }
     return compilerInputs.get(input);
   }
+  let leakedCompiler;
+  if (injectLeaks) {
+    const directory = 'node_modules/@riftydev/runtime-js/dist';
+    for (const name of await readdir(resolve(root, directory))) {
+      const input = `${directory}/${name}`;
+      if (await isCompilerInput(input)) leakedCompiler = input;
+    }
+    if (!leakedCompiler) throw new Error('Missing packed browser compiler for leak calibration');
+  }
   for (const [name, contents] of Object.entries({
     toolchainHost: "export { spawnToolchainRuntime } from '@riftydev/runtime-js/internal'",
     ioProbe:
@@ -36,7 +45,16 @@ export async function measureClientBundles() {
   })) {
     const result = await build({
       absWorkingDir: root,
-      stdin: { contents, resolveDir: root },
+      stdin: {
+        contents:
+          contents +
+          (injectLeaks && ['main', 'sw'].includes(name)
+            ? "; import * as leakedIo from '@riftydev/io'; globalThis.__budgetLeak = leakedIo;"
+            : injectLeaks && ['generic', 'toolchain'].includes(name)
+              ? `; import * as leakedTs from './${leakedCompiler}'; globalThis.__budgetLeak = leakedTs;`
+              : ''),
+        resolveDir: root,
+      },
       outdir: resolve(root, 'measure', name),
       bundle: true,
       splitting: true,
@@ -118,7 +136,9 @@ export async function measureClientBundles() {
       else if (name === 'eval') throw new Error(`Missing ${operation} lazy compiler entry`);
     }
     const backendEntry = Object.entries(result.metafile.outputs).find(
-      ([, output]) => output.entryPoint === 'node_modules/@riftydev/vfs/dist/index.js',
+      ([, output]) =>
+        output.entryPoint === 'node_modules/@riftydev/vfs/dist/index.js' ||
+        /node_modules\/@riftydev\/sdk\/dist\/default-vfs-[^/]+\.js$/.test(output.entryPoint ?? ''),
     );
     const installSourceInputs = new Set();
     for (const input of Object.keys(result.metafile.inputs)) {

@@ -19,6 +19,14 @@ export interface TerminalSessionSnapshot {
 const MAX_PENDING_CHARS = 1_000_000;
 const OMITTED_OUTPUT = '[earlier terminal output omitted before the panel mounted]\n';
 
+export type TerminalCommandPresenter = (
+  line: string,
+  execute: (
+    line: string,
+    dimensions: { readonly cols: number; readonly rows: number },
+  ) => Promise<number>,
+) => Promise<number>;
+
 type ActiveRun = Pick<ProjectTerminalRun, 'exited' | 'stop' | 'close'>;
 
 interface UiTerminal {
@@ -33,6 +41,7 @@ interface UiTerminal {
   exitCode?: number;
   activeRun: ActiveRun | null;
   closed: boolean;
+  presenter?: TerminalCommandPresenter;
 }
 
 export interface PlaygroundProjectRunUi {
@@ -56,12 +65,19 @@ export interface PlaygroundTerminalUi {
     lifecycle?: PlaygroundProjectLifecyclePresentation,
   ): PlaygroundProjectRunUi;
   stopProject(): Promise<ProcessExit | undefined>;
-  createSession(title?: string): TerminalSessionSnapshot;
+  /** Adopt a public terminal from this ProjectSession into the ordinary UI owner. */
+  createSession(title?: string, terminal?: ProjectTerminal): TerminalSessionSnapshot;
   attach(id: string, writer: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
+  bindPresenter(id: string, presenter: TerminalCommandPresenter): () => void;
+  presentLine(id: string, line: string, signal?: AbortSignal): Promise<number>;
   runLine(
     id: string,
     line: string,
-    dimensions?: { readonly cols?: number; readonly rows?: number },
+    dimensions?: {
+      readonly cols?: number;
+      readonly rows?: number;
+      readonly signal?: AbortSignal;
+    },
   ): Promise<number>;
   complete(id: string, line: string, cursor: number): Promise<TerminalCompletionResult | null>;
   write(id: string, data: TerminalRawInput): Promise<void>;
@@ -246,8 +262,8 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       return primaryRun === null ? Promise.resolve(undefined) : primaryRun.stop();
     },
 
-    createSession(title) {
-      const state = add(session.terminals.open(), title);
+    createSession(title, terminal) {
+      const state = add(terminal ?? session.terminals.open(), title);
       activeId = state.id;
       publish();
       return snapshot(state);
@@ -261,6 +277,23 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       state.pendingChars = 0;
     },
 
+    bindPresenter(id, presenter) {
+      const state = get(id);
+      state.presenter = presenter;
+      return () => {
+        if (state.presenter === presenter) state.presenter = undefined;
+      };
+    },
+
+    async presentLine(id, line, signal) {
+      signal?.throwIfAborted();
+      const state = get(id);
+      if (!state.presenter) throw new Error(`Terminal ${id} presentation is not mounted`);
+      return state.presenter(line, (submitted, dimensions) =>
+        ui.runLine(id, submitted, { ...dimensions, signal }),
+      );
+    },
+
     async runLine(id, line, dimensions = {}) {
       const state = get(id);
       if (line.trim().length === 0) return 0;
@@ -268,6 +301,7 @@ export function createPlaygroundTerminalUi(session: ProjectSession<unknown>): Pl
       const cols = dimensions.cols ?? 80;
       const rows = dimensions.rows ?? 24;
       await state.terminal.resize(positiveDimension(cols, 'cols'), positiveDimension(rows, 'rows'));
+      dimensions.signal?.throwIfAborted();
       const run = state.terminal.run(line);
       state.activeRun = run;
       state.status = 'running';

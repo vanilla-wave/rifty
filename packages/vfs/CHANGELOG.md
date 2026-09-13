@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Treat a first HEAD created but never closed as uncommitted storage; fresh replay stays empty without a false corruption diagnosis.
+
+- Preserve layout diagnosis for internal boot composition while keeping the public backend-string result (ADR-0432).
+
+- Preserve settled subtree failure scope across later entry reports; provisional timeouts still heal on real success (ADR-0429).
+- Retain native readers through compaction/close and keep detected corruption repair pending across unrelated appends (ADR-0429).
+
+- Wait for actual native guard release during busy-Worker replacement, bounded by the captured I/O budget; close late grants (ADR-0428).
+- Persist configured Workbench/SDK storage as validated OPFS segments with one physical writer, batched drains and crash-safe compaction (ADR-0425).
+
 - Expose EROFS for host-configured readonly project files; runtime Node errors retain errno -30.
 - Accept optional native-root/persistence boot configuration; share literal namespace validation with Workbench (ADR-0419).
 

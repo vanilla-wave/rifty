@@ -10,7 +10,10 @@ import type {
 } from '@riftydev/terminal';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
-import type { TerminalSessionSnapshot } from '../adapters/playground-terminal-ui.ts';
+import type {
+  TerminalCommandPresenter,
+  TerminalSessionSnapshot,
+} from '../adapters/playground-terminal-ui.ts';
 import { ProblemsPanel } from './ProblemsPanel.tsx';
 import { type TerminalDims, type TerminalModeHint, TerminalPanel } from './TerminalPanel.tsx';
 
@@ -25,6 +28,7 @@ export function BottomPanel(props: {
   onCreateSession(): void;
   onCloseSession(id: string): void;
   attach(id: string, write: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
+  bindPresenter?(id: string, presenter: TerminalCommandPresenter): () => void;
   onLine(
     id: string,
     line: string,
@@ -182,6 +186,7 @@ export function BottomPanel(props: {
                   testId={id === props.activeSessionId ? 'terminal' : undefined}
                   active={view() === 'terminal' && id === props.activeSessionId}
                   attach={(write) => props.attach(id, write)}
+                  bindPresenter={(presenter) => props.bindPresenter?.(id, presenter) ?? (() => {})}
                   onSignal={() => props.onSignal?.(id)}
                   onRawInput={(data) => props.onRawInput?.(id, data)}
                   onResize={(dims) => props.onResize?.(id, dims)}

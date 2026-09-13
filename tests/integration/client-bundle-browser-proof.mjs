@@ -13,6 +13,7 @@ export async function withClientServer(root, observe) {
     try {
       const pathname = new URL(request.url, 'http://fixture.invalid').pathname;
       response.setHeader('Cache-Control', 'no-store');
+      if (pathname === '/dist/rifty/sw.js') response.setHeader('Service-Worker-Allowed', '/');
       if (pathname === '/') {
         response.setHeader('Content-Type', 'text/html');
         response.end('<!doctype html><title>Packed client proof</title>');

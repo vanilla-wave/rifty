@@ -23,6 +23,9 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0402 | Mount Workbench namespaces through one captured OPFS root |
 | 0406 | Refuse unavailable OPFS cache bytes |
 | 0411 | Preserve acquired-tree preload failures in Workbench storage selection |
+| 0425 | Persist Workbench trees as validated OPFS segments |
+| 0428 | Wait for native replica ownership before replay |
+| 0429 | Preserve subtree failure scope and native reader lifetimes |
 
 ### kernel
 
@@ -173,6 +176,8 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0371 | Registry twins carry substituted runtime bytes in the installed tree |
 | 0384 | Registry ownership of bundled guest-package adaptations |
 | 0399 | Preserve declared companion policy through retained-lock acquisition |
+| 0433 | Preserve Vite module URLs at the filesystem root |
+| 0435 | Follow npm tar root stripping for materialized installs |
 
 ### playground
 
@@ -225,6 +230,9 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0414 | Keep Scratch mutation policy in the companion |
 | 0415 | Open saved projects independently of installation proof |
 | 0416 | Optional Workbench SQLite deployment asset |
+| 0427 | Lazy chat over the public Pi agent session |
+| 0430 | Refresh clean editor captures from public owner writes |
+| 0432 | Report excluded storage layouts through existing health and startup diagnostics |
 
 ### toolchain-build
 
@@ -308,6 +316,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0225 | Cross-realm PTY resize control plane |
 | 0230 | Owner PTY stdin pump for supervised Node children |
 | 0264 | Owner-acknowledged idle PTY dimensions |
+| 0431 | Present owned commands through the existing input lifetime |
 
 ### distribution
 
@@ -344,6 +353,9 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0419 | Configure no-COI sandbox worker startup |
 | 0420 | Apply no-COI snapshots through the SDK |
 | 0423 | Keep no-COI invocation settlement generic |
+| 0424 | Headless Pi agent over public project hosts |
+| 0426 | No-COI agent host and explicit resident exit |
+| 0434 | Run a three-lane Pi benchmark with shared profile and native judges |
 
 ## Superseded (removed)
 
@@ -590,6 +602,7 @@ here.
 | Shadow-registry debug-disable flag (`disableShadowRegistry` / env switch) | 2026-08-23 | all substituted packages are native and cannot run in-browser regardless; behavioral comparison lives in Node parity oracles; SCSS comparison exists via unsubstituted pure-JS `sass`; install-artifact audit does not justify a public surface. Record: git history of the `npm-client/shadow-registry-disable-flag` draft + ADR-0006 correction |
 | Child-side project-FS cache or owner sync-RPC bypass | 2026-08-26 | violates ADR-0150 owner-SSoT freshness; the completed hot-path goal removed one hop and JSON framing without a second state owner. Record: `docs/backlog/perf/reference/child-fs-rpc-hot-path.md` + ADR-0365/0366 |
 | SW-delivered COI as the existing-app no-COI tier | 2026-08-31 | works only by applying isolation headers to the whole host and reloading it, violating preserved host posture. Record: `docs/backlog/distribution/reference/sw-coi-shim-probe.md` |
+| Pending-ready session (executable guest before the trusted stamp / early `openProject` reply, deferred durability flush) | 2026-09-01 | measured C4: an early reply is not a ready Node session — `node -e` fails with `package tree readiness is not published` until the stamp; fetch/prepare/setup stay on the path and owner death in the window is the cold-restore path anyway; readiness stays binary at the stamp with `openProject` resolution as the one named await. Record: `docs/backlog/vfs/reference/storage-open-reopen-candidate-benchmarks-2026-09-01.md` §C4 + ADR-0425 §Decision5 (first materialization keeps the stamp fence; saved replay is independent) |
 | Runtime heartbeat for no-COI wedge detection | 2026-09-04 | the wedged realm cannot service it; caller timeout owns detection at tier `works`. Record: ADR-0377 |
 | Vite identity policy in no-COI SDK/runtime infrastructure | 2026-09-04 | destination is the shared-memory-free class; installed bytes select behavior and Vite 7 is only the oracle. Record: ADR-0375 |
 | Realm-wide async-source census for resident readiness | 2026-09-04 | browser promises/EventTargets have no complete handle census, while counting all sources rejects harmless Vite cleanup. Loader-generation port ownership proves cause instead. Record: ADR-0378 |

@@ -1,4 +1,5 @@
 import type { Page, Request, Route } from '@playwright/test';
+import type * as NativeObserver from '../../browser-unit/fixtures/native-replica-observer.ts';
 
 interface NativeProjectState {
   readonly projectId: string;
@@ -12,80 +13,76 @@ interface NativeProjectState {
 
 /** Read every retained catalog/project entry; hashes keep large dependency bytes off the wire. */
 export function nativeProjectState(page: Page, projectName: string): Promise<NativeProjectState> {
-  return page.evaluate(async (projectName) => {
-    const origin = await navigator.storage.getDirectory();
-    const directory = async (path: string) => {
-      let dir = origin;
-      for (const part of path.split('/').filter(Boolean)) dir = await dir.getDirectoryHandle(part);
-      return dir;
-    };
-    const read = async (path: string) => {
-      const parts = path.split('/');
-      const name = parts.pop();
-      if (name === undefined) throw new Error(`Missing native filename: ${path}`);
-      const file = await (await (await directory(parts.join('/'))).getFileHandle(name)).getFile();
-      return new Uint8Array(await file.arrayBuffer());
-    };
-    const hash = async (bytes: Uint8Array<ArrayBuffer>) =>
-      Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
-        byte.toString(16).padStart(2, '0'),
-      ).join('');
-    const decoder = new TextDecoder();
-    const catalog = JSON.parse(
-      decoder.decode(await read('/.rifty/workbench/playground/catalog.json')),
-    ) as { active: { kind: string; id?: string }; projects: { id: string; name: string }[] };
-    const project = catalog.projects.find((entry) => entry.name === projectName);
-    if (
-      project === undefined ||
-      catalog.active.kind !== 'project' ||
-      catalog.active.id !== project.id
-    )
-      throw new Error(`Saved project ${projectName} is not the active native catalog entry`);
-    const root = `/.rifty/workbench/v1/projects/${project.id}/tree`;
-    const entries: Record<string, string> = {};
-    const walk = async (dir: FileSystemDirectoryHandle, path: string): Promise<void> => {
-      entries[path] = 'directory';
-      for await (const [name, entry] of dir as unknown as AsyncIterable<
-        [string, FileSystemHandle]
-      >) {
-        const child = `${path}/${name}`;
-        if (entry.kind === 'directory') await walk(entry as FileSystemDirectoryHandle, child);
-        else {
-          const file = await (entry as FileSystemFileHandle).getFile();
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          entries[child] = `file:${bytes.byteLength}:${await hash(bytes)}`;
-        }
-      }
-    };
-    // Complete retained scopes, including claims, journals, .git and empty directories.
-    // The owner's separate storage-proof nonce and page terminal history are not project data.
-    for (const path of ['/.rifty/workbench/playground', '/.rifty/workbench/v1/projects'])
-      await walk(await directory(path), path);
-    let claim: Readonly<Record<string, unknown>> | null = null;
-    try {
-      const value: unknown = JSON.parse(
-        decoder.decode(await read(`${root}/node_modules/.rifty-install-stamp.json`)),
-      );
-      if (value !== null && typeof value === 'object' && !Array.isArray(value))
-        claim = value as Readonly<Record<string, unknown>>;
-    } catch (error) {
+  return page.evaluate(
+    async ({ projectName, observerUrl }) => {
+      const origin = await navigator.storage.getDirectory();
+      const observer = (await import(/* @vite-ignore */ observerUrl)) as typeof NativeObserver;
+      const native = await observer.nativeReplicaEntries(origin);
+      const read = async (path: string) => {
+        const entry = native.get(path);
+        if (entry?.kind !== 'file' || entry.bytes === undefined)
+          throw new DOMException(`Missing committed native file: ${path}`, 'NotFoundError');
+        return entry.bytes;
+      };
+      const hash = async (bytes: Uint8Array<ArrayBuffer>) =>
+        Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
+          byte.toString(16).padStart(2, '0'),
+        ).join('');
+      const decoder = new TextDecoder();
+      const catalog = JSON.parse(
+        decoder.decode(await read('/.rifty/workbench/playground/catalog.json')),
+      ) as { active: { kind: string; id?: string }; projects: { id: string; name: string }[] };
+      const project = catalog.projects.find((entry) => entry.name === projectName);
       if (
-        !(error instanceof SyntaxError) &&
-        !(error instanceof DOMException && error.name === 'NotFoundError')
+        project === undefined ||
+        catalog.active.kind !== 'project' ||
+        catalog.active.id !== project.id
       )
-        throw error;
-    }
-    const lockEntry = entries[`${root}/package-lock.json`];
-    return {
-      projectId: project.id,
-      root,
-      manifest: decoder.decode(await read(`${root}/package.json`)),
-      marker: decoder.decode(await read(`${root}/data.txt`)),
-      claim,
-      lockfileSha256: lockEntry?.startsWith('file:') ? lockEntry.split(':')[2] : undefined,
-      entries,
-    };
-  }, projectName);
+        throw new Error(`Saved project ${projectName} is not the active native catalog entry`);
+      const root = `/.rifty/workbench/v2/projects/${project.id}/tree`;
+      const entries: Record<string, string> = {};
+      // Entire committed scopes; no live-owner cache or physical per-file assumption.
+      for (const entry of native.values()) {
+        if (
+          !['/.rifty/workbench/playground', '/.rifty/workbench/v2/projects'].some(
+            (root) => entry.path === root || entry.path.startsWith(`${root}/`),
+          )
+        )
+          continue;
+        if (entry.kind === 'dir') entries[entry.path] = 'directory';
+        if (entry.kind === 'file' && entry.bytes !== undefined)
+          entries[entry.path] = `file:${entry.bytes.length}:${await hash(entry.bytes)}`;
+      }
+      let claim: Readonly<Record<string, unknown>> | null = null;
+      try {
+        const value: unknown = JSON.parse(
+          decoder.decode(await read(`${root}/node_modules/.rifty-install-stamp.json`)),
+        );
+        if (value !== null && typeof value === 'object' && !Array.isArray(value))
+          claim = value as Readonly<Record<string, unknown>>;
+      } catch (error) {
+        if (
+          !(error instanceof SyntaxError) &&
+          !(error instanceof DOMException && error.name === 'NotFoundError')
+        )
+          throw error;
+      }
+      const lockEntry = entries[`${root}/package-lock.json`];
+      return {
+        projectId: project.id,
+        root,
+        manifest: decoder.decode(await read(`${root}/package.json`)),
+        marker: decoder.decode(await read(`${root}/data.txt`)),
+        claim,
+        lockfileSha256: lockEntry?.startsWith('file:') ? lockEntry.split(':')[2] : undefined,
+        entries,
+      };
+    },
+    {
+      projectName,
+      observerUrl: `/@fs${process.cwd()}/tests/browser-unit/fixtures/native-replica-observer.ts`,
+    },
+  );
 }
 
 /** Independent durable receipt oracle, against the known-running project's runtime identity. */

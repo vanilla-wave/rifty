@@ -31,7 +31,13 @@ export interface PlaygroundProjectMirror extends FsOpsTarget {
 
 export interface PlaygroundDocumentWriter {
   /** Capture (or refresh) the exact CAS base before an editable model opens. */
-  open(path: string): Promise<ProjectDocumentSnapshot>;
+  open(path: string, options?: { readonly fresh?: boolean }): Promise<ProjectDocumentSnapshot>;
+  /** Commit a fresh clean capture only if the view accepts its exact bytes. */
+  refresh(
+    path: string,
+    version: () => string | null,
+    accept: (snapshot: ProjectDocumentSnapshot) => boolean,
+  ): Promise<boolean>;
   write(path: string, text: string): Promise<void>;
   closeTree(path: string): Promise<void>;
   closeAll(): Promise<void>;
@@ -484,7 +490,7 @@ export function createPlaygroundDocumentWriter(
     });
   };
 
-  const enqueue = (path: string, operation: () => Promise<void>): Promise<void> => {
+  const enqueue = <T>(path: string, operation: () => Promise<T>): Promise<T> => {
     const logical = projectPath(path);
     const prior = tails.get(logical) ?? Promise.resolve();
     const next = prior.then(operation);
@@ -519,17 +525,40 @@ export function createPlaygroundDocumentWriter(
   };
 
   const writer: PlaygroundDocumentWriter = {
-    async open(path) {
+    async open(path, options) {
       const logical = projectPath(path);
       await (tails.get(logical) ?? Promise.resolve());
       let document = await handle(logical);
       const current = document.snapshot();
-      if (current.staleReason !== null && !current.dirty) {
+      if ((current.staleReason !== null || options?.fresh) && !current.dirty) {
         await document.close();
         handles.delete(logical);
         document = await handle(logical);
       }
       return snapshot(document);
+    },
+
+    refresh(path, version, accept) {
+      const logical = projectPath(path);
+      return enqueue(logical, async () => {
+        if (version() === null) return false;
+        const previous = await handles.get(logical);
+        const state = previous?.snapshot();
+        if (state?.dirty || (state?.version === version() && state.staleReason === null))
+          return false;
+        const candidate = await documents.open(logical);
+        let accepted = false;
+        try {
+          const next = snapshot(candidate);
+          if (next.version !== version() || !accept(next)) return false;
+          handles.set(logical, Promise.resolve(candidate));
+          accepted = true;
+          await previous?.close();
+          return true;
+        } finally {
+          if (!accepted) await candidate.close();
+        }
+      });
     },
 
     write(path, text) {

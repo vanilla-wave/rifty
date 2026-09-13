@@ -58,7 +58,6 @@ describe('App semantic companion boundary', () => {
 describe('App client-only semantic bindings', () => {
   it('keeps Monaco lazy until a project session is bound', () => {
     expect(appSource).toContain('const EditorHost = lazy(() =>');
-    expect(appSource).toContain('function warmEditorStack(): void');
     expect(appSource).toContain(
       'const mirror = createPlaygroundProjectMirror(context.session.files)',
     );
