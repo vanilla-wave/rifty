@@ -119,7 +119,9 @@ async function load(root: FileSystemDirectoryHandle): Promise<LoadedReplica> {
     if (!absent(error)) throw error;
     return { segments: [], sizes: [], entries: emptyReplicaEntries(), images: [] };
   }
-  const segments = await decodeHead(new Uint8Array(await (await head.getFile()).arrayBuffer()));
+  const bytes = new Uint8Array(await (await head.getFile()).arrayBuffer());
+  // Creating the first HEAD precedes atomic close; death can leave it empty.
+  const segments = bytes.length === 0 ? [] : await decodeHead(bytes);
   const entries = emptyReplicaEntries();
   const images = new Map<string, ReplicaImage>();
   const sizes: number[] = [];

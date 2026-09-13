@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Treat a first HEAD created but never closed as uncommitted storage; fresh replay stays empty without a false corruption diagnosis.
+
 - Preserve layout diagnosis for internal boot composition while keeping the public backend-string result (ADR-0432).
 
 - Preserve settled subtree failure scope across later entry reports; provisional timeouts still heal on real success (ADR-0429).

@@ -16,6 +16,8 @@ test('Playground names legacy storage loss without a false recovery action', asy
   const notice = page.locator('[data-health-scope="storage-layout"]');
   await expect(notice).toContainText('legacy per-file OPFS v1');
   await expect(notice).toContainText('not carried over');
+  for (const category of ['edited source', 'npm installs', 'cloned repositories', 'Git history'])
+    await expect(notice).toContainText(category);
   await expect(notice.locator('button')).toHaveCount(0);
   await pickStarter(page, 'project-files');
   await expect(notice).toBeVisible();

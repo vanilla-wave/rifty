@@ -1,23 +1,45 @@
 # Client budget proof
 
-`pnpm test:client-bundles --keep`: GREEN on real 15 first-party + 72 external
-tarballs, strict TypeScript, minified splitting bundles and fresh Chromium.
-Compiler boot/eval/preload/fetch-fault, VM defaults/HTTP/Blob/readiness/WASM-fault,
-SDK io/backend/source-wrapper, and install/restore/fetch-fault/busy proofs pass.
+2026-09-13: `pnpm test:client-bundles --keep` passed on merged main
+`db50e46b24ac82a0c77514c44bf888b3c99c5c1e`: 15 first-party + 72 external
+tarballs, strict TypeScript, splitting/minification and fresh Chromium 148.
+Node 24.16.0 / esbuild 0.28.0. Report includes readiness-joined JS requests.
 
-| Artifact | min / ceiling B | gzip / ceiling B |
-|---|---:|---:|
-| main | 56861 / 86000 | 18033 / 28000 |
-| sw | 14056 / 22000 | 4828 / 8000 |
-| generic | 725778 / 1089000 | 213598 / 321000 |
-| toolchain | 796895 / 1196000 | 236199 / 355000 |
+User accepted rebaseline after PR #299's segmented OPFS and SDK/toolchain growth.
+Same rule: measured cleaned bytes ×1.5, rounded up to 1000 B. Keep the lazy
+`default-vfs` entry and its measured provenance: no product shrinkage for the gate.
 
-Every historical leak in the adjacent JSON crosses both ceilings. Focused
-budget suite 4/4: ≥50% headroom, eight historical min/gzip failures + two
-compiler guards, missing artifacts/provenance/observations, omitted actually
-requested QuickJS bootstrap JS. Raw reports and request ledgers were copied
-from the accepted real packed runs, not hand-generated graph fixtures.
+| Artifact | cleaned min/gzip B | old ceiling min/gzip B | new ceiling min/gzip B | reintroduced leak min/gzip B |
+|---|---:|---:|---:|---:|
+| main | 85184 / 26630 | 86000 / 28000 | 128000 / 40000 | 140987 / 42351 |
+| sw | 15220 / 5327 | 22000 / 8000 | 23000 / 8000 | 70693 / 20898 |
+| generic | 748921 / 220937 | 1089000 / 321000 | 1124000 / 332000 | 4301313 / 1242200 |
+| toolchain | 855453 / 256720 | 1196000 / 355000 | 1284000 / 386000 | 4407688 / 1277813 |
 
-CI's no-COI job runs the command; pr-check.mjs remains unchanged (25 lanes).
-The first command invocation exposed its existing CLI allowlist; the new flag
-is admitted there and the complete rerun passed. No product behavior changed.
+PR-4 criterion change: the original 2026-09-07 main leak (103660 / 30188 B)
+fits the new cap. Reintroduce the same fault class into today's actual tarballs
+and measure again; do not compare a larger current baseline to an old smaller
+leaking program. `historical` and `previousCleaned` retain the original reports.
+`cleaned` and `leaked` carry the new reports and actual browser request ledgers.
+
+Reproduction after the packed command retains its consumer directory:
+
+```js
+const { measureClientBundles } = await import(`${consumer}/measure-bundles.mjs`);
+const { observePackedWorkerBoot, accountPackedBootRequests } =
+  await import('./tests/integration/client-bundle-browser-proof.mjs');
+const report = await measureClientBundles({ injectLeaks: true });
+const boot = await observePackedWorkerBoot(consumer, report);
+await accountPackedBootRequests(consumer, report, boot);
+```
+
+Leak calibration retains the real io namespace in main/SW and the actual
+source-map-identified browser compiler in generic/toolchain eager graphs. Fresh
+Workers reach readiness (3 samples each). Raw npm TypeScript is not this browser
+oracle: an initial probe failed at `platform()` after Worker globals installed;
+the accepted probe uses the runtime's shipped browser compiler.
+
+Every new leak crosses both byte ceilings. Existing compiler-eager,
+missing artifact/provenance/observation and unaccounted-boot-JS assertions remain.
+The independent packed SDK io-provenance guard (≤5120 B) is unchanged; so are
+compiler eval/preload/fetch faults, VM/SDK/install/agent behavior proofs.

@@ -30,20 +30,24 @@ export function captureStorageCorruption(fs: FsSync, issue: OpfsLayoutIssue | un
 }
 export function storageLayoutSummary(fs: FsSync, legacy: boolean): string | undefined {
   let corrupt = false;
-  if (fs.existsSync(DIAGNOSIS)) {
-    const record: unknown = JSON.parse(
-      new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileBytesSync(DIAGNOSIS)),
-    );
-    if (
-      record === null ||
-      typeof record !== 'object' ||
-      Array.isArray(record) ||
-      Object.keys(record).sort().join(',') !== 'kind,version' ||
-      (record as Record<string, unknown>).version !== 1 ||
-      (record as Record<string, unknown>).kind !== 'corrupt'
-    )
-      throw new Error('Invalid persisted storage-layout diagnosis');
-    corrupt = true;
+  try {
+    if (fs.existsSync(DIAGNOSIS)) {
+      const record: unknown = JSON.parse(
+        new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileBytesSync(DIAGNOSIS)),
+      );
+      if (
+        record === null ||
+        typeof record !== 'object' ||
+        Array.isArray(record) ||
+        Object.keys(record).sort().join(',') !== 'kind,version' ||
+        (record as Record<string, unknown>).version !== 1 ||
+        (record as Record<string, unknown>).kind !== 'corrupt'
+      )
+        throw new Error('Invalid persisted storage-layout diagnosis');
+      corrupt = true;
+    }
+  } catch (cause) {
+    throw new OpfsPreloadError(cause);
   }
   const parts = [...(corrupt ? [CORRUPT] : []), ...(legacy ? [LEGACY] : [])];
   return parts.length === 0 ? undefined : parts.join(' ');

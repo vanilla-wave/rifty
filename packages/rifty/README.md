@@ -139,6 +139,11 @@ files. Empty, dot, slash, backslash and NUL components reject before effects.
 `sandbox.vfs.reason`; `ephemeral` selects memory. Unreadable saved preload always
 rejects. Required persistence is not browser eviction protection or storage isolation.
 
+On the same origin as Workbench, give the SDK toolchain sandbox and Workbench
+distinct `storage.namespace` values. Omitting both selects the same origin root;
+the exclusive replica writer rejects the second with `OpfsPreloadError`
+(`writer is unavailable or already occupied`), even under `preferred` (ADR-0425).
+
 `startupTimeoutMs` defaults to 10000; positive integer through 2147483647.
 It covers Worker construction/import, native VFS hydration and runtime readiness,
 including restart. Expiry or Worker close rejects startup and terminates the
