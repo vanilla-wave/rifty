@@ -1,0 +1,134 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS для b32a1d90e; merge после обязательных CI и pass-binding. Отдельный CI RPC timeout не доказывает дефект этого diff.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #336: /tmp/rifty-pr299-handoff.md A–E; observed merged-main BASE db50e46b24ac82a0c77514c44bf888b3c99c5c1e; reviewed HEAD b32a1d90e1fda3cb0fc05e5ab5c40da4df31c1f8; ADR-0411/0425/0432, supporting asset pin ADR-0391. Observed-baseline repair: raw RED/revert logs inspected; no new Contract+RED promise.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "A: ceilings = измеренный merged-main cleaned ×1.5, округление вверх до 1000; причина и old/new сохранены.",
+      "source": "acceptance",
+      "trace": "User scenario /tmp/rifty-pr299-handoff.md §A",
+      "status": "pass",
+      "citation": "tools/checks/client-bundle-budget.mjs:2; tools/checks/client-bundle-budget.test.ts:23; docs/backlog/toolchain-build/reference/client-bundle-budget-evidence.md:14; /tmp/rifty-pr336-review-artifacts.log:1",
+      "note": ""
+    },
+    {
+      "row": "B / Native first HEAD, torn-state: до atomic close пустое uncommitted дерево; после close полное дерево; ложного corrupt нет.",
+      "source": "fault-matrix",
+      "trace": "ADR-0425 §4 + User scenario /tmp/rifty-pr299-handoff.md §B",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:232; tests/browser-unit/fixtures/replica-persistence-worker.ts:498; /tmp/rifty-pr299-storage-red.log; /tmp/rifty-pr299-revert-head.log; /tmp/rifty-pr336-review-browser.log",
+      "note": ""
+    },
+    {
+      "row": "C / Acquired marker, corrupt-input/false-fallback: JSON, schema и UTF-8 ошибки отвергают required/preferred; marker bytes сохранены.",
+      "source": "fault-matrix",
+      "trace": "ADR-0411 + User scenario /tmp/rifty-pr299-handoff.md §C",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:4; packages/workbench/src/workers/workbench-storage-layout.ts:33; /tmp/rifty-pr299-storage-red.log; /tmp/rifty-pr299-revert-diagnosis.log; /tmp/rifty-pr336-review-browser.log",
+      "note": ""
+    },
+    {
+      "row": "Native committed state, corrupt-input: повреждённые HEAD/segment/truncated segment диагностируются; физические bytes сохранены.",
+      "source": "fault-matrix",
+      "trace": "ADR-0425 §4",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:52; tests/browser-unit/replica-persistence.spec.ts:112; /tmp/rifty-pr299-storage-green.log",
+      "note": ""
+    },
+    {
+      "row": "Native writer, quota-perm-fail/concurrent-same-key: quota и compaction сохраняют commit; guard удержан до real settlement.",
+      "source": "fault-matrix",
+      "trace": "ADR-0425 §6–7",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:148; tests/browser-unit/replica-persistence.spec.ts:182; tests/browser-unit/replica-persistence.spec.ts:331; /tmp/rifty-pr299-storage-green.log",
+      "note": ""
+    },
+    {
+      "row": "D / Legacy notice, provenance-lie: видимый notice содержит edited source, npm installs, cloned repositories, Git history.",
+      "source": "fault-matrix",
+      "trace": "ADR-0425 §8 + ADR-0432 + User scenario /tmp/rifty-pr299-handoff.md §D",
+      "status": "pass",
+      "citation": "tests/browser-unit/legacy-layout-notice.spec.ts:124; tests/e2e/storage-layout-notice.spec.ts:19; /tmp/rifty-pr336-review-browser.log; /tmp/rifty-pr299-notice-e2e.log",
+      "note": ""
+    },
+    {
+      "row": "E: SDK/Workbench docs называют distinct same-origin namespaces и отказ второго writer даже под preferred.",
+      "source": "acceptance",
+      "trace": "ADR-0425 §7 + User scenario /tmp/rifty-pr299-handoff.md §E",
+      "status": "pass",
+      "citation": "packages/rifty/README.md:142; packages/workbench/README.md:141; packages/vfs/src/opfs-replica-store.ts:176",
+      "note": ""
+    },
+    {
+      "row": "Новый cleaned oracle совпадает с raw merged-main размерами и readiness request ledgers; старые historical/cleaned записи сохранены неизменными.",
+      "source": "frozen-artifact",
+      "trace": "User scenario /tmp/rifty-pr299-handoff.md §A",
+      "status": "pass",
+      "citation": "docs/backlog/toolchain-build/reference/client-bundle-budget-evidence.json:158; docs/backlog/toolchain-build/reference/client-bundle-budget-evidence.json:327; /tmp/rifty-pr336-review-artifacts.mjs:10; /tmp/rifty-pr336-review-artifacts.log:1",
+      "note": ""
+    },
+    {
+      "row": "Реальные текущие io/compiler leaks превышают оба новых ceiling; compiler/provenance/boot guards сохранены.",
+      "source": "frozen-artifact",
+      "trace": "User scenario /tmp/rifty-pr299-handoff.md §A",
+      "status": "pass",
+      "citation": "docs/backlog/toolchain-build/reference/client-bundle-budget-evidence.json:484; tests/integration/fixtures/no-coi-packed-toolchain-consumer/measure-bundles.mjs:26; tools/checks/client-bundle-budget.test.ts:37; tests/integration/sdk-packaging-proof.mjs:36",
+      "note": ""
+    },
+    {
+      "row": "Обновлён только exact TypeScript worker fingerprint; прежний размер и остальные inventory criteria сохранены; browser proof присутствует.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:96; /tmp/rifty-pr336-review-artifacts.log:2; /tmp/rifty-pr299-prod.log; /tmp/rifty-pr299-bundles-final.log",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "b32a1d90e1fda3cb0fc05e5ab5c40da4df31c1f8"
+}

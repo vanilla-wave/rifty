@@ -138,6 +138,12 @@ open an empty memory project instead. See ADR-0402/0411.
 
 ## Persistence policy
 
+Workbench and an SDK toolchain sandbox running on the same origin need distinct
+`storage.namespace` values. Both omitted selects the same origin root; its
+exclusive replica writer guard rejects the second writer with `OpfsPreloadError`
+(`writer is unavailable or already occupied`), including under `preferred`
+(ADR-0425). Separate namespaces do not lift the origin-wide Workbench lease.
+
 `storage.persistence` is `required | preferred | ephemeral` (ADR-0263). An
 embedder whose source of truth lives outside the browser (every open
 re-materializes from a definition: baked snapshot, archive, remote tree)

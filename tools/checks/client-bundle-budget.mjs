@@ -1,21 +1,25 @@
 /**
  * CI-only packed JS ceilings; min bytes / sum of separately gzipped chunks.
- * 2026-09-07, Node24.16/esbuild0.28/Chromium148, accepted I4 @974cc355e:
- * artifact    cleaned min/gzip     historical leak min/gzip
- * main          56861/18033          103660/30188   (io)
- * sw            14056/4828            63105/18467   (io)
- * generic      725778/213598        4311637/1245917 (TypeScript)
- * toolchain    796895/236199        4568192/1326387 (TypeScript)
- * Ceilings: cleaned ×1.5 rounded up to 1000 B; every leak crosses both.
+ * 2026-09-13, Node24.16/esbuild0.28/Chromium148, merged main @db50e46b2:
+ * Rebaseline after segmented OPFS and SDK/toolchain growth (PR #299 follow-up).
+ * User accepted renewed 50% headroom; preserve lazy default-vfs entry/provenance.
+ * artifact    cleaned min/gzip    reintroduced io/compiler leak min/gzip
+ * main        85184/26630      140987/42351
+ * sw          15220/5327       70693/20898
+ * generic     748921/220937     4301313/1242200
+ * toolchain   855453/256720     4407688/1277813
+ * Ceilings: cleaned ×1.5 rounded up to 1000 B; every remeasured leak crosses both.
+ * The original 2026-09-07 main leak is now below the main cap; today's equivalent
+ * leak is remeasured, while the independent SDK io-provenance guard stays intact.
  * Bumps require remeasurement + cause here in the same PR. Absolute caps:
  * cumulative small growth can cross one; this is not a shrink-only ratchet.
  * Raw reports/requests: docs/backlog/toolchain-build/reference/client-bundle-budget-evidence.json.
  */
 export const CLIENT_BUNDLE_BUDGETS = {
-  main: { min: 86_000, gzip: 28_000 },
-  sw: { min: 22_000, gzip: 8_000 },
-  generic: { min: 1_089_000, gzip: 321_000 },
-  toolchain: { min: 1_196_000, gzip: 355_000 },
+  main: { min: 128_000, gzip: 40_000 },
+  sw: { min: 23_000, gzip: 8_000 },
+  generic: { min: 1_124_000, gzip: 332_000 },
+  toolchain: { min: 1_284_000, gzip: 386_000 },
 };
 
 /** The report must already include all readiness-joined JS requests. */

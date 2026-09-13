@@ -1,6 +1,41 @@
 import { type Page, expect, test } from '@playwright/test';
 const clientUrl = `/@fs${process.cwd()}/tests/browser-unit/fixtures/legacy-layout-workbench.ts`;
 const oldPath = '/.rifty/workbench/v1/projects/scratch/tree/old-edit.txt';
+for (const policy of ['required', 'preferred'] as const) {
+  for (const [damage, bytes] of [
+    ['json', [...new TextEncoder().encode('{')]],
+    ['schema', [...new TextEncoder().encode('{"version":1,"kind":"unknown"}')]],
+    ['utf8', [255]],
+  ] as const) {
+    test(`${policy} rejects malformed ${damage} storage diagnosis without memory fallback`, async ({
+      page,
+    }) => {
+      const { accessNativeReplica } = await import('./fixtures/opfs-storage-namespace.ts');
+      await page.goto('/unit-harness.html');
+      const namespace = `invalid-diagnosis-${policy}-${damage}`;
+      const path = '/.rifty/workbench/v2/storage-layout.json';
+      await accessNativeReplica(page, { namespace, files: { [path]: bytes } });
+      const result = await page.evaluate(
+        async ({ url, namespace, policy }) => {
+          const client = await import(/* @vite-ignore */ url);
+          try {
+            const opened = await client.boot(namespace, undefined, policy);
+            await client.close();
+            return { opened: true, backend: opened.storage.backend };
+          } catch (error) {
+            return { opened: false, error: String(error) };
+          }
+        },
+        { url: clientUrl, namespace, policy },
+      );
+      expect(result.opened, JSON.stringify(result)).toBe(false);
+      expect(await accessNativeReplica(page, { namespace, paths: [path] })).toEqual({
+        [path]: bytes,
+      });
+    });
+  }
+}
+
 async function seed(page: Page, namespace?: string) {
   await page.evaluate(
     async ({ namespace, path }) => {
@@ -86,7 +121,9 @@ for (const namespace of [undefined, 'legacy-selected'])
       kind: 'degraded',
       scope: 'storage-layout',
       recovery: 'none',
-      summary: expect.stringMatching(/legacy per-file OPFS v1/),
+      summary: expect.stringMatching(
+        /legacy per-file OPFS v1.*edited source, npm installs, cloned repositories and Git history/,
+      ),
     });
     expect(await oldBytes(page, namespace)).toBe('old private edit');
     // A proof-only owner has not completed the transition; page death cannot mark notice seen.

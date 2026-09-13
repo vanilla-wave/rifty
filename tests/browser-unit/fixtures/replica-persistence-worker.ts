@@ -32,7 +32,8 @@ interface Input {
   policy?: 'required' | 'preferred';
   mutated?: boolean;
   damage?: 'head' | 'segment' | 'truncate' | 'live-native';
-  phase?: 'before-close' | 'after-close';
+  phase?: 'before-open' | 'before-close' | 'after-close';
+  firstCommit?: boolean;
   rounds?: number;
 }
 const encoder = new TextEncoder();
@@ -79,13 +80,14 @@ async function open(namespace: string, timeoutMs = 30000) {
 function faultNative(
   action: (
     name: string,
-    phase: 'write' | 'before-close' | 'after-close',
+    phase: 'before-open' | 'write' | 'before-close' | 'after-close',
     data?: FileSystemWriteChunkType,
   ) => Promise<void>,
 ) {
   const proto = FileSystemFileHandle.prototype;
   const create = proto.createWritable;
   proto.createWritable = async function (options) {
+    await action(this.name, 'before-open');
     const stream = await create.call(this, options);
     const name = this.name;
     const write = stream.write.bind(stream);
@@ -115,9 +117,9 @@ async function seed(instance: OpfsFsSync) {
 async function referencedSegments(root: FileSystemDirectoryHandle): Promise<number | null> {
   try {
     const directory = await root.getDirectoryHandle('.rifty-replica-v1');
-    const head = JSON.parse(
-      await (await (await directory.getFileHandle('HEAD')).getFile()).text(),
-    ) as { segments: unknown[] };
+    const text = await (await (await directory.getFileHandle('HEAD')).getFile()).text();
+    if (text.length === 0) return null;
+    const head = JSON.parse(text) as { segments: unknown[] };
     return head.segments.length;
   } catch (error) {
     if ((error as { name?: string }).name === 'NotFoundError') return null;
@@ -268,8 +270,12 @@ async function run(input: Input) {
     return { restoreMs, flushMs, files: index, bytes: manifest.stats.totalBytes };
   }
   if (input.kind === 'verify')
-    return { tree: snapshot(current), segments: await referencedSegments(pair.root) };
-  await seed(current);
+    return {
+      tree: snapshot(current),
+      segments: await referencedSegments(pair.root),
+      issue: pair.layoutIssue,
+    };
+  if (!(input.kind === 'crash' && input.firstCommit)) await seed(current);
   if (input.kind === 'spin') {
     self.postMessage({ ok: true, result: { tree: snapshot(current) } });
     while (true) {}
@@ -492,10 +498,13 @@ async function run(input: Input) {
     const before = snapshot(current);
     faultNative(async (name, phase) => {
       if (phase === input.phase && (name === 'HEAD' || name === 'a.txt')) {
-        self.postMessage({ ok: true, result: { phase: 'paused', before } });
+        const directory = await pair.root.getDirectoryHandle('.rifty-replica-v1');
+        const headBytes = (await (await directory.getFileHandle('HEAD')).getFile()).size;
+        self.postMessage({ ok: true, result: { phase: 'paused', before, headBytes } });
         await new Promise<void>(() => {});
       }
     });
+    if (input.firstCommit) current.mkdirSync('/tree');
     current.writeFileSync('/tree/a.txt', encoder.encode('new-a'));
     current.writeFileSync('/tree/b.txt', encoder.encode('new-b'));
     await current.flush();
