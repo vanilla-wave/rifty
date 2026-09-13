@@ -92,7 +92,7 @@ interface TrackedPersistFailure {
   readonly failure: PersistFailure;
   readonly operationSequence: number;
   /** Settled structural failure; timeouts instead retain the scheduler's real-operation fence. */
-  readonly subtreeSequence?: number;
+  subtreeSequence?: number;
 }
 
 export class OpfsFsSync implements FsSync {
@@ -600,7 +600,7 @@ export class OpfsFsSync implements FsSync {
         ? Math.max(operationSequence, current?.subtreeSequence ?? 0)
         : current?.subtreeSequence;
     if (current && current.operationSequence > operationSequence) {
-      this.persistFailures.set(path, { ...current, subtreeSequence });
+      current.subtreeSequence = subtreeSequence;
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
@@ -620,10 +620,7 @@ export class OpfsFsSync implements FsSync {
       current.subtreeSequence !== undefined &&
       current.subtreeSequence <= operationSequence
     ) {
-      this.persistFailures.set(path, {
-        failure: current.failure,
-        operationSequence: current.operationSequence,
-      });
+      current.subtreeSequence = undefined;
     }
   }
 
@@ -1093,13 +1090,13 @@ export class OpfsFsSync implements FsSync {
       }
     }
     this.attachChild(d);
-    this.persistRenameAsync(s, [...dirCreates], fileMoves);
+    this.persistRenameAsync(s, dirCreates, fileMoves);
   }
 
   /** Per-file rename effect; replica mode captures final images at admission. */
   private persistRenameAsync(
     srcRoot: string,
-    dirCreates: readonly string[],
+    dirCreates: ReadonlySet<string>,
     fileMoves: ReadonlyArray<{
       readonly oldPath: string;
       readonly newPath: string;
@@ -1149,10 +1146,9 @@ export class OpfsFsSync implements FsSync {
           // subtree no longer describes any divergence (same rule as
           // `persistRmAsync`). Without this, a pre-rename write failure on a
           // moved path would read as torn forever.
-          const directoryPaths = new Set(dirCreates);
           for (const path of operation.paths) {
             if (path === srcRoot) continue;
-            this.healPersistFailure(path, operation.sequence, directoryPaths.has(path));
+            this.healPersistFailure(path, operation.sequence, dirCreates.has(path));
             this.healAncestorPersistFailures(path, operation.sequence);
           }
           this.clearPersistFailuresUnder(srcRoot, operation.sequence);

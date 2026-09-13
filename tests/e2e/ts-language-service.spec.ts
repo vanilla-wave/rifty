@@ -1342,7 +1342,7 @@ function codeActionProjectPaths(root: string): {
     fixGreeter: `${fixDir}/greeter.ts`,
     fixApp: `${fixDir}/app.ts`,
     organizeTs: `${fixDir}/organize.ts`,
-    formatTs: `${fixDir}/format.ts`,
+    formatTs: `${fixDir}/format-proof.ts`,
   };
 }
 
@@ -1437,7 +1437,12 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await openFileViaPalette(page, 'greeter.ts');
     await openFileViaPalette(page, 'app.ts');
     await openFileViaPalette(page, 'organize.ts');
-    await openFileViaPalette(page, 'format.ts');
+    await openFileViaPalette(page, 'format-proof.ts');
+    // The preset has its own format.ts; this fixture owns a fresh file and waits
+    // for the real editor open before the direct provider hook can ensure a model.
+    await expect(page.locator('[data-testid="editor"] .view-lines').first()).toContainText(
+      'export const sum=(a:number,b:number)=>a+b;',
+    );
     await expect
       .poll(() => tsMarkerCount(page, fixApp), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);

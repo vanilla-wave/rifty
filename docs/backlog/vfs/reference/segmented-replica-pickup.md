@@ -241,3 +241,30 @@ All three findings accepted; no criteria waiver.
 - Rebuilt exact compiler pin after repairs: 10,022,694 bytes, unchanged body
   except emitted static/dynamic import names; SHA
   957ad1d8a8508fd6b29d4731ac0defbe881ed6527befa5123bfdc23641f8c1f8.
+
+## Final verify 2 — CI budget boundary
+
+- Independent review: `segmented-opfs-replica-final-review-2.json`; B1–B3 closed,
+  38 native cases PASS, original concurrent probe 369 reads / zero errors.
+- CI at `5936b2356`: packed SDK scenarios PASS, main 86,094 > 86,000 B.
+  Keep ceiling. Remove two private record copies; pass the existing rename-dir
+  Set through instead of Set → array → Set. No behavioral contract change.
+- Packed remeasurement: main 85,980 / 86,000 B, gzip 26,906 / 28,000;
+  SW 15,220 / 22,000; generic 748,607 / 1,089,000;
+  toolchain 855,130 / 1,196,000. All four real packed SDK scenarios PASS.
+- Same existing OPFS ledger tests: 95 PASS / one existing skip; native structural
+  repair matrix: eight PASS. No test or budget relaxed.
+- Exact compiler pin changes only because imported chunk hashes changed:
+  10,022,694 B unchanged; normalized compiler bodies identical to BASE.
+
+### CI TypeScript fixture collision
+
+`5936b2356` CI and isolated local run returned `// loading…` from the formatter.
+Tracing found an existing starter-file collision: `/src/format.ts` was already
+prepared as a clean editor document, then overwritten by the test's shell.
+The old cached document made the actual palette open fail before Monaco;
+the direct provider hook subsequently created its own loading model.
+Fresh `format-proof.ts` plus visible-source readiness passes the same
+quick-fix, organize-imports and formatting assertions. Clean stale-document
+reopen is recorded in `playground/editor-conflict-recovery`; no editor repair
+or external-change acceptance is claimed by the formatting fixture.
