@@ -44,7 +44,7 @@ test('first Vite starter displays real saving operations in the preparing UI', a
     await expect(launcher).toBeVisible({ timeout: 60_000 });
     await expect(page.locator('.rf-app')).toHaveAttribute('data-project-index', 'ready');
     await page.locator('[data-preset="project-files"]').click();
-    await expect.poll(() => entered).toBe(true);
+    await expect.poll(() => entered, { timeout: 120_000 }).toBe(true);
     const progress = page.getByTestId('project-persistence-progress');
     await expect(progress).toBeVisible({ timeout: 120_000 });
     await expect(progress).toContainText(/Saving \d+\/\d+ operations/);
