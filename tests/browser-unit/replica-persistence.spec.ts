@@ -228,6 +228,53 @@ test('report timeout retains the physical writer until real settlement and late 
   ]);
 });
 
+for (const phase of ['before-open', 'before-close', 'after-close'] as const) {
+  test(`first commit death at ${phase} has no false corruption diagnosis`, async ({ page }) => {
+    await gotoHarness(page);
+    const result = await page.evaluate(
+      async ({ url, phase }) => {
+        const module = await import(/* @vite-ignore */ url);
+        const namespace = crypto.randomUUID();
+        const once = <T>(worker: Worker) =>
+          new Promise<T>((resolve, reject) => {
+            worker.onmessage = ({ data }) =>
+              data.ok ? resolve(data.result) : reject(new Error(data.error));
+            worker.onerror = (event) => reject(new Error(event.message));
+          });
+        const victim = new Worker(module.default, { type: 'module' });
+        let headBytes: number;
+        try {
+          const paused = once<{ headBytes: number }>(victim);
+          victim.postMessage({ kind: 'crash', firstCommit: true, namespace, phase });
+          headBytes = (await paused).headBytes;
+        } finally {
+          victim.terminate();
+        }
+        const fresh = new Worker(module.default, { type: 'module' });
+        try {
+          const verified = once<{ tree: Entry[]; issue?: { kind: string } }>(fresh);
+          fresh.postMessage({ kind: 'verify', namespace });
+          return { headBytes, ...(await verified) };
+        } finally {
+          fresh.terminate();
+        }
+      },
+      { url: workerModuleUrl, phase },
+    );
+    expect(result.issue).toBeUndefined();
+    if (phase === 'after-close') {
+      expect(result.headBytes).toBeGreaterThan(0);
+      for (const name of ['a', 'b'])
+        expect(result.tree.find((entry) => entry.path === `/tree/${name}.txt`)?.content).toEqual([
+          ...new TextEncoder().encode(`new-${name}`),
+        ]);
+    } else {
+      expect(result.headBytes).toBe(0);
+      expect(result.tree.map((entry) => entry.path)).toEqual(['/']);
+    }
+  });
+}
+
 for (const rounds of [0, 63]) {
   for (const phase of ['before-close', 'after-close'] as const) {
     test(`kill ${rounds === 0 ? 'append' : 'compaction'} at ${phase} preserves one complete tree`, async ({

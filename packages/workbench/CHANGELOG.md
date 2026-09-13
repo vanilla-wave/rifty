@@ -9,6 +9,8 @@
 
 
 - Refresh dependency artifact identity for Vite root-URL preparation; root projects retain live React component updates (ADR-0433).
+- Reject malformed persisted storage diagnoses under preferred too; pin all legacy-loss categories and document same-origin SDK namespace exclusion.
+
 - Report excluded legacy/corrupt storage through persistent, non-retryable health; retain corruption diagnosis across first-proof crashes (ADR-0432).
 
 - Use segmented OPFS storage and the v2 project namespace; per-file v1 projects are excluded and their native bytes retained (ADR-0425).

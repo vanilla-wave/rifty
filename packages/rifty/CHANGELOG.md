@@ -4,6 +4,8 @@
 
 - Add stopResident: reuse whole-Worker replacement without resident replay,
   preserving activation recovery and dirty reporting; restart keeps its replay. ADR-0426.
+- Document distinct namespaces for same-origin Workbench and SDK toolchain writers, including preferred-policy contention rejection.
+
 - Deliver startup storage diagnostics to the existing logger on initial boot and restart; keep default backend loading separate from host namespace exports.
 
 - Report a never-admitted command as failed even after Stop; a settled command's failed/unknown persistence marks the next restart's unflushedWrites.
