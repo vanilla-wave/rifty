@@ -60,7 +60,12 @@ findings. Five to fifteen lines.
 ## Output
 
 - verdict (`pass` / `concern` / `blocker`) + one-line merge call;
-- big diff → 5–10 line map of the change by area first;
-- eight axes in order, each: verdict + findings, grouped by area when large;
-- **Open** — one list of what the claim still leaves uncovered;
+- **What** — 3–7 numbered lines (`W1…`) one level above the diff: the
+  outcomes the change delivers for a user, embedder or the system; no files,
+  no mechanisms;
+- big diff → 5–10 line map of the change by area, each area tied to its
+  outcome (`→ W2`);
+- eight axes in order, each: verdict + findings, grouped by outcome when
+  large; a finding names what holds or breaks for the outcome before how;
+- **Open** — one list of what the claim still leaves uncovered, by outcome;
 - **Take** — the informal section above.
