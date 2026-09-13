@@ -1123,21 +1123,9 @@
       "name": "@gravity-ui/icons",
       "version": "2.18.0",
       "description": "Pack of Gravity UI icons",
-      "keywords": [
-        "icons",
-        "svg",
-        "react"
-      ],
+      "keywords": ["icons", "svg", "react"],
       "license": "MIT",
-      "files": [
-        "svgs",
-        "esm",
-        "*.d.ts",
-        "*.js",
-        "!.*.js",
-        "!*.config.js",
-        "metadata.json"
-      ],
+      "files": ["svgs", "esm", "*.d.ts", "*.js", "!.*.js", "!*.config.js", "metadata.json"],
       "module": "esm/index.js",
       "sideEffects": false,
       "repository": {
@@ -1219,15 +1207,9 @@
         }
       },
       "nano-staged": {
-        "*.{scss}": [
-          "stylelint --fix --quiet"
-        ],
-        "*.{js,jsx,ts,tsx}": [
-          "eslint --fix --quiet"
-        ],
-        "*.{md,yml}": [
-          "prettier --write"
-        ]
+        "*.{scss}": ["stylelint --fix --quiet"],
+        "*.{js,jsx,ts,tsx}": ["eslint --fix --quiet"],
+        "*.{md,yml}": ["prettier --write"]
       }
     }
   },
@@ -1293,19 +1275,8 @@
         "test:src": "jest src.*.ts",
         "test:dist": "jest dist.*.ts --runInBand"
       },
-      "files": [
-        "index.d.ts",
-        "index.js.flow"
-      ],
-      "keywords": [
-        "css",
-        "style",
-        "typescript",
-        "flow",
-        "typings",
-        "types",
-        "definitions"
-      ]
+      "files": ["index.d.ts", "index.js.flow"],
+      "keywords": ["css", "style", "typescript", "flow", "typings", "types", "definitions"]
     }
   },
   {
@@ -1375,16 +1346,8 @@
       "author": "Simon Lydell",
       "license": "MIT",
       "description": "A regex that tokenizes JavaScript.",
-      "keywords": [
-        "JavaScript",
-        "js",
-        "token",
-        "tokenize",
-        "regex"
-      ],
-      "files": [
-        "index.js"
-      ],
+      "keywords": ["JavaScript", "js", "token", "tokenize", "regex"],
+      "files": ["index.js"],
       "repository": "lydell/js-tokens",
       "scripts": {
         "test": "mocha --ui tdd",
@@ -1508,9 +1471,7 @@
     "packageJson": {
       "name": "react",
       "description": "React is a JavaScript library for building user interfaces.",
-      "keywords": [
-        "react"
-      ],
+      "keywords": ["react"],
       "version": "18.3.1",
       "homepage": "https://reactjs.org/",
       "bugs": "https://github.com/facebook/react/issues",
@@ -1547,9 +1508,7 @@
         "loose-envify": "^1.1.0"
       },
       "browserify": {
-        "transform": [
-          "loose-envify"
-        ]
+        "transform": ["loose-envify"]
       }
     }
   },

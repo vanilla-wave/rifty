@@ -90,3 +90,11 @@ Final targeted native set: 14 diagnosis/progress cases plus public T sequence â€
 original npm files verified against native Node after install and offline reopen.
 Exact compiler artifact remains 10,022,694 B; normalized body matches BASE,
 only chunk references changed. Pin updated without changing byte ceiling.
+
+## Whole-gate reception
+
+First complete gate at `8ecbffa65`: 10,368 unit tests PASS; one extraction-inventory
+failure reproduced once in isolation (163 expected, 164 actual). ADR-0432 adds
+`workbench-storage-layout.ts`; exact inventory updated, complete reachable-closure
+comparison unchanged. Three JSON files required repository formatting; parsed
+fixture/evidence data unchanged. No product/test/bundle ceiling increased.
