@@ -114,9 +114,10 @@ harness (`@earendil-works/pi-agent-core`, verified browser-clean), registering r
 tools as plain pluggable functions. **AI lives outside rifty** — a consumer of `@riftydev/*`;
 rifty grows only AI-agnostic capabilities (TS language service, git over VFS). Positioning:
 `docs/research/open-webcontainers-alternative-2026-06.md`.
+Delivered foundation: headless Pi agent over public Workbench/no-COI hosts,
+lazy playground "+chat", three-lane42-run diagnostic. Consumer guide:
+`packages/agent/README.md`; proof: `docs/backlog/distribution/reference/ai-agent-mode-closure-evidence.md`.
 open:
-- `docs/backlog/epics/ai-agent-mode-and-bench` — goal (draft, 2026-09-12): headless Pi agent over Workbench/no-COI hosts, playground "+chat", three-lane agent-bench (COI chat / no-COI headless / local Pi CLI); revives PR #111.
-- `docs/backlog/distribution/ai-ide-pi-agent-harness` — the goal's core child: headless agent package on Pi over public rifty hosts; records the Pi-over-opencode + AI-outside-rifty direction.
 - `docs/backlog/distribution/ai-agent-subagent-orchestration` — `task`/subagent orchestration over the embeddable loop.
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).
