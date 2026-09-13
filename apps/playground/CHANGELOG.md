@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Agent shell names an incomplete command input as its failure; nothing executed.
 - Restore React type declarations in fresh installs and re-bake dependency snapshots with npm-correct archive paths.
 
 

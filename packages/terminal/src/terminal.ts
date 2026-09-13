@@ -711,7 +711,7 @@ export class RiftyTerminal {
     if (this.disposed) throw new Error('Terminal is disposed');
     if (this.busy) throw new Error('Terminal input is busy');
     this.replaceLine(line);
-    return this.executeBuffer(execute);
+    return this.executeBuffer(execute, false);
   }
 
   findNext(term: string, options: TerminalSearchOptions = {}): boolean {
@@ -1416,10 +1416,15 @@ export class RiftyTerminal {
     await this.executeBuffer(this.opts.onInput);
   }
 
-  private async executeBuffer(execute: TerminalInputHandler): Promise<TerminalInputResult> {
+  private async executeBuffer(
+    execute: TerminalInputHandler,
+    interactive = true,
+  ): Promise<TerminalInputResult> {
     this.applyRewriteAtCursor();
     if (this.opts.inputValidator?.(this.buffer, this.cursorPos) === 'incomplete') {
-      this.insertPrintable('\n');
+      // Interactive Enter continues on the next line; an owned line has no continuation.
+      if (interactive) this.insertPrintable('\n');
+      else this.replaceLine('');
       return;
     }
     const line = this.buffer;

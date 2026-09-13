@@ -130,3 +130,35 @@ test('public executeLine retains the native owner result, error and busy/disposa
     afterDispose: 'Terminal is disposed',
   });
 });
+
+test('an owned incomplete line is discarded, never left for the next interactive Enter', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  const value = await page.evaluate(async (root) => {
+    const { RiftyTerminal } = await import(`/@fs${root}/packages/terminal/src/index.ts`);
+    const submitted: string[] = [];
+    let validations = 0;
+    const terminal = new RiftyTerminal({
+      onInput: (line: string) => {
+        submitted.push(line);
+        return 0;
+      },
+      inputValidator: () => (validations++ === 0 ? 'incomplete' : 'complete'),
+    });
+    const element = document.createElement('div');
+    element.style.cssText = 'width:800px;height:300px';
+    document.body.append(element);
+    terminal.mount(element);
+    let owned = 0;
+    const result = await terminal.executeLine('echo "open', () => {
+      owned++;
+      return 0;
+    });
+    await terminal.submitLine();
+    terminal.dispose();
+    element.remove();
+    return { result, owned, submitted, validations };
+  }, process.cwd());
+  expect(value).toEqual({ result: undefined, owned: 0, submitted: [''], validations: 2 });
+});

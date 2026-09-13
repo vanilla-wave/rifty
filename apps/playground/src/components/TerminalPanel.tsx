@@ -388,7 +388,8 @@ export function TerminalPanel(props: {
         execute(submitted, { cols: mounted.cols, rows: mounted.rows }),
       );
       scheduleTerminalBufferRefresh();
-      if (result === undefined) throw new Error('Terminal did not execute a complete command');
+      if (result === undefined)
+        throw new Error('Command input is incomplete (open quote or block); nothing executed');
       return result;
     });
     if ((props.focusEpoch ?? 0) > 0) focusTerminalSoon();
