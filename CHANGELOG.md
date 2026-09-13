@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 - Rebaseline packed client budgets from measured merged main with renewed 50% headroom; remeasure io/compiler leaks and retain independent provenance guards.
+- Slim `rifty-review-inline` to the eight axes for user-driven review: drop
+  schema mirroring, residual sets, rule-id citations and the dirty-tree
+  refusal; add a claim source order and an informal **Take** section.
 
 - Include the esbuild runtime-service-refs patch in generated compatibility inventory (ADR-0421).
 

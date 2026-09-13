@@ -83,3 +83,16 @@ isolated rerun. Zero Vitest test timeouts. Recorded host load at rerun:
 Both are unchanged tests outside the repaired storage paths. Host contention
 is a hypothesis, not an established cause. Neither failure reproduced in the
 required isolated run; no speculative source/test change or extra retry.
+
+CI job 103734490510 on `005af4ccc`: three Vitest RPC `onTaskUpdate` timeouts
+while `packages/npm-client/src/internal/shadow/installer.contract.test.ts`
+ran; no assertion failure, 746 files / 10,348 tests reported passing, incomplete
+RPC reporting. That file's single isolated local run passed 37/37 in 120.14 s.
+No runner timeout reproduced. Final CI remains the delivery gate.
+
+Independent Final+GREEN reviewed `b32a1d90e`: PASS, no findings/residuals.
+Reviewer reran 11 browser cases, 4 budget tests and exact-asset gate; recomputed
+leaked/final eager bytes and checked raw ledgers, original evidence and old/new
+criteria. `pr336-final-green.json` stores the unchanged verdict plus reviewed SHA.
+Subsequent main merge imports only the already-reviewed inline-review skill and
+CHANGELOG from PR #335; both CHANGELOG entries retained, no source change.
