@@ -4,24 +4,13 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `vfs/legacy-per-file-layout-cold-restore` — **legacy-notice** — I3
-   user-facing half: one-time `storage-layout` health issue (carrier: the
-   health snapshot ADR-0413 extended; per selected namespace) when `v1`
-   exists and `v2` is first created, playground starts with an empty catalog (never
-   a starter rebuilt under an old name), loss stated; `v1` reclaim stays with
-   `vfs/storage-pressure-and-eviction-ux`. Replica accepted at `631615fb9`. After this unit: I3
-   holds end-to-end with the user told once, honestly.
+None. I1–I5 and complete public scenario independently accepted at203fe369d.
 
 ## Open questions
 
-- Required goal acceptance: public openProject → real Node → new offline Chromium
-  process → real npm install changing ≥5,000 paths → new offline process. Storage
-  boundary proof is accepted; committed public composition proof is next.
-- Legacy and corrupt cold-restore diagnoses must reach public health. The legacy
-  unit owns this carrier; old native bytes remain untouched.
-- Reference timing means fresh Chromium process, not an OS page-cache purge;
-  retain the accepted C3 limit. Native baseline and all replica fault results:
-  `vfs/reference/segmented-replica-pickup.md`.
+None required by the accepted result. Final evidence and limits:
+`vfs/reference/legacy-layout-diagnosis-final-green.json` and
+`vfs/reference/replica-public-scale-evidence.md`.
 
 ## Out of scope
 

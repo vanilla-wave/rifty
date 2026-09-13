@@ -115,3 +115,9 @@ assertions finish, checks the hold was reached, releases, and checks settlement.
 Actual application state is observed throughout; no synthetic progress. PASS.
 Hosted webpack launcher timeout did not reproduce unchanged in isolation; no
 product repair claimed. Final CI still required.
+
+Final reception: pr:check25/25, whole no-COI95/95, final progress e2e PASS.
+Independent Final+GREEN at203fe369d accepts all I1–I5 and the composed public
+scenario; zero required unit/goal residuals. One advisory: strengthen text
+assertions for the already-present loss categories. Hosted CI passed on the next
+ordinary run; its unresolved timing question remains separately recorded.
