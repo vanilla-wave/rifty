@@ -33,3 +33,9 @@ seven native controls. Raw outputs: `agent-bench-validation.json.gz`.
 Live evidence: `tools/agent-bench/reports/summaries/2026-09-13-gpt-5.6-sol/README.md`.
 No required unit/goal residuals. Out-of-goal preview/coexistence remains owned by
 `distribution/public-api-ai-agent-preview-question` with its existing pickup trigger.
+
+Independent goal closure PASS at e8748d60cde030635dee820c595f497e21a78ec9:
+all I1–I8, empty residuals, docs-only delta and completed-item cleanup verified.
+Final+GREEN retains reviewed_sha f5ff8b848 so the accepted contract is read from
+that revision; delete-on-done is handled by the normal pass-binding gate.
+Closure-tree full pr:check also passed25/25 (unit187.9s/parity60.7s).

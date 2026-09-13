@@ -192,3 +192,35 @@ Goal flag remainsfalse while map still links the benchmark child; driver RECHART
 and docs-only closure review next. Prior accepted core/no-COI/UI proof reused perREV1,
 with current unchanged default prompt, repaired installation snapshots and actual
 three-lane/live proof covering changed dependencies.
+
+## Whole-goal closure verification — e8748d60cde030635dee820c595f497e21a78ec9
+
+Clean committed closure tree. Independent `pnpm docs:check` PASS: backlog and refs.
+Programmatic git/source checks PASS:18 files since f5ff are docs/CHANGELOG only;
+accepted goal at f5ff byte-equals UI BASE; RECHART e26825f936a55f4b451ff1da635b243f0ae3222e
+Items section empty; seven completed unit/goal files gone. Current source/test/gate
+behavior unchanged, so existing product proof and tests remain applicable.
+
+Read actual closure doc/roadmap/link/deletion diff and its complete I1–I8 proof table.
+I1/I2 public-host/tools/transport, I3 recovery/Stop, I4 limits/export, I5 real +chat,
+I6 complete no-COI host-owned cycle and I7 six embedding scenarios retain accepted
+independent real-host/packed/browser execution artifacts. Their changed prompt/install
+boundaries were re-proven in this unit. I8 carries complete14-pair smoke and42 actual
+model runs plus independently verified original/fixed judging and210 raw hashes.
+No invariant was weakened, no required baseline question or linked child remains.
+Unrelated preview coexistence, reusable product UI/subagents/demo/publication keep
+existing out-of-goal owners; they do not reopen this accepted destination.
+
+Final JSON /tmp/pr333-bench-final-review.json updated: goal_complete=true,
+unit_residuals=[],goal_residuals=[];35/35 unit coverage and8axesPASS remain.
+blockers.mjs exit0. reviewed_sha deliberately stays
+f5ff8b8484af6575d5761afd94c75f98cfda2da1, where the ready contract exists for
+pass-binding; independently reviewed docs-only closure SHA is e8748d60cde030635dee820c595f497e21a78ec9.
+No tracked file modified by this reviewer.
+
+Closed-record validation detail: direct blockers.mjs CLI reads current filesystem,
+so after delete-on-done it reports the named contract unreadable (expected reader
+mismatch, not a changed verdict/obligation). Revalidated with the SAME exported
+`evaluateVerdict` and `git show reviewed_sha:contract`, exactly the historical reader
+used by tools/checks/pass-binding.mjs: code0, errors[],35coverage,0blockers,
+goalComplete=true. No contract text, coverage or judging criterion was bypassed.
