@@ -142,6 +142,8 @@ rides this branch as goal acceptance; it introduces no new product behavior.
 
 ## Decisions
 
+ready-verdict: 2026-09-13 — Contract+RED @ 90bcbba4e — reference/legacy-layout-diagnosis-contract-red.json
+
 - 2026-09-13 — DEC-2 /root/replica_decision: ADR-0432; narrow global health variant, canonical summaries, existing logger, same-replica diagnosis custody.
 
 - 2026-09-13 — preparation: reference/legacy-layout-diagnosis-pickup.md; native/browser/SDK/UI RED, existing healthy controls PASS; original goal/challenge unchanged.

@@ -165,6 +165,7 @@ for (const mode of ['stage-before', 'stage-quota'])
     await seed(page, 'legacy-stage');
     const result = await startFault(page, 'legacy-stage', mode, true);
     expect(result.ok, result.error).toBe(mode === 'stage-before');
+    if (mode === 'stage-before') expect(result.error).toBe(mode);
     await page.reload();
     expect(await oldBytes(page, 'legacy-stage')).toBe('old private edit');
     const restored = await boot(page, 'legacy-stage');
@@ -213,6 +214,13 @@ test('real health banner has no false recovery and retains notice across project
     recovery: 'none',
     summary: expect.stringMatching(/legacy per-file OPFS v1/),
   });
+  expect(
+    result.states.every((state: unknown) =>
+      (state as { issues: { scope: string }[] }).issues.some(
+        (issue) => issue.scope === 'storage-layout',
+      ),
+    ),
+  ).toBe(true);
   expect(result.late).toEqual([result.after]);
   await expect(page.locator('[data-health-scope="storage-layout"]')).toContainText(
     'legacy per-file OPFS v1',

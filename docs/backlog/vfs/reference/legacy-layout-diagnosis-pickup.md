@@ -39,3 +39,10 @@ matrix; they are not reclassified as informational corruption.
 Separate observation: npm 404 followed by successful Node verification and failed
 owner close; question captured in `runtime-js/workbench-close-after-npm-acquisition-failure`.
 It is neither attributed to replica nor claimed repaired.
+
+Contract+RED accepted at `90bcbba4e`: /root/layout_red_review, 23/23 coverage,
+zero blockers. Independent scratch repeat: 10 RED / two controls; native
+stage-before and quota outcomes individually verified. RDY-6 npm-close question
+accepted against raw log. Advisory reception: tighten exact reached cut and
+notice continuity across every emitted project-generation state; public loss
+categories/redaction remain implementation and final-review checks.
