@@ -504,3 +504,43 @@ test('agent leaf-component write reaches the live React preview before and after
     await model.close();
   }
 });
+
+for (const collapsed of [false, true]) {
+  test(`Agent shell reveals its terminal from Problems with collapsed=${collapsed}`, async ({
+    page,
+  }) => {
+    const model = await agentModelServer([
+      [{ name: 'shell', args: { command: 'echo AGENT_VISIBLE_FROM_PROBLEMS' } }],
+      'Command completed.',
+    ]);
+    try {
+      await page.goto('/');
+      await pickStarter(page);
+      await openChat(page);
+      await settings(page, model.baseUrl);
+      await page.getByRole('tab', { name: /^Problems/ }).click();
+      if (collapsed)
+        await page.getByRole('button', { name: 'Collapse panel', exact: true }).click();
+      await send(page, 'Run the command in the visible agent terminal.');
+      await expect(page.getByTestId('ai-panel')).toHaveAttribute('data-status', 'done');
+      expect(toolResults(await exported(page)).at(-1)?.details).toHaveProperty(
+        'stdout',
+        'AGENT_VISIBLE_FROM_PROBLEMS\n',
+      );
+      await expect(
+        page.locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal"]'),
+      ).toBeVisible({ timeout: 1500 });
+      await expect(page.getByRole('tab', { name: 'Agent', exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      await expect(page.locator('.rf-console__pane[data-view="terminal"]')).toHaveAttribute(
+        'data-active',
+        'true',
+      );
+      await expect(page.getByRole('button', { name: 'Collapse panel', exact: true })).toBeVisible();
+    } finally {
+      await model.close();
+    }
+  });
+}

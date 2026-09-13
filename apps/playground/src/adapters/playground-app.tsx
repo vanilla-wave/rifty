@@ -1738,6 +1738,7 @@ export function App(props: AppProps) {
                 preview={() => (bound() === project ? agentPreview() : undefined)}
                 showTerminal={() => {
                   if (layout.consoleCollapsed()) layout.toggleConsole();
+                  setTerminalFocusEpoch((epoch) => epoch + 1);
                 }}
                 onClose={() => setChatOpen(false)}
               />

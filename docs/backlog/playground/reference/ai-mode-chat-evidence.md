@@ -181,3 +181,22 @@ in the goal map, not marked fixed or silently classified as an agent failure.
   `/tmp/pr333-ai-delivery-check.log` PASS (test:run187.9s, parity61.4s;
   zero isolated reruns). Final source tree has no known UI acceptance residual;
   I8 and its explicit baseline measurement remain on the goal map.
+
+
+## Final review F1
+
+Fresh independent review at cd1c7979c: one blocker, no other findings.
+Raw ai-mode-chat-review-f1.json and ai-mode-chat-final-review-evidence.md.
+Selecting Problems hid the actual agent command output. Birth boundary:
+active terminal id versus BottomPanel view (sibling-drift). Native output
+arrived; no transport/worker issue. Existing terminalFocusEpoch already owns
+view revelation for user-created terminals. Reuse it from showTerminal;
+no new view owner or coordination mechanism.
+
+Two committed-carrier REDs on cd1c7979c, expanded/collapsed Problems:
+`/tmp/pr333-ai-problems-red.log`, both fail visibility after real stdout.
+
+F1 GREEN: `/tmp/pr333-ai-problems-green.log` 4 PASS (both visibility REDs,
+Stop/history/lifetimes, split stdout). `/tmp/pr333-ai-review-fix-check.log`
+all25 PASS (test:run192.0s, parity60.5s), no isolated reruns. Only App's existing
+reveal signal changed; prior packed/prod/native/live evidence remains applicable.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Reveal the Agent terminal when launching commands from Problems, including a collapsed console.
+
 - Lazy +chat over the public Pi agent; real Agent terminal/preview/SCM, memory-only key/limits, Stop/Reset/export and opt-in benchmark hooks (ADR-0427/0431).
 - Refresh clean editor models and exact Document captures after public owner writes; preserve unpublished buffers/CAS, never write a refresh back (ADR-0430).
 - Prebundle the same Pi provider graph in the headerless no-COI test host.
