@@ -1,6 +1,7 @@
 ---
 area: distribution
 status: ready
+ready-verdict: 2026-09-13 — Contract+RED @ 69c4690ca8eec781bd056aeed7262b3fffed1be0
 title: agent-bench — external harness with lanes rifty (COI chat), rifty-no-coi (headless SDK) and local-reference (Pi CLI) over the #300 react-vite template
 created: 2026-09-12
 why: "where does rifty lose coding-agent quality vs a real local environment" is still anecdote; PR #111's harness (`tools/agent-bench`, decision record 0191 on that branch) never merged and its judges target the retired #111 template

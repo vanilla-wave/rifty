@@ -1,5 +1,6 @@
-# Changelog — agent-bench
+# Changelog
 
 ## [Unreleased]
 
-- Declare the three-lane diagnostic contract and callable RED boundary (ADR-0434).
+- Run three cold Pi lanes with common React/Hono judges, optional auth, real admission/deadline limits, retained diagnostic artifacts and manual failure classification.
+- Verify smoke through an external HTTP observer and real browser trace actions; validate judges against native positive controls.

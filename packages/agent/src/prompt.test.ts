@@ -17,6 +17,6 @@ it('exports the actual default policy paragraphs for native consumers', () => {
   const profile = getAgentPromptProfile();
   const actual = systemPrompt('/', [], {}, []);
   for (const part of [profile.intro, profile.guidance, profile.recovery, profile.verification]) {
-    expect(actual.split('\n\n')).toContain(part);
+    expect(actual).toContain(part);
   }
 });

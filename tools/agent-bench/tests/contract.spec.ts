@@ -167,6 +167,15 @@ test('all three real mock-model lanes run the entire task set with identical jud
             index > group && event.type === 'after' && event.callId === events[group]?.callId,
         );
         expect(end).toBeGreaterThan(group);
+        const judgeActions = JSON.stringify(events.slice(group + 1, end));
+        const oracleAction: Record<string, string> = {
+          'fix-date-sort': '.recent-list a',
+          'add-search': 'input',
+          'url-filters': 'selectOption',
+          'new-issue-form': 'new issue',
+          'node-endpoint': 'api/stats',
+        };
+        expect(judgeActions.toLowerCase()).toContain(oracleAction[task]!.toLowerCase());
         expect(
           events
             .slice(group + 1, end)

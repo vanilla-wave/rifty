@@ -122,3 +122,12 @@ after same callId (groupEnd emits no separate before). `/tmp/pr333-bench-trace-g
 Public policy additionally checked against actual core paragraphs; frozen baseline remains.
 Strengthened RED:11 expected benchmark errors +1 profile RED, baseline1PASS; no import failure.
 Final pass still executes native positive judge controls, full42 live matrix and baseline questions.
+
+## IMPLEMENT profile detail
+
+Core default remains frozen byte-identical. Shared recovery excludes the browser-only
+16KiB text-cap sentence: CLI retains its native tool limits and records their difference.
+The shared recovery is embedded after that host sentence inside the same original core
+paragraph; the profile test checks actual text containment, not paragraph boundaries.
+This also avoids empty-tool-list's triple newline producing a false paragraph mismatch.
+Frozen full-prompt check remains unchanged; unrelated policy mutant remains discriminated.
