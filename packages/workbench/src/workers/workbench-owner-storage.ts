@@ -1,17 +1,24 @@
 import type { FsSync, PersistFailureReport, Vfs } from '@riftydev/vfs';
-import { installMemoryFs, installOpfsFs } from '@riftydev/vfs/internal';
+import { type OpfsLayoutIssue, installMemoryFs, installOpfsFs } from '@riftydev/vfs/internal';
 import {
   type OwnerStoragePersistence,
   type OwnerStorageSnapshot,
   selectOwnerStorage,
   validateOwnerStorageNamespace,
 } from './owner-storage.ts';
+import {
+  captureStorageCorruption,
+  hasNativeLegacyLayout,
+  storageLayoutSummary,
+} from './workbench-storage-layout.ts';
 
 const PROOF_ROOT = '/.rifty/workbench/v2/storage-proof';
 const DEFAULT_PROOF_TIMEOUT_MS = 30_000;
 const encoder = new TextEncoder();
 
 interface OpfsInstallation {
+  readonly layoutIssue?: OpfsLayoutIssue;
+  readonly legacyLayout?: boolean;
   readonly vfs: Vfs;
   readonly fsSync: FsSync & { flush(): Promise<PersistFailureReport> };
 }
@@ -19,6 +26,7 @@ interface OpfsInstallation {
 export interface WorkbenchOwnerStorageAuthority {
   /** Clone-safe owner truth used by page/worker protocol messages. */
   readonly snapshot: OwnerStorageSnapshot;
+  readonly layoutSummary?: string;
   /** Present only while the selected backend is the proven OPFS installation. */
   readonly opfs?: Readonly<{
     persistedVfs: Vfs;
@@ -55,11 +63,16 @@ function defaultInstallers(
       installMemoryFs();
     },
     openOpfs: async () => {
-      if (namespace === undefined)
-        return installOpfsFs(undefined, { ioReportTimeoutMs, layout: 'replica' });
       const origin = await navigator.storage.getDirectory();
-      const root = await origin.getDirectoryHandle(namespace, { create: true });
-      return installOpfsFs(root, { ioReportTimeoutMs, layout: 'replica' });
+      const root =
+        namespace === undefined
+          ? origin
+          : await origin.getDirectoryHandle(namespace, { create: true });
+      const legacyLayout = await hasNativeLegacyLayout(root);
+      return {
+        ...(await installOpfsFs(root, { ioReportTimeoutMs, layout: 'replica' })),
+        legacyLayout,
+      };
     },
   });
 }
@@ -166,22 +179,27 @@ export async function installWorkbenchOwnerStorageAuthority(
   const installers = options.installers ?? defaultInstallers(namespace, options.ioReportTimeoutMs);
   const createProofId = options.createProofId ?? defaultProofId;
   let openedOpfs: OpfsInstallation | undefined;
+  let layoutSummary: string | undefined;
   const snapshot = await selectOwnerStorage(policy, {
     openMemory: () => installers.openMemory(),
     openOpfs: async () => {
       const installation = await installers.openOpfs();
       openedOpfs = installation;
+      captureStorageCorruption(installation.fsSync, installation.layoutIssue);
+      layoutSummary = storageLayoutSummary(installation.fsSync, installation.legacyLayout === true);
       return installation;
     },
     proveOpfs: (installation) => proveOpfs(installation, createProofId(), timeoutMs),
   });
-  if (snapshot.backend !== 'opfs') return Object.freeze({ snapshot });
+  const diagnosis = layoutSummary === undefined ? {} : { layoutSummary };
+  if (snapshot.backend !== 'opfs') return Object.freeze({ snapshot, ...diagnosis });
   if (openedOpfs === undefined) {
     throw new Error('Workbench OPFS selection lost its private installation handle');
   }
   const installation = openedOpfs;
   return Object.freeze({
     snapshot,
+    ...diagnosis,
     opfs: Object.freeze({
       persistedVfs: installation.vfs,
       flush: () => installation.fsSync.flush(),

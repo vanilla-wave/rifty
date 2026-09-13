@@ -7,7 +7,11 @@ import type {
   WorkbenchRecoveryScope,
 } from '../health.ts';
 
-type DegradedScope = Extract<WorkbenchHealthIssue, { readonly kind: 'degraded' }>['scope'];
+type OperationalDegradedIssue = Extract<
+  WorkbenchHealthIssue,
+  { readonly kind: 'degraded'; readonly recovery: WorkbenchRecoveryScope }
+>;
+type DegradedScope = OperationalDegradedIssue['scope'];
 type HealthListener = (snapshot: WorkbenchHealthSnapshot) => void;
 type RecoveryHandler = () => Promise<void>;
 
@@ -24,7 +28,7 @@ interface IssueRecordBase {
 interface DegradedIssueRecord extends IssueRecordBase {
   readonly kind: 'degraded';
   readonly generation: GenerationState;
-  readonly issue: Extract<WorkbenchHealthIssue, { readonly kind: 'degraded' }>;
+  readonly issue: OperationalDegradedIssue;
 }
 
 interface OwnerIssueRecord extends IssueRecordBase {
@@ -80,6 +84,7 @@ export interface WorkbenchHealthAuthority {
   readonly invariant: {
     fatal(input: WorkbenchFatalHealthInput): void;
   };
+  storageLayout(summary: string): void;
   projectOpen(progress: WorkbenchProjectOpenProgress | undefined): void;
   openGeneration(id: string): WorkbenchHealthGeneration;
   close(): void;
@@ -137,6 +142,9 @@ export function createWorkbenchHealthAuthority(
   const globalListeners = new Set<HealthListener>();
   const recoveries = new Map<WorkbenchRecoveryScope, RecoveryEntry>();
   let ownerIssue: OwnerIssueRecord | null = null;
+  let storageLayoutIssue:
+    | Extract<WorkbenchHealthIssue, { readonly scope: 'storage-layout' }>
+    | undefined;
   let fatalIssue: FatalIssueRecord | null = null;
   let activeGeneration: GenerationState | null = null;
   let closed = false;
@@ -157,6 +165,7 @@ export function createWorkbenchHealthAuthority(
     const issues: WorkbenchHealthIssue[] = [];
     if (fatalIssue !== null) issues.push(fatalIssue.issue);
     if (ownerIssue !== null) issues.push(ownerIssue.issue);
+    if (storageLayoutIssue !== undefined) issues.push(storageLayoutIssue);
     for (const scope of DEGRADED_SCOPE_ORDER) {
       const record = degraded.get(scope);
       if (record !== undefined && (generation === null || record.generation === generation)) {
@@ -342,7 +351,7 @@ export function createWorkbenchHealthAuthority(
           scope,
           summary: inspectSummary(input.summary),
           recovery: scope,
-        }) satisfies Extract<WorkbenchHealthIssue, { readonly kind: 'degraded' }>;
+        }) satisfies OperationalDegradedIssue;
         degraded.set(
           scope,
           Object.freeze({
@@ -425,6 +434,16 @@ export function createWorkbenchHealthAuthority(
         publish();
       },
     }),
+    storageLayout(summary: string): void {
+      assertAuthorityOpen();
+      storageLayoutIssue = Object.freeze({
+        kind: 'degraded',
+        scope: 'storage-layout',
+        summary: inspectSummary(summary),
+        recovery: 'none',
+      });
+      publish();
+    },
     projectOpen(progress: WorkbenchProjectOpenProgress | undefined): void {
       if (closed || (progress === undefined && projectOpen === undefined)) return;
       projectOpen =
@@ -449,6 +468,7 @@ export function createWorkbenchHealthAuthority(
       }
       degraded.clear();
       ownerIssue = null;
+      storageLayoutIssue = undefined;
       closed = true;
       globalListeners.clear();
     },

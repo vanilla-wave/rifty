@@ -241,3 +241,26 @@ export function createWorkbenchProjectStore(
     },
   });
 }
+
+/** Completion evidence only; malformed orphans retain their ordinary explicit-open error. */
+export async function hasStoredWorkbenchProject(
+  authority: OwnerVfsAuthority,
+  keys?: readonly string[],
+): Promise<boolean> {
+  if (authority.statSyncOrNull(PROJECTS_ROOT)?.isDirectory !== true) return false;
+  const candidates =
+    keys ??
+    authority
+      .readdirSync(PROJECTS_ROOT)
+      .filter((entry) => entry.isDirectory)
+      .map((entry) => entry.name);
+  const store = createWorkbenchProjectStore(authority);
+  for (const key of candidates) {
+    try {
+      if (await store.readProject(key)) return true;
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+    }
+  }
+  return false;
+}

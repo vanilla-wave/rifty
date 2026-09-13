@@ -130,6 +130,8 @@ OPFS, public Workbench/SDK and actual Playground banner are the oracles.
 | late subscriber / generation switch | Same global notice; no stale generation clears it | legacy-layout-notice + storage-layout-notice e2e → ADR-0285 + I3 |
 | informational issue × progress | Active open still publishes real persistence counts | public-project-open-progress legacy case → ADR-0413 |
 | malformed orphan × complete-record probe | Not completion proof; valid sibling can suppress notice; normal explicit-open error remains | existing project-store validation → ADR-0432 |
+| preferred proof failure × captured diagnosis | Existing memory fallback remains explicit and retains the corruption notice | native marker-quota + public backend/health → scenario + ADR-0432 |
+| no-COI restart × startup stderr | Existing logger receives the replacement owner diagnosis before ready | native SDK restart after HEAD corruption → ADR-0432 |
 | no-COI × early stderr | Existing SDK logger observes diagnosis before ready/any HEAD write | configured native Worker + public SDK → ADR-0432 |
 | native read failure × init | OpfsPreloadError; no false layout notice or memory success | inherited replica owner/native read carrier → ADR-0425 |
 | concurrent writer × open | Excluded by existing origin lease/native guard; no takeover | inherited replica guard tests → ADR-0425 |
@@ -147,3 +149,5 @@ ready-verdict: 2026-09-13 — Contract+RED @ 90bcbba4e — reference/legacy-layo
 - 2026-09-13 — DEC-2 /root/replica_decision: ADR-0432; narrow global health variant, canonical summaries, existing logger, same-replica diagnosis custody.
 
 - 2026-09-13 — preparation: reference/legacy-layout-diagnosis-pickup.md; native/browser/SDK/UI RED, existing healthy controls PASS; original goal/challenge unchanged.
+
+- 2026-09-13 — class sweep: preferred proof fallback and SDK restart had to retain captured diagnosis; native RED added, existing policy and restart admission order retained.

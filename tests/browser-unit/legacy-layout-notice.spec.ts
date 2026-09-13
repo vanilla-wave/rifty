@@ -150,7 +150,7 @@ test('diagnosis quota cannot publish a clean owner without its corruption notice
   await corruptHead(page, 'corrupt-quota');
   const result = await startFault(page, 'corrupt-quota', 'marker-quota');
   expect(result.ok).toBe(false);
-  expect(result.error).toContain('diagnosis quota');
+  expect('denied' in result ? result.denied : []).toContain('marker-quota');
   await page.reload();
   const restored = await boot(page, 'corrupt-quota');
   expect(
@@ -264,4 +264,82 @@ test('malformed current orphan cannot suppress legacy notice or prevent a valid 
       paths: ['/.rifty/workbench/v2/projects/!invalid/tree/note.txt'],
     }),
   ).toEqual({ '/.rifty/workbench/v2/projects/!invalid/tree/note.txt': encoded('orphan retained') });
+});
+
+test('preferred proof fallback retains the captured corruption diagnosis', async ({ page }) => {
+  const { corruptHead, startFault } = await import('./fixtures/legacy-layout-faults.ts');
+  await page.goto('/unit-harness.html');
+  await corruptHead(page, 'corrupt-preferred');
+  const result = await startFault(page, 'corrupt-preferred', 'marker-quota', false, 'preferred');
+  expect(result.ok).toBe(true);
+  expect('denied' in result ? result.denied : []).toContain('marker-quota');
+  const opened = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).inspect(),
+    clientUrl,
+  );
+  expect(opened.storage.backend).toBe('memory');
+  expect(opened.health.issues).toContainEqual({
+    kind: 'degraded',
+    scope: 'storage-layout',
+    recovery: 'none',
+    summary: expect.stringMatching(/corrupt/i),
+  });
+  await close(page);
+});
+
+test('plain Workbench checks actual project records and skips malformed native candidates', async ({
+  page,
+}) => {
+  const { accessNativeReplica, encoded } = await import('./fixtures/opfs-storage-namespace.ts');
+  await page.goto('/unit-harness.html');
+  await seed(page, 'plain-orphans');
+  const malformed = '/.rifty/workbench/v2/projects/broken/definition.json';
+  await accessNativeReplica(page, {
+    namespace: 'plain-orphans',
+    files: {
+      [malformed]: encoded('invalid metadata'),
+      '/.rifty/workbench/v2/projects/!invalid/tree/file': encoded('invalid key'),
+    },
+    directories: [
+      '/.rifty/workbench/v2/projects/broken/tree',
+      '/.rifty/workbench/v2/projects/incomplete',
+    ],
+  });
+  const before = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).bootPlain('plain-orphans'),
+    clientUrl,
+  );
+  expect(before.issues.some((issue: { scope: string }) => issue.scope === 'storage-layout')).toBe(
+    true,
+  );
+  await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).closePlain(),
+    clientUrl,
+  );
+  await page.evaluate(async (url) => {
+    const worker = new Worker(url, { type: 'module' });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        worker.onmessage = ({ data }) => (data.ok ? resolve() : reject(new Error(data.error)));
+        worker.onerror = (e) => reject(new Error(e.message));
+        worker.postMessage({ namespace: 'plain-orphans' });
+      });
+    } finally {
+      worker.terminate();
+    }
+  }, `/@fs${process.cwd()}/tests/browser-unit/fixtures/legacy-layout-valid-project-worker.ts`);
+  const after = await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).bootPlain('plain-orphans'),
+    clientUrl,
+  );
+  expect(
+    after.issues.filter((issue: { scope: string }) => issue.scope === 'storage-layout'),
+  ).toEqual([]);
+  await page.evaluate(
+    async (url) => (await import(/* @vite-ignore */ url)).closePlain(),
+    clientUrl,
+  );
+  expect(
+    await accessNativeReplica(page, { namespace: 'plain-orphans', paths: [malformed] }),
+  ).toEqual({ [malformed]: encoded('invalid metadata') });
 });

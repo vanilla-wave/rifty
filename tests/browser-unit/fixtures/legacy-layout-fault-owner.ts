@@ -29,8 +29,10 @@ FileSystemFileHandle.prototype.createWritable = async function (options) {
       if (
         mode === 'marker-quota' &&
         records.some((record) => record.path === '/.rifty/workbench/v2/storage-layout.json')
-      )
+      ) {
+        channel.postMessage({ denied: 'marker-quota' });
         throw new DOMException('diagnosis quota', 'QuotaExceededError');
+      }
       if (mode === 'stage-quota' && hasStage)
         throw new DOMException('stage quota', 'QuotaExceededError');
     }

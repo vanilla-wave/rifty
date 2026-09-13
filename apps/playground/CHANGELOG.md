@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Show legacy/corrupt storage loss through health without a false Retry or Reload action; retain real opening progress (ADR-0432).
+
 - Rebuild all dependency snapshots for the esbuild invocation cwd/ref artifact identity (ADR-0421).
 
 - Retain the concrete Playground SQLite asset type when validating against optional Workbench deployment options.

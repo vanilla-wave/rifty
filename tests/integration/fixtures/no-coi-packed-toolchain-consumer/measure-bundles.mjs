@@ -118,7 +118,9 @@ export async function measureClientBundles() {
       else if (name === 'eval') throw new Error(`Missing ${operation} lazy compiler entry`);
     }
     const backendEntry = Object.entries(result.metafile.outputs).find(
-      ([, output]) => output.entryPoint === 'node_modules/@riftydev/vfs/dist/index.js',
+      ([, output]) =>
+        output.entryPoint === 'node_modules/@riftydev/vfs/dist/index.js' ||
+        /node_modules\/@riftydev\/sdk\/dist\/default-vfs-[^/]+\.js$/.test(output.entryPoint ?? ''),
     );
     const installSourceInputs = new Set();
     for (const input of Object.keys(result.metafile.inputs)) {

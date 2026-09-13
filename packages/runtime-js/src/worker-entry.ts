@@ -14,9 +14,9 @@
  * Boot also installs Node-compatible globals (`process`, `Buffer`, timers).
  */
 
-import { OpfsPreloadError, initBackend, syncMirror } from '@riftydev/vfs';
+import { OpfsPreloadError, syncMirror } from '@riftydev/vfs';
 import type { PersistFailureReport } from '@riftydev/vfs';
-import { installMemoryFs } from '@riftydev/vfs/internal';
+import { initializeBackend, installMemoryFs } from '@riftydev/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
 import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
@@ -136,9 +136,17 @@ const boot = (async () => {
   let backend: 'opfs' | 'memory';
   let reason: string | undefined;
   try {
-    backend = await initBackend(
+    const initialized = await initializeBackend(
       startup.storage ?? (isSandboxToolchainRealm() ? { persistence: 'preferred' } : undefined),
     );
+    backend = initialized.backend;
+    if (initialized.layoutIssue) {
+      const message =
+        initialized.layoutIssue.kind === 'legacy'
+          ? 'The legacy per-file OPFS layout was not restored; old native files remain.'
+          : 'Stored OPFS data was corrupt and was not restored.';
+      post({ type: 'stderr', chunk: `[rifty] ${message}\n` });
+    }
   } catch (err) {
     if (err instanceof OpfsPreloadError || startup.storage?.persistence === 'required') throw err;
     // OPFS init failed for this realm — degrade to in-memory so the runtime still

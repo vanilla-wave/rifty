@@ -26,3 +26,17 @@ Raw samples: `replica-public-scale-evidence.json`. Command:
 `pnpm test:browser-unit tests/browser-unit/replica-public-scale.spec.ts` — PASS,
 59.9 s including browser harness. Reference conditions: local Chromium,
 fresh process; no OS page-cache eviction claim.
+
+## Final implementation and complete npm byte oracle
+
+`replica-public-scale-final-evidence.json`: same three-profile public sequence
+on the storage-diagnosis implementation. Additional manifest lists all **5,418**
+original archive files by path/size/SHA-256. The unchanged verifier runs on native
+Node and rifty after npm and after offline reopen; every byte hash matches.
+The verifier manifest is ordinary additional source, persisted with the project.
+
+Final medians: awaited first-open flushes 253.880 ms; complete replay plus owner
+boot 421.035 ms offline / 481.070 ms after npm. Whole session-ready: 1,559.075 /
+1,824.835 ms; whole cold open 5,275.835 ms. Every npm run still changes 5,420
+ordinary node_modules paths. No registry/snapshot requests on offline starts.
+Native root remains a single replica. Final carrier PASS, about one minute.

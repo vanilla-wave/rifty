@@ -13,7 +13,7 @@ const corpusRoot = join(registryRoot, 'replica-scale');
 export const scaleNamespace = 'replica-public-scale';
 export const installLine =
   'npm install @gravity-ui/icons@2.18.0 lodash@4.18.1 lodash-es@4.18.1 dom-helpers@5.2.1 react@18.3.1';
-import { program } from './replica-public-scale-program.ts';
+import { program, verifyInstalled } from './replica-public-scale-program.ts';
 interface PackageFixture {
   readonly name: string;
   readonly version: string;
@@ -94,9 +94,36 @@ await import('./owner-worker.js');
     await mkdir(destination, { recursive: true });
     await execute('tar', ['-xzf', path, '--strip-components=1', '-C', destination]);
   }
+  const installedFiles: [string, number, string][] = [];
+  const walk = async (relative: string): Promise<void> => {
+    for (const entry of (
+      await readdir(join(reference, 'node_modules', relative), { withFileTypes: true })
+    ).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) await walk(path);
+      else {
+        if (!entry.isFile()) throw new Error(`Unsupported reference entry: ${path}`);
+        const bytes = await readFile(join(reference, 'node_modules', path));
+        installedFiles.push([path, bytes.length, createHash('sha256').update(bytes).digest('hex')]);
+      }
+    }
+  };
+  await walk('');
+  if (installedFiles.length < 5000) throw new Error('Real npm corpus is below the goal scale');
+  const installedManifest = JSON.stringify(installedFiles);
+  const meta = JSON.parse(await readFile(join(directory, 'meta.json'), 'utf8')) as Record<
+    string,
+    unknown
+  >;
+  await writeFile(join(directory, 'meta.json'), JSON.stringify({ ...meta, installedManifest }));
+  await writeFile(join(reference, 'installed-manifest.json'), installedManifest);
+  await writeFile(join(reference, 'verify-installed.cjs'), verifyInstalled);
   await writeFile(join(reference, 'main.cjs'), program);
   const nodeVersion = (await execute(process.execPath, ['--version'])).stdout.trim();
-  const oracle: Record<string, string> = {};
+  const oracle: Record<string, string> = {
+    installed: (await execute(process.execPath, ['verify-installed.cjs'], { cwd: reference }))
+      .stdout,
+  };
   for (const note of ['initial', 'edited'])
     for (const installed of [false, true]) {
       await writeFile(join(reference, 'note.txt'), note);

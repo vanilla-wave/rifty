@@ -61,3 +61,37 @@ for (const kind of ['legacy', 'corrupt', 'clean'])
       expect(result.messages.join('\n')).not.toContain('PRIVATE_OLD_BYTES');
     }
   });
+
+test('SDK logger also receives storage diagnosis from a restarted owner', async ({ page }) => {
+  await page.goto('/no-coi-harness.html');
+  const messages = await page.evaluate(async (root) => {
+    const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+    const messages: string[] = [];
+    const namespace = 'sdk-layout-restart';
+    const sandbox = await createSandbox({
+      requireCrossOriginIsolation: false,
+      skipServiceWorker: true,
+      storage: { persistence: 'required', namespace },
+      logger: {
+        warn: (...args: unknown[]) => messages.push(args.map(String).join(' ')),
+        error: (...args: unknown[]) => messages.push(args.map(String).join(' ')),
+      },
+      toolchain: {
+        workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+      },
+    });
+    try {
+      const mount = await (await navigator.storage.getDirectory()).getDirectoryHandle(namespace);
+      const replica = await mount.getDirectoryHandle('.rifty-replica-v1');
+      const writer = await (await replica.getFileHandle('HEAD', { create: true })).createWritable();
+      await writer.write('CORRUPT_RESTART_PRIVATE');
+      await writer.close();
+      await sandbox.restart({ preview: { src: '' } });
+      return messages;
+    } finally {
+      sandbox.dispose();
+    }
+  }, root);
+  expect(messages.join('\n')).toMatch(/corrupt/i);
+  expect(messages.join('\n')).not.toContain('CORRUPT_RESTART_PRIVATE');
+});

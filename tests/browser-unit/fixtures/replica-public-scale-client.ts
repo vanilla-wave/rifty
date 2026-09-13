@@ -3,7 +3,7 @@ import {
   type PlaygroundWorkbench,
   openPlaygroundWorkbench,
 } from '../../../packages/workbench/src/workbench/playground.ts';
-import { program, verifyTree } from './replica-public-scale-program.ts';
+import { program, verifyInstalled, verifyTree } from './replica-public-scale-program.ts';
 export interface ScaleMetrics {
   readonly flushes: number[];
   readonly writes: number;
@@ -50,6 +50,7 @@ const proof: PublicScaleProof = {
       snapshotId: string;
       templateId: string;
       packageJsonText: string;
+      installedManifest: string;
     };
     const start = performance.now();
     const url = (name: string) => new URL(`/assets/${name}`, location.href).href;
@@ -79,6 +80,8 @@ const proof: PublicScaleProof = {
         '/note.txt': 'initial',
         '/main.cjs': program,
         '/verify.cjs': verifyTree,
+        '/verify-installed.cjs': verifyInstalled,
+        '/installed-manifest.json': meta.installedManifest,
       },
       firstMaterialization: {
         kind: 'snapshot',

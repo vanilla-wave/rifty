@@ -65,6 +65,11 @@ test('public T open, real npm writes and new offline Chromium processes preserve
             exit: 0,
             out: '{"files":15568,"bytes":73637414}\n',
           });
+          if (installed)
+            expect(await run('node verify-installed.cjs')).toEqual({
+              exit: 0,
+              out: fixture.oracle.installed,
+            });
           if (kind === 'first')
             await page.evaluate(() =>
               (
@@ -87,6 +92,10 @@ test('public T open, real npm writes and new offline Chromium processes preserve
             );
             writes = metrics.writes;
             expect(writes).toBeGreaterThanOrEqual(5000);
+            expect(await run('node verify-installed.cjs')).toEqual({
+              exit: 0,
+              out: fixture.oracle.installed,
+            });
             expect(await run('node main.cjs --installed')).toEqual({
               exit: 0,
               out: fixture.oracle['edited:true'],

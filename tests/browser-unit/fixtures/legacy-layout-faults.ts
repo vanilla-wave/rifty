@@ -13,32 +13,48 @@ export async function corruptHead(page: Page, namespace: string) {
     await writer.close();
   }, namespace);
 }
-export async function startFault(page: Page, namespace: string, mode: string, materialize = false) {
+export async function startFault(
+  page: Page,
+  namespace: string,
+  mode: string,
+  materialize = false,
+  persistence: 'required' | 'preferred' = 'required',
+) {
   return page.evaluate(
-    async ({ clientUrl, ownerModule, namespace, mode, materialize }) => {
+    async ({ clientUrl, ownerModule, namespace, mode, materialize, persistence }) => {
+      const describe = (error: unknown): string =>
+        error instanceof Error
+          ? [
+              `${error.name}: ${error.message}`,
+              ...(error instanceof AggregateError ? error.errors.map(describe) : []),
+              ...(error.cause === undefined ? [] : [describe(error.cause)]),
+            ].join('; ')
+          : String(error);
       const client = await import(/* @vite-ignore */ clientUrl);
       const owner = await import(/* @vite-ignore */ ownerModule);
       const channel = new BroadcastChannel('legacy-layout-cut');
+      const denied: string[] = [];
       const armed = new Promise<void>((resolve) => {
         channel.onmessage = ({ data }) => {
+          if (data.denied) denied.push(data.denied);
           if (data.armed) resolve();
         };
       });
       const timer = setInterval(() => channel.postMessage({ mode }), 25);
-      const open = client.boot(namespace, owner.default).then(
+      const open = client.boot(namespace, owner.default, persistence).then(
         async () => {
           if (materialize) await client.materialize();
           return { ok: true, error: '' };
         },
-        (error: unknown) => ({ ok: false, error: String(error) }),
+        (error: unknown) => ({ ok: false, error: describe(error) }),
       );
-      const outcome = open.catch((error: unknown) => ({ ok: false, error: String(error) }));
+      const outcome = open.catch((error: unknown) => ({ ok: false, error: describe(error) }));
       await armed;
       clearInterval(timer);
       if (mode.endsWith('quota')) {
         const result = await outcome;
         channel.close();
-        return result;
+        return { ...result, denied };
       }
       return await Promise.race([
         outcome,
@@ -52,6 +68,6 @@ export async function startFault(page: Page, namespace: string, mode: string, ma
         }),
       ]);
     },
-    { clientUrl, ownerModule, namespace, mode, materialize },
+    { clientUrl, ownerModule, namespace, mode, materialize, persistence },
   );
 }

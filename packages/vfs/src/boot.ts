@@ -11,6 +11,7 @@
  * `fs.readFileSync`, the same realm where `initBackend()` runs.
  */
 
+import type { OpfsLayoutIssue } from './opfs-replica-types.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
 import { installMemoryFs, installOpfsFs } from './sync-mirror.ts';
 
@@ -67,13 +68,16 @@ export function detectVfsBackend(): 'opfs' | 'memory' {
  * Wires the active backend in one call; both `syncMirror()` and
  * `asyncVfs()` then point at the selected (OPFS- or memory-paired) backend.
  */
-export async function initBackend(options?: VfsStorageOptions): Promise<'opfs' | 'memory'> {
+export async function initializeBackend(
+  options?: VfsStorageOptions,
+): Promise<{ backend: 'opfs' | 'memory'; layoutIssue?: OpfsLayoutIssue }> {
   const storage = captureVfsStorageOptions(options);
   if (storage?.persistence === 'ephemeral') {
     installMemoryFs();
-    return 'memory';
+    return { backend: 'memory' };
   }
   const choice = detectVfsBackend();
+  let layoutIssue: OpfsLayoutIssue | undefined;
   if (choice === 'opfs') {
     const namespace = storage?.namespace;
     const root =
@@ -83,10 +87,15 @@ export async function initBackend(options?: VfsStorageOptions): Promise<'opfs' |
             create: true,
           });
     if (storage === undefined) await installOpfsFs(root);
-    else await installOpfsFs(root, { layout: 'replica' });
+    else ({ layoutIssue } = await installOpfsFs(root, { layout: 'replica' }));
   } else {
     if (storage !== undefined) throw new Error('OPFS is unavailable in this realm');
     installMemoryFs();
   }
-  return choice;
+  return { backend: choice, ...(layoutIssue === undefined ? {} : { layoutIssue }) };
+}
+
+/** Stable public backend result; internal boot composition also retains diagnosis. */
+export async function initBackend(options?: VfsStorageOptions): Promise<'opfs' | 'memory'> {
+  return (await initializeBackend(options)).backend;
 }

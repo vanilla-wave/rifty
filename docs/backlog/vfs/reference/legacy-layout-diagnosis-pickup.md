@@ -46,3 +46,47 @@ stage-before and quota outcomes individually verified. RDY-6 npm-close question
 accepted against raw log. Advisory reception: tighten exact reached cut and
 notice continuity across every emitted project-generation state; public loss
 categories/redaction remain implementation and final-review checks.
+
+## Implementation and class sweep
+
+- Captured canonical Workbench diagnosis before native proof; same-replica record
+  survives first-HEAD death. Existing project-store validator determines completed
+  restoration; Playground supplies catalog ids, plain Workbench direct candidates.
+- Existing global health/replay and owner-ready field carry the notice. No false
+  recovery button; actual opening progress remains visible. SDK startup stderr
+  reaches existing logger on both initial spawn and replacement.
+- Additional RED: preferred proof fallback dropped the captured corruption;
+  restart dropped its startup logger message. Both repaired without changing
+  preferred policy or restart operation admission. Existing SDK test caught an
+  extra await introduced by a helper; observation is now synchronous, and original
+  ready/restore ordering remains. Forty SDK tests PASS unchanged.
+- Native quota carrier correction independently accepted under PR-4 by
+  /root/layout_red_review: real `denied:marker-quota` plus failed ready replaces
+  an unsupported exact outer-error-text expectation. Existing proof AggregateError
+  formatter remains unchanged. Preferred case also checks actual memory backend
+  and native denial. Native quota/fallback pair PASS.
+- Plain Workbench probes use real ProjectStore stage/promote/waitForDurability;
+  malformed key, metadata and missing-tree candidates cannot count as completion.
+  Valid sibling suppresses notice, malformed bytes retained. Native PASS.
+- Public readiness type oracle extended only by ADR-0432's exact union variant;
+  recovery-scope union unchanged. Empty/blank/non-string owner diagnosis rejected:
+  protocol RED → 102 tests PASS.
+- Native/SDK/UI mutation checks: absent health, diagnosis scheduled after the
+  first publication turn, healthy-only progress, false Retry, silent startup sink,
+  dropped preferred diagnosis and fatal orphan scan all produce real RED. Source
+  restored after each. No timeout/no-test/compiler-error RED credited.
+- Main bundle grew to 86,191 > 86,000 B. The default backend now has a named lazy
+  entry inside SDK, avoiding the whole public VFS namespace as that import target.
+  Published-build measurement: 85,184 B. Existing numeric ceilings unchanged;
+  packed backend-load provenance follows the actual new entry, and existing
+  browser deferral/failed-load assertions remain unchanged.
+
+Mutant commands use the committed native/UI/SDK carriers, one guard at a time.
+Public first-open, offline, no-COI and packed final gates follow on the committed
+implementation; raw goal performance remains in `replica-public-scale-evidence`.
+
+Final targeted native set: 14 diagnosis/progress cases plus public T sequence —
+15 PASS. Complete installed-file byte oracle then passed independently: 5,418
+original npm files verified against native Node after install and offline reopen.
+Exact compiler artifact remains 10,022,694 B; normalized body matches BASE,
+only chunk references changed. Pin updated without changing byte ceiling.

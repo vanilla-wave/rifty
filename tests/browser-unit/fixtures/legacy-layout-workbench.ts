@@ -25,7 +25,11 @@ export async function boot(
 }
 export function inspect() {
   if (!workbench) throw Error('Not open');
-  return { health: workbench.health.snapshot(), catalog: workbench.playground.catalog.snapshot() };
+  return {
+    health: workbench.health.snapshot(),
+    catalog: workbench.playground.catalog.snapshot(),
+    storage: workbench.snapshot().storage,
+  };
 }
 export async function materialize() {
   if (!workbench) throw Error('Not open');
@@ -73,4 +77,25 @@ export async function closeProject() {
     await project.close();
     project = undefined;
   }
+}
+
+let plain:
+  | import('../../../apps/playground/src/browser-unit/workbench-public-entry.ts').Workbench
+  | undefined;
+export async function bootPlain(namespace: string) {
+  const { openWorkbench } = await import(
+    '../../../apps/playground/src/browser-unit/workbench-public-entry.ts'
+  );
+  const url = '/src/browser-unit/workbench-vite-host-assets.ts';
+  const { workbenchViteHostAssets: assets } = await import(/* @vite-ignore */ url);
+  plain = await openWorkbench({
+    deployment: { ...assets, serviceWorker: { url: '/sw.js', scope: '/' } },
+    packageAcquisition: { registryUrl: '/npm-registry' },
+    storage: { namespace, persistence: 'required' },
+  });
+  return plain.health.snapshot();
+}
+export async function closePlain() {
+  await plain?.close();
+  plain = undefined;
 }

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve layout diagnosis for internal boot composition while keeping the public backend-string result (ADR-0432).
+
 - Preserve settled subtree failure scope across later entry reports; provisional timeouts still heal on real success (ADR-0429).
 - Retain native readers through compaction/close and keep detected corruption repair pending across unrelated appends (ADR-0429).
 
