@@ -54,3 +54,16 @@ have ADR-0432's separate skip-and-retain behavior and do not choose a backend.
 - Budget rebaseline and PR-4 old/new evidence:
   `docs/backlog/toolchain-build/reference/client-bundle-budget-evidence.md`.
 - Handoff process-format observation F: closed historical goal; no requested edit.
+
+## Emitted artifact verification
+
+Final repaired tarball graphs and new budgets pass in fresh Chromium (15 + 72
+tarballs). The TypeScript-worker asset stays 10,022,694 B; only six static
+chunk hashes and one lazy module-loader hash changed. Normalizing those seven
+import fingerprints makes the baseline/current bytes identical. Updated exact
+SHA-256 to `018ea49b3a1971609fdd02fb3f5b9db85daf0a4398fb500bbbf39bdda149b422`;
+`check:esbuild-legacy-retirement` passes. Other emitted-asset criteria unchanged.
+
+`RIFTY_PLAYGROUND_PORT=5399 pnpm test:e2e:prod`: 7/7, 3.0 min, including
+owner boot, Buffer identity, Express/sqlite, Hono, Koa, TypeScript editor and
+Webpack cold install/HMR/reload in emitted assets.

@@ -43,3 +43,8 @@ Every new leak crosses both byte ceilings. Existing compiler-eager,
 missing artifact/provenance/observation and unaccounted-boot-JS assertions remain.
 The independent packed SDK io-provenance guard (≤5120 B) is unchanged; so are
 compiler eval/preload/fetch faults, VM/SDK/install/agent behavior proofs.
+
+Final repaired tree packed run also passed (15 + 72 tarballs): main
+85204 / 26641 B, SW 15220 / 5327 B, generic 748941 / 220949 B, toolchain
+855473 / 256725 B. Baseline calibration stays pinned to merged main, before
+the two repairs. `pnpm test:run tools/checks/client-bundle-budget.test.ts`: 4/4.
