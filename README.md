@@ -122,6 +122,25 @@ Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see [`docs/pu
 
 ## Develop (monorepo)
 
+Requires Node >=24 and pnpm 11 (pin in `package.json`). Prepare a fresh checkout:
+
+```bash
+node tools/worktree/setup.mjs # also: pnpm worktree:setup
+```
+
+Installs frozen workspace dependencies, Playwright Chromium/Firefox/WebKit and
+their OS dependencies, verifies each browser launches and executes JavaScript,
+then builds library `dist/` required by PR checks. Repeat after branch/dependency
+changes; any failed step exits nonzero. Linux OS dependency installation may
+require sudo. No environment file is required for the default playground.
+
+For T3 Code, import [`t3.json`](./t3.json) actions in **Settings → Project** for
+this checkout. **Setup worktree** runs automatically for new worktrees; run it
+manually for existing ones. Wait for setup to finish before running checks.
+Keep parallel dev/e2e servers on distinct ports with `RIFTY_PLAYGROUND_PORT`
+(for example, `RIFTY_PLAYGROUND_PORT=15373 pnpm test:e2e:light`); setup does not
+reserve ports. AI/provider credentials remain in the host environment.
+
 ```bash
 pnpm install
 pnpm dev                  # playground at http://localhost:5273

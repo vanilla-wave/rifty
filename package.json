@@ -10,6 +10,7 @@
     "pnpm": ">=11.1.3 <12"
   },
   "scripts": {
+    "worktree:setup": "node tools/worktree/setup.mjs",
     "dev": "pnpm --filter @riftydev/playground dev",
     "build": "pnpm -r --filter=!@riftydev/playground build && pnpm --filter @riftydev/playground build",
     "build:libs": "pnpm -r --filter \"./packages/*\" --filter \"@riftydev/shadow-registry\" --filter \"@riftydev/eddy\" build",
