@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Honor git status --short through the existing -s formatter; do not silently print the long summary.
+
+
 - Add per-dispatch command policy and explicit background prohibition; preserve default Shell behavior.
 
 ### Fixed

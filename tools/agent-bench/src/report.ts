@@ -14,7 +14,14 @@ export interface Run extends Omit<Observation, 'trace'> {
   elapsedMs: number;
   judge: JudgeVerdict;
   finalDiff: unknown;
-  artifacts: { trace: string; browserTrace?: string; workspace?: string; screen?: string };
+  artifacts: {
+    trace: string;
+    before?: string;
+    after?: string;
+    browserTrace?: string;
+    workspace?: string;
+    screen?: string;
+  };
   failureClass: string | null;
   note: string | null;
   stage?: string;
@@ -23,6 +30,9 @@ export interface Run extends Omit<Observation, 'trace'> {
 export interface Report {
   header: {
     createdAt: string;
+    sourceRevision: string;
+    sourceDirty: boolean;
+    versions: { node: string; piCli: string; chromium?: string };
     model: string;
     profile: string;
     taskSet: string;
@@ -41,6 +51,7 @@ export async function writeReport(dir: string, report: Report) {
     '',
     `Profile: ${report.header.profile}; task set: ${report.header.taskSet}; runs/task: ${report.header.runsPerTask}.`,
     `Limits: ${JSON.stringify(report.header.limits)}.`,
+    `Source: ${report.header.sourceRevision}${report.header.sourceDirty ? ' (working tree modified)' : ''}; versions: ${JSON.stringify(report.header.versions)}.`,
     '',
     report.header.toolContextCaveat,
     '',

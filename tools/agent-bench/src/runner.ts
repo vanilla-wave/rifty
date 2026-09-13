@@ -1,4 +1,5 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { chromium } from '@playwright/test';
 import { getAgentPromptProfile } from '@riftydev/agent';
@@ -20,6 +21,20 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
   const report: Report = {
     header: {
       createdAt: new Date().toISOString(),
+      sourceRevision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      sourceDirty:
+        execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim().length > 0,
+      versions: {
+        node: process.version,
+        piCli: (
+          JSON.parse(
+            await readFile(
+              'tools/agent-bench/node_modules/@earendil-works/pi-coding-agent/package.json',
+              'utf8',
+            ),
+          ) as { version: string }
+        ).version,
+      },
       model: endpoint.model,
       profile,
       taskSet,
@@ -33,6 +48,7 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
   };
   const hosts = await services(lanes, config.playgroundPort, output);
   const browser = await chromium.launch();
+  report.header.versions.chromium = browser.version();
   const persist = () =>
     writeReport(output, JSON.parse(redact(JSON.stringify(report), key)) as Report);
   try {
@@ -73,6 +89,11 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
               : lane === 'rifty-no-coi'
                 ? prepareNoCoi(input)
                 : prepareLocal(input));
+            await writeFile(
+              join(dir, 'before.json'),
+              redact(JSON.stringify(prepared.before, null, 2), key),
+            );
+            record.artifacts.before = `${name}/before.json`;
             if (prepared.workspace)
               record.artifacts.workspace = relative(output, prepared.workspace);
             if (!key) {
@@ -102,7 +123,10 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
               if (tracing) await prepared.context.tracing.groupEnd();
             }
             record.stage = 'snapshot';
-            record.finalDiff = diffTrees(prepared.before, await prepared.snapshot());
+            const after = await prepared.snapshot();
+            await writeFile(join(dir, 'after.json'), redact(JSON.stringify(after, null, 2), key));
+            record.artifacts.after = `${name}/after.json`;
+            record.finalDiff = diffTrees(prepared.before, after);
             record.outcome =
               record.agentStatus === 'budget-exceeded'
                 ? 'budget-exceeded'
@@ -119,7 +143,13 @@ export async function run(config: Config, tasks: Task[], lanes: Lane[], output: 
             if (record.agentStatus === 'budget-exceeded') record.outcome = 'budget-exceeded';
             if (prepared)
               try {
-                record.finalDiff = diffTrees(prepared.before, await prepared.snapshot());
+                const after = await prepared.snapshot();
+                await writeFile(
+                  join(dir, 'after.json'),
+                  redact(JSON.stringify(after, null, 2), key),
+                );
+                record.artifacts.after = `${name}/after.json`;
+                record.finalDiff = diffTrees(prepared.before, after);
               } catch (snapshotError) {
                 record.error += `\nSnapshot failed: ${redact(String(snapshotError), key)}`;
               }

@@ -57,6 +57,7 @@ export async function buildInstallArtifactIdentityFile(): Promise<InstallArtifac
 export async function buildInstallArtifactRecipe() {
   return {
     schema: 3,
+    npmTarballLayout: 'strip-one-component-v1',
     bakedOverrides,
     internalsShims,
     builtinShadowSubstitutionCatalog: {

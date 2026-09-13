@@ -27,7 +27,6 @@
     "@earendil-works/pi-ai": "0.85.1",
     "@riftydev/io": "workspace:*",
     "@riftydev/sdk": "workspace:*",
-    "@riftydev/workbench": "workspace:*",
-    "@riftydev/vfs": "workspace:*"
+    "@riftydev/workbench": "workspace:*"
   }
 }

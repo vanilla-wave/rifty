@@ -144,6 +144,8 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
           | {
               messages?: {
                 role: string;
+                toolName?: string;
+                content?: { type?: string; text?: string }[];
                 stopReason?: string;
                 usage?: { input?: number; output?: number; totalTokens?: number };
               }[];
@@ -183,9 +185,20 @@ export async function prepareLocal(input: Input): Promise<Prepared> {
             stderr: redact(stderr, key),
           },
           terminalTail: redact(
-            `${JSON.stringify(messages.filter((message) => message.role === 'toolResult')).slice(
-              -16000,
-            )}\n${stderr}`,
+            [
+              ...messages
+                .filter((message) => message.role === 'toolResult' && message.toolName === 'bash')
+                .map((message) =>
+                  (message.content ?? [])
+                    .filter((block) => block.type === 'text')
+                    .map((block) => block.text ?? '')
+                    .join(''),
+                ),
+              stderr,
+            ]
+              .filter(Boolean)
+              .join('\n')
+              .slice(-16000),
             key,
           ),
         };

@@ -12,7 +12,7 @@ let project: ReturnType<ToolchainSandbox['project']>;
 let mode: 'commands' | 'preview' = 'commands';
 const preview = document.querySelector('iframe')!;
 async function snapshot(): Promise<FileTree> {
-  const files: FileTree = {};
+  const files: FileTree = Object.create(null);
   async function walk(path: string) {
     for (const entry of await project.fs.readdir(path || '.')) {
       if (['node_modules', '.git', 'dist'].includes(entry.name)) continue;

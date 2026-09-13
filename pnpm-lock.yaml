@@ -166,9 +166,6 @@ importers:
       '@riftydev/sdk':
         specifier: workspace:*
         version: link:../rifty
-      '@riftydev/vfs':
-        specifier: workspace:*
-        version: link:../vfs
       '@riftydev/workbench':
         specifier: workspace:*
         version: link:../workbench
@@ -484,9 +481,6 @@ importers:
       '@riftydev/sdk':
         specifier: workspace:*
         version: link:../../packages/rifty
-      '@riftydev/vfs':
-        specifier: workspace:*
-        version: link:../../packages/vfs
 
   tools/compat-matrix-generator: {}
 

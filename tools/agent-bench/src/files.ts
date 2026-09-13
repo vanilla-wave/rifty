@@ -10,7 +10,7 @@ export async function writeTree(root: string, files: FileTree) {
   }
 }
 export async function readTree(root: string): Promise<FileTree> {
-  const files: FileTree = {};
+  const files: FileTree = Object.create(null);
   async function walk(path: string) {
     for (const entry of await readdir(join(root, path), { withFileTypes: true })) {
       if (excluded.has(entry.name)) continue;

@@ -29,6 +29,7 @@ interface RunRecord {
   agentStatus: string;
   outcome: string;
   toolCalls: number;
+  terminalTail: string;
   judge: { pass: boolean; probes: unknown[] };
   artifacts: { trace: string; browserTrace?: string; workspace?: string };
   profile: string;
@@ -131,6 +132,7 @@ test('all three real mock-model lanes run the entire task set with identical jud
       expect(run.judge.pass).toBe(false);
       expect(run.judge.probes.length).toBeGreaterThan(0);
       expect(run.toolCalls).toBe(1);
+      expect(run.terminalTail).toBe('');
       expect(run.profile).toBe(profile.id);
       expect((await stat(join(out, run.artifacts.trace))).size).toBeGreaterThan(100);
       {

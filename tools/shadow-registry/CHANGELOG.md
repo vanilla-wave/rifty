@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Include npm tar path layout in materialized install identity; retire authority of package-prefix-only extracted trees.
+
+
 - Preserve Vite module URLs at project root `/`, restoring one React Refresh runtime and live component edits (ADR-0433).
 
 - Forward optional adapter cwd/ref ownership through package entry preparation (ADR-0421).

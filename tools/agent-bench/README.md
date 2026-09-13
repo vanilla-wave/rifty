@@ -44,8 +44,8 @@ Smoke model reads the actual package.json and stops. Planted defects remain:
 common judge evidence across lanes. Smoke success proves execution, not repair.
 
 Each run retains transcript/events/provider requests, usage, elapsed time, tool
-count, terminal tail, actual file diff, judge probes, browser trace/screenshot
-when keyless. JSON/Markdown distinguish budget-exceeded from ordinary failure.
+count, terminal tail, actual before/after file trees (including dependency locks), file diff, judge probes, browser trace/screenshot
+when keyless. Header records source revision/dirty state and native/browser/Pi versions. JSON/Markdown distinguish budget-exceeded from ordinary failure.
 Assign `failureClass` and `note` manually in report.json, then regenerate Markdown;
 existing assignments survive. Classes: agent, rifty-runtime, rifty-tooling,
 ai-mode-ux, provider, task-bad. Unclassified remains null. Failed setup/judging

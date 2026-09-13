@@ -131,3 +131,18 @@ The shared recovery is embedded after that host sentence inside the same origina
 paragraph; the profile test checks actual text containment, not paragraph boundaries.
 This also avoids empty-tool-list's triple newline producing a false paragraph mismatch.
 Frozen full-prompt check remains unchanged; unrelated policy mutant remains discriminated.
+
+## Delivery verification
+
+/tmp/pr333-bench-contract-green-full.log:11PASS10.4m; full14-run all-three smoke,
+all-three call/time limits, retained provider-failure write, optional-key privacy.
+Native positive controls: all5 real programs PASS in /tmp/pr333-bench-native-controls-final.log.
+Read-only native smoke exposed file-read results in terminalTail; captured RED
+/tmp/pr333-bench-native-terminal-red.log. Native report now includes bash output
+and stderr only; smoke asserts no terminal output for its read-only model.
+Before/after file trees retain exact text source and dependency locks for diagnosis.
+
+Supporting baseline repair: current native/COI/no-COI results and retained traces
+are in agent-bench-baseline-results.md. The existing no-COI2 CI fixtures now gate
+per port (2PASS8.1s). Native git short alias RED→GREEN, plus guard revert-check;
+known untracked-directory shaping remains linked to its existing independent draft.

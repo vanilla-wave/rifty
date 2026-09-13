@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Retire materialized dependency claims produced by the old npm tar-root layout; fresh installation restores declaration-file paths.
+
+
 - Stabilize resident ownership fault fixtures against delayed host admission; retain native foreign-loader checks.
 
 

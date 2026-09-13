@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Restore React type declarations in fresh installs and re-bake dependency snapshots with npm-correct archive paths.
+
+
 - Reveal the Agent terminal when launching commands from Problems, including a collapsed console.
 
 - Lazy +chat over the public Pi agent; real Agent terminal/preview/SCM, memory-only key/limits, Stop/Reset/export and opt-in benchmark hooks (ADR-0427/0431).

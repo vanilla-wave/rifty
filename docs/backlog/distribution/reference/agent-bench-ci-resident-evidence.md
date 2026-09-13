@@ -12,7 +12,7 @@ CI failure (1FAIL/1PASS); late-createRequire sibling did not reproduce in isolat
 
 Fault: ordering at fixture host→Worker admission, not a changed runtime outcome.
 Sweep: both prior-loader schedulers in no-coi-dev-hmr.spec.ts; no other20ms rival
-schedulers. Each now waits on a real VFS marker written by selected entry before
+schedulers. Each now waits on a per-port real VFS marker written by selected entry before
 arming its native callback. Prior loader/createRequire identity remains captured
 before entry; expected errors/events unchanged. Existing VFS and timers suffice;
 no runtime hook, owner-token override or production coordination added.
@@ -28,3 +28,5 @@ Logs: /tmp/pr333-ci-no-coi-isolated.log (2PASS),
 /tmp/pr333-ci-no-coi-ordering-green.log (same80ms2PASS8.0s).
 The injected page delay was removed after verification. Full no-COI suite and
 independent final review remain required with benchmark delivery.
+
+The per-port marker cannot be satisfied by a previous iteration’s retained file.

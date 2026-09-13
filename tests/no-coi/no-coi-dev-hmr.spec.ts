@@ -588,7 +588,7 @@ setTimeout(() => sender.postMessage(null), 20).unref();`,
         }),
         '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
 const selected = http.createServer((_req, res) => res.end('selected'));
-require('node:fs').writeFileSync('/port-proof/selected-entered', 'ready');
+require('node:fs').writeFileSync('/port-proof/selected-entered-${targetPort}', 'ready');
 setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
       });
       const outcome = await page.evaluate(
@@ -602,7 +602,7 @@ setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
 const rival = http.createServer((_req, res) => res.end('rival'));
 const fs = require('node:fs');
 function afterSelectedEntry() {
-  if (!fs.existsSync('/port-proof/selected-entered')) {
+  if (!fs.existsSync('/port-proof/selected-entered-${port}')) {
     setTimeout(afterSelectedEntry, 5).unref();
     return;
   }
@@ -661,7 +661,7 @@ test('late createRequire cannot borrow resident ownership across prior loaders',
       const schedule = `const lateRequire = createRequire;
 const fs = lateRequire('/port-proof/gate.cjs')('node:fs');
 function afterSelectedEntry() {
-  if (!fs.existsSync('/port-proof/selected-entered')) {
+  if (!fs.existsSync('/port-proof/selected-entered-${targetPort}')) {
     setTimeout(afterSelectedEntry, 5).unref();
     return;
   }
@@ -681,7 +681,7 @@ afterSelectedEntry();`;
         }),
         '/port-proof/node_modules/plain-dev/server.cjs': `const http = require('node:http');
 const selected = http.createServer((_req, res) => res.end('selected'));
-require('node:fs').writeFileSync('/port-proof/selected-entered', 'ready');
+require('node:fs').writeFileSync('/port-proof/selected-entered-${targetPort}', 'ready');
 setTimeout(() => selected.listen(${targetPort}, '127.0.0.1'), 100);`,
         '/port-proof/node_modules/.bin/rival': `#!/usr/bin/env node
 import('../rival/index.${testCase.format === 'cjs' ? 'cjs' : 'mjs'}');
@@ -705,7 +705,7 @@ import('../rival/index.${testCase.format === 'cjs' ? 'cjs' : 'mjs'}');
 const lateRequire = createRequire;
 const fs = require('node:fs');
 function afterSelectedEntry() {
-  if (!fs.existsSync('/port-proof/selected-entered')) {
+  if (!fs.existsSync('/port-proof/selected-entered-${port}')) {
     setTimeout(afterSelectedEntry, 5).unref();
     return;
   }
