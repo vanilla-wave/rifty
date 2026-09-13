@@ -109,3 +109,16 @@ configuration. This avoids temporarily writing raw keyed traces to disk.
   the existing assembled policy while its public shared paragraphs are exposed.
   Model task outcomes/native positive judge controls and the full42 live matrix
   are still acceptance targets, not claimed pickup results.
+
+## Contract review repair
+
+Independent BLOCK62736497d: smoke accepted fabricated14 rows/phony traces with no lanes or judges
+(`/tmp/pr333-bench-review-mutant.log`,2PASS). Raw `agent-bench-contract-red-f1.json` retained.
+Carrier now owns the external HTTP observer:28 requests,14 actual package tool replies,
+actual shared policy in provider messages. Every lane's real Playwright ZIP must carry
+common-judge action calls inside its tracing group; no size-only proof.
+Playwright1.60.0 native group probe: before Tracing.tracingGroup, Frame actions parentId,
+after same callId (groupEnd emits no separate before). `/tmp/pr333-bench-trace-group.zip`.
+Public policy additionally checked against actual core paragraphs; frozen baseline remains.
+Strengthened RED:11 expected benchmark errors +1 profile RED, baseline1PASS; no import failure.
+Final pass still executes native positive judge controls, full42 live matrix and baseline questions.

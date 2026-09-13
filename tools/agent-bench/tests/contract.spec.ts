@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { AgentPromptProfile } from '@riftydev/agent';
 import { agentModelServer } from '../../../tests/e2e/fixtures/agent-model-server.ts';
+import { observedSmokeModel } from './observed-smoke-model.ts';
 
 function getAgentPromptProfile(): AgentPromptProfile {
   const output = execFileSync(
@@ -74,13 +75,44 @@ test('the public shared coding profile is available to browser and native CLI co
 
 test('all three real mock-model lanes run the entire task set with identical judge evidence', async () => {
   const out = await mkdtemp(join(tmpdir(), 'rifty-agent-bench-smoke-'));
-  const result = await cli(['run', '--mock-model', '--runs', '1', '--output', out]);
+  // The provider lives outside the runner: report-only fabrication makes zero requests.
+  const model = await observedSmokeModel();
+  const config = join(out, 'config.json');
+  await writeFile(
+    config,
+    JSON.stringify({ endpoint: { baseUrl: model.baseUrl, model: 'scripted' } }),
+  );
+  let result: Awaited<ReturnType<typeof cli>>;
+  try {
+    result = await cli(['run', '--runs', '1', '--config', config, '--output', out]);
+  } finally {
+    await model.close();
+  }
   expect(result.code, result.output).toBe(0);
+  expect(model.requests).toHaveLength(28);
+  const completedReads = model.requests.filter((request) =>
+    request.body.messages.some((message) => message.role === 'tool'),
+  );
+  expect(completedReads).toHaveLength(14);
+  const profile = getAgentPromptProfile();
+  for (const request of completedReads) {
+    expect(request.authorization).toBeNull();
+    const system = request.body.messages
+      .filter((message) => message.role === 'system')
+      .map((message) => message.content)
+      .join('\n');
+    for (const part of [profile.intro, profile.guidance, profile.recovery, profile.verification])
+      expect(system).toContain(part);
+    const result = JSON.stringify(
+      request.body.messages.filter((message) => message.role === 'tool'),
+    );
+    expect(result).toContain('dependencies');
+    expect(result).toMatch(/react|hono/);
+  }
   const report = JSON.parse(await readFile(join(out, 'report.json'), 'utf8')) as Report;
   expect(report.header.runsPerTask).toBe(1);
   expect(report.header.toolContextCaveat).toMatch(/not.*equivalent|non-equivalence/i);
   expect(report.runs).toHaveLength(14);
-  const profile = getAgentPromptProfile();
   expect(report.header.profile).toBe(profile.id);
   for (const task of tasks) {
     const runs = report.runs.filter((run) => run.task === task);
@@ -101,9 +133,50 @@ test('all three real mock-model lanes run the entire task set with identical jud
       expect(run.toolCalls).toBe(1);
       expect(run.profile).toBe(profile.id);
       expect((await stat(join(out, run.artifacts.trace))).size).toBeGreaterThan(100);
-      if (run.lane !== 'local-reference') {
+      {
         if (!run.artifacts.browserTrace) throw new Error(`No actual browser trace for ${run.lane}`);
-        expect((await stat(join(out, run.artifacts.browserTrace))).size).toBeGreaterThan(1000);
+        const zip = join(out, run.artifacts.browserTrace);
+        const trace = execFileSync('unzip', ['-p', zip, '*.trace'], {
+          encoding: 'utf8',
+          maxBuffer: 30 * 1024 * 1024,
+        });
+        const events = trace
+          .split('\n')
+          .filter(Boolean)
+          .map(
+            (line) =>
+              JSON.parse(line) as {
+                type: string;
+                title?: string;
+                callId?: string;
+                parentId?: string;
+                method?: string;
+                class?: string;
+              },
+          );
+        // A dedicated real tracing group encloses the common judge, independently of agent actions.
+        const group = events.findIndex(
+          (event) =>
+            event.type === 'before' &&
+            event.method === 'tracingGroup' &&
+            event.title === `judge:${task}`,
+        );
+        expect(group, trace.slice(-2000)).toBeGreaterThanOrEqual(0);
+        const end = events.findIndex(
+          (event, index) =>
+            index > group && event.type === 'after' && event.callId === events[group]?.callId,
+        );
+        expect(end).toBeGreaterThan(group);
+        expect(
+          events
+            .slice(group + 1, end)
+            .some(
+              (event) =>
+                event.type === 'before' &&
+                event.parentId === events[group]?.callId &&
+                (event.class === 'Frame' || event.class === 'APIRequestContext'),
+            ),
+        ).toBe(true);
       }
     }
   }

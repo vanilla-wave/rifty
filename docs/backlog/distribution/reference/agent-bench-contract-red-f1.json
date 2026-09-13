@@ -1,0 +1,293 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "Contract+RED BLOCK: сначала discriminating smoke RED для F1; затем IMPLEMENT и Final+GREEN. Цель не закрыта.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "62736497d388c86935330b97eabde3b20230e886",
+  "unit_goal_source": "docs/backlog/distribution/agent-bench.md; goal docs/backlog/epics/ai-agent-mode-and-bench/goal.md I8/scenario4; BASE 0bcf3340bc96e6d819e6fa54c48de1c50a447f05; fresh reviewer /root/bench_contract_review.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance4 → I8",
+      "location": "tools/agent-bench/tests/contract.spec.ts:75",
+      "summary": "RED обязан отвергать report-only route без реального запуска lanes и общих judges (F1)."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I8 / scenario4",
+      "location": "docs/backlog/epics/ai-agent-mode-and-bench/goal.md:80",
+      "summary": "Benchmark ещё scaffold: реализация, реальные all-three smoke/positive native controls, 42 live runs, diagnostic summary/evidence/classification и независимый Final+GREEN остаются."
+    },
+    {
+      "clause": "Acceptance8 → I8 + ADR-0434",
+      "location": "docs/backlog/distribution/agent-bench.md:102",
+      "summary": "Реально измерить tsc/vitest/no-COI shell и React declaration baseline, классифицировать и маршрутизировать по обязательствам."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance1: five shared tasks, cold supported lanes, current templates and actual DOM/API judges incl. required-title error",
+      "source": "acceptance",
+      "trace": "I8 + scenario4",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:75",
+      "note": "F1: executed report-only mutant skips every real task/judge while this carrier passes. Default/live quantities remain GREEN targets."
+    },
+    {
+      "row": "Acceptance2: real +chat entry and packed public no-COI project/preview hosts; explicit node exclusion",
+      "source": "acceptance",
+      "trace": "I8 + I5 + I6",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:90",
+      "note": "F1: no host/browser launches, yet lane labels and text trace files pass."
+    },
+    {
+      "row": "Acceptance3: native pinned Pi with optional auth/budgets, common profile/context caveat; unchanged core default",
+      "source": "acceptance",
+      "trace": "I8 + I2 + ADR-0434",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:68",
+      "note": "F2: native hook facts and unchanged core default independently pass, but exported opposing policy also passes metadata checks."
+    },
+    {
+      "row": "Acceptance4: real all-three smoke and identical common judge evidence; fabricated report/skipped judge cannot pass",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "missing",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:75",
+      "note": "F1: explicit discrimination fails; executed zero-lane/zero-judge report-only mutant is GREEN."
+    },
+    {
+      "row": "Acceptance5: per-run admission/deadline, distinct budget outcome, errors and retained effects/records",
+      "source": "acceptance",
+      "trace": "I8 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:124",
+      "note": ""
+    },
+    {
+      "row": "Acceptance6: JSON/Markdown config/metrics/delta/evidence, human annotations retained, key excluded",
+      "source": "acceptance",
+      "trace": "I8 + I2 + I4",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:113",
+      "note": "F3: executed report-only mutant omits declared delta/config/metrics yet report assertions pass; annotations/key REDs still exist."
+    },
+    {
+      "row": "Acceptance7: complete 42-run real diagnostic matrix and classified committed summary remain explicit post-implementation measurement targets",
+      "source": "acceptance",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-bench.md:97",
+      "note": ""
+    },
+    {
+      "row": "Acceptance8: tsc/vitest/no-COI shell/React declaration baseline values remain explicit post-implementation measurement targets",
+      "source": "acceptance",
+      "trace": "I8 + ADR-0434",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/agent-bench.md:102",
+      "note": ""
+    },
+    {
+      "row": "Parity1: common judges on actual lane programs; identical mock evidence; native positive controls target all requested outcomes",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:96",
+      "note": "F1: skipped judges produce accepted identical metadata. Positive native controls are declared GREEN targets, not measured pickup results."
+    },
+    {
+      "row": "Parity2: shared profile paragraphs checked against actual requests/native assembled context, honest differences",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:68",
+      "note": "F2: unrelated exported paragraphs pass; no content-to-assembled-context discrimination in this RED."
+    },
+    {
+      "row": "Fault run/budget: native pre-effect admission/abort and explicit exhaustion",
+      "source": "fault-matrix",
+      "trace": "I8 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:124",
+      "note": ""
+    },
+    {
+      "row": "Fault provider/tool after effects: error retained in trace/diff without invented completion",
+      "source": "fault-matrix",
+      "trace": "I8 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:170",
+      "note": ""
+    },
+    {
+      "row": "Fault install/judge failure: retain failure stage/evidence and previously completed records",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:113",
+      "note": ""
+    },
+    {
+      "row": "Fault profile/task/lane sibling drift: shared inputs/common judges/real hosts and visible differences",
+      "source": "fault-matrix",
+      "trace": "I8",
+      "status": "weak",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:75",
+      "note": "F1/F2 executed mutants preserve only labels and fabricated evidence; actual sharing/hosts are absent."
+    },
+    {
+      "row": "Fault config/export: explicit invalid config and memory-only/redacted key",
+      "source": "fault-matrix",
+      "trace": "I8 + I2",
+      "status": "pass",
+      "citation": "tools/agent-bench/tests/contract.spec.ts:215",
+      "note": ""
+    },
+    {
+      "row": "Public pnpm agent-bench run/report CLI exposes diagnostic entry",
+      "source": "public-api",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/cli.ts:1",
+      "note": ""
+    },
+    {
+      "row": "Public getAgentPromptProfile and AgentPromptProfile expose generic shared coding policy",
+      "source": "public-api",
+      "trace": "I8 + ADR-0434",
+      "status": "weak",
+      "citation": "packages/agent/src/prompt-profile.ts:4",
+      "note": "F2: callable export is discriminated, common policy semantics are not."
+    },
+    {
+      "row": "Frozen accepted fix-date-sort user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/fix-date-sort/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted add-search user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/add-search/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted url-filters user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/url-filters/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted new-issue-form user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/new-issue-form/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen accepted node-endpoint user prompt is byte-identical to origin/ai-mode-mvp",
+      "source": "frozen-artifact",
+      "trace": "I8 + scenario4",
+      "status": "pass",
+      "citation": "tools/agent-bench/tasks/node-endpoint/prompt.md:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen delivered default prompt: exact formatter bytes except current date",
+      "source": "frozen-artifact",
+      "trace": "I8 + ADR-0434",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt.test.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Frozen native CLI oracle: no-auth transport, blocked extra write, explicit deadline and stopped PID",
+      "source": "frozen-artifact",
+      "trace": "I8 + I4 + ADR-0434",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-bench-native-cli-oracle.mjs:8",
+      "note": ""
+    },
+    {
+      "row": "Frozen Playwright privacy oracle: snapshots=false can retain provider-error key; keyed raw traces omitted",
+      "source": "frozen-artifact",
+      "trace": "I8 + I2 + ADR-0434",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-bench-trace-privacy.json:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/tests/contract.spec.ts:96",
+          "summary": "F1: Smoke RED принимает полностью выдуманный report без единого lane/model/judge.",
+          "authority": "Acceptance4 → I8: fabricated report or skipped judge is not a smoke pass; RDY-8",
+          "evidence": "REV-5 class4: unchanged smoke test in detached /tmp/pr333-bench-review-mutant; node node_modules/@playwright/test/cli.js test --config tools/agent-bench/playwright.config.ts --grep 'public shared coding profile|all three real mock-model' → 2 passed. CLI only writes report rows and text instead of trace.zip, never launches a lane/provider/judge. Full mutant and commands: /tmp/pr333-bench-contract-review-evidence.md; raw /tmp/pr333-bench-review-mutant.log."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/tests/contract.spec.ts:71",
+          "summary": "F2: Проверка ID/длины допускает policy, противоположную неизменному core prompt.",
+          "authority": "",
+          "evidence": "Same executed mutant profile test PASS; node --import tsx /tmp/pr333-bench-review-policy-proof.mjs → frozen default PASS, metadata PASS, exported paragraphs present in actual core prompt=false. /tmp/pr333-bench-review-policy-proof.log. Weak per REV-4, advisory."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/tests/contract.spec.ts:115",
+          "summary": "F3: Report RED пропускает отсутствие lane delta и заявленных config/metrics.",
+          "authority": "",
+          "evidence": "Same executed smoke mutant PASS: report has only model/profile/runsPerTask/caveat header and abbreviated runs; no delta, endpoint, limits, task-set, time/turns/terminal tail. summary.md contains only budget-exceeded plus the manual note. /tmp/pr333-bench-review-mutant.log and full mutant evidence. Weak per REV-4."
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
