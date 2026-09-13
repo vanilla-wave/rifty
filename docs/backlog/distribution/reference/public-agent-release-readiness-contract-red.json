@@ -1,0 +1,139 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED без блокеров; реализацию можно продолжать, слабые type/UI/leak проверки закрыть до Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "0c257d0b0db739a26d1741a3dba6ea7fe31a0531",
+  "unit_goal_source": "docs/backlog/distribution/public-agent-release-readiness.md @ 0c257d0b0; BASE origin/main 8889e9d5e1f8b8c369247ddc3b7ecc62e759470e",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1 — public generated root-only package, packed artifacts, 17-package lockstep, no registry mutation",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "weak",
+      "citation": "packages/agent/src/publishing.test.ts:15",
+      "note": "RED различает private/public manifest, root export, files и generated config; SPEC membership и точный release-set count остаются за GREEN gates."
+    },
+    {
+      "row": "Acceptance 2 — exclusive OpenAI/custom StreamFn transports; custom needs no settings and receives context/abort",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:72",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3 — distinct capped shell/preview outcome text with retained details",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:157",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4 — truthful custom trace and retained assistant identity; truthful OpenAI trace",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:94",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5 — neutral agent error and Playground-owned proxy guidance",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0436",
+      "status": "weak",
+      "citation": "packages/agent/src/session.test.ts:137",
+      "note": "Deletion-only implementation passes; added test proves neutral agent text but not Playground UI composition."
+    },
+    {
+      "row": "Acceptance 6 — packed consumers and full release-readiness gates",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/public-agent-release-readiness-evidence.md:54",
+      "note": ""
+    },
+    {
+      "row": "Fault: corrupt-input × transport options",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:113",
+      "note": ""
+    },
+    {
+      "row": "Fault: lossy-aggregate × shell/preview result",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:157",
+      "note": ""
+    },
+    {
+      "row": "Fault: provenance-lie × custom trace export",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:94",
+      "note": ""
+    },
+    {
+      "row": "Fault: network × default model request",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0436",
+      "status": "weak",
+      "citation": "packages/agent/src/session.test.ts:137",
+      "note": "Carrier proves loud product-neutral failure; it has no secret/config fixture and no Playground UI assertion."
+    },
+    {
+      "row": "Public createAgentSession custom/runtime admission behavior",
+      "source": "public-api",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:72",
+      "note": ""
+    },
+    {
+      "row": "Public AgentSessionOptions exclusive transport union",
+      "source": "public-api",
+      "trace": "scenario+ADR-0436",
+      "status": "weak",
+      "citation": "packages/agent/src/session.test.ts:80",
+      "note": "Runtime carrier exists, but unknown-as casts do not discriminate the exported TypeScript union."
+    },
+    {
+      "row": "Public AgentTrace custom config and assistant response metadata",
+      "source": "public-api",
+      "trace": "scenario+ADR-0436",
+      "status": "pass",
+      "citation": "packages/agent/src/session.test.ts:94",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/agent/src/session.test.ts:80",
+          "evidence": "pnpm exec vitest run packages/agent/src/session.test.ts packages/agent/src/publishing.test.ts: exactly 2 files/6 tests failed for the intended product gaps; pnpm --filter @riftydev/agent typecheck: exit 0.",
+          "summary": "Все 6 Acceptance и 4 Fault строки имеют committed carrier и missing строк нет, но transport type union, UI-owned guidance и no-leak часть проверены слабо.",
+          "authority": ""
+        }
+      ]
+    },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ],
+  "adjudication": []
+}

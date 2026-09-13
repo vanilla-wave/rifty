@@ -96,6 +96,8 @@ keeps working with its UI-owned proxy help.
 
 ## Decisions
 
+ready-verdict: 2026-09-14 — Contract+RED @ 0c257d0b0db739a26d1741a3dba6ea7fe31a0531
+
 - 2026-09-14 — dedup: no matching active item/map/trap/declined concept; the adjacent git/TypeScript publication item has different packages and no API work.
 - 2026-09-14 — package becomes release-ready, not already published; registry operations remain confirm-first.
 - 2026-09-14 — reuse native Pi `StreamFn`; no second callback abstraction.
