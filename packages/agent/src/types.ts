@@ -71,18 +71,32 @@ export interface AgentSettings {
   readonly baseUrl: string;
   readonly model: string;
   readonly apiKey?: string;
+}
+
+export interface AgentRunLimits {
   readonly maxToolCalls?: number;
   readonly runTimeoutMs?: number;
 }
 
-export interface AgentSessionOptions {
+export interface AgentSessionCommonOptions extends AgentRunLimits {
   readonly host: AgentHost;
-  readonly settings: AgentSettings;
   readonly tools?: readonly AgentTool[];
   readonly instructions?: readonly string[];
-  readonly fetch?: ProviderRequestOptions['fetch'];
-  readonly streamFn?: StreamFn;
 }
+
+export type AgentSessionOptions = AgentSessionCommonOptions &
+  (
+    | {
+        readonly settings: AgentSettings;
+        readonly fetch?: ProviderRequestOptions['fetch'];
+        readonly streamFn?: never;
+      }
+    | {
+        readonly streamFn: StreamFn;
+        readonly settings?: never;
+        readonly fetch?: never;
+      }
+  );
 
 export type AgentStatus = 'idle' | 'running' | 'done' | 'error' | 'aborted' | 'budget-exceeded';
 
@@ -104,7 +118,19 @@ export type AgentSessionEvent =
 export interface AgentTrace {
   readonly version: 1;
   readonly profile: string;
-  readonly config: Omit<AgentSettings, 'apiKey'>;
+  readonly config:
+    | {
+        readonly transport: 'openai-compatible';
+        readonly baseUrl: string;
+        readonly model: string;
+        readonly maxToolCalls: number;
+        readonly runTimeoutMs: number;
+      }
+    | {
+        readonly transport: 'custom';
+        readonly maxToolCalls: number;
+        readonly runTimeoutMs: number;
+      };
   readonly transcript: readonly AgentMessage[];
   readonly events: readonly { readonly at: number; readonly event: AgentSessionEvent }[];
   readonly status: AgentStatus;

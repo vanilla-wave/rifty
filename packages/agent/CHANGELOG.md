@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Make the package public; add settings-free native StreamFn transport and
+  truthful custom trace provenance (ADR-0436).
+- Put shell status/exit/error/worker/effects and preview HTTP status in bounded
+  model-facing result text; keep structured details.
+- Keep generic network errors product-neutral; Playground owns its proxy help.
+
 - Expose the shared coding policy for native consumers; retain the complete default browser prompt bytes.
 
 

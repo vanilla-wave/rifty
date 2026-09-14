@@ -49,7 +49,8 @@ export async function proveSnapshotBuild() {
       companion: currentSessionTools(),
       preview: () => createBrowserAgentPreview({ url: () => ready.url, frame: () => frame }),
     }),
-    settings: { baseUrl: 'https://scripted.invalid/v1', model: 'scripted', runTimeoutMs: 120_000 },
+    settings: { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
+    runTimeoutMs: 120_000,
     fetch: provider.fetch,
   });
   try {

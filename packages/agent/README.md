@@ -1,7 +1,7 @@
 # Agent
 
-Framework-free Pi coding agent over public rifty hosts. Private workspace
-package; not published. ADR-0424. Runtime packages do not depend on it.
+Framework-free Pi coding agent over public rifty hosts. Runtime packages do not
+depend on it. ADR-0424/0436.
 
 ```ts
 import { createAgentSession, createWorkbenchAgentHost } from '@riftydev/agent';
@@ -9,14 +9,30 @@ import { createAgentSession, createWorkbenchAgentHost } from '@riftydev/agent';
 const agent = createAgentSession({
   host: createWorkbenchAgentHost({ session: projectSession }),
   settings: { baseUrl, model },
+  maxToolCalls: 100,
+  runTimeoutMs: 180_000,
   instructions: ['Follow the project coding conventions.'],
-  // tools: native Pi AgentTool[], fetch or full streamFn: consumer-owned.
+  // tools: native Pi AgentTool[]; fetch is consumer-owned.
 });
 const unsubscribe = agent.subscribe(renderEvent);
 await agent.send('Inspect the project and fix the build.');
 const trace = await agent.exportTrace();
 await agent.dispose();
 unsubscribe();
+```
+
+For a consumer-owned model/wire/auth path, pass Pi's native `StreamFn` without
+OpenAI-compatible settings. It receives the current system prompt, messages,
+tools and request `AbortSignal`; close over the actual model/transport and return
+an `AssistantMessageEventStream` carrying its real response metadata.
+
+```ts
+const agent = createAgentSession({
+  host,
+  streamFn: (_unusedModel, context, options) =>
+    streamThroughConsumerModel(context, { signal: options?.signal }),
+  tools: domainTools,
+});
 ```
 
 The session owns its host handle. The Workbench adapter opens/closes one
@@ -63,10 +79,17 @@ diagnostic tools are offered only when provided. Optional Workbench companion:
 `createBrowserAgentPreview({url: () => preview.url, frame: () => iframe})`;
 omitting `frame` offers fetch only. Inaccessible documents fail loudly.
 
-The default transport is OpenAI-compatible chat completions. `apiKey` is
+The settings transport is OpenAI-compatible chat completions. `apiKey` is
 optional and memory-only; absent means no Authorization header. Consumers own
-auth, CSRF and request policy in their supplied fetch/streamFn. No key is saved
-in the trace config; supplied key strings are redacted from exported values.
+auth and request policy in their supplied fetch or full `streamFn`. No key is
+saved in trace config; supplied settings-key strings are redacted from exported
+values. Custom trace config identifies custom transport; actual model/provider/API
+metadata comes from retained assistant messages.
+
+Rifty-owned shell results begin with JSON status/exit/error/worker/effects;
+preview fetch begins with HTTP status. The envelope is included inside the same
+16 KiB text cap, so a following model turn can distinguish quiet outcomes.
+Consumer tools must put their own model-relevant outcome in text.
 
 Limits default to 100 tool calls / 180 seconds per `send`. Tool text results
 use a 16 KiB UTF-8 head/tail cap. Trace includes native transcript, events and

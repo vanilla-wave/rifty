@@ -10,7 +10,7 @@ Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](
 
 ## Packages
 
-**`npm i @riftydev/sdk`** is the umbrella front door ([`packages/rifty`](./packages/rifty)): framework-free `createSandbox()` plus twelve runtime layers on subpaths (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Each layer is also its own package; `workbench`, `shadow-registry` and `eddy` ship standalone. Sixteen names, all ESM, ship `.d.ts`, released in lockstep under the `@riftydev` scope ([publishing](./docs/public/publishing.md)).
+**`npm i @riftydev/sdk`** is the umbrella front door ([`packages/rifty`](./packages/rifty)): framework-free `createSandbox()` plus twelve runtime layers on subpaths (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Each layer is also its own package; `agent`, `workbench`, `shadow-registry` and `eddy` ship standalone. Seventeen names, all ESM, ship `.d.ts`, released in lockstep under the `@riftydev` scope ([publishing](./docs/public/publishing.md)).
 
 | Package | What it is | Runs in |
 |---|---|---|
@@ -27,6 +27,7 @@ Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](
 | [`@riftydev/service-worker`](./packages/service-worker) | Service Worker preview/HMR routing bridge | browser |
 | [`@riftydev/git`](./packages/git) | git over the VFS (isomorphic-git); smart-HTTP via a CORS proxy | anywhere |
 | [`@riftydev/ts-language-service`](./packages/ts-language-service) | In-browser `ts.LanguageService` over the VFS | anywhere |
+| [`@riftydev/agent`](./packages/agent) | Headless Pi coding-agent loop over public project hosts | browser |
 | [`@riftydev/workbench`](./packages/workbench) | Framework-free project / session / run / preview API (owner Worker) | browser + Worker |
 | [`@riftydev/shadow-registry`](./tools/shadow-registry) | Data tables of in-browser npm substitutions | anywhere |
 | [`@riftydev/eddy`](./services/eddy) | Opt-in fast-install resolver service (ADR-0182) | Node service |

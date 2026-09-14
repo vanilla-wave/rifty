@@ -67,6 +67,12 @@ function messageText(message: AgentMessage): string {
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const json = (value: unknown) => JSON.stringify(value, null, 2) ?? String(value);
 
+function playgroundAgentDetail(detail: string): string {
+  return /failed to fetch|fetch failed|networkerror|connection error/i.test(detail)
+    ? `${detail}. Browser endpoint access failed; for CORS use the playground dev proxy (RIFTY_AI_PROXY_TARGET, Base URL /ai-proxy/v1).`
+    : detail;
+}
+
 interface ToolResult {
   readonly content: readonly { readonly type: string; readonly text?: string }[];
   readonly details?: unknown;
@@ -252,14 +258,20 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
     const selected = validateSettings(settings());
     const host = createPlaygroundAgentHost(props);
     try {
-      const agent = createAgentSession({ host, settings: selected });
+      const { maxToolCalls, runTimeoutMs, ...transportSettings } = selected;
+      const agent = createAgentSession({
+        host,
+        settings: transportSettings,
+        maxToolCalls,
+        runTimeoutMs,
+      });
       const detach = agent.subscribe((event) => {
         if (!alive) return;
         if (event.type === 'agent') receive(event.event);
         else if (event.type === 'status') {
           if (event.status === 'running') runStart = items().length;
           setStatus(event.status);
-          setDetail(event.detail ?? '');
+          setDetail(playgroundAgentDetail(event.detail ?? ''));
         }
       });
       active = { agent, host, detach };
@@ -369,6 +381,8 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
     },
     async sessionMetadata() {
       const trace = await hook.exportTrace();
+      if (trace.config.transport !== 'openai-compatible')
+        throw new Error('Playground benchmark requires OpenAI-compatible transport');
       return {
         ...(taskId ? { taskId } : {}),
         model: trace.config.model,

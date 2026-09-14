@@ -18,6 +18,11 @@ function failedResult(text: string, details: Record<string, unknown>): AgentTool
   return result(text, { ...details, [failure]: true });
 }
 
+function modelResultText(metadata: Record<string, unknown>, body: string): string {
+  const heading = JSON.stringify(metadata);
+  return body ? `${heading}\n${body}` : heading;
+}
+
 export function isToolFailure(value: AgentToolResult<unknown>): boolean {
   return (
     value.details !== null &&
@@ -293,10 +298,28 @@ export function standardTools(
           );
           const makeResult =
             outcome.status !== 'exited' || outcome.exitCode !== 0 ? failedResult : result;
-          return makeResult(`${outcome.stdout}${outcome.stderr}`, {
+          const details = {
             ...outcome,
             command: args.command,
-          });
+          };
+          return makeResult(
+            modelResultText(
+              {
+                status: outcome.status,
+                exitCode: outcome.exitCode,
+                ...(outcome.worker === undefined ? {} : { worker: outcome.worker }),
+                ...(outcome.effects === undefined ? {} : { effects: outcome.effects }),
+                ...(outcome.error === undefined
+                  ? {}
+                  : {
+                      error:
+                        outcome.error instanceof Error ? hostError(outcome.error) : outcome.error,
+                    }),
+              },
+              `${outcome.stdout}${outcome.stderr}`,
+            ),
+            details,
+          );
         },
       ),
     );
@@ -321,9 +344,8 @@ export function standardTools(
         async (args, signal) => {
           const response = await preview.fetch(args.path ?? '', signal);
           const makeResult = response.status >= 400 ? failedResult : result;
-          return makeResult(response.body, {
-            statusCode: response.status,
-          });
+          const details = { statusCode: response.status };
+          return makeResult(modelResultText(details, response.body), details);
         },
       ),
     );

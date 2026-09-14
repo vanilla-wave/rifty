@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Keep AI endpoint CORS/proxy guidance in the Playground UI while the public
+  agent package reports product-neutral network failures.
+
 - Agent shell names an incomplete command input as its failure; nothing executed.
 - Restore React type declarations in fresh installs and re-bake dependency snapshots with npm-correct archive paths.
 

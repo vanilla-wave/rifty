@@ -187,7 +187,8 @@ export async function sandboxAgentCycle(
   });
   const agent = createAgentSession({
     host,
-    settings: { ...settings, runTimeoutMs: 180_000 },
+    settings,
+    runTimeoutMs: 180_000,
     fetch: provider.fetch,
   });
   const start = async () => {
