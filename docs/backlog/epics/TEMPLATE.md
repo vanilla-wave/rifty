@@ -27,7 +27,8 @@ tier: <works|robust|production — required at ready>
 
 ## Invariants
 
-<!-- Drafted at FIT from Outcome/User scenario/Decisions — never new scope.
+<!-- Drafted at FIT — in the refine session for a refined epic (rifty-refine §4) —
+     from Outcome/User scenario/Decisions — never new scope.
      Each checked false on current main (evidence comment above the list).
      Reported to the user at FIT completion (README §Report).
      A run only proves them; every child row traces to one (RDY-3).
@@ -60,13 +61,12 @@ Index, not store: one line + link per entry; content lives on items/ledger.
 
 <!-- Fog: in-scope questions not yet phrasable as a contract. A child whose
      contract depends on an open question is not seeded. Don't pre-slice fog.
-     Owner-typed: a user-owned observable-scope question answerable now is
-     ASKED at FIT, never parked here (stages/fit.md 3); owner: user lines
-     carry why they are not answerable yet and route to rifty-refine at
-     PICKUP, never to a probe. Split a mixed question by owner. -->
+     A user-owned question is ASKED at FIT (stages/fit.md 3); unanswered →
+     the goal stays draft, the question recorded here as owner: user. A ready
+     map is agent-owned; owner: user otherwise only mid-run (STOP-4). Split a
+     mixed question by owner. -->
 
-- <question> — owner: <user|agent> — <what settles it: probe/spike/decision;
-  for owner: user — why not answerable now>
+- <question> — owner: agent — <what settles it: probe/spike/design>
 
 ## Out of scope
 

@@ -1,6 +1,6 @@
 ---
 name: rifty-to-backlog
-description: Formalize a rifty finding or idea into a deduplicated, gated backlog draft. Direct invocation = mid-task/agent intake (audit/review/post-merge discoveries, no user in session); user-brought input enters via rifty-refine, which runs this formalization as its final step.
+description: Formalize a rifty finding or idea into a deduplicated, gated backlog draft. Direct invocation = mid-task/agent intake (audit/review/post-merge discoveries, no user in session); user-brought input enters via rifty-refine, which runs this formalization as its formalize step.
 ---
 
 Capture = verify relevance → dedup → record a fact/question that must wait.
@@ -38,7 +38,8 @@ Use `docs/process/rules/fault-classes.md` §§Boundary failure models/Class-kill
 
 ## 4. Mint
 
-Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md` — committed
+Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md` (an epic:
+`epics/<slug>/` from `epics/TEMPLATE.md`, `goal.md` draft) — committed
 to the discovering unit's branch; with no unit branch to ride (a post-merge
 audit) it is its own docs-only PR (`docs/process/rules/pr.md` `PR-2`). A draft is
 one of two shapes (README §Shape): **question** (`## Question`, no prescribed
@@ -55,7 +56,8 @@ otherwise at FIT/PICKUP. Preserve any early record for reuse; formalizing the
 same premise does not require another premise critique.
 
 Every completed write-up, including a factual/agent-only capture, gets `RDY-6`
-§Final check of the written result after the draft is written. Use a fresh
+§Final check of the written result after the draft is written (an epic
+continuing into FIT in this session: that check is `stages/fit.md` 8). Use a fresh
 reviewer on the final draft set and original sources; an early Challenge cannot
 substitute. Keep explicit unanswered questions in drafts; do not self-run a
 user interview in an agent-only context or claim their scope settled.

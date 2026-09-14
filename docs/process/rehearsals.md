@@ -159,3 +159,68 @@ D/I/E/F/G/J. Early V critique can avoid a second scope answer but costs one
 extra context if the later premise check could have shared Contract+RED.
 Move an already-separate critic earlier → no extra context. Reuse unchanged
 premise, never remove required Contract+RED to pay for earlier feedback.
+
+## Refine → FIT boundary — regression suite, 2026-09-12
+
+Narrow paper rehearsal on the working tree of the refine→FIT fix (seed:
+PR #333 refined an epic with the user present, closed every fork, left
+`## Invariants` empty and `status: draft`, planned "FIT via `rifty-goal`
+after merge" in a second session). Replay each cell to its exit; cite the
+clause; `before` = text at `acf594da9`.
+
+Authorities: `rifty-refine/SKILL.md` §3.6, §4 (lines 51, 55-68);
+`stages/fit.md:3-9, 24-26, 33-34`; `docs/backlog/README.md` §Epic fit
+:102-105, :111-118, §Report :144-146; `docs/process/README.md:49-52`;
+`rifty-goal/SKILL.md:20, 25-28`; `rules/pr.md` `PR-3` :20-21;
+`epics/TEMPLATE.md:30, 62-68`; `artifacts/map.md:9`; `RDY-6` 4 :124-126;
+AGENTS.md:31
+("epic missing tier/Invariants → fit it yourself"); unchanged: `RDY-1`,
+`STOP-1a` (stops.md:15-18), stops.md:23-27 (§STOP-1 mid-run fog), `rifty-to-backlog`
+§4 :44 / §5 :62-63, `stages/pickup.md`, `implement.md:18`.
+
+Axes the seeds kept: size (item ↔ epic) · certainty (all forks closed ↔ a
+user fork open) · origin (user in session ↔ agent-only / legacy hand-off) ·
+timing (build now ↔ hand-off later, PR unmerged) · distance (product ↔ the
+process text). Dropped: spread — every seed lands on "docs only".
+
+| # | Cell / seed | Persona / want | Trace and exit (after) | Verdict after / before |
+|---|---|---|---|---|
+| R1 | epic · forks closed · user present / PR #333 `epics/ai-agent-mode-and-bench` | owner: "воскресить #111", then hand the goal off in one command | refine §4:56-58 → fit.md 4 (Invariants, tier) → 8 (one final check on the whole set) → 9 `ready` + report → on its branch, packaging `PR-3` → process README:39 hand-off → `rifty-goal`:21 PICKUP | **pass** / **fail**: refine §4 "ends with preparation" + §3.6 vs TEMPLATE:30 dual owner → Invariants empty; `rifty-goal` had no row for a draft goal dir (silence); FIT scheduled for a session without the user (fit.md:5 before), PR merge as a stage boundary (`PR-3`), "immediately runnable" (backlog README:101) not met. Tally before 2·0·4+2·~12·2·2; after 1·0·4·~12·1·1 |
+| R2 | epic · one user question unanswered / `no-coi-sandbox-tier` FIT 2026-08-28 | owner: "не знаю пока", wants the question kept and nothing built on a guess | refine §3 grill → no answer → fit.md:24-26 goal stays `draft` (step 9 does not flip); §4: FIT resumes on the answer — in-session (§3) or at hand-off: `rifty-goal`:20 FIT, :25-28 ask the recorded `owner: user` question first, in-session, then FIT from step 1; packaging `PR-3` | **pass** / **fail** before: backlog README §Epic fit :111-113 let the question ride as `owner: user` fog in a `ready` goal → the autonomous run stops at `STOP-1a` mid-way; `rifty-goal` table had no draft-goal row |
+| R3 | legacy ready single-file epic / `epics/embeddable-dev-loop.md` (no Invariants) | owner hands off "run embeddable-dev-loop" | `rifty-goal`:20 legacy → fit.md:7-9 FIT in the hand-off session, step 3 asks the user present → 9 `ready` → PICKUP | **pass** / pass (banked G); backfire re-rehearsed clean — no refine session required |
+| R4 | agent-only epic capture — **invented** (pole origin=nobody asked × size=epic; captures on record are items) | post-merge audit agent finds a multi-item outcome | `rifty-to-backlog` §1-4 draft, §5:62-63 no interview → refine not entered (Preconditions:12) → own docs-only PR only with no branch (§4:44, `PR-2`) → user brings it → process README:47 refine → FIT then | **pass** / pass; the fix does not reach it |
+| R5 | standalone item · same day / `playground/react-vite-starter` (created + Contract+RED 2026-09-02, PR #300) | maintainer: build the starter now | refine → §4:65-66 item `draft → ready` at PICKUP (`RDY-1`) → process README:48 → pickup.md 2 → Contract+RED → IMPLEMENT, one PR (implement.md:18) | **pass** / pass; backfire clean — §4:56 says "An epic" |
+| R6 | mid-slice discovery / banked M `process.ts:659` | agent mid-slice | `rifty-to-backlog` §4:43-44 rides the unit branch (`PR-2`) | pass on routing; ceremony fail carried (banked M) |
+| R7 | user "just file it" / banked O `runtime-js/node-entry-runtime-binding-variant-coverage` (epic variant: same clause) | user: record the gap, decide later | refine §3 "just file it → Formalize" → §4:58-60 goal stays `draft` → later `rifty-goal`:20 | **pass** / pass; backfire clean — FIT not forced |
+| R8 | hand-off right after FIT, refine PR unmerged / PR #333 counterfactual "теперь запускай" | owner: start the run without a merge round-trip | refine §4 → `ready` on branch → process README:39 → `rifty-goal`:21 PICKUP → branch/PR choice: `PR-3` "one draft PR per goal by default; combine or split" | **pass** with named silence (which branch: driver's, principle `PR-3`) / same |
+| R9 | the process text itself / this diff | maintainer: fix the text, rehearse, one PR | process README:48 authorized change, no minted draft (`PR-2`) → `RDY-8` docs checks + Final+GREEN → `pr:check` doc lanes | pass on routing; ceremony fail carried (banked B). Observed: `pr:check` 19/20 in a fresh worktree (`check:esbuild-legacy-retirement`: build outputs missing), 20/20 docs-only after `pnpm build:libs` |
+
+Score (changed cells only). Before: R1 fails one-door (three texts answered
+"who lands Invariants": refine §3.6, TEMPLATE:30, AGENTS.md:31), no-manual-
+relay (merge → user re-hands off FIT → re-hands off the run), serialise-only-
+where-it-buys (a merge wait before FIT), uncertainty-legible (an empty section
+pointing at a stage nobody was scheduled to run), and the repo's own `PR-3`,
+process README:41-42 "never return control between stages", fit.md:5 (before)
+"the user is present", backlog README:101 "immediately runnable". R2 before: silence on the driver
+path. After: 0 new fails; R6/R9 ceremony fails carried from the banked suite.
+
+Constraint: preparation had two names — refine (an entry) and FIT (a stage) —
+and the text keyed FIT's start to a hand-off, never to the user's presence;
+so with the user in the room the driver stopped at the name boundary, shipped
+a draft, and booked the user-needing half for a session without the user.
+Explains R1 (all), R2 silence, the §3.6/TEMPLATE dual owner. Does NOT explain
+R6/R9 ceremony (banked constraint: cost keyed to unit shape) or the legacy
+`ready`/`in-progress` epics without Invariants (by design: FIT at hand-off, R3).
+
+Decision 2026-09-12 (user): an unanswered user question ALWAYS keeps the goal
+`draft` — `owner: user` fog removed from ready goals (README §Epic fit,
+TEMPLATE, `RDY-6` 4, fit.md 3-4, `artifacts/map.md`); `STOP-4` mid-run fog
+unchanged. A first cut of this fix let a child-only user question ride as
+fog in a ready goal (fresh reviewer finding); rejected — it re-creates the
+mid-run stop the fix exists to remove.
+
+Backfire: R2 (unanswered question must stay `draft`) — fit.md 3, refine §4; R3 (legacy
+without refine) — fit.md:7-9; R4 (agent-only never interviews) — refine
+Preconditions:12 + `rifty-to-backlog`:62-63; R5 (items never FIT) — §4:56
+"An epic"; R7 (just-file) — §4:58-60. All re-rehearsed clean. Residual silence:
+R8 branch choice (agent path, `PR-3`).

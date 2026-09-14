@@ -32,8 +32,8 @@ A draft is one of two shapes — never a solution without its decision:
 
 - **question** — `## Question` + context; no prescribed carrier (a carrier with
   no spike/ADR fact = frozen assumption). Exits: compiled to `ready`, absorbed
-  into a goal's `map.md` fog, or declined into `docs/adr/README.md` §Declined
-  concepts.
+  into a goal's `map.md` fog (agent-owned), or declined into
+  `docs/adr/README.md` §Declined concepts.
 - **finding** — observed fact/gap with evidence: `## Context`, honest sources,
   compat ❌ / code-marker link. A draft whose `sources`/`code` refs no longer
   resolve on main is stale: refresh or delete.
@@ -99,19 +99,23 @@ A ready goal (`goal.md`) needs `## Outcome`, end-to-end `## User scenario`,
 numbered checkable `## Invariants` (each false on current main, evidence
 recorded), and `tier`. No approval gate: FIT flips `status: ready` itself and
 ends with the completion report (§Report) — a ready goal is immediately
-runnable.
+runnable. FIT runs where the outcome was ratified: in the refine session for a
+refined epic (`rifty-refine` §4), in the hand-off session for a legacy epic.
+A `draft` goal directory is unfinished FIT input (an unanswered user question
+or a just-file); no merge is required before FIT resumes (`PR-3`).
 `map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
 `ledger.md` opens empty. Seeded children stay `draft` — a ready goal hands off
 with draft children; each compiles to `ready` at its own PICKUP, never at FIT
 (`docs/process/rules/readiness.md` `RDY-1`).
 
-Fog is owner-typed. A user-owned observable-scope question (what the value
-requires, what must NOT change, whose scenario counts) is asked at FIT while
-the user is there — a probe existing for its technical half is not a reason to
-park it (`docs/process/stages/fit.md` 3). It reaches fog only when it is not answerable
-yet, tagged `owner: user` + why; PICKUP routes such a line to `rifty-refine`,
-never to a probe (`docs/process/artifacts/map.md`). Every fog line: `<question> — owner: user|agent — <what
-settles it>`. A rejected rival route is recorded checkable in goal `##
+A user-owned observable-scope question (what the value requires, what must
+NOT change, whose scenario counts) is asked at FIT while the user is there — a
+probe existing for its technical half is not a reason to park it
+(`docs/process/stages/fit.md` 3). Unanswered → the goal stays `draft`: a ready
+goal carries no `owner: user` fog, so its run is autonomous. Fog in a ready
+map is agent-owned — `<question> — owner: agent — <what settles it>`;
+`owner: user` lives only in a `draft` goal (unanswered at FIT) or mid-run
+(`STOP-4`). A rejected rival route is recorded checkable in goal `##
 Decisions`: `rejected route: <route> — violates <I#|Outcome clause>` — the
 clause a later agent cites instead of re-deriving the comparison. Seed order proves the minimal pattern first (the
 null/install-only case of a shared mechanism lands before machinery for the
@@ -137,8 +141,9 @@ the first IMPLEMENT. A standalone pickup without an earlier report emits it
 at that boundary. Repeated stages need only material changes, not the whole
 report again. Mid-task capture needs only its durable record.
 
-A report is not an approval gate. Refine-only authorizes preparation, not a
-build; already-authorized implementation continues without another hand-off.
+A report is not an approval gate. Refine-only authorizes preparation — for an
+epic, through FIT to a ready goal — not a build; already-authorized
+implementation continues without another hand-off.
 An unresolved user scope/value choice still needs the user's answer (`RDY-6`);
 silence is not a decision.
 

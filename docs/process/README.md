@@ -46,8 +46,12 @@ orchestration engine. Fresh contexts are for independent decisions (`DEC-5`).
 
 Intent selects the entry: unsettled user input → `rifty-refine`; observed
 failure → `rifty-fix`; authorized item/change → PICKUP; whole goal →
-`rifty-goal`. `rifty-to-backlog` records work that must wait. Capturing a fact
-never requires another hand-off for work already authorized in this session.
+`rifty-goal`. An epic refined with the user present continues into FIT in
+that session and ends `ready` — `draft` only on a just-file or an unanswered
+user question (`stages/fit.md` 3); the user's whole-goal hand-off starts the
+run — in-session on the same branch when given there. `rifty-to-backlog`
+records work that must wait. Capturing a fact never requires another hand-off
+for work already authorized in this session.
 
 ## Stops
 
