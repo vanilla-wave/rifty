@@ -33,8 +33,8 @@ export async function provePackedAgent(
     settings: {
       baseUrl: new URL('/mock-model/v1', location.href).href,
       model: 'scripted',
-      runTimeoutMs: 120_000,
     },
+    runTimeoutMs: 120_000,
     fetch: provider.fetch,
   });
   try {

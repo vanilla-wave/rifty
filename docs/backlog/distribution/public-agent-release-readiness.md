@@ -102,3 +102,4 @@ ready-verdict: 2026-09-14 — Contract+RED @ 0c257d0b0db739a26d1741a3dba6ea7fe31
 - 2026-09-14 — package becomes release-ready, not already published; registry operations remain confirm-first.
 - 2026-09-14 — reuse native Pi `StreamFn`; no second callback abstraction.
 - 2026-09-14 — public package and transport/trace contract recorded by ADR-0436.
+- 2026-09-14 — preview details test matches required status fields while retaining the existing private failure marker; no contract criterion changed.

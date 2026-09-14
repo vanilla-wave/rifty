@@ -83,3 +83,54 @@ exit 0
 The REDs exercise the desired public entry, native Pi loop, standard tool result
 boundary and generated manifest. They fail on the current product behavior, not
 an import or fixture failure.
+
+## Root cause and fault-class sweep
+
+`lossy-aggregate` was born where rifty projected structured shell/preview
+outcomes to Pi text: shell kept only stdout/stderr and preview kept only body.
+Pi retained `details` in the transcript but provider text serializers need not
+carry it. The shared result-text chokepoint now puts rifty-owned metadata before
+the body and the existing UTF-8 cap wraps the whole value. Sibling sweep:
+file/list/search tools already report their outcome in text; diagnostics and DOM
+preview actions serialize their returned value; consumer tools own their text.
+Only shell and preview-fetch had rifty-owned decisive metadata outside text.
+
+`provenance-lie` was born in trace construction: it always copied required
+OpenAI settings even when a custom stream performed the call. Exclusive
+transport admission now selects either the real settings model or Pi's native
+unknown loop parameter; custom trace config makes no endpoint/model claim and
+retains actual assistant response metadata.
+
+## GREEN proof
+
+```text
+pnpm exec vitest run packages/agent/src/session.test.ts packages/agent/src/publishing.test.ts
+2 files, 7 tests passed
+
+pnpm typecheck
+25 workspace projects passed
+
+pnpm test:browser-unit tests/browser-unit/agent-core.spec.ts
+16 passed
+
+RIFTY_PLAYGROUND_PORT=5287 pnpm exec playwright test --project=chromium-heavy --workers=1 tests/e2e/ai-mode.spec.ts --grep "storage refusal"
+1 passed; Playground still shows proxy guidance
+
+pnpm build:libs
+17 workspace targets passed, including agent JS + declarations
+
+pnpm --filter @riftydev/agent pack --pack-destination <temporary-directory>
+tarball contains dist JS/map/declarations, package manifest, README, CHANGELOG, LICENSE;
+published manifest has no private flag, root-only dist export and exact first-party 0.1.0 deps
+
+pnpm test:packed-consumer
+1 passed in 166.6s; real tarball-only Workbench/no-COI agent flows
+
+pnpm pr:check
+25/25 passed; test:run 200.1s, parity 61.4s
+```
+
+The committed RED at `0c257d0b0` is the revert check: the prior projection,
+transport admission/error formatter and private manifest fail all six behavioral
+tests; the delivered owners make the same tests green without changing their
+contract assertions.

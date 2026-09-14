@@ -3,6 +3,7 @@ import { streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
 import {
   type AgentSession,
   type AgentSessionEvent,
+  type StreamFn,
   Type,
   createAgentSession,
   createBrowserAgentPreview,
@@ -14,7 +15,19 @@ import { currentProject, currentSessionTools } from './sealed-playground-workben
 const settings = {
   baseUrl: 'https://scripted.invalid/v1',
   model: 'scripted',
-  runTimeoutMs: 20_000,
+};
+
+const scriptedModel: Model<'openai-completions'> = {
+  id: settings.model,
+  name: settings.model,
+  api: 'openai-completions',
+  provider: 'rifty',
+  baseUrl: settings.baseUrl,
+  reasoning: false,
+  input: ['text'],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 128_000,
+  maxTokens: 8192,
 };
 
 async function file(path: string) {
@@ -30,37 +43,31 @@ function setup(
   const provider = scriptedProvider(replies);
   const events: AgentSessionEvent[] = [];
   const host = createWorkbenchAgentHost({ session: currentProject() });
-  const session = createAgentSession({
+  const streamFn: StreamFn = (_model, context, options) => {
+    if (provider.requests.length > 0) {
+      const callIds = context.messages.flatMap((message) =>
+        message.role === 'assistant'
+          ? message.content.filter((block) => block.type === 'toolCall').map((block) => block.id)
+          : [],
+      );
+      const results = context.messages.filter((message) => message.role === 'toolResult');
+      for (const id of callIds) {
+        if (!results.some((result) => result.toolCallId === id))
+          throw new Error(`Custom stream received dangling call ${id}`);
+      }
+    }
+    return streamSimple(scriptedModel, context, {
+      ...options,
+      apiKey: 'unused',
+      headers: { Authorization: null },
+      fetch: provider.fetch,
+      maxRetries: 0,
+    });
+  };
+  const common = {
     host,
-    settings: { ...settings, maxToolCalls, apiKey },
-    fetch: provider.fetch,
-    ...(customStream
-      ? {
-          streamFn: (model, context, options) => {
-            if (provider.requests.length > 0) {
-              const callIds = context.messages.flatMap((message) =>
-                message.role === 'assistant'
-                  ? message.content
-                      .filter((block) => block.type === 'toolCall')
-                      .map((block) => block.id)
-                  : [],
-              );
-              const results = context.messages.filter((message) => message.role === 'toolResult');
-              for (const id of callIds) {
-                if (!results.some((result) => result.toolCallId === id))
-                  throw new Error(`Custom stream received dangling call ${id}`);
-              }
-            }
-            return streamSimple(model as Model<'openai-completions'>, context, {
-              ...options,
-              apiKey: 'unused',
-              headers: { Authorization: null },
-              fetch: provider.fetch,
-              maxRetries: 0,
-            });
-          },
-        }
-      : {}),
+    maxToolCalls,
+    runTimeoutMs: 20_000,
     instructions: ['Project instruction: preserve the existing file.'],
     tools: [
       {
@@ -105,7 +112,12 @@ function setup(
         },
       },
     ],
-  });
+  };
+  const session = createAgentSession(
+    customStream
+      ? { ...common, streamFn }
+      : { ...common, settings: { ...settings, apiKey }, fetch: provider.fetch },
+  );
   session.subscribe((event) => events.push(event));
   return { session, provider, events };
 }
@@ -363,7 +375,8 @@ export async function proveTimeBudget() {
   let aborted = false;
   const session = createAgentSession({
     host,
-    settings: { ...settings, runTimeoutMs: 100 },
+    settings,
+    runTimeoutMs: 100,
     fetch: (_input, init) =>
       new Promise<Response>((_resolve, reject) => {
         const signal = init?.signal;

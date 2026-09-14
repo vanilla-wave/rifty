@@ -40,6 +40,11 @@ const BASE_KEYWORDS = ['rifty', 'browser', 'webcontainer'];
 // addExports: subpath exports to add to the dev exports map before deriving.
 // dropExports: dev-only subpaths to exclude from the published exports.
 const SPEC = {
+  '@riftydev/agent': {
+    dir: 'packages/agent',
+    sideEffects: false,
+    keywords: ['ai', 'coding-agent', 'tools', 'sandbox'],
+  },
   // Umbrella front door (EPIC B / ADR-0071). `@riftydev/sdk`: re-exports every
   // @riftydev/* layer on a subpath plus the framework-free createSandbox()
   // façade. First-party deps stay external (DD-1), so subpath imports share the
@@ -189,6 +194,8 @@ const SPEC = {
 };
 
 const DESCRIPTIONS = {
+  '@riftydev/agent':
+    'Framework-free Pi coding agent over public rifty project hosts, with consumer-owned model transport and tools.',
   '@riftydev/sdk':
     'rifty SDK — a browser-based Node-compatible runtime + WASI runner. One install, all the parts, plus a framework-free createSandbox() façade.',
   '@riftydev/io':

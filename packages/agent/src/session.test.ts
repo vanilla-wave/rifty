@@ -2,9 +2,10 @@ import type { StreamFn } from '@earendil-works/pi-agent-core';
 import {
   type AssistantMessage,
   type Context,
+  Type,
   createAssistantMessageEventStream,
 } from '@earendil-works/pi-ai';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { createAgentSession } from './session.ts';
 import { standardTools, wrapTool } from './tools.ts';
 import type {
@@ -12,6 +13,7 @@ import type {
   AgentCommandResult,
   AgentHost,
   AgentSessionOptions,
+  AgentSettings,
 } from './types.ts';
 
 const usage = {
@@ -69,6 +71,17 @@ async function executeStandard(capabilities: AgentCapabilities, name: string) {
 }
 
 describe('public agent transport contract', () => {
+  it('exposes exclusive default and custom transport option types', () => {
+    expectTypeOf<{
+      host: AgentHost;
+      settings: AgentSettings;
+    }>().toMatchTypeOf<AgentSessionOptions>();
+    expectTypeOf<{ host: AgentHost; streamFn: StreamFn }>().toMatchTypeOf<AgentSessionOptions>();
+    expectTypeOf<
+      Extract<AgentSessionOptions, { settings: AgentSettings; streamFn: StreamFn }>
+    >().toEqualTypeOf<never>();
+  });
+
   it('runs a native custom stream without network settings and traces actual response identity', async () => {
     const contexts: Context[] = [];
     const signals: (AbortSignal | undefined)[] = [];
@@ -82,6 +95,18 @@ describe('public agent transport contract', () => {
       streamFn,
       maxToolCalls: 7,
       runTimeoutMs: 2_000,
+      instructions: ['Consumer instruction.'],
+      tools: [
+        {
+          name: 'consumer_tool',
+          label: 'Consumer tool',
+          description: 'Consumer-owned domain action',
+          parameters: Type.Object({}),
+          async execute() {
+            return { content: [{ type: 'text' as const, text: 'unused' }] };
+          },
+        },
+      ],
     } as unknown as AgentSessionOptions);
     try {
       await session.send('Use the consumer callback.');
@@ -90,6 +115,8 @@ describe('public agent transport contract', () => {
       expect(contexts).toHaveLength(1);
       expect(contexts[0]?.messages[0]).toMatchObject({ role: 'user' });
       expect(contexts[0]?.systemPrompt).toContain('coding agent');
+      expect(contexts[0]?.systemPrompt).toContain('Consumer instruction.');
+      expect(contexts[0]?.tools?.map((tool) => tool.name)).toContain('consumer_tool');
       expect(signals[0]).toBeInstanceOf(AbortSignal);
       expect(trace.config).toEqual({
         transport: 'custom',
@@ -222,7 +249,7 @@ describe('model-facing standard tool outcomes', () => {
       const text = resultText(result);
       texts.push(text);
       expect(text).toContain(`"statusCode":${status}`);
-      expect(result.details).toEqual({ statusCode: status });
+      expect(result.details).toMatchObject({ statusCode: status });
     }
     expect(new Set(texts).size).toBe(2);
 

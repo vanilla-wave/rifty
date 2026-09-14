@@ -17,33 +17,35 @@ function positiveInteger(value: number, name: string): number {
   return value;
 }
 
-function explainError(message: string): string {
-  return /failed to fetch|fetch failed|networkerror|connection error/i.test(message)
-    ? `${message}. Browser endpoint access failed; for CORS use the playground dev proxy (RIFTY_AI_PROXY_TARGET, Base URL /ai-proxy/v1).`
-    : message;
-}
-
 export function createAgentSession(options: AgentSessionOptions): AgentSession {
-  const { host, settings } = options;
-  if (!settings.model.trim()) throw new TypeError('Agent model is required');
-  const baseUrl = new URL(
-    settings.baseUrl,
-    typeof location === 'undefined' ? undefined : location.href,
-  ).href;
-  const maxToolCalls = positiveInteger(settings.maxToolCalls ?? 100, 'maxToolCalls');
-  const runTimeoutMs = positiveInteger(settings.runTimeoutMs ?? 180_000, 'runTimeoutMs');
-  const model: Model<'openai-completions'> = {
-    id: settings.model,
-    name: settings.model,
-    api: 'openai-completions',
-    provider: 'rifty',
-    baseUrl,
-    reasoning: false,
-    input: ['text'],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 128_000,
-    maxTokens: 8192,
-  };
+  const { host } = options;
+  const hasSettings = options.settings !== undefined;
+  const hasCustomStream = options.streamFn !== undefined;
+  if (hasSettings === hasCustomStream)
+    throw new TypeError('Exactly one agent transport is required: settings or streamFn');
+  const settings = options.settings;
+  if (!hasSettings && options.fetch !== undefined)
+    throw new TypeError('Custom agent transport owns fetch through streamFn');
+  if (settings && !settings.model.trim()) throw new TypeError('Agent model is required');
+  const model: Model<'openai-completions'> | undefined = settings
+    ? {
+        id: settings.model,
+        name: settings.model,
+        api: 'openai-completions',
+        provider: 'rifty',
+        baseUrl: new URL(
+          settings.baseUrl,
+          typeof location === 'undefined' ? undefined : location.href,
+        ).href,
+        reasoning: false,
+        input: ['text'],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128_000,
+        maxTokens: 8192,
+      }
+    : undefined;
+  const maxToolCalls = positiveInteger(options.maxToolCalls ?? 100, 'maxToolCalls');
+  const runTimeoutMs = positiveInteger(options.runTimeoutMs ?? 180_000, 'runTimeoutMs');
   const listeners = new Set<(event: AgentSessionEvent) => void>();
   const events: { at: number; event: AgentSessionEvent }[] = [];
   const timings: { startedAt: number; endedAt: number }[] = [];
@@ -86,11 +88,12 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   }
 
   const agent = new Agent({
-    initialState: { model, ...refreshCapabilities() },
+    initialState: { ...(model ? { model } : {}), ...refreshCapabilities() },
     toolExecution: 'sequential',
     streamFn:
       options.streamFn ??
       ((selected, context, requestOptions) => {
+        if (!settings) throw new TypeError('Default agent transport settings are unavailable');
         if (selected.api !== 'openai-completions')
           throw new TypeError('Default transport requires openai-completions');
         return streamSimple(selected as Model<'openai-completions'>, context, {
@@ -226,11 +229,11 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       } else if (stopRequested) outcome = 'aborted';
       else if (agent.state.errorMessage) {
         outcome = 'error';
-        outcomeDetail = explainError(agent.state.errorMessage);
+        outcomeDetail = agent.state.errorMessage;
       } else outcome = 'done';
     } catch (error) {
       outcome = budgetReason ? 'budget-exceeded' : stopRequested ? 'aborted' : 'error';
-      outcomeDetail = explainError(error instanceof Error ? error.message : String(error));
+      outcomeDetail = error instanceof Error ? error.message : String(error);
     } finally {
       clearTimeout(timer);
       timings.push({ startedAt, endedAt: Date.now() });
@@ -297,7 +300,15 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       const trace: AgentTrace = {
         version: 1,
         profile: PROMPT_PROFILE_ID,
-        config: { baseUrl: settings.baseUrl, model: settings.model, maxToolCalls, runTimeoutMs },
+        config: settings
+          ? {
+              transport: 'openai-compatible',
+              baseUrl: model?.baseUrl ?? settings.baseUrl,
+              model: settings.model,
+              maxToolCalls,
+              runTimeoutMs,
+            }
+          : { transport: 'custom', maxToolCalls, runTimeoutMs },
         transcript: agent.state.messages,
         events,
         timings,
@@ -305,10 +316,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         usage,
         finalDiff,
       };
+      const apiKey = settings?.apiKey;
       const serialized = JSON.stringify(trace, (_key, value: unknown) =>
-        typeof value === 'string' && settings.apiKey
-          ? value.split(settings.apiKey).join('[redacted]')
-          : value,
+        typeof value === 'string' && apiKey ? value.split(apiKey).join('[redacted]') : value,
       );
       return JSON.parse(serialized) as AgentTrace;
     },

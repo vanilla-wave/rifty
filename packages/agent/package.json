@@ -1,15 +1,32 @@
 {
   "name": "@riftydev/agent",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
   "description": "Headless Pi coding agent over public rifty project hosts.",
+  "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/agent"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "browser", "webcontainer", "ai", "coding-agent", "tools", "sandbox"],
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
   },
-  "files": ["dist", "README.md", "CHANGELOG.md"],
+  "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
+    "access": "public",
     "main": "./dist/index.js",
+    "module": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {
       ".": {

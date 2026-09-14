@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Make `@riftydev/agent` release-ready with native callback transport, truthful
+  bounded tool outcomes and lockstep package metadata (ADR-0436).
+
 - `rifty-review-inline` output opens with the outcomes (`W1…`) one level above the diff; map, findings and Open tie to them — what before how.
 - Complete AI agent mode and benchmark goal I1–I8; retain independent reviews, real-host/live evidence and explicit external preview/product follow-ups.
 - Add three-lane coding-agent benchmark, live diagnostic artifacts and native project isolation; common form judges accept actual link/input/textarea workflows.

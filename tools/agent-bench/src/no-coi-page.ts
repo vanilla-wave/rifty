@@ -1,4 +1,5 @@
 import {
+  type AgentRunLimits,
   type AgentSession,
   type AgentSettings,
   createAgentSession,
@@ -25,7 +26,7 @@ async function snapshot(): Promise<FileTree> {
   return files;
 }
 const bench = {
-  async boot(files: FileTree, settings: AgentSettings) {
+  async boot(files: FileTree, options: AgentSettings & AgentRunLimits) {
     if (crossOriginIsolated) throw new Error('Benchmark no-COI page unexpectedly isolated');
     sandbox = await createSandbox({
       requireCrossOriginIsolation: false,
@@ -35,9 +36,12 @@ const bench = {
     project = sandbox.project({ root: '/bench' });
     for (const [path, text] of Object.entries(files)) await project.fs.writeFile(path, text);
     await sandbox.toolchain.install({ cwd: '/bench', registryUrl: '/npm-registry' });
+    const { maxToolCalls, runTimeoutMs, ...settings } = options;
     agent = createAgentSession({
       host: createSandboxAgentHost({ sandbox, project: { root: '/bench' }, mode: () => mode }),
       settings,
+      maxToolCalls,
+      runTimeoutMs,
     });
     return snapshot();
   },
