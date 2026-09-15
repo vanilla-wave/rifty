@@ -357,6 +357,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0426 | No-COI agent host and explicit resident exit |
 | 0434 | Run a three-lane Pi benchmark with shared profile and native judges |
 | 0436 | Publish agent with native custom stream transport |
+| 0437 | Bounded Workbench browser prerequisite probes |
 
 ## Superseded (removed)
 

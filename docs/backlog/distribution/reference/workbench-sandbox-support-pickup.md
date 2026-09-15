@@ -1,0 +1,51 @@
+# Workbench prerequisite pickup
+
+Authority: original user answers in `workbench-sandbox-support-refine.md`;
+implementation hand-off: PR #340, same PR, green CI. ADR-0437 owns the API.
+Fresh read-only source audit: `/root/requirements_audit`, 2026-09-15.
+
+## Composition mapping
+
+| Operation | Existing authority / consequence |
+|---|---|
+| DOM / COI / Worker / page locks | `workbench/open-workbench.ts:706`; exclusive admission at :636. Probe a private lock, never the origin lease. |
+| Module Worker + cloned ports / SAB | `kernel/src/worker-like.ts:43`, `spawn-worker.ts:351`; `runtime-js/src/host.ts:310`. |
+| Nested Worker | `workers/owner-child-node-executor.ts:278`, `owner-child-dev-server.ts:148`; COI owner-to-child path. |
+| Dynamic import + JS eval | `kernel/src/worker-entry.ts:271` indirect eval importer; `runtime-js/src/module-loader/cjs.ts:1823` and `repl/eval.ts:19` use Function, independently of VM selection. |
+| SAB / Atomics wait, notify, waitAsync | `workbench-browser-owner-spawn.ts:51`; `kernel/src/ipc/capabilities.ts:25`; `sab-ring.ts:141/277/291`. COI only. |
+| WASM | COI default QuickJS: `workers/kernel-worker-entry.ts:40`, `runtime-js/src/ipc/install-process.ts:125`, `builtins/vm/engine-config.ts:32`. Non-COI rewrite default (`rifty/src/sandbox.ts:292`); QuickJS/workload selection requires WASM. |
+| BroadcastChannel | `net/src/cross-realm/preview-port.ts:278/682`; both compositions' preview path. |
+| SW | COI register then control proof `open-workbench.ts:193`; SDK SW denial retained as swError and boot continues `rifty/src/sandbox.ts:676`. Probe both classic and module registration; deployment control remains unverified. |
+| OPFS | `workers/owner-storage.ts:46/61`, `vfs/src/opfs-replica-store.ts:62/92/173/271`: sync handle guard plus createWritable/write/close, getFile/read, deletion. Private directory only. Existing replica admission errors are not browser incompatibility. |
+| UUID | `workbench-owner-storage.ts:50/192`; OPFS proof path. Probe ownership also needs an unpredictable private name. |
+| Sync XHR | `glue/sqlite-wasm-provider.ts:14/29`; optional SQLite workload, not ordinary JS/QuickJS boot. Asset-specific SQLite setup remains deployment/workload evidence. |
+
+## Native reference and RED
+
+Existing native Chromium reference scripts/versions/results live in refine and
+CSP evidence; no oracle claims inferred from API presence. Current browser suite
+`tests/browser-unit/sandbox-support.spec.ts` serves native HTTP CSP on Worker
+responses and native SW requests. Faults decorate unavailable browser/storage
+boundaries only; no rifty package is mocked. Baseline public module loads; the
+missing callable export is an explicit assertion failure, not an import failure.
+
+Command: `RIFTY_PLAYGROUND_PORT=5539 pnpm exec playwright test --config
+playwright.browser-unit.config.ts tests/browser-unit/sandbox-support.spec.ts
+--workers=1 --reporter=line`. Raw run: `/tmp/pr340-red.log`.
+
+Current-session rerun (port 5540): 23 RED (missing callable export), 1 GREEN
+(legacy synchronous passive API), 18.6 s; `/tmp/pr340-red-final.log`.
+Native reference scripts re-executed unchanged via `node
+/tmp/rifty-support-probe.mjs` and `node /tmp/rifty-pr340-csp-probe.mjs`;
+same COI/non-COI OPFS and CSP discriminator outcomes as the committed reference.
+
+## Mechanism sweep
+
+`workbench/service-worker-control.ts:48–151`: real controller proof owns listeners,
+ports and deadline. `runtime-js/src/host.ts:196–218/429–442`: real runtime handshake
+and pending calls. `workbench-owner-storage.ts:80/114–166`: native proof and cleanup
+failures. `vfs/src/opfs-replica-store.ts:35–80`: late sync handle closure after
+deadline. `service-worker/src/register.ts:38–48`: registration itself unbounded.
+None can safely own disposable whole-invocation teardown. ADR-0437 selects one
+per-call deadline, separate bounded cleanup and late native cleanup; no shared
+queue, correlation owner or lease acquisition.

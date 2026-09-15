@@ -101,6 +101,24 @@ Probes must preserve existing SW registrations/controllers as well as projects.
 - 2026-09-15 — repeat/current-context observations must not change host isolation, select a mode, erase projects or present contention as browser incompatibility; inspection is the requested action.
 - 2026-09-15 — public API addition needs a short ADR at PICKUP; no signature or new coordination mechanism selected during refine.
 - 2026-09-15 — feedback reception: prerequisite inventory/negative proof, SW evidence levels and legacy passive API boundary clarified; user outcome unchanged, full-boot carrier not adopted. See [evidence](reference/workbench-sandbox-support-refine.md#feedback-reception).
+- 2026-09-15 — pickup: ADR-0437 adds one Workbench API and inert static probe assets; no new boot policy. Source mapping and executed RED: [pickup evidence](reference/workbench-sandbox-support-pickup.md).
+
+## Acceptance
+
+- A1: Public `checkSandboxSupport(options?)` before opening returns named COI/non-COI conclusions, structured operation results, readable observed/unknown reasons and explicit deployment/package limits; absent required evidence is inconclusive. → scenario
+- A2: Native module Worker/import, nested Worker where required, ports/BroadcastChannel, host JS evaluation, conditional WASM and COI SAB/Atomics/locks checks follow the existing compositions and selected VM/workload. CSP/browser-negative tests reject false positive prerequisites. → scenario
+- A3: Dedicated Worker proves native OPFS sync handle and replica write/read/delete operations; required/preferred/ephemeral policies give their existing consequence, independent of Window sync-handle presence. → scenario
+- A4: SW API presence, disposable registration/activation and unverified actual deployment control remain distinct; COI registration failure blocks, non-COI reports its optional limitation. → scenario
+- A5: Repeated/concurrent probes have bounded completion and honest cleanup, preserving existing native data, live sessions and SW registrations/controllers. → scenario
+- A6: SDK detector remains pure/synchronous and presence-only; consumer examples explain active diagnostics, static assets and relevant CSP requirements. → ADR-0071
+
+## Fault matrix
+
+- F1: Worker CSP denial, nested/import denial, dead/stalled Worker: observed failure or incomplete, bounded settlement, no invented cause; terminate own Workers/ports. → scenario
+- F2: Storage permission/quota failure: required blocks, preferred limits, ephemeral skips; failed cleanup remains explicit. → scenario
+- F3: Same/other-tab active sessions and concurrent/repeated calls: unique scratch/SW scopes, existing native entries/registrations/controllers retained, origin lease contention is not incompatibility, fresh denial observed. → scenario
+- F4: Late native registration/storage completion and cleanup timeout/rejection: bounded report never claims unobserved removal; late owned resources still cleaned when the browser settles. → scenario
+- F5: Unproved required memory/locks/SW or selected WASM operations: no supported verdict; optional failures remain limitations. → scenario
 
 ## Challenge
 
