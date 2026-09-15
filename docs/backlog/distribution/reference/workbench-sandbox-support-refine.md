@@ -140,6 +140,23 @@ Reviewed SHA256 (before review-record additions):
 | distribution/reference/workbench-sandbox-support-refine.md | 9c6bd91525d17fe65d933c2fdde7c044096bc6f60c14c28ae1dd91e55e20abc4 |
 | playground/capabilities-detection-e2e-logging.md | 584ceac182ec36877b8956f2977952e40f0d66fdd1e50983915cb44fb72bb5cd |
 
+## Post-answer final review
+
+Reviewer `/root/support_settled_review`, fresh read-only, examined
+`5634648d3190ed1dba34e80eeddcc5d031cd0163` after all three user answers:
+«PASS — RDY-6, docs Final+GREEN». No material open scope fork or required
+correction. Standalone draft retained until PICKUP; no implementation claim.
+[Exact verdict](workbench-sandbox-support-round3-final-green.json).
+
+Reviewed SHA256: item `e31afa99b48d77f61e4571d75febf0bb035fec572c3286adcdadb6216d1993e2`;
+this evidence before record addition `2c9159517a7973fc627e5a43930af584ae934f2ebf9e84a1c450eb1b9ba39b4c`;
+unchanged logging item `584ceac182ec36877b8956f2977952e40f0d66fdd1e50983915cb44fb72bb5cd`.
+
+Driver `pnpm pr:check`: docs-only 20/20 PASS
+(`/tmp/rifty-support-round3-pr-check.log`); skipped typecheck, build:libs,
+check:arch, test:run, test:parity. Reviewer inspected that log, source, five
+ADRs and actual probe source/JSON; no new browser run after Round 3.
+
 ## Disposable probe source
 
 Save this block as `/tmp/rifty-support-probe.mjs`; run from repository root.
