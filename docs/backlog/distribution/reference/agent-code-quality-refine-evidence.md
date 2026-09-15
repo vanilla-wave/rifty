@@ -273,3 +273,24 @@ precedes expansion; I6/I7 carry behavior-based judging, all-environment referenc
 controls and selection integrity. The critique's 24 was an earlier working
 count, superseded by the proposal's explicit 20–30 estimate. Existing code and
 baseline evidence support its observations; no new runtime probe claimed.
+
+### Corpus amendment review
+
+Fresh read-only `/root/corpus_amendment_final`: PASS, no findings.
+Record: `agent-code-quality-corpus-final-green.json`; reviewed commit
+`ec3ba65a60d131b741d445a4f6bfe2d6b0831e2d`. Driver verified all six reviewed SHA256 hashes.
+I1–I5 preserved; I6/I7 accepted; counts/mix remain estimates.
+Documentation only; I1–I7 implementation and live proof remain open.
+
+`pnpm pr:check`: docs-only 20/20 PASS; log
+`/tmp/rifty-agent-eval-corpus-pr-check.log`. Source lanes skipped;
+`git diff --check` and verdict validator PASS.
+
+```text
+8ef58e991c4d149b3167b917ff87cf28d9fc95382a86ac4cee9c0bd1bde31f3f  docs/backlog/epics/agent-code-quality-evaluation/goal.md
+dde905965cccafec8adac6ad62b1eaa1c8ff096298758e81a2ddf61b66fea946  docs/backlog/epics/agent-code-quality-evaluation/map.md
+3d3d86416652dc808866a66470d51cb35b3598c796e0c80f1c4f300bf21166a9  docs/backlog/epics/agent-code-quality-evaluation/ledger.md
+31545bbb349fa25f93acf8701e71f5ae59e3a4e48515fd46228585871dc3da92  docs/backlog/distribution/agent-eval-project-corpus.md
+2b4a03d4ff811c7e8c62db1d0ea33e86085903f4291852aaad3928580a95b09d  docs/backlog/distribution/agent-eval-comparison-report.md
+2fd35ba304cfb0056530006c0ce562ca86a6615759b93e2d0ad5b6add82e71ae  docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md
+```
