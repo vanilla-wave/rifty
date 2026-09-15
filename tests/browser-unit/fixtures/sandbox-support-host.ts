@@ -30,6 +30,10 @@ export async function startSupportHost(upstream: string) {
       const asset = /\/(support-(?:worker|child|module|service-worker))\.js$/.exec(path)?.[1];
       if (asset) {
         response.setHeader('Content-Type', 'text/javascript');
+        if (path.includes('/published/')) {
+          response.end(await readFile(resolve(`packages/workbench/dist/assets/${asset}.js`)));
+          return;
+        }
         if (path.includes('/sw-denied/') && asset === 'support-service-worker') {
           response.statusCode = 403;
           response.end('Forbidden');

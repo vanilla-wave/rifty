@@ -73,3 +73,19 @@ Native OPFS probe includes SHA-256 (`vfs/src/opfs-replica-codec.ts:27`).
 
 Production and published probe assets are separate bundles, preserving the
 existing runtime chunk graph. SDK source changes clarify documentation only.
+
+## Gate contract reception (PR-4)
+
+Full pr:check: 24/25 PASS; test:run RED, 3 failures in 2 files, 0 timeouts.
+Both files rerun in isolation: same 3 failures. Old sealed-root expectation
+excluded the requested new export; old reachability criterion counted 164 files
+and only the eight library entries. ADR-0437 intentionally adds one root export
+and four independently built static assets (171 production files total).
+The updated gate retains exact exports/count/full source reachability across
+eight library + four asset entries, with no source exclusions. A native browser
+case executes assets built by the real publishing script. Independent Final+GREEN
+compares both criteria against BASE. No product defect was hidden by a retry.
+
+Final native browser suite: 29/29 PASS, 17.7 s; includes published assets,
+private-lock collision and live-session preservation (`/tmp/pr340-green-final.log`).
+Corrected legacy contracts: 23/23 PASS across both previously failing files.

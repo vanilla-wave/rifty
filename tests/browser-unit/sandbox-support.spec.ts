@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { type Page, expect, test } from '@playwright/test';
 import { bootOwner, closeOwner, readOwnerFile, writeOwnerFile } from './fixtures.ts';
 import { startSupportHost } from './fixtures/sandbox-support-host.ts';
@@ -132,6 +133,19 @@ test('missing probe configuration leaves required observations incomplete', asyn
   expect(row(report, 'service-worker-registration').status).toBe('incomplete');
   expect(report.modes.coi.conclusion).toBe('inconclusive');
   expect(report.modes.nonCoi.conclusion).toBe('inconclusive');
+});
+
+test('published probe assets perform real browser operations', async ({ page }) => {
+  execFileSync(process.execPath, ['tools/publishing/build-workbench-assets.mjs'], {
+    stdio: 'pipe',
+  });
+  const probeBaseUrl = await open(page, 'published');
+  const report = await check(page, { probeBaseUrl, persistence: 'required' });
+  expect(report.modes.coi.conclusion, JSON.stringify(report)).toBe('supported');
+  expect(report.modes.nonCoi.conclusion).toBe('supported');
+  expect(row(report, 'module-import').status).toBe('passed');
+  expect(row(report, 'nested-worker').status).toBe('passed');
+  expect(report.cleanup.status).toBe('passed');
 });
 
 for (const [variant, failed] of [
