@@ -57,7 +57,8 @@ empty Worker errors retain an unknown cause. Optional failures appear in
 in a dedicated Worker using sync handles and replica write/read/delete operations,
 not by looking for sync handles on Window.
 
-COI requires isolation, SAB/Atomics, a private Window Web Lock, nested module
+Both compositions require cryptographic UUID generation. COI also requires
+isolation, SAB/Atomics, a private Window Web Lock, nested module
 Workers, JS eval, QuickJS WASM and SW registration. Non-COI has no COI/SAB gate,
 uses rewrite by default, and reports SW/preview loss as optional limitations.
 Selecting QuickJS or `wasm: true` makes WASM mandatory for non-COI too. JS eval

@@ -44,6 +44,7 @@ export function modes(checks: readonly SandboxSupportCheck[], options: SandboxSu
   const basic: SandboxSupportCheckId[] = [
     'window',
     'secure-context',
+    'crypto',
     'module-worker',
     'module-import',
     'message-port',
@@ -53,7 +54,6 @@ export function modes(checks: readonly SandboxSupportCheck[], options: SandboxSu
   const coi: SandboxSupportCheckId[] = [
     ...basic,
     'cross-origin-isolated',
-    'crypto',
     'page-locks',
     'nested-worker',
     'broadcast-channel',

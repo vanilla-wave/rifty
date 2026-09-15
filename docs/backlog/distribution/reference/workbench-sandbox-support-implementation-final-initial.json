@@ -1,0 +1,152 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "BLOCK: include the SDK's mandatory UUID operation in the non-COI verdict and verify its known failure; the remaining reviewed implementation and PR-4 criterion updates pass.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "9b778d48516d868b90a6436950e0afdab1523104",
+  "unit_goal_source": "docs/backlog/distribution/workbench-sandbox-support.md at 9b778d48516d868b90a6436950e0afdab1523104; BASE 51440931aeb5e322ddfcab930e02068e7083922e. Fresh read-only independent reviewer /root/final_green_review inspected the full diff, raw user answers, ADR-0007/0071/0372/0375/0383/0419/0437, actual composition source, Contract+RED record and native reference evidence. Independently executed RIFTY_PLAYGROUND_PORT=5587 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/sandbox-support.spec.ts --workers=1 --reporter=line: 29 passed (18.0s), /tmp/pr340-independent-final-browser.log. Inspected current-session full 25/25 pr:check proof /tmp/pr340-pr-check-green.log. Independent native UUID discriminator /tmp/pr340-final-independent/uuid.spec.ts exposed the finding below. PR-4: compared baseline sealed exports, 164-file/eight-entry reachability and exact coordination inventory to HEAD. New root export plus seven sources/four separately emitted asset entries and four exact communication paths are justified by ADR-0437; complete source reachability, exact exports, retired references, unknown broker and output-byte checks remain enforced; actual published assets execute in the native suite. No tracked file edited. Remote CI and merge are outside this review verdict.",
+  "unit_residuals": [
+    {
+      "clause": "User scenario: distinguish failed requirements from incomplete checks, with required checks following both actual compositions (A1/A2)",
+      "location": "packages/workbench/src/support/report.ts:65",
+      "summary": "The non-COI required list omits crypto.randomUUID, although SDK boot requires it; a known UUID failure becomes an inconclusive mode result without the observed cause in its reasons."
+    }
+  ],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "A1: before-opening public report names both modes and distinguishes failed/incomplete evidence with readable reasons and limits",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "weak",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:87",
+      "note": "Current implementation passes committed carriers while losing the known non-COI UUID failure; independent native discriminator demonstrates the Bugs finding."
+    },
+    {
+      "row": "A2: actual composition-dependent native Worker/import/nested/messaging/eval/WASM/memory/lock operations reject false prerequisite conclusions",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "weak",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:151",
+      "note": "The native negative suite covers listed operations, but UUID test at :506 asserts only COI; required SDK UUID classification is absent, as executed in the Bugs finding."
+    },
+    {
+      "row": "A3: dedicated Worker OPFS sync and replica operations with required/preferred/ephemeral consequences",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:188",
+      "note": ""
+    },
+    {
+      "row": "A4: SW presence, private registration/activation and unverified deployment control remain distinct with per-mode consequences",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:174",
+      "note": ""
+    },
+    {
+      "row": "A5: bounded repeated/concurrent probes and honest cleanup preserve native data, active sessions and SW state",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:221",
+      "note": ""
+    },
+    {
+      "row": "A6: unchanged pure synchronous SDK detector and consumer documentation for active diagnostics/assets/CSP",
+      "source": "acceptance",
+      "trace": "ADR-0071",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:398; docs/public/sandbox-support.md:1",
+      "note": ""
+    },
+    {
+      "row": "F1: CSP/import/nested/dead/stalled Workers give bounded honest outcomes and owned teardown",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:151; tests/browser-unit/sandbox-support.spec.ts:207",
+      "note": ""
+    },
+    {
+      "row": "F2: storage denial/quota follows selected persistence; cleanup failure remains explicit",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:188; tests/browser-unit/sandbox-support.spec.ts:297",
+      "note": ""
+    },
+    {
+      "row": "F3: concurrent/repeated calls preserve pre-existing files, sessions, scopes/controllers and origin leases while observing new denial",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:221; tests/browser-unit/sandbox-support.spec.ts:409; tests/browser-unit/sandbox-support.spec.ts:518",
+      "note": ""
+    },
+    {
+      "row": "F4: late native registration/storage and cleanup timeout/rejection retain bounded honest late removal",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:323; tests/browser-unit/sandbox-support.spec.ts:346; tests/browser-unit/sandbox-support.spec.ts:449",
+      "note": ""
+    },
+    {
+      "row": "F5: required memory/locks/SW/selected WASM evidence prevents unsupported positive results; optional loss remains limitation",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:385; tests/browser-unit/sandbox-support.spec.ts:479; tests/browser-unit/sandbox-support.spec.ts:518",
+      "note": ""
+    },
+    {
+      "row": "checkSandboxSupport(options?) public root export and structured support types",
+      "source": "public-api",
+      "trace": "ADR-0437 + scenario",
+      "status": "weak",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:58; packages/workbench/src/workbench/internal/playground-workbench.contract.test.ts:662",
+      "note": "Public entry/build carriers pass; the non-COI classification gap is the Bugs finding."
+    },
+    {
+      "row": "Frozen native reference: passive presence survives Worker CSP denial; dedicated Worker OPFS exact bytes succeed without COI",
+      "source": "frozen-artifact",
+      "trace": "ADR-0437 + scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/workbench-sandbox-support-refine.md:46; tests/browser-unit/sandbox-support.spec.ts:87; tests/browser-unit/sandbox-support.spec.ts:398",
+      "note": ""
+    },
+    {
+      "row": "Frozen native CSP reference: JS eval, WASM compilation, module import and nested Worker permission are separate observations",
+      "source": "frozen-artifact",
+      "trace": "ADR-0437 + scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/workbench-sandbox-support-csp-evidence.md:1; tests/browser-unit/sandbox-support.spec.ts:151",
+      "note": ""
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "blocker", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/workbench/src/support/report.ts:65",
+          "evidence": "RIFTY_PLAYGROUND_PORT=5588 pnpm exec playwright test --config /tmp/pr340-final-independent/playwright.config.mts uuid.spec.ts --workers=1 --reporter=line; /tmp/pr340-independent-uuid.log: native createSandbox rejected TypeError 'crypto.randomUUID is not a function', while report.checks.crypto was failed and report.modes.nonCoi was inconclusive with no crypto reason; assertion Expected unsupported / Received inconclusive, 1 failed. Chromium real Worker/SDK composition with only unavailable native UUID boundary decorated; no rifty sibling mocked.",
+          "summary": "Include crypto in the non-COI required checks. SDK boot unconditionally calls crypto.randomUUID at packages/rifty/src/sandbox.ts:393, but only the COI list contains crypto. Thus an observed mandatory failure is classified as incomplete for non-COI and its proven cause is omitted from that mode's reasons. Fault class: sibling-drift between actual SDK requirements and the report projection. Missing RED: existing UUID carrier tests only COI; add non-COI failed conclusion and reason. Sibling sweep: COI already requires UUID; both modes share module/eval and selected OPFS requirements, with VM/WASM/SW differences checked against actual paths.",
+          "authority": "User scenario in docs/backlog/distribution/workbench-sandbox-support.md:41-52: the report distinguishes failed requirements from checks not established, and required checks follow both compositions' actual browser operations; A1/A2 → scenario."
+        }
+      ]
+    },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "blocker", "findings": [] }
+  ]
+}

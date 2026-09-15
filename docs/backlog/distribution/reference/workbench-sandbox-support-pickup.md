@@ -99,3 +99,19 @@ unchanged. No directory exemption. First uncommitted run had not seen these
 
 Second full gate: unit and parity PASS; only the now-corrected exact inventory
 failed (24/25). Its isolated suite and check are rerun before final verification.
+
+## Final+GREEN reception
+
+Fresh reviewer `/root/final_green_review` at `9b778d485`: native 29/29 PASS,
+then a real SDK discriminator found non-COI's mandatory UUID omitted from the
+report's required set (`rifty/src/sandbox.ts:393`). SDK fails with TypeError when
+UUID is absent; report had returned inconclusive. Added the common requirement
+at the shared mode boundary (sibling-drift); both modes now classify this known
+failure. Extended existing native regression: RED unsupported vs inconclusive
+(`/tmp/pr340-uuid-red.log`). Source sweep: SDK owner token, Workbench operation
+IDs, Workbench OPFS proof all use native randomUUID. Other reviewed rows and
+PR-4 criteria passed; initial verdict retained alongside this evidence.
+
+UUID repair: full native suite 29/29 PASS, 17.8 s; reverting only the mode
+requirement reproduces unsupported-vs-inconclusive RED again. Source restored
+in finally (`/tmp/pr340-uuid-revert.log`).

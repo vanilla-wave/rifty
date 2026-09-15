@@ -503,7 +503,7 @@ test('[fault: provenance-lie] unavailable BroadcastChannel cannot prove preview 
   expect(report.modes.nonCoi.limitations.join(' ')).toMatch(/broadcast|preview/i);
 });
 
-test('[fault: provenance-lie] unavailable UUID never becomes a positive COI verdict', async ({
+test('[fault: provenance-lie] unavailable UUID is an established failure for both compositions', async ({
   page,
 }) => {
   const probeBaseUrl = await open(page);
@@ -513,6 +513,8 @@ test('[fault: provenance-lie] unavailable UUID never becomes a positive COI verd
   const report = await check(page, { probeBaseUrl });
   expect(row(report, 'crypto').status).toBe('failed');
   expect(report.modes.coi.conclusion).toBe('unsupported');
+  expect(report.modes.nonCoi.conclusion).toBe('unsupported');
+  expect(report.modes.nonCoi.reasons.join(' ')).toMatch(/crypto/);
 });
 
 test('[fault: concurrent-same-key] private lock collision is inconclusive, never browser incompatibility', async ({
