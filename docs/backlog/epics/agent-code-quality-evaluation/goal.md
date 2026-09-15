@@ -57,8 +57,9 @@ and evaluation corpus; the original five tasks remain the only task set.
 - I1. A finite versioned suite covers bug fixes and feature additions across
   multiple real JS/TS projects, and application creation across multiple
   distinct minimal starters with installed dependencies. Tasks have explicit
-  requirements, comparable starting state and independently checked judges
-  that accept working solutions and reject unmet requirements/regressions.
+  requirements, one pinned lockfile installed by every lane and independently
+  checked judges that accept working solutions and reject unmet
+  requirements/regressions.
 - I2. The suite runs through actual COI +chat, packed no-COI SDK, native Pi CLI
   and native Codex. Pi/Rifty comparisons share the model and task input;
   Codex's actual model/configuration and all tool/context/dependency differences
@@ -76,7 +77,9 @@ and evaluation corpus; the original five tasks remain the only task set.
   all four environments, retains the declared matrix and repeated attempts,
   and demonstrates report regeneration without new model calls. Deterministic
   plumbing controls alone cannot close this invariant; failures need not all
-  become successes for the measurement to be complete.
+  become successes for the measurement to be complete. The validated pilot
+  corpus, frozen and family-split under I7, can close it; expansion carries
+  its own campaign and proof.
 - I6. Each scored case has a pinned starting project, provenance, explicit
   requirements/regressions and an inspectable difficulty rationale grounded in
   diagnosis, interacting behavior or compatibility. Its trusted checks reject
@@ -112,6 +115,7 @@ the user's acceptance; record: the same evidence file §Corpus discussion.
 - user 2026-09-15, 2.2: «2, но стартеры разные» — multiple installed minimal starters, not empty projects.
 - amend: 2026-09-15 — user: «выглядит ок. А как это в эпик положим?» accepting the preceding corpus proposal — scenario 1 and I6/I7 require substantive case diversity, discriminating judges and a pilot/frozen corpus; full exchange and bounds in refine evidence §Corpus discussion.
 - agent: six pilot candidates (two bugs, two features, two starter apps), then roughly 20–30 scored cases, are route estimates, not closure by count; the suggested two-thirds apps mix is indicative, not an accepted exact quota.
+- amend: 2026-09-15 — user: «Внеси правки» accepting the PR #341 review findings — judge-substrate probe (test runners/command-result judging inside COI and no-COI) precedes case curation; campaign size and per-case authoring cost are recorded before a campaign; I5 closes on the validated pilot corpus, expansion is a follow-up slice; each case pins one package-lock v3 installed by every lane. Source: refine evidence §PR review amendment.
 - agent: preserve ADR-0434's real COI/no-COI lanes, privacy, on-demand execution and diagnostic interpretation; no new platform or runtime API prescribed.
 - agent: tier works; reachable faults may fail loudly, but never manufacture success or conceal selected trial failures; no crash-resume service promise.
 - agent: finite corpus, repeats and statistical method are chosen and recorded before measuring; task-specific model tuning and success-based exclusions cannot define the result.

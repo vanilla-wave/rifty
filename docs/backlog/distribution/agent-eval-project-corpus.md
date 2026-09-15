@@ -17,6 +17,14 @@ apps built from descriptions on different minimal installed starters (I1).
 Select exact snapshots at PICKUP, before model measurement; no external
 benchmark dataset or framework choice has been accepted as a requirement.
 
+Existing judges see only the preview (`JudgeContext.previewUrl`, DOM/HTTP);
+no lane runs a project's test suite or CLI as a judge, the COI lane exposes
+seed/export/metadata hooks only (ADR-0434 §2) and Vitest 2.1.9 cannot install
+in Rifty (legacy-esbuild ceiling, `reference/agent-bench-baseline-results.md`).
+Own-environment judging of real-project bugs/features and CLI/library cases
+needs a command-result judge inside each lane; without it such cases are
+unevaluable in Rifty because of the judge, not the agent.
+
 Requirements and regression checks judge observable results in each originating
 environment (I3). Independent functioning and broken controls validate judges;
 agent-visible files cannot replace the trusted checks. Preserve comparable
@@ -26,25 +34,34 @@ results cannot manufacture the corpus. No empty-project generation promise.
 
 ## Corpus route
 
-1. Curate six different pilot candidates: two bugs, two features, two starter
+1. Probe the judging substrate before curation: which test runners/versions
+   install and run in COI and no-COI; how a test-suite or CLI result is
+   captured inside each lane. Choose bug/feature projects whose regression
+   suite runs in each selected lane, or record that lane as unsupported for
+   the case up front. This gate precedes every candidate.
+2. Curate six different pilot candidates: two bugs, two features, two starter
    apps. Cover distinct engineering problems, not six versions of UI CRUD.
-2. Bugs/features: real issue/PR and pre-change project snapshot, pinned
-   dependencies and retained regression suite. Record provenance; avoid leaking
-   the reference patch into the agent's task/context. A public issue alone
-   proves neither difficulty nor freedom from model-training contamination.
-3. Starter apps: original product descriptions covering a linked user workflow
+3. Bugs/features: real issue/PR and pre-change project snapshot, one
+   package-lock v3 installed by every lane, retained regression suite. Record
+   provenance; avoid leaking the reference patch into the agent's task/context.
+   A public issue alone proves neither difficulty nor freedom from
+   model-training contamination.
+4. Starter apps: original product descriptions covering a linked user workflow
    on different installed minimal starters. Required behavior is explicit;
    implementation shape remains open.
-4. Validate case cards and judges before expansion: unmet-task control fails,
+5. Validate case cards and judges before expansion: unmet-task control fails,
    functioning reference passes on native, plausible partial solutions fail,
    alternative correct implementations pass. Run reference solutions in every
    selected environment and retain unsupported/failure evidence; reference
    failure in Rifty never licenses dropping the task from a chosen matrix.
-5. Review pilot trajectories and checks for triviality, ambiguity, flaky judges
-   and coverage gaps. Expand toward roughly 20–30 scored cases, documenting
-   selection reasons. Complexity comes from diagnosis, interacting behavior and
-   preserving contracts; no minimum file/line/tool-call count.
-6. Separate calibration and evaluation by related task families; freeze the
+6. Review pilot trajectories and checks for triviality, ambiguity, flaky judges
+   and coverage gaps; record per-case authoring cost. The I5 campaign runs
+   on the pilot version frozen and family-split by step 7. Expansion toward
+   roughly 20–30 scored cases is a separate slice with its own frozen version
+   and campaign, documenting selection reasons. Complexity comes from
+   diagnosis, interacting behavior and preserving contracts; no minimum
+   file/line/tool-call count.
+7. Separate calibration and evaluation by related task families; freeze the
    corpus/version/selection rationale before comparative runs. Keep the five
    existing smoke/regression tasks separately reported. Any later correction
    retains old evidence and identifies the changed corpus/judge version.
@@ -55,7 +72,8 @@ No pilot, new reference solution or live task has been executed during refine.
 
 ## Case card
 
-- Origin: real issue/PR or original scenario; pinned project/starter/dependencies.
+- Origin: real issue/PR or original scenario; pinned project/starter and one
+  package-lock v3 installed by every lane; per-lane install result.
 - Task: exact agent request and starting state; no solution hints.
 - Required behavior and existing behavior that must remain; inspectable checks.
 - Difficulty: distinct diagnostic/interaction/compatibility problem; task family.

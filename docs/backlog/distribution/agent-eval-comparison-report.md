@@ -22,6 +22,8 @@ PICKUP fixes and validates the estimator, repeat/order rules and comparison
 eligibility before measurement. Execute I5's real reference campaign over the
 finite accepted corpus and four environments; demonstrate regenerating reports
 without new model calls. A negative or inconclusive result is a valid outcome.
+Record the declared matrix size, expected runs, wall-clock and usage before a
+campaign starts; the pilot corpus frozen under I7 can close I5.
 Deterministic plumbing tests are necessary infrastructure evidence, not measured
 agent quality. No automatic merge gate or live-model CI default.
 

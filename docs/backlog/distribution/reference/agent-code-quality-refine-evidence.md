@@ -294,3 +294,85 @@ dde905965cccafec8adac6ad62b1eaa1c8ff096298758e81a2ddf61b66fea946  docs/backlog/e
 2b4a03d4ff811c7e8c62db1d0ea33e86085903f4291852aaad3928580a95b09d  docs/backlog/distribution/agent-eval-comparison-report.md
 2fd35ba304cfb0056530006c0ce562ca86a6615759b93e2d0ad5b6add82e71ae  docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md
 ```
+
+## PR review amendment
+
+Source: PR #341 review, 2026-09-15. User: «Глянь что думаешь про
+https://github.com/vanilla-wave/rifty/pull/341»; after the findings: «Внеси
+правки. И я не понял что предлагаешь с кейсами делать?». Findings verified
+against the branch and `main` sources; no model runs.
+
+- Judges are preview-only. `tools/agent-bench/src/judge/context.ts` gives a
+  judge `previewUrl` + `view`; all five task judges evaluate DOM/HTTP of the
+  resident preview. No lane executes a test suite or CLI as a judge; the COI
+  lane exposes seed/export/metadata hooks only (ADR-0434 §2); Vitest 2.1.9
+  install is rejected in Rifty (legacy-esbuild ceiling,
+  `agent-bench-baseline-results.md`). Real-project bug/feature and CLI/library
+  cases judged in their own environment need a command-result judge per lane;
+  the goal only implied this under "unsupported capability stays visible".
+  → map open question; corpus route step 1 (substrate probe) gates curation.
+- Campaign size unrecorded: roughly 20–30 cases × 4 environments × 3 trials
+  ≈ 240–360 live runs plus reference solutions per environment; the 2026-09-13
+  diagnostic shows 62–83 s median agent time, tails 329–541 s, before cold
+  real-project install. → map open question; report item records matrix,
+  expected runs, wall-clock and usage before a campaign; I5 closes on the
+  validated pilot corpus, expansion is a follow-up slice.
+- Case authoring is the main cost driver: snapshot, lockfile, reference
+  solution, plausible-partial control, judge controls, patch-leak scrub and
+  four-environment reference runs per case. → map paragraph; route step 6
+  records per-case cost.
+- Starting state: prior lanes resolved React 19.3.0 vs 19.2.8 from the same
+  semver; the goal required "comparable"/"recorded" only. Rifty npm-client
+  reads package-lock v3 (`packages/npm-client/src/installer-lockfile-reader.ts`,
+  ADR-0023); the native lane runs plain `npm install`. → I1 requires one
+  pinned lockfile installed by every lane; case card carries the per-lane
+  install result.
+
+Interpretation: «Внеси правки» authorizes applying the four findings. The
+case question was answered in the same session: I5 closes on the six-case
+pilot, frozen and family-split under I7; expansion is a later slice; the
+judge-substrate probe precedes curation, and a lane whose runner cannot run
+is recorded unsupported for that case up front; one lockfile per case; case
+authoring cost is measured in the pilot. No user reply to that answer yet;
+if the user rejects it, route step 1 and the I5 pilot clause revert and the
+rest of the amendment stands.
+
+Unchanged: I2–I4, I6–I7 wording, scenario, out-of-scope, children's `draft`
+status, ROADMAP. Documentation only; I1–I7 implementation stays open.
+
+### PR review amendment check
+
+Fresh read-only reviewer over the uncommitted amendment; verbatim verdict
+(Markdown/source formatting normalized):
+
+```text
+challenge: 2026-09-15 — 4 problems
+
+- goal.md I5 «pilot corpus can close it» vs I7 «expanded, versioned
+  evaluation corpus … fixed before the comparative campaign» и corpus шаг 7:
+  не сказано, что freeze/family-split применяется к версии пилота и несёт ли
+  расширение свою кампанию.
+- map.md «prior medians 60–80 s … tails to 540 s» расходится с README
+  2026-09-13 (62.2/82.9/62.9 s; 541.1 s) и evidence («62–83 s, 329–541 s»).
+- evidence фиксирует вопрос пользователя про кейсы, но не ответ/интерпретацию;
+  решение по кейсам опирается на «Внеси правки» при заявленном непонимании
+  именно этой части. Добавить Interpretation (RDY-6).
+- Стиль: corpus незавёрнутая строка 123 символа; goal.md I1 сирота
+  «checked judges».
+
+Проверено: judge/context.ts:2-5, tasks.ts:29, ADR-0434:18-19,
+baseline-results:16, installer-lockfile-reader.ts:31-35,
+lanes/local-reference.ts:25, README 2026-09-13:46-48, 240–360 = 20–30×4×3.
+Нумерация route 1–7 сплошная; ссылки и amend-строка согласованы; I2–I4,
+I6–I7, решения 1.1–2.2, статусы draft детей не тронуты; новых механизмов
+не введено.
+```
+
+All four applied before commit: I5 and route step 6 bind the pilot campaign
+to the version frozen and family-split under I7/step 7 and give expansion its
+own campaign; map numbers now match the 2026-09-13 README; Interpretation
+added above; both wraps fixed. Factual verification of the findings stands.
+
+- `pnpm pr:check` after the fixes: docs-only 20/20 PASS, log
+  `/tmp/rifty-pr341-review-amend-pr-check.log`; source lanes skipped.
+- `git diff --check` PASS.
