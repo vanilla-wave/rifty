@@ -89,7 +89,7 @@ export function modes(checks: readonly SandboxSupportCheck[], options: SandboxSu
           ? 'inconclusive'
           : 'supported',
       required: Object.freeze(required),
-      reasons: Object.freeze(unmet.map((check) => check.reason)),
+      unmet: Object.freeze(unmet.map((check) => check.id)),
       limitations: Object.freeze(
         checks
           .filter(
@@ -99,7 +99,7 @@ export function modes(checks: readonly SandboxSupportCheck[], options: SandboxSu
               check.status !== 'passed' &&
               check.status !== 'not-applicable',
           )
-          .map((check) => check.reason),
+          .map((check) => check.id),
       ),
     });
   };

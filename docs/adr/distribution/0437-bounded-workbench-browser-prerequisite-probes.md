@@ -57,3 +57,10 @@ Browser evidence is current-context and time-limited. It does not promise actual
 asset configuration, future quota/durability, free origin leases or npm support.
 Probe assets must receive the applicable CSP; deployment-specific differences
 remain explicit. Non-COI does not enable `openWorkbench` without COI.
+
+## Corrections (active)
+
+- 2026-09-16 — ADR-0438 supersedes decision 2's omission-as-incomplete behavior:
+  `probeBaseUrl` and the decision 1 `options` argument are required. Decision 1's
+  report sections/states remain; mode `unmet`/`limitations` carry check IDs.
+  Remaining decisions unchanged.

@@ -358,6 +358,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0434 | Run a three-lane Pi benchmark with shared profile and native judges |
 | 0436 | Publish agent with native custom stream transport |
 | 0437 | Bounded Workbench browser prerequisite probes |
+| 0438 | Require sandbox probe configuration and addressable checks |
 
 ## Superseded (removed)
 

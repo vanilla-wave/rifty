@@ -30,13 +30,13 @@ export interface SandboxSupportMode {
   readonly composition: 'openWorkbench' | 'sdk-toolchain';
   readonly conclusion: 'supported' | 'unsupported' | 'inconclusive';
   readonly required: readonly SandboxSupportCheckId[];
-  readonly reasons: readonly string[];
-  readonly limitations: readonly string[];
+  readonly unmet: readonly SandboxSupportCheckId[];
+  readonly limitations: readonly SandboxSupportCheckId[];
 }
 
 export interface SandboxSupportOptions {
   /** Same-origin directory containing the four published support-*.js assets. */
-  readonly probeBaseUrl?: string | URL;
+  readonly probeBaseUrl: string | URL;
   /** Same policy as the existing owners; default preferred. */
   readonly persistence?: 'required' | 'preferred' | 'ephemeral';
   /** Existing SDK toolchain default is rewrite; COI always needs QuickJS WASM. */

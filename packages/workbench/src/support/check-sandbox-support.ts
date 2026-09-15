@@ -16,8 +16,9 @@ const LIMITS = Object.freeze([
 
 /** Active, disposable browser probes. Does not open a sandbox or inspect project data. */
 export async function checkSandboxSupport(
-  options: SandboxSupportOptions = {},
+  options: SandboxSupportOptions,
 ): Promise<SandboxSupportReport> {
+  if (options?.probeBaseUrl === undefined) throw new TypeError('probeBaseUrl is required');
   const timeoutMs = options.timeoutMs ?? 5000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000)
     throw new RangeError('timeoutMs must be an integer from 1 to 60000');
@@ -32,22 +33,19 @@ export async function checkSandboxSupport(
   if (options.wasm !== undefined && typeof options.wasm !== 'boolean')
     throw new TypeError('wasm must be boolean');
   const selected = { ...options, persistence };
-  let base: URL | undefined;
-  if (options.probeBaseUrl !== undefined) {
-    base = new URL(String(options.probeBaseUrl), globalThis.location?.href);
-    if (
-      !['https:', 'http:'].includes(base.protocol) ||
-      base.origin !== globalThis.location?.origin ||
-      base.username ||
-      base.password ||
-      base.search ||
-      base.hash ||
-      !base.pathname.endsWith('/')
-    ) {
-      throw new TypeError(
-        'probeBaseUrl must be a same-origin HTTP(S) directory without credentials, query or fragment',
-      );
-    }
+  const base = new URL(String(options.probeBaseUrl), globalThis.location?.href);
+  if (
+    !['https:', 'http:'].includes(base.protocol) ||
+    base.origin !== globalThis.location?.origin ||
+    base.username ||
+    base.password ||
+    base.search ||
+    base.hash ||
+    !base.pathname.endsWith('/')
+  ) {
+    throw new TypeError(
+      'probeBaseUrl must be a same-origin HTTP(S) directory without credentials, query or fragment',
+    );
   }
   const checks = new Map<SandboxSupportCheckId, SandboxSupportCheck>(
     CHECK_IDS.map((id) => [
@@ -174,242 +172,228 @@ export async function checkSandboxSupport(
       })(),
     );
 
-    if (base !== undefined) {
-      const asset = (filename: string): string => {
-        const url = new URL(filename, base);
-        url.searchParams.set('probe', privateName);
-        return url.href;
+    const asset = (filename: string): string => {
+      const url = new URL(filename, base);
+      url.searchParams.set('probe', privateName);
+      return url.href;
+    };
+    try {
+      const workerDone = new Promise<void>((resolve) => {
+        resolveWorker = resolve;
+      });
+      const portDone = new Promise<void>((resolve) => {
+        resolvePort = resolve;
+      });
+      const broadcastDone = new Promise<void>((resolve) => {
+        resolveBroadcast = resolve;
+      });
+      work.push(workerDone, portDone, broadcastDone);
+      port = new MessageChannel();
+      port.port1.onmessage = (event) => {
+        const data = event.data as { name?: unknown; bytes?: unknown };
+        if (
+          data.name === privateName &&
+          data.bytes instanceof ArrayBuffer &&
+          new Uint8Array(data.bytes).join(',') === '37,128,255'
+        ) {
+          passed(
+            'message-port',
+            'Transferred MessagePort and ArrayBuffer roundtrip preserved exact bytes',
+          );
+        } else set(failure('message-port', new Error('Transferred bytes differed')));
+        resolvePort();
       };
       try {
-        const workerDone = new Promise<void>((resolve) => {
-          resolveWorker = resolve;
-        });
-        const portDone = new Promise<void>((resolve) => {
-          resolvePort = resolve;
-        });
-        const broadcastDone = new Promise<void>((resolve) => {
-          resolveBroadcast = resolve;
-        });
-        work.push(workerDone, portDone, broadcastDone);
-        port = new MessageChannel();
-        port.port1.onmessage = (event) => {
-          const data = event.data as { name?: unknown; bytes?: unknown };
-          if (
-            data.name === privateName &&
-            data.bytes instanceof ArrayBuffer &&
-            new Uint8Array(data.bytes).join(',') === '37,128,255'
-          ) {
-            passed(
-              'message-port',
-              'Transferred MessagePort and ArrayBuffer roundtrip preserved exact bytes',
-            );
-          } else set(failure('message-port', new Error('Transferred bytes differed')));
-          resolvePort();
-        };
-        try {
-          broadcast = new BroadcastChannel(privateName);
-          broadcast.onmessage = (event) => {
-            if (event.data === `${privateName}:ready`) {
-              broadcast?.postMessage(privateName);
-              return;
-            }
-            if (event.data !== `${privateName}:reply`) return;
-            passed(
-              'broadcast-channel',
-              'BroadcastChannel exchanged messages between Window and Worker',
-            );
-            resolveBroadcast();
-          };
-          // Either side's native-channel greeting proves the peer is attached.
-          broadcast.postMessage(privateName);
-        } catch (error) {
-          set(failure('broadcast-channel', error));
-          resolveBroadcast();
-        }
-        observe('shared-memory', () => {
-          memory = new SharedArrayBuffer(4);
-          const atomics = Atomics as unknown as {
-            waitAsync(
-              view: Int32Array,
-              index: number,
-              value: number,
-              timeout: number,
-            ): { value: string | Promise<string> };
-          };
-          if (atomics.waitAsync(new Int32Array(memory), 0, 0, 0).value !== 'timed-out')
-            throw new Error('Window Atomics.waitAsync failed');
-        });
-        // Allocation alone is not a shared-memory roundtrip.
-        if (checks.get('shared-memory')?.status === 'passed')
-          set({
-            id: 'shared-memory',
-            status: 'incomplete',
-            reason: 'Shared memory allocated; Worker transfer/Atomics roundtrip not completed',
-          });
-        else memory = undefined;
-        worker = new Worker(asset('support-worker.js'), { type: 'module' });
-        worker.onerror = (event) => {
-          event.preventDefault();
-          workerFailed(new Error(event.message || 'Worker failed; cause unknown'));
-        };
-        worker.onmessageerror = () =>
-          workerFailed(new Error('Worker message could not be deserialized; cause unknown'));
-        worker.onmessage = (event: MessageEvent<SupportWorkerMessage>) => {
-          const message = event.data;
-          if (message?.kind === 'done') {
-            resolveWorker();
+        broadcast = new BroadcastChannel(privateName);
+        broadcast.onmessage = (event) => {
+          if (event.data === `${privateName}:ready`) {
+            broadcast?.postMessage(privateName);
             return;
           }
-          if (message?.kind !== 'check') return;
-          const check = message.check;
-          if (
-            !check ||
-            ![
-              'module-worker',
-              'module-import',
-              'nested-worker',
-              'broadcast-channel',
-              'js-eval',
-              'wasm',
-              'shared-memory',
-              'opfs',
-            ].includes(check.id) ||
-            !['passed', 'failed'].includes(check.status) ||
-            typeof check.reason !== 'string'
-          )
-            return;
-          if (
-            check.id === 'shared-memory' &&
-            check.status === 'passed' &&
-            (memory === undefined || Atomics.load(new Int32Array(memory), 0) !== 42)
-          ) {
-            set(
-              failure(
-                'shared-memory',
-                new Error('Worker shared-memory result was not observed in Window'),
-              ),
-            );
-          } else set(check);
-          if (check.id === 'broadcast-channel' && check.status === 'failed') resolveBroadcast();
-          if (check.id === 'opfs') resolveStorage();
-        };
-        const start: SupportWorkerRequest = {
-          kind: 'start',
-          name: privateName,
-          port: port.port2,
-          ...(memory === undefined ? {} : { memory }),
-        };
-        worker.postMessage(start, [port.port2]);
-        const bytes = new Uint8Array([37, 128, 255]).buffer;
-        port.port1.postMessage({ name: privateName, bytes }, [bytes]);
-        if (persistence !== 'ephemeral') {
-          const storageDone = new Promise<void>((resolve) => {
-            resolveStorage = resolve;
-          });
-          work.push(storageDone);
-          work.push(
-            (async () => {
-              try {
-                const root = await navigator.storage.getDirectory();
-                if (stopped) return;
-                try {
-                  await root.getDirectoryHandle(privateName);
-                  set({
-                    id: 'opfs',
-                    status: 'incomplete',
-                    reason:
-                      'Private storage probe name already exists; existing data left untouched',
-                  });
-                  resolveStorage();
-                  return;
-                } catch (error) {
-                  if ((error as { name?: string })?.name === 'TypeMismatchError') {
-                    set({
-                      id: 'opfs',
-                      status: 'incomplete',
-                      reason: 'Private storage probe name is an existing file; left untouched',
-                    });
-                    resolveStorage();
-                    return;
-                  }
-                  if ((error as { name?: string })?.name !== 'NotFoundError') throw error;
-                }
-                if (stopped) return;
-                const directory = await capture(
-                  root.getDirectoryHandle(privateName, { create: true }),
-                  () => root.removeEntry(privateName, { recursive: true }),
-                );
-                if (stopped || directory === undefined) return;
-                worker?.postMessage({
-                  kind: 'storage',
-                  directory,
-                  name: privateName,
-                } satisfies SupportWorkerRequest);
-              } catch (error) {
-                set(failure('opfs', error));
-                resolveStorage();
-              }
-            })(),
+          if (event.data !== `${privateName}:reply`) return;
+          passed(
+            'broadcast-channel',
+            'BroadcastChannel exchanged messages between Window and Worker',
           );
-        }
+          resolveBroadcast();
+        };
+        // Either side's native-channel greeting proves the peer is attached.
+        broadcast.postMessage(privateName);
       } catch (error) {
-        workerFailed(error);
+        set(failure('broadcast-channel', error));
+        resolveBroadcast();
       }
-
-      for (const type of ['classic', 'module'] as const) {
-        const id =
-          type === 'classic' ? 'service-worker-registration' : 'service-worker-module-registration';
+      observe('shared-memory', () => {
+        memory = new SharedArrayBuffer(4);
+        const atomics = Atomics as unknown as {
+          waitAsync(
+            view: Int32Array,
+            index: number,
+            value: number,
+            timeout: number,
+          ): { value: string | Promise<string> };
+        };
+        if (atomics.waitAsync(new Int32Array(memory), 0, 0, 0).value !== 'timed-out')
+          throw new Error('Window Atomics.waitAsync failed');
+      });
+      // Allocation alone is not a shared-memory roundtrip.
+      if (checks.get('shared-memory')?.status === 'passed')
+        set({
+          id: 'shared-memory',
+          status: 'incomplete',
+          reason: 'Shared memory allocated; Worker transfer/Atomics roundtrip not completed',
+        });
+      else memory = undefined;
+      worker = new Worker(asset('support-worker.js'), { type: 'module' });
+      worker.onerror = (event) => {
+        event.preventDefault();
+        workerFailed(new Error(event.message || 'Worker failed; cause unknown'));
+      };
+      worker.onmessageerror = () =>
+        workerFailed(new Error('Worker message could not be deserialized; cause unknown'));
+      worker.onmessage = (event: MessageEvent<SupportWorkerMessage>) => {
+        const message = event.data;
+        if (message?.kind === 'done') {
+          resolveWorker();
+          return;
+        }
+        if (message?.kind !== 'check') return;
+        const check = message.check;
+        if (
+          !check ||
+          ![
+            'module-worker',
+            'module-import',
+            'nested-worker',
+            'broadcast-channel',
+            'js-eval',
+            'wasm',
+            'shared-memory',
+            'opfs',
+          ].includes(check.id) ||
+          !['passed', 'failed'].includes(check.status) ||
+          typeof check.reason !== 'string'
+        )
+          return;
+        if (
+          check.id === 'shared-memory' &&
+          check.status === 'passed' &&
+          (memory === undefined || Atomics.load(new Int32Array(memory), 0) !== 42)
+        ) {
+          set(
+            failure(
+              'shared-memory',
+              new Error('Worker shared-memory result was not observed in Window'),
+            ),
+          );
+        } else set(check);
+        if (check.id === 'broadcast-channel' && check.status === 'failed') resolveBroadcast();
+        if (check.id === 'opfs') resolveStorage();
+      };
+      const start: SupportWorkerRequest = {
+        kind: 'start',
+        name: privateName,
+        port: port.port2,
+        ...(memory === undefined ? {} : { memory }),
+      };
+      worker.postMessage(start, [port.port2]);
+      const bytes = new Uint8Array([37, 128, 255]).buffer;
+      port.port1.postMessage({ name: privateName, bytes }, [bytes]);
+      if (persistence !== 'ephemeral') {
+        const storageDone = new Promise<void>((resolve) => {
+          resolveStorage = resolve;
+        });
+        work.push(storageDone);
         work.push(
           (async () => {
             try {
-              const scope = new URL(`${privateName}/${type}/`, base).href;
-              const registrations = await navigator.serviceWorker.getRegistrations();
+              const root = await navigator.storage.getDirectory();
               if (stopped) return;
-              if (
-                location.href.startsWith(scope) ||
-                registrations.some((registration) => registration.scope === scope)
-              ) {
+              try {
+                await root.getDirectoryHandle(privateName);
                 set({
-                  id,
+                  id: 'opfs',
                   status: 'incomplete',
-                  reason: `${id}: private scope is occupied; existing registration left untouched`,
+                  reason: 'Private storage probe name already exists; existing data left untouched',
                 });
+                resolveStorage();
                 return;
+              } catch (error) {
+                if ((error as { name?: string })?.name === 'TypeMismatchError') {
+                  set({
+                    id: 'opfs',
+                    status: 'incomplete',
+                    reason: 'Private storage probe name is an existing file; left untouched',
+                  });
+                  resolveStorage();
+                  return;
+                }
+                if ((error as { name?: string })?.name !== 'NotFoundError') throw error;
               }
-              const registration = await capture(
-                navigator.serviceWorker.register(asset('support-service-worker.js'), {
-                  scope,
-                  type,
-                  updateViaCache: 'none',
-                }),
-                (value) => value.unregister(),
+              if (stopped) return;
+              const directory = await capture(
+                root.getDirectoryHandle(privateName, { create: true }),
+                () => root.removeEntry(privateName, { recursive: true }),
               );
-              if (registration === undefined || stopped) return;
-              await activated(registration, abort.signal);
-              passed(
-                id,
-                `${type} Service Worker registered and activated in a private scope; deployment control unverified`,
-              );
+              if (stopped || directory === undefined) return;
+              worker?.postMessage({
+                kind: 'storage',
+                directory,
+                name: privateName,
+              } satisfies SupportWorkerRequest);
             } catch (error) {
-              set(failure(id, error));
+              set(failure('opfs', error));
+              resolveStorage();
             }
           })(),
         );
       }
-    } else {
-      for (const id of [
-        'module-worker',
-        'service-worker-registration',
-        'service-worker-module-registration',
-      ] as const) {
-        set({
-          id,
-          status: 'incomplete',
-          reason: `${id}: provide probeBaseUrl pointing to the published probe assets`,
-        });
-      }
+    } catch (error) {
+      workerFailed(error);
+    }
+
+    for (const type of ['classic', 'module'] as const) {
+      const id =
+        type === 'classic' ? 'service-worker-registration' : 'service-worker-module-registration';
+      work.push(
+        (async () => {
+          try {
+            const scope = new URL(`${privateName}/${type}/`, base).href;
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            if (stopped) return;
+            if (
+              location.href.startsWith(scope) ||
+              registrations.some((registration) => registration.scope === scope)
+            ) {
+              set({
+                id,
+                status: 'incomplete',
+                reason: `${id}: private scope is occupied; existing registration left untouched`,
+              });
+              return;
+            }
+            const registration = await capture(
+              navigator.serviceWorker.register(asset('support-service-worker.js'), {
+                scope,
+                type,
+                updateViaCache: 'none',
+              }),
+              (value) => value.unregister(),
+            );
+            if (registration === undefined || stopped) return;
+            await activated(registration, abort.signal);
+            passed(
+              id,
+              `${type} Service Worker registered and activated in a private scope; deployment control unverified`,
+            );
+          } catch (error) {
+            set(failure(id, error));
+          }
+        })(),
+      );
     }
   }
+
   const completed = await bounded(Promise.all(work), timeoutMs);
   if (!completed) {
     for (const check of checks.values()) {

@@ -46,3 +46,17 @@ Log: `/tmp/pr340-consumer-red.log`. Exit 1; four behavioral failures, no load/ty
   text. Tests require `unmet`/`limitations` IDs resolving to exactly one check row.
 - Former omission expectation deliberately superseded by accepted Acceptance 1;
   reason-text assertions superseded by Acceptance 2. Native fault scenarios retained.
+
+## GREEN and reverse checks
+
+- Full same-file browser command (no `--grep`): 29/29 PASS, 17.8 s,
+  Chromium 148.0.7778.96; `/tmp/pr340-consumer-green.log`. Published assets,
+  both modes, native fault paths, live owner/session preservation and cleanup pass.
+- Remove only the early URL guard: missing-configuration test fails (undefined
+  options error names `timeoutMs`, not `probeBaseUrl`); `/tmp/pr340-consumer-revert-guard.log`.
+- Change only `unmet` projection back to reason text: real non-COI test fails
+  because a listed value resolves to zero rows; `/tmp/pr340-consumer-revert-unmet.log`.
+- Change only `limitations` projection back to text: SW/storage-denial tests fail
+  on zero matching rows; `/tmp/pr340-consumer-revert-limitations.log`.
+- Each reverse run exits 1 on assertions; original source restored in `finally`.
+  No criteria changed to obtain GREEN. `pnpm docs:check` and `git diff --check` pass.
