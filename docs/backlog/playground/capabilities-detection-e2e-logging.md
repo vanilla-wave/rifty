@@ -22,8 +22,8 @@ the Window detector's OPFS flag for Worker storage support (ADR-0372).
 `CapabilitiesPanel` when insufficient. The old audit's ambiguous UI-wiring
 premise is partly resolved; startup/e2e logging itself was not checked.
 
-The public pre-opening API is a distinct outcome in
-[Workbench sandbox support](../distribution/workbench-sandbox-support.md).
+The delivered public pre-opening API is documented in
+[Workbench sandbox support](../../public/sandbox-support.md).
 Generated per-engine reporting remains with the
 [cross-browser matrix](../service-worker/cross-browser-compat-matrix.md).
 

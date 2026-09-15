@@ -115,3 +115,12 @@ PR-4 criteria passed; initial verdict retained alongside this evidence.
 UUID repair: full native suite 29/29 PASS, 17.8 s; reverting only the mode
 requirement reproduces unsupported-vs-inconclusive RED again. Source restored
 in finally (`/tmp/pr340-uuid-revert.log`).
+
+## Delivery
+
+Final+GREEN PASS at `68436c19f3432f58466a07ff76e8925f918e1e8b` by
+`/root/final_green_review`: 14/14 coverage, 8/8 axes, no residuals. Full pr:check
+25/25 PASS on that commit (unit/parity without isolated reruns); native suite
+29/29, independent UUID discriminator 1/1, reverse mutant RED. Completed item
+removed; public guide and independent verdict retained. Final PR CI is recorded
+on GitHub against the delivered head.
