@@ -118,6 +118,7 @@ Delivered foundation: headless Pi agent over public Workbench/no-COI hosts,
 lazy playground "+chat", three-lane42-run diagnostic. Consumer guide:
 `packages/agent/README.md`; proof: `docs/backlog/distribution/reference/ai-agent-mode-closure-evidence.md`.
 open:
+- `docs/backlog/epics/agent-code-quality-evaluation` — real-project and varied-starter coding comparisons against native Pi and Codex, with own-environment checks and uncertainty.
 - `docs/backlog/distribution/ai-agent-subagent-orchestration` — `task`/subagent orchestration over the embeddable loop.
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).
