@@ -136,7 +136,9 @@ registration/controller may change. Refine's chosen browser-probe scope stands.
 
 - `/root/support_final` @ `e6b81be582263f86d12982efe96cf1457a741409`: FIX (missed TSX source; retained logging audit). Corrected.
 - `/root/support_final_clean` @ `a23a6700c72393c12b7d89f3d475024ee5e5bf99`: [PASS for unresolved draft](workbench-sandbox-support-final-green.json).
-- `/root/support_settled_review` @ `5634648d3190ed1dba34e80eeddcc5d031cd0163`: [PASS after R3](workbench-sandbox-support-round3-final-green.json), docs-only pr:check 20/20. These records precede feedback amendments; new final review required.
+- `/root/support_settled_review` @ `5634648d3190ed1dba34e80eeddcc5d031cd0163`: [PASS after R3](workbench-sandbox-support-round3-final-green.json), docs-only pr:check 20/20. These records precede feedback amendments.
+
+- `/root/feedback_final_review` @ `a29aeb024e6f02d8b8b440be917e053efdf841bf`: [PASS after feedback](workbench-sandbox-support-feedback-final-green.json), docs-only pr:check 20/20; original feedback, code/ADRs and both native probe artifacts verified. No remaining user fork. Product readiness remains with PICKUP.
 
 ## Disposable probe source
 
