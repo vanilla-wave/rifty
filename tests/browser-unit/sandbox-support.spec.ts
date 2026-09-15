@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { type Page, expect, test } from '@playwright/test';
+import type { SandboxSupportCheckId } from '../../packages/workbench/src/index.ts';
 import { bootOwner, closeOwner, readOwnerFile, writeOwnerFile } from './fixtures.ts';
 import { startSupportHost } from './fixtures/sandbox-support-host.ts';
 
 interface Check {
-  id: string;
+  id: SandboxSupportCheckId;
   status: 'passed' | 'failed' | 'incomplete' | 'not-applicable';
   reason: string;
   error?: { name: string; message: string };
@@ -16,16 +17,16 @@ interface Report {
     {
       composition: string;
       conclusion: 'supported' | 'unsupported' | 'inconclusive';
-      required: string[];
-      reasons: string[];
-      limitations: string[];
+      required: readonly SandboxSupportCheckId[];
+      unmet: readonly SandboxSupportCheckId[];
+      limitations: readonly SandboxSupportCheckId[];
     }
   >;
   cleanup: Check;
   limits: string[];
 }
 interface Options {
-  probeBaseUrl?: string;
+  probeBaseUrl: string;
   persistence?: 'required' | 'preferred' | 'ephemeral';
   nonCoiVmEngine?: 'rewrite' | 'quickjs';
   wasm?: boolean;
@@ -55,7 +56,7 @@ async function open(page: Page, variant = 'normal', coi = true) {
   return base;
 }
 
-async function check(page: Page, options: Options = {}): Promise<Report> {
+async function check(page: Page, options: Options): Promise<Report> {
   // Missing API is an explicit behavior assertion, not a module-load RED.
   expect(
     await page.evaluate(
@@ -67,7 +68,7 @@ async function check(page: Page, options: Options = {}): Promise<Report> {
         ).supportApi.checkSandboxSupport,
     ),
   ).toBe('function');
-  return page.evaluate(async (options) => {
+  const report = await page.evaluate(async (options) => {
     const api = (
       globalThis as typeof globalThis & {
         supportApi: { checkSandboxSupport(options: Options): Promise<Report> };
@@ -75,6 +76,15 @@ async function check(page: Page, options: Options = {}): Promise<Report> {
     ).supportApi;
     return api.checkSandboxSupport(options);
   }, options);
+  for (const mode of Object.values(report.modes)) {
+    expect(mode).not.toHaveProperty('reasons');
+    for (const ids of [mode.unmet, mode.limitations]) {
+      expect(Array.isArray(ids)).toBe(true);
+      for (const id of ids)
+        expect(report.checks.filter((check) => check.id === id)).toHaveLength(1);
+    }
+  }
+  return report;
 }
 const row = (report: Report, id: string) => {
   const found = report.checks.find((check) => check.id === id);
@@ -93,6 +103,8 @@ for (const coi of [true, false]) {
     const report = await check(page, { probeBaseUrl, persistence: 'required' });
     expect(report.modes.coi.conclusion).toBe(coi ? 'supported' : 'unsupported');
     expect(report.modes.nonCoi.conclusion).toBe('supported');
+    expect(report.modes.nonCoi.unmet).toEqual([]);
+    expect(report.modes.coi.unmet).toEqual(coi ? [] : ['cross-origin-isolated', 'shared-memory']);
     for (const id of [
       'module-worker',
       'module-import',
@@ -126,13 +138,44 @@ for (const coi of [true, false]) {
   });
 }
 
-test('missing probe configuration leaves required observations incomplete', async ({ page }) => {
+test('[fault: corrupt-input] missing probe configuration throws before any probe starts', async ({
+  page,
+}) => {
   await open(page);
-  const report = await check(page);
-  expect(row(report, 'module-worker').status).toBe('incomplete');
-  expect(row(report, 'service-worker-registration').status).toBe('incomplete');
-  expect(report.modes.coi.conclusion).toBe('inconclusive');
-  expect(report.modes.nonCoi.conclusion).toBe('inconclusive');
+  const result = await page.evaluate(async () => {
+    const api = (
+      globalThis as typeof globalThis & {
+        supportApi: { checkSandboxSupport(options?: Partial<Options>): Promise<Report> };
+      }
+    ).supportApi;
+    let observations = 0;
+    const secure = isSecureContext;
+    Object.defineProperty(globalThis, 'isSecureContext', {
+      configurable: true,
+      get: () => {
+        observations++;
+        return secure;
+      },
+    });
+    const outcomes = [];
+    for (const options of [undefined, {}, { probeBaseUrl: undefined }]) {
+      try {
+        await api.checkSandboxSupport(options);
+        outcomes.push({ name: 'resolved', message: '' });
+      } catch (error) {
+        if (!(error instanceof Error)) throw error;
+        outcomes.push({ name: error.name, message: error.message });
+      }
+    }
+    return { outcomes, observations };
+  });
+  expect(result.outcomes).toEqual(
+    Array.from({ length: 3 }, () => ({
+      name: 'TypeError',
+      message: expect.stringContaining('probeBaseUrl'),
+    })),
+  );
+  expect(result.observations).toBe(0);
 });
 
 test('published probe assets perform real browser operations', async ({ page }) => {
@@ -181,7 +224,7 @@ test('[fault: false-fallback] SW registration denial differs from presence and n
   expect(row(report, 'service-worker-registration').status).toBe('failed');
   expect(report.modes.coi.conclusion).toBe('unsupported');
   expect(report.modes.nonCoi.conclusion).toBe('supported');
-  expect(report.modes.nonCoi.limitations.join(' ')).toMatch(/service.worker/i);
+  expect(report.modes.nonCoi.limitations).toEqual(['service-worker-module-registration']);
 });
 
 for (const variant of ['storage-denied', 'quota']) {
@@ -195,7 +238,7 @@ for (const variant of ['storage-denied', 'quota']) {
     expect(required.modes.nonCoi.conclusion).toBe('unsupported');
     const preferred = await check(page, { probeBaseUrl, persistence: 'preferred' });
     expect(preferred.modes.nonCoi.conclusion).toBe('supported');
-    expect(preferred.modes.nonCoi.limitations.join(' ')).toMatch(/storage|OPFS/i);
+    expect(preferred.modes.nonCoi.limitations).toEqual(['opfs']);
     const ephemeral = await check(page, { probeBaseUrl, persistence: 'ephemeral' });
     expect(row(ephemeral, 'opfs').status).toBe('not-applicable');
     expect(ephemeral.modes.nonCoi.conclusion).toBe('supported');
@@ -500,7 +543,7 @@ test('[fault: provenance-lie] unavailable BroadcastChannel cannot prove preview 
   const report = await check(page, { probeBaseUrl });
   expect(row(report, 'broadcast-channel').status).toBe('failed');
   expect(report.modes.coi.conclusion).toBe('unsupported');
-  expect(report.modes.nonCoi.limitations.join(' ')).toMatch(/broadcast|preview/i);
+  expect(report.modes.nonCoi.limitations).toContain('broadcast-channel');
 });
 
 test('[fault: provenance-lie] unavailable UUID is an established failure for both compositions', async ({
@@ -514,7 +557,7 @@ test('[fault: provenance-lie] unavailable UUID is an established failure for bot
   expect(row(report, 'crypto').status).toBe('failed');
   expect(report.modes.coi.conclusion).toBe('unsupported');
   expect(report.modes.nonCoi.conclusion).toBe('unsupported');
-  expect(report.modes.nonCoi.reasons.join(' ')).toMatch(/crypto/);
+  expect(report.modes.nonCoi.unmet).toContain('crypto');
 });
 
 test('[fault: concurrent-same-key] private lock collision is inconclusive, never browser incompatibility', async ({

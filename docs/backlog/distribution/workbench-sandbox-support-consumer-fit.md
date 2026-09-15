@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Make checkSandboxSupport gate-ready for a real non-COI SDK host before PR #340 lands
 created: 2026-09-15
 why: A real non-COI SDK host ran the PR #340 report and found two gate hazards (unconfigured assets read as browser verdict; mode reasons not addressable by id) plus four guide gaps; the API is unpublished, so its shape is still free to change.
@@ -85,6 +85,7 @@ started.
 
 ## Decisions
 
+- 2026-09-16 — PICKUP: user authorized completion in handoff; observed-defect route (RDY-8), baseline `3ee25558f`, executed browser RED and independent DEC-2 decision in `reference/workbench-sandbox-support-consumer-implementation.md`; inherited preparation unchanged.
 - 2026-09-15 — A is a host prerequisite, not a report defect: no `navigator.locks` in `packages/rifty/src/sandbox.ts` or `packages/workbench/src/workers/no-coi-toolchain-worker.ts`; resolved by guide composition, no new option.
 - 2026-09-15 — B resolved by design: `probeBaseUrl` required, `TypeError` on omission; the omission path can never reach `supported`, matches existing option validation, removes the permanent misconfig cause from `inconclusive`. Overturns ADR-0437 decision 2 sentence "Omission reports incomplete asset-dependent checks" → DEC-2 at PICKUP (row 5) with its own decision subagent; the premise critic record is evidence, not that check.
 - 2026-09-15 — C: module-SW probe stays (`register.ts:40`, `sandbox.ts:677`); no SW opt-out; id-based rows let `skipServiceWorker` hosts ignore them.
