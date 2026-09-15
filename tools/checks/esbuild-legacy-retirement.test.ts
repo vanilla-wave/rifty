@@ -138,6 +138,10 @@ describe('esbuild carrier retirement', () => {
       'packages/npm-client/src/internal/shadow/substitution.ts',
     ]);
     expect(ALLOWED_COORDINATION_SOURCES).toEqual([
+      'packages/workbench/src/support/check-sandbox-support.ts',
+      'packages/workbench/src/support/support-child.ts',
+      'packages/workbench/src/support/support-worker.ts',
+      'packages/workbench/src/support/types.ts',
       'packages/workbench/src/glue/vfs-snapshot-port.ts',
       'packages/workbench/src/workbench/service-worker-control.ts',
       'tools/shadow-registry/src/runtime/generated/esbuild-runtime.js',

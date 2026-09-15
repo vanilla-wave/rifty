@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add checkSandboxSupport: bounded native COI/non-COI prerequisites, per-mode reasons, inert probe assets and explicit cleanup (ADR-0437).
+
 - Retire materialized dependency claims produced by the old npm tar-root layout; fresh installation restores declaration-file paths.
 
 

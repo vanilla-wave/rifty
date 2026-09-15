@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
+
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
 
 - Retire invocation watcher and promise-timer abort callbacks with their existing timer owner (ADR-0422).

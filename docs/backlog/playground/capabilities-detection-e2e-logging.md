@@ -1,15 +1,32 @@
 ---
 area: playground
 status: draft
-title: Wire capabilities-detection (single source of truth) into startup + e2e logging
+title: Verify capabilities-detection startup and e2e logging
 created: 2026-06-08
-why: D-006 specifies a data-driven capabilities source for the browser-compat report; ambiguous whether detectCapabilities is wired into startup + e2e logging
-user_story: As a developer checking whether my browser can run the playground, I want startup to log my real `crossOriginIsolated`/`SharedArrayBuffer`/`FileSystemSyncAccessHandle`/`Atomics.waitAsync` support, but today it is unverified whether `detectCapabilities` is wired into boot logging + the e2e harness, so each run may record nothing.
-sources: [D-006, ADR-0007, audit-digest missedLive]
+why: D-006 requires data-driven browser reporting; Playground consumes the detector, but startup and e2e capability logging remain unverified.
+user_story: As a developer checking browser support, I want startup and e2e runs to record their real capability observations, but today that logging is unverified.
+sources: [D-006, ADR-0007, docs/backlog/distribution/reference/workbench-sandbox-support-refine.md]
+code: [packages/runtime-js/src/env/capabilities.ts, apps/playground/src/adapters/playground-app.tsx, apps/playground/src/components/CapabilitiesPanel.tsx]
 ---
+
+## Question
+
+Do startup and the e2e harness record capabilities with their actual realm and
+mode? Verify existing wiring before prescribing additions. Do not mistake
+the Window detector's OPFS flag for Worker storage support (ADR-0372).
+
 ## Context
-A capabilities-detection module (`packages/runtime-js/src/env/capabilities.ts`) should be the single source of truth, logging `crossOriginIsolated`, `SharedArrayBuffer`, `FileSystemSyncAccessHandle`, `Atomics.waitAsync` at startup and into e2e. D-006 / ADR-0007 specify this as the data-driven feed for the `docs/public/compat/browsers.md` browser-compat report (feature-detection over UA). Audit flagged it ambiguous-verify: confirm it is implemented and wired into e2e, otherwise it is open work.
-## Options / Next
-Next: (1) verify `detectCapabilities` exists and is the single source; (2) wire it into playground boot logging + the Playwright e2e harness so each run records the capability set; (3) feed the same data into the eventual `docs/public/compat/browsers.md` generated report (see toolchain-build/browser-compat-matrix). If already wired, close this; the verification itself is the deliverable.
-## Reversibility
-Reversible — wiring + logging, feature-detection only (D-006 forbids `if(isFirefox)` product code). No cross-package API change if `detectCapabilities` already exists.
+
+2026-09-15 source verification: `playground-app.tsx:166` calls
+`detectCapabilities`; lines 1365/1458/1515 gate execution/UI and render
+`CapabilitiesPanel` when insufficient. The old audit's ambiguous UI-wiring
+premise is partly resolved; startup/e2e logging itself was not checked.
+
+The delivered public pre-opening API is documented in
+[Workbench sandbox support](../../public/sandbox-support.md).
+Generated per-engine reporting remains with the
+[cross-browser matrix](../service-worker/cross-browser-compat-matrix.md).
+
+## Decisions
+
+- 2026-09-15 — retain the original logging obligation; Workbench API refinement does not close it. Owner: agent at this item's pickup; trigger: browser startup/e2e reporting work.

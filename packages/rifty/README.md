@@ -36,7 +36,8 @@ headerless page; threaded-WASM toolchains remain a loud named gap.
 - Same-origin WASM assets when sqlite/WASI guests are used.
 
 Those bits belong in app/template config, not the SDK facade. Future starter
-templates should own that host wiring. Gate on `checkCapabilities()` before booting.
+templates should own that host wiring. `checkCapabilities()` only reports current-realm
+API presence; it cannot prove permission, CSP, Worker storage or successful boot.
 
 Cross-origin isolation enables the browser capabilities rifty needs; it does not
 turn guest code into safely hostile code. Current host controls are lifecycle
@@ -44,6 +45,10 @@ controls such as `sandbox.dispose()` and Worker kill/terminate paths, not hard
 CPU, memory, spawn, or egress quotas. See the
 [trust model](https://github.com/vanilla-wave/rifty/blob/main/docs/public/trust-model.md)
 for the current boundary.
+
+For active checks of COI Workbench and the non-COI Workbench toolchain, see
+[`checkSandboxSupport`](https://github.com/vanilla-wave/rifty/blob/main/docs/public/sandbox-support.md).
+The generic SDK sandbox is a different composition; `checkCapabilities()` stays synchronous.
 
 ## Install
 
@@ -62,11 +67,8 @@ import runtimeWorkerUrl from '@riftydev/runtime-js/worker?worker&url';
 import { checkCapabilities, createSandbox } from '@riftydev/sdk';
 
 async function main(): Promise<void> {
-  const caps = checkCapabilities();
-  if (!caps.sufficient || !caps.capabilities.crossOriginIsolated) {
-    document.body.textContent = caps.summary;
-    return;
-  }
+  // Passive presence only; createSandbox still reports actual startup failures.
+  console.log(checkCapabilities().summary);
 
   const sandbox = await createSandbox({
     // resolved by YOUR bundler; createSandbox cannot infer host worker assets
