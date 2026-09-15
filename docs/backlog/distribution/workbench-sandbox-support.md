@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Report browser support for COI and non-COI sandboxes before opening through Workbench
 created: 2026-09-15
 why: Existing capability flags neither distinguish the COI and non-COI compositions nor prove that their required browser operations are usable.
@@ -89,6 +89,8 @@ Probes must preserve existing SW registrations/controllers as well as projects.
 
 ## Decisions
 
+- ready-verdict: 2026-09-15 — Contract+RED @ 70b887072; [independent verdict](reference/workbench-sandbox-support-contract-red.json).
+
 - 2026-09-15 — user Round 1: public Workbench API; no Playground UI delivery.
 - 2026-09-15 — user Round 2: answer before opening a sandbox.
 - rejected route: startup-only diagnosis — violates the user's before-opening requirement.
@@ -129,4 +131,4 @@ The cheaper startup-only route was offered and rejected by user Round 2.
 Round 3 selected real browser probes. No current user-scope fork remains; the
 exact API, probe carriers, browser-proof suite and ADR are agent-owned at PICKUP.
 This is one implementable diagnostic outcome, not a multi-unit epic; the item
-stays `draft` until PICKUP supplies Contract+RED and readiness evidence (RDY-1).
+is ready after native baseline, executed RED and independent Contract+RED (RDY-8).
