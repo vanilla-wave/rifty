@@ -89,3 +89,13 @@ compares both criteria against BASE. No product defect was hidden by a retry.
 Final native browser suite: 29/29 PASS, 17.7 s; includes published assets,
 private-lock collision and live-session preservation (`/tmp/pr340-green-final.log`).
 Corrected legacy contracts: 23/23 PASS across both previously failing files.
+
+The committed-tree gate also found four new communication-bearing sources outside
+ADR-0391's exact inventory. Isolated `pnpm check:esbuild-legacy-retirement` reproduced
+all four. Added precisely the ADR-0437 probe driver/Worker/child/protocol paths;
+retired references, unknown brokers, packlists and output-byte checks remain
+unchanged. No directory exemption. First uncommitted run had not seen these
+`git ls-files` entries; committed verification exposed the missing inventory update.
+
+Second full gate: unit and parity PASS; only the now-corrected exact inventory
+failed (24/25). Its isolated suite and check are rerun before final verification.
