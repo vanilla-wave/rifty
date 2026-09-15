@@ -179,54 +179,59 @@ test('quota in one physical batch reports every logical path and heals only repa
   expect(result.healed.lastPathFailed).toBe(false);
 });
 
-test('report timeout retains the physical writer until real settlement and late success heals', async ({
-  page,
-}) => {
-  await gotoHarness(page);
-  const result = await page.evaluate(async (url) => {
-    const module = await import(/* @vite-ignore */ url);
-    const first = new Worker(module.default, { type: 'module' });
-    const second = new Worker(module.default, { type: 'module' });
-    const namespace = crypto.randomUUID();
-    const once = <T>(worker: Worker) =>
-      new Promise<T>((resolve, reject) => {
-        worker.addEventListener(
-          'message',
-          ({ data }) => (data.ok ? resolve(data.result) : reject(new Error(data.error))),
-          { once: true },
-        );
-        worker.addEventListener('error', (e) => reject(new Error(e.message)), { once: true });
-      });
-    try {
-      const timed = once<{ dirty: { total: number }; fenced: boolean }>(first);
-      first.postMessage({ kind: 'hold', namespace });
-      const dirty = await timed;
-      const closing = once<{ closed: boolean }>(first);
-      first.postMessage({ kind: 'close', namespace });
-      await closing;
-      const waiting = once<{ acquired: boolean }>(second);
-      second.postMessage({ kind: 'owner-contend', namespace });
-      const competing = await waiting;
-      const settled = once<{ clean: { total: number }; tree: Entry[] }>(first);
-      first.postMessage({ kind: 'release', namespace });
-      const completed = await settled;
-      const reacquiring = once<{ acquired: boolean }>(second);
-      second.postMessage({ kind: 'owner-contend', namespace });
-      return { dirty, competing, settled: completed, reacquired: await reacquiring };
-    } finally {
-      first.terminate();
-      second.terminate();
-    }
-  }, workerModuleUrl);
-  expect(result.dirty.dirty.total).toBe(2);
-  expect(result.dirty.fenced).toBe(false);
-  expect(result.competing.acquired).toBe(false);
-  expect(result.settled.clean.total).toBe(0);
-  expect(result.reacquired.acquired).toBe(true);
-  expect(result.settled.tree.find((e) => e.path === '/tree/b.txt')?.content).toEqual([
-    ...new TextEncoder().encode('new-b'),
-  ]);
-});
+for (const slowSeed of [false, true]) {
+  test(`report timeout retains the physical writer until real settlement and late success heals (slow seed: ${slowSeed})`, async ({
+    page,
+  }) => {
+    await gotoHarness(page);
+    const result = await page.evaluate(
+      async ({ url, slowSeed }) => {
+        const module = await import(/* @vite-ignore */ url);
+        const first = new Worker(module.default, { type: 'module' });
+        const second = new Worker(module.default, { type: 'module' });
+        const namespace = crypto.randomUUID();
+        const once = <T>(worker: Worker) =>
+          new Promise<T>((resolve, reject) => {
+            worker.addEventListener(
+              'message',
+              ({ data }) => (data.ok ? resolve(data.result) : reject(new Error(data.error))),
+              { once: true },
+            );
+            worker.addEventListener('error', (e) => reject(new Error(e.message)), { once: true });
+          });
+        try {
+          const timed = once<{ dirty: { total: number }; fenced: boolean }>(first);
+          first.postMessage({ kind: 'hold', namespace, slowSeed });
+          const dirty = await timed;
+          const closing = once<{ closed: boolean }>(first);
+          first.postMessage({ kind: 'close', namespace });
+          await closing;
+          const waiting = once<{ acquired: boolean }>(second);
+          second.postMessage({ kind: 'owner-contend', namespace });
+          const competing = await waiting;
+          const settled = once<{ clean: { total: number }; tree: Entry[] }>(first);
+          first.postMessage({ kind: 'release', namespace });
+          const completed = await settled;
+          const reacquiring = once<{ acquired: boolean }>(second);
+          second.postMessage({ kind: 'owner-contend', namespace });
+          return { dirty, competing, settled: completed, reacquired: await reacquiring };
+        } finally {
+          first.terminate();
+          second.terminate();
+        }
+      },
+      { url: workerModuleUrl, slowSeed },
+    );
+    expect(result.dirty.dirty.total).toBe(2);
+    expect(result.dirty.fenced).toBe(false);
+    expect(result.competing.acquired).toBe(false);
+    expect(result.settled.clean.total).toBe(0);
+    expect(result.reacquired.acquired).toBe(true);
+    expect(result.settled.tree.find((e) => e.path === '/tree/b.txt')?.content).toEqual([
+      ...new TextEncoder().encode('new-b'),
+    ]);
+  });
+}
 
 for (const phase of ['before-open', 'before-close', 'after-close'] as const) {
   test(`first commit death at ${phase} has no false corruption diagnosis`, async ({ page }) => {

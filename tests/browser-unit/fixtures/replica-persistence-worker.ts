@@ -34,6 +34,7 @@ interface Input {
   damage?: 'head' | 'segment' | 'truncate' | 'live-native';
   phase?: 'before-open' | 'before-close' | 'after-close';
   firstCommit?: boolean;
+  slowSeed?: boolean;
   rounds?: number;
 }
 const encoder = new TextEncoder();
@@ -275,7 +276,18 @@ async function run(input: Input) {
       segments: await referencedSegments(pair.root),
       issue: pair.layoutIssue,
     };
-  if (!(input.kind === 'crash' && input.firstCommit)) await seed(current);
+  if (!(input.kind === 'crash' && input.firstCommit)) {
+    const restore = input.slowSeed
+      ? faultNative(async (_name, phase) => {
+          if (phase === 'before-close') await new Promise((resolve) => setTimeout(resolve, 80));
+        })
+      : () => {};
+    try {
+      await seed(current);
+    } finally {
+      restore();
+    }
+  }
   if (input.kind === 'spin') {
     self.postMessage({ ok: true, result: { tree: snapshot(current) } });
     while (true) {}
