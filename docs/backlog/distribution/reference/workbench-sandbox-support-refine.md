@@ -7,7 +7,7 @@ Date: 2026-09-15. Baseline: `51440931aeb5e322ddfcab930e02068e7083922e`.
 - User: «нужна возможность точно понять из workbench поддерживает браузер песочницу или нет + детализировать ответ, если можно. Как для coi так и для non coi режима».
 - Round 1: «API @riftydev/workbench»; alternatives: API + Playground UI, UI only.
 - Round 2: «До открытия песочницы»; alternatives: startup result, preflight + startup errors.
-- Round 3: pending — active browser probes, passive presence only, or deployment verification.
+- Round 3: «Реальные пробы браузерных возможностей»; offered wording explicitly included temporary Worker/test data with cleanup. Alternatives: passive API presence without effects; full deployment files/settings verification.
 
 ## Dedup and current sources
 
@@ -87,8 +87,28 @@ Verbatim verdict before user scope answers:
 > Ценность подтверждена: существующий `sufficient` проверяет только Worker/ServiceWorker; он не определяет возможность запуска Workbench. Но отдельный preflight пока не обоснован: исходный запрос не требует ответа до запуска. Более дешёвый прямой маршрут — структурированный результат существующей попытки запуска с причинами отказа и ограничениями. Вопрос «пассивная проверка или активный preflight» преждевременно исключает этот вариант.
 
 Resolution: Round 1 selected the public API; Round 2 explicitly selected a
-result before opening, rejecting startup-only diagnosis. Probe depth remains
-pending Round 3. Early Challenge is not the final written-result check.
+result before opening, rejecting startup-only diagnosis. Round 3 then selected
+real browser probes, rejecting passive-only presence and broader deployment
+verification. Early Challenge is not the final written-result check.
+
+## Scope closure after Round 3
+
+| Source | Observable consequence | Authority |
+|---|---|---|
+| Original COI/non-COI request, ADR-0372/0375 | Separate named compositions; no new non-COI openWorkbench topology | User outcome + existing mode contracts |
+| Round 1 / Round 2 | Public Workbench API before sandbox opening; host renders details | Explicit user answers |
+| Round 3 + actual CSP/OPFS probe | Real bounded Worker/memory/storage probes, temporary-resource cleanup | Explicit chosen option; exact checks/carriers agent-owned at PICKUP |
+| Round 3 alternatives | Browser prerequisites only; actual deployment/package success unproven | User chose browser probes over deployment verification |
+| ADR-0372/0419 | Storage result reflects owner realm and persistence policy; optional loss is not unconditional rejection | Existing storage contract |
+| Original inspection action, repeated calls or already-open session | No project mutation, no host isolation change; no stale results or false browser-incompatibility claim from contention | Inspection scope + Fidelity |
+| Worker error with empty message, stalled probe/cleanup denial | Failed/unfinished check visible; unproved cause stays unknown; cleanup failure visible | Executed probe + Fidelity, reachable fault model |
+
+One diagnostic outcome fits a standalone item. No user fork currently remains;
+public signature, probe URLs/worker carrier, per-mode requirement inventory,
+bounded settlement/cleanup mechanism and browser test coverage belong to PICKUP.
+The probe is browser evidence, not a shipped API or a complete RED suite.
+Prior final review certified the earlier unresolved capture only; new final
+review must examine the actual post-answer result.
 
 ## Written-result review history
 
