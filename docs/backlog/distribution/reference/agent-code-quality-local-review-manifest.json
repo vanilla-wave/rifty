@@ -1,0 +1,41 @@
+{
+  "reviewer": "/root/local_runner_refine_final",
+  "base": "6f3ecb34939fc700073558555af681ca1380ee13",
+  "algorithm": "sha256",
+  "reviewed_documents": {
+    "docs/backlog/epics/agent-code-quality-evaluation/goal.md": "f78312f1618709599d4407e4d20d7f5f60a0e49185e4d1e661bd63bf9a9df9d0",
+    "docs/backlog/epics/agent-code-quality-evaluation/map.md": "d83484a19f000e255529d6489d7a1394233c912e6e549b7f669823de847025c1",
+    "docs/backlog/epics/agent-code-quality-evaluation/ledger.md": "9a044545f4396662e94ea12f2eafda95598c507cc199477b2c86cfc045422148",
+    "docs/backlog/distribution/agent-eval-local-runner.md": "8e7935b27712cc7fea2a6192febaddc85ad61aeb3c29db8d7bd28c2cb90fc330",
+    "docs/backlog/distribution/agent-eval-codex-reference.md": "1b81bbcc36fecfd66bb7a2eb2462dcf0d1a0e64c3296f973dc9fb52c7daeea2c",
+    "docs/backlog/distribution/agent-eval-project-corpus.md": "df3cc615764db15dddfab536a9ddaddffc87abeacdfb7f5292e35ad0e96363c2",
+    "docs/backlog/distribution/agent-eval-comparison-report.md": "662c0769e77922e265a9a5472e8e1cbbe9d37e97fca657b927215e88bb75b85c",
+    "docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md": "a95c19c7185f621da57695f9a3b4fa685b8410f1173bfadca32dec46d07ec9f1"
+  },
+  "reviewed_source_evidence": {
+    "tools/agent-bench/src/cli.ts": "1f3e8921dda620ba8ab47e63b34f356c0809b52fd54f772911aa087b0e3fbb6d",
+    "tools/agent-bench/src/config.ts": "bf6dce9194aa9d09102f6f5da065f94a7eb0701ca36ce7eabe6fa4434dce0e6a",
+    "tools/agent-bench/src/runner.ts": "165015220899f58aa6d231ab6daa3fbbcdc0217553ca937e36b38af985e0fadd",
+    "tools/agent-bench/src/report.ts": "6771a6eb679245438e99fd292ae0a532a7a37178ce6f2e91364e21d7be24d31e",
+    "docs/adr/distribution/0434-run-a-three-lane-pi-benchmark-with-shared-profile-and-native-judges.md": "094fdef3eb3e9581fb9be20a2ae6f437b82bfbe33224099069a79b6d4fefcc7e"
+  },
+  "check_log": {
+    "path": "/tmp/rifty-agent-eval-local-pr-check.log",
+    "sha256": "c1a9a660d65e4570b492a075d381fd163be57785306465b49fb232004930f109",
+    "result": "PASS docs-only 20/20; skipped typecheck, build:libs, check:arch, test:run, test:parity"
+  },
+  "review_notes": [
+    "Raw user answers checked against final goal/map/all four children and evidence. No remaining consequential unsupported scope fork found.",
+    "I1-I7 preserved exactly against BASE; I8-I9 appended. Ledger begins with exact BASE content.",
+    "I8 remains a meaningful absent promise: current fixed loops/report exist, but no resolved declared matrix or full operator-owned workflow contract.",
+    "Current source facts verified read-only; no model or interruption acceptance execution claimed.",
+    "Determinism applies to declared protocol, harness-controlled inputs/order and scoring from evidence; variable model output, timing and runtime scheduling remain measured.",
+    "New series never resumes/overwrites old evidence. No crash-recovery platform, second orchestration owner or tier increase introduced.",
+    "Fresh Codex reference context remains distinct from the operating Codex session; operator annotations cannot rewrite measured scores.",
+    "Docs-only unit has no traced implementation Acceptance/Parity/Fault-matrix clauses, public API changes or frozen oracle changes: coverage empty intentionally; all goal implementation remains residual."
+  ],
+  "verdict": {
+    "path": "/tmp/rifty-agent-eval-local-final.json",
+    "sha256": "eecaadcb2c19856b29e551293edbe73936b019ea7d25c6e3742e18c3e0f2e1fe"
+  }
+}

@@ -418,3 +418,16 @@ the Codex reference and corpus; comparison report reuses the same series
 records. No second scheduler, service or model-driven run orchestrator is
 required. Changed public seams or new mechanisms still follow PICKUP/ADR
 and the existing fault-class inventory; no mechanism is prescribed here.
+
+### Local execution amendment review
+
+Fresh read-only `/root/local_runner_refine_final`: PASS, no findings.
+Record: `agent-code-quality-local-final-green.json`; reviewed commit
+`f6897dc455b8fe5c0caa28680ac8833f8cbb00d0`. Hashes: `agent-code-quality-local-review-manifest.json`;
+driver matched all document/source/log/verdict bytes before binding.
+I1–I7 unchanged; ledger append-only. I8/I9 match the user answers;
+local execution and all goal behavior remain unimplemented.
+
+`pnpm pr:check`: docs-only 20/20 PASS,
+`/tmp/rifty-agent-eval-local-pr-check.log`; source lanes skipped.
+`git diff --check` and verdict validator PASS.
