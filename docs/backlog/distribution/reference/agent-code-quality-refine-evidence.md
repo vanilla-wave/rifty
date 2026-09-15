@@ -180,3 +180,34 @@ Corpus selection, Codex execution protocol and uncertainty calculation are
 agent-owned implementation research. Existing secrets handling and on-demand
 execution remain ADR-0434 obligations. No product implementation authorized by
 this refine-only hand-off.
+
+## Final written-result review and checks
+
+Fresh read-only reviewer `/root/eval_refine_final`: PASS, original request and
+answers compared with goal/map/three children/evidence and ROADMAP. Verdict:
+`agent-code-quality-refine-final-green.json`. No product acceptance certified;
+I1–I5 remain future obligations.
+
+Driver matched every supplied SHA256 to commit
+`61199dcf9fcca366e4504328fc1f0cc0a7eb7fbf`; goal differs only by the explicitly
+permitted `status: draft` → `ready` flip. Reviewed manifest:
+
+```text
+65108b0cc27afde51d1820172c43d8c15b9e565bd58e7510e6e6b5a3d8fce5ef  docs/ROADMAP.md
+7e713496b1372d30c8df2d62bff29020ec2bb026dceb02baa88e8731dd75f0ed  docs/backlog/epics/agent-code-quality-evaluation/goal.md
+aeb69eddb62d254f0c07fb3aa3c91d639557837bba0f7721cfe5d68697f31881  docs/backlog/epics/agent-code-quality-evaluation/map.md
+77cfb5c3767eef8e0dc18a3f938e2ae8dfa0dffc6672e485ca89e56c146fe8cc  docs/backlog/epics/agent-code-quality-evaluation/ledger.md
+4c26b6ff999185cc406f56b48b1a472d5d2618eac010c57c2cf7d2f549221aa9  docs/backlog/distribution/agent-eval-codex-reference.md
+476d965bbcdbedea59c6181229f90e1f94dcc1c2b835ddb25dae4cee332c1686  docs/backlog/distribution/agent-eval-project-corpus.md
+5a43098d098a35afddd5fbe1f8e335b906cc3f78a5fecfd5661ea831fe0ae518  docs/backlog/distribution/agent-eval-comparison-report.md
+624824586964258aa8b1acd848d2a61902e9c0a2e99950bdd02b19691b7d14b5  docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md
+```
+
+- `pnpm pr:check`: docs-only 20/20 PASS, final log
+  `/tmp/rifty-agent-eval-refine-pr-check-final.log` (ROADMAP included).
+- Initial sandbox attempt: four tsx drift checks failed to start, `listen EPERM`
+  for a local IPC pipe; authorized rerun passed. Not a product regression.
+- Classifier skipped `typecheck`, `build:libs`, `check:arch`, `test:run`,
+  `test:parity`; no source behavior changed or tested here.
+- `pnpm backlog:check`: 307 items, 16 epics, 0 invalid; repeated after ready flip.
+- `pnpm refs:check`: 284 ADRs, 616 source docs, PASS; `git diff --check` PASS.
