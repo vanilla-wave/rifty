@@ -35,9 +35,10 @@ dedicated Worker writes/flushes/reads exact bytes in both COI and non-COI.
 The Worker error can contain no explanatory message. Evidence, script, versions
 and independent early Challenge: [refine evidence](reference/workbench-sandbox-support-refine.md).
 
-This updates/moves the old startup/e2e capability-logging audit instead of
-creating a duplicate. Its unanswered wiring premise is now sourced above;
-browser-matrix generation stays in the existing
+Dedup found the related startup/e2e capability-logging audit. Playground already
+calls the detector and renders a fallback panel, but logging remains unverified;
+that obligation stays in the [logging item](../playground/capabilities-detection-e2e-logging.md).
+It does not supply a pre-opening Workbench API. Browser-matrix generation stays in the existing
 [cross-browser item](../service-worker/cross-browser-compat-matrix.md).
 
 ## User scenario

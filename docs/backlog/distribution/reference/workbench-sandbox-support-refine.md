@@ -11,10 +11,15 @@ Date: 2026-09-15. Baseline: `51440931aeb5e322ddfcab930e02068e7083922e`.
 
 ## Dedup and current sources
 
-- Existing match: `playground/capabilities-detection-e2e-logging` (2026-06-08),
-  an unverified startup/e2e logging audit. Reuse its capture for this clarified API outcome.
-- `rg -n 'detectCapabilities|checkCapabilities' apps/playground/src packages/workbench/src packages/rifty/src tests -g '*.ts' -g '*.mjs'`:
-  SDK wrapper/boot/tests call it; no Playground/Workbench call found.
+- Related capture: `playground/capabilities-detection-e2e-logging` (2026-06-08),
+  an unverified startup/e2e logging audit. Its logging obligation remains there;
+  it does not supply a callable Workbench API before opening.
+- `rg -n 'detectCapabilities|checkCapabilities' apps/playground/src packages/workbench/src packages/rifty/src tests -g '*.{ts,tsx,mjs}'`:
+  SDK wrapper/boot/tests and Playground `playground-app.tsx:166` call it;
+  no Workbench call found. Playground gates execution/UI at lines 1365/1458/1515
+  and renders `CapabilitiesPanel` on insufficient capabilities. The first search
+  omitted TSX; independent review caught and corrected its false no-Playground
+  conclusion. Startup/e2e logging remains unverified.
 - `packages/runtime-js/src/env/capabilities.ts`: current-realm globals;
   `sufficient` requires only Worker + ServiceWorker; no mode-specific verdict.
 - `packages/workbench/src/workbench/public.ts`: no public support preflight.
@@ -84,6 +89,15 @@ Verbatim verdict before user scope answers:
 Resolution: Round 1 selected the public API; Round 2 explicitly selected a
 result before opening, rejecting startup-only diagnosis. Probe depth remains
 pending Round 3. Early Challenge is not the final written-result check.
+
+## Written-result review history
+
+- `/root/support_final`, fresh read-only, reviewed
+  `e6b81be582263f86d12982efe96cf1457a741409`: «FIX — одна фактическая ошибка».
+  TSX was omitted from the call search; the old startup/e2e logging obligation
+  also needed an explicit retained carrier. Both corrections are applied above
+  and in the restored logging item. Probe source/output and two user answers
+  were independently verified. This FIX is history, not a final PASS.
 
 ## Disposable probe source
 
