@@ -60,3 +60,14 @@ Log: `/tmp/pr340-consumer-red.log`. Exit 1; four behavioral failures, no load/ty
   on zero matching rows; `/tmp/pr340-consumer-revert-limitations.log`.
 - Each reverse run exits 1 on assertions; original source restored in `finally`.
   No criteria changed to obtain GREEN. `pnpm docs:check` and `git diff --check` pass.
+
+## Final verification
+
+- Clean commit `36cbd0aea9d43db775ea12588d2729aba1b25798`: full `pnpm pr:check`
+  25/25 PASS; unit 235.0 s, parity 61.6 s, no failed-file reruns.
+  Raw log `/tmp/pr340-consumer-pr-check.log`.
+- Fresh independent Final+GREEN `/root/consumer_final_review`: 13/13 obligations,
+  eight axes PASS, no findings/residuals. Independent Chromium suite 29/29 PASS,
+  19.1 s; `/tmp/pr340-consumer-independent-green.log`.
+- Bound verdict: `workbench-sandbox-support-consumer-fit-final-green.json`.
+  Completed standalone consumer-fit item deleted; no parent-goal completion claimed.
