@@ -64,3 +64,7 @@ Sweep of replica browser fixtures:
 - Full `pnpm pr:check` after repair: 25/25 PASS; unit 209.7 s, parity 61.4 s,
   no failed-file reruns. `/tmp/pr340-replica-pr-check.log`. Only this evidence text
   changed after the tested fixture implementation at `6481b6270`.
+- Independent Final+GREEN `/root/replica_fixture_review` at `28078a46e`: 12/12
+  obligations, eight axes PASS, zero findings/residuals. Own native run 31/31
+  PASS in 1.2 min (`/tmp/pr340-replica-independent-green.log`); JSON validator exit 0.
+  Bound record: `workbench-sandbox-support-ci-replica-final-green.json`.
