@@ -65,6 +65,11 @@ deployment are distinct observations; the last remains deployment-specific.
 Excluding deployment verification does not silently exclude browser SW checks.
 Probes must preserve existing SW registrations/controllers as well as projects.
 
+## Out of scope
+
+Playground UI, full deployment/control verification, npm compatibility and a new
+non-COI `openWorkbench` topology; per original user choices and existing ADRs.
+
 ## PICKUP evidence required
 
 - Trace requirements to actual boot/execution paths of both compositions and
