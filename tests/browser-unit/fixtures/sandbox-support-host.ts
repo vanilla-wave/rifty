@@ -68,8 +68,8 @@ export async function startSupportHost(upstream: string) {
             ? 'navigator.storage.getDirectory = () => Promise.reject(new DOMException("test denial", "NotAllowedError"));\n'
             : asset === 'support-worker' && path.includes('/quota/')
               ? 'FileSystemFileHandle.prototype.createWritable = () => Promise.reject(new DOMException("test quota", "QuotaExceededError"));\n'
-              : asset === 'support-worker' && path.includes('/locks-denied/')
-                ? 'navigator.locks.request = () => Promise.reject(new DOMException("test locks", "SecurityError"));\n'
+              : asset === 'support-worker' && path.includes('/wasm-denied/')
+                ? 'WebAssembly.compile = () => Promise.reject(new WebAssembly.CompileError("test WASM denial"));\n'
                 : '';
         response.end(fault + code);
         return;

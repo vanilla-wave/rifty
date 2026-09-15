@@ -49,3 +49,12 @@ deadline. `service-worker/src/register.ts:38–48`: registration itself unbounde
 None can safely own disposable whole-invocation teardown. ADR-0437 selects one
 per-call deadline, separate bounded cleanup and late native cleanup; no shared
 queue, correlation owner or lease acquisition.
+
+## Contract+RED reception
+
+`/root/contract_red_review` at `9fc492bf6`: FIX, live-session carrier used
+paths outside /scratch and compared structured reads to strings. Both pairs
+corrected; source-confirmed page lock realm replaces the unsupported Worker
+lock requirement. Added negative WASM/BC/UUID cases. Actual COI UUID authority
+also includes `workbench/workbench-browser-owner-spawn.ts:43` operation IDs.
+Native OPFS probe includes SHA-256 (`vfs/src/opfs-replica-codec.ts:27`).

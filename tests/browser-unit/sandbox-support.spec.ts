@@ -46,6 +46,11 @@ async function open(page: Page, variant = 'normal', coi = true) {
     const entry = await import('/src/browser-unit/workbench-public-entry.ts');
     (globalThis as typeof globalThis & { supportApi: Record<string, unknown> }).supportApi = entry;
   });
+  if (variant === 'locks-denied')
+    await page.evaluate(() => {
+      navigator.locks.request = () =>
+        Promise.reject(new DOMException('test locks', 'SecurityError'));
+    });
   return base;
 }
 
@@ -92,9 +97,10 @@ for (const coi of [true, false]) {
       'module-import',
       'nested-worker',
       'message-port',
+      'broadcast-channel',
       'js-eval',
       'wasm',
-      'worker-locks',
+      'page-locks',
       'opfs',
       'service-worker-registration',
     ]) {
@@ -133,7 +139,7 @@ for (const [variant, failed] of [
   ['nested-denied', 'nested-worker'],
   ['import-denied', 'module-import'],
   ['wasm-only', 'js-eval'],
-  ['locks-denied', 'worker-locks'],
+  ['locks-denied', 'page-locks'],
 ] as const) {
   test(`[fault: provenance-lie] actual ${variant} cannot give positive required verdict`, async ({
     page,
@@ -398,16 +404,24 @@ test('[fault: concurrent-same-key] real active Workbench project survives same/o
   });
   const other = await context.newPage();
   try {
-    await writeOwnerFile(page, '/support-live.txt', 'live project bytes');
+    await writeOwnerFile(page, '/scratch/support-live.txt', 'live project bytes');
     await open(other);
     const reports = await Promise.all([
       check(page, { probeBaseUrl }),
       check(other, { probeBaseUrl }),
     ]);
     expect(reports.every((r) => r.modes.coi.conclusion === 'supported')).toBe(true);
-    expect(await readOwnerFile(page, '/support-live.txt')).toBe('live project bytes');
-    await writeOwnerFile(page, '/support-after.txt', 'owner still alive');
-    expect(await readOwnerFile(page, '/support-after.txt')).toBe('owner still alive');
+    expect(await readOwnerFile(page, '/scratch/support-live.txt')).toEqual({
+      ok: true,
+      text: 'live project bytes',
+      error: '',
+    });
+    await writeOwnerFile(page, '/scratch/support-after.txt', 'owner still alive');
+    expect(await readOwnerFile(page, '/scratch/support-after.txt')).toEqual({
+      ok: true,
+      text: 'owner still alive',
+      error: '',
+    });
   } finally {
     await closeOwner(page);
     await other.close();
@@ -442,4 +456,43 @@ test('[fault: unbounded-read] late native scratch creation cannot escape cleanup
       { timeout: 7000 },
     )
     .toEqual([]);
+});
+
+test('[fault: false-fallback] WASM denial follows selected engine and workload', async ({
+  page,
+}) => {
+  const probeBaseUrl = await open(page, 'wasm-denied');
+  const rewrite = await check(page, { probeBaseUrl });
+  expect(row(rewrite, 'wasm').status).toBe('failed');
+  expect(rewrite.modes.coi.conclusion).toBe('unsupported');
+  expect(rewrite.modes.nonCoi.conclusion).toBe('supported');
+  const quickjs = await check(page, { probeBaseUrl, nonCoiVmEngine: 'quickjs' });
+  expect(quickjs.modes.nonCoi.conclusion).toBe('unsupported');
+  const workload = await check(page, { probeBaseUrl, wasm: true });
+  expect(workload.modes.nonCoi.conclusion).toBe('unsupported');
+});
+
+test('[fault: provenance-lie] unavailable BroadcastChannel cannot prove preview prerequisites', async ({
+  page,
+}) => {
+  const probeBaseUrl = await open(page);
+  await page.evaluate(() => {
+    Object.defineProperty(globalThis, 'BroadcastChannel', { value: undefined, configurable: true });
+  });
+  const report = await check(page, { probeBaseUrl });
+  expect(row(report, 'broadcast-channel').status).toBe('failed');
+  expect(report.modes.coi.conclusion).toBe('unsupported');
+  expect(report.modes.nonCoi.limitations.join(' ')).toMatch(/broadcast|preview/i);
+});
+
+test('[fault: provenance-lie] unavailable UUID never becomes a positive COI verdict', async ({
+  page,
+}) => {
+  const probeBaseUrl = await open(page);
+  await page.evaluate(() => {
+    Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true });
+  });
+  const report = await check(page, { probeBaseUrl });
+  expect(row(report, 'crypto').status).toBe('failed');
+  expect(report.modes.coi.conclusion).toBe('unsupported');
 });
