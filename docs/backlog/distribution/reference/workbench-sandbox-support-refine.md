@@ -98,6 +98,27 @@ pending Round 3. Early Challenge is not the final written-result check.
   also needed an explicit retained carrier. Both corrections are applied above
   and in the restored logging item. Probe source/output and two user answers
   were independently verified. This FIX is history, not a final PASS.
+- `/root/support_final_clean`, fresh context, read-only, reviewed
+  `a23a6700c72393c12b7d89f3d475024ee5e5bf99`:
+  «PASS — финальный draft точно отражает запрос и два ответа пользователя.
+  Обязательных исправлений нет. Round 3 остаётся открытым; PASS подтверждает
+  честную фиксацию, не завершённый refine, readiness или реализацию».
+  Sources, five ADRs, retained logging obligation, actual script/JSON and
+  docs-only `pr:check` 20/20 verified. Reviewer did not rerun the browser probe.
+  Exact verdict: [Final+GREEN](workbench-sandbox-support-final-green.json).
+- Driver checks: `pnpm backlog:check`, `git diff --check`, `pnpm pr:check`
+  (`/tmp/rifty-support-refine-pr-check-final.log`): PASS, docs-only 20/20;
+  skipped typecheck, build:libs, check:arch, test:run, test:parity.
+  Initial gate attempt hit sandbox `tsx` IPC denial in four checks; the same
+  full docs gate passed with permitted local IPC. No product test was changed.
+
+Reviewed SHA256 (before review-record additions):
+
+| File | SHA256 |
+|---|---|
+| distribution/workbench-sandbox-support.md | c08ba5bacaed63d6b1016dce82bb4f76cd911902360a71427058047cfd4ed3fa |
+| distribution/reference/workbench-sandbox-support-refine.md | 9c6bd91525d17fe65d933c2fdde7c044096bc6f60c14c28ae1dd91e55e20abc4 |
+| playground/capabilities-detection-e2e-logging.md | 584ceac182ec36877b8956f2977952e40f0d66fdd1e50983915cb44fb72bb5cd |
 
 ## Disposable probe source
 
