@@ -2,6 +2,7 @@
 import { OpfsFsSync, type PersistFailureReport, initBackend, syncMirror } from '@riftydev/vfs';
 import { installOpfsFs } from '@riftydev/vfs/internal';
 import { installWorkbenchOwnerStorageAuthority } from '../../../packages/workbench/src/workers/workbench-owner-storage.ts';
+import { settleOpfsSetup } from './opfs-setup.ts';
 import manifest from './tracker-tree-manifest.json';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -112,8 +113,7 @@ async function seed(instance: OpfsFsSync) {
   instance.mkdirSync('/tree', { recursive: true });
   instance.writeFileSync('/tree/a.txt', encoder.encode('old-a'));
   instance.writeFileSync('/tree/b.txt', encoder.encode('old-b'));
-  const r = await instance.flush();
-  if (r.total) throw new Error('seed unclean');
+  await settleOpfsSetup(instance);
 }
 async function referencedSegments(root: FileSystemDirectoryHandle): Promise<number | null> {
   try {

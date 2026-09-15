@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- Make replica browser fixture setup join native settlement before judging short
+  reporting deadlines; retain target timeout and writer-custody assertions.
+
 - Make `@riftydev/agent` release-ready with native callback transport, truthful
   bounded tool outcomes and lockstep package metadata (ADR-0436).
 
