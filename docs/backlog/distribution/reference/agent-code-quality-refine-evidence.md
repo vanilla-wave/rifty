@@ -376,3 +376,45 @@ added above; both wraps fixed. Factual verification of the findings stands.
 - `pnpm pr:check` after the fixes: docs-only 20/20 PASS, log
   `/tmp/rifty-pr341-review-amend-pr-check.log`; source lanes skipped.
 - `git diff --check` PASS.
+
+## Local script execution
+
+User asked why launch workflow was not discussed, then selected:
+«На машине с использованием codex».
+
+Driver clarification: «Правильно понимаю: ты открываешь репозиторий в Codex,
+пишешь „запусти eval …“, а Codex сам запускает локальную серию, следит за
+прогрессом и разбирает отчёт? Native Codex при этом остаётся отдельным
+участником сравнения».
+
+User: «Это точка входа. Но как будто нужен набор скриптов, которые будут
+детерменированное все это запускать».
+
+Driver's separate interruption question offered continuation without repeating
+completed trials versus retaining a partial report and starting a new series.
+User: «Сохранить частичный отчёт; следующий запуск — новая серия».
+
+Interpretation: Codex is the local operator; repository scripts own the
+repeatable experiment protocol and scoring. Native Codex remains a separate
+evaluated process. Operator text is not a score oracle. Fixed configuration
+determines the matrix and controlled inputs/order; model outputs, timings
+and runtime scheduling remain variable. Interruption preserves persisted
+completed results, exposes unfinished work, and never resumes implicitly.
+The next run uses fresh workspaces and separate output. Explicit old-path
+reuse rejects rather than overwrites. These are I8/I9 and scenario 2/6;
+no automatic continuation or whole-goal implementation was authorized.
+
+Current source at `6f3ecb34939fc700073558555af681ca1380ee13`:
+`tools/agent-bench/src/cli.ts` exposes run/report, no resume command;
+`config.ts` records endpoint/model, limits, repeats and playground port;
+`runner.ts` loops tasks/lanes/repeats, prints START/END and persists each
+completed record, but initializes an empty report and uses recursive mkdir
+on the requested output path. `report.ts` regenerates JSON/Markdown from
+stored report.json without model calls. These are source observations, not
+an executed interruption or local-Codex acceptance test.
+
+Route: first extend that existing CLI/runner on one existing task, then add
+the Codex reference and corpus; comparison report reuses the same series
+records. No second scheduler, service or model-driven run orchestrator is
+required. Changed public seams or new mechanisms still follow PICKUP/ADR
+and the existing fault-class inventory; no mechanism is prescribed here.

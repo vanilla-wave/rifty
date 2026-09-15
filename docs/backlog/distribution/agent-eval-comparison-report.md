@@ -5,7 +5,7 @@ title: Report repeatable coding comparisons with uncertainty and failure evidenc
 created: 2026-09-15
 why: Current per-task pass deltas lack uncertainty and the identity/accounting needed for the expanded comparison.
 epic: agent-code-quality-evaluation
-blocked_by: [distribution/agent-eval-codex-reference, distribution/agent-eval-project-corpus]
+blocked_by: [distribution/agent-eval-local-runner, distribution/agent-eval-codex-reference, distribution/agent-eval-project-corpus]
 sources: [ADR-0434, docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md]
 code: [tools/agent-bench/src/report.ts, tools/agent-bench/src/runner.ts, tools/agent-bench/src/config.ts]
 ---
@@ -32,3 +32,8 @@ task/family counts distinct from repeated-trial counts. Identify pilot versus
 frozen evaluation corpus and report selected reference-solution failures;
 an optional compatible-task view uses a rule fixed before results and never
 replaces the full selected matrix or rescues own-environment failures.
+
+Consume the local runner's persisted series records for I8/I9; retain partial
+versus completed series identity and visible missing work. Report generation
+is deterministic over the same evidence and never calls a model. An operator
+may explain or separately annotate results, never rewrite measured scores.

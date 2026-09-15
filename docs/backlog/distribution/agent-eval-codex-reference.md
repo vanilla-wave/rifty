@@ -5,6 +5,7 @@ title: Run native Codex as an inspectable benchmark reference
 created: 2026-09-15
 why: The existing benchmark has native Pi but no requested Codex reference.
 epic: agent-code-quality-evaluation
+blocked_by: [distribution/agent-eval-local-runner]
 sources: [ADR-0434, docs/backlog/distribution/reference/agent-code-quality-refine-evidence.md]
 code: [tools/agent-bench/src/lanes/types.ts, tools/agent-bench/src/runner.ts, tools/agent-bench/src/config.ts]
 ---
@@ -21,3 +22,5 @@ with retained output/artifacts, actual configuration, own-environment judging
 and honest budget/failure handling (I2/I3). Begin with one task before the
 new corpus. PICKUP probes public execution/completion/cancellation and records
 any new adapter decision under ADR-0434's seam; never fabricate a native loop.
+Use the local runner's series/interruption contract. This evaluated Codex
+process must not inherit the operating Codex session's history or judge answers.

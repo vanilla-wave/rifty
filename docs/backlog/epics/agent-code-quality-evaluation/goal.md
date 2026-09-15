@@ -28,7 +28,9 @@ The payoff is evidence of where browser Node limits real coding workflows.
    user workflows; framework swaps alone do not establish diversity.
 2. They configure model/endpoint for Rifty and native Pi, and the native Codex
    reference's model/settings, then run repeated independent trials over the
-   declared matrix. Both existing Rifty paths remain: actual COI +chat and
+   declared matrix on their machine through Codex. Codex invokes repository
+   scripts, monitors progress and explains results; scripts own execution and
+   scoring. Both existing Rifty paths remain: actual COI +chat and
    packed no-COI SDK. Every agent receives the same task and starting project
    for a comparison; host/tool differences remain explicit.
 3. The same functional requirements and regression checks judge the result in
@@ -42,6 +44,9 @@ The payoff is evidence of where browser Node limits real coding workflows.
 5. They rerun after a change or regenerate a report from retained evidence;
    task/model/dependency/judge/config changes are visible. They can inspect
    failures without mistaking aggregate success for proof of equality.
+6. On interruption, they keep a partial report of persisted completed attempts
+   and visible unfinished work. Their next run starts a fresh series with fresh
+   workspaces and separate output; no resume or overwrite of earlier evidence.
 
 ## Invariants
 
@@ -53,6 +58,10 @@ I4 absent: raw per-task deltas only, no uncertainty or expanded experiment ident
 I5 absent: retained 42-run report covers only the previous corpus and lanes.
 I6/I7 absent: no expanded case-card/control catalog or family-separated pilot
 and evaluation corpus; the original five tasks remain the only task set.
+I8/I9 absent as complete promises: current CLI has run/report and fixed nested
+loops, but no resolved experiment plan; runner reuses an existing output path
+and has no explicit interrupted-series contract. Source: refine evidence
+§Local script execution.
 
 - I1. A finite versioned suite covers bug fixes and feature additions across
   multiple real JS/TS projects, and application creation across multiple
@@ -93,6 +102,19 @@ and evaluation corpus; the original five tasks remain the only task set.
   campaign; Rifty failures cannot justify post-hoc removal. Reports separate
   the existing smoke/regression set, task groups and repeated trials, so easy
   controls or repetitions cannot masquerade as broader capability coverage.
+- I8. A maintainer can use Codex to invoke documented local repository scripts
+  that own validation, preparation, execution, judging and report generation.
+  Explicit configuration resolves to the same declared trial matrix and
+  harness-controlled inputs/order; actual model and runtime variability remains
+  measured. Codex need not improvise orchestration or decide scores. Scripts
+  expose progress and retained results, and regenerate the same score summary
+  from the same stored evidence without model calls. Native Codex remains a
+  separately configured, isolated reference participant.
+- I9. An interrupted series retains its persisted completed results and an
+  inspectable partial report; unfinished or missing results are visible and
+  never successful or silently removed. Every subsequent run is a fresh series
+  with fresh workspaces and separate output. No automatic continuation, hidden
+  retry of unfinished attempts or overwrite of prior series is allowed.
 
 ## Challenge
 
@@ -116,6 +138,8 @@ the user's acceptance; record: the same evidence file §Corpus discussion.
 - amend: 2026-09-15 — user: «выглядит ок. А как это в эпик положим?» accepting the preceding corpus proposal — scenario 1 and I6/I7 require substantive case diversity, discriminating judges and a pilot/frozen corpus; full exchange and bounds in refine evidence §Corpus discussion.
 - agent: six pilot candidates (two bugs, two features, two starter apps), then roughly 20–30 scored cases, are route estimates, not closure by count; the suggested two-thirds apps mix is indicative, not an accepted exact quota.
 - amend: 2026-09-15 — user: «Внеси правки» accepting the PR #341 review findings — judge-substrate probe (test runners/command-result judging inside COI and no-COI) precedes case curation; campaign size and per-case authoring cost are recorded before a campaign; I5 closes on the validated pilot corpus, expansion is a follow-up slice; each case pins one package-lock v3 installed by every lane. Source: refine evidence §PR review amendment.
+- amend: 2026-09-15 — user: «На машине с использованием codex»; «Это точка входа. Но как будто нужен набор скриптов, которые будут детерменированное все это запускать»; «Сохранить частичный отчёт; следующий запуск — новая серия» — scenario 2/6 and I8/I9 establish local script-owned execution through Codex and fresh-series interruption behavior; source: refine evidence §Local script execution.
+- agent: deterministic means the declared protocol and scoring from retained evidence, not identical model outputs, timings or runtime schedules; extend the existing bench CLI/runner, no separate orchestration service.
 - agent: preserve ADR-0434's real COI/no-COI lanes, privacy, on-demand execution and diagnostic interpretation; no new platform or runtime API prescribed.
 - agent: tier works; reachable faults may fail loudly, but never manufacture success or conceal selected trial failures; no crash-resume service promise.
 - agent: finite corpus, repeats and statistical method are chosen and recorded before measuring; task-specific model tuning and success-based exclusions cannot define the result.
