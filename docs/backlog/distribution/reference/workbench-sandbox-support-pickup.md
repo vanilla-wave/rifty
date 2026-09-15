@@ -58,3 +58,18 @@ corrected; source-confirmed page lock realm replaces the unsupported Worker
 lock requirement. Added negative WASM/BC/UUID cases. Actual COI UUID authority
 also includes `workbench/workbench-browser-owner-spawn.ts:43` operation IDs.
 Native OPFS probe includes SHA-256 (`vfs/src/opfs-replica-codec.ts:27`).
+
+## Implementation verification
+
+- Initial native suite: 25/27; two concurrent/live-session calls left BC
+  incomplete while all other required checks passed. Isolated run: 1/2 same
+  outcome. Native diagnostic trace retained at `/tmp/pr340-bc-trace.log`.
+- Replaced the cross-port BC readiness assumption with greetings on the native
+  channel itself (receiver-not-attached boundary model). Concurrent/live-session
+  cases: 10/10; then full native suite: 27/27, 17.1 s. No retry timer or cache.
+- Additional private-lock contention RED: expected incomplete, received failed
+  (`/tmp/pr340-lock-red.log`). Private occupied names now remain incomplete;
+  they cannot establish browser incompatibility.
+
+Production and published probe assets are separate bundles, preserving the
+existing runtime chunk graph. SDK source changes clarify documentation only.

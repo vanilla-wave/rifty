@@ -245,6 +245,7 @@ test('[fault: concurrent-same-key] same/other-page probes preserve native files,
     ]);
     expect(
       reports.every((r) => r.modes.coi.conclusion === 'supported' && r.cleanup.status === 'passed'),
+      JSON.stringify(reports),
     ).toBe(true);
     const after = await page.evaluate(async () => {
       const root = await navigator.storage.getDirectory();
@@ -410,7 +411,10 @@ test('[fault: concurrent-same-key] real active Workbench project survives same/o
       check(page, { probeBaseUrl }),
       check(other, { probeBaseUrl }),
     ]);
-    expect(reports.every((r) => r.modes.coi.conclusion === 'supported')).toBe(true);
+    expect(
+      reports.every((r) => r.modes.coi.conclusion === 'supported'),
+      JSON.stringify(reports),
+    ).toBe(true);
     expect(await readOwnerFile(page, '/scratch/support-live.txt')).toEqual({
       ok: true,
       text: 'live project bytes',
@@ -495,4 +499,34 @@ test('[fault: provenance-lie] unavailable UUID never becomes a positive COI verd
   const report = await check(page, { probeBaseUrl });
   expect(row(report, 'crypto').status).toBe('failed');
   expect(report.modes.coi.conclusion).toBe('unsupported');
+});
+
+test('[fault: concurrent-same-key] private lock collision is inconclusive, never browser incompatibility', async ({
+  page,
+}) => {
+  const probeBaseUrl = await open(page);
+  await page.evaluate(async () => {
+    crypto.randomUUID = () => '22222222-2222-4222-8222-222222222222';
+    await new Promise<void>((resolve) => {
+      void navigator.locks.request(
+        'rifty-support-22222222-2222-4222-8222-222222222222',
+        () =>
+          new Promise<void>((release) => {
+            (
+              globalThis as typeof globalThis & { releasePrivateLock: () => void }
+            ).releasePrivateLock = release;
+            resolve();
+          }),
+      );
+    });
+  });
+  try {
+    const report = await check(page, { probeBaseUrl, persistence: 'ephemeral' });
+    expect(row(report, 'page-locks').status).toBe('incomplete');
+    expect(report.modes.coi.conclusion).toBe('inconclusive');
+  } finally {
+    await page.evaluate(() =>
+      (globalThis as typeof globalThis & { releasePrivateLock: () => void }).releasePrivateLock(),
+    );
+  }
 });

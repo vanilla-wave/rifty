@@ -1,5 +1,14 @@
 import { createBrowserOpenWorkbench } from './internal/browser-workbench-composition.ts';
 
+export { checkSandboxSupport } from '../support/check-sandbox-support.ts';
+export type {
+  SandboxSupportCheck,
+  SandboxSupportCheckId,
+  SandboxSupportMode,
+  SandboxSupportOptions,
+  SandboxSupportReport,
+} from '../support/types.ts';
+
 export { produceDependencySnapshot } from '../glue/dep-snapshot-producer.ts';
 export type {
   ProduceDependencySnapshotOptions,

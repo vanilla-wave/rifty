@@ -46,7 +46,7 @@ Worker presence survives CSP denial; WASM permission does not imply JS eval.
   Separate static probe assets cover these operations without real boot assets.
 - Existing `workbench/service-worker-control.ts` owns real deployment control,
   listeners and its deadline; reusing it would require an actual controlling SW.
-  `workers/owner-rpc-client.ts` and `workbench/project-content-transport.ts` own
+  `workbench/workbench-browser-owner.ts` and `workbench/project-content-transport.ts` own
   admitted application mutations; their timeout is not cancellation. These
   authorities cannot own disposable probe teardown. A per-invocation deadline
   is the minimal separate authority; no third coordination owner for any key.
