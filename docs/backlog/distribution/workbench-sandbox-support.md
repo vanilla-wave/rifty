@@ -5,7 +5,7 @@ title: Report browser support for COI and non-COI sandboxes before opening throu
 created: 2026-09-15
 why: Existing capability flags neither distinguish the COI and non-COI compositions nor prove that their required browser operations are usable.
 user_story: As an embedder, I want to query @riftydev/workbench before opening a sandbox and explain which modes my current browser context supports, but today Workbench has no such public report.
-sources: [ADR-0007, ADR-0372, ADR-0375, ADR-0383, ADR-0419, docs/backlog/distribution/reference/workbench-sandbox-support-refine.md]
+sources: [ADR-0007, ADR-0071, ADR-0372, ADR-0375, ADR-0383, ADR-0419, docs/backlog/distribution/reference/workbench-sandbox-support-refine.md]
 code: [packages/workbench/src/workbench/public.ts, packages/workbench/src/workbench/open-workbench.ts, packages/workbench/src/workbench/internal/browser-workbench-composition.ts, packages/runtime-js/src/env/capabilities.ts, packages/rifty/src/capabilities.ts, packages/rifty/src/sandbox.ts]
 ---
 
@@ -45,9 +45,10 @@ with compatibility of every npm project. Precise causes appear when evidenced;
 otherwise the failed check and unknown cause stay explicit.
 
 The API performs real, bounded browser-capability probes before any sandbox
-opens: Worker execution/messaging, mode-required memory operations, and
-Worker-owned storage access. It returns a per-mode conclusion scoped to these
-checks, with structured results and readable explanations. It distinguishes
+opens. Required checks follow both compositions' actual browser operations;
+Worker/messaging, memory and storage are categories, not an exhaustive inventory.
+It returns a per-mode prerequisites conclusion, with structured results and
+readable explanations. It distinguishes
 blocked operations from checks not completed or not applicable. Temporary
 Workers/test data are cleaned up; cleanup failure is reported rather than
 claimed successful. Existing project data and active sessions remain intact.
@@ -58,6 +59,33 @@ future storage availability, or successful execution of arbitrary packages.
 Failed/unfinished optional probes do not become unconditional mode blockers;
 persistence policy and existing mode requirements determine the consequence.
 Repeated checks observe current conditions rather than returning stale success.
+An unproved required operation prevents a positive prerequisites verdict.
+For Service Worker, API presence, usable registration and control of the actual
+deployment are distinct observations; the last remains deployment-specific.
+Excluding deployment verification does not silently exclude browser SW checks.
+Probes must preserve existing SW registrations/controllers as well as projects.
+
+## PICKUP evidence required
+
+- Trace requirements to actual boot/execution paths of both compositions and
+  applicable options: nested/module Workers and imports, JS evaluation, WASM,
+  SAB/Atomics, Web Locks, SW and owner storage. Prove the mapping with browser
+  behavior tests, including negative cases; the inventory is not a second
+  hand-maintained boot policy. Full disposable boot is not prescribed.
+- Resolve each SW check's safe carrier and evidence scope. Incomplete checks
+  stay explicit; no mutation of existing host registrations to obtain proof.
+- Preserve SDK `checkCapabilities()` as the pure synchronous realm-presence
+  wrapper (ADR-0071). Its flag must not be described as proof of startup;
+  reconcile public documentation and examples with the active report in this delivery.
+- Compile RDY-3 fault rows for same/other-tab active sessions, concurrent/repeated
+  probes, pre-existing native files, denial/quota, stalled/dead Worker and failed
+  cleanup; verify only probe-owned resources are removed.
+- Sweep existing deadline/settlement owners before adding coordination
+  (Class-kill). Choose the owning module/public seam by architecture + ADR;
+  Workbench cannot import SDK, and two public surfaces need no duplicated probe.
+- Document probe-relevant CSP requirements and evidence limits. JS eval and
+  WASM compilation are separate checks; their necessity follows the selected
+  engine/runtime path, not one unconditional browser-wide WASM blocker.
 
 ## Decisions
 
@@ -72,6 +100,7 @@ Repeated checks observe current conditions rather than returning stale success.
 - 2026-09-15 — ADR-0007: feature evidence, not UA allowlists; no expansion of the browser-support commitment.
 - 2026-09-15 — repeat/current-context observations must not change host isolation, select a mode, erase projects or present contention as browser incompatibility; inspection is the requested action.
 - 2026-09-15 — public API addition needs a short ADR at PICKUP; no signature or new coordination mechanism selected during refine.
+- 2026-09-15 — feedback reception: prerequisite inventory/negative proof, SW evidence levels and legacy passive API boundary clarified; user outcome unchanged, full-boot carrier not adopted. See [evidence](reference/workbench-sandbox-support-refine.md#feedback-reception).
 
 ## Challenge
 

@@ -110,52 +110,33 @@ The probe is browser evidence, not a shipped API or a complete RED suite.
 Prior final review certified the earlier unresolved capture only; new final
 review must examine the actual post-answer result.
 
-## Written-result review history
+## Feedback reception
 
-- `/root/support_final`, fresh read-only, reviewed
-  `e6b81be582263f86d12982efe96cf1457a741409`: «FIX — одна фактическая ошибка».
-  TSX was omitted from the call search; the old startup/e2e logging obligation
-  also needed an explicit retained carrier. Both corrections are applied above
-  and in the restored logging item. Probe source/output and two user answers
-  were independently verified. This FIX is history, not a final PASS.
-- `/root/support_final_clean`, fresh context, read-only, reviewed
-  `a23a6700c72393c12b7d89f3d475024ee5e5bf99`:
-  «PASS — финальный draft точно отражает запрос и два ответа пользователя.
-  Обязательных исправлений нет. Round 3 остаётся открытым; PASS подтверждает
-  честную фиксацию, не завершённый refine, readiness или реализацию».
-  Sources, five ADRs, retained logging obligation, actual script/JSON and
-  docs-only `pr:check` 20/20 verified. Reviewer did not rerun the browser probe.
-  Exact verdict: [Final+GREEN](workbench-sandbox-support-final-green.json).
-- Driver checks: `pnpm backlog:check`, `git diff --check`, `pnpm pr:check`
-  (`/tmp/rifty-support-refine-pr-check-final.log`): PASS, docs-only 20/20;
-  skipped typecheck, build:libs, check:arch, test:run, test:parity.
-  Initial gate attempt hit sandbox `tsx` IPC denial in four checks; the same
-  full docs gate passed with permitted local IPC. No product test was changed.
+Source: user-provided `/tmp/wrap-up-pr340-plan-objections-2026-09-15.md`.
+Checked against current source and a [new native CSP discriminator](workbench-sandbox-support-csp-evidence.md).
 
-Reviewed SHA256 (before review-record additions):
-
-| File | SHA256 |
+| Point | Reception |
 |---|---|
-| distribution/workbench-sandbox-support.md | c08ba5bacaed63d6b1016dce82bb4f76cd911902360a71427058047cfd4ed3fa |
-| distribution/reference/workbench-sandbox-support-refine.md | 9c6bd91525d17fe65d933c2fdde7c044096bc6f60c14c28ae1dd91e55e20abc4 |
-| playground/capabilities-detection-e2e-logging.md | 584ceac182ec36877b8956f2977952e40f0d66fdd1e50983915cb44fb72bb5cd |
+| 1, incomplete inventory | Valid. Owner-child path uses kernel `makeKernelWorker`; dynamic import, JS evaluation, conditional WASM and Web Locks must enter the boot-derived mapping. Existing probe already imports a module, but does not cover the whole composition. |
+| 2, legacy sufficient | Valid documentation ambiguity; the flag computes presence correctly. ADR-0071 D5 keeps the pure API; it must not promise successful startup. No sync-to-async breaking replacement prescribed. |
+| 3, SW | Valid evidence distinction; no data supports «most frequent fail». Registration capability and actual deployment control differ; unknown required checks block a positive prerequisite verdict. |
+| 4, OPFS | Future collision/cleanup cases are valid; no observed live-session collision. Disposable script uses fresh contexts, not an open Workbench. Its fixed filename is not a production carrier. |
+| 5, bounded | Outcome does not choose a timer or new coordination. Class-kill applies before adding a mechanism; record sweep at PICKUP. |
+| 6, owner module | Real dependency constraint, agent-owned at PICKUP; SDK lacks Workbench dep, layer order permits SDK→Workbench. No duplicate probe or new dependency mandated. |
+| 7, process bulk | Removed repeated hashes/check transcripts; preserve concise independent identity/revision records required by RDY-6/REV-8. |
+| 8, CSP | No host/probe CSP guidance found in docs/public or traps. Source grep is not empty: net preview/header code contains CSP. Add targeted consumer guidance with implementation. |
 
-## Post-answer final review
+Fresh read-only critic `/root/feedback_scope_critic`:
+`challenge: 2026-09-15 — clear` — «обязательность full disposable boot не
+подтверждена; нового пользовательского выбора не выявлено».
+Safe SW carrier and public ownership are PICKUP choices; no existing host
+registration/controller may change. Refine's chosen browser-probe scope stands.
 
-Reviewer `/root/support_settled_review`, fresh read-only, examined
-`5634648d3190ed1dba34e80eeddcc5d031cd0163` after all three user answers:
-«PASS — RDY-6, docs Final+GREEN». No material open scope fork or required
-correction. Standalone draft retained until PICKUP; no implementation claim.
-[Exact verdict](workbench-sandbox-support-round3-final-green.json).
+## Independent review history
 
-Reviewed SHA256: item `e31afa99b48d77f61e4571d75febf0bb035fec572c3286adcdadb6216d1993e2`;
-this evidence before record addition `2c9159517a7973fc627e5a43930af584ae934f2ebf9e84a1c450eb1b9ba39b4c`;
-unchanged logging item `584ceac182ec36877b8956f2977952e40f0d66fdd1e50983915cb44fb72bb5cd`.
-
-Driver `pnpm pr:check`: docs-only 20/20 PASS
-(`/tmp/rifty-support-round3-pr-check.log`); skipped typecheck, build:libs,
-check:arch, test:run, test:parity. Reviewer inspected that log, source, five
-ADRs and actual probe source/JSON; no new browser run after Round 3.
+- `/root/support_final` @ `e6b81be582263f86d12982efe96cf1457a741409`: FIX (missed TSX source; retained logging audit). Corrected.
+- `/root/support_final_clean` @ `a23a6700c72393c12b7d89f3d475024ee5e5bf99`: [PASS for unresolved draft](workbench-sandbox-support-final-green.json).
+- `/root/support_settled_review` @ `5634648d3190ed1dba34e80eeddcc5d031cd0163`: [PASS after R3](workbench-sandbox-support-round3-final-green.json), docs-only pr:check 20/20. These records precede feedback amendments; new final review required.
 
 ## Disposable probe source
 
