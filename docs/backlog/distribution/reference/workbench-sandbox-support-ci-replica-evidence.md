@@ -56,8 +56,11 @@ Sweep of replica browser fixtures:
   tests/browser-unit/replica-native-read.spec.ts`: 31/31 PASS, 1.2 min;
   `/tmp/pr340-replica-setup-green.log`.
 - Reverse check removes only `await fs.fence()` from the shared helper; slow-seed
-  case fails on `OPFS setup unclean`, with `PersistOperationTimeoutError` in the
+  case fails on `OPFS setup unclean`, with `did not settle within 40ms` in the
   retained failure detail. `/tmp/pr340-replica-setup-revert.log`; source restored.
 - The fixture defect is reproduced and repaired. The initial CI log discarded its
   native failure detail; attribution to its 40 ms threshold is consistent with the
   controlled discriminator, not an assertion that the discarded detail was read.
+- Full `pnpm pr:check` after repair: 25/25 PASS; unit 209.7 s, parity 61.4 s,
+  no failed-file reruns. `/tmp/pr340-replica-pr-check.log`. Only this evidence text
+  changed after the tested fixture implementation at `6481b6270`.
