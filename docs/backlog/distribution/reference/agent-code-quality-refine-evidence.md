@@ -211,3 +211,65 @@ aeb69eddb62d254f0c07fb3aa3c91d639557837bba0f7721cfe5d68697f31881  docs/backlog/e
   `test:parity`; no source behavior changed or tested here.
 - `pnpm backlog:check`: 307 items, 16 epics, 0 invalid; repeated after ready flip.
 - `pnpm refs:check`: 284 ADRs, 616 source docs, PASS; `git diff --check` PASS.
+
+## Corpus discussion
+
+Source: conversation after PR #341 refinement, 2026-09-15.
+
+User: «Можем детальнее обсудить набор тестов? Хочу понимать что там будет
+и как соберем набор кейсов. Не хочется скатиться в тривиальный набор».
+
+Driver proposal, decisive original excerpts:
+
+- «Начать с шести разных кандидатных задач — по две каждого типа.
+  Проверить их качество, затем расширить корпус примерно до 20–30.
+  Число пока ориентир».
+- «Разные стартеры должны давать разные рабочие сценарии. Восемь одинаковых
+  CRUD-форм на разных фреймворках дают мало дополнительной информации».
+- «Текущие пять простых задач сохраняем как отдельные быстрые проверки регрессий».
+- «Скрыты тестовые данные и проверки, но не требования».
+- «Корпус фиксируем до итогового сравнения. Провалы Rifty из него не удаляем».
+- «Эталонное решение проверяем в каждой среде: это помогает увидеть
+  ограничения среды. Основной результат остаётся выбранным тобой —
+  работает ли решение именно там».
+- «Для распределения корпуса я бы предложил примерно ⅔ приложений и ⅓
+  Node API, CLI и библиотек. Тебе ближе такой акцент или почти весь набор
+  должен представлять создание веб-приложений?»
+
+The same proposal described real issue/pre-change snapshots for bugs/features,
+original product workflows for starter apps, per-case provenance/requirements/
+regressions/reference/checks/difficulty, failing baseline and partial-solution
+controls, accepting other working implementations, pilot trajectory review,
+family-separated calibration/evaluation and separately counted trials.
+Its six illustrative scenarios are retained in the corpus child's candidate
+table; no concrete repository or exact task was claimed selected.
+
+User reply: «выглядит ок. А как это в эпик положим?».
+
+Interpretation: accept the proposed corpus-building direction; amend scenario 1
+and I6/I7 to make substantive cases, validated checks and selection integrity
+reviewable obligations. Six pilot candidates / roughly 20–30 scored cases are
+route estimates. The approximate two-thirds split remains an agent curation
+guide, not an exact user quota or an exclusion of other accepted JS/TS workflows.
+No model runs, source changes or implementation authorization added.
+
+### Premise critique
+
+Fresh read-only `/root/corpus_challenge`, before the accepted proposal; verbatim
+wording, Markdown/source formatting normalized:
+
+> Вердикт: направление годится; 24 задачи сами по себе от тривиальности не защищают.
+>
+> - Риск однообразия. Предложенные сценарии преимущественно UI CRUD. Нужны также реальные библиотечные/CLI задачи и изменение существующего API: чужая структура проекта, поиск причины, совместимость вызовов. Иначе несколько репозиториев могут оказаться одним упражнением в разных декорациях. Сейчас 4/5 задач используют один React-шаблон — tools/agent-bench/src/tasks.ts.
+> - Сложность — связанный сценарий. Для приложения важно явно выбрать: законченный пользовательский процесс или несколько независимых экранов. Например, импорт → исправление ошибок → сохранение → фильтрация → экспорт; проверяется согласованность данных между шагами. Восемь отдельных форм создания мало добавят.
+> - Судья может навязывать реализацию. Текущие проверки завязаны на .issue-card, .issue-card__id и конкретные подписи — src/judge/context.ts, tasks/new-issue-form/judge.ts. Для существующего UI это допустимо; перенос на свободное создание приложений превратит скрытые проверки в скрытые требования. Контракт должен определять поведение и необходимые точки взаимодействия; судья принимать разные корректные реализации.
+> - Native reference недостаточно для причин. Один раз прогнать эталонное решение в каждой среде: иначе нельзя отличить неспособность агента от принципиально неработающего там проекта. Ограничения уже наблюдались: Vitest/esbuild и политика установки — agent-bench-baseline-results.md. Такие выбранные задачи сохраняются в общем результате; дополнительный срез совместимых задач должен иметь заранее определённое правило.
+> - Holdout разделять по семействам. Соседние задачи одного репозитория или вариации одного starter-сценария легко передают решения из калибровки. Публичный issue/pre-fix snapshot также не гарантирует отсутствия обучающего загрязнения; свежие оригинальные сценарии дополняют его, но не доказывают чистоту.
+>
+> Проще: сначала шесть кандидатных задач — по две каждого типа, максимально разных. На них проверить пригодность исходников, эталоны и строгость судей; затем расширять покрытие пробелов до окончательного числа. Считать независимыми единицами задачи/семейства, а повторные запуски — измерением нестабильности агента. Не отбирать задачи по тому, где Rifty проходит.
+
+Reception: distinct scenarios replace the earlier UI-heavy examples; pilot
+precedes expansion; I6/I7 carry behavior-based judging, all-environment reference
+controls and selection integrity. The critique's 24 was an earlier working
+count, superseded by the proposal's explicit 20–30 estimate. Existing code and
+baseline evidence support its observations; no new runtime probe claimed.

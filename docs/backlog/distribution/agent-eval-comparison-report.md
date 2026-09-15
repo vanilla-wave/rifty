@@ -24,3 +24,9 @@ finite accepted corpus and four environments; demonstrate regenerating reports
 without new model calls. A negative or inconclusive result is a valid outcome.
 Deterministic plumbing tests are necessary infrastructure evidence, not measured
 agent quality. No automatic merge gate or live-model CI default.
+
+I7 requires separate smoke/regression, bug, feature and app results, plus
+task/family counts distinct from repeated-trial counts. Identify pilot versus
+frozen evaluation corpus and report selected reference-solution failures;
+an optional compatible-task view uses a rule fixed before results and never
+replaces the full selected matrix or rescues own-environment failures.
