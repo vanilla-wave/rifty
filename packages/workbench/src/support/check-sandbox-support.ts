@@ -1,4 +1,4 @@
-import { CHECK_IDS, failure, modes } from './report.ts';
+import { CHECK_IDS, WORKER_CLAIMS, WORKER_EVIDENCE, failure, modes } from './report.ts';
 import type {
   SandboxSupportCheck,
   SandboxSupportCheckId,
@@ -99,6 +99,8 @@ export async function checkSandboxSupport(
 
   const abort = new AbortController();
   const cleanupErrors: unknown[] = [];
+  // Set when the probe phase ends; bounds the scratch removal's wait for the Worker's lock.
+  let cleanupUntil = 0;
   const owned: (() => Promise<unknown>)[] = [];
   const pendingEffects: Promise<void>[] = [];
   // Native register/mkdir cannot be aborted: retain disposal even after the report deadline.
@@ -142,7 +144,18 @@ export async function checkSandboxSupport(
     resolveStorage();
   };
   const workerFailed = (error: unknown): void => {
-    set(failure('module-worker', error));
+    // The observed load stands; a later Worker death only costs the evidence still pending.
+    if (checks.get('module-worker')?.status === 'passed') {
+      const detail = error instanceof Error ? error.message : String(error);
+      for (const id of WORKER_EVIDENCE) {
+        if (checks.get(id)?.status !== 'incomplete') continue;
+        set({
+          id,
+          status: 'incomplete',
+          reason: `${id}: probe Worker failed after loading: ${detail || 'cause unknown'}`,
+        });
+      }
+    } else set(failure('module-worker', error));
     endWorker();
   };
   if (typeof document !== 'undefined' && name !== undefined) {
@@ -261,16 +274,7 @@ export async function checkSandboxSupport(
         const check = message.check;
         if (
           !check ||
-          ![
-            'module-worker',
-            'module-import',
-            'nested-worker',
-            'broadcast-channel',
-            'js-eval',
-            'wasm',
-            'shared-memory',
-            'opfs',
-          ].includes(check.id) ||
+          !WORKER_CLAIMS.includes(check.id) ||
           !['passed', 'failed'].includes(check.status) ||
           typeof check.reason !== 'string'
         )
@@ -333,7 +337,7 @@ export async function checkSandboxSupport(
               if (stopped) return;
               const directory = await capture(
                 root.getDirectoryHandle(privateName, { create: true }),
-                () => root.removeEntry(privateName, { recursive: true }),
+                () => removeScratch(root, privateName, () => cleanupUntil),
               );
               if (stopped || directory === undefined) return;
               worker?.postMessage({
@@ -404,6 +408,7 @@ export async function checkSandboxSupport(
         });
     }
   }
+  cleanupUntil = Date.now() + timeoutMs;
   stopped = true;
   abort.abort();
   worker?.terminate();
@@ -458,6 +463,28 @@ export async function checkSandboxSupport(
     cleanup: Object.freeze(cleanup),
     limits: LIMITS,
   });
+}
+
+/**
+ * Terminating the probe Worker releases its OPFS sync access handle asynchronously, so the
+ * first removal can still meet that lock. Wait it out inside the cleanup deadline already owned
+ * by the caller; a lock that outlives the deadline stays an explicit cleanup failure.
+ */
+async function removeScratch(
+  root: FileSystemDirectoryHandle,
+  name: string,
+  deadline: () => number,
+): Promise<void> {
+  for (;;) {
+    try {
+      await root.removeEntry(name, { recursive: true });
+      return;
+    } catch (error) {
+      if ((error as { name?: string })?.name !== 'NoModificationAllowedError') throw error;
+      if (Date.now() >= deadline()) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
 }
 
 async function bounded(work: Promise<unknown>, timeoutMs: number): Promise<boolean> {

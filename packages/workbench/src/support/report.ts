@@ -26,6 +26,24 @@ export const CHECK_IDS: readonly SandboxSupportCheckId[] = [
   'deployment-control',
 ];
 
+/** Observations that need the probe Worker alive; it reports all but message-port itself. */
+export const WORKER_EVIDENCE: readonly SandboxSupportCheckId[] = [
+  'module-import',
+  'nested-worker',
+  'message-port',
+  'broadcast-channel',
+  'js-eval',
+  'wasm',
+  'shared-memory',
+  'opfs',
+];
+
+/** Claims the Worker may send; message-port is judged by the Window's own byte comparison. */
+export const WORKER_CLAIMS: readonly SandboxSupportCheckId[] = [
+  'module-worker',
+  ...WORKER_EVIDENCE.filter((id) => id !== 'message-port'),
+];
+
 export function failure(id: SandboxSupportCheckId, error: unknown): SandboxSupportCheck {
   const detail =
     error instanceof Error
