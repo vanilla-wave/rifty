@@ -56,7 +56,10 @@ verdict. Individual `incomplete` rows also include unverified deployment control
 and operations blocked by an already-failed prerequisite.
 
 `reason` describes what was observed. Native exceptions retain name/message;
-empty Worker errors retain an unknown cause. Each mode's `unmet` and `limitations`
+empty Worker errors retain an unknown cause. A Worker failure arriving after the
+module Worker already loaded never retracts that row: the observations still
+pending in that Worker stay `incomplete`, naming the failure.
+Each mode's `unmet` and `limitations`
 are readonly check-ID lists: resolve them through `checks` for status/reason/error,
 without parsing text. `unmet` lists required observations that did not pass;
 `limitations` lists optional failed/incomplete observations.
@@ -77,7 +80,9 @@ the `wasm` flag. JS eval remains required for the host CJS/REPL path under eithe
 SW API presence, private classic/module registration + activation, and actual
 deployment control are separate observations. `deployment-control` remains
 `incomplete` even when the disposable registration succeeds; `openWorkbench`
-still proves its real controlling SW during opening.
+still proves its real controlling SW during opening. It stays an addressable
+`checks` row rather than prose in `limits` so SW-skipping hosts filter it by ID
+like any other observation (ADR-0438); no mode ever requires it.
 
 ### Compose host prerequisites
 
@@ -126,6 +131,8 @@ timers can be delayed by suspended tabs. Only private Workers/ports/channels,
 scratch data and SW scopes are removed. Native registration/file creation cannot
 be canceled: late completion retains cleanup, and the returned immutable report
 keeps `cleanup: incomplete` if removal was not observed before its deadline.
+Terminating the probe Worker releases its OPFS sync access handle asynchronously,
+so scratch removal waits that lock out within the same cleanup deadline.
 Cleanup failure is explicit; callers should inspect it alongside mode conclusions.
 
 SDK `checkCapabilities()` remains a pure synchronous presence report for its

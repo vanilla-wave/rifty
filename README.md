@@ -101,7 +101,8 @@ import { checkCapabilities, createSandbox } from '@riftydev/sdk';
 
 async function main(): Promise<void> {
   // Passive presence only; createSandbox still reports actual startup failures.
-  console.log(checkCapabilities().summary);
+  const caps = checkCapabilities();
+  if (!caps.sufficient) throw new Error(caps.summary);
 
   const sandbox = await createSandbox({
     workerUrl: runtimeWorkerUrl,

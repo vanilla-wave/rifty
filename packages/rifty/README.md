@@ -68,7 +68,11 @@ import { checkCapabilities, createSandbox } from '@riftydev/sdk';
 
 async function main(): Promise<void> {
   // Passive presence only; createSandbox still reports actual startup failures.
-  console.log(checkCapabilities().summary);
+  const caps = checkCapabilities();
+  if (!caps.sufficient) {
+    document.body.textContent = caps.summary;
+    return;
+  }
 
   const sandbox = await createSandbox({
     // resolved by YOUR bundler; createSandbox cannot infer host worker assets
