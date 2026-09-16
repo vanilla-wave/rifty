@@ -374,10 +374,25 @@ test('[fault: quota-perm-fail] cleanup rejection stays explicit and preserves fo
   await denyRemoveEntry(page, 'cleanup denied', 'NotAllowedError');
   const report = await check(page, { probeBaseUrl });
   expect(report.cleanup.status).toBe('failed');
-  expect(report.cleanup.reason).toMatch(/cleanup|denied/i);
-  expect(report.cleanup.reason).toMatch(/NotAllowedError/);
+  expect(report.cleanup.reason).toMatch(/NotAllowedError: cleanup denied/);
   // Only a just-terminated Worker's lock is waited out; any other rejection is the verdict.
   expect(await removeEntryAttempts(page)).toBe(1);
+});
+
+test('[fault: quota-perm-fail] an observed cleanup rejection outranks a stalled disposer', async ({
+  page,
+}) => {
+  const probeBaseUrl = await open(page);
+  await denyRemoveEntry(page, 'cleanup denied', 'NotAllowedError');
+  await page.evaluate(() => {
+    ServiceWorkerRegistration.prototype.unregister = () => new Promise(() => {});
+  });
+  const started = Date.now();
+  const report = await check(page, { probeBaseUrl, persistence: 'required', timeoutMs: 1000 });
+  expect(Date.now() - started).toBeLessThan(10_000);
+  // The deadline also expired here; a failure the probe saw is never dropped for it.
+  expect(report.cleanup.status, report.cleanup.reason).toBe('failed');
+  expect(report.cleanup.reason).toMatch(/NotAllowedError: cleanup denied/);
 });
 
 // A native rejection can arrive after the deadline: latency must not decide the published status.

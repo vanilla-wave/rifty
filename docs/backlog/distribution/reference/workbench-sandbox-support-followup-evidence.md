@@ -115,6 +115,20 @@ Mutant check on the deciding branch (`scratchLock !== undefined` short-circuited
 both lock tests fail with `Received string: "Cleanup deadline expired; pending native effects
 retain late cleanup, removal not yet established"`. Source restored.
 
+## Independent verify pass round 3 — PASS @ `aded87e6e3`, two NOTEs closed
+
+Verdict: `workbench-sandbox-support-followup-final-green.json`. No blockers, no residuals; both
+advisory NOTEs were coverage gaps on decisions this PR records, so both were closed in place:
+
+- ADR-0439 decision 3 (an observed rejection outranks deadline expiry) had no discriminating test:
+  the reviewer's mutant `cleaned && cleanupErrors.length > 0` passed all 33 tests. Added a joint
+  rejection + stalled-disposer test; that mutant now yields `incomplete` where the test wants
+  `failed`.
+- The non-lock cleanup test matched `/cleanup|denied/i`, which the constant `Cleanup failed:`
+  prefix satisfies, so a mutant dropping `: ${error.message}` from the aggregate survived. Both
+  non-lock tests now match `/NotAllowedError: cleanup denied/`; the mutant yields
+  `cleanup: AggregateError: Cleanup failed: NotAllowedError` and fails.
+
 ## GREEN
 
-Whole suite on the fixed tree: `33 passed (19.4s)` (29 baseline + four new fault tests).
+Whole suite on the fixed tree: `34 passed (20.7s)` (29 baseline + five new fault tests).
