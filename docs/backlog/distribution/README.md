@@ -29,6 +29,9 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | `landing-compare-page.md` | ready | webcontainers-alternative-search-slot | rifty.dev/compare — verifiable WebContainers-alternative table + link-checker |
 | `ai-sandbox-reference-demo.md` | draft | open-bolt-ai-sandbox-demo | open client-side AI sandbox (eval+install slice; live preview question remains) |
 | `landing-blog-surface.md` | ready | wasi-in-browser-showcase | rifty.dev/blog route + first WASI post |
+| `ai-agent-project-context-files.md` | draft | agent-pi-project-resources | AGENTS.md/CLAUDE.md walk-up → pi `<project_context>` block, pi custom-prompt order, `reload()`, opt-out, loaded-resources report |
+| `ai-agent-project-skills.md` | draft | agent-pi-project-resources | `.pi/skills` + `.agents/skills` SKILL.md discovery → pi `<available_skills>` block |
+| `ai-agent-playground-reload.md` | draft | agent-pi-project-resources | playground chat `/reload` + loaded-resources display |
 
 ## Dependency map
 
