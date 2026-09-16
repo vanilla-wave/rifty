@@ -359,6 +359,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0436 | Publish agent with native custom stream transport |
 | 0437 | Bounded Workbench browser prerequisite probes |
 | 0438 | Require sandbox probe configuration and addressable checks |
+| 0439 | Settle probe cleanup against the terminated Worker's OPFS lock |
 
 ## Superseded (removed)
 

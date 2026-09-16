@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { buildSupportAssets, supportAssets } from './build-support-assets.mjs';
 import { hostBuiltinAliases } from './workbench-asset-builtins.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -102,14 +104,8 @@ await copyFile(
   resolve(outdir, 'quickjs.wasm'),
 );
 await copyFile(requireNet.resolve('sql.js/dist/sql-wasm.wasm'), resolve(outdir, 'sql-wasm.wasm'));
-// Separate inert prerequisite carriers; do not change the runtime chunk graph.
-await build({
-  entryPoints: ['support-worker', 'support-child', 'support-module', 'support-service-worker'].map(
-    (name) => resolve(workbench, `src/support/${name}.ts`),
-  ),
-  outdir,
-  bundle: false,
-  format: 'esm',
-  platform: 'browser',
-  target: 'es2022',
-});
+await buildSupportAssets(outdir);
+// Hosts copy these by filename (docs/public/sandbox-support.md); a missing one fails in a browser.
+for (const name of supportAssets) {
+  assert(existsSync(resolve(outdir, `${name}.js`)), `Missing Workbench support asset: ${name}.js`);
+}

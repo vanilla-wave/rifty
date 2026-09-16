@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Remove `checkSandboxSupport` scratch storage even when the probe deadline expires while the Worker still holds its OPFS sync access handle; the lock is waited out inside the cleanup deadline, and a lock that outlives it reports `cleanup: incomplete` naming the native error instead of a failure the caller cannot act on (ADR-0439).
+- Report an observed cleanup rejection ahead of deadline expiry, with each native name and message retained in the aggregate reason.
+- Keep an observed `module-worker: passed` when the probe Worker fails later; the observations still pending in it report that failure as `incomplete`.
+
 - Add checkSandboxSupport: bounded native COI/non-COI prerequisites, required probeBaseUrl, per-mode unmet/limitations check IDs, inert probe assets and explicit cleanup (ADR-0437, ADR-0438).
 
 - Retire materialized dependency claims produced by the old npm tar-root layout; fresh installation restores declaration-file paths.

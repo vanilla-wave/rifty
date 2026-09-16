@@ -1,6 +1,9 @@
-import { execFileSync } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { type Page, expect, test } from '@playwright/test';
 import type { SandboxSupportCheckId } from '../../packages/workbench/src/index.ts';
+import { buildSupportAssets } from '../../tools/publishing/build-support-assets.mjs';
 import { bootOwner, closeOwner, readOwnerFile, writeOwnerFile } from './fixtures.ts';
 import { startSupportHost } from './fixtures/sandbox-support-host.ts';
 
@@ -33,12 +36,17 @@ interface Options {
   timeoutMs?: number;
 }
 let host: Awaited<ReturnType<typeof startSupportHost>>;
+let publishedAssets: string;
 test.beforeAll(async ({ baseURL }) => {
   if (!baseURL) throw new Error('Missing Vite upstream');
-  host = await startSupportHost(baseURL);
+  // The publishing build's own support step, into a scratch dir: no half-written dist/assets.
+  publishedAssets = await mkdtemp(join(tmpdir(), 'rifty-support-assets-'));
+  await buildSupportAssets(publishedAssets);
+  host = await startSupportHost(baseURL, publishedAssets);
 });
 test.afterAll(async () => {
   await host.close();
+  await rm(publishedAssets, { recursive: true, force: true });
 });
 
 async function open(page: Page, variant = 'normal', coi = true) {
@@ -86,6 +94,31 @@ async function check(page: Page, options: Options): Promise<Report> {
   }
   return report;
 }
+type Counted = typeof globalThis & { removeEntryAttempts?: number };
+const denyRemoveEntry = (page: Page, message: string, name: string, afterMs = 0) =>
+  page.evaluate(
+    (denial) => {
+      (globalThis as Counted).removeEntryAttempts = 0;
+      FileSystemDirectoryHandle.prototype.removeEntry = () => {
+        (globalThis as Counted).removeEntryAttempts =
+          ((globalThis as Counted).removeEntryAttempts ?? 0) + 1;
+        const error = new DOMException(denial.message, denial.name);
+        return new Promise<undefined>((_, reject) =>
+          denial.afterMs > 0 ? setTimeout(() => reject(error), denial.afterMs) : reject(error),
+        );
+      };
+    },
+    { message, name, afterMs },
+  );
+const removeEntryAttempts = (page: Page) =>
+  page.evaluate(() => (globalThis as Counted).removeEntryAttempts ?? 0);
+const storageNames = (page: Page) =>
+  page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const names: string[] = [];
+    for await (const name of root.keys()) names.push(name);
+    return names;
+  });
 const row = (report: Report, id: string) => {
   const found = report.checks.find((check) => check.id === id);
   expect(found, id).toBeDefined();
@@ -179,9 +212,6 @@ test('[fault: corrupt-input] missing probe configuration throws before any probe
 });
 
 test('published probe assets perform real browser operations', async ({ page }) => {
-  execFileSync(process.execPath, ['tools/publishing/build-workbench-assets.mjs'], {
-    stdio: 'pipe',
-  });
   const probeBaseUrl = await open(page, 'published');
   const report = await check(page, { probeBaseUrl, persistence: 'required' });
   expect(report.modes.coi.conclusion, JSON.stringify(report)).toBe('supported');
@@ -341,14 +371,46 @@ test('[fault: quota-perm-fail] cleanup rejection stays explicit and preserves fo
   page,
 }) => {
   const probeBaseUrl = await open(page);
-  await page.evaluate(() => {
-    FileSystemDirectoryHandle.prototype.removeEntry = () =>
-      Promise.reject(new DOMException('cleanup denied', 'NotAllowedError'));
-  });
+  await denyRemoveEntry(page, 'cleanup denied', 'NotAllowedError');
   const report = await check(page, { probeBaseUrl });
   expect(report.cleanup.status).toBe('failed');
-  expect(report.cleanup.reason).toMatch(/cleanup|denied/i);
+  expect(report.cleanup.reason).toMatch(/NotAllowedError: cleanup denied/);
+  // Only a just-terminated Worker's lock is waited out; any other rejection is the verdict.
+  expect(await removeEntryAttempts(page)).toBe(1);
 });
+
+test('[fault: quota-perm-fail] an observed cleanup rejection outranks a stalled disposer', async ({
+  page,
+}) => {
+  const probeBaseUrl = await open(page);
+  await denyRemoveEntry(page, 'cleanup denied', 'NotAllowedError');
+  await page.evaluate(() => {
+    ServiceWorkerRegistration.prototype.unregister = () => new Promise(() => {});
+  });
+  const started = Date.now();
+  const report = await check(page, { probeBaseUrl, persistence: 'required', timeoutMs: 1000 });
+  expect(Date.now() - started).toBeLessThan(10_000);
+  // The deadline also expired here; a failure the probe saw is never dropped for it.
+  expect(report.cleanup.status, report.cleanup.reason).toBe('failed');
+  expect(report.cleanup.reason).toMatch(/NotAllowedError: cleanup denied/);
+});
+
+// A native rejection can arrive after the deadline: latency must not decide the published status.
+for (const rejectAfterMs of [0, 40]) {
+  test(`[fault: concurrent-same-key] a lock outliving the cleanup deadline stays named, ${rejectAfterMs}ms rejection`, async ({
+    page,
+  }) => {
+    const probeBaseUrl = await open(page);
+    await denyRemoveEntry(page, 'probe lock persists', 'NoModificationAllowedError', rejectAfterMs);
+    const started = Date.now();
+    const report = await check(page, { probeBaseUrl, persistence: 'required', timeoutMs: 300 });
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(report.cleanup.status, report.cleanup.reason).toBe('incomplete');
+    expect(report.cleanup.reason).toMatch(/NoModificationAllowedError/);
+    expect(report.cleanup.reason).toMatch(/probe lock persists/);
+    expect(await removeEntryAttempts(page)).toBeGreaterThan(1);
+  });
+}
 
 test('WASM requiredness follows VM/workload selection independently of JS eval', async ({
   page,
@@ -384,6 +446,28 @@ test('[fault: unbounded-read] late native registration retains cleanup after tim
       { timeout: 7000 },
     )
     .toBe(0);
+});
+
+test('[fault: concurrent-same-key] deadline inside the OPFS phase still removes the held scratch', async ({
+  page,
+}) => {
+  const probeBaseUrl = await open(page, 'storage-slow');
+  const report = await check(page, { probeBaseUrl, persistence: 'required', timeoutMs: 300 });
+  expect(row(report, 'opfs').status).toBe('incomplete');
+  // A Worker still holding its own sync access handle is teardown order, not a cleanup verdict.
+  expect(report.cleanup.status, report.cleanup.reason).not.toBe('failed');
+  await expect.poll(() => storageNames(page), { timeout: 7000 }).toEqual([]);
+});
+
+test('[fault: provenance-lie] a late Worker failure cannot unprove the observed module load', async ({
+  page,
+}) => {
+  const probeBaseUrl = await open(page, 'late-error');
+  const report = await check(page, { probeBaseUrl, persistence: 'required' });
+  expect(row(report, 'module-worker').status).toBe('passed');
+  expect(row(report, 'opfs').status).toBe('incomplete');
+  expect(row(report, 'opfs').reason).toMatch(/late probe worker failure/i);
+  expect(report.modes.nonCoi.conclusion).toBe('inconclusive');
 });
 
 test('[fault: unbounded-read] cleanup stall is bounded and incomplete', async ({ page }) => {
@@ -505,18 +589,7 @@ test('[fault: unbounded-read] late native scratch creation cannot escape cleanup
   const report = await check(page, { probeBaseUrl, persistence: 'required', timeoutMs: 300 });
   expect(row(report, 'opfs').status).toBe('incomplete');
   expect(report.cleanup.status).toBe('incomplete');
-  await expect
-    .poll(
-      () =>
-        page.evaluate(async () => {
-          const root = await navigator.storage.getDirectory();
-          const names: string[] = [];
-          for await (const name of root.keys()) names.push(name);
-          return names;
-        }),
-      { timeout: 7000 },
-    )
-    .toEqual([]);
+  await expect.poll(() => storageNames(page), { timeout: 7000 }).toEqual([]);
 });
 
 test('[fault: false-fallback] WASM denial follows selected engine and workload', async ({

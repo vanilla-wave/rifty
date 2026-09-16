@@ -3,8 +3,36 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { transform } from 'esbuild';
 
-/** Native HTTP CSP also applies to nested Workers and SW requests. */
-export async function startSupportHost(upstream: string) {
+/** Browser-boundary faults prepended to the probe Worker, keyed by URL variant. */
+const workerFaults: Record<string, string> = {
+  'storage-denied':
+    'navigator.storage.getDirectory = () => Promise.reject(new DOMException("test denial", "NotAllowedError"));',
+  quota:
+    'FileSystemFileHandle.prototype.createWritable = () => Promise.reject(new DOMException("test quota", "QuotaExceededError"));',
+  'wasm-denied':
+    'WebAssembly.compile = () => Promise.reject(new WebAssembly.CompileError("test WASM denial"));',
+  // Hold the OPFS sync access handle open past the caller's probe deadline.
+  'storage-slow': `const open = FileSystemFileHandle.prototype.createSyncAccessHandle;
+FileSystemFileHandle.prototype.createSyncAccessHandle = async function (...args) {
+  const handle = await open.apply(this, args);
+  await new Promise((resolve) => setTimeout(resolve, 1800));
+  return handle;
+};`,
+  // Uncaught Worker failure after the load was already observed; OPFS stays pending.
+  'late-error': `FileSystemFileHandle.prototype.createSyncAccessHandle = () => new Promise(() => {});
+addEventListener('message', (event) => {
+  if (event.data?.kind === 'storage')
+    setTimeout(() => {
+      throw new Error('late probe worker failure');
+    }, 0);
+});`,
+};
+
+/**
+ * Native HTTP CSP also applies to nested Workers and SW requests. `publishedAssets` serves the
+ * `/published/` variant from assets the real publishing build emitted.
+ */
+export async function startSupportHost(upstream: string, publishedAssets: string) {
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', upstream);
@@ -31,7 +59,7 @@ export async function startSupportHost(upstream: string) {
       if (asset) {
         response.setHeader('Content-Type', 'text/javascript');
         if (path.includes('/published/')) {
-          response.end(await readFile(resolve(`packages/workbench/dist/assets/${asset}.js`)));
+          response.end(await readFile(resolve(publishedAssets, `${asset}.js`)));
           return;
         }
         if (path.includes('/sw-denied/') && asset === 'support-service-worker') {
@@ -68,14 +96,12 @@ export async function startSupportHost(upstream: string) {
         );
         const { code } = await transform(source, { loader: 'ts', target: 'es2022' });
         const fault =
-          asset === 'support-worker' && path.includes('/storage-denied/')
-            ? 'navigator.storage.getDirectory = () => Promise.reject(new DOMException("test denial", "NotAllowedError"));\n'
-            : asset === 'support-worker' && path.includes('/quota/')
-              ? 'FileSystemFileHandle.prototype.createWritable = () => Promise.reject(new DOMException("test quota", "QuotaExceededError"));\n'
-              : asset === 'support-worker' && path.includes('/wasm-denied/')
-                ? 'WebAssembly.compile = () => Promise.reject(new WebAssembly.CompileError("test WASM denial"));\n'
-                : '';
-        response.end(fault + code);
+          asset === 'support-worker'
+            ? (Object.entries(workerFaults).find(([variant]) =>
+                path.includes(`/${variant}/`),
+              )?.[1] ?? '')
+            : '';
+        response.end(`${fault}\n${code}`);
         return;
       }
       const upstreamResponse = await fetch(url);

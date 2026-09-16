@@ -1,4 +1,4 @@
-import { CHECK_IDS, failure, modes } from './report.ts';
+import { CHECK_IDS, WORKER_CLAIMS, WORKER_EVIDENCE, failure, modes } from './report.ts';
 import type {
   SandboxSupportCheck,
   SandboxSupportCheckId,
@@ -99,6 +99,10 @@ export async function checkSandboxSupport(
 
   const abort = new AbortController();
   const cleanupErrors: unknown[] = [];
+  // Set when the probe phase ends; bounds the scratch removal's wait for the Worker's lock.
+  let cleanupUntil = 0;
+  // Last lock observed on the probe's own scratch, cleared once the removal is observed.
+  let scratchLock: unknown;
   const owned: (() => Promise<unknown>)[] = [];
   const pendingEffects: Promise<void>[] = [];
   // Native register/mkdir cannot be aborted: retain disposal even after the report deadline.
@@ -142,7 +146,18 @@ export async function checkSandboxSupport(
     resolveStorage();
   };
   const workerFailed = (error: unknown): void => {
-    set(failure('module-worker', error));
+    // The observed load stands; a later Worker death only costs the evidence still pending.
+    if (checks.get('module-worker')?.status === 'passed') {
+      const detail = error instanceof Error ? error.message : String(error);
+      for (const id of WORKER_EVIDENCE) {
+        if (checks.get(id)?.status !== 'incomplete') continue;
+        set({
+          id,
+          status: 'incomplete',
+          reason: `${id}: probe Worker failed after loading: ${detail || 'cause unknown'}`,
+        });
+      }
+    } else set(failure('module-worker', error));
     endWorker();
   };
   if (typeof document !== 'undefined' && name !== undefined) {
@@ -261,16 +276,7 @@ export async function checkSandboxSupport(
         const check = message.check;
         if (
           !check ||
-          ![
-            'module-worker',
-            'module-import',
-            'nested-worker',
-            'broadcast-channel',
-            'js-eval',
-            'wasm',
-            'shared-memory',
-            'opfs',
-          ].includes(check.id) ||
+          !WORKER_CLAIMS.includes(check.id) ||
           !['passed', 'failed'].includes(check.status) ||
           typeof check.reason !== 'string'
         )
@@ -333,7 +339,15 @@ export async function checkSandboxSupport(
               if (stopped) return;
               const directory = await capture(
                 root.getDirectoryHandle(privateName, { create: true }),
-                () => root.removeEntry(privateName, { recursive: true }),
+                () =>
+                  removeScratch(
+                    root,
+                    privateName,
+                    () => cleanupUntil,
+                    (lock) => {
+                      scratchLock = lock;
+                    },
+                  ),
               );
               if (stopped || directory === undefined) return;
               worker?.postMessage({
@@ -404,6 +418,7 @@ export async function checkSandboxSupport(
         });
     }
   }
+  cleanupUntil = Date.now() + timeoutMs;
   stopped = true;
   abort.abort();
   worker?.terminate();
@@ -423,26 +438,36 @@ export async function checkSandboxSupport(
     ]),
     timeoutMs,
   );
-  const cleanup: SandboxSupportCheck = !cleaned
-    ? {
-        id: 'cleanup',
-        status: 'incomplete',
-        reason:
-          'Cleanup deadline expired; pending native effects retain late cleanup, removal not yet established',
-      }
-    : cleanupErrors.length > 0
+  const cleanup: SandboxSupportCheck =
+    cleanupErrors.length > 0
       ? failure(
           'cleanup',
           new AggregateError(
             cleanupErrors,
-            `Cleanup failed: ${cleanupErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
+            // Keep each native name/message: the aggregate is the only place the caller sees them.
+            `Cleanup failed: ${cleanupErrors.map(describe).join('; ')}`,
           ),
         )
-      : {
-          id: 'cleanup',
-          status: 'passed',
-          reason: 'Probe Workers/ports/channels terminated and every owned native resource removed',
-        };
+      : // An observed lock settles the verdict; a native rejection cannot be bounded (ADR-0439).
+        scratchLock !== undefined
+        ? {
+            id: 'cleanup',
+            status: 'incomplete',
+            reason: `Cleanup deadline expired with the probe scratch directory still locked (${describe(scratchLock)}); removal not established`,
+          }
+        : !cleaned
+          ? {
+              id: 'cleanup',
+              status: 'incomplete',
+              reason:
+                'Cleanup deadline expired; pending native effects retain late cleanup, removal not yet established',
+            }
+          : {
+              id: 'cleanup',
+              status: 'passed',
+              reason:
+                'Probe Workers/ports/channels terminated and every owned native resource removed',
+            };
   const snapshot = Object.freeze(
     [...checks.values()].map((check) =>
       Object.freeze({
@@ -458,6 +483,35 @@ export async function checkSandboxSupport(
     cleanup: Object.freeze(cleanup),
     limits: LIMITS,
   });
+}
+
+const describe = (error: unknown): string =>
+  error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+
+/**
+ * ADR-0428's platform fact at the probe's own boundary (ADR-0439): terminate() may leave the
+ * Worker's sync access handle busy briefly, so the first removal can still meet that lock. Wait it
+ * out inside the caller's cleanup deadline. `observe` reports each lock as it happens and clears it
+ * once removal is observed — a native rejection arriving after the deadline cannot be waited for.
+ */
+async function removeScratch(
+  root: FileSystemDirectoryHandle,
+  name: string,
+  deadline: () => number,
+  observe: (lock: unknown) => void,
+): Promise<void> {
+  for (;;) {
+    try {
+      await root.removeEntry(name, { recursive: true });
+      observe(undefined);
+      return;
+    } catch (error) {
+      if ((error as { name?: string })?.name !== 'NoModificationAllowedError') throw error;
+      observe(error);
+      if (Date.now() >= deadline()) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
 }
 
 async function bounded(work: Promise<unknown>, timeoutMs: number): Promise<boolean> {

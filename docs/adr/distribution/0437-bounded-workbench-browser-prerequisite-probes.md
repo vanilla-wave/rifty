@@ -60,6 +60,9 @@ remain explicit. Non-COI does not enable `openWorkbench` without COI.
 
 ## Corrections (active)
 
+- 2026-09-16 — ADR-0439 settles decision 5's teardown seam: the scratch removal
+  waits out the terminated Worker's OPFS lock inside this cleanup deadline.
+  Order, deadline ownership and the no-queue constraint are unchanged.
 - 2026-09-16 — ADR-0438 supersedes decision 2's omission-as-incomplete behavior:
   `probeBaseUrl` and the decision 1 `options` argument are required. Decision 1's
   report sections/states remain; mode `unmet`/`limitations` carry check IDs.
