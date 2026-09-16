@@ -34,6 +34,13 @@ access handle, so the immediately following `root.removeEntry(name, {recursive:t
 meets the lock. The single-attempt disposer then reports `cleanup: failed` and nothing
 removes the directory afterwards — a permanent leftover in the caller's origin storage.
 
+Sibling sweep (`rifty-fix` 2): `createSyncAccessHandle`/`removeEntry` call sites are
+`packages/vfs/src/{opfs-sync,opfs,opfs-replica-store}.ts` and this probe. Only
+`opfs-replica-store.ts` `acquireGuard` crosses a terminated Worker — ADR-0428 states the same
+platform fact and waits it out with the same contention error and a 25 ms poll. Second
+reachable instance, so it is recorded rather than consolidated (§Class-kill); ADR-0439 records
+why the twins stay separate.
+
 Fix: `removeScratch` in `packages/workbench/src/support/check-sandbox-support.ts` retries
 only `NoModificationAllowedError`, only until the cleanup deadline ADR-0437 decision 5
 already owns (ADR-0439). Every other rejection stays immediate; late uncancelable effects

@@ -11,6 +11,10 @@ asynchronously, so a deadline expiring inside the OPFS phase makes the first
 `cleanup: failed` plus a scratch directory nothing else removes. RED and repro:
 `docs/backlog/distribution/reference/workbench-sandbox-support-followup-evidence.md`.
 
+ADR-0428 already settled the same platform fact for the real VFS
+(`packages/vfs/src/opfs-replica-store.ts` `acquireGuard`). This is its second
+reachable instance at the OPFS boundary, so the inventory is recorded here.
+
 ## Decisions
 
 1. Termination order stands. The scratch removal treats
@@ -28,6 +32,11 @@ asynchronously, so a deadline expiring inside the OPFS phase makes the first
   the caller cannot act on and leaked the probe's own directory.
 - Awaiting a termination acknowledgement needs an API the platform does not
   offer; a second teardown authority would own the same key.
+- Sharing ADR-0428's helper would make a disposable prerequisite probe depend on
+  the VFS it exists to test, and the operations differ — acquire a guard versus
+  remove a directory. The twins stay separate until a third instance
+  (`fault-classes.md` §Class-kill); they keep one contention error and one
+  polling interval so the classes cannot drift.
 - Cleanup can now occupy its deadline waiting for a lock. That is the phase's
   declared budget, and the report already distinguishes `incomplete` from
   `failed`.

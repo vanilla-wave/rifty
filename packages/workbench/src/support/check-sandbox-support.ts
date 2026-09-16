@@ -466,9 +466,9 @@ export async function checkSandboxSupport(
 }
 
 /**
- * Terminating the probe Worker releases its OPFS sync access handle asynchronously, so the
- * first removal can still meet that lock. Wait it out inside the cleanup deadline already owned
- * by the caller; a lock that outlives the deadline stays an explicit cleanup failure.
+ * ADR-0428's platform fact at the probe's own boundary (ADR-0439): terminate() may leave the
+ * Worker's sync access handle busy briefly, so the first removal can still meet that lock. Wait it
+ * out inside the caller's cleanup deadline; a lock outliving it stays an explicit cleanup failure.
  */
 async function removeScratch(
   root: FileSystemDirectoryHandle,
@@ -482,7 +482,7 @@ async function removeScratch(
     } catch (error) {
       if ((error as { name?: string })?.name !== 'NoModificationAllowedError') throw error;
       if (Date.now() >= deadline()) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 25));
     }
   }
 }
