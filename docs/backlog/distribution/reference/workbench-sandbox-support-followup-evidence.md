@@ -129,6 +129,14 @@ advisory NOTEs were coverage gaps on decisions this PR records, so both were clo
   non-lock tests now match `/NotAllowedError: cleanup denied/`; the mutant yields
   `cleanup: AggregateError: Cleanup failed: NotAllowedError` and fails.
 
+## Landing Final+GREEN — PASS @ `09384630c9`
+
+`workbench-sandbox-support-followup-final-green.json`: eight axes pass, nine coverage rows pass, no
+findings, no residuals. The reviewer re-executed both mutants against byte-identical HEAD tests and
+confirmed each dies, and compared the four support assets built by the old and new publishing paths
+byte for byte (`PR-4`).
+
 ## GREEN
 
 Whole suite on the fixed tree: `34 passed (20.7s)` (29 baseline + five new fault tests).
+`pnpm pr:check` 25/25 on the committed tree.
