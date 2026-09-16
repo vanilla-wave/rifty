@@ -79,6 +79,23 @@ browser suite calls the same function into a `mkdtemp` directory it serves and r
 The proof that the assets are produced by real publishing code is unchanged; the proof that
 publishing emits them into the shipped directory moves from the browser test to that assert.
 
+## Independent Final+GREEN round 1 — BLOCK at `bc371e9951`
+
+Verdict: `docs/backlog/distribution/reference/workbench-sandbox-support-followup-final-green.json`
+(round 1 record kept in the PR thread). Two blockers and one concern, all verified and fixed here:
+
+1. A lock persisting past the cleanup deadline reported `cleanup: incomplete`, not the `failed`
+   ADR-0439 decision 2 states: the retry's last attempt raced the phase timer and lost, so the
+   error arrived after the immutable report. `removeScratch` now reserves the final poll interval.
+2. The aggregated cleanup failure dropped the native exception *name* — reason carried
+   `AggregateError: Cleanup failed: <message>` with no `NoModificationAllowedError`
+   (ADR-0437 decision 1 keeps observed name/message). The aggregate message now carries both.
+3. Concern: `cleanup rejection stays explicit` survived a mutant that retried non-lock errors too.
+
+Regression tests committed for all three: a terminal-lock test asserting `cleanup: failed`, the
+native name in the reason and more than one attempt; the non-lock test asserting exactly one
+attempt and its own native name.
+
 ## GREEN
 
-Whole suite on the fixed tree: `31 passed (19.5s)` (29 baseline + the two new fault tests).
+Whole suite on the fixed tree: `32 passed (18.8s)` (29 baseline + three new fault tests).

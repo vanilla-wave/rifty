@@ -440,7 +440,8 @@ export async function checkSandboxSupport(
           'cleanup',
           new AggregateError(
             cleanupErrors,
-            `Cleanup failed: ${cleanupErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
+            // Keep each native name/message: the aggregate is the only place the caller sees them.
+            `Cleanup failed: ${cleanupErrors.map((error) => (error instanceof Error ? `${error.name}: ${error.message}` : String(error))).join('; ')}`,
           ),
         )
       : {
@@ -465,6 +466,9 @@ export async function checkSandboxSupport(
   });
 }
 
+/** ADR-0428's interval; the last one is reserved so a terminal lock is reported, not timed out. */
+const CONTENTION_POLL_MS = 25;
+
 /**
  * ADR-0428's platform fact at the probe's own boundary (ADR-0439): terminate() may leave the
  * Worker's sync access handle busy briefly, so the first removal can still meet that lock. Wait it
@@ -481,8 +485,8 @@ async function removeScratch(
       return;
     } catch (error) {
       if ((error as { name?: string })?.name !== 'NoModificationAllowedError') throw error;
-      if (Date.now() >= deadline()) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      if (Date.now() + CONTENTION_POLL_MS >= deadline()) throw error;
+      await new Promise((resolve) => setTimeout(resolve, CONTENTION_POLL_MS));
     }
   }
 }

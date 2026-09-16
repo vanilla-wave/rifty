@@ -20,8 +20,10 @@ reachable instance at the OPFS boundary, so the inventory is recorded here.
 1. Termination order stands. The scratch removal treats
    `NoModificationAllowedError` as the expected settlement of its own just
    terminated Worker and retries until the removal succeeds or the cleanup
-   deadline ADR-0437 decision 5 already owns expires. No new deadline owner,
-   queue or correlation state; every other rejection stays immediate.
+   deadline ADR-0437 decision 5 already owns expires. The last poll interval is
+   reserved, so a terminal lock is reported rather than absorbed by that
+   deadline. No new deadline owner, queue or correlation state; every other
+   rejection stays immediate.
 2. A lock outliving that deadline remains an explicit `cleanup: failed` with the
    native error, never a silent leftover. Late uncancelable effects keep
    ADR-0437's single-attempt disposal: their deadline is already past.
