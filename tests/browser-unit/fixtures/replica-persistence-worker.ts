@@ -2,6 +2,7 @@
 import { OpfsFsSync, type PersistFailureReport, initBackend, syncMirror } from '@riftydev/vfs';
 import { installOpfsFs } from '@riftydev/vfs/internal';
 import { installWorkbenchOwnerStorageAuthority } from '../../../packages/workbench/src/workers/workbench-owner-storage.ts';
+import { settleOpfsSetup } from './opfs-setup.ts';
 import manifest from './tracker-tree-manifest.json';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -34,6 +35,7 @@ interface Input {
   damage?: 'head' | 'segment' | 'truncate' | 'live-native';
   phase?: 'before-open' | 'before-close' | 'after-close';
   firstCommit?: boolean;
+  slowSeed?: boolean;
   rounds?: number;
 }
 const encoder = new TextEncoder();
@@ -111,8 +113,7 @@ async function seed(instance: OpfsFsSync) {
   instance.mkdirSync('/tree', { recursive: true });
   instance.writeFileSync('/tree/a.txt', encoder.encode('old-a'));
   instance.writeFileSync('/tree/b.txt', encoder.encode('old-b'));
-  const r = await instance.flush();
-  if (r.total) throw new Error('seed unclean');
+  await settleOpfsSetup(instance);
 }
 async function referencedSegments(root: FileSystemDirectoryHandle): Promise<number | null> {
   try {
@@ -275,7 +276,18 @@ async function run(input: Input) {
       segments: await referencedSegments(pair.root),
       issue: pair.layoutIssue,
     };
-  if (!(input.kind === 'crash' && input.firstCommit)) await seed(current);
+  if (!(input.kind === 'crash' && input.firstCommit)) {
+    const restore = input.slowSeed
+      ? faultNative(async (_name, phase) => {
+          if (phase === 'before-close') await new Promise((resolve) => setTimeout(resolve, 80));
+        })
+      : () => {};
+    try {
+      await seed(current);
+    } finally {
+      restore();
+    }
+  }
   if (input.kind === 'spin') {
     self.postMessage({ ok: true, result: { tree: snapshot(current) } });
     while (true) {}

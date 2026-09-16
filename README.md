@@ -100,10 +100,8 @@ import runtimeWorkerUrl from '@riftydev/runtime-js/worker?worker&url';
 import { checkCapabilities, createSandbox } from '@riftydev/sdk';
 
 async function main(): Promise<void> {
-  const caps = checkCapabilities();
-  if (!caps.sufficient || !caps.capabilities.crossOriginIsolated) {
-    throw new Error(caps.summary);
-  }
+  // Passive presence only; createSandbox still reports actual startup failures.
+  console.log(checkCapabilities().summary);
 
   const sandbox = await createSandbox({
     workerUrl: runtimeWorkerUrl,
@@ -118,6 +116,10 @@ async function main(): Promise<void> {
 
 void main();
 ```
+
+For active checks before COI Workbench or non-COI toolchain opening, use
+[`checkSandboxSupport`](./docs/public/sandbox-support.md) from `@riftydev/workbench`.
+It probes real browser operations and reports each composition separately.
 
 Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see [`docs/public/compat/`](./docs/public/compat/)).
 

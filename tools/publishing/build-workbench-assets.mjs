@@ -102,3 +102,14 @@ await copyFile(
   resolve(outdir, 'quickjs.wasm'),
 );
 await copyFile(requireNet.resolve('sql.js/dist/sql-wasm.wasm'), resolve(outdir, 'sql-wasm.wasm'));
+// Separate inert prerequisite carriers; do not change the runtime chunk graph.
+await build({
+  entryPoints: ['support-worker', 'support-child', 'support-module', 'support-service-worker'].map(
+    (name) => resolve(workbench, `src/support/${name}.ts`),
+  ),
+  outdir,
+  bundle: false,
+  format: 'esm',
+  platform: 'browser',
+  target: 'es2022',
+});

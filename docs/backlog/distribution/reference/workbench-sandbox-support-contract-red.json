@@ -1,0 +1,150 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS: proceed to implementation; Final+GREEN remains required.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "70b887072f5383bcb93a9afdfd93b578631cc75e",
+  "unit_goal_source": "docs/backlog/distribution/workbench-sandbox-support.md at 70b887072f5383bcb93a9afdfd93b578631cc75e; BASE 51440931aeb5e322ddfcab930e02068e7083922e; raw user authority in docs/backlog/distribution/reference/workbench-sandbox-support-refine.md; ADR-0437. Independent verification by /root/contract_red_review of the accepted FIX and resulting committed tree. Executed corrected real-owner baseline: RIFTY_PLAYGROUND_PORT=5544 pnpm exec playwright test --config /tmp/pr340-review-probes/playwright.config.mts active-owner-fixed.spec.ts --workers=1 --reporter=line; /tmp/pr340-review-active-owner-fixed.log: 1 passed (4.7s), both /scratch write/read pairs returned exact {ok:true,text:expected,error:empty}. Current full RED artifact /tmp/pr340-red-corrected.log independently inspected: 26 Expected:function/Received:undefined assertions, 1 synchronous passive SDK pass (20.4s). Current-session native Chromium reference /tmp/pr340-native-current.json and /tmp/pr340-csp-current.json retained from initial review; no changed oracle claims.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "A1: public before-opening report names both compositions, separates outcomes and gives reasons/evidence limits",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:87",
+      "note": ""
+    },
+    {
+      "row": "A2: composition-dependent native Worker/import/nested/messaging/eval/WASM/shared-memory/lock checks reject false positives",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:137",
+      "note": ""
+    },
+    {
+      "row": "A3: Worker OPFS operations and required/preferred/ephemeral consequences",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:173",
+      "note": ""
+    },
+    {
+      "row": "A4: SW presence, registration and deployment control are distinct; mode-specific registration consequence",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:161",
+      "note": ""
+    },
+    {
+      "row": "A5: bounded repeated/concurrent probes preserve native data, live sessions and registrations",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:394",
+      "note": ""
+    },
+    {
+      "row": "A6: passive synchronous SDK semantics and consumer guidance for active diagnostics/assets/CSP",
+      "source": "acceptance",
+      "trace": "ADR-0071",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:384",
+      "note": ""
+    },
+    {
+      "row": "F1: denied/import/nested/dead/stalled Workers give bounded honest observations",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:137",
+      "note": ""
+    },
+    {
+      "row": "F2: storage denial/quota policy consequences and explicit cleanup failure",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:173",
+      "note": ""
+    },
+    {
+      "row": "F3: same/other-tab sessions and repeated/concurrent checks preserve owned boundaries and observe new denial",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:394",
+      "note": ""
+    },
+    {
+      "row": "F4: late native registration/storage and stalled/failed cleanup remain bounded, honest and retain late cleanup",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:308",
+      "note": ""
+    },
+    {
+      "row": "F5: unproved required memory/locks/SW/selected WASM prevents support; optional loss remains limitation",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:461",
+      "note": ""
+    },
+    {
+      "row": "Proposed checkSandboxSupport(options?) public entry and structured report/options",
+      "source": "public-api",
+      "trace": "ADR-0437 + scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:57",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

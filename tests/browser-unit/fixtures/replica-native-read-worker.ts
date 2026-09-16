@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { NotImplementedError } from '@riftydev/vfs';
 import { installOpfsFs } from '@riftydev/vfs/internal';
+import { settleOpfsSetup } from './opfs-setup.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 interface Input {
@@ -19,7 +20,7 @@ async function run(input: Input) {
   const fs = pair.fsSync;
   fs.mkdirSync('/dir');
   fs.writeFileSync('/dir/a', new TextEncoder().encode('stable'));
-  if ((await fs.flush()).total) throw new Error('seed failed');
+  await settleOpfsSetup(fs);
   try {
     if (input.kind === 'controls') {
       const errors: { method: string; name: string; feature: string }[] = [];
@@ -77,7 +78,7 @@ async function run(input: Input) {
       const reader = read();
       for (let i = 0; i < 140; i++) {
         fs.writeFileSync('/b', new TextEncoder().encode(String(i)));
-        if ((await fs.flush()).total) throw new Error('concurrent writer is dirty');
+        await settleOpfsSetup(fs);
       }
       done = true;
       await reader;
@@ -85,7 +86,7 @@ async function run(input: Input) {
     }
     for (let i = 0; i < 63; i++) {
       fs.writeFileSync('/b', new TextEncoder().encode(String(i)));
-      await fs.flush();
+      await settleOpfsSetup(fs);
     }
     const directory = await root.getDirectoryHandle('.rifty-replica-v1');
     const head = JSON.parse(

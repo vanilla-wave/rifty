@@ -22,6 +22,14 @@ const EXPORTED_SOURCE_ENTRIES = [
   'src/workers/no-coi-toolchain-worker.ts',
 ] as const;
 
+// ADR-0437: independently built static carriers; not new package subpath exports.
+const SUPPORT_ASSET_ENTRIES = [
+  'src/support/support-worker.ts',
+  'src/support/support-child.ts',
+  'src/support/support-module.ts',
+  'src/support/support-service-worker.ts',
+] as const;
+
 const EXPECTED_EXTERNAL_PACKAGES = [
   '@riftydev/git',
   '@riftydev/io',
@@ -221,6 +229,13 @@ function resolvedExportEntries(): readonly string[] {
   return Object.values(readManifest().exports).map((target) => resolve(PACKAGE_ROOT, target));
 }
 
+function resolvedBuildEntries(): readonly string[] {
+  return [
+    ...resolvedExportEntries(),
+    ...SUPPORT_ASSET_ENTRIES.map((path) => resolve(PACKAGE_ROOT, path)),
+  ];
+}
+
 function sourceLoader(path: string): Loader {
   switch (extname(path)) {
     case '.ts':
@@ -242,7 +257,7 @@ async function runtimeBearingSourcesOutsideBuild(): Promise<readonly string[]> {
   const manifest = readManifest();
   const result = await build({
     absWorkingDir: PACKAGE_ROOT,
-    entryPoints: resolvedExportEntries(),
+    entryPoints: resolvedBuildEntries(),
     bundle: true,
     external: Object.keys(manifest.dependencies).flatMap((dependency) => [
       dependency,
@@ -315,7 +330,7 @@ describe('@riftydev/workbench extraction boundary', () => {
   });
 
   it('contains the whole production closure with no unreachable implementation files', () => {
-    const entries = resolvedExportEntries();
+    const entries = resolvedBuildEntries();
     const closure = sourceClosure(entries);
     const packageProductionFiles = productionFiles(PACKAGE_SRC_ROOT);
 
@@ -349,11 +364,12 @@ describe('@riftydev/workbench extraction boundary', () => {
     // ADR-0420: explicit no-COI snapshot application composition.
     // PR #299: targeted page reads extracted from the ratcheted owner module.
     // ADR-0432: native storage diagnosis shares the owner's existing publication point.
-    expect(packageProductionFiles).toHaveLength(164);
+    // ADR-0437: three diagnostic modules and four separately emitted probe assets.
+    expect(packageProductionFiles).toHaveLength(171);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
-  it('does not retain runtime-bearing source outside the eight published build entries', async () => {
+  it('does not retain runtime-bearing source outside published library and probe asset build entries', async () => {
     expect(await runtimeBearingSourcesOutsideBuild()).toEqual([]);
   });
 

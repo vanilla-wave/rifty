@@ -1,0 +1,166 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS: the non-COI UUID finding is repaired and independently verified; all unit obligations are covered. Remote CI remains a separate delivery check; no merge was requested.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "68436c19f3432f58466a07ff76e8925f918e1e8b",
+  "unit_goal_source": "docs/backlog/distribution/workbench-sandbox-support.md at 68436c19f3432f58466a07ff76e8925f918e1e8b; BASE 51440931aeb5e322ddfcab930e02068e7083922e. Independent reviewer /root/final_green_review verified the actual five-file delta from its initial 9b778d48516d868b90a6436950e0afdab1523104 review, the unchanged full-unit authority, and the preserved initial BLOCK in reference/workbench-sandbox-support-implementation-final-initial.json. Required crypto is now shared by both mode lists (report.ts:47), matching SDK sandbox.ts:393. Committed native UUID regression at tests/browser-unit/sandbox-support.spec.ts:506 now requires both unsupported conclusions and the non-COI crypto reason. Independently reran the SAME real SDK/browser discriminator against HEAD: RIFTY_PLAYGROUND_PORT=5589 pnpm exec playwright test --config /tmp/pr340-final-independent/playwright.config.mts uuid.spec.ts --workers=1 --reporter=line, /tmp/pr340-independent-uuid-verified.log: 1 passed (5.1s); real SDK TypeError and non-COI unsupported with the observed crypto reason agree. Inspected current-session full native suite /tmp/pr340-uuid-green.log: 29/29 PASS (17.8s); /tmp/pr340-uuid-revert.log restores only the prior report implementation and kills the extended committed test (expected unsupported, received inconclusive), with final source restored. Inspected full current pr:check /tmp/pr340-pr-check-uuid.log: 25/25 PASS, unit 207.8s and parity 69.9s, no reruns. Initial independent native full-suite run was 29/29 PASS (18.0s), /tmp/pr340-independent-final-browser.log. PR-4 comparison remains valid and unchanged: baseline sealed root export, 164-file/eight-entry reachability and exact communication inventory expand only for ADR-0437 one root export, seven sources/four independently built assets and four exact communication paths. Whole-source reachability, exact exports, retired references, unknown brokers and emitted-byte checks remain; published assets run in the committed native suite. No tracked file edited; HEAD and worktree verified clean. This standalone diagnostic outcome has full browser acceptance and no unit/goal residuals; remote CI is tracked separately by the driver.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "A1: before-opening public report names both modes and distinguishes failed/incomplete evidence with readable reasons and limits",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:87; tests/browser-unit/sandbox-support.spec.ts:506",
+      "note": ""
+    },
+    {
+      "row": "A2: actual composition-dependent native Worker/import/nested/messaging/eval/WASM/memory/lock operations reject false prerequisite conclusions",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:151; tests/browser-unit/sandbox-support.spec.ts:506",
+      "note": ""
+    },
+    {
+      "row": "A3: dedicated Worker OPFS sync and replica operations with required/preferred/ephemeral consequences",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:188",
+      "note": ""
+    },
+    {
+      "row": "A4: SW presence, private registration/activation and unverified deployment control remain distinct with per-mode consequences",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:174",
+      "note": ""
+    },
+    {
+      "row": "A5: bounded repeated/concurrent probes and honest cleanup preserve native data, active sessions and SW state",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:221",
+      "note": ""
+    },
+    {
+      "row": "A6: unchanged pure synchronous SDK detector and consumer documentation for active diagnostics/assets/CSP",
+      "source": "acceptance",
+      "trace": "ADR-0071",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:398; docs/public/sandbox-support.md:1",
+      "note": ""
+    },
+    {
+      "row": "F1: CSP/import/nested/dead/stalled Workers give bounded honest outcomes and owned teardown",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:151; tests/browser-unit/sandbox-support.spec.ts:207",
+      "note": ""
+    },
+    {
+      "row": "F2: storage denial/quota follows selected persistence; cleanup failure remains explicit",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:188; tests/browser-unit/sandbox-support.spec.ts:297",
+      "note": ""
+    },
+    {
+      "row": "F3: concurrent/repeated calls preserve pre-existing files, sessions, scopes/controllers and origin leases while observing new denial",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:221; tests/browser-unit/sandbox-support.spec.ts:409; tests/browser-unit/sandbox-support.spec.ts:520",
+      "note": ""
+    },
+    {
+      "row": "F4: late native registration/storage and cleanup timeout/rejection retain bounded honest late removal",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:323; tests/browser-unit/sandbox-support.spec.ts:346; tests/browser-unit/sandbox-support.spec.ts:449",
+      "note": ""
+    },
+    {
+      "row": "F5: required memory/locks/SW/selected WASM evidence prevents unsupported positive results; optional loss remains limitation",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:385; tests/browser-unit/sandbox-support.spec.ts:479; tests/browser-unit/sandbox-support.spec.ts:520",
+      "note": ""
+    },
+    {
+      "row": "checkSandboxSupport(options?) public root export and structured support types",
+      "source": "public-api",
+      "trace": "ADR-0437 + scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/sandbox-support.spec.ts:58; packages/workbench/src/workbench/internal/playground-workbench.contract.test.ts:662; tests/browser-unit/sandbox-support.spec.ts:506",
+      "note": ""
+    },
+    {
+      "row": "Frozen native reference: passive presence survives Worker CSP denial; dedicated Worker OPFS exact bytes succeed without COI",
+      "source": "frozen-artifact",
+      "trace": "ADR-0437 + scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/workbench-sandbox-support-refine.md:46; tests/browser-unit/sandbox-support.spec.ts:87; tests/browser-unit/sandbox-support.spec.ts:398",
+      "note": ""
+    },
+    {
+      "row": "Frozen native CSP reference: JS eval, WASM compilation, module import and nested Worker permission are separate observations",
+      "source": "frozen-artifact",
+      "trace": "ADR-0437 + scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/workbench-sandbox-support-csp-evidence.md:1; tests/browser-unit/sandbox-support.spec.ts:151",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

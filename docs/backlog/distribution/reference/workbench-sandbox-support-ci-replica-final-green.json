@@ -1,0 +1,150 @@
+{
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "UNIT PR #340, observed browser-unit replica fixture failure against BASE 578553302fdab9b71ee13cb472f32792f3cbd73f; standalone, no parent goal. Reviewed clean HEAD 28078a46edfc00676baff85fa1e222650509285f. Fresh independent reviewer /root/replica_fixture_review, depth 1, no children, read-only tracked tree. Scope: six-file delta after accepted consumer-fit delivery; earlier consumer-fit work excluded under REV-1. Independently read AGENTS.md, process/review/checkpoint/verdict rules, ADR-0425, complete diff, baseline checking criteria from git, fixture siblings and actual OpfsFsSync/scheduler settlement and failure-ledger code. PR-4: original reporting timeout, pending fence, physical exclusion, late-heal and read/compaction assertions retained; setup now joins real settlement, with no increased deadline or swallowed native failure. Raw CI /tmp/pr340-consumer-ci-browser.log: only failure seed unclean, 266 passed/1 skipped; original log discarded native cause. Unchanged isolated run /tmp/pr340-replica-isolated.log: 21/21 PASS. Committed RED dc1809d445b3fd88fc1a810254eeb04fbc62d767 precedes repair: /tmp/pr340-replica-slow-seed-red.log fails slow-seed case on seed unclean; native close decorated with 80 ms delay against unchanged 40 ms budget. Reverse /tmp/pr340-replica-setup-revert.log: removing helper fence fails on OPFS setup unclean and three did not settle within 40ms entries. These prove the fixture defect without claiming the discarded original native cause was recovered. Independently executed RIFTY_PLAYGROUND_PORT=5394 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/replica-persistence.spec.ts tests/browser-unit/replica-native-read.spec.ts --reporter=list: exit 0, 31/31 PASS, 1.2 min; raw /tmp/pr340-replica-independent-green.log. Read driver touched-suite GREEN /tmp/pr340-replica-setup-green.log and full current /tmp/pr340-replica-pr-check.log: 25/25 PASS, including typecheck, build, test:run and parity; no failed-file reruns. Fault sweep: short-budget persistence/native-read setup share existing fence+flush boundary; paired async mutations already join real results, guard-deadline intentionally holds acquisition, native-reader and remaining persistence setup use ordinary budgets. No new state owner, retry, public API, frozen oracle, product implementation or test configuration. Independent git diff --check passed; post-run tracked tree clean and HEAD unchanged.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Healthy replica seed whose native close exceeds the reporting budget reaches the existing timeout scenario after actual settlement",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 3 + baseline replica timeout scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:182; tests/browser-unit/fixtures/replica-persistence-worker.ts:279; tests/browser-unit/fixtures/opfs-setup.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Reporting expiry reports both target logical paths while the real-settle fence remains pending",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:225; tests/browser-unit/fixtures/replica-persistence-worker.ts:481",
+      "note": ""
+    },
+    {
+      "row": "Close retains the physical writer during unsettled publication; another owner acquires only after settlement",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 7",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:209; tests/browser-unit/replica-persistence.spec.ts:227",
+      "note": ""
+    },
+    {
+      "row": "Late successful publication heals timeout failures and preserves the target bytes",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 3",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:228; tests/browser-unit/fixtures/replica-persistence-worker.ts:500",
+      "note": ""
+    },
+    {
+      "row": "Quota failure reports every affected logical path; repairing one path heals only that path",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 3 + decision 6",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:148; tests/browser-unit/fixtures/replica-persistence-worker.ts:463",
+      "note": ""
+    },
+    {
+      "row": "Acquired native read refusal stays loud; corrupt state remains diagnosed with physical bytes retained; failed compaction preserves the previous tree",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 4 + decision 6",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:52; tests/browser-unit/replica-persistence.spec.ts:100",
+      "note": ""
+    },
+    {
+      "row": "Exact structural mutations, native bytes and timestamps survive fresh replica replay",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 2 + decision 4 + decision 5",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:120",
+      "note": ""
+    },
+    {
+      "row": "First-commit, append and compaction interruption expose honest complete state; Worker death releases the physical guard",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 4 + decision 6 + decision 7",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-persistence.spec.ts:237; tests/browser-unit/replica-persistence.spec.ts:285; tests/browser-unit/replica-persistence.spec.ts:336",
+      "note": ""
+    },
+    {
+      "row": "Stable native read/stat/readdir stay correct during concurrent writes in both file and replica modes",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 5 + baseline replica-native-read concurrent scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:30; tests/browser-unit/fixtures/replica-native-read-worker.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Replica native backend controls preserve named unsupported errors while file-mode controls remain supported",
+      "source": "acceptance",
+      "trace": "ADR-0425 native evidence final paragraph + baseline native backend controls scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:35",
+      "note": ""
+    },
+    {
+      "row": "Compaction retains admitted native read/stat/readdir/content until real settlement, reports delay, then heals and reclaims superseded storage",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 5 + decision 6",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:50; tests/browser-unit/fixtures/replica-native-read-worker.ts:166",
+      "note": ""
+    },
+    {
+      "row": "Close retains physical ownership until an already-admitted native read settles and returns its committed bytes",
+      "source": "acceptance",
+      "trace": "ADR-0425 decision 5 + decision 7",
+      "status": "pass",
+      "citation": "tests/browser-unit/replica-native-read.spec.ts:61; tests/browser-unit/fixtures/replica-native-read-worker.ts:149",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "overall_verdict": "pass",
+  "merge_call": "PASS: replica fixture repair complete; no blocker, concern or required residual. Standalone unit; no parent-goal completion claim.",
+  "reviewed_sha": "28078a46edfc00676baff85fa1e222650509285f"
+}

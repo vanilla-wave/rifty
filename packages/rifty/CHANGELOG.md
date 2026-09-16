@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Clarify checkCapabilities as synchronous realm presence; link active Workbench diagnostics without changing SDK behavior.
+
 - Add stopResident: reuse whole-Worker replacement without resident replay,
   preserving activation recovery and dirty reporting; restart keeps its replay. ADR-0426.
 - Document distinct namespaces for same-origin Workbench and SDK toolchain writers, including preferred-policy contention rejection.

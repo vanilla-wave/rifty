@@ -659,6 +659,7 @@ describe('Playground companion sealed contract', () => {
       'StaleProjectDocumentError',
       'StdinClosedError',
       'WorkbenchOriginOccupiedError',
+      'checkSandboxSupport',
       'openWorkbench',
       'produceDependencySnapshot',
       'projects',
