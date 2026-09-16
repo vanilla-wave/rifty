@@ -92,10 +92,29 @@ Verdict: `docs/backlog/distribution/reference/workbench-sandbox-support-followup
    (ADR-0437 decision 1 keeps observed name/message). The aggregate message now carries both.
 3. Concern: `cleanup rejection stays explicit` survived a mutant that retried non-lock errors too.
 
-Regression tests committed for all three: a terminal-lock test asserting `cleanup: failed`, the
-native name in the reason and more than one attempt; the non-lock test asserting exactly one
-attempt and its own native name.
+## Independent verify pass — BLOCK at `e7405dc1de`
+
+Verdict: round-2 record in the PR thread. Finding 1's repair was wrong: reserving the final poll
+interval does not bound the native call. With `removeEntry` rejecting after 40 ms and
+`timeoutMs: 300`, rejections landed at 54/122/189/257 ms, the fifth attempt was issued at 283 ms and
+rejected at 323 ms — after the 315 ms report — so the phase timer still published the generic
+`incomplete`. Reviewer repro: 3 failed under `--repeat-each=3`.
+
+Settled instead by removing the race from the decision: `removeScratch` reports each lock through
+an `observe` callback as it happens, and the report is decided by what was actually observed —
+an observed rejection first, then an observed-but-unremoved lock (`incomplete`, naming the native
+error), then deadline expiry, then `passed`. Rejection latency can no longer change the status.
+ADR-0439 decision 2 now states this; decision 3 records that an observed cleanup rejection outranks
+deadline expiry, which also stops the pre-existing silent drop of a disposer error under timeout.
+
+Regression tests committed: the terminal-lock test runs at 0 ms and 40 ms rejection latency and
+asserts `cleanup: incomplete` with the native name and message and more than one attempt; the
+non-lock test asserts exactly one attempt and its own native name.
+
+Mutant check on the deciding branch (`scratchLock !== undefined` short-circuited to `false`):
+both lock tests fail with `Received string: "Cleanup deadline expired; pending native effects
+retain late cleanup, removal not yet established"`. Source restored.
 
 ## GREEN
 
-Whole suite on the fixed tree: `32 passed (18.8s)` (29 baseline + three new fault tests).
+Whole suite on the fixed tree: `33 passed (19.4s)` (29 baseline + four new fault tests).

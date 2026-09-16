@@ -20,18 +20,25 @@ reachable instance at the OPFS boundary, so the inventory is recorded here.
 1. Termination order stands. The scratch removal treats
    `NoModificationAllowedError` as the expected settlement of its own just
    terminated Worker and retries until the removal succeeds or the cleanup
-   deadline ADR-0437 decision 5 already owns expires. The last poll interval is
-   reserved, so a terminal lock is reported rather than absorbed by that
-   deadline. No new deadline owner, queue or correlation state; every other
-   rejection stays immediate.
-2. A lock outliving that deadline remains an explicit `cleanup: failed` with the
-   native error, never a silent leftover. Late uncancelable effects keep
-   ADR-0437's single-attempt disposal: their deadline is already past.
+   deadline ADR-0437 decision 5 already owns expires. No new deadline owner,
+   queue or correlation state; every other rejection stays immediate.
+2. The verdict follows the locks actually observed, not a race with that
+   deadline: a native rejection cannot be bounded, so its arrival time never
+   decides the report. A lock observed with no removal observed after it is
+   `cleanup: incomplete` naming that native error — removal not established,
+   never `passed`, never the generic pending-effects reason.
+3. An observed cleanup rejection now outranks deadline expiry in the report:
+   a failure the probe saw is never dropped for "deadline expired". Late
+   uncancelable effects keep ADR-0437's single-attempt disposal: their deadline
+   is already past.
 
 ## Alternatives and consequences
 
 - Reporting the first rejection was the shipped behavior: it published a failure
   the caller cannot act on and leaked the probe's own directory.
+- Reserving a slice of the deadline so a terminal lock lands as `failed` was
+  tried and rejected: a native `removeEntry` can reject after any reserve, which
+  made the published status depend on rejection latency.
 - Awaiting a termination acknowledgement needs an API the platform does not
   offer; a second teardown authority would own the same key.
 - Sharing ADR-0428's helper would make a disposable prerequisite probe depend on

@@ -95,17 +95,20 @@ async function check(page: Page, options: Options): Promise<Report> {
   return report;
 }
 type Counted = typeof globalThis & { removeEntryAttempts?: number };
-const denyRemoveEntry = (page: Page, message: string, name: string) =>
+const denyRemoveEntry = (page: Page, message: string, name: string, afterMs = 0) =>
   page.evaluate(
     (denial) => {
       (globalThis as Counted).removeEntryAttempts = 0;
       FileSystemDirectoryHandle.prototype.removeEntry = () => {
         (globalThis as Counted).removeEntryAttempts =
           ((globalThis as Counted).removeEntryAttempts ?? 0) + 1;
-        return Promise.reject(new DOMException(denial.message, denial.name));
+        const error = new DOMException(denial.message, denial.name);
+        return new Promise<undefined>((_, reject) =>
+          denial.afterMs > 0 ? setTimeout(() => reject(error), denial.afterMs) : reject(error),
+        );
       };
     },
-    { message, name },
+    { message, name, afterMs },
   );
 const removeEntryAttempts = (page: Page) =>
   page.evaluate(() => (globalThis as Counted).removeEntryAttempts ?? 0);
@@ -377,18 +380,22 @@ test('[fault: quota-perm-fail] cleanup rejection stays explicit and preserves fo
   expect(await removeEntryAttempts(page)).toBe(1);
 });
 
-test('[fault: concurrent-same-key] a lock outliving the cleanup deadline is an explicit failure', async ({
-  page,
-}) => {
-  const probeBaseUrl = await open(page);
-  await denyRemoveEntry(page, 'probe lock persists', 'NoModificationAllowedError');
-  const started = Date.now();
-  const report = await check(page, { probeBaseUrl, persistence: 'required', timeoutMs: 300 });
-  expect(Date.now() - started).toBeLessThan(5000);
-  expect(report.cleanup.status, report.cleanup.reason).toBe('failed');
-  expect(report.cleanup.reason).toMatch(/NoModificationAllowedError/);
-  expect(await removeEntryAttempts(page)).toBeGreaterThan(1);
-});
+// A native rejection can arrive after the deadline: latency must not decide the published status.
+for (const rejectAfterMs of [0, 40]) {
+  test(`[fault: concurrent-same-key] a lock outliving the cleanup deadline stays named, ${rejectAfterMs}ms rejection`, async ({
+    page,
+  }) => {
+    const probeBaseUrl = await open(page);
+    await denyRemoveEntry(page, 'probe lock persists', 'NoModificationAllowedError', rejectAfterMs);
+    const started = Date.now();
+    const report = await check(page, { probeBaseUrl, persistence: 'required', timeoutMs: 300 });
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(report.cleanup.status, report.cleanup.reason).toBe('incomplete');
+    expect(report.cleanup.reason).toMatch(/NoModificationAllowedError/);
+    expect(report.cleanup.reason).toMatch(/probe lock persists/);
+    expect(await removeEntryAttempts(page)).toBeGreaterThan(1);
+  });
+}
 
 test('WASM requiredness follows VM/workload selection independently of JS eval', async ({
   page,

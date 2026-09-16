@@ -132,7 +132,10 @@ scratch data and SW scopes are removed. Native registration/file creation cannot
 be canceled: late completion retains cleanup, and the returned immutable report
 keeps `cleanup: incomplete` if removal was not observed before its deadline.
 Terminating the probe Worker releases its OPFS sync access handle asynchronously,
-so scratch removal waits that lock out within the same cleanup deadline.
+so scratch removal waits that lock out within the same cleanup deadline. A lock
+still held when that deadline expires reports `cleanup: incomplete` naming the
+native error; an observed rejection reports `cleanup: failed` with its name and
+message, and outranks deadline expiry.
 Cleanup failure is explicit; callers should inspect it alongside mode conclusions.
 
 SDK `checkCapabilities()` remains a pure synchronous presence report for its
