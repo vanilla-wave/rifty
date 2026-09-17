@@ -237,3 +237,14 @@ committed differential test RED (1 failed / 17 skipped,
 `/tmp/pi-context-identity-test-red.log`). Skip the selected project path when
 already supplied globally; retain first-candidate selection. Full relevant
 suite then 34 passed. This remains I1/I5 work, no scope change.
+
+## Final review repair
+
+B1 (independent final_review): resource await introduced a new admission gap.
+A 10ms run budget expired during a held startup/reload read; after release,
+one model request still ran. Probe `/tmp/pi-resource-timeout-probe.mts` and
+committed two-case RED `/tmp/pi-resources-budget-red.log`: 2 failed,
+stop/dispose siblings 2 passed. Shared post-await guard now checks budget as
+well as stop. Relevant suite `/tmp/pi-resources-budget-green.log`: 38 passed.
+Authority ADR-0424 §7 time limits; fault class observable-order. No new queue,
+cancellation mechanism or reduced budget requirement.

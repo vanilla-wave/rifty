@@ -239,7 +239,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     }, runTimeoutMs);
     try {
       await (reloading ?? initialResources);
-      if (!stopRequested) {
+      if (!stopRequested && budgetReason === undefined) {
         const refreshed = refreshCapabilities();
         agent.state.systemPrompt = refreshed.systemPrompt;
         agent.state.tools = refreshed.tools;

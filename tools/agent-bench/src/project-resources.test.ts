@@ -457,3 +457,86 @@ it('pi context identity prevents the same global/project file appearing twice', 
   expect(event?.type === 'resources' ? event.report.contextFiles : undefined).toEqual(oracle);
   expect(f.prompt().match(/<project_instructions /g)).toHaveLength(oracle.length);
 });
+
+it.each(['startup', 'reload'] as const)(
+  'expired run budget never dispatches after waiting for %s resources',
+  async (phase) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let blocked = phase === 'startup';
+    const f = await fixture({ 'AGENTS.md': 'Slow resources.' }, (root, files) => ({
+      runTimeoutMs: 10,
+      host: {
+        root,
+        capabilities: () => ({
+          files: {
+            ...files,
+            async read(path: string) {
+              if (blocked) await held;
+              return files.read(path);
+            },
+          },
+        }),
+        async close() {},
+      },
+    }));
+    try {
+      if (phase === 'reload')
+        await expect.poll(() => f.events.some((event) => event.type === 'resources')).toBe(true);
+      blocked = true;
+      const reloading = phase === 'reload' ? f.session.reload() : Promise.resolve();
+      const sending = f.session.send('do not send after the deadline');
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      release();
+      await Promise.all([sending, reloading]);
+      expect(f.session.status()).toBe('budget-exceeded');
+      expect(f.provider.requests).toHaveLength(0);
+    } finally {
+      release();
+      await f.session.dispose();
+    }
+  },
+);
+
+it.each(['stop', 'dispose'] as const)(
+  '%s during startup read settles before host close without model dispatch',
+  async (action) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let closed = false;
+    const f = await fixture({ 'AGENTS.md': 'Slow resources.' }, (root, files) => ({
+      host: {
+        root,
+        capabilities: () => ({
+          files: {
+            ...files,
+            async read(path: string) {
+              await held;
+              return files.read(path);
+            },
+          },
+        }),
+        async close() {
+          closed = true;
+        },
+      },
+    }));
+    try {
+      const sending = f.session.send('cancel before dispatch');
+      const cancelling = f.session[action]();
+      expect(closed).toBe(false);
+      release();
+      await Promise.all([sending, cancelling]);
+      expect(f.session.status()).toBe('aborted');
+      expect(f.provider.requests).toHaveLength(0);
+      expect(closed).toBe(action === 'dispose');
+    } finally {
+      release();
+      await f.session.dispose();
+    }
+  },
+);

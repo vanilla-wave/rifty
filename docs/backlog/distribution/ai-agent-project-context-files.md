@@ -48,6 +48,7 @@ core formatter reused. Differential carrier:
 |---|---|---|---|
 | poisoned-cache × edit then send/reload | snapshot retained until explicit reload | project-resources.test.ts + ai-mode.spec.ts | → I4 |
 | corrupt-input × skill metadata | pi warnings/skip; report carries diagnostics | same-tree CLI invalid skill | → I2, I4 |
+| observable-order × timeout/stop/dispose during resource read | no post-cancellation model dispatch; reads settle before close | startup/reload budget and cancellation cases in project-resources.test.ts | → ADR-0424 |
 | false-fallback × missing file capability | report/prompt name unread resources | no-file host test | → I6 |
 
 ## Out of scope
@@ -62,3 +63,5 @@ ready-verdict: 2026-09-18 — Contract+RED @ 81d4664705266f360ba2a45b3aefcbf288b
 re-cut: 2026-09-18 — combine ai-agent-project-context-files, ai-agent-project-skills and ai-agent-playground-reload into one resource delivery and checkpoint; all I1–I7 retained — trace: none
 - 2026-09-18 — ADR-0440: public API, semantic copy, dependency pins, ADR-0434 correction.
 - 2026-09-18 — host root is cwd; adapters already expose it. Preview → commands requires explicit reload, preserving I4 cache semantics.
+
+re-cut: 2026-09-18 — add resource-await timeout admission regression under existing ADR-0424 budget baseline; observed RED, no scope change — trace: none
