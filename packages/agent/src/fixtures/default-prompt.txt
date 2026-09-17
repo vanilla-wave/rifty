@@ -15,8 +15,7 @@ A dev server may already run. Verify user-visible changes through available prev
 
 Unavailable host capabilities: file tools, shell, preview, diagnostics, SCM diff.
 
-Current working directory: /
-
 Current date: <DATE>
 
 Project instructions
+Current working directory: /

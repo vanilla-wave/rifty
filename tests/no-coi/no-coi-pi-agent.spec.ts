@@ -200,3 +200,88 @@ test('same Pi session edits/builds real React, observes preview mode, exits resi
   ).toContain('agent-first');
   console.log(`React no-COI exact dependency lock: ${value.lock}`);
 });
+
+test('sandbox project resources load by default and reload through the real project filesystem', async ({
+  page,
+}) => {
+  await page.goto('/no-coi-harness.html');
+  const result = await page.evaluate(async (root) => {
+    const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+    const { createAgentSession, createSandboxAgentHost } = (await import(
+      `/@fs${root}/packages/agent/src/index.ts`
+    )) as typeof import('../../packages/agent/src/index.ts');
+    const { scriptedProvider } = await import(
+      `/@fs${root}/tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts`
+    );
+    const sandbox = await createSandbox({
+      requireCrossOriginIsolation: false,
+      skipServiceWorker: true,
+      toolchain: {
+        workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+      },
+    });
+    const provider = scriptedProvider([
+      [{ name: 'read_file', args: { path: '.pi/skills/deploy/SKILL.md' } }],
+      'Arrr.',
+      'Still old.',
+      'Reloaded.',
+    ]);
+    try {
+      if (crossOriginIsolated) throw new Error('Expected no-COI');
+      for (const [path, content] of Object.entries({
+        '/AGENTS.md': 'Outside host root.',
+        '/agent-resources/AGENTS.md': 'Pirate instructions.',
+        '/agent-resources/sub/CLAUDE.md': 'Descendant instructions.',
+        '/agent-resources/.pi/skills/deploy/SKILL.md':
+          '---\nname: deploy\ndescription: Deploy project\n---\nUse the deployment steps.',
+        '/agent-resources/.agents/skills/nested/extra.md':
+          '---\nname: extra\ndescription: Extra skill\n---\nExtra steps.',
+        '/agent-resources/.pi/settings.json': '{}',
+      }))
+        await sandbox.fs.writeFile(path, content);
+      const agent = createAgentSession({
+        host: createSandboxAgentHost({
+          sandbox,
+          project: { root: '/agent-resources' },
+          mode: () => 'commands',
+        }),
+        settings: { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
+        fetch: provider.fetch,
+      });
+      try {
+        await agent.send('deploy this');
+        await sandbox
+          .project({ root: '/agent-resources' })
+          .fs.writeFile('AGENTS.md', 'Plain instructions.');
+        await agent.send('before reload');
+        const report = await agent.reload();
+        await agent.send('after reload');
+        return { report, trace: await agent.exportTrace(), requests: provider.requests };
+      } finally {
+        await agent.dispose();
+      }
+    } finally {
+      sandbox.dispose();
+    }
+  }, root);
+  expect(result.trace.status).toBe('done');
+  const prompt = (index: number) =>
+    String(
+      result.requests[index]?.body.messages.find(
+        (message: Record<string, unknown>) => message.role === 'system',
+      )?.content,
+    );
+  expect(prompt(0)).toContain('Pirate instructions.');
+  expect(prompt(0)).toContain('<name>deploy</name>');
+  expect(prompt(0)).toContain('<name>extra</name>');
+  expect(prompt(0)).not.toContain('Outside host root.');
+  expect(prompt(0)).not.toContain('Descendant instructions.');
+  expect(prompt(2)).toContain('Pirate instructions.');
+  expect(prompt(3)).toContain('Plain instructions.');
+  expect(prompt(3)).not.toContain('Pirate instructions.');
+  expect(JSON.stringify(results(result.trace))).toContain('Use the deployment steps.');
+  expect(result.report.unsupported).toContainEqual({
+    kind: 'settings.json',
+    path: '/agent-resources/.pi/settings.json',
+  });
+});

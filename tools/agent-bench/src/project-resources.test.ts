@@ -6,7 +6,13 @@ import {
   SettingsManager,
   loadProjectContextFiles,
 } from '@earendil-works/pi-coding-agent';
-import { type AgentFiles, type AgentSessionOptions, createAgentSession } from '@riftydev/agent';
+import {
+  type AgentCapabilities,
+  type AgentFiles,
+  type AgentSessionEvent,
+  type AgentSessionOptions,
+  createAgentSession,
+} from '@riftydev/agent';
 import { afterEach, expect, it } from 'vitest';
 import { MemoryVfs } from '../../../packages/vfs/src/index.ts';
 import { scriptedProvider } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts';
@@ -16,7 +22,12 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup();
 });
 
-async function fixture(tree: Record<string, string>, extra = {}) {
+async function fixture(
+  tree: Record<string, string>,
+  extra:
+    | Record<string, unknown>
+    | ((root: string, files: AgentFiles) => Record<string, unknown>) = {},
+) {
   const root = await mkdtemp(join(tmpdir(), 'rifty-pi-resources-'));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, '.git'));
@@ -49,11 +60,14 @@ async function fixture(tree: Record<string, string>, extra = {}) {
     host: { root, capabilities: () => ({ files }), async close() {} },
     settings: { baseUrl: 'https://scripted.invalid/v1', model: 'scripted' },
     fetch: provider.fetch,
-    ...extra,
+    ...(typeof extra === 'function' ? extra(root, files) : extra),
   } as AgentSessionOptions);
+  const events: AgentSessionEvent[] = [];
+  session.subscribe((event) => events.push(event));
   cleanups.push(() => session.dispose());
   return {
     root,
+    events,
     vfs,
     session,
     files,
@@ -203,6 +217,8 @@ it('same tree as full pi CLI: skills discovery, collision winners, hidden entrie
     '.pi/skills/hidden/SKILL.md': skill('hidden', 'disable-model-invocation: true\n'),
     '.pi/skills/bom/SKILL.md': `\uFEFF${skill('bom')}`,
     '.pi/skills/Z/SKILL.md': skill('collision'),
+    '.pi/skills/\uE000/SKILL.md': skill('unicode-collision'),
+    '.pi/skills/\u{10000}/SKILL.md': skill('unicode-collision'),
     '.pi/skills/a/SKILL.md': skill('collision'),
     '.pi/skills/standalone.md': skill('standalone'),
     '.pi/skills/nested/plain.md': skill('pi-nested-excluded'),
@@ -258,7 +274,7 @@ it('same tree as full pi CLI: skills discovery, collision winners, hidden entrie
   expect(report?.diagnostics).toEqual(
     expect.arrayContaining(
       expected.diagnostics
-        .filter((d) => d.path.startsWith(f.root))
+        .filter((d) => d.path?.startsWith(f.root))
         .map((d) => expect.objectContaining({ type: d.type, message: d.message, path: d.path })),
     ),
   );
@@ -287,4 +303,157 @@ it('supplied skills occupy global slot; project collision wins; skills opt-out h
   );
   await off.session.send('hello');
   expect(off.prompt()).not.toContain('<available_skills>');
+});
+
+it.each(['contextFiles', 'skills'] as const)(
+  'independent %s opt-out preserves the other block',
+  async (option) => {
+    const f = await fixture(
+      { 'AGENTS.md': 'Root context.', '.pi/skills/deploy/SKILL.md': skill('deploy') },
+      { [option]: false },
+    );
+    await f.session.send('hello');
+    expect(f.prompt().includes('<project_context>')).toBe(option !== 'contextFiles');
+    expect(f.prompt().includes('<available_skills>')).toBe(option !== 'skills');
+  },
+);
+
+it('startup emits before send; reload returns the emitted snapshot and retains history', async () => {
+  const f = await fixture({ 'AGENTS.md': 'Startup instructions.' });
+  await expect.poll(() => f.events.some((event) => event.type === 'resources')).toBe(true);
+  expect(f.provider.requests).toHaveLength(0);
+  await f.session.send('first');
+  await f.vfs.writeFile(join(f.root, 'AGENTS.md'), 'Reloaded instructions.');
+  const report = await f.session.reload();
+  expect(f.events.filter((event) => event.type === 'resources').at(-1)).toEqual({
+    type: 'resources',
+    report,
+  });
+  // Report consumers cannot rewrite the session's private snapshot.
+  (report.contextFiles as { path: string; content: string }[])[0]!.content = 'Tampered report.';
+  await f.session.send('second');
+  expect(f.prompt(1)).toContain('Reloaded instructions.');
+  expect(f.prompt(1)).not.toContain('Tampered report.');
+  expect(
+    f.provider.requests[1]?.body.messages.filter((message) => message.role === 'user'),
+  ).toHaveLength(2);
+  await f.session.dispose();
+  await expect(f.session.reload()).rejects.toThrow('disposed');
+});
+
+it('no-file startup changes only after explicit reload when files become available', async () => {
+  let capabilities: AgentCapabilities = {};
+  const f = await fixture({ 'AGENTS.md': 'Now readable.' }, (root) => ({
+    host: { root, capabilities: () => capabilities, async close() {} },
+  }));
+  await f.session.send('preview');
+  expect(f.prompt()).toContain('Project resources were not read');
+  capabilities = { files: f.files };
+  await f.session.send('commands before reload');
+  expect(f.prompt(1)).not.toContain('Now readable.');
+  const report = await f.session.reload();
+  expect(report.fileAccess).toBe('available');
+  await f.session.send('commands after reload');
+  expect(f.prompt(2)).toContain('Now readable.');
+});
+
+it('reload serializes with pending reads and send; active/disposed admission stays loud', async () => {
+  let release!: () => void;
+  let held: Promise<void> = Promise.resolve();
+  const f = await fixture({ 'AGENTS.md': 'Snapshot.' }, (root, files) => ({
+    host: {
+      root,
+      capabilities: () => ({
+        files: {
+          ...files,
+          async read(path: string) {
+            await held;
+            return files.read(path);
+          },
+        },
+      }),
+      async close() {},
+    },
+  }));
+  await f.session.send('initial');
+  held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const reload = f.session.reload();
+  await expect(f.session.reload()).rejects.toThrow('reload already in progress');
+  const sending = f.session.send('during reload');
+  await expect(f.session.reload()).rejects.toThrow('Stop the agent');
+  expect(f.provider.requests).toHaveLength(1);
+  release();
+  await reload;
+  await sending;
+  expect(f.provider.requests).toHaveLength(2);
+});
+
+it('resource faults report unreadable context and invalid YAML without hiding later valid resources', async () => {
+  const f = await fixture(
+    {
+      'AGENTS.override.md': 'Unreadable.',
+      'AGENTS.md': 'Fallback context.',
+      '.pi/skills/broken/SKILL.md': '---\nname: [broken\n---',
+      '.pi/skills/deploy/SKILL.md': skill('deploy'),
+    },
+    (root, files) => ({
+      host: {
+        root,
+        capabilities: () => ({
+          files: {
+            ...files,
+            async read(path: string) {
+              if (path.endsWith('/AGENTS.override.md'))
+                throw Object.assign(new Error('denied context'), { code: 'EACCES' });
+              return files.read(path);
+            },
+          },
+        }),
+        async close() {},
+      },
+    }),
+  );
+  await f.session.send('hello');
+  expect(f.prompt()).toContain('Fallback context.');
+  expect(f.prompt()).toContain('<name>deploy</name>');
+  const event = f.events.find((event) => event.type === 'resources');
+  expect(event?.type).toBe('resources');
+  if (event?.type !== 'resources') throw new Error('Missing resource report');
+  expect(event.report.diagnostics).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        path: join(f.root, 'AGENTS.override.md'),
+        message: 'denied context',
+      }),
+      expect.objectContaining({
+        path: join(f.root, '.pi/skills/broken/SKILL.md'),
+        type: 'warning',
+      }),
+    ]),
+  );
+});
+
+it('empty resources retain profile and emit no resource blocks with cwd last', async () => {
+  const f = await fixture({}, { instructions: ['Consumer append.'] });
+  await f.session.send('hello');
+  expect(f.prompt()).not.toContain('<project_context>');
+  expect(f.prompt()).not.toContain('<available_skills>');
+  expect(f.prompt()).toMatch(
+    new RegExp(`Consumer append\.\nCurrent working directory: ${f.root}\n$`),
+  );
+});
+
+it('pi context identity prevents the same global/project file appearing twice', async () => {
+  const f = await fixture({ 'AGENTS.md': 'Shared instructions.' }, (root) => ({
+    userContextFiles: [{ path: join(root, 'AGENTS.md'), content: 'Shared instructions.' }],
+  }));
+  const oracle = loadProjectContextFiles({ cwd: f.root, agentDir: f.root }).filter((file) =>
+    file.path.startsWith(f.root),
+  );
+  await f.session.send('hello');
+  const event = f.events.find((event) => event.type === 'resources');
+  expect(event?.type === 'resources' ? event.report.contextFiles : undefined).toEqual(oracle);
+  expect(f.prompt().match(/<project_instructions /g)).toHaveLength(oracle.length);
 });

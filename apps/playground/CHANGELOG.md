@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Show loaded agent files, skills and diagnostics; /reload applies editor changes without a model request.
+
 - Keep AI endpoint CORS/proxy guidance in the Playground UI while the public
   agent package reports product-neutral network failures.
 

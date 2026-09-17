@@ -2,8 +2,10 @@ import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { Model, ToolResultMessage } from '@earendil-works/pi-ai';
 import { streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
+import { loadResources } from './resources.ts';
 import { isToolFailure, standardTools, wrapTool } from './tools.ts';
 import type {
+  AgentResourceReport,
   AgentSession,
   AgentSessionEvent,
   AgentSessionOptions,
@@ -49,6 +51,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   const listeners = new Set<(event: AgentSessionEvent) => void>();
   const events: { at: number; event: AgentSessionEvent }[] = [];
   const timings: { startedAt: number; endedAt: number }[] = [];
+  let resources: AgentResourceReport | undefined;
+  let reloading: Promise<AgentResourceReport> | undefined;
   let status: AgentStatus = 'idle';
   let detail: string | undefined;
   let active: Promise<void> | undefined;
@@ -74,6 +78,17 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     emit({ type: 'status', status, ...(reason === undefined ? {} : { detail: reason }) });
   }
 
+  async function readResources(): Promise<AgentResourceReport> {
+    const report = await loadResources(host.root, host.capabilities(), options);
+    resources = report;
+    emit({ type: 'resources', report: structuredClone(report) });
+    return structuredClone(report);
+  }
+  const initialResources = readResources();
+  // The first send also observes initialization failures; no unhandled rejection
+  // if the consumer creates a session before subscribing/sending.
+  void initialResources.catch(() => {});
+
   function refreshCapabilities() {
     const capabilities = host.capabilities();
     const tools = [...standardTools(host.root, capabilities, emit), ...(options.tools ?? [])];
@@ -82,7 +97,13 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       throw new TypeError('Agent tool names must be unique');
     emit({ type: 'capabilities', tools: names, notes: capabilities.notes ?? [] });
     return {
-      systemPrompt: systemPrompt(host.root, tools, capabilities, options.instructions ?? []),
+      systemPrompt: systemPrompt(
+        host.root,
+        tools,
+        capabilities,
+        options.instructions ?? [],
+        resources,
+      ),
       tools: tools.map(wrapTool),
     };
   }
@@ -217,6 +238,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       agent.abort();
     }, runTimeoutMs);
     try {
+      await (reloading ?? initialResources);
       if (!stopRequested) {
         const refreshed = refreshCapabilities();
         agent.state.systemPrompt = refreshed.systemPrompt;
@@ -260,13 +282,24 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         active = undefined;
       }
     },
+    async reload() {
+      if (disposed) throw new Error('Agent session is disposed');
+      if (active) throw new Error('Stop the agent before Reload');
+      if (reloading) throw new Error('Agent resource reload already in progress');
+      reloading = initialResources.then(readResources);
+      try {
+        return await reloading;
+      } finally {
+        reloading = undefined;
+      }
+    },
     async stop() {
       stopRequested = true;
       agent.abort();
       await active;
     },
     reset() {
-      if (active) throw new Error('Stop the agent before Reset');
+      if (active || reloading) throw new Error('Stop the agent before Reset');
       if (disposed) throw new Error('Agent session is disposed');
       agent.reset();
       events.length = 0;
@@ -328,6 +361,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       stopRequested = true;
       agent.abort();
       await active;
+      await (reloading ?? initialResources).catch(() => {});
       detach();
       listeners.clear();
       await host.close();

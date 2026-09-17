@@ -107,3 +107,34 @@ An aborted partial model proposal was never dispatched: it stays an aborted
 assistant message. Only skipped calls from an accepted batch receive tool
 results. Those results precede `agent_end`; its messages describe this run only.
 The terminal status event is published after trace timings are complete.
+
+Project resources load once at session creation (ADR-0440). `send` waits for
+that read; file edits apply after `await agent.reload()`. Subscribe immediately
+to receive the initial `resources` event; each reload returns/emits an
+`AgentResourceReport` with context files, skills, diagnostics and unsupported
+paths. Playground `/reload` shows this report without contacting the model.
+Reset clears conversation only; reload preserves conversation.
+
+The host root is cwd. The first root file among `AGENTS.override.md`,
+`AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, `CLAUDE.MD` wins; no descendant context
+scan. Skills follow pi 0.85.1 `.pi/skills` and `.agents/skills` discovery,
+including ignore files, metadata diagnostics, collisions and hidden skills.
+Profile/date → consumer `instructions` → project context → skills → cwd.
+
+`contextFiles: false` and `skills: false` independently disable those blocks.
+`userContextFiles: [{path, content}]` precedes project context;
+`userSkills: [{name, description, filePath, disableModelInvocation?}]` occupies
+pi's global skill slot, after project skills. Materialize supplied skills at
+host-readable `filePath` locations; `read_file` loads their content. No home
+scan. No-file hosts state that resources were not read; reload after returning
+to file mode. Reload requires an idle live session; concurrent reload rejects.
+
+| Pi resource | Support |
+|---|---|
+| Context files, skills, explicit reload | ✅ |
+| `.pi/extensions` | ❌ reported unsupported |
+| `.pi/prompts` (templates and command expansion) | ❌ reported unsupported |
+| `.pi/SYSTEM.md` | ❌ reported unsupported |
+| `.pi/APPEND_SYSTEM.md` | ❌ reported unsupported |
+| `.pi/settings.json` | ❌ reported unsupported |
+| `.pi/npm` / packages / `pi install` | ❌ reported unsupported |

@@ -549,6 +549,7 @@ test('project resources load at start; editor edits wait for chat /reload and vi
   page,
 }) => {
   test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
   const model = await agentModelServer([
     [{ name: 'read_file', args: { path: '.pi/skills/deploy/SKILL.md' } }],
     'Arrr, skill read.',
@@ -576,6 +577,7 @@ test('project resources load at start; editor edits wait for chat /reload and vi
             '---\nname: hidden\ndescription: Secret\ndisable-model-invocation: true\n---\nHidden.',
           '.pi/extensions/foo.ts': 'export {};',
           '.pi/prompts/review.md': 'Review.',
+          '.pi/skills/invalid/SKILL.md': '---\nname: invalid\n---\nMissing description.',
         },
       });
     });
@@ -598,13 +600,35 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     await expect(report).toContainText('deploy');
     await expect(report).toContainText('.pi/extensions');
     await expect(report).toContainText('.pi/prompts');
+    await expect(report).toContainText('description is required');
+    expect(prompt(0).indexOf('<project_context>')).toBeLessThan(
+      prompt(0).indexOf('<available_skills>'),
+    );
+    expect(prompt(0).indexOf('</available_skills>')).toBeLessThan(
+      prompt(0).indexOf('Current working directory:'),
+    );
     expect(JSON.stringify(toolResults(await exported(page)))).toContain('Follow deployment steps.');
     await page.getByRole('treeitem', { name: /^AGENTS\.md/ }).click();
-    const editor = page.locator('[data-testid="editor"] .monaco-editor').first();
-    await editor.click();
-    await page.keyboard.press('ControlOrMeta+A');
-    await page.keyboard.type('Answer in plain speech.');
+    // Existing editor hook fires the real Monaco change event; select-all is
+    // unreliable in headless Chromium (EditorHost's ADR-0166 test seam).
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const setValue = Reflect.get(globalThis, '__riftySetEditorValue') as
+            | ((path: string, text: string) => boolean)
+            | undefined;
+          return setValue?.('/AGENTS.md', 'Answer in plain speech.') ?? false;
+        }),
+      )
+      .toBe(true);
+    await expect(page.locator('[data-testid="editor"] .view-lines')).toContainText(
+      'Answer in plain speech.',
+    );
+    await expect(page.locator('[data-testid="editor"] .view-lines')).not.toContainText(
+      'Answer in pirate speak.',
+    );
     await page.keyboard.press('ControlOrMeta+KeyS');
+    await expect(page.locator('.rf-toast[data-tone="success"]')).toContainText('Saved');
     await send(page, 'same instructions?');
     await expect(panel).toHaveAttribute('data-status', 'done');
     expect(prompt(2)).toContain('Answer in pirate speak.');

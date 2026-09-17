@@ -220,3 +220,20 @@ fixture spelling; direct native discovery identity is additionally asserted
 when a real `stat(lowercase-name)` probe establishes a case-sensitive volume
 (including Linux CI). No entire case is skipped. Independent reviewer approved
 this carrier separation; corrected RED still has 10 assertion failures.
+
+## Implementation proof
+
+- `pnpm exec vitest run tools/agent-bench/src/project-resources.test.ts packages/agent/src`: 33 passed. CLI differential + startup-before-send event, independent opt-outs, report isolation, reload admission/history, no-file→file transition, read/parse diagnostics, empty tail.
+- Unicode collision RED: native CLI selected U+E000 directory, JS UTF-16 comparator selected U+10000. Full differential case failed (1 failed / 16 passed, `/tmp/pi-resources-unicode-red.log`); compare UTF-8 bytes at resource enumeration fixes the ordering. Same case GREEN, no weakened oracle.
+- `RIFTY_PLAYGROUND_PORT=5391 pnpm exec playwright test --project=chromium-heavy --workers=1 tests/e2e/ai-mode.spec.ts -g 'project resources load'`: 1 passed. Real workbench, Pi loop, provider prompt and read_file, editor model change → save → cached turn → /reload → changed turn; diagnostics visible. `/tmp/pi-project-resources.png` inspected.
+- Browser test delivery correction: container click did not focus Monaco; direct select-all appended text. Existing ADR-0166 `__riftySetEditorValue` drives the real model-change/save path deterministically. Assert editor replacement and saved toast before reload; provider assertions unchanged.
+- `RIFTY_PLAYGROUND_PORT=5392 pnpm exec playwright test --config playwright.no-coi.config.ts --project=chromium tests/no-coi/no-coi-pi-agent.spec.ts -g 'sandbox project resources'`: 1 passed. Actual sandbox project fs and agent adapter; root bound, both skill directories, read_file, cached turn and reload.
+- Mechanism sweep: `session.ts` owns existing active/disposed admission. Initial load + one admitted reload remain there; no queue, lock service or host-specific state owner. `send` waits for admitted load; reload rejects during runs/reloads; dispose settles reads before host close.
+- PR-4: default-prompt golden deliberately changes only the ADR-0440 tail (cwd last, date/profile and consumer text preserved). No policy paragraph weakened. New acceptance tests retain original required model-visible results.
+
+Context identity follow-up: real pi 0.85.1 `loadProjectContextFiles({cwd,
+agentDir: cwd})` returns one AGENTS.md. Our same-input probe returned two;
+committed differential test RED (1 failed / 17 skipped,
+`/tmp/pi-context-identity-test-red.log`). Skip the selected project path when
+already supplied globally; retain first-candidate selection. Full relevant
+suite then 34 passed. This remains I1/I5 work, no scope change.

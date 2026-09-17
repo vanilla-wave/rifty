@@ -57,6 +57,8 @@ settings, extensions/packages reported unsupported; no home scanning or trust UI
 
 ## Decisions
 
+ready-verdict: 2026-09-18 — Contract+RED @ 81d4664705266f360ba2a45b3aefcbf288bf5690
+
 re-cut: 2026-09-18 — combine ai-agent-project-context-files, ai-agent-project-skills and ai-agent-playground-reload into one resource delivery and checkpoint; all I1–I7 retained — trace: none
 - 2026-09-18 — ADR-0440: public API, semantic copy, dependency pins, ADR-0434 correction.
 - 2026-09-18 — host root is cwd; adapters already expose it. Preview → commands requires explicit reload, preserving I4 cache semantics.
