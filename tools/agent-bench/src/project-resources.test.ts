@@ -79,8 +79,10 @@ it.each(['AGENTS.override.md', 'AGENTS.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD
     await f.session.send('deploy this');
     const oracle = loadProjectContextFiles({ cwd: f.root, agentDir: join(f.root, 'absent-user') });
     const { buildSystemPrompt } = await import(
-      new URL('./core/system-prompt.js', import.meta.resolve('@earendil-works/pi-coding-agent'))
-        .href
+      new URL(
+        '../node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js',
+        import.meta.url,
+      ).href
     );
     const reference = buildSystemPrompt({
       customPrompt: 'PROFILE',
@@ -218,7 +220,8 @@ it('same tree as full pi CLI: skills discovery, collision winners, hidden entrie
   await loader.reload();
   const expected = loader.getSkills();
   const oracle = await import(
-    new URL('./core/skills.js', import.meta.resolve('@earendil-works/pi-coding-agent')).href
+    new URL('../node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js', import.meta.url)
+      .href
   );
   await f.session.send('deploy this');
   const report = (await f.session.exportTrace()).events

@@ -204,3 +204,11 @@ Raw RED logs kept at `/tmp/pi-resources-red.log`,
   projection added. CLI symlink behavior measured, not claimed on those hosts.
 - Preview/no-file → commands: cached unread report until explicit reload.
 - Oracle dependency already belongs to agent-bench; test is default Vitest unit lane.
+
+## Contract review correction
+
+B1 accepted: the first amended unit run used `import.meta.resolve`, unavailable
+in Vitest SSR; six cases failed before assertions. Replaced with explicit
+installed CLI module URLs (CLI exports only import condition). Re-run:
+10 assertion failures, zero import errors. Prior report overstated that run;
+`/tmp/pi-resources-red.log` contains the corrected executed result.
