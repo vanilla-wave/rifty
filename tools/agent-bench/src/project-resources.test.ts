@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
@@ -84,10 +84,19 @@ it.each(['AGENTS.override.md', 'AGENTS.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD
         import.meta.url,
       ).href
     );
+    const nativeCaseInsensitive = await stat(join(f.root, candidate.toLowerCase())).then(
+      () => true,
+      () => false,
+    );
+    const selected = oracle.filter((entry) => entry.path.startsWith(`${f.root}/`));
+    if (!nativeCaseInsensitive)
+      expect(selected.map((entry) => entry.path)).toEqual([join(f.root, candidate)]);
+    // VFS is case-sensitive. Always prove its spelling; native discovery is
+    // directly comparable only on a case-sensitive backing filesystem.
     const reference = buildSystemPrompt({
       customPrompt: 'PROFILE',
       cwd: f.root,
-      contextFiles: oracle,
+      contextFiles: selected.map((entry) => ({ ...entry, path: join(f.root, candidate) })),
     });
     const block = reference.slice(
       reference.indexOf('<project_context>'),

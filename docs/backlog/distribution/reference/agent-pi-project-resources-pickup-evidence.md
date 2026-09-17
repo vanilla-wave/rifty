@@ -212,3 +212,11 @@ in Vitest SSR; six cases failed before assertions. Replaced with explicit
 installed CLI module URLs (CLI exports only import condition). Re-run:
 10 assertion failures, zero import errors. Prior report overstated that run;
 `/tmp/pi-resources-red.log` contains the corrected executed result.
+
+Native case probe: on this volume `AGENTS.MD` is also reachable as `AGENTS.md`;
+pi chooses the latter candidate spelling. MemoryVfs is case-sensitive.
+All five VFS assertions always run against pi's formatter with the actual
+fixture spelling; direct native discovery identity is additionally asserted
+when a real `stat(lowercase-name)` probe establishes a case-sensitive volume
+(including Linux CI). No entire case is skipped. Independent reviewer approved
+this carrier separation; corrected RED still has 10 assertion failures.
