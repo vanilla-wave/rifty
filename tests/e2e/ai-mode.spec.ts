@@ -544,3 +544,79 @@ for (const collapsed of [false, true]) {
     }
   });
 }
+
+test('project resources load at start; editor edits wait for chat /reload and visible report', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const model = await agentModelServer([
+    [{ name: 'read_file', args: { path: '.pi/skills/deploy/SKILL.md' } }],
+    'Arrr, skill read.',
+    'Arrr, still old.',
+    'New instructions applied.',
+  ]);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await page.evaluate(async () => {
+      const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+        seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+      };
+      await hook.seed({
+        taskId: 'project-resources',
+        files: {
+          'AGENTS.md': 'Answer in pirate speak.',
+          'CLAUDE.md': 'Losing context.',
+          'sub/CLAUDE.md': 'Descendant context.',
+          '.pi/skills/deploy/SKILL.md':
+            '---\nname: deploy\ndescription: Deploy this project\n---\nFollow deployment steps.',
+          '.pi/skills/hidden/SKILL.md':
+            '---\nname: hidden\ndescription: Secret\ndisable-model-invocation: true\n---\nHidden.',
+          '.pi/extensions/foo.ts': 'export {};',
+          '.pi/prompts/review.md': 'Review.',
+        },
+      });
+    });
+    // New session starts over the completed fixture.
+    await settings(page, model.baseUrl);
+    await send(page, 'deploy this');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    const prompt = (index: number) =>
+      String(
+        model.requests[index]?.body.messages.find((message) => message.role === 'system')?.content,
+      );
+    expect(prompt(0)).toContain('Answer in pirate speak.');
+    expect(prompt(0)).toContain('<name>deploy</name>');
+    expect(prompt(0)).not.toContain('<name>hidden</name>');
+    expect(prompt(0)).not.toContain('Losing context.');
+    expect(prompt(0)).not.toContain('Descendant context.');
+    const report = panel.getByTestId('ai-resources');
+    await expect(report).toContainText('AGENTS.md');
+    await expect(report).toContainText('deploy');
+    await expect(report).toContainText('.pi/extensions');
+    await expect(report).toContainText('.pi/prompts');
+    expect(JSON.stringify(toolResults(await exported(page)))).toContain('Follow deployment steps.');
+    await page.getByRole('treeitem', { name: /^AGENTS\.md/ }).click();
+    const editor = page.locator('[data-testid="editor"] .monaco-editor').first();
+    await editor.click();
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.keyboard.type('Answer in plain speech.');
+    await page.keyboard.press('ControlOrMeta+KeyS');
+    await send(page, 'same instructions?');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(prompt(2)).toContain('Answer in pirate speak.');
+    await send(page, '/reload');
+    await expect(report).toContainText('Reloaded');
+    expect(model.requests).toHaveLength(3);
+    await send(page, 'updated instructions?');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(prompt(3)).toContain('Answer in plain speech.');
+    expect(prompt(3)).not.toContain('Answer in pirate speak.');
+    await page.screenshot({ path: '/tmp/pi-project-resources.png', fullPage: true });
+  } finally {
+    await model.close();
+  }
+});

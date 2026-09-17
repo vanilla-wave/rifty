@@ -360,6 +360,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0437 | Bounded Workbench browser prerequisite probes |
 | 0438 | Require sandbox probe configuration and addressable checks |
 | 0439 | Settle probe cleanup against the terminated Worker's OPFS lock |
+| 0440 | Load pi project resources through rooted agent hosts |
 
 ## Superseded (removed)
 
