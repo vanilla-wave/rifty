@@ -1,0 +1,222 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS Final+GREEN for the delivered unit; product residuals empty. Proceed to docs-only CLOSE cleanup.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5972a3c0b2bcbd0020e695571c9c3e02f0321470",
+  "unit_goal_source": "docs/backlog/distribution/ai-agent-project-context-files.md; goal docs/backlog/epics/agent-pi-project-resources/goal.md; BASE 7f8f4708e0d1ec6ee56de0b7ccdca339d94422ac; reviewed product HEAD 5972a3c0b2bcbd0020e695571c9c3e02f0321470. Independent /root/final_review read original request/five verbatim user answers, accepted goal/unit, ADR-0424/0434/0440, full diff and Contract+RED evidence. I1-I7 delivered without scope weakening; all three Contract+RED advisory proof gaps now have carriers. PR-4: default-prompt golden changes only the authorized custom-prompt tail; profile id/paragraphs unchanged. Independent CLI/core oracle /tmp/pi-resource-final-independent-oracle.log: formatter equality true. Independent source verification: 38 tests passed /tmp/pi-resource-final-independent-verify.log. Actual workbench/browser editor-save-cached-turn-/reload and sandbox project filesystem/read_file scenarios passed /tmp/pi-resources-e2e-green.log and /tmp/pi-resources-sandbox-green.log; /tmp/pi-project-resources.png inspected. B1 history preserved at /tmp/pi-project-final-review-initial-block.json: expired budget while awaiting resources dispatched a request on d03fcfad4. Driver accepted; committed startup/reload RED /tmp/pi-resources-budget-red.log has two requests=1 failures, stop/dispose siblings pass. Shared post-await guard fixed in 5972a3c0b; independent original probe /tmp/pi-resource-timeout-verified.log now requests=0, transcript=[], status=budget-exceeded. No extra queue/state owner. Full gate evidence: /tmp/pi-resources-pr-check-reviewed.log. Product residuals empty; goal_complete remains false only until linked child/map CLOSE cleanup.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: context candidate selection, BOM, no descendants, global-first pi bytes and order",
+      "source": "acceptance",
+      "trace": "I1 + I3 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:84; tools/agent-bench/src/project-resources.test.ts:128; tests/e2e/ai-mode.spec.ts:593",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: CLI skill set/metadata/collisions, supplied global skills and real read_file",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:214; tools/agent-bench/src/project-resources.test.ts:288; tests/e2e/ai-mode.spec.ts:610; tests/no-coi/no-coi-pi-agent.spec.ts:282",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: startup event, cached resources, reload returns/emits report; editor/chat reload without model dispatch",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:321; tests/e2e/ai-mode.spec.ts:611; tests/no-coi/no-coi-pi-agent.spec.ts:255",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: default-on both hosts, independent opt-outs including supplied resources, no-file notice",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:188; tools/agent-bench/src/project-resources.test.ts:300; tools/agent-bench/src/project-resources.test.ts:308; tests/no-coi/no-coi-pi-agent.spec.ts:204",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: all six unsupported kinds in report/compat; visible files, skills, diagnostics",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:152; tests/e2e/ai-mode.spec.ts:598; packages/agent/README.md:133",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: five context candidates, first match, BOM, descendants, global order",
+      "source": "acceptance",
+      "trace": "I1 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:84; tools/agent-bench/src/project-resources.test.ts:447",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: full CLI pi/agents discovery, root/nested md, cutoff, ignores, BOM, collisions, metadata and formatter bytes",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:214",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: unchanged profile, append/context/skills/cwd order and omitted empty blocks",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt.test.ts:6; tools/agent-bench/src/project-resources.test.ts:121; tools/agent-bench/src/project-resources.test.ts:435; tests/e2e/ai-mode.spec.ts:604",
+      "note": ""
+    },
+    {
+      "row": "Poisoned cache: edited resources remain cached until explicit reload",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:152; tests/e2e/ai-mode.spec.ts:632",
+      "note": ""
+    },
+    {
+      "row": "Corrupt metadata: pi diagnostics and skip, valid resources retained",
+      "source": "fault-matrix",
+      "trace": "I2 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:274; tools/agent-bench/src/project-resources.test.ts:393",
+      "note": ""
+    },
+    {
+      "row": "Observable order: timeout/stop/dispose during resource read cannot dispatch; reads settle before close",
+      "source": "fault-matrix",
+      "trace": "ADR-0424",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:461; tools/agent-bench/src/project-resources.test.ts:503",
+      "note": ""
+    },
+    {
+      "row": "Missing file capability: prompt/report explicitly say resources unread",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:199; tools/agent-bench/src/project-resources.test.ts:344",
+      "note": ""
+    },
+    {
+      "row": "contextFiles option independently disables supplied/project context",
+      "source": "public-api",
+      "trace": "ADR-0440 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:188; tools/agent-bench/src/project-resources.test.ts:308",
+      "note": ""
+    },
+    {
+      "row": "skills option independently disables supplied/project skills",
+      "source": "public-api",
+      "trace": "ADR-0440 + I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:300; tools/agent-bench/src/project-resources.test.ts:308",
+      "note": ""
+    },
+    {
+      "row": "userContextFiles option and AgentContextFile: global-first context without ambient home scan",
+      "source": "public-api",
+      "trace": "ADR-0440 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:128; tools/agent-bench/src/project-resources.test.ts:447",
+      "note": ""
+    },
+    {
+      "row": "userSkills option and AgentSkill: global slot after project collision winners",
+      "source": "public-api",
+      "trace": "ADR-0440 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:288",
+      "note": ""
+    },
+    {
+      "row": "session.reload: idle/live admission, returned snapshot, history retained, send awaits reload",
+      "source": "public-api",
+      "trace": "ADR-0440 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:321; tools/agent-bench/src/project-resources.test.ts:360",
+      "note": ""
+    },
+    {
+      "row": "resources event, AgentResourceReport and AgentResourceDiagnostic: startup/reload reports with files, skills, warnings, collisions, unsupported paths",
+      "source": "public-api",
+      "trace": "ADR-0440 + I4 + I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:152; tools/agent-bench/src/project-resources.test.ts:261; tools/agent-bench/src/project-resources.test.ts:321",
+      "note": ""
+    },
+    {
+      "row": "createAgentSession/send: run deadline remains effective across initial resource load and reload",
+      "source": "public-api",
+      "trace": "ADR-0424 + ADR-0440",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:461",
+      "note": ""
+    },
+    {
+      "row": "Pinned CLI/core discovery/formatter oracle",
+      "source": "frozen-artifact",
+      "trace": "ADR-0440 + I2",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/agent-pi-project-resources-oracle.mjs:58; tools/agent-bench/src/project-resources.test.ts:214",
+      "note": ""
+    },
+    {
+      "row": "Default prompt golden preserves shared profile and adopts authorized custom-prompt tail",
+      "source": "frozen-artifact",
+      "trace": "ADR-0434 + ADR-0440 + I3",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt.test.ts:6; packages/agent/src/fixtures/default-prompt.txt:16",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

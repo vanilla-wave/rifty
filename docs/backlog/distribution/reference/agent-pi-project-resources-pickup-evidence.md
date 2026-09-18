@@ -248,3 +248,13 @@ stop/dispose siblings 2 passed. Shared post-await guard now checks budget as
 well as stop. Relevant suite `/tmp/pi-resources-budget-green.log`: 38 passed.
 Authority ADR-0424 §7 time limits; fault class observable-order. No new queue,
 cancellation mechanism or reduced budget requirement.
+
+## Final gate and rechart
+
+Reviewed product: `5972a3c0b2bcbd0020e695571c9c3e02f0321470`.
+`pnpm pr:check` on that committed tree: all 25 lanes passed, no reruns;
+unit/conformance/integration 193.6s, Node parity 60.9s.
+Independent final_review: Final+GREEN PASS, 21 coverage rows PASS,
+no findings or required residuals. B1 verify used the reviewer's original
+probe plus 38 passing relevant tests. Rechart removed the sole child and
+emptied the map; accepted I1–I7 have real end-to-end carriers.

@@ -4,10 +4,6 @@ Live plan: index, not store. Frontier = open children with `epic:` backlinks.
 
 ## Items
 
-1. `distribution/ai-agent-project-context-files` — context, skills, session
-   snapshot/report and playground reload together; I1–I7. Empty-resource
-   profile preserved; tail follows I3 too.
-
 ## Open questions
 
 None. Pickup/ADR-0440 resolve carrier questions; ledger records the re-cut.
