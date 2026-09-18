@@ -133,7 +133,8 @@ to file mode. Reload requires an idle live session; concurrent reload rejects.
 |---|---|
 | Context files, skills, explicit reload | ✅ |
 | `.pi/extensions` | ❌ reported unsupported |
-| `.pi/prompts` (templates and command expansion) | ❌ reported unsupported |
+| `.pi/prompts` (templates) | ❌ reported unsupported |
+| `/skill:name` and `/name` expansion | ❌ unsupported |
 | `.pi/SYSTEM.md` | ❌ reported unsupported |
 | `.pi/APPEND_SYSTEM.md` | ❌ reported unsupported |
 | `.pi/settings.json` | ❌ reported unsupported |
