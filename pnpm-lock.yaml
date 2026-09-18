@@ -169,6 +169,12 @@ importers:
       '@riftydev/workbench':
         specifier: workspace:*
         version: link:../workbench
+      ignore:
+        specifier: 7.0.5
+        version: 7.0.5
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
 
   packages/git:
     dependencies:

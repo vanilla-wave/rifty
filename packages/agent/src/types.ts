@@ -6,6 +6,7 @@ import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';
 
 export interface AgentFiles {
   read(path: string): Promise<string>;
+  /** Entries carry `${path}/${name}`; resource discovery reports and skips other entries. */
   list(path: string): Promise<readonly { readonly path: string; readonly kind: 'file' | 'dir' }[]>;
   /** Host owns read/transform/write. Workbench retains the read's CAS version. */
   change(path: string, transform: (current: string | null) => string | null): Promise<void>;
@@ -78,10 +79,47 @@ export interface AgentRunLimits {
   readonly runTimeoutMs?: number;
 }
 
+export interface AgentContextFile {
+  readonly path: string;
+  readonly content: string;
+}
+
+export interface AgentSkill {
+  readonly name: string;
+  readonly description: string;
+  readonly filePath: string;
+  readonly disableModelInvocation?: boolean;
+}
+
+export interface AgentResourceDiagnostic {
+  readonly type: 'warning' | 'collision';
+  readonly path: string;
+  readonly message: string;
+  readonly collision?: {
+    readonly resourceType: 'skill';
+    readonly name: string;
+    readonly winnerPath: string;
+    readonly loserPath: string;
+  };
+}
+
+export interface AgentResourceReport {
+  readonly fileAccess: 'available' | 'unavailable';
+  readonly contextFiles: readonly AgentContextFile[];
+  readonly skills: readonly AgentSkill[];
+  readonly diagnostics: readonly AgentResourceDiagnostic[];
+  readonly unsupported: readonly { readonly kind: string; readonly path: string }[];
+}
+
 export interface AgentSessionCommonOptions extends AgentRunLimits {
   readonly host: AgentHost;
   readonly tools?: readonly AgentTool[];
   readonly instructions?: readonly string[];
+  readonly contextFiles?: boolean;
+  readonly skills?: boolean;
+  readonly userContextFiles?: readonly AgentContextFile[];
+  /** Locations must be readable with the host's rooted read_file tool. */
+  readonly userSkills?: readonly AgentSkill[];
 }
 
 export type AgentSessionOptions = AgentSessionCommonOptions &
@@ -101,6 +139,7 @@ export type AgentSessionOptions = AgentSessionCommonOptions &
 export type AgentStatus = 'idle' | 'running' | 'done' | 'error' | 'aborted' | 'budget-exceeded';
 
 export type AgentSessionEvent =
+  | { readonly type: 'resources'; readonly report: AgentResourceReport }
   | { readonly type: 'agent'; readonly event: AgentEvent }
   | { readonly type: 'status'; readonly status: AgentStatus; readonly detail?: string }
   | {
@@ -144,6 +183,8 @@ export interface AgentSession {
   detail(): string | undefined;
   /** A new prompt continues the retained history, including prior tool results. */
   send(prompt: string): Promise<void>;
+  /** Re-read resources while idle; retains conversation history. */
+  reload(): Promise<AgentResourceReport>;
   stop(): Promise<void>;
   reset(): void;
   subscribe(listener: (event: AgentSessionEvent) => void): () => void;

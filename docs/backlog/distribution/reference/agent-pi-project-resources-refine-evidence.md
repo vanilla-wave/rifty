@@ -1,6 +1,6 @@
 # agent-pi-project-resources — refine/FIT evidence (2026-09-16)
 
-Goal: `docs/backlog/epics/agent-pi-project-resources/`. Driver: Claude (refine session, user present). Main at `51440931a`.
+Goal: agent-pi-project-resources (completed; accepted goal preserved at `5972a3c0b`). Driver: Claude (refine session, user present). Main at `51440931a`.
 
 ## Request (verbatim)
 
