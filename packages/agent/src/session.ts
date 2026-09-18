@@ -52,6 +52,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   const events: { at: number; event: AgentSessionEvent }[] = [];
   const timings: { startedAt: number; endedAt: number }[] = [];
   let resources: AgentResourceReport | undefined;
+  // Latest admitted read: send and dispose settle on it; reload chains after it.
+  let pending: Promise<AgentResourceReport>;
   let reloading: Promise<AgentResourceReport> | undefined;
   let status: AgentStatus = 'idle';
   let detail: string | undefined;
@@ -84,10 +86,10 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     emit({ type: 'resources', report: structuredClone(report) });
     return structuredClone(report);
   }
-  const initialResources = readResources();
-  // The first send also observes initialization failures; no unhandled rejection
-  // if the consumer creates a session before subscribing/sending.
-  void initialResources.catch(() => {});
+  pending = readResources();
+  // The next send observes a failed read and reload retries it; no unhandled
+  // rejection if the consumer creates a session before subscribing/sending.
+  void pending.catch(() => {});
 
   function refreshCapabilities() {
     const capabilities = host.capabilities();
@@ -238,7 +240,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       agent.abort();
     }, runTimeoutMs);
     try {
-      await (reloading ?? initialResources);
+      await pending;
       if (!stopRequested && budgetReason === undefined) {
         const refreshed = refreshCapabilities();
         agent.state.systemPrompt = refreshed.systemPrompt;
@@ -286,7 +288,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (disposed) throw new Error('Agent session is disposed');
       if (active) throw new Error('Stop the agent before Reload');
       if (reloading) throw new Error('Agent resource reload already in progress');
-      reloading = initialResources.then(readResources);
+      reloading = pending.catch(() => undefined).then(readResources);
+      pending = reloading;
       try {
         return await reloading;
       } finally {
@@ -361,7 +364,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       stopRequested = true;
       agent.abort();
       await active;
-      await (reloading ?? initialResources).catch(() => {});
+      await pending.catch(() => {});
       detach();
       listeners.clear();
       await host.close();

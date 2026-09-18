@@ -29,8 +29,8 @@ export async function projectSkills(
           return [`${negated ? '!' : ''}${prefix}${pattern}`];
         });
         matcher.add(patterns);
-      } catch (error) {
-        resourceWarning(diagnostics, path, error);
+      } catch {
+        // CLI addIgnoreRules swallows unreadable ignore files (package-manager.js).
       }
     }
     const skill = entries.find(

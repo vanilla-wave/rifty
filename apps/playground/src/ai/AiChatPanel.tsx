@@ -303,9 +303,17 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   async function send() {
     const text = input().trim();
     if (!text || running()) return;
+    if (text.startsWith('/') && text !== '/reload') {
+      // Pi expands /skill:name and /name templates; refuse rather than forward silently.
+      setNotice(
+        `Unsupported chat command ${text.split(/\s/)[0]}: only /reload is supported; pi skill and prompt-template expansion is not.`,
+      );
+      return;
+    }
     try {
       const current = ensureSession();
       setInput('');
+      setNotice('');
       followOutput = true;
       if (text === '/reload') {
         setBusy(true);

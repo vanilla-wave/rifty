@@ -6,6 +6,7 @@ import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';
 
 export interface AgentFiles {
   read(path: string): Promise<string>;
+  /** Entries carry `${path}/${name}`; resource discovery reports and skips other entries. */
   list(path: string): Promise<readonly { readonly path: string; readonly kind: 'file' | 'dir' }[]>;
   /** Host owns read/transform/write. Workbench retains the read's CAS version. */
   change(path: string, transform: (current: string | null) => string | null): Promise<void>;

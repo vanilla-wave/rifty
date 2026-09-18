@@ -262,3 +262,25 @@ emptied the map; accepted I1–I7 have real end-to-end carriers.
 
 CLOSE: completed goal documents removed after rechart; user answers, ADR-0440,
 reproducible oracle/tests and review records retained. No deferred goal work.
+
+## Inline review repair (2026-09-18)
+
+Inline review of PR #346 at `81a786e43`: verdict concern, four advisory
+findings fixed in place (`REV-12` NOTE). RED `4b3fe44b4`: 3 failed / 21 passed
+(`pnpm exec vitest run tools/agent-bench/src/project-resources.test.ts`); the
+CLI diagnostics comparison tightened to an exact multiset, already equal.
+
+- `session.ts`: reload chained on the rejected startup read, so send/reload
+  replayed a stale host error forever → latest admitted read; reload retries.
+- `resource-files.ts` + `types.ts`: `AgentFiles.list` path shape undocumented;
+  bare names discovered nothing silently → contract stated; foreign entries
+  reported and skipped.
+- `project-skills.ts`: unreadable ignore file warned where CLI `addIgnoreRules`
+  swallows → silent skip (parity).
+- Playground chat forwarded `/skill:x` / `/name` to the model while README
+  marked them ❌ → `/`-input other than `/reload` refused with a notice; e2e
+  asserts no model request. `/tmp` screenshot removed from the committed e2e.
+
+GREEN: unit 40 passed (agent + project-resources); `pnpm typecheck`, `pnpm lint`
+clean; `RIFTY_PLAYGROUND_PORT=5391 pnpm exec playwright test --project=chromium-heavy
+--workers=1 tests/e2e/ai-mode.spec.ts -g 'project resources load'`: 1 passed.

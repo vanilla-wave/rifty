@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Load pi 0.85.1 project context/skills by default; resource reports, opt-outs and explicit reload. Preserve profile paragraphs; adopt custom-prompt tail (ADR-0440 supersedes ADR-0434 tail clause).
+- `reload()` retries a failed startup read; `list` entries outside the listed directory are reported; unreadable ignore files skip silently as the CLI.
 
 - Make the package public; add settings-free native StreamFn transport and
   truthful custom trace provenance (ADR-0436).

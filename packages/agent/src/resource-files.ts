@@ -35,7 +35,18 @@ export async function resourceEntries(
   diagnostics: AgentResourceDiagnostic[],
 ): Promise<Awaited<ReturnType<AgentFiles['list']>>> {
   try {
-    return [...(await files.list(path))].sort((a, b) => comparePaths(a.path, b.path));
+    const prefix = resourcePath(path, '');
+    const entries = (await files.list(path)).filter((entry) => {
+      const name = entry.path.startsWith(prefix) ? entry.path.slice(prefix.length) : '';
+      if (name && !name.includes('/')) return true;
+      diagnostics.push({
+        type: 'warning',
+        path: entry.path,
+        message: `Host list entry is not a direct child of ${path}`,
+      });
+      return false;
+    });
+    return entries.sort((a, b) => comparePaths(a.path, b.path));
   } catch (error) {
     if (
       !(
