@@ -1,6 +1,7 @@
 # Project resources pickup — 2026-09-18
 
-Authority: ready goal `docs/backlog/epics/agent-pi-project-resources/goal.md`.
+Authority: accepted agent-pi-project-resources goal, preserved at reviewed
+product commit `5972a3c0b2bcbd0020e695571c9c3e02f0321470`.
 Baseline: `7f8f4708e0d1ec6ee56de0b7ccdca339d94422ac`.
 
 ## Independent carrier decision
@@ -258,3 +259,6 @@ Independent final_review: Final+GREEN PASS, 21 coverage rows PASS,
 no findings or required residuals. B1 verify used the reviewer's original
 probe plus 38 passing relevant tests. Rechart removed the sole child and
 emptied the map; accepted I1–I7 have real end-to-end carriers.
+
+CLOSE: completed goal documents removed after rechart; user answers, ADR-0440,
+reproducible oracle/tests and review records retained. No deferred goal work.
