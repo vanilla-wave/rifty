@@ -635,11 +635,16 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     await send(page, '/reload');
     await expect(report).toContainText('Reloaded');
     expect(model.requests).toHaveLength(3);
+    // Pi expands /skill:name and /name templates; the chat refuses instead of forwarding.
+    await send(page, '/skill:deploy');
+    await expect(panel.locator('.rf-ai__notice')).toContainText(
+      'Unsupported chat command /skill:deploy',
+    );
+    expect(model.requests).toHaveLength(3);
     await send(page, 'updated instructions?');
     await expect(panel).toHaveAttribute('data-status', 'done');
     expect(prompt(3)).toContain('Answer in plain speech.');
     expect(prompt(3)).not.toContain('Answer in pirate speak.');
-    await page.screenshot({ path: '/tmp/pi-project-resources.png', fullPage: true });
   } finally {
     await model.close();
   }

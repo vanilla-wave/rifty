@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import {
   DefaultResourceLoader,
   SettingsManager,
@@ -271,12 +271,10 @@ it('same tree as full pi CLI: skills discovery, collision winners, hidden entrie
         }),
       ),
   );
-  expect(report?.diagnostics).toEqual(
-    expect.arrayContaining(
-      expected.diagnostics
-        .filter((d) => d.path?.startsWith(f.root))
-        .map((d) => expect.objectContaining({ type: d.type, message: d.message, path: d.path })),
-    ),
+  const flat = (list: readonly { type: string; message: string; path?: string }[]) =>
+    list.map((d) => `${d.type}|${d.path}|${d.message}`).sort();
+  expect(flat(report?.diagnostics as { type: string; message: string; path: string }[])).toEqual(
+    flat(expected.diagnostics.filter((d) => d.path?.startsWith(f.root))),
   );
   expect(f.prompt()).toContain(
     oracle
@@ -395,6 +393,7 @@ it('resource faults report unreadable context and invalid YAML without hiding la
     {
       'AGENTS.override.md': 'Unreadable.',
       'AGENTS.md': 'Fallback context.',
+      '.pi/skills/.gitignore': 'deploy/\n',
       '.pi/skills/broken/SKILL.md': '---\nname: [broken\n---',
       '.pi/skills/deploy/SKILL.md': skill('deploy'),
     },
@@ -407,6 +406,8 @@ it('resource faults report unreadable context and invalid YAML without hiding la
             async read(path: string) {
               if (path.endsWith('/AGENTS.override.md'))
                 throw Object.assign(new Error('denied context'), { code: 'EACCES' });
+              if (path.endsWith('/.gitignore'))
+                throw Object.assign(new Error('denied ignore'), { code: 'EACCES' });
               return files.read(path);
             },
           },
@@ -432,6 +433,60 @@ it('resource faults report unreadable context and invalid YAML without hiding la
         type: 'warning',
       }),
     ]),
+  );
+  // CLI addIgnoreRules swallows unreadable ignore files: no diagnostic, pattern unapplied.
+  expect(event.report.diagnostics).not.toContainEqual(
+    expect.objectContaining({ path: join(f.root, '.pi/skills/.gitignore') }),
+  );
+});
+
+it('a failed startup read rejects send once; reload retries and the next send carries resources', async () => {
+  let calls = 0;
+  const f = await fixture({ 'AGENTS.md': 'Recovered instructions.' }, (root, files) => ({
+    host: {
+      root,
+      capabilities: () => {
+        if (calls++ === 0) throw new Error('host warming up');
+        return { files };
+      },
+      async close() {},
+    },
+  }));
+  await f.session.send('first');
+  expect(f.session.status()).toBe('error');
+  expect(f.session.detail()).toBe('host warming up');
+  expect(f.provider.requests).toHaveLength(0);
+  const report = await f.session.reload();
+  expect(report.fileAccess).toBe('available');
+  await f.session.send('second');
+  expect(f.session.status()).toBe('done');
+  expect(f.prompt()).toContain('Recovered instructions.');
+});
+
+it('host list entries outside the listed directory are reported, never silently discovered', async () => {
+  const f = await fixture({ 'AGENTS.md': 'Bare names.' }, (root, files) => ({
+    host: {
+      root,
+      capabilities: () => ({
+        files: {
+          ...files,
+          list: async (path: string) =>
+            (await files.list(path)).map((entry) => ({ ...entry, path: basename(entry.path) })),
+        },
+      }),
+      async close() {},
+    },
+  }));
+  await f.session.send('hello');
+  expect(f.prompt()).not.toContain('Bare names.');
+  const event = f.events.find((event) => event.type === 'resources');
+  if (event?.type !== 'resources') throw new Error('Missing resource report');
+  expect(event.report.diagnostics).toContainEqual(
+    expect.objectContaining({
+      type: 'warning',
+      path: 'AGENTS.md',
+      message: expect.stringContaining(f.root),
+    }),
   );
 });
 
