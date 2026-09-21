@@ -1,3 +1,4 @@
+import type { Ignore } from 'ignore';
 import type { AgentFiles, AgentResourceDiagnostic } from './types.ts';
 
 const encoder = new TextEncoder();
@@ -57,5 +58,35 @@ export async function resourceEntries(
     )
       resourceWarning(diagnostics, path, error);
     return [];
+  }
+}
+
+/**
+ * Pi 0.85.1 package-manager `addIgnoreRules`: `.gitignore`/`.ignore`/`.fdignore` in `dir`,
+ * patterns anchored at `prefix` (relative to the walk base); unreadable files are swallowed.
+ */
+export async function addIgnoreRules(
+  files: AgentFiles,
+  dir: string,
+  prefix: string,
+  entries: Awaited<ReturnType<AgentFiles['list']>>,
+  matcher: Ignore,
+): Promise<void> {
+  for (const name of ['.gitignore', '.ignore', '.fdignore']) {
+    const path = resourcePath(dir, name);
+    if (!entries.some((entry) => entry.path === path && entry.kind === 'file')) continue;
+    try {
+      const patterns = (await files.read(path)).split(/\r?\n/).flatMap((line) => {
+        if (!line.trim() || line.trim().startsWith('#')) return [];
+        let pattern = line;
+        const negated = pattern.startsWith('!');
+        if (negated || pattern.startsWith('\\!')) pattern = pattern.slice(1);
+        if (pattern.startsWith('/')) pattern = pattern.slice(1);
+        return [`${negated ? '!' : ''}${prefix}${pattern}`];
+      });
+      matcher.add(patterns);
+    } catch {
+      // CLI addIgnoreRules swallows unreadable ignore files (package-manager.js).
+    }
   }
 }

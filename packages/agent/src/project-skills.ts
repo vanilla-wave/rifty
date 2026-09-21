@@ -1,6 +1,11 @@
 import ignore, { type Ignore } from 'ignore';
 import { parse } from 'yaml';
-import { resourceEntries, resourcePath, resourceWarning } from './resource-files.ts';
+import {
+  addIgnoreRules,
+  resourceEntries,
+  resourcePath,
+  resourceWarning,
+} from './resource-files.ts';
 import type { AgentFiles, AgentResourceDiagnostic, AgentSkill } from './types.ts';
 
 const basename = (path: string) => path.slice(path.lastIndexOf('/') + 1);
@@ -16,23 +21,7 @@ export async function projectSkills(
   async function collect(dir: string, mode: 'pi' | 'agents', base: string, matcher: Ignore) {
     const entries = await resourceEntries(files, dir, diagnostics);
     const prefix = dir === base ? '' : `${dir.slice(base.length + 1)}/`;
-    for (const name of ['.gitignore', '.ignore', '.fdignore']) {
-      const path = resourcePath(dir, name);
-      if (!entries.some((entry) => entry.path === path && entry.kind === 'file')) continue;
-      try {
-        const patterns = (await files.read(path)).split(/\r?\n/).flatMap((line) => {
-          if (!line.trim() || line.trim().startsWith('#')) return [];
-          let pattern = line;
-          const negated = pattern.startsWith('!');
-          if (negated || pattern.startsWith('\\!')) pattern = pattern.slice(1);
-          if (pattern.startsWith('/')) pattern = pattern.slice(1);
-          return [`${negated ? '!' : ''}${prefix}${pattern}`];
-        });
-        matcher.add(patterns);
-      } catch {
-        // CLI addIgnoreRules swallows unreadable ignore files (package-manager.js).
-      }
-    }
+    await addIgnoreRules(files, dir, prefix, entries, matcher);
     const skill = entries.find(
       (entry) =>
         basename(entry.path) === 'SKILL.md' &&

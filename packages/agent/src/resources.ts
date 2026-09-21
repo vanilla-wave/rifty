@@ -1,4 +1,5 @@
 import { mergeSkills, projectSkills } from './project-skills.ts';
+import { promptTemplatePaths } from './prompt-templates.ts';
 import { resourceEntries, resourcePath, resourceWarning } from './resource-files.ts';
 import type {
   AgentCapabilities,
@@ -58,12 +59,9 @@ export async function loadResources(
     }
     const prompts = resourcePath(piDir, 'prompts');
     if (unsupported.some((entry) => entry.path === prompts)) {
-      // Pi expands `/<name>` for each `.pi/prompts/<name>.md` (non-recursive): names are
-      // reported so a chat can refuse them; contents are never read.
-      for (const entry of await resourceEntries(files, prompts, diagnostics)) {
-        if (entry.kind === 'file' && entry.path.endsWith('.md'))
-          unsupported.push({ kind: 'prompts', path: entry.path });
-      }
+      // Names a chat must refuse: pi would expand `/<name>` for each template.
+      for (const path of await promptTemplatePaths(files, prompts, diagnostics))
+        unsupported.push({ kind: 'prompts', path });
     }
   }
   const skills =

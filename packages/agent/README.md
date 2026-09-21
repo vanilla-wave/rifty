@@ -138,7 +138,7 @@ skipped. Unreadable ignore files are skipped silently, as the CLI does.
 | Context files, skills, explicit reload | ✅ |
 | `.pi/extensions` | ❌ reported unsupported |
 | `.pi/prompts` (templates) | ❌ reported unsupported |
-| `/skill:name` and `/name` expansion | ❌ template names (`.pi/prompts/*.md`) reported unread; playground chat refuses `/skill:<loaded skill>` and `/<reported template>`, forwards other `/`-text as pi does |
+| `/skill:name` and `/name` expansion | ❌ templates discovered as the CLI does (`.pi/prompts/*.md`, ignore rules, no dotfiles) and reported, never loaded; playground chat refuses `/skill:<loaded skill>` and `/<reported template>`, forwards other `/`-text as pi does |
 | `.pi/SYSTEM.md` | ❌ reported unsupported |
 | `.pi/APPEND_SYSTEM.md` | ❌ reported unsupported |
 | `.pi/settings.json` | ❌ reported unsupported |
