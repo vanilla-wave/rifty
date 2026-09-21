@@ -557,6 +557,7 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     'Path noted.',
     'Comment noted.',
     'Missing noted.',
+    'Ignored noted.',
     'New instructions applied.',
   ]);
   try {
@@ -580,6 +581,8 @@ test('project resources load at start; editor edits wait for chat /reload and vi
             '---\nname: hidden\ndescription: Secret\ndisable-model-invocation: true\n---\nHidden.',
           '.pi/extensions/foo.ts': 'export {};',
           '.pi/prompts/review.md': 'Review.',
+          '.pi/prompts/ignored.md': 'Ignored.',
+          '.pi/prompts/.gitignore': 'ignored.md\n',
           '.pi/skills/invalid/SKILL.md': '---\nname: invalid\n---\nMissing description.',
         },
       });
@@ -647,7 +650,12 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     await send(page, '/review');
     await expect(panel.locator('.rf-ai__notice')).toContainText('Unsupported chat command /review');
     expect(model.requests).toHaveLength(3);
-    const plain = ['/src/main.tsx needs a fix', '// TODO: keep this', '/missing explain this path'];
+    const plain = [
+      '/src/main.tsx needs a fix',
+      '// TODO: keep this',
+      '/missing explain this path',
+      '/ignored explain this path',
+    ];
     for (const [index, text] of plain.entries()) {
       await send(page, text);
       await expect.poll(() => model.requests.length).toBe(4 + index);
@@ -655,10 +663,10 @@ test('project resources load at start; editor edits wait for chat /reload and vi
       expect(JSON.stringify(model.requests[3 + index]?.body.messages.at(-1))).toContain(text);
     }
     await send(page, 'updated instructions?');
-    await expect.poll(() => model.requests.length).toBe(7);
+    await expect.poll(() => model.requests.length).toBe(8);
     await expect(panel).toHaveAttribute('data-status', 'done');
-    expect(prompt(6)).toContain('Answer in plain speech.');
-    expect(prompt(6)).not.toContain('Answer in pirate speak.');
+    expect(prompt(7)).toContain('Answer in plain speech.');
+    expect(prompt(7)).not.toContain('Answer in pirate speak.');
   } finally {
     await model.close();
   }

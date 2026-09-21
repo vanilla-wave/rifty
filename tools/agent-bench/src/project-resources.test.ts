@@ -289,6 +289,45 @@ it('same tree as full pi CLI: skills discovery, collision winners, hidden entrie
   );
 });
 
+it('same tree as full pi CLI: reported .pi/prompts template names follow CLI discovery', async () => {
+  const f = await fixture({
+    'AGENTS.md': 'Templates.',
+    '.pi/prompts/review.md': 'Review: $ARGUMENTS',
+    '.pi/prompts/.hidden.md': 'Dotfile',
+    '.pi/prompts/ignored.md': 'Ignored',
+    '.pi/prompts/fdignored.md': 'Fdignored',
+    '.pi/prompts/.gitignore': 'ignored.md\n',
+    '.pi/prompts/.fdignore': 'fdignored.md\n',
+    '.pi/prompts/notes.txt': 'Not a template',
+    '.pi/prompts/nested/deep.md': 'Not recursive',
+    '.pi/prompts/node_modules/pkg.md': 'Skipped',
+  });
+  const loader = new DefaultResourceLoader({
+    cwd: f.root,
+    agentDir: join(f.root, 'user'),
+    settingsManager: SettingsManager.inMemory({}, { projectTrusted: true }),
+    noExtensions: true,
+    noSkills: true,
+    noThemes: true,
+  });
+  await loader.reload();
+  const expected = loader
+    .getPrompts()
+    .prompts.filter((template) => template.filePath.startsWith(f.root))
+    .map((template) => template.filePath)
+    .sort();
+  expect(expected).toEqual([join(f.root, '.pi/prompts/review.md')]);
+  await f.session.send('hello');
+  const event = f.events.find((event) => event.type === 'resources');
+  if (event?.type !== 'resources') throw new Error('Missing resource report');
+  expect(
+    event.report.unsupported
+      .filter((entry) => entry.kind === 'prompts' && entry.path.endsWith('.md'))
+      .map((entry) => entry.path)
+      .sort(),
+  ).toEqual(expected);
+});
+
 it('supplied skills occupy global slot; project collision wins; skills opt-out hides all', async () => {
   const userSkills = [
     { name: 'deploy', description: 'user loses', filePath: '/user/deploy/SKILL.md' },
@@ -402,6 +441,8 @@ it('resource faults report unreadable context and invalid YAML without hiding la
       '.pi/skills/.gitignore': 'deploy/\n',
       '.pi/skills/broken/SKILL.md': '---\nname: [broken\n---',
       '.pi/skills/deploy/SKILL.md': skill('deploy'),
+      '.pi/prompts/review.md': 'Review.',
+      '.pi/prompts/denied.md': 'Unreadable.',
     },
     (root, files) => ({
       host: {
@@ -412,7 +453,7 @@ it('resource faults report unreadable context and invalid YAML without hiding la
             async read(path: string) {
               if (path.endsWith('/AGENTS.override.md'))
                 throw Object.assign(new Error('denied context'), { code: 'EACCES' });
-              if (path.endsWith('/.gitignore'))
+              if (path.endsWith('/.gitignore') || path.endsWith('/denied.md'))
                 throw Object.assign(new Error('denied ignore'), { code: 'EACCES' });
               return files.read(path);
             },
@@ -443,6 +484,12 @@ it('resource faults report unreadable context and invalid YAML without hiding la
   // CLI addIgnoreRules swallows unreadable ignore files: no diagnostic, pattern unapplied.
   expect(event.report.diagnostics).not.toContainEqual(
     expect.objectContaining({ path: join(f.root, '.pi/skills/.gitignore') }),
+  );
+  // CLI loadTemplateFromFile returns null on a read failure: no template, no diagnostic.
+  const templates = event.report.unsupported.filter((entry) => entry.path.endsWith('.md'));
+  expect(templates).toEqual([{ kind: 'prompts', path: join(f.root, '.pi/prompts/review.md') }]);
+  expect(event.report.diagnostics).not.toContainEqual(
+    expect.objectContaining({ path: join(f.root, '.pi/prompts/denied.md') }),
   );
 });
 
