@@ -56,6 +56,15 @@ export async function loadResources(
       const path = resourcePath(piDir, kind);
       if (piEntries.some((entry) => entry.path === path)) unsupported.push({ kind, path });
     }
+    const prompts = resourcePath(piDir, 'prompts');
+    if (unsupported.some((entry) => entry.path === prompts)) {
+      // Pi expands `/<name>` for each `.pi/prompts/<name>.md` (non-recursive): names are
+      // reported so a chat can refuse them; contents are never read.
+      for (const entry of await resourceEntries(files, prompts, diagnostics)) {
+        if (entry.kind === 'file' && entry.path.endsWith('.md'))
+          unsupported.push({ kind: 'prompts', path: entry.path });
+      }
+    }
   }
   const skills =
     options.skills === false
