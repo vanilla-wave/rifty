@@ -544,3 +544,108 @@ for (const collapsed of [false, true]) {
     }
   });
 }
+
+test('project resources load at start; editor edits wait for chat /reload and visible report', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  const model = await agentModelServer([
+    [{ name: 'read_file', args: { path: '.pi/skills/deploy/SKILL.md' } }],
+    'Arrr, skill read.',
+    'Arrr, still old.',
+    'New instructions applied.',
+  ]);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await page.evaluate(async () => {
+      const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+        seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+      };
+      await hook.seed({
+        taskId: 'project-resources',
+        files: {
+          'AGENTS.md': 'Answer in pirate speak.',
+          'CLAUDE.md': 'Losing context.',
+          'sub/CLAUDE.md': 'Descendant context.',
+          '.pi/skills/deploy/SKILL.md':
+            '---\nname: deploy\ndescription: Deploy this project\n---\nFollow deployment steps.',
+          '.pi/skills/hidden/SKILL.md':
+            '---\nname: hidden\ndescription: Secret\ndisable-model-invocation: true\n---\nHidden.',
+          '.pi/extensions/foo.ts': 'export {};',
+          '.pi/prompts/review.md': 'Review.',
+          '.pi/skills/invalid/SKILL.md': '---\nname: invalid\n---\nMissing description.',
+        },
+      });
+    });
+    // New session starts over the completed fixture.
+    await settings(page, model.baseUrl);
+    await send(page, 'deploy this');
+    const panel = page.getByTestId('ai-panel');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    const prompt = (index: number) =>
+      String(
+        model.requests[index]?.body.messages.find((message) => message.role === 'system')?.content,
+      );
+    expect(prompt(0)).toContain('Answer in pirate speak.');
+    expect(prompt(0)).toContain('<name>deploy</name>');
+    expect(prompt(0)).not.toContain('<name>hidden</name>');
+    expect(prompt(0)).not.toContain('Losing context.');
+    expect(prompt(0)).not.toContain('Descendant context.');
+    const report = panel.getByTestId('ai-resources');
+    await expect(report).toContainText('AGENTS.md');
+    await expect(report).toContainText('deploy');
+    await expect(report).toContainText('.pi/extensions');
+    await expect(report).toContainText('.pi/prompts');
+    await expect(report).toContainText('description is required');
+    expect(prompt(0).indexOf('<project_context>')).toBeLessThan(
+      prompt(0).indexOf('<available_skills>'),
+    );
+    expect(prompt(0).indexOf('</available_skills>')).toBeLessThan(
+      prompt(0).indexOf('Current working directory:'),
+    );
+    expect(JSON.stringify(toolResults(await exported(page)))).toContain('Follow deployment steps.');
+    await page.getByRole('treeitem', { name: /^AGENTS\.md/ }).click();
+    // Existing editor hook fires the real Monaco change event; select-all is
+    // unreliable in headless Chromium (EditorHost's ADR-0166 test seam).
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const setValue = Reflect.get(globalThis, '__riftySetEditorValue') as
+            | ((path: string, text: string) => boolean)
+            | undefined;
+          return setValue?.('/AGENTS.md', 'Answer in plain speech.') ?? false;
+        }),
+      )
+      .toBe(true);
+    await expect(page.locator('[data-testid="editor"] .view-lines')).toContainText(
+      'Answer in plain speech.',
+    );
+    await expect(page.locator('[data-testid="editor"] .view-lines')).not.toContainText(
+      'Answer in pirate speak.',
+    );
+    await page.keyboard.press('ControlOrMeta+KeyS');
+    await expect(page.locator('.rf-toast[data-tone="success"]')).toContainText('Saved');
+    await send(page, 'same instructions?');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(prompt(2)).toContain('Answer in pirate speak.');
+    await send(page, '/reload');
+    await expect(report).toContainText('Reloaded');
+    expect(model.requests).toHaveLength(3);
+    // Pi expands /skill:name and /name templates; the chat refuses instead of forwarding.
+    await send(page, '/skill:deploy');
+    await expect(panel.locator('.rf-ai__notice')).toContainText(
+      'Unsupported chat command /skill:deploy',
+    );
+    expect(model.requests).toHaveLength(3);
+    await send(page, 'updated instructions?');
+    await expect(panel).toHaveAttribute('data-status', 'done');
+    expect(prompt(3)).toContain('Answer in plain speech.');
+    expect(prompt(3)).not.toContain('Answer in pirate speak.');
+  } finally {
+    await model.close();
+  }
+});

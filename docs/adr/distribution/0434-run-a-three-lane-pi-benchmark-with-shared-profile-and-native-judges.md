@@ -63,3 +63,9 @@ branch decision record0191, not an active main ADR. Core/hosts/UI are delivered.
 
 Native CLI/schema/header/budget probes and source→scope record:
 `docs/backlog/distribution/reference/agent-bench-pickup-evidence.md`.
+
+## Corrections (active)
+
+2026-09-18 — ADR-0440 supersedes decision 3's unchanged assembled-prompt
+clause. Shared profile id/paragraphs remain unchanged; resource blocks and
+custom-prompt tail order now apply to every consumer.

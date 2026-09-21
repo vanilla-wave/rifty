@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Show loaded agent files, skills and diagnostics; /reload applies editor changes without a model request.
+- Chat refuses `/`-commands other than `/reload` with a notice instead of forwarding them to the model.
+
 - Keep AI endpoint CORS/proxy guidance in the Playground UI while the public
   agent package reports product-neutral network failures.
 

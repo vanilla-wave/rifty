@@ -2,6 +2,7 @@ import {
   type AgentEvent,
   type AgentHost,
   type AgentMessage,
+  type AgentResourceReport,
   type AgentSession,
   type AgentStatus,
   type AgentTrace,
@@ -10,6 +11,7 @@ import {
 import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { downloadBlob } from '../glue/download.ts';
+import { ResourceReport } from './ResourceReport.tsx';
 import { type PlaygroundAgentOptions, createPlaygroundAgentHost } from './playground-agent-host.ts';
 import { type ChatSettings, loadSettings, saveSettings, validateSettings } from './settings.ts';
 import './chat.css';
@@ -103,6 +105,8 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   const [status, setStatus] = createSignal<AgentStatus>('idle');
   const [detail, setDetail] = createSignal('');
   const [notice, setNotice] = createSignal('');
+  const [resources, setResources] = createSignal<AgentResourceReport>();
+  const [reloaded, setReloaded] = createSignal(false);
   const [input, setInput] = createSignal('');
   const [busy, setBusy] = createSignal(false);
   const [hasSession, setHasSession] = createSignal(false);
@@ -268,6 +272,7 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
       const detach = agent.subscribe((event) => {
         if (!alive) return;
         if (event.type === 'agent') receive(event.event);
+        else if (event.type === 'resources') setResources(event.report);
         else if (event.type === 'status') {
           if (event.status === 'running') runStart = items().length;
           setStatus(event.status);
@@ -289,6 +294,8 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
     const previous = active;
     active = undefined;
     setHasSession(false);
+    setResources(undefined);
+    setReloaded(false);
     previous?.detach();
     await previous?.agent.dispose();
   }
@@ -296,14 +303,28 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   async function send() {
     const text = input().trim();
     if (!text || running()) return;
+    if (text.startsWith('/') && text !== '/reload') {
+      // Pi expands /skill:name and /name templates; refuse rather than forward silently.
+      setNotice(
+        `Unsupported chat command ${text.split(/\s/)[0]}: only /reload is supported; pi skill and prompt-template expansion is not.`,
+      );
+      return;
+    }
     try {
       const current = ensureSession();
       setInput('');
+      setNotice('');
       followOutput = true;
-      await current.agent.send(text);
+      if (text === '/reload') {
+        setBusy(true);
+        await current.agent.reload();
+        setReloaded(true);
+      } else await current.agent.send(text);
     } catch (error) {
       setStatus('error');
       setDetail(errorMessage(error));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -515,6 +536,9 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
             </button>
           </fieldset>
         </form>
+      </Show>
+      <Show when={resources()}>
+        {(report) => <ResourceReport report={report()} reloaded={reloaded()} />}
       </Show>
       <Show when={notice()}>
         <output class="rf-ai__notice">{notice()}</output>

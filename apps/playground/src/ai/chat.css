@@ -172,3 +172,22 @@
     grid-template-columns: 0 0 minmax(0, 1fr) 300px;
   }
 }
+.rf-ai__resources {
+  margin: 0 12px 10px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  border: 1px solid #ffffff24;
+  border-radius: 6px;
+  padding: 8px;
+}
+.rf-ai__resources summary {
+  cursor: pointer;
+}
+.rf-ai__resources > div {
+  max-height: 160px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.rf-ai__resources ul {
+  padding-left: 16px;
+}
