@@ -284,3 +284,30 @@ CLI diagnostics comparison tightened to an exact multiset, already equal.
 GREEN: unit 40 passed (agent + project-resources); `pnpm typecheck`, `pnpm lint`
 clean; `RIFTY_PLAYGROUND_PORT=5391 pnpm exec playwright test --project=chromium-heavy
 --workers=1 tests/e2e/ai-mode.spec.ts -g 'project resources load'`: 1 passed.
+
+## Post-merge verify pass (2026-09-21)
+
+PR #346 merged with `check:pass-binding` red: product/test paths changed after
+`reviewed_sha` 5972a3c0b (inline repair `4b3fe44b4`/`ba15345f4`) without the
+independent verify pass `REV-8` requires. Repair on PR #347 against BASE
+5972a3c0b; each round is a RED commit then a fix, then a fresh independent pass.
+
+| Pass | Verdict | Finding | RED → fix |
+|---|---|---|---|
+| 1 | BLOCK | `startsWith('/')` guard refused plain `/src/main.tsx …`, `// TODO …` (false-fallback vs BASE) | `d0d9734e8` → `1c04a39bb` |
+| 2 | BLOCK | superset guard still refused `/etc …`, `/missing …` with `.pi/prompts` present; `/skill:deploy\nnow` cut at whitespace, pi cuts at space | `7d6a133e9` → `6ae42dcac` |
+| 3 | BLOCK | all `.pi/prompts/*.md` reported; CLI `collectAutoPromptEntries` skips dotfiles, `node_modules`, ignore rules, non-recursive; unreadable dropped | `18442ae20` → `81396816f` |
+| 4 | BLOCK | malformed frontmatter YAML template reported; CLI `loadTemplateFromFile` drops it. Concern (NOTE): first `/skill:x` forwarded before the startup report | `563901006` → `a00a93f94`; NOTE fix `2049cf3ce` → `4ddbc75ba` |
+| 5 | BLOCK | pass-4 blockers closed; the NOTE fix waited for the startup read outside session admission: failed read hangs the first `/`-input and `/reload`, slow read bypasses the budget | reverted `20dc651fb`, `0f11682b3`; NOTE routed to `docs/backlog/distribution/agent-chat-first-command-admission.md` (advisory, outside the accepted goal; honest fix is a public `send` admission change) |
+
+| 6 | PASS (concern) | five blockers closed; NOTE (pre-report first slash) advisory, draft routing correct; nit: stale test comment (left, test path frozen after `reviewed_sha`) | landing record `reference/pr-347-final-green.json` @ `0f11682b3` |
+
+Verdict records: `/tmp/pi-346-verify-{1..5}-block.json`, `/tmp/pi-346-verify-6-pass.json`
+(reviewer artifacts cited inside). The landing record names the PR and BASE:
+contract and goal were deleted on CLOSE, so `unit_goal_source` cites them by
+slug, not as a live path (`REV-8` reads a named contract at `reviewed_sha`). Carriers: CLI differential against real
+`DefaultResourceLoader.getPrompts()` and `_expandSkillCommand`/`expandPromptTemplate`
+semantics in `tools/agent-bench/src/project-resources.test.ts`;
+`apps/playground/src/ai/chat-command.test.ts`; e2e `tests/e2e/ai-mode.spec.ts`
+'project resources load' (`/skill:deploy`, `/review` refused; paths, comments,
+unknown and ignored names forwarded).

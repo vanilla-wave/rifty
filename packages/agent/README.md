@@ -128,7 +128,7 @@ pi's global skill slot, after project skills. Materialize supplied skills at
 host-readable `filePath` locations; `read_file` loads their content. No home
 scan. No-file hosts state that resources were not read; reload after returning
 to file mode. Reload requires an idle live session; concurrent reload rejects.
-A failed read rejects the next `send`; `reload()` retries it. The run time
+A failed read fails the next run (`status`/`detail`); `reload()` retries it. The run time
 limit also covers waiting for a pending read. `AgentFiles.list` entries carry
 the listed directory joined with the name; other entries are reported and
 skipped. Unreadable ignore files are skipped silently, as the CLI does.
@@ -138,7 +138,7 @@ skipped. Unreadable ignore files are skipped silently, as the CLI does.
 | Context files, skills, explicit reload | ✅ |
 | `.pi/extensions` | ❌ reported unsupported |
 | `.pi/prompts` (templates) | ❌ reported unsupported |
-| `/skill:name` and `/name` expansion | ❌ playground chat refuses `/`-input other than `/reload` |
+| `/skill:name` and `/name` expansion | ❌ templates discovered as the CLI does (`.pi/prompts/*.md`, ignore rules, no dotfiles) and reported, never loaded; playground chat refuses `/skill:<loaded skill>` and `/<reported template>`, forwards other `/`-text as pi does |
 | `.pi/SYSTEM.md` | ❌ reported unsupported |
 | `.pi/APPEND_SYSTEM.md` | ❌ reported unsupported |
 | `.pi/settings.json` | ❌ reported unsupported |

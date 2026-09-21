@@ -4,6 +4,7 @@
 
 - Load pi 0.85.1 project context/skills by default; resource reports, opt-outs and explicit reload. Preserve profile paragraphs; adopt custom-prompt tail (ADR-0440 supersedes ADR-0434 tail clause).
 - `reload()` retries a failed startup read; `list` entries outside the listed directory are reported; unreadable ignore files skip silently as the CLI.
+- Resource report lists `.pi/prompts` templates discovered as the CLI does (ignore rules, no dotfiles, non-recursive) as unsupported, never loaded, so hosts refuse exactly what pi would expand.
 
 - Make the package public; add settings-free native StreamFn transport and
   truthful custom trace provenance (ADR-0436).

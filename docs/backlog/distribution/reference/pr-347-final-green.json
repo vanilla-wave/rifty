@@ -1,0 +1,213 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS с NOTE: все пять blockers закрыты; unit/goal residuals пусты. Первый pre-report slash остаётся advisory вне принятого scope; routing в draft корректен.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "0f11682b3ed1f216560e9088e8ad01e14b82a8f7",
+  "unit_goal_source": "PR #347 (repair of PR #346 inline-review findings after goal CLOSE); PR #346 inline-review repair, шестой rifty-review Final+GREEN. Контракт ai-agent-project-context-files (distribution contract, deleted on CLOSE) и goal agent-pi-project-resources goal (deleted on CLOSE) прочитаны на BASE 5972a3c0b2bcbd0020e695571c9c3e02f0321470; product HEAD 0f11682b3ed1f216560e9088e8ad01e14b82a8f7. Прочитаны raw PR body, BASE..HEAD diff, prior PASS и /tmp/pi-346-verify-{1..5}-block.json; неизменённое покрытие, включая sandbox acceptance, перенесено. git diff --exit-code a00a93f94 0f11682b3 -- apps packages tests tools: exit 0. REV-12: revert устраняет pass5 B1; goal Decisions исключает expansion, I7 требует report/compat, поэтому first-command NOTE не создаёт required residual. Routing в distribution draft agent-chat-first-command-admission допустим; финальный текст draft не оценивался. Detached scratch /private/tmp/pi346-verify6-browser-k1bdf1uo/head: RIFTY_PLAYGROUND_PORT=50606 pnpm exec playwright test --project=chromium-heavy --workers=1 tests/e2e/ai-mode.spec.ts -g 'project resources load': 1 PASS, head-e2e.log. Прежний host fault decorator только в scratch; RIFTY_PLAYGROUND_PORT=50871 pnpm exec playwright test --project=chromium-light --workers=1 tests/e2e/review-startup-failure.spec.ts: 5 PASS, head-startup.log; /etc error с host warming up, /reload retries, slow read 2500ms при budget1000ms даёт requests=0/status=budget-exceeded; plain/no-files controls PASS. Декоратор затем удалён, product diff scratch пуст. Boundary batch port51245: 4 PASS, 1 ожидаемый advisory FAIL; head-boundaries.log. node --experimental-strip-types <scratch-parent>/{discovery,malformed,frontmatter}.mjs: exit 0, CLI 0.85.1 template sets и 18 command boundaries совпали; одноимённые .jsonl. HEAD archive /private/tmp/pi-346-verify6-head-checks-p43tn57w: pnpm --config.verify-deps-before-run=false exec vitest run apps/playground/src/ai/chat-command.test.ts tools/agent-bench/src/project-resources.test.ts packages/agent: 44 PASS/6 files; pnpm --config.verify-deps-before-run=false typecheck и lint: exit 0. Логи /private/tmp/pi-346-verify6-head-{vitest,typecheck,lint}.log; 3660 tracked blobs равны HEAD. Scratch launcher/dependency precheck исправлены до успешных прогонов. Исходные tracked-файлы reviewer не менял; внешний HEAD 0cf95cab8 содержит только docs после reviewed product.",
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "apps/playground/src/ai/AiChatPanel.tsx:307",
+          "summary": "NOTE сохранён: первая /skill:deploy или /review до resources report уходит модели без refusal. Goal Decisions исключает expansion; I7 требует report/compat, не отказ каждому вводу. REV-12 routing в отдельный draft корректен; unit/goal residual отсутствует.",
+          "authority": "",
+          "evidence": "В /private/tmp/pi346-verify6-browser-k1bdf1uo/head: RIFTY_PLAYGROUND_PORT=51245 pnpm exec playwright test --project=chromium-light --workers=1 tests/e2e/review-slash-input.spec.ts tests/e2e/review-slash-boundaries.spec.ts tests/e2e/review-excluded-prompts.spec.ts tests/e2e/review-malformed-prompts.spec.ts → 4 PASS/1 FAIL. Единственный FAIL: review-slash-boundaries.spec.ts:85; /skill:deploy requests 0→1, /review после reset 1→2, notice=[], точный текст в provider request. /src, //, /etc, /missing, newline-skill, hidden/ignored и malformed /bad — PASS. Лог: /private/tmp/pi346-verify6-browser-k1bdf1uo/head-boundaries.log."
+        },
+        {
+          "severity": "nit",
+          "location": "tools/agent-bench/src/project-resources.test.ts:185",
+          "summary": "Прежний nit: «reported, never read» устарел; template читается для проверки YAML, содержимое отбрасывается.",
+          "authority": "",
+          "evidence": "node --experimental-strip-types /private/tmp/pi346-verify6-browser-k1bdf1uo/discovery.mjs → exit 0; discovery.jsonl reads содержит review.md ровно один раз; packages/agent/src/prompt-templates.ts:27."
+        }
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "row": "Acceptance 1: context selection, BOM, no descendants, global-first bytes/order",
+      "source": "acceptance",
+      "trace": "I1 + I3 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:83; tools/agent-bench/src/project-resources.test.ts:128; tests/e2e/ai-mode.spec.ts:599",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: CLI skills, metadata, collisions, supplied globals, real read_file",
+      "source": "acceptance",
+      "trace": "I2 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:220; tools/agent-bench/src/project-resources.test.ts:341; tests/e2e/ai-mode.spec.ts:616",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: startup report, cached snapshot, reload/report, editor/chat without command dispatch",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:374; tools/agent-bench/src/project-resources.test.ts:506; tests/e2e/ai-mode.spec.ts:641",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: default-on, independent opt-outs, explicit no-file report",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:194; tools/agent-bench/src/project-resources.test.ts:361; tests/no-coi/no-coi-pi-agent.spec.ts:204",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: six unsupported kinds, compat list, visible files/skills/diagnostics",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:152; tests/e2e/ai-mode.spec.ts:605; packages/agent/README.md:136",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: context candidates, BOM, descendants and global order",
+      "source": "acceptance",
+      "trace": "I1 + I5",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:83; tools/agent-bench/src/project-resources.test.ts:566",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: CLI discovery/formatter, exact diagnostic multiset, unreadable ignores skipped",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:220; tools/agent-bench/src/project-resources.test.ts:280; tools/agent-bench/src/project-resources.test.ts:446",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: profile retained, append/context/skills/cwd order, no empty blocks",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:121; tools/agent-bench/src/project-resources.test.ts:556; tests/e2e/ai-mode.spec.ts:610",
+      "note": ""
+    },
+    {
+      "row": "Poisoned cache: edits take effect only after explicit reload",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:152; tests/e2e/ai-mode.spec.ts:638",
+      "note": ""
+    },
+    {
+      "row": "Corrupt metadata: pi diagnostics/skip with valid resources retained",
+      "source": "fault-matrix",
+      "trace": "I2 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:280; tools/agent-bench/src/project-resources.test.ts:446",
+      "note": ""
+    },
+    {
+      "row": "Observable order: timeout/stop/dispose cannot dispatch after cancellation; reads settle before close",
+      "source": "fault-matrix",
+      "trace": "ADR-0424",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:579; tools/agent-bench/src/project-resources.test.ts:621",
+      "note": ""
+    },
+    {
+      "row": "Missing file capability: report/prompt name unread resources",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:194; tools/agent-bench/src/project-resources.test.ts:397",
+      "note": ""
+    },
+    {
+      "row": "AgentFiles.list: foreign entries reported and skipped",
+      "source": "public-api",
+      "trace": "ADR-0440 + I4",
+      "status": "pass",
+      "citation": "packages/agent/src/types.ts:9; tools/agent-bench/src/project-resources.test.ts:529",
+      "note": ""
+    },
+    {
+      "row": "createAgentSession: startup resource failure is observable and recoverable",
+      "source": "public-api",
+      "trace": "ADR-0440 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:506",
+      "note": ""
+    },
+    {
+      "row": "session.reload: retries failed read and replaces cached snapshot",
+      "source": "public-api",
+      "trace": "ADR-0440 + I4",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:374; tools/agent-bench/src/project-resources.test.ts:413; tools/agent-bench/src/project-resources.test.ts:506",
+      "note": ""
+    },
+    {
+      "row": "session.send: awaits latest admitted read; deadline remains effective",
+      "source": "public-api",
+      "trace": "ADR-0424 + ADR-0440",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:413; tools/agent-bench/src/project-resources.test.ts:506; tools/agent-bench/src/project-resources.test.ts:579",
+      "note": ""
+    },
+    {
+      "row": "session.dispose: settles resource read before closing host",
+      "source": "public-api",
+      "trace": "ADR-0424 + ADR-0440",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:621",
+      "note": ""
+    },
+    {
+      "row": "AgentResourceReport.unsupported: CLI template paths; dotfiles, ignored, non-.md, nested, unreadable и malformed YAML исключены",
+      "source": "public-api",
+      "trace": "ADR-0440 + I4 + I7",
+      "status": "pass",
+      "citation": "packages/agent/src/types.ts:111; packages/agent/src/prompt-templates.ts:27; tools/agent-bench/src/project-resources.test.ts:292; tools/agent-bench/src/project-resources.test.ts:446",
+      "note": ""
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true
+}

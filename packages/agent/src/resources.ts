@@ -1,4 +1,5 @@
 import { mergeSkills, projectSkills } from './project-skills.ts';
+import { promptTemplatePaths } from './prompt-templates.ts';
 import { resourceEntries, resourcePath, resourceWarning } from './resource-files.ts';
 import type {
   AgentCapabilities,
@@ -55,6 +56,12 @@ export async function loadResources(
     for (const kind of unsupportedKinds) {
       const path = resourcePath(piDir, kind);
       if (piEntries.some((entry) => entry.path === path)) unsupported.push({ kind, path });
+    }
+    const prompts = resourcePath(piDir, 'prompts');
+    if (unsupported.some((entry) => entry.path === prompts)) {
+      // Names a chat must refuse: pi would expand `/<name>` for each template.
+      for (const path of await promptTemplatePaths(files, prompts, diagnostics))
+        unsupported.push({ kind: 'prompts', path });
     }
   }
   const skills =

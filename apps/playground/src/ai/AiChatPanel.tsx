@@ -12,6 +12,7 @@ import { For, Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { createStore, reconcile } from 'solid-js/store';
 import { downloadBlob } from '../glue/download.ts';
 import { ResourceReport } from './ResourceReport.tsx';
+import { unsupportedChatCommand } from './chat-command.ts';
 import { type PlaygroundAgentOptions, createPlaygroundAgentHost } from './playground-agent-host.ts';
 import { type ChatSettings, loadSettings, saveSettings, validateSettings } from './settings.ts';
 import './chat.css';
@@ -303,10 +304,11 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   async function send() {
     const text = input().trim();
     if (!text || running()) return;
-    if (text.startsWith('/') && text !== '/reload') {
-      // Pi expands /skill:name and /name templates; refuse rather than forward silently.
+    const command = unsupportedChatCommand(text, resources());
+    if (command !== undefined) {
+      // Pi would expand this; refuse rather than forward silently.
       setNotice(
-        `Unsupported chat command ${text.split(/\s/)[0]}: only /reload is supported; pi skill and prompt-template expansion is not.`,
+        `Unsupported chat command ${command}: only /reload is supported; pi skill and prompt-template expansion is not.`,
       );
       return;
     }
