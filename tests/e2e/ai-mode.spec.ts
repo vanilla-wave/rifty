@@ -554,6 +554,8 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     [{ name: 'read_file', args: { path: '.pi/skills/deploy/SKILL.md' } }],
     'Arrr, skill read.',
     'Arrr, still old.',
+    'Path noted.',
+    'Comment noted.',
     'New instructions applied.',
   ]);
   try {
@@ -635,16 +637,26 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     await send(page, '/reload');
     await expect(report).toContainText('Reloaded');
     expect(model.requests).toHaveLength(3);
-    // Pi expands /skill:name and /name templates; the chat refuses instead of forwarding.
+    // Pi expands /skill:<loaded skill> and /<.pi/prompts template>: the chat refuses those
+    // instead of forwarding; every other '/'-text reaches the model unchanged, as in pi.
     await send(page, '/skill:deploy');
     await expect(panel.locator('.rf-ai__notice')).toContainText(
       'Unsupported chat command /skill:deploy',
     );
+    await send(page, '/review');
+    await expect(panel.locator('.rf-ai__notice')).toContainText('Unsupported chat command /review');
     expect(model.requests).toHaveLength(3);
+    for (const [index, text] of ['/src/main.tsx needs a fix', '// TODO: keep this'].entries()) {
+      await send(page, text);
+      await expect.poll(() => model.requests.length).toBe(4 + index);
+      await expect(panel).toHaveAttribute('data-status', 'done');
+      expect(JSON.stringify(model.requests[3 + index]?.body.messages.at(-1))).toContain(text);
+    }
     await send(page, 'updated instructions?');
+    await expect.poll(() => model.requests.length).toBe(6);
     await expect(panel).toHaveAttribute('data-status', 'done');
-    expect(prompt(3)).toContain('Answer in plain speech.');
-    expect(prompt(3)).not.toContain('Answer in pirate speak.');
+    expect(prompt(5)).toContain('Answer in plain speech.');
+    expect(prompt(5)).not.toContain('Answer in pirate speak.');
   } finally {
     await model.close();
   }
