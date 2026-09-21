@@ -589,8 +589,14 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     });
     // New session starts over the completed fixture.
     await settings(page, model.baseUrl);
-    await send(page, 'deploy this');
     const panel = page.getByTestId('ai-panel');
+    // Pi loads resources before its first prompt: the very first send already refuses.
+    await send(page, '/skill:deploy');
+    await expect(panel.locator('.rf-ai__notice')).toContainText(
+      'Unsupported chat command /skill:deploy',
+    );
+    expect(model.requests).toHaveLength(0);
+    await send(page, 'deploy this');
     await expect(panel).toHaveAttribute('data-status', 'done');
     const prompt = (index: number) =>
       String(
