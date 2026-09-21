@@ -39,8 +39,6 @@ interface ActiveSession {
   readonly agent: AgentSession;
   readonly host: AgentHost;
   readonly detach: () => void;
-  /** Settles with the startup resource read (report or failure); pi loads before its first prompt. */
-  readonly loaded: Promise<void>;
 }
 
 // agent-bench hook: external validation harness only. Not public API.
@@ -272,24 +270,17 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
         maxToolCalls,
         runTimeoutMs,
       });
-      let settle = () => {};
-      const loaded = new Promise<void>((resolve) => {
-        settle = resolve;
-      });
       const detach = agent.subscribe((event) => {
         if (!alive) return;
         if (event.type === 'agent') receive(event.event);
-        else if (event.type === 'resources') {
-          setResources(event.report);
-          settle();
-        } else if (event.type === 'status') {
+        else if (event.type === 'resources') setResources(event.report);
+        else if (event.type === 'status') {
           if (event.status === 'running') runStart = items().length;
-          if (event.status === 'error') settle();
           setStatus(event.status);
           setDetail(playgroundAgentDetail(event.detail ?? ''));
         }
       });
-      active = { agent, host, detach, loaded };
+      active = { agent, host, detach };
       setHasSession(true);
       return active;
     } catch (error) {
@@ -313,20 +304,16 @@ export function AiChatPanel(props: PlaygroundAgentOptions & { readonly onClose: 
   async function send() {
     const text = input().trim();
     if (!text || running()) return;
+    const command = unsupportedChatCommand(text, resources());
+    if (command !== undefined) {
+      // Pi would expand this; refuse rather than forward silently.
+      setNotice(
+        `Unsupported chat command ${command}: only /reload is supported; pi skill and prompt-template expansion is not.`,
+      );
+      return;
+    }
     try {
       const current = ensureSession();
-      if (text.startsWith('/') && !resources()) {
-        setBusy(true);
-        await current.loaded;
-      }
-      const command = unsupportedChatCommand(text, resources());
-      if (command !== undefined) {
-        // Pi would expand this; refuse rather than forward silently.
-        setNotice(
-          `Unsupported chat command ${command}: only /reload is supported; pi skill and prompt-template expansion is not.`,
-        );
-        return;
-      }
       setInput('');
       setNotice('');
       followOutput = true;

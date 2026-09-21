@@ -182,7 +182,7 @@ it('cached instructions change only on explicit reload; report includes all unsu
     }),
   );
   // Pi expands `/<name>` for each `.pi/prompts/<name>.md` (non-recursive): those names are
-  // reported after one read whose content is discarded; other entries are not templates.
+  // reported, never read; other entries are not templates.
   const reported = report?.unsupported ?? [];
   expect(reported).toContainEqual({ kind: 'prompts', path: join(f.root, '.pi/prompts/review.md') });
   expect(reported.map((entry) => entry.path)).not.toContain(join(f.root, '.pi/prompts/notes.txt'));

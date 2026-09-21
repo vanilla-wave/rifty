@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 - Show loaded agent files, skills and diagnostics; /reload applies editor changes without a model request.
-- Chat refuses `/skill:<loaded skill>` and `/<reported .pi/prompts template>` with a notice, waiting for the startup resource read first; other `/`-text (paths, comments, unknown names) is forwarded to the model as in pi.
+- Chat refuses `/skill:<loaded skill>` and `/<reported .pi/prompts template>` with a notice; other `/`-text (paths, comments, unknown names) is forwarded to the model as in pi.
 
 - Keep AI endpoint CORS/proxy guidance in the Playground UI while the public
   agent package reports product-neutral network failures.
