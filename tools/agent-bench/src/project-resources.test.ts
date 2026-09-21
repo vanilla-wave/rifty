@@ -153,6 +153,7 @@ it('cached instructions change only on explicit reload; report includes all unsu
   const unsupported = [
     'extensions/foo.ts',
     'prompts/review.md',
+    'prompts/notes.txt',
     'SYSTEM.md',
     'APPEND_SYSTEM.md',
     'settings.json',
@@ -180,6 +181,11 @@ it('cached instructions change only on explicit reload; report includes all unsu
       ),
     }),
   );
+  // Pi expands `/<name>` for each `.pi/prompts/<name>.md` (non-recursive): those names are
+  // reported, never read; other entries are not templates.
+  const reported = report?.unsupported ?? [];
+  expect(reported).toContainEqual({ kind: 'prompts', path: join(f.root, '.pi/prompts/review.md') });
+  expect(reported.map((entry) => entry.path)).not.toContain(join(f.root, '.pi/prompts/notes.txt'));
   await f.session.send('third');
   expect(f.prompt(2)).toContain('New instructions.');
   expect(f.prompt(2)).not.toContain('Old instructions.');

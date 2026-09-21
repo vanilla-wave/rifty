@@ -556,6 +556,7 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     'Arrr, still old.',
     'Path noted.',
     'Comment noted.',
+    'Missing noted.',
     'New instructions applied.',
   ]);
   try {
@@ -646,17 +647,18 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     await send(page, '/review');
     await expect(panel.locator('.rf-ai__notice')).toContainText('Unsupported chat command /review');
     expect(model.requests).toHaveLength(3);
-    for (const [index, text] of ['/src/main.tsx needs a fix', '// TODO: keep this'].entries()) {
+    const plain = ['/src/main.tsx needs a fix', '// TODO: keep this', '/missing explain this path'];
+    for (const [index, text] of plain.entries()) {
       await send(page, text);
       await expect.poll(() => model.requests.length).toBe(4 + index);
       await expect(panel).toHaveAttribute('data-status', 'done');
       expect(JSON.stringify(model.requests[3 + index]?.body.messages.at(-1))).toContain(text);
     }
     await send(page, 'updated instructions?');
-    await expect.poll(() => model.requests.length).toBe(6);
+    await expect.poll(() => model.requests.length).toBe(7);
     await expect(panel).toHaveAttribute('data-status', 'done');
-    expect(prompt(5)).toContain('Answer in plain speech.');
-    expect(prompt(5)).not.toContain('Answer in pirate speak.');
+    expect(prompt(6)).toContain('Answer in plain speech.');
+    expect(prompt(6)).not.toContain('Answer in pirate speak.');
   } finally {
     await model.close();
   }
