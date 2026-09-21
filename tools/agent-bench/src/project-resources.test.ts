@@ -301,6 +301,11 @@ it('same tree as full pi CLI: reported .pi/prompts template names follow CLI dis
     '.pi/prompts/notes.txt': 'Not a template',
     '.pi/prompts/nested/deep.md': 'Not recursive',
     '.pi/prompts/node_modules/pkg.md': 'Skipped',
+    '.pi/prompts/bad.md': '---\ndescription: [broken\n---\nBody\n',
+    '.pi/prompts/scalar.md': '---\nscalar\n---\nBody\n',
+    '.pi/prompts/empty-frontmatter.md': '---\n---\nBody\n',
+    '.pi/prompts/unterminated.md': '---\ndescription: [open\nBody\n',
+    '.pi/prompts/bom.md': '\uFEFF---\ndescription: bom\n---\nBody\n',
   });
   const loader = new DefaultResourceLoader({
     cwd: f.root,
@@ -316,7 +321,12 @@ it('same tree as full pi CLI: reported .pi/prompts template names follow CLI dis
     .prompts.filter((template) => template.filePath.startsWith(f.root))
     .map((template) => template.filePath)
     .sort();
-  expect(expected).toEqual([join(f.root, '.pi/prompts/review.md')]);
+  // Malformed frontmatter YAML is the only content rule: CLI loadTemplateFromFile drops it.
+  expect(expected).toEqual(
+    ['bom', 'empty-frontmatter', 'review', 'scalar', 'unterminated'].map((name) =>
+      join(f.root, `.pi/prompts/${name}.md`),
+    ),
+  );
   await f.session.send('hello');
   const event = f.events.find((event) => event.type === 'resources');
   if (event?.type !== 'resources') throw new Error('Missing resource report');
