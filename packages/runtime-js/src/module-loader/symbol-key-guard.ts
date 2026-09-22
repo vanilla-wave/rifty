@@ -4,10 +4,12 @@
  */
 const SYMBOL_KEYS = new WeakMap<object, Set<string>>();
 const LOOP_KEYS = new WeakMap<object, Set<string>>();
+const FUNCTION_STRING_KEYS = new WeakMap<object, Set<string>>();
 
 interface AstNode {
   readonly type?: string;
   readonly name?: string;
+  readonly value?: unknown;
   readonly computed?: boolean;
   readonly callee?: AstNode;
   readonly object?: AstNode;
@@ -67,6 +69,21 @@ export function noteConstSymbolBinding(
   SYMBOL_KEYS.set(scope, set);
 }
 
+function noteConstFunctionString(
+  scope: BindingScope,
+  kind: string | undefined,
+  id: unknown,
+  init: unknown,
+): void {
+  if (kind !== 'const') return;
+  const name = asNode(id)?.type === 'Identifier' ? asNode(id)?.name : undefined;
+  const initNode = asNode(init);
+  if (!name || initNode?.type !== 'Literal' || initNode.value !== 'Function') return;
+  const set = FUNCTION_STRING_KEYS.get(scope) ?? new Set<string>();
+  set.add(name);
+  FUNCTION_STRING_KEYS.set(scope, set);
+}
+
 export function noteSymbolConst(
   scope: BindingScope,
   statement: unknown,
@@ -76,6 +93,7 @@ export function noteSymbolConst(
   const kind = (asNode(statement) as { kind?: string } | null)?.kind;
   const body = asNode(decl) as ({ id?: unknown; init?: unknown } & AstNode) | null;
   noteConstSymbolBinding(scope, kind, body?.id, body?.init, scopes);
+  noteConstFunctionString(scope, kind, body?.id, body?.init);
 }
 
 export function noteLoopKey(scope: BindingScope, decl: unknown): void {
@@ -116,13 +134,25 @@ export function isSymbol(node: unknown, scopes: readonly BindingScope[]): boolea
   return expressionIsProvableSymbol(node, scopes);
 }
 
+function isConstFunctionString(node: unknown, scopes: readonly BindingScope[]): boolean {
+  const ast = asNode(node);
+  if (ast?.type !== 'Identifier' || typeof ast.name !== 'string') return false;
+  for (let i = scopes.length - 1; i >= 0; i--) {
+    const scope = scopes[i];
+    if (!scope) continue;
+    if (FUNCTION_STRING_KEYS.get(scope)?.has(ast.name)) return true;
+    if (scope.bindings.has(ast.name)) return false;
+  }
+  return false;
+}
+
 export function mayBeFunctionKey(
   node: unknown,
   scopes: readonly BindingScope[],
   literal: string | undefined,
 ): boolean {
   if (expressionIsProvableSymbol(node, scopes) || isLoopKey(node, scopes)) return false;
-  if (literal === 'Function') return true;
+  if (literal === 'Function' || isConstFunctionString(node, scopes)) return true;
   // A bare identifier is a runtime name, not the string 'Function'. Expressions stay loud.
   if (asNode(node)?.type === 'Identifier') return false;
   return literal === undefined;

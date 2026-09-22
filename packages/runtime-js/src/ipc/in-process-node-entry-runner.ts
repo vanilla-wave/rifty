@@ -57,6 +57,7 @@ export function makeInProcessNodeEntryRunner(): NodeEntryRunner {
       },
       isTTY: false,
       fd: 1,
+      [Symbol.for('rifty.io.process-stdio-sink')]: true,
     };
     const g = globalThis as { process?: unknown };
     const prevGlobalProcess = g.process;

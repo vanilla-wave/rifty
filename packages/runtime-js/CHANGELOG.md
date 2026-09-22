@@ -3,12 +3,13 @@
 ## [Unreleased]
 
 - Keep a live `worker_threads.Worker` on the event loop until exit or `unref()`, deliver `uncaughtException` / `unhandledRejection` to a user listener and continue, and make `process.exit()` with no argument use `process.exitCode` (ADR-0441).
-- A bundled cac `runMatchedCommand()` action promise stays on the event loop until it settles, the same tracker the Vite CLI already uses.
+- A bundled cac `runMatchedCommand()` action promise stays on the event loop until it settles. The rewrite matches that statement in code only, on the same line.
 - A forked program child stays alive while it has `process.on('message')` listeners for both `serialization: 'json'` and `'advanced'`. A URL worker that shares the IPC port does not.
-- Accept `child_process` `serialization: 'advanced'` structured-clone IPC, empty `Worker` `execArgv`, and Worker `stdout`/`stderr` streams.
+- Accept `child_process` `serialization: 'advanced'` as a structured clone. A nested function throws, and a later mutation of the sent object does not cross the channel. Empty `Worker` `execArgv` and Worker `stdout`/`stderr` streams stay accepted.
 - An explicit Worker or `fork` `execArgv` of `--experimental-import-meta-resolve`, `--require`, and `--conditions` reaches the child: `--require` preloads before the entry, `--conditions` joins module resolution. Other flags stay a named `NotImplementedError`.
-- Shift `vm` `lineOffset` / `columnOffset` stack locations, link prototype builtin exports (`process.cwd`, `path/posix`), and throw named `NotImplementedError` for `fs.statfsSync`, `child_process.spawnSync`, and `process.memoryUsage`.
-- A const `Symbol` / `Symbol.for` computed key is not treated as a global `Function` write.
+- Shift `vm` `lineOffset` / `columnOffset` stack locations. A second script that reuses a filename with a different offset throws instead of clearing the first. Link prototype builtin exports (`process.cwd`, `path/posix`), and throw named `NotImplementedError` for `fs.statfsSync`, `child_process.spawnSync`, and `process.memoryUsage`.
+- A const bound to the string `Function` stays on the global `Function` write ceiling. A const `Symbol` key and a `for-in` key do not.
+- `path.win32` / `node:path/win32` is the Windows path algorithm. `path` and `path.posix` stay POSIX.
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 

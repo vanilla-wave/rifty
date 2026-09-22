@@ -9,6 +9,7 @@ import {
   extname as vfsExtname,
   isAbsolute as vfsIsAbsolute,
 } from '@riftydev/vfs';
+import { win32 } from './path-win32.ts';
 import { getProcessCwd } from './process.ts';
 
 export interface ParsedPath {
@@ -105,8 +106,7 @@ export function format(o: Partial<ParsedPath>): string {
 }
 
 // `path.toNamespacedPath` (v9) — POSIX identity no-op. Windows namespacing
-// (`\\?\C:\…`) is the only non-identity case, and rifty is POSIX-only
-// (`win32 === posix`), so returning the input verbatim is faithful Node behaviour.
+// lives on `path.win32`.
 export function toNamespacedPath(p: string): string {
   return p;
 }
@@ -127,8 +127,7 @@ export const posix = {
   toNamespacedPath,
 };
 
-// We don't ship `win32` — pet project, POSIX only.
-export const win32 = posix;
+export { win32 } from './path-win32.ts';
 
 const path = {
   sep,

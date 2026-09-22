@@ -18,7 +18,16 @@ export function transmitNodeIpcMessage(
       { code: 'ERR_INVALID_ARG_TYPE' },
     );
   }
-  return message;
+  try {
+    return structuredClone(message);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'DataCloneError') {
+      throw Object.assign(new TypeError('The "message" argument could not be serialized'), {
+        code: 'ERR_INVALID_ARG_TYPE',
+      });
+    }
+    throw error;
+  }
 }
 
 export function serializeNodeIpcMessage(message: unknown): unknown {

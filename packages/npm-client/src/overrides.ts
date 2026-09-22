@@ -37,10 +37,14 @@ export function resolveOverride(
   return null;
 }
 
-/** npm's bare value (`"8.0.16"`, `"^1"`) is a range for the overridden name. */
+/** npm's bare value (`"8.0.16"`, `"^1"`, `"v8.0.16"`) is a range for the overridden name. */
 function isNpmBareVersionRange(spec: string): boolean {
   if (spec.startsWith('$') || spec.includes('/') || spec.startsWith('@')) return false;
-  return spec === '*' || spec.includes('||') || /^(?:v?\d|[\^~><=])/.test(spec);
+  if (spec === '*' || spec.includes('||') || /^[\^~><=]/.test(spec) || /^\d/.test(spec)) {
+    return true;
+  }
+  // `v1.2.3` is a version. `v8` is the package of that name.
+  return /^v\d+\./.test(spec);
 }
 
 function parseTarget(

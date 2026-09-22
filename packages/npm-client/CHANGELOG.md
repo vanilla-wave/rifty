@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Parse a bare npm override version (`"vite": "8.0.16"`) as a range of the overridden package. A bare package name stays a replacement name.
+- Parse a bare npm override version (`"vite": "8.0.16"`, `"v8.0.16"`) as a range of the overridden package. A bare package name, including `npm:v8`, stays a replacement name.
 
 - Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.
 

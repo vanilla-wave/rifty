@@ -2,9 +2,7 @@ import type { ParityCase } from '../../src/types.ts';
 
 /**
  * `path.toNamespacedPath` / `path.posix.toNamespacedPath` — POSIX identity no-op.
- * (`path.win32` is NOT exercised: rifty ships `win32 === posix` POSIX-only by
- * design, a pre-existing module-wide deviation from real Node's Windows path,
- * unrelated to this method.)
+ * (`path.win32` is the Windows algorithm and is not exercised here.)
  */
 const c: ParityCase = {
   code: `

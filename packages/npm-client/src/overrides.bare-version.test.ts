@@ -33,4 +33,17 @@ describe('npm bare-version override spelling', () => {
       source: 'user',
     });
   });
+
+  it('keeps an npm: alias whose name looks like a v-prefixed version', () => {
+    expect(resolveOverride('foo', undefined, { foo: 'npm:v8' })).toEqual({
+      name: 'v8',
+      range: null,
+      source: 'user',
+    });
+    expect(resolveOverride('vite', undefined, { vite: 'v8.0.16' })).toEqual({
+      name: 'vite',
+      range: 'v8.0.16',
+      source: 'user',
+    });
+  });
 });

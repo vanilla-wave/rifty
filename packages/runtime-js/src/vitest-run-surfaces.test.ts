@@ -1,4 +1,4 @@
-import { Readable } from '@riftydev/io';
+import { Readable, Writable } from '@riftydev/io';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { spawnSync } from './builtins/child_process.ts';
@@ -17,7 +17,7 @@ describe('vitest run surfaces', () => {
     const posix = loadBuiltin('path/posix') as { join: (...p: string[]) => string };
     const win32 = loadBuiltin('path/win32') as { join: (...p: string[]) => string };
     expect(posix.join('a', 'b')).toBe('a/b');
-    expect(win32.join('a', 'b')).toBe('a/b');
+    expect(win32.join('a', 'b')).toBe('a\\b');
     const vfs = new MemoryFsSync();
     vfs.loadFixture({
       '/main.mjs': `import { cwd } from 'node:process'; export const kind = typeof cwd;`,
@@ -68,6 +68,15 @@ describe('vitest run surfaces', () => {
     const defined = await createModuleLoader(defines).import('/defines.mjs');
     expect(defined.mode).toBe('test');
     expect(defined.stub).toBe(1);
+    const ceiling = new MemoryFsSync();
+    ceiling.loadFixture({
+      '/ceil.mjs': `
+        const key = 'Function';
+        globalThis[key] = function () {};
+        export const ok = true;
+      `,
+    });
+    await expect(createModuleLoader(ceiling).import('/ceil.mjs')).rejects.toThrow(/Function/);
   });
 
   it('does not end process.stdout when a readable pipes into it', async () => {
@@ -115,6 +124,19 @@ describe('vitest run surfaces', () => {
     expect(stack).toContain('/virtual/mod.js:1:1');
     try {
       runInThisContext('function f(){ throw new Error("boom"); }\nf()', {
+        filename: '/virtual/mod2.js',
+        lineOffset: 10,
+        columnOffset: 5,
+      });
+    } catch (error) {
+      stack = (error as Error).stack ?? '';
+    }
+    expect(stack).toMatch(/\/virtual\/mod2\.js:1[12]:/);
+    expect(() => runInThisContext('1', { filename: '/virtual/mod2.js', lineOffset: 0 })).toThrow(
+      /lineOffset/,
+    );
+    try {
+      runInThisContext('function f(){ throw new Error("again"); }\nf()', {
         filename: '/virtual/mod2.js',
         lineOffset: 10,
         columnOffset: 5,
@@ -179,6 +201,7 @@ describe('vitest run surfaces', () => {
             map: value.map instanceof Map,
             hole: value.list[0] === undefined,
             bytes: value.bytes instanceof Uint8Array,
+            n: value.n,
           });
           process.exit(0);
         });
@@ -199,12 +222,42 @@ describe('vitest run surfaces', () => {
     expect(() => child.send?.(() => {})).toThrow(
       expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
     );
-    child.send?.({
+    expect(() => child.send?.({ fn() {} })).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+    const payload = {
       date: new Date('2020-01-01T00:00:00.000Z'),
       map: new Map([['a', 1]]),
       list: [undefined],
       bytes: new Uint8Array([1, 2]),
+      n: 1,
+    };
+    child.send?.(payload);
+    payload.n = 2;
+    await expect(reply).resolves.toEqual({
+      date: true,
+      map: true,
+      hole: true,
+      bytes: true,
+      n: 1,
     });
-    await expect(reply).resolves.toEqual({ date: true, map: true, hole: true, bytes: true });
+  });
+
+  it('ends a writable that only advertises fd 1', async () => {
+    let ended = false;
+    const dest = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+    (dest as { fd?: number }).fd = 1;
+    dest.on('finish', () => {
+      ended = true;
+    });
+    Readable.from(['a']).pipe(dest);
+    await new Promise<void>((resolve) => {
+      nodeSetTimeout(() => resolve(), 20);
+    });
+    expect(ended).toBe(true);
   });
 });

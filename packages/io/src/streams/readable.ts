@@ -262,9 +262,10 @@ interface PipeableWritable extends EventEmitter {
   emit: EventEmitter['emit'];
 }
 
+const PROCESS_STDIO_SINK = Symbol.for('rifty.io.process-stdio-sink');
+
 function isProcessStdioSink(dest: object): boolean {
-  const fd = (dest as { fd?: unknown }).fd;
-  return fd === 1 || fd === 2;
+  return (dest as Record<symbol, boolean | undefined>)[PROCESS_STDIO_SINK] === true;
 }
 
 /** Node's `AbortError` shape (`name`/`code`), used when a web cancel carries no
@@ -770,7 +771,7 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
       this.resume();
     };
     const onEnd = (): void => {
-      // Node never ends process.stdout/stderr from pipe(); those sinks are fd 1/2.
+      // Node never ends process.stdout/stderr from pipe(); those sinks are branded.
       if (!endOnFinish || isProcessStdioSink(dest)) return;
       dest.end();
     };

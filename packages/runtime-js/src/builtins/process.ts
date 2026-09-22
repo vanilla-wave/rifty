@@ -6,13 +6,8 @@
  * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
  * `riftyProcess`. No post-spawn `globalThis.process` swap.
  *
- * `nextTick` is queued via `queueMicrotask`. To match Node's ordering (nextTick
- * always wins over `Promise.then`), `patchPromiseForNextTick` patches
- * `Promise.prototype.then` in the realm so every then-callback drains pending
- * nextTicks before firing — gated to Node workers at the pre-entry seam (WASI
- * realms leave `then` native).
- * Limitation: code that captured the original `.then` before the patch bypasses
- * the drain. Acceptable for M3; revisit if a real package breaks.
+ * `nextTick` drains before `Promise.then` via a realm patch on Node workers.
+ * WASI realms leave `then` native. A `.then` captured before the patch skips it.
  */
 import {
   type IpcFrame,
@@ -251,6 +246,7 @@ function makeStdioWriter(
   const stream = Object.assign(new EventEmitter(), {
     isTTY,
     fd,
+    [Symbol.for('rifty.io.process-stdio-sink')]: true,
     write(chunk: string | Uint8Array) {
       const bytes = encodeChunk(chunk);
       // A passed-in view may share storage with its caller; the semantic writer
@@ -662,6 +658,7 @@ export class NodeProcess extends EventEmitter {
         },
         isTTY: false,
         fd: 1,
+        [Symbol.for('rifty.io.process-stdio-sink')]: true,
       }) as NodeStdioWriter;
       this.stderr = Object.assign(new EventEmitter(), {
         write: (chunk: string | Uint8Array) => {
@@ -670,6 +667,7 @@ export class NodeProcess extends EventEmitter {
         },
         isTTY: false,
         fd: 2,
+        [Symbol.for('rifty.io.process-stdio-sink')]: true,
       }) as NodeStdioWriter;
       const reader = makeStdinReader();
       this.stdin = reader.stdin;
