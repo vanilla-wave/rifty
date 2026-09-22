@@ -1228,7 +1228,7 @@ undocumented, not supported. The point is honest fit: tested support, visible ca
 unsupported rows.
 
 Each markdown here cites the covering tests in \`tests/conformance/\` and \`tests/integration/\` for a
-Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\`/\`sass-embedded.md\`/\`vite-command.md\` are rendered by \`pnpm compat:generate\`
+Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\`/\`esbuild-js-api.md\`/\`sass-embedded.md\`/\`vite-command.md\` are rendered by \`pnpm compat:generate\`. \`vitest.md\` is hand-written.
 from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
 from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-test-result-sink\`.
 
@@ -1244,6 +1244,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [sass-embedded.md](./sass-embedded.md) — exact sass-embedded 1.100.0 facade over the exact pure-JS Sass twin; direct construction, initialized-compiler reflection, CLI/watch/types gaps, and the sync-importer divergence stay visible (ADR-0344)
 - [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [vite-command.md](./vite-command.md) — playground \`vite\` command through the installed \`.bin\` CLI (ADR-0174)
+- [vitest.md](./vitest.md) — \`vitest run\` for vitest 4.1.11 and vite 8.0.16, both pools, with \`vitest.config.ts\` and TypeScript tests
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

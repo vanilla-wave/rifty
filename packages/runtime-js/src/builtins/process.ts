@@ -11,9 +11,8 @@
  * `Promise.prototype.then` in the realm so every then-callback drains pending
  * nextTicks before firing — gated to Node workers at the pre-entry seam (WASI
  * realms leave `then` native).
- * Limitation: code that captured the original `.then` before our patch (via
- * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
- * real package breaks.
+ * Limitation: code that captured the original `.then` before the patch bypasses
+ * the drain. Acceptable for M3; revisit if a real package breaks.
  */
 import {
   type IpcFrame,
@@ -555,13 +554,13 @@ export class NodeProcess extends EventEmitter {
   #controlClosed = false;
   #publicIpc = false;
   #jsonIpc = false;
+  #forkIpc = false;
   #ipcKeepaliveHeld = false;
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
   #descendantAuthority: NodeProcessDescendantAuthority | null = null;
-  // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
-  // in order on the first listener; mirrors makeStdinReader's pending buffer.
+  // Pre-listener `'message'` frames, flushed in order (ADR-0045).
   readonly #ipcBacklog: unknown[] = [];
 
   constructor(spec?: KernelProcessSpec) {
@@ -646,6 +645,7 @@ export class NodeProcess extends EventEmitter {
       } else {
         this.#publicIpc = true;
         this.#jsonIpc = launch?.kind === 'program' && launch.ipc !== 'advanced';
+        this.#forkIpc = launch?.kind === 'program';
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -1048,7 +1048,7 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const hold = this.#publicIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    const hold = this.#forkIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
     if (hold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = hold;
     if (hold) refEventLoop();
