@@ -19,7 +19,10 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
-import { registerNodeEvalDrainLifecycle } from '../internal/event-loop-keepalive.ts';
+import {
+  registerNodeEvalDrainLifecycle,
+  trackKeepalivePromise,
+} from '../internal/event-loop-keepalive.ts';
 import { ModuleLoadError } from '../module-loader/errors.ts';
 import {
   type ModuleLoader,
@@ -240,7 +243,9 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     });
     return;
   }
+  Reflect.set(globalThis, '__riftyTrackCliPromise', trackKeepalivePromise);
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
+  preloadExecArgv(loader, opts.entryPath);
   try {
     if (opts.bin) {
       const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));
@@ -266,5 +271,18 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     // (backlog/runtime-js/node-entry-miss-node-shape). All other throws are
     // re-raised unchanged.
     throw asNodePrintedError(err);
+  }
+}
+
+/** Node `--require` from the child `process.execArgv`, before the entry. */
+function preloadExecArgv(loader: ModuleLoader, entryPath: string): void {
+  const argv = (globalThis as { process?: { execArgv?: readonly string[] } }).process?.execArgv;
+  if (!argv) return;
+  for (let index = 0; index < argv.length; index++) {
+    if (argv[index] !== '--require') continue;
+    const specifier = argv[index + 1];
+    index += 1;
+    if (specifier === undefined) continue;
+    loader.require(specifier, entryPath);
   }
 }

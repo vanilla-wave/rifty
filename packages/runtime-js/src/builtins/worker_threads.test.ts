@@ -486,7 +486,7 @@ globalThis.onmessage = ({ data }) => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it('rejects an explicit execArgv override before allocating a worker thread', async () => {
+  it('rejects a nonempty explicit execArgv override before allocating a worker thread', async () => {
     _resetThreadIdCounterForTests();
     const spawn = vi
       .spyOn(globalProcessManager, 'spawnWorker')
@@ -497,7 +497,7 @@ globalThis.onmessage = ({ data }) => {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
 
-    expect(() => new Worker('/workspace/worker.mjs', { execArgv: [] })).toThrow(
+    expect(() => new Worker('/workspace/worker.mjs', { execArgv: ['--inspect'] })).toThrow(
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'worker_threads.Worker.execArgv',

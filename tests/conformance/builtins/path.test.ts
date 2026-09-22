@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { loadBuiltin } from '../../../packages/runtime-js/src/builtins/index.ts';
 import path from '../../../packages/runtime-js/src/builtins/path.ts';
 
 describe('node:path', () => {
@@ -70,5 +71,13 @@ describe('node:path', () => {
     expect(path.isAbsolute('x')).toBe(false);
     expect(path.sep).toBe('/');
     expect(path.delimiter).toBe(':');
+  });
+  it('registers node:path/posix and node:path/win32 as the posix namespace', () => {
+    const posix = loadBuiltin('path/posix') as typeof path;
+    const win32 = loadBuiltin('path/win32') as typeof path;
+    expect(posix.join('a', 'b')).toBe('a/b');
+    expect(win32.join('a', 'b')).toBe('a/b');
+    expect(posix).toBe(path.posix);
+    expect(win32).toBe(path.win32);
   });
 });

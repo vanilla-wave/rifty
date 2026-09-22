@@ -1,4 +1,5 @@
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
+import { trackUnawaitedCliAction } from './cli-action-keepalive.ts';
 import { ModuleLoadError } from './errors.ts';
 import { transformEsm } from './esm-ast.ts';
 import { syncTransformCeiling } from './esm-job-state.ts';
@@ -96,6 +97,7 @@ function compileEsmFactory(
   asyncBody: boolean,
 ): EsmFactory {
   const helper = transformed.helpers;
+  const body = trackUnawaitedCliAction(transformed.body);
   try {
     return new Function(
       helper.dynamicImport,
@@ -110,7 +112,7 @@ function compileEsmFactory(
       helper.metaResolve,
       'Function',
       helper.webAssembly,
-      `const ${helper.runtimeObject} = Object; return (${asyncBody ? 'async ' : ''}function* () {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody} yield;\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
+      `const ${helper.runtimeObject} = Object; return (${asyncBody ? 'async ' : ''}function* () {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody} yield;\n${body}\n})();\n//# sourceURL=${resolved.id}`,
     ) as EsmFactory;
   } catch (error) {
     const message = (error as Error).message ?? String(error);
@@ -135,6 +137,7 @@ function compileDirectEsmFactory(
   transformed: PreparedEsm['transformed'],
 ): EsmDirectFactory {
   const helper = transformed.helpers;
+  const body = trackUnawaitedCliAction(transformed.body);
   try {
     return new Function(
       helper.dynamicImport,
@@ -151,7 +154,7 @@ function compileDirectEsmFactory(
       helper.webAssembly,
       `const ${helper.runtimeObject} = Object; return (async function () {
 const ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody}
-${transformed.body}
+${body}
 })();
 //# sourceURL=${resolved.id}`,
     ) as EsmDirectFactory;

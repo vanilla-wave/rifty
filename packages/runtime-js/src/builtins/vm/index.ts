@@ -13,6 +13,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { recordDivergence } from '../../telemetry/divergence-sink.ts';
 import { selectEngine } from './engine-config.ts';
+import { registerVmStackOffset } from './stack-offsets.ts';
 import {
   type CompiledScript,
   type ContextCodeGeneration,
@@ -193,11 +194,8 @@ function assertSupportedRunOptions(options: RunningScriptOptions, feature: strin
 
 function assertSupportedScriptOptions(options: ScriptOptions, feature: string): void {
   assertSupportedRunOptions(options, feature);
-  if (options.lineOffset !== undefined && options.lineOffset !== 0) {
-    throw new NotImplementedError(`${feature}.lineOffset`);
-  }
-  if (options.columnOffset !== undefined && options.columnOffset !== 0) {
-    throw new NotImplementedError(`${feature}.columnOffset`);
+  if (options.filename) {
+    registerVmStackOffset(options.filename, options.lineOffset ?? 0, options.columnOffset ?? 0);
   }
   if (options.cachedData !== undefined) {
     throw new NotImplementedError(`${feature}.cachedData`);

@@ -55,12 +55,27 @@ export function resolutionOrder(esm: boolean): FileDirResolutionOrder {
   return esm ? IMPORT_RESOLUTION : REQUIRE_RESOLUTION;
 }
 
-export type ResolutionCondition = 'node' | 'default' | 'import' | 'require' | 'module-sync';
+export type ResolutionCondition = string;
+
+function cliConditions(): readonly string[] {
+  const argv = (globalThis as { process?: { execArgv?: readonly string[] } }).process?.execArgv;
+  if (!argv) return [];
+  const conditions: string[] = [];
+  for (let index = 0; index < argv.length; index++) {
+    if (argv[index] !== '--conditions') continue;
+    const value = argv[index + 1];
+    if (value !== undefined) conditions.push(value);
+    index += 1;
+  }
+  return conditions;
+}
 
 export function activeConditions(esm: boolean): readonly ResolutionCondition[] {
-  return esm
-    ? (['node', 'import', 'module-sync', 'default'] as const)
-    : (['node', 'require', 'module-sync', 'default'] as const);
+  const base = esm
+    ? ['node', 'import', 'module-sync', 'default']
+    : ['node', 'require', 'module-sync', 'default'];
+  const extra = cliConditions();
+  return extra.length === 0 ? base : [...extra, ...base];
 }
 
 /** Node's ambiguous `.js` syntax detection after package-scope classification. */

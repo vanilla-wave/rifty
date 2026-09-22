@@ -2,6 +2,7 @@ import { NotImplementedError } from '@riftydev/io';
 import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
+import * as symbolKey from './symbol-key-guard.ts';
 
 interface GuardNodeShape {
   readonly type: string;
@@ -387,6 +388,7 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
           updateGuardMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateGuardMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
         }
+        symbolKey.noteSymbolConst(topGuardScope(ctx), n, decl, ctx.scopes);
       }
       return;
     }
@@ -605,6 +607,7 @@ function walkGuardForInOf(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): void 
   ) {
     declareGuardVariable(topGuardScope(ctx), left);
   }
+  if (left?.type === 'VariableDeclaration') symbolKey.noteLoopKey(topGuardScope(ctx), left);
   if (left?.type === 'VariableDeclaration') walkEsmFunctionGuard(left, ctx);
   else walkGuardAssignmentTarget(left, ctx);
   walkEsmFunctionGuard(node.right, ctx);
@@ -1257,8 +1260,8 @@ function isGlobalFunctionReadMember(node: GuardNodeShape, ctx: EsmFunctionGuardC
 
 function isGlobalFunctionWriteMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
-  const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  const key = (node as unknown as { property?: unknown }).property;
+  return symbolKey.keyFn(staticPropertyName(node), isComputedMember(node), key, ctx.scopes);
 }
 
 function guardExpressionMayBeHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
@@ -1313,7 +1316,7 @@ function isReflectGetFunctionCall(node: GuardNodeShape, ctx: EsmFunctionGuardCtx
     return false;
   }
   if (!isGlobalObjectExpression(args[0], ctx)) return false;
-  return propertyMayBeFunction(args[1]);
+  return propertyMayBeFunction(args[1], ctx.scopes);
 }
 
 function isReflectGetDerivedFunctionConstructorCall(
@@ -1466,22 +1469,22 @@ function isGlobalFunctionMutationCall(node: GuardNodeShape, ctx: EsmFunctionGuar
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return propertyMayBeFunction(args[1], ctx.scopes);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return propertyMayBeFunction(args[0], ctx.scopes);
   }
 
   return false;
 }
 
-function propertyMayBeFunction(node: unknown): boolean {
+function propertyMayBeFunction(node: unknown, scopes: EsmFunctionGuardCtx['scopes']): boolean {
   const value = literalString(node);
-  return value === 'Function' || value === undefined;
+  return symbolKey.mayBeFunctionKey(node, scopes, value);
 }
 
 function propertyMayBeConstructor(node: unknown): boolean {

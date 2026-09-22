@@ -262,6 +262,11 @@ interface PipeableWritable extends EventEmitter {
   emit: EventEmitter['emit'];
 }
 
+function isProcessStdioSink(dest: object): boolean {
+  const fd = (dest as { fd?: unknown }).fd;
+  return fd === 1 || fd === 2;
+}
+
 /** Node's `AbortError` shape (`name`/`code`), used when a web cancel carries no
  *  reason and to wrap a premature source close — mirrors `Readable.toWeb`. */
 function abortError(cause?: unknown): Error {
@@ -765,7 +770,9 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
       this.resume();
     };
     const onEnd = (): void => {
-      if (endOnFinish) dest.end();
+      // Node never ends process.stdout/stderr from pipe(); those sinks are fd 1/2.
+      if (!endOnFinish || isProcessStdioSink(dest)) return;
+      dest.end();
     };
     const onSourceError = (err: unknown): void => {
       dest.emit('error', err);

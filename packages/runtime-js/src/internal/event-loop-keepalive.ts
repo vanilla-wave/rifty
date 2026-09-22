@@ -496,10 +496,34 @@ export function installUnhandledErrorTrap(
  * served-worker fallback emits the diagnostic and exit. Other realms retain
  * default reporting while their run-to-completion drain records the reason.
  */
+function processHandled(event: string, ...args: unknown[]): boolean {
+  const proc = (
+    globalThis as unknown as {
+      process?: {
+        listenerCount?: (name: string) => number;
+        emit?: (name: string, ...values: unknown[]) => boolean;
+      } & Record<symbol, unknown>;
+    }
+  ).process;
+  // Only the rifty process carries this symbol. Host Node's process must keep its own trap.
+  if (typeof proc?.[Symbol.for('rifty.runtime-js.process-terminal-bootstrap.v1')] !== 'function') {
+    return false;
+  }
+  if (typeof proc.listenerCount !== 'function' || typeof proc.emit !== 'function') return false;
+  if (proc.listenerCount(event) === 0) return false;
+  proc.emit(event, ...args);
+  return true;
+}
+
 export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
+    const promise = (ev as { promise?: unknown }).promise;
+    if (processHandled('unhandledRejection', ev.reason, promise)) {
+      ev.preventDefault?.();
+      return;
+    }
     if (beginNodeEvalUnhandled(ev.reason, 'rejection')) {
       ev.preventDefault?.();
       return;

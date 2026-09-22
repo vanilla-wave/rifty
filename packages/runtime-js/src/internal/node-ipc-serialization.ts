@@ -1,4 +1,26 @@
 /** Node child_process IPC defaults to JSON serialization. */
+export function transmitNodeIpcMessage(
+  message: unknown,
+  serialization: 'json' | 'advanced',
+): unknown {
+  if (serialization === 'json') return serializeNodeIpcMessage(message);
+  if (message === undefined) {
+    throw Object.assign(new TypeError('The "message" argument must be specified'), {
+      code: 'ERR_MISSING_ARGS',
+    });
+  }
+  const type = typeof message;
+  if (type === 'function' || type === 'symbol' || type === 'bigint') {
+    throw Object.assign(
+      new TypeError(
+        'The "message" argument must be one of type string, object, number, or boolean',
+      ),
+      { code: 'ERR_INVALID_ARG_TYPE' },
+    );
+  }
+  return message;
+}
+
 export function serializeNodeIpcMessage(message: unknown): unknown {
   if (message === undefined) {
     throw Object.assign(new TypeError('The "message" argument must be specified'), {

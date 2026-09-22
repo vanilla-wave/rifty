@@ -6,6 +6,8 @@
  */
 
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import type { EventEmitter } from './events.ts';
+import { NodeProcess, riftyProcess } from './process.ts';
 
 type ImmediateHandle = { readonly id: number };
 type HostTimeout = ReturnType<typeof globalThis.setTimeout>;
@@ -133,6 +135,21 @@ class KeepaliveTimerHandle {
   }
 }
 
+function reportUncaughtException(err: unknown): void {
+  const active = (globalThis as { process?: unknown }).process;
+  const target = (active instanceof NodeProcess ? active : riftyProcess) as EventEmitter;
+  if (target.listenerCount('uncaughtException') === 0) throw err;
+  target.emit('uncaughtException', err);
+}
+
+function runTimerCallback(fn: (...args: unknown[]) => void, args: unknown[]): void {
+  try {
+    fn(...args);
+  } catch (err) {
+    reportUncaughtException(err);
+  }
+}
+
 export function setTimeout(
   fn: (...a: unknown[]) => void,
   ms?: number,
@@ -143,7 +160,7 @@ export function setTimeout(
   const raw = hostSetTimeout(
     (...a: unknown[]) => {
       if (!box.handle?.fireTimeout()) return;
-      fn(...a);
+      runTimerCallback(fn, a);
     },
     ms,
     ...args,
@@ -178,7 +195,7 @@ export function setInterval(
   const raw = hostSetInterval(
     (...a: unknown[]) => {
       if (!box.handle?.shouldRunInterval()) return;
-      fn(...a);
+      runTimerCallback(fn, a);
     },
     ms,
     ...args,

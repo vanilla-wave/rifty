@@ -7,7 +7,7 @@
  * tests; it is not used for threaded WASI packages such as Rolldown in-browser.
  */
 
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, Readable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type SpawnWorkerSpec,
@@ -17,6 +17,7 @@ import {
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
@@ -32,12 +33,15 @@ import {
 } from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
+import { assertSupportedWorkerExecArgv } from './worker-exec-argv.ts';
 
 interface WorkerOptions {
   workerData?: unknown;
   env?: Record<string, string | undefined>;
   eval?: boolean;
   execArgv?: readonly string[];
+  stdout?: boolean;
+  stderr?: boolean;
 }
 
 function snapshotWorkerEnvironment(
@@ -100,6 +104,10 @@ export class Worker extends EventEmitter {
   /** ADR-0011 phase 2: when present, backed by a real `kernel.spawnWorker`
    * realm and `terminate` routes through it. */
   private workerHandle: ProcessHandle | null = null;
+  stdout: Readable | null = null;
+  stderr: Readable | null = null;
+  #loopHeld = false;
+  readonly #execArgv: readonly string[];
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
@@ -107,15 +115,24 @@ export class Worker extends EventEmitter {
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
-    if (
-      Object.prototype.hasOwnProperty.call(opts, 'execArgv') ||
-      (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0)
-    ) {
+    const hasOwnExecArgv = Object.prototype.hasOwnProperty.call(opts, 'execArgv');
+    if (hasOwnExecArgv) {
+      if (!Array.isArray(opts.execArgv)) {
+        throw new NotImplementedError(
+          'worker_threads.Worker.execArgv',
+          'execArgv must be an array of strings',
+        );
+      }
+      assertSupportedWorkerExecArgv(opts.execArgv);
+      this.#execArgv = Object.freeze([...opts.execArgv]);
+    } else if (inheritedLaunch?.kind === 'eval' && inheritedLaunch.execArgv.length > 0) {
       // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
       throw new NotImplementedError(
         'worker_threads.Worker.execArgv',
         'node-entry v3 cannot preserve worker-thread execArgv identity',
       );
+    } else {
+      this.#execArgv = Object.freeze([]);
     }
     const processContext = snapshotNodeProcessContext();
     const env =
@@ -127,6 +144,9 @@ export class Worker extends EventEmitter {
     this.workerData = opts.workerData;
     this.processContext = processContext;
     this.env = env;
+    if (opts.stdout === true) this.stdout = new Readable({ read() {} });
+    if (opts.stderr === true) this.stderr = new Readable({ read() {} });
+    this.#holdLoop();
     // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):
     // synchronous allocation cannot close prompt-start while entry loading
     // still needs parent-serviced remote FS.
@@ -175,6 +195,7 @@ export class Worker extends EventEmitter {
         remoteFs: true,
         threadId: this.threadId,
         ...(encodedWorkerData === undefined ? {} : { workerDataJson: encodedWorkerData }),
+        ...(this.#execArgv.length === 0 ? {} : { execArgv: this.#execArgv }),
       });
       if (this.processContext === null) {
         throw new Error('worker_threads.Worker: kernel Node process context is unavailable');
@@ -200,8 +221,8 @@ export class Worker extends EventEmitter {
       );
       this.workerHandle = handle;
       if (handle.kind === 'worker') {
-        handle.stdout().on('data', (chunk) => this.emitToOwner('stdout', chunk));
-        handle.stderr().on('data', (chunk) => this.emitToOwner('stderr', chunk));
+        handle.stdout().on('data', (chunk) => this.#captureStdio(this.stdout, 'stdout', chunk));
+        handle.stderr().on('data', (chunk) => this.#captureStdio(this.stderr, 'stderr', chunk));
         handle.on('message', (msg) => this.emitWorkerMessage(msg));
         this.flushKernelMessages(handle);
         // Node emits 'online' once the worker realm exists. Construction-start
@@ -327,11 +348,30 @@ export class Worker extends EventEmitter {
   }
 
   ref(): this {
+    this.#holdLoop();
     return this;
   }
 
   unref(): this {
+    this.#releaseLoop();
     return this;
+  }
+
+  #holdLoop(): void {
+    if (this.#loopHeld || this.exited) return;
+    this.#loopHeld = true;
+    refEventLoop();
+  }
+
+  #releaseLoop(): void {
+    if (!this.#loopHeld) return;
+    this.#loopHeld = false;
+    unrefEventLoop();
+  }
+
+  #captureStdio(stream: Readable | null, event: string, chunk: unknown): void {
+    if (stream) stream.push(chunk);
+    else this.emitToOwner(event, chunk);
   }
 
   private emitWorkerMessage(msg: unknown): void {
@@ -375,6 +415,9 @@ export class Worker extends EventEmitter {
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
+    this.#releaseLoop();
+    this.stdout?.push(null);
+    this.stderr?.push(null);
     this.emitToOwner('exit', code);
   }
 

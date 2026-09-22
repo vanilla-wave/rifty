@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `Readable.pipe` into fd 1 or 2 does not call `dest.end()`, so a pipe into process stdout/stderr leaves the stream writable.
+
 - Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
 
 - Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,

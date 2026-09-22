@@ -308,6 +308,8 @@ export interface SpawnWorkerChildOptions {
   readonly cwd?: string;
   readonly env?: Record<string, string>;
   readonly fork: boolean;
+  readonly serialization?: 'json' | 'advanced';
+  readonly execArgv?: readonly string[];
 }
 
 /** Translate a validated `node <script>` launch to one real remote-FS Worker. */
@@ -324,8 +326,9 @@ export function spawnWorkerChild(
     kind: 'program',
     bin: false,
     remoteFs: true,
-    ipc: options.fork ? 'json' : 'none',
+    ipc: options.serialization === 'advanced' ? 'advanced' : options.fork ? 'json' : 'none',
     nodeServe: true,
+    ...(options.execArgv === undefined ? {} : { execArgv: options.execArgv }),
   });
   const spec: SpawnWorkerSpec = {
     entry,

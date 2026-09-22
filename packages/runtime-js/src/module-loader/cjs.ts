@@ -10,6 +10,7 @@ import { createFunctionImportRouting } from './function-import-routing.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
+import * as symbolKey from './symbol-key-guard.ts';
 
 const jsonStringifyPrimordial = JSON.stringify;
 const objectDefinePropertyPrimordial = Object.defineProperty;
@@ -571,6 +572,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
           updateMaybeDerivedFunctionAliasesFromPatternValue(declId, decl.init, ctx);
           updateMaybeEvalAliasesFromPatternValue(declId, decl.init, ctx);
         }
+        symbolKey.noteSymbolConst(topScope(ctx), n, decl, ctx.scopes);
       }
       return;
     }
@@ -823,6 +825,7 @@ function walkForInOf(node: AnyNodeShape, ctx: FunctionRewriteCtx): void {
   ) {
     declareVariable(topScope(ctx), left);
   }
+  if (left?.type === 'VariableDeclaration') symbolKey.noteLoopKey(topScope(ctx), left);
   if (left?.type === 'VariableDeclaration') walkFunctionReferences(left, ctx);
   else walkAssignmentTarget(left, ctx);
   walkFunctionReferences(node.right, ctx);
@@ -1445,8 +1448,8 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
-  const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  const key = (node as unknown as { property?: unknown }).property;
+  return symbolKey.keyFn(staticPropertyName(node), isComputedMember(node), key, ctx.scopes);
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1501,7 +1504,7 @@ function isReflectGetFunctionCall(node: AnyNodeShape, ctx: FunctionRewriteCtx): 
     return false;
   }
   if (!isGlobalObjectExpression(args[0], ctx)) return false;
-  return propertyMayBeFunction(args[1]);
+  return propertyMayBeFunction(args[1], ctx.scopes);
 }
 
 function isReflectGetDerivedFunctionConstructorCall(
@@ -1659,22 +1662,22 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return propertyMayBeFunction(args[1], ctx.scopes);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return propertyMayBeFunction(args[0], ctx.scopes);
   }
 
   return false;
 }
 
-function propertyMayBeFunction(node: unknown): boolean {
+function propertyMayBeFunction(node: unknown, scopes: FunctionRewriteCtx['scopes']): boolean {
   const value = literalString(node);
-  return value === 'Function' || value === undefined;
+  return symbolKey.mayBeFunctionKey(node, scopes, value);
 }
 
 function propertyMayBeConstructor(node: unknown): boolean {

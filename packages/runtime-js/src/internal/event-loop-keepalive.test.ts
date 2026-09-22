@@ -541,6 +541,42 @@ describe('event-loop keepalive', () => {
 });
 
 describe('unhandledrejection trap', () => {
+  it('delivers the rejection to a rifty process listener and does not record it', async () => {
+    const previous = globalThis.process;
+    const seen: unknown[] = [];
+    globalThis.process = {
+      [Symbol.for('rifty.runtime-js.process-terminal-bootstrap.v1')]: () => {},
+      listenerCount: (name: string) => (name === 'unhandledRejection' ? 1 : 0),
+      emit: (name: string, reason: unknown) => {
+        if (name === 'unhandledRejection') seen.push(reason);
+        return true;
+      },
+    } as unknown as typeof globalThis.process;
+    try {
+      const listeners: Record<string, (ev: unknown) => void> = {};
+      installUnhandledRejectionTrap({
+        addEventListener(type: string, cb: (ev: unknown) => void) {
+          listeners[type] = cb;
+        },
+      } as unknown as typeof self);
+      let prevented = false;
+      listeners.unhandledrejection?.({
+        reason: new Error('rej'),
+        preventDefault: () => {
+          prevented = true;
+        },
+      });
+      expect(prevented).toBe(true);
+      expect(seen.map((reason) => (reason as Error).message)).toEqual(['rej']);
+      const queue: Array<() => void> = [];
+      const drained = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+      queue.shift()?.();
+      await expect(drained).resolves.toBeUndefined();
+    } finally {
+      globalThis.process = previous;
+    }
+  });
+
   it('records the rejection reason so awaitDrain surfaces it (does not swallow / preventDefault)', () => {
     const listeners: Record<string, (ev: unknown) => void> = {};
     const target = {

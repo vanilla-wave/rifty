@@ -1622,9 +1622,9 @@ const fs = {
   Dir,
   createReadStream,
   createWriteStream,
-  // Node-named stream classes: `destroy`/`send` probe `stream instanceof
-  // fs.ReadStream` on cleanup — an absent class makes that probe throw.
-  ReadStream: FileReadStream,
+  ReadStream: FileReadStream, // instanceof fs.ReadStream
+  // biome-ignore format: pinned file — keep this throw on one line
+  statfsSync(): never { throw new NotImplementedError('fs.statfsSync'); },
   WriteStream: FileWriteStream,
   watch,
   watchFile,

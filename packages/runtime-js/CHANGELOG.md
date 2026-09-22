@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Keep a live `worker_threads.Worker` on the event loop until exit or `unref()`, deliver `uncaughtException` / `unhandledRejection` to a user listener and continue, and make `process.exit()` with no argument use `process.exitCode` (ADR-0441).
+- A bundled cac `runMatchedCommand()` action promise stays on the event loop until it settles, the same tracker the Vite CLI already uses.
+- An IPC child with `serialization: 'advanced'` stays alive while it has `process.on('message')` listeners, same as JSON IPC.
+- Accept `child_process` `serialization: 'advanced'` structured-clone IPC, empty `Worker` `execArgv`, and Worker `stdout`/`stderr` streams.
+- An explicit Worker or `fork` `execArgv` of `--experimental-import-meta-resolve`, `--require`, and `--conditions` reaches the child: `--require` preloads before the entry, `--conditions` joins module resolution. Other flags stay a named `NotImplementedError`.
+- Shift `vm` `lineOffset` / `columnOffset` stack locations, link prototype builtin exports (`process.cwd`, `path/posix`), and throw named `NotImplementedError` for `fs.statfsSync`, `child_process.spawnSync`, and `process.memoryUsage`.
+- A const `Symbol` / `Symbol.for` computed key is not treated as a global `Function` write.
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

@@ -29,7 +29,7 @@ import {
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import { transmitNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
@@ -55,6 +55,7 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { assertSupportedWorkerExecArgv } from './worker-exec-argv.ts';
 
 // ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
 // no default handlers after ADR-0039 — execSync is Node-API knowledge and lives
@@ -88,6 +89,7 @@ interface SpawnOptions {
   stdio?: SpawnStdio;
   silent?: boolean;
   serialization?: 'json' | 'advanced';
+  execArgv?: readonly string[];
   /** Internal flag set by `fork()` to enable IPC. */
   __fork?: boolean;
 }
@@ -128,6 +130,7 @@ class ChildProcess extends EventEmitter {
   /** Bus the child's script subscribes to for parent-sent `'childMessage'`
    * events. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
+  readonly #ipcSerialization: 'json' | 'advanced';
 
   constructor(
     handle: ProcessHandle,
@@ -139,11 +142,13 @@ class ChildProcess extends EventEmitter {
       readonly expose: readonly [boolean, boolean, boolean];
       readonly slots: number;
     },
+    ipcSerialization: 'json' | 'advanced' = 'json',
   ) {
     super();
     this.handle = handle;
     this.ownerProcess = (globalThis as { process?: unknown }).process;
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
+    this.#ipcSerialization = ipcSerialization;
     this.pid = handle.pid;
     this.stdin = (streams.expose[0] ? streams.stdin : null) as unknown as Writable;
     this.stdout = (streams.expose[1] ? streams.stdout : null) as unknown as Readable;
@@ -177,7 +182,7 @@ class ChildProcess extends EventEmitter {
           throw new NotImplementedError('child_process.send.arguments');
         }
         if (!this.connected) return false;
-        const serialized = serializeNodeIpcMessage(message);
+        const serialized = transmitNodeIpcMessage(message, this.#ipcSerialization);
         if (handle.kind === 'worker') return handle.send(serialized);
         queueMicrotask(() => this.inboundIpc.emit('childMessage', serialized));
         return true;
@@ -189,7 +194,7 @@ class ChildProcess extends EventEmitter {
       };
       if (handle.kind === 'worker') {
         handle.on('message', (message) => {
-          this.emitToOwner('message', serializeNodeIpcMessage(message));
+          this.emitToOwner('message', transmitNodeIpcMessage(message, this.#ipcSerialization));
         });
         handle.on('disconnect', () => this.finishIpc());
       }
@@ -321,12 +326,8 @@ function rejectedChildCwd(cwd: string): ChildProcess | null {
 }
 
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  if (opts.serialization === 'advanced') {
-    throw new NotImplementedError(
-      'child_process.serialization.advanced',
-      "Node's advanced IPC serializer is not implemented; use default JSON",
-    );
-  }
+  if (opts.execArgv !== undefined) assertSupportedWorkerExecArgv(opts.execArgv);
+  const ipcSerialization = opts.serialization === 'advanced' ? 'advanced' : 'json';
   const stdio = resolveWorkerStdio(
     opts.stdio,
     activeProcessStdio(),
@@ -351,15 +352,22 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
       cwd: opts.cwd,
       env: opts.env,
       fork: opts.__fork === true,
+      serialization: ipcSerialization,
+      ...(opts.execArgv === undefined ? {} : { execArgv: opts.execArgv }),
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
-    const child = new ChildProcess(handle, stdio.ipc, {
-      stdin: handle.stdin(),
-      stdout: handle.stdout(),
-      stderr: handle.stderr(),
-      expose: stdio.expose,
-      slots: stdio.slots,
-    });
+    const child = new ChildProcess(
+      handle,
+      stdio.ipc,
+      {
+        stdin: handle.stdin(),
+        stdout: handle.stdout(),
+        stderr: handle.stderr(),
+        expose: stdio.expose,
+        slots: stdio.slots,
+      },
+      ipcSerialization,
+    );
     forwardWorkerStdio(handle, stdio);
     return child;
   }
@@ -372,6 +380,7 @@ function spawnViaSameRealm(
   opts: SpawnOptions,
   stdio: ReturnType<typeof resolveWorkerStdio>,
 ): ChildProcess {
+  const ipcSerialization = opts.serialization === 'advanced' ? 'advanced' : 'json';
   warnSameRealmFallbackOnce();
   // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
   // it's registered. A mutable container lets the handler read them on the next
@@ -428,13 +437,18 @@ function spawnViaSameRealm(
   wiring.handle = handle;
   handle.on('stdout', (chunk) => stdout.push(chunk));
   handle.on('stderr', (chunk) => stderr.push(chunk));
-  const child = new ChildProcess(handle, stdio.ipc, {
-    stdin,
-    stdout,
-    stderr,
-    expose: stdio.expose,
-    slots: stdio.slots,
-  });
+  const child = new ChildProcess(
+    handle,
+    stdio.ipc,
+    {
+      stdin,
+      stdout,
+      stderr,
+      expose: stdio.expose,
+      slots: stdio.slots,
+    },
+    ipcSerialization,
+  );
   wiring.child = child;
   if (stdio.stdout) {
     stdout.on('data', (chunk) => stdio.stdout?.write(chunk));
@@ -658,6 +672,10 @@ Object.defineProperty(execFile, PROMISIFY_CUSTOM, {
   value: promisifiedExecFile,
 });
 
+export function spawnSync(): never {
+  throw new NotImplementedError('child_process.spawnSync');
+}
+
 export function fork(
   modulePath: string,
   args: string[] = [],
@@ -673,5 +691,13 @@ export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+const child_process = {
+  spawn,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  spawnSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

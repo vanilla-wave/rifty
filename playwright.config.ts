@@ -28,6 +28,7 @@ const HEAVY_SPECS = [
   '**/ai-mode.spec.ts',
   '**/preset-deep-link.spec.ts',
   '**/webpack-dev-server.spec.ts',
+  '**/vitest-run.spec.ts',
 ];
 
 export default defineConfig({

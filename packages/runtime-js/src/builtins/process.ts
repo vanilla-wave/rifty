@@ -1,6 +1,5 @@
 /**
  * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
- *
  * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0045 fork-IPC)
  * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
  * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
@@ -625,7 +624,7 @@ export class NodeProcess extends EventEmitter {
       this.ppid = spec.ppid;
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
-      this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
+      this.execArgv = launch?.execArgv ? [...launch.execArgv] : [];
       // Copy so per-process env mutation does not leak into the published
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
@@ -646,7 +645,7 @@ export class NodeProcess extends EventEmitter {
         this.#wireWorkerIpc(spec.stdio.ipc);
       } else {
         this.#publicIpc = true;
-        this.#jsonIpc = launch?.kind === 'program';
+        this.#jsonIpc = launch?.kind === 'program' && launch.ipc !== 'advanced';
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -746,11 +745,13 @@ export class NodeProcess extends EventEmitter {
   uptime(): number {
     return performance.now() / 1000;
   }
-
-  exit(code: unknown = 0): never {
-    const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
+  // biome-ignore format: pinned file — keep this throw on one line
+  memoryUsage(): never { throw new NotImplementedError('process.memoryUsage'); }
+  exit(...args: unknown[]): never {
+    const c = args.length === 0 ? this.#exitCode : coerceExitCode(args[0]);
     this.#exitCode = c;
     const exitCode = toUint8ExitCode(c);
+    this.emit('exit', exitCode);
     const exitError = Object.assign(new Error(`process.exit(${c})`), {
       code: RIFTY_PROCESS_EXIT,
       exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
@@ -1047,10 +1048,10 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
-    if (shouldHold === this.#ipcKeepaliveHeld) return;
-    this.#ipcKeepaliveHeld = shouldHold;
-    if (shouldHold) refEventLoop();
+    const hold = this.#publicIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    if (hold === this.#ipcKeepaliveHeld) return;
+    this.#ipcKeepaliveHeld = hold;
+    if (hold) refEventLoop();
     else unrefEventLoop();
   }
 

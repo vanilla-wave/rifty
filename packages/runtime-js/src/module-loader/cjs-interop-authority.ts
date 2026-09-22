@@ -28,6 +28,18 @@ export interface CjsInteropAuthority {
   invalidate(id?: string): void;
 }
 
+/** Own keys plus prototype methods. Class-backed builtins (`process`) hide Node's named exports on the prototype. */
+function addBuiltinExportNames(names: Set<string>, value: object): void {
+  for (const name of Object.keys(value)) names.add(name);
+  let proto = Object.getPrototypeOf(value) as object | null;
+  while (proto !== null && proto !== Object.prototype && proto !== Function.prototype) {
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (name !== 'constructor') names.add(name);
+    }
+    proto = Object.getPrototypeOf(proto) as object | null;
+  }
+}
+
 /** Owns the CJS import job, static surface, and primed namespace as one cache generation. */
 export function createCjsInteropAuthority(options: {
   readonly registry: ModuleRegistry;
@@ -66,7 +78,7 @@ export function createCjsInteropAuthority(options: {
     }
     node.names.add('default');
     if (resolved.kind === 'builtin') {
-      for (const name of Object.keys(loadBuiltin(resolved.id))) node.names.add(name);
+      addBuiltinExportNames(node.names, loadBuiltin(resolved.id));
       return node;
     }
     if (resolved.kind === 'json') {

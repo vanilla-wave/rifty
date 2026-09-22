@@ -25,13 +25,15 @@ export interface NodeEntryProgramLaunch {
   readonly bin: boolean;
   readonly remoteFs: boolean;
   /** Public Node fork lane. Omitted and `none` are equivalent for non-fork launches. */
-  readonly ipc?: 'none' | 'json';
+  readonly ipc?: 'none' | 'json' | 'advanced';
   /** Host-only physical root behind the child's public `/` namespace. */
   readonly remoteFsRoot?: string;
   readonly nodeServe: boolean;
   readonly previewScope?: string;
   readonly terminal?: NodeEntryTerminalBootstrap;
   readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
+  /** Explicit `fork`/`spawn` `execArgv`. Omitted means the child sees `[]`. */
+  readonly execArgv?: readonly string[];
 }
 
 export interface NodeEntryEvalLaunch {
@@ -55,6 +57,8 @@ export interface NodeEntryWorkerThreadLaunch {
   readonly threadId: number;
   readonly workerDataJson?: string;
   readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
+  /** Explicit `Worker` `execArgv`. Omitted means the worker sees `[]`. */
+  readonly execArgv?: readonly string[];
 }
 
 export type NodeEntryLaunch =
@@ -285,6 +289,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
         'previewScope',
         'terminal',
         'runtimeBindings',
+        'execArgv',
       ],
       'node-entry bootstrap program launch',
     );
@@ -292,8 +297,8 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
     const ipc = optionalOwnField(record, 'ipc');
-    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json') {
-      throw new TypeError('node-entry bootstrap launch.ipc must be none or json');
+    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json' && ipc !== 'advanced') {
+      throw new TypeError('node-entry bootstrap launch.ipc must be none, json, or advanced');
     }
     const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
     const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));
@@ -311,6 +316,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       ...(runtimeBindings === undefined
         ? {}
         : { runtimeBindings: snapshotNodeEntryRuntimeBindings(runtimeBindings) }),
+      ...optionalExecArgv(record),
     });
   }
   if (kind === 'eval') {
@@ -354,7 +360,15 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
   if (kind === 'worker-thread') {
     assertAllowedOwnFields(
       record,
-      ['kind', 'remoteFs', 'remoteFsRoot', 'threadId', 'workerDataJson', 'runtimeBindings'],
+      [
+        'kind',
+        'remoteFs',
+        'remoteFsRoot',
+        'threadId',
+        'workerDataJson',
+        'runtimeBindings',
+        'execArgv',
+      ],
       'node-entry bootstrap worker-thread launch',
     );
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
@@ -384,9 +398,15 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       ...(runtimeBindings === undefined
         ? {}
         : { runtimeBindings: snapshotNodeEntryRuntimeBindings(runtimeBindings) }),
+      ...optionalExecArgv(record),
     });
   }
   throw new TypeError('node-entry bootstrap launch.kind must be program, eval, or worker-thread');
+}
+
+function optionalExecArgv(record: Record<string, unknown>): { execArgv?: readonly string[] } {
+  if (!Object.prototype.hasOwnProperty.call(record, 'execArgv')) return {};
+  return { execArgv: stringArrayOwnField(record, 'execArgv', 'node-entry bootstrap launch') };
 }
 
 function snapshotPayload(value: unknown): NodeEntryBootstrapPayload {

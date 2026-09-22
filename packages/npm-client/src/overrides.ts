@@ -31,20 +31,31 @@ export function resolveOverride(
 ): ResolvedOverrideTarget | null {
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
-  if (userMatch) return { ...parseTarget(userMatch), source: 'user' };
+  if (userMatch) return { ...parseTarget(userMatch, name), source: 'user' };
   const builtin = bakedOverrides[name];
-  if (builtin) return { ...parseTarget(builtin), source: 'baked' };
+  if (builtin) return { ...parseTarget(builtin, name), source: 'baked' };
   return null;
 }
 
-function parseTarget(target: string): { name: string; range: string | null } {
+/** npm's bare value (`"8.0.16"`, `"^1"`) is a range for the overridden name. */
+function isNpmBareVersionRange(spec: string): boolean {
+  if (spec.startsWith('$') || spec.includes('/') || spec.startsWith('@')) return false;
+  return spec === '*' || spec.includes('||') || /^(?:v?\d|[\^~><=])/.test(spec);
+}
+
+function parseTarget(
+  target: string,
+  overriddenName: string,
+): { name: string; range: string | null } {
   // Accept formats:
   //   "bcryptjs"             → name=bcryptjs, range=null (latest)
   //   "bcryptjs@2.x"         → name=bcryptjs, range="2.x"
   //   "npm:bcryptjs@2.x"     → npm alias form, same as above
+  //   "8.0.16" / "^8"        → name=overriddenName, range=the bare spec (npm)
   let str = target;
   if (str.startsWith('npm:')) str = str.slice(4);
   const at = str.lastIndexOf('@');
-  if (at <= 0) return { name: str, range: null };
-  return { name: str.slice(0, at), range: str.slice(at + 1) };
+  if (at > 0) return { name: str.slice(0, at), range: str.slice(at + 1) };
+  if (isNpmBareVersionRange(str)) return { name: overriddenName, range: str };
+  return { name: str, range: null };
 }
