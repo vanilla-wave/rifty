@@ -1,0 +1,102 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS. Merge after final CI and check:pass-binding; independent rerun: 82 unit/resource tests and 2 Chromium scenarios passed on the reviewed SHA.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "4b57e5adab240f3549bb8e3b796d93d9cc71fa95",
+  "unit_goal_source": "PR #350: user-authorized repair of PR #347 first-command refusal and its valid review comments; BASE b1467da1177af47317eb8b72722296f4a99cea63; observed baseline: AiChatPanel classified an undefined resource report before first session creation, then send dispatched the command literally. Authorities: ADR-0442 decisions 1–3, ADR-0440 decision 1, ADR-0424 decisions 2 and 7. RED commit 3c66d1930324de89349c85fce5a8ef75ce57e673; inspected actual unit/browser RED logs and BASE checking criteria under PR-4.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "observable-order: classify after the pending resource read and cancellation/budget checks",
+      "source": "fault-matrix",
+      "trace": "ADR-0442 §1",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:311; tools/agent-bench/src/project-resources.test.ts:843; tools/agent-bench/src/project-resources.test.ts:893; packages/agent/src/session.ts:245",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie: first skill/template command cannot appear executed through literal model forwarding",
+      "source": "fault-matrix",
+      "trace": "User P1 + ADR-0442 §2",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:233; tests/e2e/ai-mode.spec.ts:548",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift: skill and template commands share admission on first/later/reset sends and after reload",
+      "source": "fault-matrix",
+      "trace": "ADR-0442 §1",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:233; tools/agent-bench/src/project-resources.test.ts:311",
+      "note": ""
+    },
+    {
+      "row": "corrupt-input: paths, comments, unknown names and ignored/malformed templates remain literal",
+      "source": "fault-matrix",
+      "trace": "ADR-0442 §1",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:275; tools/agent-bench/src/project-resources.test.ts:361",
+      "note": ""
+    },
+    {
+      "row": "false-fallback: failed startup/reload is visible; explicit reload recovers without a UI resource-event wait",
+      "source": "fault-matrix",
+      "trace": "ADR-0440 §1",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:443; apps/playground/src/ai/AiChatPanel.tsx:303",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache: mutating caller-visible reports cannot rewrite the admission snapshot",
+      "source": "fault-matrix",
+      "trace": "ADR-0440 resource snapshot",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:261; packages/agent/src/session.ts:85; packages/agent/src/session.ts:247",
+      "note": ""
+    },
+    {
+      "row": "Loaded skill/template refusal matches actual pi 0.85.1 expansion, including space-only skill splitting and template whitespace splitting",
+      "source": "acceptance",
+      "trace": "ADR-0442 §1",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:361; packages/agent/src/chat-command.test.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Playground keeps /reload as a local action without a model request; subsequent commands use the reloaded resources",
+      "source": "acceptance",
+      "trace": "ADR-0442 §1 + ADR-0440 §1",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:587; tools/agent-bench/src/project-resources.test.ts:311; apps/playground/src/ai/AiChatPanel.tsx:312",
+      "note": ""
+    },
+    {
+      "row": "Playground displays the existing session error and retains the refused draft for both first command kinds",
+      "source": "acceptance",
+      "trace": "ADR-0442 §3",
+      "status": "pass",
+      "citation": "tests/e2e/ai-mode.spec.ts:548; apps/playground/src/ai/AiChatPanel.tsx:317",
+      "note": ""
+    },
+    {
+      "row": "AgentSession.send preserves Promise settlement and reports unsupported expansion through error/detail, without model requests or transcript entries; later normal sends recover",
+      "source": "public-api",
+      "trace": "ADR-0442 §2",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:233; tools/agent-bench/src/project-resources.test.ts:443; packages/agent/src/session.ts:249",
+      "note": ""
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    { "axis": "Bugs", "verdict": "pass", "findings": [] },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}
