@@ -7,3 +7,4 @@
 - 2026-09-16 — final written-result check pass 3 (fresh read-only reviewer subagent over the working tree on main 51440931a): pass-2 problems resolved; 4 wording/citation problems (Outcome "default config", I4 evidence sentence, vite TS-config proof scope, §Oracle framing) fixed before landing; scope re-check clean → `status: ready`.
 
 - 2026-09-16 — landed refine + FIT set @ f872eb5c0 (reviewed revision for passes 1–3 = this set over main 51440931a).
+- 2026-09-22 — implementation on `vitest-run-in-browser`: `tests/e2e/vitest-run.spec.ts` green (bare override install, failing `vitest run` exits 1, fixed run exits 0, `npm test`, verbose, `--pool=threads`). Final+GREEN not recorded.
