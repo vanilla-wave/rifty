@@ -29,3 +29,20 @@ existing sync-child path if that is a real implementation, else loud.
 ## Challenge
 
 challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved in goal.md)
+
+## Reference contract
+
+Node v24.16.0: `node -e "const fs=require('node:fs'); const cp=require('node:child_process'); console.log(process.version, typeof fs.statfsSync, typeof cp.spawnSync, typeof process.memoryUsage, typeof process.memoryUsage.bind(process));"` → `v24.16.0 function function function function`. Executed rifty RED: `pnpm test:parity builtin-loud-members-present` → all four `undefined`; `pnpm test:run packages/runtime-js/src/builtins/absent-members-loud.test.ts` → three missing-member failures (2026-09-23).
+
+## Acceptance
+
+1. `fs.statfsSync` and `child_process.spawnSync` are callable named builtin exports, so the Vitest import can link without calling them. `process.memoryUsage.bind(process)` also succeeds. → I6
+2. On invocation, each unavailable capability throws `NotImplementedError` with its specific `module.feature`, including `--changed`'s `spawnSync` and browser GC's `statfsSync`. → I6
+
+## Parity cases
+
+1. `tools/node-parity-runner/cases/modules/builtin-loud-members-present.case.ts` observes the same `function` types and bindability as real Node for the three members. → I6
+
+## Out of scope
+
+Real filesystem capacity, OS process spawn and heap statistics cannot be supplied by the current browser runtime; these calls stay named loud ceilings. Vitest's claimed `run` path imports or binds them but does not invoke them.
