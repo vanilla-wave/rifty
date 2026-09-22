@@ -545,6 +545,45 @@ for (const collapsed of [false, true]) {
   });
 }
 
+test('first pi command is refused before model dispatch and keeps the draft', async ({ page }) => {
+  test.setTimeout(180_000);
+  const model = await agentModelServer(['Plain message accepted.', 'Plain message accepted.']);
+  try {
+    await page.goto('/?agentBench=1');
+    await pickStarter(page);
+    await openChat(page);
+    await settings(page, model.baseUrl);
+    await page.evaluate(async () => {
+      const hook = Reflect.get(globalThis, '__riftyAgentBench') as {
+        seed(input: { taskId: string; files: Record<string, string> }): Promise<void>;
+      };
+      await hook.seed({
+        taskId: 'first-command',
+        files: {
+          '.pi/skills/deploy/SKILL.md':
+            '---\nname: deploy\ndescription: Deploy this project\n---\nDeploy.',
+          '.pi/prompts/review.md': 'Review.',
+        },
+      });
+    });
+    const panel = page.getByTestId('ai-panel');
+    for (const [index, command] of ['/skill:deploy', '/review'].entries()) {
+      await settings(page, model.baseUrl);
+      await send(page, command);
+      await expect(panel).toHaveAttribute('data-status', 'error');
+      await expect(panel.getByRole('alert')).toContainText(`Unsupported chat command ${command}`);
+      await expect(panel.getByLabel('Message', { exact: true })).toHaveValue(command);
+      expect(model.requests).toHaveLength(index);
+      expect((await exported(page)).transcript).toEqual([]);
+      await send(page, 'hello');
+      await expect(panel).toHaveAttribute('data-status', 'done');
+      expect(model.requests).toHaveLength(index + 1);
+    }
+  } finally {
+    await model.close();
+  }
+});
+
 test('project resources load at start; editor edits wait for chat /reload and visible report', async ({
   page,
 }) => {
