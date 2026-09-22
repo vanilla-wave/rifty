@@ -133,6 +133,13 @@ limit also covers waiting for a pending read. `AgentFiles.list` entries carry
 the listed directory joined with the name; other entries are reported and
 skipped. Unreadable ignore files are skipped silently, as the CLI does.
 
+After that read, `send` refuses loaded `/skill:<name>` and discovered
+`/<template>` commands: `status: error`, `detail` names the unsupported command
+(`NotImplementedError('agent.commandExpansion')`). No model request or history
+entry is created; `send` retains its normal Promise settlement. Plain slash
+text and unknown names still reach the model. Playground handles `/reload`
+through `reload()`; direct `send('/reload')` follows template discovery.
+
 | Pi resource | Support |
 |---|---|
 | Context files, skills, explicit reload | ✅ |

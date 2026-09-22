@@ -683,11 +683,9 @@ test('project resources load at start; editor edits wait for chat /reload and vi
     // Pi expands /skill:<loaded skill> and /<.pi/prompts template>: the chat refuses those
     // instead of forwarding; every other '/'-text reaches the model unchanged, as in pi.
     await send(page, '/skill:deploy');
-    await expect(panel.locator('.rf-ai__notice')).toContainText(
-      'Unsupported chat command /skill:deploy',
-    );
+    await expect(panel.getByRole('alert')).toContainText('Unsupported chat command /skill:deploy');
     await send(page, '/review');
-    await expect(panel.locator('.rf-ai__notice')).toContainText('Unsupported chat command /review');
+    await expect(panel.getByRole('alert')).toContainText('Unsupported chat command /review');
     expect(model.requests).toHaveLength(3);
     const plain = [
       '/src/main.tsx needs a fix',

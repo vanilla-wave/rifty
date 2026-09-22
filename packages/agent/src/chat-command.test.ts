@@ -1,6 +1,6 @@
-import type { AgentResourceReport } from '@riftydev/agent';
 import { describe, expect, it } from 'vitest';
 import { unsupportedChatCommand } from './chat-command.ts';
+import type { AgentResourceReport } from './types.ts';
 
 const report = (partial: Partial<AgentResourceReport>): AgentResourceReport => ({
   fileAccess: 'available',

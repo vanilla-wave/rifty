@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
   DefaultResourceLoader,
+  ModelRuntime,
+  SessionManager,
   SettingsManager,
+  createAgentSession as createPiSession,
   loadProjectContextFiles,
 } from '@earendil-works/pi-coding-agent';
 import {
@@ -255,6 +258,20 @@ it.each(['/skill:deploy', '/review'])(
   },
 );
 
+it('mutating a returned reload report cannot bypass private command admission', async () => {
+  const f = await fixture(commandResources);
+  const report = await f.session.reload();
+  (report.skills as unknown[]).length = 0;
+  (report.unsupported as unknown[]).length = 0;
+  for (const command of ['/skill:deploy', '/review']) {
+    await f.session.send(command);
+    expect(f.session.status(), command).toBe('error');
+    expect(f.session.detail()).toContain(command);
+  }
+  expect(f.provider.requests).toHaveLength(0);
+  expect((await f.session.exportTrace()).transcript).toEqual([]);
+});
+
 it.each([
   '/src/main.tsx needs a fix',
   '// TODO: keep',
@@ -340,6 +357,88 @@ it.each(['startup', 'reload'] as const)(
     }
   },
 );
+
+it('send refusal matches the pinned pi session expansion of skill and template commands', async () => {
+  const f = await fixture({ ...commandResources, '.pi/prompts/reload.md': 'Template reload.' });
+  const agentDir = join(f.root, 'user');
+  const settingsManager = SettingsManager.inMemory({}, { projectTrusted: true });
+  const loader = new DefaultResourceLoader({
+    cwd: f.root,
+    agentDir,
+    settingsManager,
+    noExtensions: true,
+    noThemes: true,
+  });
+  await loader.reload();
+  const modelRuntime = await ModelRuntime.create({
+    authPath: join(agentDir, 'auth.json'),
+    modelsPath: null,
+    modelsStorePath: join(agentDir, 'model-store.json'),
+    allowModelNetwork: false,
+    refreshOnCreate: false,
+  });
+  const { session: oracle } = await createPiSession({
+    cwd: f.root,
+    agentDir,
+    settingsManager,
+    resourceLoader: loader,
+    sessionManager: SessionManager.inMemory(f.root),
+    modelRuntime,
+    model: {
+      id: 'scripted',
+      name: 'scripted',
+      api: 'openai-completions',
+      provider: 'rifty',
+      baseUrl: 'https://scripted.invalid/v1',
+      reasoning: false,
+      input: ['text'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128_000,
+      maxTokens: 8192,
+    },
+    noTools: 'all',
+  });
+  try {
+    for (const text of [
+      '/skill:deploy',
+      '/skill:deploy now',
+      '/skill:deploy\nnow',
+      '/skill:deploy\tnow',
+      '/skill:hidden',
+      '/skill:missing',
+      '/review',
+      '/review now',
+      '/review\nthe diff',
+      '/bad',
+      '/ignored',
+      '/src/main.tsx needs a fix',
+      '// TODO: keep',
+      '/',
+      ' /review',
+      '/reload',
+    ]) {
+      // Pi's public queue admission shares prompt's skill → template expansion.
+      // Inspecting the queued result never dispatches to an external model.
+      await oracle.steer(text);
+      const expanded = oracle.getSteeringMessages().at(-1);
+      expect(expanded).toBeDefined();
+      const requestsBefore = f.provider.requests.length;
+      f.session.reset();
+      await f.session.send(text);
+      if (expanded === text) {
+        expect(f.session.status(), text).toBe('done');
+        expect(f.provider.requests.length, text).toBe(requestsBefore + 1);
+      } else {
+        expect(f.session.status(), text).toBe('error');
+        expect(f.session.detail(), text).toMatch(/^Not implemented: agent\./);
+        expect(f.provider.requests.length, text).toBe(requestsBefore);
+        expect((await f.session.exportTrace()).transcript, text).toEqual([]);
+      }
+    }
+  } finally {
+    oracle.dispose();
+  }
+});
 
 it.each(['startup', 'reload'] as const)(
   'a rejected %s read fails command admission; reload recovers without forwarding it',

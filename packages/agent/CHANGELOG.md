@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Refuse pi-expandable commands inside `send` after resource discovery and budget/cancellation checks; first and later sends report the same error without model dispatch (ADR-0442).
 - Load pi 0.85.1 project context/skills by default; resource reports, opt-outs and explicit reload. Preserve profile paragraphs; adopt custom-prompt tail (ADR-0440 supersedes ADR-0434 tail clause).
 - `reload()` retries a failed startup read; `list` entries outside the listed directory are reported; unreadable ignore files skip silently as the CLI.
 - Resource report lists `.pi/prompts` templates discovered as the CLI does (ignore rules, no dotfiles, non-recursive) as unsupported, never loaded, so hosts refuse exactly what pi would expand.
