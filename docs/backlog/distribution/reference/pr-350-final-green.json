@@ -1,6 +1,6 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "PASS. Merge after final CI and check:pass-binding; independent rerun: 82 unit/resource tests and 2 Chromium scenarios passed on the reviewed SHA.",
+  "merge_call": "PASS after independent STRETCH ruling on Greptile P2; no surviving blockers. Original independent 82 unit/resource and 2 Chromium runs passed; await final CI and pass-binding before merge.",
   "checkpoint": "Final+GREEN",
   "reviewed_sha": "4b57e5adab240f3549bb8e3b796d93d9cc71fa95",
   "unit_goal_source": "PR #350: user-authorized repair of PR #347 first-command refusal and its valid review comments; BASE b1467da1177af47317eb8b72722296f4a99cea63; observed baseline: AiChatPanel classified an undefined resource report before first session creation, then send dispatched the command literally. Authorities: ADR-0442 decisions 1–3, ADR-0440 decision 1, ADR-0424 decisions 2 and 7. RED commit 3c66d1930324de89349c85fce5a8ef75ce57e673; inspected actual unit/browser RED logs and BASE checking criteria under PR-4.",
@@ -90,13 +90,61 @@
     }
   ],
   "axes": [
-    { "axis": "Completeness", "verdict": "pass", "findings": [] },
-    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
-    { "axis": "Goal drift", "verdict": "pass", "findings": [] },
-    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
-    { "axis": "Scope", "verdict": "pass", "findings": [] },
-    { "axis": "Bugs", "verdict": "pass", "findings": [] },
-    { "axis": "Regressions", "verdict": "pass", "findings": [] },
-    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "tools/agent-bench/src/project-resources.test.ts:392",
+          "summary": "Greptile P2 #4075163270: hardcoded test baseUrl must come from environment configuration before merge.",
+          "authority": "ADR-0005 (D-004): npm-client registry base URL from environment/options.",
+          "evidence": "External review at https://github.com/vanilla-wave/rifty/pull/350#discussion_r4075163270 on 77200cb62d472286a65c8f6d39f23e610a165c80 calls the literal https://scripted.invalid/v1 an external-looking URL and demands environment configuration. Original independent Final+GREEN had no findings; this external demand is retained with its separate critic ruling."
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": [
+    {
+      "summary": "Greptile P2 #4075163270: hardcoded test baseUrl must come from environment configuration before merge.",
+      "ruling": "STRETCH",
+      "clause": "REV-2 admits active ADR authority and disallows strengthening beyond its clause. D-004 (docs/adr/npm-client/0005-npm-registry-dev-proxy.md:25-30) governs npm-client registry configuration, not every URL-shaped fixture value. AGENTS.md Architecture forbids hardcoded external URLs, but the reviewed value is unused model metadata on an exclusively local queue-admission path; this conclusion rests on the actual path and executed probe, not a blanket tests exemption. REV-12 therefore permits NOTE rather than FIX for this env-config demand. Independent critic /root/greptile_adjudication. Evidence: tools/agent-bench/src/project-resources.test.ts:373-379 disables model refresh/discovery networking; :380-400 creates the real pi session with explicit model metadata; :422-423 calls only public oracle.steer(text) and getSteeringMessages(). No oracle.prompt()/model stream is called. Pinned @earendil-works/pi-coding-agent 0.85.1 dist/core/agent-session.js:1016-1024 expands skills/templates then _queueSteer; :1046-1058 pushes text and calls agent.steer; :1209-1211 returns the queued array. Real @earendil-works/pi-agent-core dist/agent.js:173-175 only enqueues in steeringQueue. The pi baseUrl is not read by this path. The rifty side is real createAgentSession with injected external transport: project-resources.test.ts:61-65. tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts:17-62 consumes Request bodies and returns local Response objects without any network primitive. It mocks only the external model boundary, permitted by AGENTS.md Fidelity. Executed original test unchanged: NODE_OPTIONS='--require=/private/tmp/rifty-greptile-deny-egress.cjs' pnpm exec vitest run tools/agent-bench/src/project-resources.test.ts -t 'send refusal matches the pinned pi session expansion' --project unit --maxWorkers=1 --minWorkers=1 --fileParallelism=false. Exit 0; 1 passed, 62 skipped; test 48ms; total 1.75s. Probe rejects global fetch, http(s).request/get, net.connect/createConnection/Socket.connect, tls.connect, dns.lookup/resolve. /private/tmp/rifty-greptile-deny-egress-results.jsonl records both process exits with denied: []. No network call was attempted, including calls that could have been caught and ignored. No tracked source edits. No required repair. Optional clarification only; existing test comment already explains the queue-only path. Reopen if new evidence shows this test dispatches the pi model or uses a real external endpoint.",
+      "by": "critic"
+    }
   ]
 }
