@@ -1,6 +1,8 @@
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { Model, ToolResultMessage } from '@earendil-works/pi-ai';
 import { streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
+import { NotImplementedError } from '@riftydev/io';
+import { unsupportedChatCommand } from './chat-command.ts';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
 import { loadResources } from './resources.ts';
 import { isToolFailure, standardTools, wrapTool } from './tools.ts';
@@ -242,6 +244,12 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     try {
       await pending;
       if (!stopRequested && budgetReason === undefined) {
+        const command = unsupportedChatCommand(prompt, resources);
+        if (command !== undefined)
+          throw new NotImplementedError(
+            'agent.commandExpansion',
+            `Unsupported chat command ${command}: pi skill and prompt-template expansion is not supported.`,
+          );
         const refreshed = refreshCapabilities();
         agent.state.systemPrompt = refreshed.systemPrompt;
         agent.state.tools = refreshed.tools;

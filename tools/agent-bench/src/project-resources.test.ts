@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
   DefaultResourceLoader,
+  ModelRuntime,
+  SessionManager,
   SettingsManager,
+  createAgentSession as createPiSession,
   loadProjectContextFiles,
 } from '@earendil-works/pi-coding-agent';
 import {
@@ -182,7 +185,7 @@ it('cached instructions change only on explicit reload; report includes all unsu
     }),
   );
   // Pi expands `/<name>` for each `.pi/prompts/<name>.md` (non-recursive): those names are
-  // reported, never read; other entries are not templates.
+  // reported after frontmatter validation; other entries are not templates.
   const reported = report?.unsupported ?? [];
   expect(reported).toContainEqual({ kind: 'prompts', path: join(f.root, '.pi/prompts/review.md') });
   expect(reported.map((entry) => entry.path)).not.toContain(join(f.root, '.pi/prompts/notes.txt'));
@@ -216,6 +219,267 @@ description: "${name} <deploy> & verify"
 ${extra}---
 Read and deploy.
 `;
+
+const commandResources = {
+  '.pi/skills/deploy/SKILL.md': skill('deploy'),
+  '.pi/skills/hidden/SKILL.md': skill('hidden', 'disable-model-invocation: true\n'),
+  '.pi/skills/broken/SKILL.md': '---\nname: broken\n---\nNo description',
+  '.pi/prompts/review.md': 'Review: $ARGUMENTS',
+  '.pi/prompts/ignored.md': 'Ignored',
+  '.pi/prompts/.gitignore': 'ignored.md\n',
+  '.pi/prompts/bad.md': '---\ndescription: [broken\n---\nBody\n',
+};
+
+it.each(['/skill:deploy', '/review'])(
+  'send refuses %s on first, later and reset runs without changing model history',
+  async (command) => {
+    const f = await fixture(commandResources);
+    await f.session.send(command);
+    expect(f.session.status()).toBe('error');
+    expect(f.session.detail()).toMatch(/^Not implemented: agent\./);
+    expect(f.session.detail()).toContain(command);
+    expect(f.provider.requests).toHaveLength(0);
+    expect((await f.session.exportTrace()).transcript).toEqual([]);
+
+    await f.session.send('hello');
+    const before = (await f.session.exportTrace()).transcript;
+    await f.session.send(command);
+    expect(f.session.status()).toBe('error');
+    expect(f.session.detail()).toContain(command);
+    expect(f.provider.requests).toHaveLength(1);
+    expect((await f.session.exportTrace()).transcript).toEqual(before);
+
+    f.session.reset();
+    await f.session.send(command);
+    expect(f.session.status()).toBe('error');
+    expect(f.session.detail()).toContain(command);
+    expect(f.provider.requests).toHaveLength(1);
+    expect((await f.session.exportTrace()).transcript).toEqual([]);
+  },
+);
+
+it('mutating a returned reload report cannot bypass private command admission', async () => {
+  const f = await fixture(commandResources);
+  const report = await f.session.reload();
+  (report.skills as unknown[]).length = 0;
+  (report.unsupported as unknown[]).length = 0;
+  for (const command of ['/skill:deploy', '/review']) {
+    await f.session.send(command);
+    expect(f.session.status(), command).toBe('error');
+    expect(f.session.detail()).toContain(command);
+  }
+  expect(f.provider.requests).toHaveLength(0);
+  expect((await f.session.exportTrace()).transcript).toEqual([]);
+});
+
+it.each([
+  '/src/main.tsx needs a fix',
+  '// TODO: keep',
+  '/',
+  '/missing explain this path',
+  '/review.md',
+  '/skill:missing',
+  '/skill:broken',
+  '/skill:deploy\nnow',
+  '/skill:deploy\tnow',
+  '/ignored',
+  '/bad',
+  '/reload',
+])('send preserves plain slash input %j byte-for-byte', async (text) => {
+  const f = await fixture(commandResources);
+  await f.session.send(text);
+  expect(f.session.status()).toBe('done');
+  expect(f.provider.requests).toHaveLength(1);
+  expect(f.provider.requests[0]?.body.messages.find((message) => message.role === 'user')).toEqual({
+    role: 'user',
+    content: [{ type: 'text', text }],
+  });
+});
+
+it.each(['/skill:deploy now', '/skill:hidden', '/review the diff', '/review\nthe diff'])(
+  'send refuses pi-expandable input %j without model dispatch',
+  async (text) => {
+    const f = await fixture(commandResources);
+    await f.session.send(text);
+    expect(f.session.status()).toBe('error');
+    expect(f.session.detail()).toMatch(/^Not implemented: agent\./);
+    expect(f.provider.requests).toHaveLength(0);
+    expect((await f.session.exportTrace()).transcript).toEqual([]);
+  },
+);
+
+it.each(['startup', 'reload'] as const)(
+  'send judges commands after the pending %s snapshot settles',
+  async (phase) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let blocked = phase === 'startup';
+    const f = await fixture(phase === 'startup' ? commandResources : {}, (root, files) => ({
+      host: {
+        root,
+        capabilities: () => ({
+          files: {
+            ...files,
+            async list(path: string) {
+              if (blocked) await held;
+              return files.list(path);
+            },
+          },
+        }),
+        async close() {},
+      },
+    }));
+    try {
+      if (phase === 'reload') {
+        await expect.poll(() => f.events.some((event) => event.type === 'resources')).toBe(true);
+        for (const [path, content] of Object.entries(commandResources))
+          await f.files.change(join(f.root, path), () => content);
+      }
+      blocked = true;
+      const reloading = phase === 'reload' ? f.session.reload() : Promise.resolve();
+      const sending = f.session.send('/skill:deploy');
+      await Promise.resolve();
+      expect(f.session.status()).toBe('running');
+      expect(f.provider.requests).toHaveLength(0);
+      release();
+      await Promise.all([sending, reloading]);
+      expect(f.session.status()).toBe('error');
+      expect(f.session.detail()).toContain('/skill:deploy');
+      await f.session.send('/review');
+      expect(f.session.status()).toBe('error');
+      expect(f.session.detail()).toContain('/review');
+      expect(f.provider.requests).toHaveLength(0);
+      expect((await f.session.exportTrace()).transcript).toEqual([]);
+    } finally {
+      release();
+    }
+  },
+);
+
+it('send refusal matches the pinned pi session expansion of skill and template commands', async () => {
+  const f = await fixture({ ...commandResources, '.pi/prompts/reload.md': 'Template reload.' });
+  const agentDir = join(f.root, 'user');
+  const settingsManager = SettingsManager.inMemory({}, { projectTrusted: true });
+  const loader = new DefaultResourceLoader({
+    cwd: f.root,
+    agentDir,
+    settingsManager,
+    noExtensions: true,
+    noThemes: true,
+  });
+  await loader.reload();
+  const modelRuntime = await ModelRuntime.create({
+    authPath: join(agentDir, 'auth.json'),
+    modelsPath: null,
+    modelsStorePath: join(agentDir, 'model-store.json'),
+    allowModelNetwork: false,
+    refreshOnCreate: false,
+  });
+  const { session: oracle } = await createPiSession({
+    cwd: f.root,
+    agentDir,
+    settingsManager,
+    resourceLoader: loader,
+    sessionManager: SessionManager.inMemory(f.root),
+    modelRuntime,
+    model: {
+      id: 'scripted',
+      name: 'scripted',
+      api: 'openai-completions',
+      provider: 'rifty',
+      baseUrl: 'https://scripted.invalid/v1',
+      reasoning: false,
+      input: ['text'],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 128_000,
+      maxTokens: 8192,
+    },
+    noTools: 'all',
+  });
+  try {
+    for (const text of [
+      '/skill:deploy',
+      '/skill:deploy now',
+      '/skill:deploy\nnow',
+      '/skill:deploy\tnow',
+      '/skill:hidden',
+      '/skill:missing',
+      '/review',
+      '/review now',
+      '/review\nthe diff',
+      '/bad',
+      '/ignored',
+      '/src/main.tsx needs a fix',
+      '// TODO: keep',
+      '/',
+      ' /review',
+      '/reload',
+    ]) {
+      // Pi's public queue admission shares prompt's skill → template expansion.
+      // Inspecting the queued result never dispatches to an external model.
+      await oracle.steer(text);
+      const expanded = oracle.getSteeringMessages().at(-1);
+      expect(expanded).toBeDefined();
+      const requestsBefore = f.provider.requests.length;
+      f.session.reset();
+      await f.session.send(text);
+      if (expanded === text) {
+        expect(f.session.status(), text).toBe('done');
+        expect(f.provider.requests.length, text).toBe(requestsBefore + 1);
+      } else {
+        expect(f.session.status(), text).toBe('error');
+        expect(f.session.detail(), text).toMatch(/^Not implemented: agent\./);
+        expect(f.provider.requests.length, text).toBe(requestsBefore);
+        expect((await f.session.exportTrace()).transcript, text).toEqual([]);
+      }
+    }
+  } finally {
+    oracle.dispose();
+  }
+});
+
+it.each(['startup', 'reload'] as const)(
+  'a rejected %s read fails command admission; reload recovers without forwarding it',
+  async (phase) => {
+    let rejectNext = phase === 'startup';
+    const f = await fixture(commandResources, (root, files) => ({
+      host: {
+        root,
+        capabilities: () => {
+          if (rejectNext) {
+            rejectNext = false;
+            throw new Error('resource host unavailable');
+          }
+          return { files };
+        },
+        async close() {},
+      },
+    }));
+    if (phase === 'reload') {
+      await expect.poll(() => f.events.some((event) => event.type === 'resources')).toBe(true);
+      rejectNext = true;
+      await expect(f.session.reload()).rejects.toThrow('resource host unavailable');
+    }
+    await f.session.send('/skill:deploy');
+    expect(f.session.status()).toBe('error');
+    expect(f.session.detail()).toBe('resource host unavailable');
+    expect(f.provider.requests).toHaveLength(0);
+    expect((await f.session.exportTrace()).transcript).toEqual([]);
+    await f.session.reload();
+    for (const text of ['/skill:deploy', '/review']) {
+      await f.session.send(text);
+      expect(f.session.status()).toBe('error');
+      expect(f.session.detail()).toContain(text);
+    }
+    expect(f.provider.requests).toHaveLength(0);
+    expect((await f.session.exportTrace()).transcript).toEqual([]);
+    await f.session.send('recovered');
+    expect(f.session.status()).toBe('done');
+    expect(f.provider.requests).toHaveLength(1);
+  },
+);
 
 it('same tree as full pi CLI: skills discovery, collision winners, hidden entries, diagnostics and block bytes', async () => {
   const f = await fixture({
@@ -576,41 +840,49 @@ it('pi context identity prevents the same global/project file appearing twice', 
   expect(f.prompt().match(/<project_instructions /g)).toHaveLength(oracle.length);
 });
 
-it.each(['startup', 'reload'] as const)(
-  'expired run budget never dispatches after waiting for %s resources',
-  async (phase) => {
+it.each(
+  (['startup', 'reload'] as const).flatMap((phase) =>
+    ['do not send after the deadline', '/skill:deploy', '/review'].map((text) => ({ phase, text })),
+  ),
+)(
+  'expired run budget never dispatches $text after waiting for $phase resources',
+  async ({ phase, text }) => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
     let blocked = phase === 'startup';
-    const f = await fixture({ 'AGENTS.md': 'Slow resources.' }, (root, files) => ({
-      runTimeoutMs: 10,
-      host: {
-        root,
-        capabilities: () => ({
-          files: {
-            ...files,
-            async read(path: string) {
-              if (blocked) await held;
-              return files.read(path);
+    const f = await fixture(
+      { 'AGENTS.md': 'Slow resources.', ...commandResources },
+      (root, files) => ({
+        runTimeoutMs: 10,
+        host: {
+          root,
+          capabilities: () => ({
+            files: {
+              ...files,
+              async read(path: string) {
+                if (blocked) await held;
+                return files.read(path);
+              },
             },
-          },
-        }),
-        async close() {},
-      },
-    }));
+          }),
+          async close() {},
+        },
+      }),
+    );
     try {
       if (phase === 'reload')
         await expect.poll(() => f.events.some((event) => event.type === 'resources')).toBe(true);
       blocked = true;
       const reloading = phase === 'reload' ? f.session.reload() : Promise.resolve();
-      const sending = f.session.send('do not send after the deadline');
+      const sending = f.session.send(text);
       await new Promise((resolve) => setTimeout(resolve, 40));
       release();
       await Promise.all([sending, reloading]);
       expect(f.session.status()).toBe('budget-exceeded');
       expect(f.provider.requests).toHaveLength(0);
+      expect((await f.session.exportTrace()).transcript).toEqual([]);
     } finally {
       release();
       await f.session.dispose();
@@ -618,39 +890,58 @@ it.each(['startup', 'reload'] as const)(
   },
 );
 
-it.each(['stop', 'dispose'] as const)(
-  '%s during startup read settles before host close without model dispatch',
-  async (action) => {
+it.each(
+  (['stop', 'dispose'] as const).flatMap((action) =>
+    (['startup', 'reload'] as const).flatMap((phase) =>
+      ['cancel before dispatch', '/skill:deploy', '/review'].map((text) => ({
+        action,
+        phase,
+        text,
+      })),
+    ),
+  ),
+)(
+  '$action during $phase read settles $text before host close without model dispatch',
+  async ({ action, phase, text }) => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
     let closed = false;
-    const f = await fixture({ 'AGENTS.md': 'Slow resources.' }, (root, files) => ({
-      host: {
-        root,
-        capabilities: () => ({
-          files: {
-            ...files,
-            async read(path: string) {
-              await held;
-              return files.read(path);
+    let blocked = phase === 'startup';
+    const f = await fixture(
+      { 'AGENTS.md': 'Slow resources.', ...commandResources },
+      (root, files) => ({
+        host: {
+          root,
+          capabilities: () => ({
+            files: {
+              ...files,
+              async read(path: string) {
+                if (blocked) await held;
+                return files.read(path);
+              },
             },
+          }),
+          async close() {
+            closed = true;
           },
-        }),
-        async close() {
-          closed = true;
         },
-      },
-    }));
+      }),
+    );
     try {
-      const sending = f.session.send('cancel before dispatch');
+      if (phase === 'reload')
+        await expect.poll(() => f.events.some((event) => event.type === 'resources')).toBe(true);
+      blocked = true;
+      const reloading = phase === 'reload' ? f.session.reload() : Promise.resolve();
+      const sending = f.session.send(text);
       const cancelling = f.session[action]();
       expect(closed).toBe(false);
       release();
-      await Promise.all([sending, cancelling]);
+      await Promise.all([sending, cancelling, reloading]);
       expect(f.session.status()).toBe('aborted');
       expect(f.provider.requests).toHaveLength(0);
+      expect((await f.session.exportTrace()).transcript).toEqual([]);
       expect(closed).toBe(action === 'dispose');
     } finally {
       release();
