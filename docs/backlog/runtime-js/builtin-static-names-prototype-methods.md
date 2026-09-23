@@ -51,4 +51,5 @@ each value is the identical own enumerable property on its default process;
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ 414a619f4b3d9ac1d90f291d97d13217288d67f7
 - 2026-09-23 — Re-cut the generic prototype scan to Node's own process shape; it meets I6 without exposing host methods.

@@ -1,0 +1,114 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS: proceed to IMPLEMENT; merge still requires GREEN, package changelog, pr:check, and independent Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/builtin-static-names-prototype-methods.md @ 414a619f4b3d9ac1d90f291d97d13217288d67f7; BASE origin/main 0c4c1b070042a7a3079888cae92f25f15db24cdf",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:97",
+      "summary": "npm bare-version override support and its acceptance proof remain open."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:100",
+      "summary": "Worker keepalive and unref parity remain open."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:104",
+      "summary": "Process error handlers, exit event, and exitCode semantics remain open."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "Forks-pool Vitest execution, reporter output, config and TypeScript collection, and exit codes remain open."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115",
+      "summary": "Threads-pool parity remains open."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "Implement this reviewed process named-import contract and complete the other mapped loader/runtime walls; then prove GREEN and independent Final+GREEN."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "Exact-pair compatibility documentation and composed browser acceptance remain open."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: static import of cwd links, is identical to the default process cwd, and invokes it without a package-specific patch.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:6; tools/node-parity-runner/cases/process/named-method-exports.case.ts:13; tools/node-parity-runner/cases/process/named-method-exports.case.ts:16; docs/backlog/runtime-js/reference/builtin-static-names-prototype-methods-evidence.md:12",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: chdir, hrtime, uptime, exit, and kill preserve named/default identity while pushStdin, on, and emit stay absent from named exports.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:6; tools/node-parity-runner/cases/process/named-method-exports.case.ts:12; tools/node-parity-runner/cases/process/named-method-exports.case.ts:18; docs/backlog/runtime-js/reference/builtin-static-names-prototype-methods-evidence.md:12",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: Node and rifty link all six names and match own/enumerable shape, identities, callable cwd, hrtime.bigint, and absent internal names.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/named-method-exports.case.ts:6; tools/node-parity-runner/cases/process/named-method-exports.case.ts:10; tools/node-parity-runner/cases/process/named-method-exports.case.ts:18; docs/backlog/runtime-js/reference/builtin-static-names-prototype-methods-evidence.md:3",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "414a619f4b3d9ac1d90f291d97d13217288d67f7"
+}
