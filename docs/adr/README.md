@@ -101,6 +101,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0443 | Named-loud builtin members for linked, unsuppliable Node edges |
 | 0444 | Check runtime global-write keys at Node's key coercion |
 | 0447 | Count referenced MessagePorts in child-realm keepalive |
+| 0448 | Carry advanced fork IPC as a native structured clone |
 | 0450 | Project vm script offsets through one owned stack hook |
 | 0458 | Read the realm-bound `node:process` registry entry uncached in io |
 
@@ -419,6 +420,8 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0326 advanced-IPC-serialization loud-gap clause | 0448 / note 2026-09-23 | fork `serialization: 'advanced'` rides the public lane as a native structured clone with Node's view/refusal rules; handles, callbacks/options, channel `ref()`/`unref()` stay gaps |
+| 0416 active node-entry v4 version | 0448 / note 2026-09-23 | v5 carries program launch `ipc: 'advanced'`; SQLite absence semantics unchanged |
 | 0348 §2 link-only-placeholder clause | 0443 / note 2026-09-23 | an observed link/load-time edge the browser cannot supply ships as a named `NotImplementedError` member; called edges still need the real contract |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |

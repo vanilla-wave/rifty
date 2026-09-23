@@ -29,7 +29,11 @@ import {
   unref as unrefEventLoop,
 } from '../internal/event-loop-keepalive.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  decodeNodeIpcMessage,
+  encodeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -51,6 +55,7 @@ import {
   type NodeProcessRelease,
   createNodeProcessRelease,
 } from './process-identity.ts';
+import { INHERIT_STDIN, type InheritStdin, type StdinInheritor } from './process-stdin-inherit.ts';
 import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
@@ -297,6 +302,8 @@ function makeStdinReader(
   let eofReceived = false;
   let endEmitted = false;
   let keepaliveHeld = false;
+  // Worker children reading this stdin as an inherited fd (never holds the realm).
+  const inheritors = new Set<StdinInheritor>();
   const syncKeepalive = (): void => {
     const shouldHold = port !== undefined && flowing && !eofReceived;
     if (shouldHold === keepaliveHeld) return;
@@ -320,11 +327,17 @@ function makeStdinReader(
     return data;
   };
   function flush(): void {
-    while (flowing && pending.length > 0) {
+    while ((flowing || inheritors.size > 0) && pending.length > 0) {
       const data = pending.shift();
       if (data === undefined) continue;
+      for (const inheritor of inheritors) inheritor.data(data);
+      if (!flowing) continue;
       const chunk = normalize(data);
       if (chunk !== null) stdin.emit('data', chunk);
+    }
+    if (eofReceived && pending.length === 0) {
+      for (const inheritor of inheritors) inheritor.end();
+      inheritors.clear();
     }
     if (!flowing || pending.length > 0 || !eofReceived || endEmitted) return;
     if (encoding && /^utf-?8$/iu.test(encoding)) {
@@ -373,6 +386,12 @@ function makeStdinReader(
       return stdin;
     },
   });
+  const inherit: InheritStdin = (inheritor) => {
+    inheritors.add(inheritor);
+    queueMicrotask(flush);
+    return () => inheritors.delete(inheritor);
+  };
+  Object.defineProperty(stdin, INHERIT_STDIN, { value: inherit });
   if (port) {
     port.onmessage = (ev: MessageEvent): void => {
       const data = ev.data;
@@ -505,7 +524,8 @@ export class NodeProcess extends EventEmitter {
   #ipcDisconnected = false;
   #controlClosed = false;
   #publicIpc = false;
-  #jsonIpc = false;
+  /** A fork program's `serialization`; `null` for a launch-less URL Worker's raw port. */
+  #ipcSerialization: NodeIpcSerialization | null = null;
   #ipcKeepaliveHeld = false;
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
@@ -604,7 +624,8 @@ export class NodeProcess extends EventEmitter {
         this.#wireWorkerIpc(spec.stdio.ipc);
       } else {
         this.#publicIpc = true;
-        this.#jsonIpc = launch?.kind === 'program';
+        const ipc = launch?.kind === 'program' ? launch.ipc : undefined;
+        this.#ipcSerialization = ipc === 'json' || ipc === 'advanced' ? ipc : null;
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -702,7 +723,11 @@ export class NodeProcess extends EventEmitter {
       if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
-        const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
+        const serialization = this.#ipcSerialization;
+        const payload =
+          serialization === null
+            ? frame.payload
+            : decodeNodeIpcMessage(frame.payload, serialization);
         if (this.listenerCount('message') === 0) {
           this.#ipcBacklog.push(payload);
         } else {
@@ -742,7 +767,9 @@ export class NodeProcess extends EventEmitter {
     this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
       if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
-      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
+      const serialization = this.#ipcSerialization;
+      const payload =
+        serialization === null ? message : encodeNodeIpcMessage(message, serialization);
       try {
         const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
@@ -962,7 +989,10 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    const shouldHold =
+      this.#ipcSerialization !== null &&
+      !this.#ipcDisconnected &&
+      this.listenerCount('message') > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();

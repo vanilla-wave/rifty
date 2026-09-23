@@ -77,6 +77,11 @@ disconnect never closes private control; physical exit closes all lanes.
 Advanced IPC serialization, handles, callbacks/options, and channel
 `ref()`/`unref()` remain directed loud gaps.
 
+> **Correction (2026-09-23, ADR-0448):** a fork with `serialization:
+> 'advanced'` now rides this public lane as a native structured clone with
+> Node's view and refusal rules (node-entry v5 `ipc: 'advanced'`). Handles,
+> callbacks/options and channel `ref()`/`unref()` remain directed loud gaps.
+
 ### Finite process and terminal contract
 
 The root snapshot backs only the forcing consumer forms: `exec('ps')`,
