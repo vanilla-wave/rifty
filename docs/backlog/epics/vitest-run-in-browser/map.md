@@ -67,11 +67,6 @@ order is also recorded as `blocked_by`; the other children are independent.
   pickup. The evidence §Oracle reading is suspect (V8 applies `columnOffset`
   to the first physical line only, no clamp; vite 8's module-runner
   `prepareStackTrace` reads CallSite getters) — pickup re-runs the oracle.
-- Unclaimed modes' loudness: prior attempts observed jsdom failing as a bare
-  `TypeError` (`vm.constants` absent), watch mode waiting without a ceiling,
-  vite 8.0.15 working — owner: agent — verified at item 12 pickup; a claim I7
-  cannot honestly state is a user question at CLOSE (`STOP-1e`), never an
-  artificial version/mode ban.
 - `vitest.config.ts` loading (vite `loadConfigFromFile` → rolldown bundle of
   the TS config) and `.ts` test transform under vitest's module runner: no
   wall observed yet because earlier walls block — owner: agent — first
@@ -84,13 +79,15 @@ order is also recorded as `blocked_by`; the other children are independent.
   (probe: jsdom 30 installs and parses DOM; vitest forces `runScripts:
   'dangerously'` → `vm.constants.DONT_CONTEXTIFY` + Window as a vm-realm global;
   feasibility open). Until then a loud `NotImplementedError` naming that epic.
-- watch mode (`vitest` without `run`): first loud wall stays
-  `readline.emitKeypressEvents` NotImplementedError; not claimed.
+- watch mode: unclaimed ⚠️ (goal amend 2026-09-23) — shell stdin is non-TTY,
+  so bare `vitest` runs once (as Node with piped stdin) and `--watch` waits on
+  fs polling; no ceiling, no ban.
 - coverage (`@vitest/coverage-v8` → `node:inspector` Session): loud proxy throw.
 - `vmThreads` / `vmForks` pools (`vm.SourceTextModule` absent): loud.
 - vitest browser mode, `typecheck` pool, `--changed` (git via spawnSync): loud.
-- vite versions other than exact 8.0.16 and vitest other than 4.1.11: unclaimed;
-  vite outside the exact set keeps today's loud shadow/patch ceilings.
+- vite versions other than exact 8.0.16 and vitest other than 4.1.11: unclaimed
+  ⚠️ (goal amend 2026-09-23); vite 8.2+ fails loudly at install
+  (`lightningcss.version`), 7.3.6/8.0.x/8.1.x install unverified; no ban.
 - re-running `npm install` after changing the pin over an existing
   `node_modules/vite`: stale files survive and the vite install patch aborts —
   `npm-client/stale-package-dir-on-version-change` (honest-npm territory); the

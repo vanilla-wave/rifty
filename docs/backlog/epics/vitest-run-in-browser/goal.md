@@ -40,9 +40,11 @@ npm is a separate planned goal.
    `1 passed`, `1 failed` with the assertion diff; exit code 1. Fix the test →
    exit 0. `npm test` and `vitest run --reporter=verbose` behave the same.
 4. `vitest run --pool=threads` → same results and exit code as `--pool=forks`.
-5. Outside the claim, every path stays loud: `environment: 'jsdom'`, watch
-   mode, coverage, `vmThreads`/`vmForks`, other vite versions throw a named
-   `NotImplementedError`/ceiling and the compat page lists them ❌.
+5. Outside the claim, every path stays loud: `environment: 'jsdom'`,
+   coverage, browser mode, `vmThreads`/`vmForks` throw a named
+   `NotImplementedError`/ceiling and the compat page lists them ❌. Watch mode
+   and other vite versions are unclaimed: the page lists them ⚠️ with the
+   observed boundary, no mode/version bans.
 
 ## Invariants
 
@@ -124,9 +126,10 @@ npm is a separate planned goal.
    or an npm-authored lock — the organic `devDependencies: {vitest}` manifest
    alone resolves latest vite and stays a loud `lightningcss.version` install
    failure), carries ✅ rows for I1–I6 including `vitest.config.ts` and
-   TypeScript test files, and ❌ rows for jsdom/happy-dom, watch mode,
-   coverage, browser mode, `vmThreads`/`vmForks`, other vite versions — each ❌
-   backed by a loud throw, never a silent fallback.
+   TypeScript test files, ❌ rows for jsdom/happy-dom, coverage, browser mode,
+   `vmThreads`/`vmForks` — each ❌ backed by a loud throw, never a silent
+   fallback — and ⚠️ unclaimed rows for watch mode and other vite versions
+   stating the observed boundary, never a mode/version ban.
 
 ## Challenge
 
@@ -173,6 +176,7 @@ challenge: 2026-09-15 — 6 problems (all resolved before FIT; lines below)
   proven for the 7.3.6/esbuild path only; the 8.0.16/rolldown config bundle
   and vitest's `.ts` transform are first exercised at item 12 — map fog), a
   wall found there re-charts the map.
+- amend: 2026-09-23 — user: "A: поправить I7 (Recommended)" — scenario 5 + I7: watch mode and other vite versions move from ❌-with-loud-throw to ⚠️ unclaimed with the observed boundary, no mode/version bans (STOP-1e from item 12 Contract+RED: non-TTY shell stdin makes bare `vitest` run once as Node does with piped stdin and `--watch` wait on fs polling; vite 7.3.6/8.0.x/8.1.x install, 8.2+ fails loudly on `lightningcss.version`; evidence `docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md` on the goal branch).
 - tier: works (2026-09-15, agent) — honest happy path + loud throws; the
   scenario has no crash/reload or fault-injection axis. A child touching
   concurrency/IPC (keepalive, advanced IPC) still owes its DoD `## Fault matrix`
