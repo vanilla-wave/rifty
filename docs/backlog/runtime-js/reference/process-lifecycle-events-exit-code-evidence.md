@@ -964,6 +964,26 @@ $ pnpm test:parity callback-throw-uncaught-child
       + {"file":"zlib-gzip.js","stdout":["unhandled zlib-gzip","after","exit 0 undefined"],"code":0,"signal":null}
 ```
 
+`tools/node-parity-runner/cases/process/eval-print-explicit-exit.case.ts`
+(Contract+RED concern: `-p` with an explicit `exit()`). Oracle and RED = the
+implementation without the `'exit'` emission in `NodeProcessExit.exit`:
+
+```
+$ node -p "process.on('exit',c=>process.stdout.write('EXIT '+c+'\n'));setTimeout(()=>process.exit(3),5);42"
+EXIT 3
+42
+[exit 3]
+$ node -p "process.on('exit',c=>process.stdout.write('EXIT '+c+'\n'));process.exit(4);42"
+EXIT 4
+[exit 4]
+$ pnpm test:parity eval-print-explicit-exit        # RED
+  ✗ process/eval-print-explicit-exit.case.ts
+      -     "stdout": "EXIT 3\n42\n",
+      +     "stdout": "42\n",
+      -     "stdout": "EXIT 4\n",
+      +     "stdout": "",
+```
+
 Sibling probe (temporary case, not committed): `fs.createReadStream(f).on('data', throw)`
 and a throw inside a user `promises.stat().then` already match Node.
 
