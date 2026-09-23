@@ -88,6 +88,9 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   etc.) throw directed `NotImplementedError`s instead of mutating the browser host
   constructor, deleting it, or silently mixing routed and replaced constructors:
   `module-loader.cjs-global-function-assignment` / `module-loader.esm-global-function-assignment`.
+  A computed key from direct `Symbol(...)` / `Symbol.for(...)` or an immutable
+  binding to either is accepted; it cannot name the string `Function` (parity
+  `modules/symbol-global-write-{cjs,esm}`). Other dynamic keys stay loud.
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
 - A direct, unshadowed `eval` with a statically known string containing ordinary
   `import()` syntax is routed through the constructing module's collision-free

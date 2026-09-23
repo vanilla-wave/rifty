@@ -31,3 +31,18 @@ against the unchanged `origin/main` product source: same two directed Symbol
 key false positives; no unrelated `Function` read remains in either case.
 The unsafe-key tests now also assert that the `Function` descriptor is
 unchanged immediately after the expected throw.
+
+## GREEN
+
+With the shared AST key classifier and scope-bound Symbol constants:
+
+```text
+$ node --import tsx tools/node-parity-runner/src/cli.ts symbol-global-write
+  ✓ modules/symbol-global-write-cjs.case.ts
+  ✓ modules/symbol-global-write-esm.case.ts
+all cases match
+```
+
+The existing `function-constructor-import` parity cases also pass (2/2),
+three targeted module-loader unit files pass (51/51), runtime-js typecheck
+passes, and the source-size ratchet holds (CJS 2040 → 2006, ESM 1564 → 1528).
