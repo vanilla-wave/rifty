@@ -384,15 +384,46 @@ closed-post-kept         true,4                                    true,0       
 exit                     0, no PROBE|held                          0, no PROBE|held
 ```
 
+Wrapped methods keep Chromium's native descriptor, name and length; `close`,
+`postMessage` and `structuredClone` lengths already differed from Node. The
+closed-port transfer row is pre-existing Chromium behavior, not claimed here.
+
 `check:esbuild-legacy-retirement` pin: after `build:libs`,
 `packages/workbench/dist/assets/typescript-worker.js` keeps 10 022 694 bytes but
 its sha256 becomes `ab5544b5…23f98`. It holds none of this code; it imports the
 runtime-js chunk whose content-hash name changed (`chunk-3AM62KA3.js` carries
 `MessagePort.ref.transferred`). Re-pinned sha with bytes unchanged.
 
-Wrapped methods keep Chromium's native descriptor, name and length; `close`,
-`postMessage` and `structuredClone` lengths already differed from Node. The
-closed-port transfer row is pre-existing Chromium behavior, not claimed here.
+Sibling sweep, rifty `worker_threads.Worker#postMessage` (scratch browser-unit
+probe, same source in Node and rifty `node main.cjs`; `w.postMessage({ port })`,
+`w.postMessage({ fn })`, then `w.postMessage('after')`, child exits on its first
+message):
+
+```text
+Node v24.16.0  post=DataCloneError:Object that needs transfer was found in message but not listed in transferList
+               post-fn=DataCloneError:() => 1 could not be cloned.   child-got="after"   worker-exit=0
+rifty          post=no-throw   post-fn=no-throw   timeout (after 3 s)   worker-exit=1
+```
+
+A port never moves through this lane (no transfer list; the clone fails), so
+it cannot hide a referenced port's release. Swallowing the DataCloneError is a
+separate pre-existing defect (the kernel `send` catch also closes the control
+channel, so `'after'` is lost), reported outside this unit.
+
+GREEN lanes at `74214074d` (Chromium 148, `RIFTY_PLAYGROUND_PORT=5413`):
+
+```text
+pnpm test:browser-unit (full lane)                        283 passed, 1 skipped (manual PD256 calibration)
+playwright --project=chromium-light --workers=1 <25 specs with Node child port/IPC traffic:
+  node-command, owner-shell-async-lifecycle, http-close-command-drain, execsync-*, fetch-keepalive-*,
+  cross-realm-*, generic-dev-server-lifecycle, hono-api, koa-api, m1/m2/m7, vite7-build-preview,
+  vite-command-honesty, preview-websocket-bridge, socket-lab, owner-shell-*, markdown-ssg,
+  sandbox-fs-rpc, preview-readiness-process-state, m10-dev-hmr, manual-vite-install>
+                                                          63 passed, 2 skipped (retired preset; opt-in network)
+playwright --project=chromium-heavy --workers=1 react-vite-build react-vite-preset fullstack-demo
+  webpack-dev-server npm-lock-replay                      6 passed
+pnpm test:e2e:prod                                        8 passed
+```
 
 ## Probe sources (verbatim)
 
