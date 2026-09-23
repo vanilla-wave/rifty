@@ -222,3 +222,46 @@ Transfer RED: `/private/tmp/rifty-message-port-transfer-red.log`.
 Root's separate fresh5419 Vitest diagnostic now reaches thread startup and
 fails the named Worker.execArgv ceiling; this is not full Vitest acceptance.
 Full goal proof and independent Final+GREEN remain parent-owned.
+
+## Final-review B1 repair, 2026-09-23
+
+Independent review `a728f986a` found the dictionary facade delegating
+Symbol.iterator back to its caller after overload selection. A changing getter
+made native postMessage consume an unchecked iterable: managed endpoint and
+companion buffer detached. The same second read broke ordinary buffer options
+whose getter only permits one access. Fault class: provenance-lie ×
+ownership-losing transfer; observable-order × option getters.
+
+Executed new regression before repair:
+
+```sh
+RIFTY_PLAYGROUND_PORT=5434 pnpm test:browser-unit tests/browser-unit/message-port-transfer-options.spec.ts
+```
+
+Fresh5434: 3 RED (MessagePort, native Worker, worker-global), 1 structuredClone
+control PASS. Actual native Chromium runs precede the installed shim in each
+case. Native reads once, raises DataCloneError without detaching, retains peer
+bytes `[4,8,12]`; bad shim reads three times, sends, detaches both, loses bytes.
+Ordinary buffer native transfer reads once and delivers `[2,5,9]`; bad shim
+reads twice and throws. Node24 executed reference agrees:
+`/private/tmp/rifty-message-port-b1-native.mjs` and `-native.log`.
+RED: `/private/tmp/rifty-message-port-b1-red.log`.
+
+Repair: preserve the selected iterator value in the fresh dictionary facade;
+native overload selection cannot re-open the original getter. Non-callable
+iterators retain native early TypeError without touching the transfer getter.
+No new transfer protocol or per-carrier registry. One normalizer covers all
+three affected entry points; structuredClone remains the dictionary-only
+control. Existing Set/frozen-options/getter and managed-byte guards unchanged.
+
+```sh
+RIFTY_PLAYGROUND_PORT=5434 pnpm test:browser-unit tests/browser-unit/message-port-transfer-options.spec.ts tests/browser-unit/message-port-keepalive.spec.ts
+pnpm test:run packages/runtime-js/src/ipc/worker-realm-compat.test.ts packages/runtime-js/src/builtins/worker_threads.test.ts packages/runtime-js/src/internal/event-loop-keepalive.test.ts packages/kernel/src/shared-globals-binary-sync.test.ts
+pnpm exec tsc --noEmit --project packages/runtime-js/tsconfig.json
+```
+
+Fresh5434: 15/15 browser PASS, 11.7s; 62/62 related unit PASS; runtime-js
+typecheck PASS. Final carrier also verifies invalid-iterator rejection reads
+no transfer getter; live native and installed results match on all entry points.
+Logs `/private/tmp/rifty-message-port-b1-{green,unit,types}.log`.
+Same independent reviewer must verify the repaired source; no full-goal claim.

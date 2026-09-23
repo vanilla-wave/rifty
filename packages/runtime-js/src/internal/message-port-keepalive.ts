@@ -139,14 +139,16 @@ export function installMessagePortKeepalive(): void {
     }
     return items;
   };
-  const transferDictionary = (value: unknown): unknown => {
+  const transferDictionary = (value: unknown, iterator?: unknown): unknown => {
     if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value;
-    // Snapshot once, without Proxy invariants depending on a frozen caller dictionary.
+    // Snapshot transfer and overload choice; native must not re-read caller getters.
+    // Fresh target also avoids frozen caller-property Proxy invariants.
     const transfer = checkedTransfer(Reflect.get(value, 'transfer'));
     return new Proxy(
       {},
       {
         get(_target, key) {
+          if (key === Symbol.iterator) return iterator;
           return key === 'transfer' ? transfer : Reflect.get(value, key, value);
         },
       },
@@ -155,9 +157,11 @@ export function installMessagePortKeepalive(): void {
   const transferArgument = (value: unknown): unknown => {
     if ((typeof value !== 'object' && typeof value !== 'function') || value === null) return value;
     const iterator: unknown = Reflect.get(value, Symbol.iterator);
+    // Preserve native rejection without reading dictionary getters for an invalid iterator.
+    if (iterator != null && typeof iterator !== 'function') return { [Symbol.iterator]: iterator };
     return typeof iterator === 'function'
       ? checkedTransfer(value, iterator)
-      : transferDictionary(value);
+      : transferDictionary(value, iterator);
   };
   const replaceMethod = (target: object, key: string, value: unknown): void => {
     const previous = Object.getOwnPropertyDescriptor(target, key);

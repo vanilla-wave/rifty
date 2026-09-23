@@ -1,0 +1,319 @@
+{
+  "overall_verdict": "blocker",
+  "merge_call": "Final+GREEN BLOCK: исправить B1 и закрепить RED для общего transfer-normalizer; готовность PR/merge вне review.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a728f986a3376a9d273bcaa5dfc80c7f6e208fdd",
+  "unit_goal_source": "docs/backlog/runtime-js/message-port-ref-keepalive.md @ a728f986a3376a9d273bcaa5dfc80c7f6e208fdd; preparation BASE 9836df2e0b839c5d4849dc5f4409449812a3b82d. Только MessagePort/kernel primordial implementation; VM/IPC/source product changes исключены. Detached scratch /private/tmp/rifty-message-port-final-review; tracked source не изменён. Независимо выполнено: live Node v24.16.0 oracle, 9 scenarios exit0 (/private/tmp/rifty-message-port-review-native.log); RIFTY_PLAYGROUND_PORT=5423 pnpm test:browser-unit tests/browser-unit/message-port-keepalive.spec.ts — 11/11 PASS, fresh server reuseExistingServer:false (/private/tmp/rifty-message-port-review-green-5423.log); pnpm test:run packages/runtime-js/src/ipc/worker-realm-compat.test.ts packages/runtime-js/src/builtins/worker_threads.test.ts packages/runtime-js/src/internal/event-loop-keepalive.test.ts packages/kernel/src/shared-globals-binary-sync.test.ts — 62/62 PASS; runtime-js/kernel tsc --noEmit и check:arch PASS. C1 перепроверен node /private/tmp/rifty-message-port-review-c1-mutant.mjs: actual detach-then-throw даёт oldRowsPass=true, bytes=null, newBytesPass=false, mutantKilled=true; прежняя concern устранена. node /private/tmp/rifty-message-port-review-state.mjs: отдельный второй экземпляр installer и kernel owner сохраняет primordial/public constructor, refs 1→1→0, raw transfer bytes=[6,9], queued payloads [[1,2],[3,4],[5,6]] до close, lateRef=false, finalRefs=0. BASE criteria прочитаны: promise не ослаблен; C1 bytes и overload fixture добавлены. Raw preparation log /private/tmp/rifty-message-port-review-red.log: 9 behavioral RED/1 default-infrastructure PASS, не импортная ошибка; новый seam отсутствовал. Новых frozen golden файлов нет; записанные native outputs перепроверены живым oracle. Полный Vitest goal не проверялся этим review.",
+  "unit_residuals": [
+    {
+      "clause": "Acceptance 4 → I4; ADR-0452: managed transfer ceiling и native ArrayBuffer behavior",
+      "location": "packages/runtime-js/src/internal/message-port-keepalive.ts:150",
+      "summary": "B1: options facade повторно открывает Symbol.iterator исходного объекта. Непроверенный iterable отсоединяет managed endpoint/companion; обычный buffer getter читается лишний раз. Нужен RED и исправление единого normalizer с проверкой трёх affected entry points."
+    }
+  ],
+  "goal_residuals": [
+    {
+      "clause": "I4 + I5 + User scenario 3–4: общий Vitest outcome на forks/threads",
+      "location": "docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md:222",
+      "summary": "Нет full-scenario PASS: fresh5419 дошёл до Worker.execArgv ceiling. Обязательны TS config/collection, 1passed/1failed и diff/exit1, исправленный exit0, npm test и verbose на обоих pools; startup-продолжение остаётся у goal driver."
+    },
+    {
+      "clause": "I6 + I7: claimed module path и точная compat-документация/проверенные ceilings",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "После закрытия startup ceiling нужен общий end-to-end acceptance и compat proof exact Vitest4.1.11/Vite8.0.16, включая loud unclaimed modes. Эта MessagePort slice цель не закрывает."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: manual ref держит CJS parent до позднего сообщения unref Worker; повторные ref и один unref не оставляют hold",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: default/raw infrastructure drain, native identity/transfer, global/builtin aliases без listener-only keepalive",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: own/peer close асинхронен и однократен; queued bytes и partial order сохранены; поздний ref не оживляет",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: managed transfer запрещён до любого detachment; обычные ArrayBuffer transfers и native identity сохранены",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": "B1/C2: suite проходит при повторном чтении Symbol.iterator; отдельные пробы доказывают managed detachment и поломку обычного ArrayBuffer transfer."
+    },
+    {
+      "row": "Acceptance 5: shared primordial переживает второй bundle и повторный install; raw kernel ports не становятся managed",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: optional manual refs, sole hold, idempotence, return values, hasRef transitions",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:34",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: global/builtin aliases и unref Worker/kernel infrastructure drain",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: own/peer close, exact queued bytes, callback counts, native identity, partial order",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:64",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: managed transfer ceiling без partial detach; native ArrayBuffer transfer",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": "B1/C2: suite проходит при повторном чтении Symbol.iterator; отдельные пробы доказывают managed detachment и поломку обычного ArrayBuffer transfer."
+    },
+    {
+      "row": "Parity 5: второй kernel bundle и однократная public installation",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "torn-state × repeated ref/unref/close: count/release once, closed handle не оживает",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "observable-order × queued send then close: data и immediate до close; без выдуманного total order",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:92",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie × ownership-losing transfer: named throw до всех detachments",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": "B1/C2: suite проходит при повторном чтении Symbol.iterator; отдельные пробы доказывают managed detachment и поломку обычного ArrayBuffer transfer."
+    },
+    {
+      "row": "sibling-drift × global/builtin и raw/private channels: тот же guest API, неизменная инфраструктура",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "frozen-assumption × second-bundle primordial capture: исходный constructor после public replacement",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "kernel.getKernelHostMessageChannel(): realm-shared primordial",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "globalThis.MessageChannel: реальные native local pairs, once-only wrapper",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:144",
+      "note": ""
+    },
+    {
+      "row": "node:worker_threads.MessageChannel: alias глобального constructor",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:17",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.ref(): idempotent manual hold, undefined return, без revival после close",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.unref(): один release после повторных ref, undefined return",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.hasRef(): initial false, manual transitions, false после close",
+      "source": "public-api",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:45",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.close(): own/peer async notification, release once, queued partial order",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:64",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.start(): native delivery queue с отслеживанием queued close",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:92",
+      "note": ""
+    },
+    {
+      "row": "MessagePort.postMessage(): native bytes/overloads; managed transfer guard",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:130",
+      "note": "B1/C2: suite проходит при повторном чтении Symbol.iterator; отдельные пробы доказывают managed detachment и поломку обычного ArrayBuffer transfer."
+    },
+    {
+      "row": "MessagePort.onmessage setter: native delivery/start для queued tracking",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:133",
+      "note": ""
+    },
+    {
+      "row": "structuredClone(): checked transfer dictionary, frozen options, intact rejected endpoint/companion",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "Worker.prototype.postMessage(): native transfers через общий managed-transfer guard",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": "B1/C2: suite проходит при повторном чтении Symbol.iterator; отдельные пробы доказывают managed detachment и поломку обычного ArrayBuffer transfer."
+    },
+    {
+      "row": "globalThis.postMessage(): native transfer entry через общий managed-transfer guard",
+      "source": "public-api",
+      "trace": "ADR-0452+I4",
+      "status": "weak",
+      "citation": "tests/browser-unit/message-port-keepalive.spec.ts:65",
+      "note": "B1/C2: suite проходит при повторном чтении Symbol.iterator; отдельные пробы доказывают managed detachment и поломку обычного ArrayBuffer transfer."
+    },
+    {
+      "row": "Зафиксированные Node v24.16.0 oracle outputs: refs, async close, queued bytes/order, native buffer transfer",
+      "source": "frozen-artifact",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:15",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/message-port-keepalive-cases.ts:143",
+          "evidence": "11/11 committed browser cases PASS (/private/tmp/rifty-message-port-review-green-5423.log), но node /private/tmp/rifty-message-port-review-transfer-sweep.mjs и node /private/tmp/rifty-message-port-review-option-getter.mjs воспроизводят B1. Case проверяет transfer getter, не повторное чтение overload-discriminating Symbol.iterator.",
+          "summary": "C2: transfer carrier слабее заявленного ceiling; текущий ошибочный normalizer проходит Set/frozen/transfer-getter и fixed-array rejection assertions. Weak coverage — advisory; product violation B1 — отдельный blocker.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "blocker",
+      "findings": [
+        {
+          "severity": "blocker",
+          "location": "packages/runtime-js/src/internal/message-port-keepalive.ts:150",
+          "evidence": "Scratch /private/tmp/rifty-message-port-final-review @ a728f986a3376a9d273bcaa5dfc80c7f6e208fdd, fresh server 5423. node /private/tmp/rifty-message-port-review-probes.mjs: Chromium 148.0.7778.96 native reads=1, DataCloneError, bufferLength=3, received=[1,2,3]; shim reads=3, outcome=\"sent\", bufferLength=0, received=null. Input options: {get [Symbol.iterator](){return ++reads===1?undefined:function*(){yield managed;yield buffer;}}, transfer:[]}. node /private/tmp/rifty-message-port-review-transfer-sweep.mjs: actual CJS owner exit=0, {reads:3,outcome:\"sent\",bufferLength:0,hasRef:true,bytes:null}; same detachment via MessagePort.postMessage, native Worker.postMessage and DedicatedWorkerGlobalScope.postMessage. structuredClone/window dictionary controls retain length=3 and bytes. Native Node v24.16.0 same input: reads=1, DataCloneError(code=25), length=3, bytes=[1,2,3] (/private/tmp/rifty-message-port-review-transfer-native.log). node /private/tmp/rifty-message-port-review-option-getter.mjs: ordinary buffer options whose iterator getter throws on a second read succeed natively (reads=1, detached, bytes=[2,5,9]); shim reads=2, Error(\"iterator reread\"), length=3, bytes=null. JSON outputs use the corresponding /private/tmp/rifty-message-port-review-*.json paths.",
+          "summary": "B1 — повторное чтение Symbol.iterator меняет выбранный overload и обходит managed-transfer guard; тот же дефект ломает обычный ArrayBuffer transfer. Fault class: provenance-lie × ownership-losing transfer, observable-order × option getters. transferArgument уже прочёл iterator (157), затем transferDictionary Proxy снова отдаёт исходный getter native overload selection; новый iterable минует checkedTransfer. Missing RED: изменяющийся/однократный iterator getter. Sibling sweep выполнен: MessagePort (230), Worker (264), worker-global postMessage (272) поражены; structuredClone dictionary контроль сохранён.",
+          "authority": "Acceptance 4 → I4; Fault matrix provenance-lie × ownership-losing transfer → I4; ADR-0452 §Lifetime and limits: reject owned endpoint transfer before detachment, preserve native ArrayBuffer transfers across every installed native transfer entry."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "blocker",
+      "findings": []
+    }
+  ]
+}
