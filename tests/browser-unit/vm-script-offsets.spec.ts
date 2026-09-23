@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import asyncCase from '../../tools/node-parity-runner/cases/vm/run-in-this-context-offsets-async.case.ts';
 import callSitesCase from '../../tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts';
 import offsetsCase from '../../tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts';
+import ownSourceUrlCase from '../../tools/node-parity-runner/cases/vm/run-in-this-context-own-source-url.case.ts';
 import { normalise } from '../../tools/node-parity-runner/src/diff.ts';
 import { runInNode } from '../../tools/node-parity-runner/src/run-in-node.ts';
 import type { ParityCase } from '../../tools/node-parity-runner/src/types.ts';
@@ -28,6 +29,7 @@ const cases: ReadonlyArray<readonly [string, ParityCase]> = [
   ['vm/run-in-this-context-offsets', offsetsCase],
   ['vm/run-in-this-context-offsets-callsites', callSitesCase],
   ['vm/run-in-this-context-offsets-async', asyncCase],
+  ['vm/run-in-this-context-own-source-url', ownSourceUrlCase],
 ];
 
 for (const [name, parityCase] of cases) {

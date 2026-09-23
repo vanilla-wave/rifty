@@ -4,6 +4,8 @@
 
 - `vm.runInThisContext` / `vm.Script` honour int32 `lineOffset` / `columnOffset` in stacks and guest `Error.prepareStackTrace` CallSites via one owned stack-hook accessor; offsets validate as Node on every `vm` entry point; sandbox offsets stay named gaps (ADR-0450).
 
+- `vm.runInThisContext` / `vm.Script` name a script by its own `sourceURL` comment as Node does (offsets dropped from line/column, kept on enclosing getters); `Script` sandbox runs check the context before the offset gap; a frozen `Error` is a named gap (ADR-0450).
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

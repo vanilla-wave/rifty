@@ -54,6 +54,19 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
    share an identity only when filename and offsets are equal. Zero offsets
    keep today's `sourceURL = filename`, unless the filename itself starts with
    the identity scheme (then encoded, never read back as offsets).
+
+   **Own `sourceURL`.** V8 names a script by its last valid
+   `//# sourceURL=` / `//@ sourceURL=` comment and then drops the origin
+   offsets from line/column/`toString` but keeps them on the enclosing getters
+   (evidence §Own sourceURL); rifty's appended comment would win. For code that
+   spells `sourceURL`, V8 itself reads the name first: the code as the body of
+   a never-called function, named by frame 0 of an error created before it,
+   with `Error.stackTraceLimit` / `Error.prepareStackTrace` borrowed by
+   descriptor and restored as found. Zero offsets: nothing appended (V8 keeps
+   the own name). Offsets: the identity carries the own name too. An
+   identity-shaped own name always goes through an identity. A JS lexer was
+   rejected: regex/division, templates and V8's comment grammar are V8's to
+   decide.
 3. **One owner of `Error.prepareStackTrace`.** The first offset script (and
    every later one, if the owner was removed) installs a configurable,
    non-enumerable accessor that keeps the guest-assigned value. Getter: a
@@ -65,9 +78,11 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
 4. **Projection.** A CallSite whose `sourceURL` is an offset identity is
    handed out as a Proxy (prototype and names are CallSite's): line, column,
    enclosing line/column shift per Node with null for ≤ 0;
-   `getScriptNameOrSourceURL` / `getEvalOrigin` return the filename;
-   `toString` rewrites the identity to `filename[:line[:col]]` (zero omitted,
-   negatives printed). Other CallSites pass through untouched.
+   `getScriptNameOrSourceURL` returns the own name, else the filename;
+   `getEvalOrigin` the filename; `toString` rewrites the identity to
+   `name[:line[:col]]` (zero omitted, negatives printed). Under an own name
+   line/column/`toString` stay unshifted, enclosing getters shift (V8). Other
+   CallSites pass through untouched.
 5. **ADR-0136 window** reads and writes the slot through the owner while it is
    installed, so its restore sees its own dispatcher and never deletes the
    owner.
@@ -89,6 +104,10 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
   (visible, never a plausible `file:line:col`) until the next offset script.
 - `eval` / `new Function` inside an offset script: their eval origin shows the
   encoded identity without position (Node: `file:line:col`).
+- A frozen `Error` (non-configurable stack slots) is
+  `NotImplementedError('vm.runInThisContext.frozenError')` for an offset script
+  or code that spells `sourceURL` (Node runs both); plain code still runs.
+- Code that spells `sourceURL` is parsed twice (probe + evaluation).
 - Unchanged, outside this ADR: eval-shaped host-realm frames, the absent
   default `displayErrors` decoration, and Chromium's `undefined` default hook
   before any offset script (evidence §Discovered).

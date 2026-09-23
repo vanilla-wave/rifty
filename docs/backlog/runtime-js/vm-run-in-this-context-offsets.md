@@ -6,7 +6,7 @@ created: 2026-09-15
 why: vitest's module evaluator (and vite-node 3) evaluate every transformed test module with `vm.runInThisContext(wrapped, { filename, lineOffset: 0, columnOffset: -N })`; rifty throws `NotImplementedError('vm.runInThisContext.columnOffset')` for any non-zero offset, so no test file can execute
 epic: vitest-run-in-browser
 sources: [docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-evidence.md, docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/adr/runtime-js/0450-project-vm-script-offsets-through-one-owned-stack-hook.md, docs/public/compat/modules.md]
-code: [packages/runtime-js/src/builtins/vm/index.ts, packages/runtime-js/src/module-loader/source-maps.ts, tools/node-parity-runner/cases/vm, tests/browser-unit/vm-script-offsets.spec.ts]
+code: [packages/runtime-js/src/builtins/vm/index.ts, packages/runtime-js/src/builtins/vm/script-offsets.ts, packages/runtime-js/src/builtins/vm/own-source-url.ts, packages/runtime-js/src/module-loader/source-maps.ts, tools/node-parity-runner/cases/vm, tests/browser-unit/vm-script-offsets.spec.ts]
 ---
 
 ## Context
@@ -39,6 +39,7 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 5. `lineOffset` / `columnOffset` are validated as Node's int32 (`ERR_INVALID_ARG_TYPE` / `ERR_OUT_OF_RANGE`, exact messages; `lineOffset` first, `compileFunction` `columnOffset` first as in Node — evidence P9) on `runInThisContext`, `Script`, `runInContext`, `runInNewContext` and `compileFunction`, before any loud gap — parity `validate …` rows, unit `script-offsets.test.ts` → ADR-0450
 6. Once an offset script ran, `Error.prepareStackTrace` has one owner: ADR-0136 source-map windows opened after or around an offset script keep both remaps, restore the value they read and never remove the owner; a formatter that bypasses the owner never shows an unshifted `filename:line:col`, and the next offset script projects again; this holds from Chromium's unset start hook too — `script-offsets-stack-hook.fault.test.ts` (Fault matrix) → ADR-0450
 7. `docs/public/compat/modules.md` `node:vm` row states host-realm offsets as honoured and lists the Out of scope gaps and the ADR-0450 divergences as ❌; `packages/runtime-js/CHANGELOG.md` records the change; ADR-0450 is indexed → ADR-0450
+8. A script whose code names itself — the last valid `//# sourceURL=` / `//@ sourceURL=` comment as V8 parses it (comment-shaped text in strings, templates, regexes or block comments is not one; a trailing invalid one clears it) — renders and hands out CallSites as in Node, with or without offsets: that name, line/column/`toString` without the offsets, enclosing getters with them; the probe that reads the name never runs guest code and leaves `Error.stackTraceLimit` / `Error.prepareStackTrace` (guest accessors included) as it found them; a frozen `Error` is `NotImplementedError('vm.runInThisContext.frozenError')` — parity `vm/run-in-this-context-own-source-url` + browser-unit spec + `own-source-url.fault.test.ts` → I6 + ADR-0450
 
 ## Reference contract
 
@@ -58,8 +59,9 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 7. Execution unchanged: `exec 42 7` → I6
 8. Validation: 15 option sets × {`runInThisContext`, `Script`} (`validate …` rows; evidence P3) → ADR-0450
 9. vitest/vite hook shape: `vite-hook line1` `/virtual/my project/src/sum.test.ts,1,28,1,1,atLine1 [atLine1 (/virtual/my project/src/sum.test.ts:1:28)]`, `vite-hook line3` `…,3,9,2,32,atLine2 […:3:9]`, `callsites-pattern` `…,4,56,4,30,sites`, `late-hook 1:28`, `restored typeof function`, `restored default line1` `…:1:28`, `restored default line3` `…:3:9` → I4
-10. Chromium realm: cases 1–9 and 11 print the same stdout in a fresh Chromium module worker (`Error.prepareStackTrace` initially undefined) as the parity runner's `runInNode` — `tests/browser-unit/vm-script-offsets.spec.ts` → I4
+10. Chromium realm: cases 1–9, 11 and 12 print the same stdout in a fresh Chromium module worker (`Error.prepareStackTrace` initially undefined) as the parity runner's `runInNode` — `tests/browser-unit/vm-script-offsets.spec.ts` → I4
 11. Async frames (`vm/run-in-this-context-offsets-async`): `async-default` `at inner (/virtual/async.js:13:46) | at async outer (/virtual/async.js:12:15)`, `async-line1` `…async1.js:4:90 | at async outer1 (/virtual/async1.js:4:30)`, `async-hook` `false,inner2,13,47,… | true,outer2,12,15,async outer2 (/virtual/async2.js:12:15)` (evidence §Parity case outputs) → I4 + ADR-0450
+12. Own `sourceURL` (`vm/run-in-this-context-own-source-url`): `own offsets line2` `/virtual/own.js:2:10`, `own last invalid` `/virtual/fileI.js:4:10`, `own zero offsets` `/virtual/own0.js:2:10`, `own identity-shaped` `rifty-vm://5/5/x.js:2:10`, `not own template` `/virtual/fileTpl.js:7:10`, `hook own line1` `/virtual/hown1.js,1,25,6,null,…`, `own exec 10 5` (evidence §Own sourceURL) → I6 + ADR-0450
 
 ## Fault matrix
 
@@ -77,6 +79,11 @@ ADR-0450 accessor.
 | `concurrent-same-key` × rows 1–2 from Chromium's unset hook (restore writes `undefined`) | the restore clears through the owner, never deletes it; reading back after re-assigning the read value is identical | fault test `from an unset hook` rows | → ADR-0450 |
 | `provenance-lie` × formatter bypassing the owner (`delete`, format inside a hook, overflow) | offset frames show a visibly encoded identity, never an unshifted `filename:line:col`; the next offset script re-installs projection | fault test row 3 (`delete`), `inside a stack hook` row; overflow not deterministically drivable (same V8 bypass branch) | → ADR-0450 |
 | `provenance-lie` × zero-offset filename shaped like an identity (`rifty-vm://5/5/x.js`) | rendered as that filename at its own position, never decoded as offsets | fault test `shaped like an offset identity` row | → ADR-0450 |
+| `provenance-lie` × guest hook chaining to the hook it read (identity-shaped filename) | each CallSite projected once; the name is never decoded | fault test `chaining to the hook it read` row | → ADR-0450 |
+| `sibling-drift` × guest re-assigns the hook it read after an offset script | reads back the same value; offsets still project | fault test `re-assigning the hook read` row | → ADR-0450 |
+| `sibling-drift` × own-`sourceURL` probe vs guest accessors on `Error.stackTraceLimit` / `Error.prepareStackTrace`, or `stackTraceLimit = 0` | accessors never invoked, descriptors restored as found; the name is still read | `own-source-url.fault.test.ts` accessor / zero-limit rows | → ADR-0450 |
+| `concurrent-same-key` × own-`sourceURL` probe with the owner installed, or inside an ADR-0136 window | owner descriptor unchanged; window restore and both remaps intact | `own-source-url.fault.test.ts` owner row; fault test `probe inside a source-map window` row | → ADR-0450 |
+| `sibling-drift` × frozen `Error` | `NotImplementedError('vm.runInThisContext.frozenError')` where the slots are needed; plain code runs | `own-source-url.fault.test.ts` frozen row (child process) | → ADR-0450 |
 
 ## Out of scope
 
@@ -84,7 +91,9 @@ ADR-0450 accessor.
 - `Script#runInContext` / `Script#runInNewContext` on a Script built with a non-zero offset: `NotImplementedError('vm.Script.lineOffset' | 'vm.Script.columnOffset')` + compat ❌.
 - `vm.compileFunction` with a non-zero offset: `NotImplementedError('vm.compileFunction.lineOffset' | 'vm.compileFunction.columnOffset')` + compat ❌.
 - ADR-0450 divergences (a property read cannot throw), each a compat ❌ row: the slot is an accessor once an offset script ran; reading it back after assigning a function yields a delegating wrapper, after a non-function the default; an owner bypass shows the encoded identity; `eval` / `new Function` called inside an offset script show the encoded identity (no position) as their eval origin (Node: `eval at f (file:line:col)`).
-- Pre-existing and unchanged (evidence §Discovered 1–4), compat ❌ rows: eval-shaped host-realm frames (`at eval (…)`, `isEval()` true, `getFileName()` undefined); no default `displayErrors` decoration; zero-offset filenames that are omitted or not valid `sourceURL` values lose the filename (`<anonymous>`, Node `evalmachine.<anonymous>`); Chromium's `undefined` default hook before any offset script.
+- Pre-existing and unchanged (evidence §Discovered 1–4), compat ❌ rows: eval-shaped host-realm frames (`at eval (…)`, `isEval()` true, `getFileName()` undefined — so for an own-`sourceURL` script `getFileName() || getScriptNameOrSourceURL()` reads the own name, Node the filename); no default `displayErrors` decoration; zero-offset filenames that are omitted or not valid `sourceURL` values (whitespace) lose the filename (`<anonymous>`, Node `evalmachine.<anonymous>`); Chromium's `undefined` default hook before any offset script.
+- Frozen `Error` (non-configurable `stackTraceLimit` / `prepareStackTrace`): `NotImplementedError('vm.runInThisContext.frozenError')` for offset scripts and for code that spells `sourceURL` (Node runs both) + compat ❌.
+- Own-`sourceURL` override in rifty's other loaders (CJS, ESM, `[eval]`, workers, `child_process` exec, sandbox engines; evidence §Own sourceURL): routed at land.
 
 ## Decisions
 
@@ -95,4 +104,6 @@ ADR-0450 accessor.
 - 2026-09-23 — sandbox entry points keep named gaps: ADR-0142 engines have no script origin; vitest's vm pools are out of goal scope (map §Out of scope).
 - 2026-09-23 — frame-shape gaps found at pickup (evidence §Discovered 1–3) are outside this promise; compat ❌ here, backlog routing at land.
 - 2026-09-23 — IMPLEMENT: Node v24.16.0 `compileFunction` validates `columnOffset` before `lineOffset` (evidence P9); Acceptance 5 follows Node, not the earlier blanket "lineOffset first". `runInContext` checks its context before options, and a `Script`'s run methods ignore construction options (offsets, `cachedData` & co.), as Node (evidence P9; unit rows).
+- re-cut: 2026-09-23 — Final+GREEN reception: own-`sourceURL` scripts (Acceptance 8, parity case 12, five fault rows), frozen-`Error` named gap, `Script` sandbox runs check the context before the offset gap — trace: none
+- 2026-09-23 — own `sourceURL` read by V8 itself (never-called function probe, name from frame 0), not a JS lexer: V8's own tokens and comment grammar (regex/division, templates, trailing-invalid reset, quoted values); only for code that spells `sourceURL` (evidence §Own sourceURL).
 - 2026-09-23 — IMPLEMENT: Contract+RED concerns taken in place — Chromium-start fault rows, in-hook bypass row, async parity case, runInNewContext / compileFunction order rows, `+ ADR-0450` traces, eval-origin divergence recorded. Stack-overflow bypass stays untested (V8 skips the hook only while the stack is overflowed; not reproducible on demand).

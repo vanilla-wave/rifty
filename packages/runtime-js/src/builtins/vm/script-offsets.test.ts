@@ -105,6 +105,22 @@ describe('vm offsets outside the host realm', () => {
     );
   });
 
+  it('a Script built with offsets checks the context first, as in Node', () => {
+    // Node v24.16.0 (evidence §Own sourceURL, order-script.cjs): context
+    // validation precedes the run, so an invalid context never reports the gap.
+    const script = new Script('1', { lineOffset: 1, columnOffset: 2 });
+    const messageOf = (fn: () => unknown) => (thrownBy(fn) as Error).message;
+    expect(messageOf(() => script.runInContext({}))).toBe(
+      'The "contextifiedObject" argument must be an vm.Context. Received an instance of Object',
+    );
+    expect(messageOf(() => script.runInContext(null as unknown as Record<string, unknown>))).toBe(
+      'The "object" argument must be of type object. Received null',
+    );
+    expect(
+      messageOf(() => script.runInNewContext(null as unknown as Record<string, unknown>)),
+    ).toBe('The "object" argument must be of type object. Received null');
+  });
+
   it('Script run options carry no construction options, as in Node', () => {
     // Node v24.16.0 (evidence P9): a Script's run methods ignore offsets, cachedData & co.
     const runOptions = {

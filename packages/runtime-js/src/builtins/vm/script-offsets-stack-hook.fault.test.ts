@@ -191,6 +191,53 @@ describe('vm offset projection shares the stack hook slot', () => {
     }
     expect(stack).toContain(`${filename}:1:7`);
   });
+
+  it('a hook chaining to the hook it read never projects a CallSite twice', () => {
+    lateInner();
+    const read = Error.prepareStackTrace as (error: Error, sites: unknown) => unknown;
+    Error.prepareStackTrace = (error, sites) => read(error, sites);
+    let stack = '';
+    try {
+      runInThisContext('throw new Error("id")', { filename: 'rifty-vm://5/5/x.js' });
+    } catch (error) {
+      stack = String((error as Error).stack);
+    } finally {
+      Error.prepareStackTrace = read;
+    }
+    // Projected again, the identity-shaped name would decode to `x.js:6:12`.
+    expect(stack).toContain('rifty-vm://5/5/x.js:1:7');
+  });
+
+  it('re-assigning the hook read after an offset script reads back the same value', () => {
+    const inner = lateInner();
+    const read = Error.prepareStackTrace;
+    Error.prepareStackTrace = read;
+    expect(Error.prepareStackTrace).toBe(read);
+    expect(lateFrame(inner)).toBe(LATE_FRAME);
+  });
+
+  it("a script's own-sourceURL probe inside a source-map window keeps both remaps and the window's restore", async () => {
+    // Node v24.16.0: own sourceURL, offsets dropped (parity vm/run-in-this-context-own-source-url).
+    globalThis.__riftyOffsetInner = lateInner();
+    const before = Error.prepareStackTrace;
+    let own: (() => Error) | undefined;
+    globalThis.__riftyOffsetEvaluate = () => {
+      own = runInThisContext(
+        '(function f() {\n  return new Error("s") })\n//# sourceURL=/virtual/own.js',
+        { filename: '/virtual/file.js', lineOffset: 3, columnOffset: 2 },
+      ) as () => Error;
+    };
+    const loader = loaderFor(['a'], true);
+
+    await loader.import('./a.ts', '/work/__entry__.ts');
+
+    expect(globalThis.__riftyOffsetFrames).toEqual(['/work/a.ts:3:1', LATE_FRAME]);
+    expect(Error.prepareStackTrace).toBe(before);
+    if (!own) throw new Error('own-sourceURL script was not evaluated');
+    expect(/\/virtual\/\w+\.js:\d+:\d+/.exec(String(own().stack))?.[0]).toBe(
+      '/virtual/own.js:2:10',
+    );
+  });
 });
 
 // Chromium starts with no `Error.prepareStackTrace` (evidence §Chromium); the

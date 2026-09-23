@@ -174,6 +174,7 @@ opt-in; supersedes ADR-0138, which had recorded the rewrite direct-eval leak as 
 | Behavior | Status | Notes |
 |---|---|---|
 | `runInThisContext` / `new Script(…).runInThisContext()` with `lineOffset` / `columnOffset` | ✅ | Node's int32 validation; `.stack`, guest `Error.prepareStackTrace` CallSites (line/column/enclosing getters, `toString`) and default rendering show Node's positions: every line + `lineOffset`, physical line 1 + `columnOffset`, unclamped (≤ 0 getters null, zero omitted). Parity `vm/run-in-this-context-offsets{,-callsites,-async}` + Chromium browser-unit `vm-script-offsets.spec.ts` |
+| Script whose code has its own `//# sourceURL=` / `//@ sourceURL=` (any offsets) | ✅ | Named by it as in Node (last valid comment, as V8 parses it): line/column/`toString` without offsets, enclosing getters with them. Parity `vm/run-in-this-context-own-source-url` + Chromium browser-unit |
 | Offset validation on `runInContext` / `runInNewContext` / `compileFunction` | ✅ | `ERR_INVALID_ARG_TYPE` / `ERR_OUT_OF_RANGE`, Node's order (`compileFunction`: `columnOffset` first) |
 | Non-zero offsets in `runInContext` / `runInNewContext` | ❌ | `NotImplementedError('vm.runInContext.lineOffset' \| 'vm.runInContext.columnOffset')` |
 | `Script` built with offsets run by `runInContext` / `runInNewContext` | ❌ | `NotImplementedError('vm.Script.lineOffset' \| 'vm.Script.columnOffset')` |
@@ -181,10 +182,12 @@ opt-in; supersedes ADR-0138, which had recorded the rewrite direct-eval leak as 
 | `Error.prepareStackTrace` once an offset script ran | ❌ | An accessor (Node: data property); reading back after assigning a function yields a wrapper delegating to it, after a non-function the default (Node: the assigned value) |
 | Owner bypass: `delete Error.prepareStackTrace`, an error formatted inside a hook, stack overflow | ❌ | Offset frames show the encoded identity `rifty-vm://<lineOffset>/<columnOffset>/<escaped filename>` until the next offset script (never a plausible `file:line:col`) |
 | `eval` / `new Function` called inside an offset script | ❌ | Eval origin shows the encoded identity without position (Node: `eval at f (file:line:col)`) |
-| Host-realm frame shape (any offsets) | ❌ | Eval frames: top level `at eval (…)`, `isEval()` true, `getFileName()` undefined, `getEvalOrigin()` = filename |
+| Host-realm frame shape (any offsets) | ❌ | Eval frames: top level `at eval (…)`, `isEval()` true, `getFileName()` undefined (so with an own `sourceURL`, `getFileName() \|\| getScriptNameOrSourceURL()` is that name; Node: the filename), `getEvalOrigin()` = filename |
 | Default `displayErrors` decoration | ❌ | Absent on errors thrown synchronously out of `runInThisContext` / `Script` |
-| Zero-offset filename omitted, or not a valid `sourceURL` (whitespace, quotes) | ❌ | Frames show `<anonymous>` (Node: the filename / `evalmachine.<anonymous>`) |
+| Zero-offset filename omitted, or not a valid `sourceURL` (whitespace) | ❌ | Frames show `<anonymous>` (Node: the filename / `evalmachine.<anonymous>`) |
 | Default `Error.prepareStackTrace` before any offset script | ❌ | Chromium's `undefined` (Node 24: `ErrorPrepareStackTrace`) |
+| Frozen `Error` (non-configurable `stackTraceLimit` / `prepareStackTrace`) | ❌ | `NotImplementedError('vm.runInThisContext.frozenError')` for an offset script or code that spells `sourceURL` (Node runs both); other code runs |
+
 - The in-Worker VFS is in-memory only (M4 adds OPFS).
 - A `.ts`/`.tsx` module that classifies as CJS (its nearest package scope is not `type:module`) cannot be `require()`d: `transformSource` is an async caller-injected contract and a synchronous `require()` cannot await it (ADR-0052 D1 alt-C). It throws `NotImplementedError('module-loader.ts-via-require')` rather than feeding raw TypeScript to `new Function`. A `.ts` under a `type:module` scope loads as ESM via `import()`, where the injected transform runs.
 - **TS-on-import coverage:** `import type`, inline `type` imports, `const enum`, `interface`, `enum`, `satisfies`, and standard decorators all lower before the AST pass. Parity cases: `modules/ts-effect-syntax-cross-file`, `modules/ts-graph-cross-file`, and `modules/ts-standard-decorator`, all head-to-head against `tsx` with exact host `esbuild@0.28.0` injected on the rifty side. Legacy `experimentalDecorators` semantics are a distinct tsconfig-driven mode and are not claimed by the standard-decorator case.

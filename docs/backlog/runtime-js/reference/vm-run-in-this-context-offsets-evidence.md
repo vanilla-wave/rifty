@@ -272,7 +272,8 @@ Verified above; not caused or changed by offsets:
    synchronously out of `runInThisContext`/`Script`; only an explicit
    `displayErrors` option is a loud gap today.
 3. Zero-offset path: a filename that is not a valid `sourceURL` value
-   (whitespace, quotes) loses the filename (`<anonymous>` frames).
+   (whitespace) loses the filename (`<anonymous>` frames). Quotes are valid
+   (§Own sourceURL: `/virtual/q"m.js`, `"/virtual/qq.js"` render as in Node).
 4. Realm default `Error.prepareStackTrace` is Chromium's `undefined`; Node 24
    ships `ErrorPrepareStackTrace` (data property, writable, non-enumerable,
    configurable) in every main/worker realm.
@@ -299,3 +300,97 @@ with `FORCE_COLOR: "1"` (`playwright/lib/runner/index.js:4999`); `runInNode`
 inherited it, so the Node side printed `exec \x1b[33m42\x1b[39m \x1b[33m7\x1b[39m`
 against rifty's `exec 42 7`. The oracle child now drops `FORCE_COLOR`
 (`run-in-node.test.ts` RED: received `\x1b[33m42\x1b[39m x`).
+
+## Own sourceURL (Final+GREEN reception, 2026-09-23)
+
+Blocker: an offset script whose code carries its own `sourceURL` rendered the
+vm filename with shifted positions. Oracle Node v24.16.0 / V8
+13.6.233.17-node.49; scripts in `/tmp/vgoal/u10/recv/` (not committed).
+
+`node node-srcurl-getters.cjs` — V8 names the script by the own comment and
+drops the offsets from line/column/`toString`, but NOT from the enclosing
+getters; `getFileName()` stays the vm filename:
+
+```
+offsets line2 {lineOffset:3,columnOffset:2}  default: at f (/virtual/own.js:2:10)
+  getFileName=/virtual/file.js getScriptNameOrSourceURL=/virtual/own.js getLineNumber=2 getColumnNumber=10 getEnclosingLineNumber=4 getEnclosingColumnNumber=4 isEval=false getEvalOrigin=undefined str=f (/virtual/own.js:2:10)
+offsets line1 {lineOffset:5,columnOffset:-3}  getLineNumber=1 getColumnNumber=24 getEnclosingLineNumber=6 getEnclosingColumnNumber=null
+zero offsets                                   default: at f (/virtual/own0.js:1:24)  getFileName=/virtual/file0.js
+no filename                                    default: at f (/virtual/nofn.js:1:24)  getFileName=evalmachine.<anonymous>
+```
+
+`node node-probe-facts.cjs` / inline probes — comment grammar as V8 parses it:
+last valid comment wins (`first.js`/`second.js` → `second.js`); `//@` honoured;
+a trailing invalid one (`//# sourceURL=bad value`, empty value) clears the name
+→ vm filename + offsets; `/*# sourceURL= */`, comment-shaped text in a string,
+template or regex, `//# sourceURL =x` (space before `=`) and a trailing token
+after the value → not a name; quotes are part of the value
+(`at t ("/virtual/q.js":1:22)`); a comment inside a never-called inner function
+counts; `#!# sourceURL=…` (hashbang) does not; hashbang code runs in
+`vm`/`eval`.
+
+Mechanism check `node probe-proto.cjs` (V8 probe: `new Function('E',
+'return new E();function probe() {\n' + code + '\n}')`, name read from frame 0
+through a borrowed `Error.prepareStackTrace`, `stackTraceLimit` 1): 32/35
+samples equal the name the real `vm.runInThisContext` script got; the 3
+differences are scripts Node rejects (`return` / `new.target` at top level,
+an injected `}`) — the real evaluation throws its SyntaxError; `INJECTED
+undefined` (the probe never runs guest code).
+
+Parity case `vm/run-in-this-context-own-source-url` (`node run-case-node.mjs`):
+
+```
+own offsets line2 at f (/virtual/own.js:2:10)
+own offsets line1 at g (/virtual/own1.js:1:24)
+own Script at h (/virtual/ownS.js:2:10)
+own legacy at at l (/virtual/legacy.js:2:10)
+own last wins at w (/virtual/second.js:2:10)
+own last invalid at i (/virtual/fileI.js:4:10)
+own quoted at q ("/virtual/q.js":2:10)
+own no filename at n (/virtual/nofn.js:2:10)
+own after hashbang at b (/virtual/hb.js:3:10)
+own zero offsets at z (/virtual/own0.js:2:10)
+own identity-shaped at r (rifty-vm://5/5/x.js:2:10)
+own identity-shaped zero at r0 (rifty-vm://5/5/y.js:2:10)
+not own string at s (/virtual/fileStr.js:5:10)
+not own template at t (/virtual/fileTpl.js:7:10)
+not own regex at x (/virtual/fileRe.js:5:10)
+not own block at k (/virtual/fileBlk.js:7:10)
+hook own line2 /virtual/hown.js,2,10,4,4,f2 (/virtual/hown.js:2:10)
+hook own line1 /virtual/hown1.js,1,25,6,null,g2 (/virtual/hown1.js:1:25)
+hook own zero /virtual/hown0.js,2,10,1,2,z2 (/virtual/hown0.js:2:10)
+hook own identity-shaped rifty-vm://1/1/h.js,2,10,4,4,r2 (rifty-vm://1/1/h.js:2:10)
+own exec 10 5
+```
+
+RED at `0dccabe21` (Node host `tsx cli.ts run-in-this-context-own-source-url`):
+15 rows differ, e.g. `+ own offsets line2 at f (/virtual/file.js:5:10)`,
+`+ own zero offsets at z (/virtual/file0.js:2:10)` (zero offsets: pre-existing
+since BASE), `+ hook own line1 /virtual/hfile1.js,6,22,6,null`. Chromium
+browser-unit, same product: `- Expected - 15 / + Received + 15`. GREEN after
+the fix: Node host 4/4 vm offset cases, Chromium 4/4.
+
+Frozen `Error` — `node -e "Object.freeze(Error); vm.runInThisContext(…)"`:
+`ok 1` (plain), `ok 2` (own sourceURL), `ok 3` (`lineOffset: 1`). Rifty needs
+the `Error` stack slots (probe, owner): named gap
+`vm.runInThisContext.frozenError` for the last two, plain code still runs
+(`own-source-url.fault.test.ts`, child process).
+
+`Script` sandbox runs — `node order-script.cjs` (Script built with
+`{lineOffset:1,columnOffset:2}`): `runInContext({})` → `The "contextifiedObject"
+argument must be an vm.Context. Received an instance of Object`;
+`runInContext(null)` / `runInNewContext(null)` → `The "object" argument must be
+of type object. Received null`; `runInContext({}, {timeout:'x'})` → the context
+error first. Rifty at `0dccabe21` raised `vm.Script.lineOffset` first.
+
+Mutants (all killed): projection re-entry guard dropped → `a hook chaining to
+the hook it read` row; setter stores the wrapper → `re-assigning the hook read`
+row; probe assigns instead of defining → accessor / owner / window rows; no
+`stackTraceLimit` override → accessor / zero-limit rows; no restore → 4 rows;
+no hashbang strip → parity `own after hashbang`.
+
+Pre-existing sibling (for routing, not changed here): other rifty loaders
+append `//# sourceURL=<id>` after guest code the same way
+(`module-loader/cjs.ts`, `esm-job-preparation.ts`, `loader.ts` `[eval]`,
+`worker_threads.ts`, `child_process-exec.ts`, the vm sandbox engines), so a
+guest `sourceURL` comment there is overridden too; not measured against Node.

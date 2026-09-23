@@ -7,6 +7,8 @@
  * through {@link readPrepareStackTrace} / {@link writePrepareStackTrace}.
  */
 
+import { frozenErrorGap, ownSourceURL } from './own-source-url.ts';
+
 interface CallSiteLike {
   getScriptNameOrSourceURL(): unknown;
   getLineNumber(): number | null;
@@ -19,14 +21,20 @@ interface CallSiteLike {
 interface ScriptIdentity {
   readonly url: string;
   readonly filename: string;
+  /** Rendered name: the script's own `sourceURL`, else the filename. */
+  readonly name: string;
+  /** Line/column getters and rendering; V8 drops them under an own `sourceURL`. */
   readonly lineOffset: number;
   readonly columnOffset: number;
+  /** Enclosing getters; V8 keeps them under an own `sourceURL`. */
+  readonly enclosingLineOffset: number;
+  readonly enclosingColumnOffset: number;
 }
 
 type StackHook = (this: unknown, error: unknown, trace: unknown) => unknown;
 
 const SCHEME = 'rifty-vm://';
-const IDENTITY_RE = /^rifty-vm:\/\/(-?\d+)\/(-?\d+)\/([A-Za-z0-9._%-]*)$/;
+const IDENTITY_RE = /^rifty-vm:\/\/(-?\d+)\/(-?\d+)\/([A-Za-z0-9._%-]*)(?:\/([A-Za-z0-9._%-]+))?$/;
 const DEFAULT_FILENAME = 'evalmachine.<anonymous>';
 const errorCtor = Error as unknown as { prepareStackTrace?: unknown };
 const errorToString = Error.prototype.toString;
@@ -39,22 +47,27 @@ const hookOf = new WeakMap<object, unknown>();
 const projectedSites = new WeakSet<object>();
 
 /**
- * `sourceURL` for a host-realm script: the filename itself for zero offsets
- * (today's shape), else an offset identity — which installs the projection.
- * A zero-offset filename that looks like an identity is encoded too, so a
- * guest name is never read back as offsets.
+ * `sourceURL` to append to a host-realm script: none when the code names
+ * itself (V8 keeps its own), the filename itself for zero offsets (today's
+ * shape), else an offset identity — which installs the projection and carries
+ * the script's own name. An identity-shaped name is wrapped too, so a guest
+ * name is never read back as offsets.
  */
 export function hostScriptSourceURL(
+  code: string,
   filename: string | undefined,
   lineOffset: number,
   columnOffset: number,
 ): string | undefined {
+  const own = ownSourceURL(code);
   const plain = filename === undefined ? undefined : String(filename);
-  if (lineOffset === 0 && columnOffset === 0 && !plain?.startsWith(SCHEME)) {
-    return plain || undefined;
+  if (lineOffset === 0 && columnOffset === 0) {
+    if (own !== undefined && !own.startsWith(SCHEME)) return undefined;
+    if (own === undefined && !plain?.startsWith(SCHEME)) return plain || undefined;
   }
   installStackProjection();
-  return `${SCHEME}${lineOffset}/${columnOffset}/${encodeFilename(plain ?? DEFAULT_FILENAME)}`;
+  const ownPart = own === undefined ? '' : `/${encodeFilename(own)}`;
+  return `${SCHEME}${lineOffset}/${columnOffset}/${encodeFilename(plain ?? DEFAULT_FILENAME)}${ownPart}`;
 }
 
 /** The hook as assigned (projection wrappers unwrapped). */
@@ -101,13 +114,15 @@ function isOwnerInstalled(): boolean {
 /** (Re)install the owner, keeping whatever hook the slot holds now. */
 function installStackProjection(): void {
   if (isOwnerInstalled()) return;
-  assigned = unwrap(errorCtor.prepareStackTrace);
-  Object.defineProperty(errorCtor, 'prepareStackTrace', {
+  const current = unwrap(errorCtor.prepareStackTrace);
+  const installed = Reflect.defineProperty(errorCtor, 'prepareStackTrace', {
     configurable: true,
     enumerable: false,
     get: getPrepareStackTrace,
     set: setPrepareStackTrace,
   });
+  if (!installed) throw frozenErrorGap('prepareStackTrace');
+  assigned = current;
 }
 
 function unwrap(value: unknown): unknown {
@@ -157,19 +172,21 @@ function projectionHandler(identity: ScriptIdentity): ProxyHandler<CallSiteLike>
     get(target, key) {
       switch (key) {
         case 'getLineNumber':
-          return () => shiftLine(identity, target.getLineNumber());
+          return () => shiftLine(identity.lineOffset, target.getLineNumber());
         case 'getColumnNumber':
-          return () => shiftColumn(identity, target.getLineNumber(), target.getColumnNumber());
+          return () =>
+            shiftColumn(identity.columnOffset, target.getLineNumber(), target.getColumnNumber());
         case 'getEnclosingLineNumber':
-          return () => shiftLine(identity, target.getEnclosingLineNumber());
+          return () => shiftLine(identity.enclosingLineOffset, target.getEnclosingLineNumber());
         case 'getEnclosingColumnNumber':
           return () =>
             shiftColumn(
-              identity,
+              identity.enclosingColumnOffset,
               target.getEnclosingLineNumber(),
               target.getEnclosingColumnNumber(),
             );
         case 'getScriptNameOrSourceURL':
+          return () => identity.name;
         case 'getEvalOrigin':
           return () => identity.filename;
         case 'toString':
@@ -184,19 +201,19 @@ function projectionHandler(identity: ScriptIdentity): ProxyHandler<CallSiteLike>
 
 // Node: line + lineOffset; column + columnOffset on physical line 1 only;
 // getters return null for a shifted value <= 0.
-function shiftLine(identity: ScriptIdentity, line: number | null): number | null {
+function shiftLine(lineOffset: number, line: number | null): number | null {
   if (typeof line !== 'number') return line;
-  const shifted = line + identity.lineOffset;
+  const shifted = line + lineOffset;
   return shifted > 0 ? shifted : null;
 }
 
 function shiftColumn(
-  identity: ScriptIdentity,
+  columnOffset: number,
   line: number | null,
   column: number | null,
 ): number | null {
   if (typeof column !== 'number') return column;
-  const shifted = column + (line === 1 ? identity.columnOffset : 0);
+  const shifted = column + (line === 1 ? columnOffset : 0);
   return shifted > 0 ? shifted : null;
 }
 
@@ -211,7 +228,7 @@ function projectedToString(identity: ScriptIdentity, target: CallSiteLike): stri
   if (typeof line !== 'number' || typeof column !== 'number' || at < 0) return text;
   const shiftedLine = line + identity.lineOffset;
   const shiftedColumn = column + (line === 1 ? identity.columnOffset : 0);
-  let location = identity.filename || '<anonymous>';
+  let location = identity.name || '<anonymous>';
   if (shiftedLine !== 0) {
     location += `:${shiftedLine}`;
     if (shiftedColumn !== 0) location += `:${shiftedColumn}`;
@@ -223,15 +240,22 @@ function parseIdentity(url: unknown): ScriptIdentity | undefined {
   if (typeof url !== 'string' || !url.startsWith(SCHEME)) return undefined;
   const match = IDENTITY_RE.exec(url);
   if (!match) return undefined;
+  const lineOffset = Number(match[1]);
+  const columnOffset = Number(match[2]);
+  const filename = decodeFilename(match[3] ?? '');
+  const own = match[4] === undefined ? undefined : decodeFilename(match[4]);
   return {
     url,
-    lineOffset: Number(match[1]),
-    columnOffset: Number(match[2]),
-    filename: decodeFilename(match[3] ?? ''),
+    filename,
+    name: own ?? filename,
+    lineOffset: own === undefined ? lineOffset : 0,
+    columnOffset: own === undefined ? columnOffset : 0,
+    enclosingLineOffset: lineOffset,
+    enclosingColumnOffset: columnOffset,
   };
 }
 
-// `sourceURL` values end at whitespace and reject quotes: keep [A-Za-z0-9._-],
+// `sourceURL` values end at whitespace: keep [A-Za-z0-9._-],
 // escape every other UTF-16 unit (lone surrogates included). No raw `/`, so an
 // owner bypass never renders a plausible `/path:line:col`.
 function encodeFilename(filename: string): string {

@@ -346,7 +346,7 @@ function runScriptInThisContext(
   lineOffset: number,
   columnOffset: number,
 ): unknown {
-  const sourceURL = hostScriptSourceURL(filename, lineOffset, columnOffset);
+  const sourceURL = hostScriptSourceURL(code, filename, lineOffset, columnOffset);
   return runGlobalScript(sourceURL ? `${code}\n//# sourceURL=${sourceURL}` : code);
 }
 
@@ -454,8 +454,8 @@ export class Script {
     return runScriptInThisContext(this.#code, this.#filename, this.#lineOffset, this.#columnOffset);
   }
 
-  #assertSandboxRun(options?: VmOptions): void {
-    assertSupportedRunOptions(normalizeOptions(options), 'vm.Script');
+  // After Node's own context and option checks: where the run would start.
+  #assertNoOffsets(): void {
     assertNoOffsets(
       { lineOffset: this.#lineOffset, columnOffset: this.#columnOffset },
       'vm.Script',
@@ -463,8 +463,9 @@ export class Script {
   }
 
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
-    this.#assertSandboxRun(options);
     assertContextified(contextifiedObject);
+    assertSupportedRunOptions(normalizeOptions(options), 'vm.Script');
+    this.#assertNoOffsets();
     return selectEngineForRun().runCompiled(
       this.#getCompiled(),
       contextifiedObject as ContextObject,
@@ -475,8 +476,9 @@ export class Script {
     if (contextObject === null) {
       throw new TypeError('The "object" argument must be of type object. Received null');
     }
-    this.#assertSandboxRun(options);
+    assertSupportedRunOptions(normalizeOptions(options), 'vm.Script');
     const context = createContext(contextObject === undefined ? {} : contextObject);
+    this.#assertNoOffsets();
     return selectEngineForRun().runCompiled(this.#getCompiled(), context as ContextObject);
   }
 }
