@@ -3,7 +3,7 @@
 Live plan: index, not store. Minimal pattern first; each child a `draft`
 finding compiled to `ready` at its own PICKUP (`RDY-1`). Item 8 follows 7;
 item 11 is delivered inside 8's merged Worker lifecycle unit. Item 12 follows
-all deliveries 1–11 and new MessagePort unit 13. Remaining independent children
+all deliveries 1–11 and new MessagePort/startup units 13–14. Remaining independent children
 retain their ordering.
 
 ## Items
@@ -43,15 +43,26 @@ retain their ordering.
     no separate pickup.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 1–11 and 13.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 1–11 and 13–14.
 13. `runtime-js/message-port-ref-keepalive` — **manual-port-refs** — I4; emnapi's
     global MessageChannel port keeps pending NAPI work alive after deliberate
     Worker unref. Native local pairs, manual refs, honest local closure and
     transfer boundary; no package patch. Added from actual Vitest-main trace
     (RDY-5); I2 remains unchanged.
+14. `runtime-js/worker-threads-startup-options` — **child-startup** — I4, I5, I6;
+    exact Vitest flags force generic child CJS preloads, conditions and flagged
+    import.meta.resolve parentURL. Worker rejects them; executed fork sibling
+    silently drops them. One startup consumer, distinct native inheritance
+    authorities, exact typed launch migration. Added from Chromium5419 plus
+    native/physical fork probe; no Vitest patch.
 
 ## Open questions
 
+- I7 user fork pending: fresh Chromium5428 also runs Vitest4.1.11/Vite8.0.15
+  fail/fix correctly. The accepted blanket other-version ceiling is false.
+  Watch also ran tests and waited45s without a ceiling (Chromium5429).
+  Asked whether to retain exact guarantee without artificial mode/version bans;
+  no goal.md amendment until the user's answer. Other work continues.
 - Resolved startup-handle fog (2026-09-23): emnapi runtime's
   NodejsWaitingRequestCounter calls missing ref/unref on a global MessageChannel
   port; rolldown deliberately unrefs its Worker. New I4 unit 13 owns this class,

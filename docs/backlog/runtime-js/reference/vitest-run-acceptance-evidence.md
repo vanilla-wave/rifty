@@ -37,3 +37,11 @@ unset exitCode and missing manual MessagePort refs. Individual repairs carry
 native/browser artifacts. An earlier reported PASS reused an unverified server
 and was withdrawn; it is not acceptance evidence. Full current-branch GREEN
 and unclaimed-mode ceiling probes remain pending.
+
+Fresh Chromium5424, source a728f986a: I4 subset GREEN,47.1s. For this diagnostic
+only, the threads command was omitted from the unchanged e2e loop; `finally`
+restored the original file byte-for-byte. All8 executions (default, explicit
+forks, verbose, npm test × failing/fixed) satisfied the existing assertions.
+This proves I4's reporter/config/TS/status path, not I5 or overall acceptance.
+Full5419 had already reached `worker_threads.Worker.execArgv` on threads;
+generic required startup flag support is the next unit.
