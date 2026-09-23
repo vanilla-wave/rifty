@@ -259,6 +259,24 @@ Node at BASE (`✓`), so the RED isolates the detached call.
    `exitCode` accessor): `process/esm-named-members*` both `✓`,
    `process/unbound-exit-kill` `✗` with the R3 TypeErrors.
 
+## G1 — GREEN (IMPLEMENT @ 9f8977375)
+
+```
+$ pnpm test:parity process/esm-named-members
+  ✓ process/esm-named-members-off-surface.case.ts
+  ✓ process/esm-named-members.case.ts
+$ pnpm test:parity process/unbound-exit-kill
+  ✓ process/unbound-exit-kill.case.ts
+```
+
+`typescript-worker.js` re-pin (`check:esbuild-legacy-retirement`): `pnpm build:libs`
+with `process.ts` at 621242ddc (pre-extraction) vs at HEAD — same 10 022 694
+bytes, SHA `018ea49b…` → `5607aff9…`. A byte compare finds 8 differing ranges,
+all in imported chunk filenames: `chunk-FQPFA6AQ`→`chunk-DFTJ66BD`,
+`chunk-CP2OLPUQ`→`chunk-QGYJXBY6`, `chunk-VAGJFYGJ`→`chunk-LVIFJLGN`,
+`chunk-GBCASOFU`→`chunk-JN27U7K4` (the chunk holding `process.ts`),
+`module-loader-MN3ON23T`→`module-loader-VKSPNEDR`. No compiler byte changed.
+
 ## D — discoveries outside this unit (for REV-12 routing by the goal driver)
 
 1. Over-export: non-IPC rifty process has own enumerable `send`,
