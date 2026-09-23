@@ -555,7 +555,7 @@ export class NodeProcess extends EventEmitter {
   #ipcDisconnected = false;
   #controlClosed = false;
   #publicIpc = false;
-  #jsonIpc = false;
+  #ipcSerialization: 'json' | 'advanced' | null = null;
   #ipcKeepaliveHeld = false;
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
@@ -646,7 +646,8 @@ export class NodeProcess extends EventEmitter {
         this.#wireWorkerIpc(spec.stdio.ipc);
       } else {
         this.#publicIpc = true;
-        this.#jsonIpc = launch?.kind === 'program';
+        this.#ipcSerialization =
+          launch?.kind !== 'program' ? null : launch.ipc === 'advanced' ? 'advanced' : 'json';
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
@@ -780,14 +781,15 @@ export class NodeProcess extends EventEmitter {
 
   #wireIpc(port: MessagePort): void {
     this.#ipcPort = port;
-    // Browsers auto-start a port only with `addEventListener('message')`; using
-    // `onmessage = …` requires an explicit `start()` (called below).
+    // `onmessage` needs an explicit `start()` in browsers.
     port.onmessage = (ev: MessageEvent): void => {
       const frame = this.#receiveControlFrame(ev.data);
       if (frame === null) return;
       if (frame.kind === 'ipc:message') {
         if (this.#ipcDisconnected) return;
-        const payload = this.#jsonIpc ? serializeNodeIpcMessage(frame.payload) : frame.payload;
+        const payload = this.#ipcSerialization
+          ? serializeNodeIpcMessage(frame.payload, this.#ipcSerialization)
+          : frame.payload;
         if (this.listenerCount('message') === 0) {
           this.#ipcBacklog.push(payload);
         } else {
@@ -807,16 +809,8 @@ export class NodeProcess extends EventEmitter {
     };
     port.start();
 
-    // Flush frames buffered before the first listener. `newListener` fires BEFORE
-    // the listener is added; defer to a MACROTASK (not a microtask) so the flush
-    // lands AFTER the entry module finishes evaluating — Node delivers IPC on the
-    // event loop, never mid-eval. A microtask delivered the buffered
-    // `{__emnapi__:load}` frame in the gap between Rolldown's `wasi-worker.mjs`
-    // attaching `parentPort.on('message')` (top) and setting `globalThis.onmessage`
-    // (last line), crashing with "globalThis.onmessage is not a function".
-    // TODO(backlog: runtime-js/ipc-backlog-flush-entry-resolution): setTimeout(0)
-    // is robust only while the entry body fits one macrotask; the Node-correct
-    // release is a kernel post-entry hook firing after the entry module resolves.
+    // `newListener` runs before attachment; a microtask can preempt entry setup.
+    // TODO(backlog: runtime-js/ipc-backlog-flush-entry-resolution): release at post-entry.
     this.on('newListener', (event) => {
       if (event !== 'message' || this.#ipcBacklog.length === 0) return;
       setTimeout(() => {
@@ -827,7 +821,9 @@ export class NodeProcess extends EventEmitter {
     this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
       if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
       if (this.#ipcDisconnected) return false;
-      const payload = this.#jsonIpc ? serializeNodeIpcMessage(message) : message;
+      const payload = this.#ipcSerialization
+        ? serializeNodeIpcMessage(message, this.#ipcSerialization)
+        : message;
       try {
         const frame: IpcFrame = { kind: 'ipc:message', payload };
         port.postMessage(frame);
@@ -1047,7 +1043,10 @@ export class NodeProcess extends EventEmitter {
   }
 
   #syncIpcKeepalive(): void {
-    const shouldHold = this.#jsonIpc && !this.#ipcDisconnected && this.listenerCount('message') > 0;
+    const shouldHold =
+      this.#ipcSerialization !== null &&
+      !this.#ipcDisconnected &&
+      this.listenerCount('message') > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();

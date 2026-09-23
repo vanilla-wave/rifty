@@ -13,12 +13,18 @@ describe('advanced Node IPC serialization faults', () => {
       map: Map<string, number>;
       missing: undefined[];
       bytes: Uint8Array;
+      set: Set<string>;
+      regexp: RegExp;
+      error: Error;
       self?: unknown;
     } = {
       date: new Date('2020-01-02T03:04:05.000Z'),
       map: new Map([['key', 7]]),
       missing: [undefined],
       bytes: new Uint8Array([0, 128, 255]),
+      set: new Set(['a', 'b']),
+      regexp: /ab+/gi,
+      error: new Error('boom', { cause: 'root' }),
     };
     value.self = value;
 
@@ -28,6 +34,12 @@ describe('advanced Node IPC serialization faults', () => {
     expect(result.map instanceof Map).toBe(true);
     expect(result.missing).toEqual([undefined]);
     expect([...result.bytes]).toEqual([0, 128, 255]);
+    expect(result.set instanceof Set).toBe(true);
+    expect([...result.set]).toEqual(['a', 'b']);
+    expect(result.regexp.toString()).toBe('/ab+/gi');
+    expect(result.error instanceof Error).toBe(true);
+    expect(result.error.message).toBe('boom');
+    expect(result.error.cause).toBe('root');
     expect(result.self).toBe(result);
   });
 
@@ -52,5 +64,15 @@ describe('advanced Node IPC serialization faults', () => {
     };
     expect(() => advanced(value)).toThrow(/child_process\.serialization\.advanced\.accessor/u);
     expect(calls).toBe(0);
+  });
+
+  it('rejects SharedArrayBuffer like Node and unknown host objects loudly', () => {
+    expect(() => advanced({ shared: new SharedArrayBuffer(4) })).toThrow(
+      /SharedArrayBuffer.*could not be cloned/u,
+    );
+    expect(() => advanced({ blob: new Blob(['x']) })).toThrow(
+      /child_process\.serialization\.advanced\.host-object/u,
+    );
+    expect(advanced({ after: true })).toEqual({ after: true });
   });
 });

@@ -11,6 +11,9 @@ const childSource = `
     missing: [undefined],
     bytes: new Uint8Array([0, 128, 255]),
     big: 9n,
+    set: new Set(['a', 'b']),
+    regexp: /ab+/gi,
+    error: new Error('boom', { cause: 'root' }),
   };
   value.self = value;
   onMessage((message) => p.send(message));
@@ -25,12 +28,21 @@ const c: ParityCase = {
   code: `
     const { fork } = require('node:child_process');
     const cwd = require('node:process').cwd();
+    let invalidOption = 'NO_THROW';
+    try {
+      fork('child.js', [], { cwd, serialization: 'future' });
+    } catch (error) {
+      invalidOption = error.name + '/' + (error.code ?? 'no-code');
+    }
     const value = {
       date: new Date('2022-03-04T05:06:07.000Z'),
       map: new Map([['key', 11]]),
       missing: [undefined],
       bytes: new Uint8Array([1, 127, 254]),
       big: 13n,
+      set: new Set(['c', 'd']),
+      regexp: /cd+/gm,
+      error: new Error('fail', { cause: 'branch' }),
     };
     value.self = value;
     const shape = (message) => ({
@@ -39,6 +51,10 @@ const c: ParityCase = {
       missing: message.missing.length === 1 && message.missing[0] === undefined,
       bytes: message.bytes instanceof Uint8Array && [...message.bytes].join(','),
       big: typeof message.big === 'bigint' && message.big.toString(),
+      set: message.set instanceof Set && [...message.set].join(','),
+      regexp: message.regexp instanceof RegExp && message.regexp.toString(),
+      error: message.error instanceof Error &&
+        message.error.message + '/' + message.error.cause,
       cycle: message.self === message,
     });
 
@@ -78,7 +94,7 @@ const c: ParityCase = {
         child.disconnect();
         const connectedAfter = child.connected;
         child.once('exit', (code, signal) => {
-          resolve({ messages, invalid, connectedBefore, connectedAfter,
+          resolve({ messages, invalid, invalidOption, connectedBefore, connectedAfter,
             exit: { code, signal } });
         });
       });
@@ -88,11 +104,14 @@ const c: ParityCase = {
   `,
   expected:
     '{"messages":[["ready",{"date":"2020-01-02T03:04:05.000Z","map":7,' +
-    '"missing":true,"bytes":"0,128,255","big":"9","cycle":true}],' +
+    '"missing":true,"bytes":"0,128,255","big":"9","set":"a,b",' +
+    '"regexp":"/ab+/gi","error":"boom/root","cycle":true}],' +
     '["echo",{"date":"2022-03-04T05:06:07.000Z","map":11,' +
-    '"missing":true,"bytes":"1,127,254","big":"13","cycle":true}],["after"]],' +
+    '"missing":true,"bytes":"1,127,254","big":"13","set":"c,d",' +
+    '"regexp":"/cd+/gm","error":"fail/branch","cycle":true}],["after"]],' +
     '"invalid":["missing:TypeError/ERR_MISSING_ARGS",' +
     '"function:TypeError/ERR_INVALID_ARG_TYPE","nested-function:Error/no-code"],' +
+    '"invalidOption":"TypeError/ERR_INVALID_ARG_VALUE",' +
     '"connectedBefore":true,"connectedAfter":false,"exit":{"code":0,"signal":null}}\n',
 };
 

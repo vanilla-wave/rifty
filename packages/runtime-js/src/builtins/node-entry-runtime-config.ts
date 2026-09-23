@@ -25,7 +25,7 @@ export interface NodeEntryProgramLaunch {
   readonly bin: boolean;
   readonly remoteFs: boolean;
   /** Public Node fork lane. Omitted and `none` are equivalent for non-fork launches. */
-  readonly ipc?: 'none' | 'json';
+  readonly ipc?: 'none' | 'json' | 'advanced';
   /** Host-only physical root behind the child's public `/` namespace. */
   readonly remoteFsRoot?: string;
   readonly nodeServe: boolean;
@@ -292,8 +292,8 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
     const ipc = optionalOwnField(record, 'ipc');
-    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json') {
-      throw new TypeError('node-entry bootstrap launch.ipc must be none or json');
+    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json' && ipc !== 'advanced') {
+      throw new TypeError('node-entry bootstrap launch.ipc must be none, json, or advanced');
     }
     const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
     const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));

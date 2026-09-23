@@ -36,8 +36,11 @@ An uncloneable nested value throws synchronously and leaves the channel
 usable. Node-specific Buffer identity cannot survive native structured clone
 (`Buffer` becomes `Uint8Array`), so a Buffer anywhere in the reachable graph
 throws `NotImplementedError('child_process.serialization.advanced.Buffer')`.
-Accessor-bearing payloads are also loud until their getter evaluation order
-and Buffer provenance can be preserved. Neither path silently changes type.
+Plain-object accessors are also loud until their getter evaluation order
+and Buffer provenance can be preserved; native Error.stack follows the
+platform serializer. Unknown host objects are loud; Node
+rejects SharedArrayBuffer even though native structured clone accepts it, so
+that value keeps Node's synchronous clone error. None silently changes type.
 
 Use ADR-0326's one physical public/control port, ordering, disconnect and
 worker-death outcomes. Do not add per-message sequencing or retry. The
@@ -53,6 +56,6 @@ Vitest value requires it. If later evidence does, that is a new decision.
 
 - Vitest's forks pool can start and exchange standard structured-clone
   values without JSON loss; Node's default fork behavior remains JSON.
-- Buffer, accessor-bearing and other unsupported V8-only payloads stay named
+- Buffer, plain-object-accessor and other unsupported V8-only payloads stay named
   loud gaps in the public compat table, not silent type substitutions.
 - ADR-0326's public/private lane separation and teardown remain authoritative.

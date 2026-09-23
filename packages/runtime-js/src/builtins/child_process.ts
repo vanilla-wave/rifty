@@ -29,7 +29,10 @@ import {
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  serializeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
@@ -132,6 +135,7 @@ class ChildProcess extends EventEmitter {
   constructor(
     handle: ProcessHandle,
     ipcEnabled: boolean,
+    private readonly serialization: NodeIpcSerialization,
     streams: {
       readonly stdout: Readable;
       readonly stderr: Readable;
@@ -177,7 +181,7 @@ class ChildProcess extends EventEmitter {
           throw new NotImplementedError('child_process.send.arguments');
         }
         if (!this.connected) return false;
-        const serialized = serializeNodeIpcMessage(message);
+        const serialized = serializeNodeIpcMessage(message, this.serialization);
         if (handle.kind === 'worker') return handle.send(serialized);
         queueMicrotask(() => this.inboundIpc.emit('childMessage', serialized));
         return true;
@@ -189,7 +193,7 @@ class ChildProcess extends EventEmitter {
       };
       if (handle.kind === 'worker') {
         handle.on('message', (message) => {
-          this.emitToOwner('message', serializeNodeIpcMessage(message));
+          this.emitToOwner('message', serializeNodeIpcMessage(message, this.serialization));
         });
         handle.on('disconnect', () => this.finishIpc());
       }
@@ -321,12 +325,20 @@ function rejectedChildCwd(cwd: string): ChildProcess | null {
 }
 
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  if (opts.serialization === 'advanced') {
-    throw new NotImplementedError(
-      'child_process.serialization.advanced',
-      "Node's advanced IPC serializer is not implemented; use default JSON",
+  const requestedSerialization = opts.serialization;
+  if (
+    requestedSerialization !== undefined &&
+    requestedSerialization !== 'json' &&
+    requestedSerialization !== 'advanced'
+  ) {
+    throw Object.assign(
+      new TypeError(
+        `The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received ${String(requestedSerialization)}`,
+      ),
+      { code: 'ERR_INVALID_ARG_VALUE' },
     );
   }
+  const serialization = requestedSerialization ?? 'json';
   const stdio = resolveWorkerStdio(
     opts.stdio,
     activeProcessStdio(),
@@ -351,9 +363,10 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
       cwd: opts.cwd,
       env: opts.env,
       fork: opts.__fork === true,
+      serialization,
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
-    const child = new ChildProcess(handle, stdio.ipc, {
+    const child = new ChildProcess(handle, stdio.ipc, serialization, {
       stdin: handle.stdin(),
       stdout: handle.stdout(),
       stderr: handle.stderr(),
@@ -363,7 +376,7 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     forwardWorkerStdio(handle, stdio);
     return child;
   }
-  return spawnViaSameRealm(command, args, opts, stdio);
+  return spawnViaSameRealm(command, args, { ...opts, serialization }, stdio);
 }
 
 function spawnViaSameRealm(
@@ -428,7 +441,7 @@ function spawnViaSameRealm(
   wiring.handle = handle;
   handle.on('stdout', (chunk) => stdout.push(chunk));
   handle.on('stderr', (chunk) => stderr.push(chunk));
-  const child = new ChildProcess(handle, stdio.ipc, {
+  const child = new ChildProcess(handle, stdio.ipc, opts.serialization ?? 'json', {
     stdin,
     stdout,
     stderr,

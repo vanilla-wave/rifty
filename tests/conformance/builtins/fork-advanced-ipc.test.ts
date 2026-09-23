@@ -6,6 +6,13 @@ import { writeFileSync } from '../../../packages/runtime-js/src/builtins/fs.ts';
 afterEach(() => resetSyncMirror());
 
 describe('child_process.fork — advanced IPC', () => {
+  it('rejects an unknown serialization discriminator before spawning', () => {
+    writeFileSync('/advanced.js', '__process.send(1);');
+    expect(() => fork('/advanced.js', [], { serialization: 'future' } as never)).toThrowError(
+      expect.objectContaining({ name: 'TypeError', code: 'ERR_INVALID_ARG_VALUE' }),
+    );
+  });
+
   it('accepts the option and preserves structured-clone values from the child', async () => {
     writeFileSync(
       '/advanced.js',

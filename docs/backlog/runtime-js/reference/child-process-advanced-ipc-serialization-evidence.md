@@ -5,7 +5,7 @@ Node v24.16.0 oracle for the committed physical parity case:
 ```text
 node --import tsx --input-type=module -e 'import c from "./tools/node-parity-runner/cases/child_process/fork-structured-serialization.case.ts"; import { runInNode } from "./tools/node-parity-runner/src/run-in-node.ts"; const out=await runInNode(c); console.log(process.version, out===c.expected); console.log(out)'
 v24.16.0 true
-{"messages":[["ready",{"date":"2020-01-02T03:04:05.000Z","map":7,"missing":true,"bytes":"0,128,255","big":"9","cycle":true}],["echo",{"date":"2022-03-04T05:06:07.000Z","map":11,"missing":true,"bytes":"1,127,254","big":"13","cycle":true}],["after"]],"invalid":["missing:TypeError/ERR_MISSING_ARGS","function:TypeError/ERR_INVALID_ARG_TYPE","nested-function:Error/no-code"],"connectedBefore":true,"connectedAfter":false,"exit":{"code":0,"signal":null}}
+{"messages":[["ready",{"date":"2020-01-02T03:04:05.000Z","map":7,"missing":true,"bytes":"0,128,255","big":"9","set":"a,b","regexp":"/ab+/gi","error":"boom/root","cycle":true}],["echo",{"date":"2022-03-04T05:06:07.000Z","map":11,"missing":true,"bytes":"1,127,254","big":"13","set":"c,d","regexp":"/cd+/gm","error":"fail/branch","cycle":true}],["after"]],"invalid":["missing:TypeError/ERR_MISSING_ARGS","function:TypeError/ERR_INVALID_ARG_TYPE","nested-function:Error/no-code"],"invalidOption":"TypeError/ERR_INVALID_ARG_VALUE","connectedBefore":true,"connectedAfter":false,"exit":{"code":0,"signal":null}}
 ```
 
 Rifty baseline:
@@ -35,3 +35,8 @@ false). ADR-0448 makes that unsupported graph loud. Top-level
 `send(undefined)` → TypeError/ERR_MISSING_ARGS; `send(function)` and
 `send(Symbol)` → TypeError/ERR_INVALID_ARG_TYPE; nested function → Error with
 no code and message ending `could not be cloned.`
+
+Node v24.16.0 advanced `send(new SharedArrayBuffer(4))` → Error with no code,
+`#<SharedArrayBuffer> could not be cloned.`; native
+`structuredClone(new SharedArrayBuffer(4))` succeeds. Rifty rejects this
+Node-disallowed value before posting.

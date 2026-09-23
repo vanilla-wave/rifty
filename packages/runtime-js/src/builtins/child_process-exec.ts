@@ -27,7 +27,12 @@ import {
 export interface ExecScriptArgs {
   command: string;
   args: string[];
-  opts: { cwd?: string; env?: Record<string, string>; __fork?: boolean };
+  opts: {
+    cwd?: string;
+    env?: Record<string, string>;
+    __fork?: boolean;
+    serialization?: 'json' | 'advanced';
+  };
   io: ProcessIO;
   ownHandle: ProcessHandle;
   inboundIpc: EventEmitter;
@@ -327,7 +332,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       childProcess.channel = nodeIpcChannel('process');
       childProcess.send = (msg, ...unsupported) => {
         if (unsupported.length > 0) throw new NotImplementedError('process.send.arguments');
-        const serialized = serializeNodeIpcMessage(msg);
+        const serialized = serializeNodeIpcMessage(msg, a.opts.serialization ?? 'json');
         queueMicrotask(() => a.outboundMessages.emit('message', serialized));
         return true;
       };

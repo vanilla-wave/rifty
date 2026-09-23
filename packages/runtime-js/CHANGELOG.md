@@ -6,6 +6,7 @@
 - Register `node:path/posix` as the existing POSIX path namespace.
 - Expose implemented process methods as own ESM named exports.
 - Permit Symbol-key global writes through the CJS and ESM Function guards.
+- Fork advanced IPC now carries structured-clone data over the existing Worker channel; default JSON stays intact, Buffer/accessor graphs fail loudly.
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 

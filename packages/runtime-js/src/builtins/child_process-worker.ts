@@ -3,6 +3,7 @@
 import { NotImplementedError, type Readable } from '@riftydev/io';
 import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
+import type { NodeIpcSerialization } from '../internal/node-ipc-serialization.ts';
 import {
   buildConfiguredNodeEntryWorkerEntry,
   nodeChildSpawnOptions,
@@ -308,6 +309,7 @@ export interface SpawnWorkerChildOptions {
   readonly cwd?: string;
   readonly env?: Record<string, string>;
   readonly fork: boolean;
+  readonly serialization: NodeIpcSerialization;
 }
 
 /** Translate a validated `node <script>` launch to one real remote-FS Worker. */
@@ -324,7 +326,7 @@ export function spawnWorkerChild(
     kind: 'program',
     bin: false,
     remoteFs: true,
-    ipc: options.fork ? 'json' : 'none',
+    ipc: options.fork ? options.serialization : 'none',
     nodeServe: true,
   });
   const spec: SpawnWorkerSpec = {
