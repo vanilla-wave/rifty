@@ -119,6 +119,8 @@ Boundary: MessagePort / dedicated Worker, owner ↔ child (`docs/process/rules/f
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ c378b464f8c20e5b75d57d4b9f2c22c4fe28051a
+
 - 2026-09-23 — pickup: carrier ADR-0448 (native clone plus one codec, node-entry v5). Rejected: raw passthrough (#349), hand-walked snapshot codec (#351), preflight walk with ceilings (#352), a JS copy of V8's wire format; evidence in ADR-0448 §Rejected.
 - 2026-09-23 — scope: vitest's own traffic needs plain data with `undefined` and cycles (I4 rows); the rest of the value table and the named throws are ADR-0448's, because Fidelity makes every accepted value Node-faithful or a named throw.
 - 2026-09-23 — top-level refusal text: the validation shared by both serializations gains Node's `Received …` suffix; JSON serialization itself is unchanged.
