@@ -46,3 +46,24 @@ all cases match
 The existing `function-constructor-import` parity cases also pass (2/2),
 three targeted module-loader unit files pass (51/51), runtime-js typecheck
 passes, and the source-size ratchet holds (CJS 2040 → 2006, ESM 1564 → 1528).
+
+## Guard repair (2026-09-23)
+
+Fault: `provenance-lie` at static Symbol-call classification → runtime property
+key. Node v24.16.0 CJS, ESM, and CJS `with` probes turn a replaced
+`Symbol`/`Symbol.for` result into string `Function` and mutate the global
+constructor. Rifty's previous guard admitted those writes without an error.
+The same exemption feeds assignment, descriptor, Reflect, and Object.assign
+paths in both loaders.
+
+RED on the root PR source with 8 new regressions: `symbol-global-write-guard.test.ts`
+8 failed / 8 passed. The repair checks the admitted call result at runtime;
+CJS `with` keys keep the static named ceiling because dynamic scope can shadow
+the call and the guard binding. The runtime helper is held in an immutable
+loader binding: a direct `eval` replacement of its generated parameter was
+also RED (1/1) and now keeps the ceiling. CJS strict directives and shebangs
+keep their source meaning. After repair: 26/26 unit, including ESM after
+top-level await; Symbol parity 2/2;
+Function-constructor parity 2/2; existing ESM/CJS Function ceiling conformance
+3/3; runtime-js typecheck pass. The `Function` descriptor remains unchanged on
+every rejected write.

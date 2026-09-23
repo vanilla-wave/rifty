@@ -59,3 +59,4 @@ ready-verdict: 2026-09-23 — Contract+RED @ fb69d4fa6a691d82b0ee51ce365dac835d8
 - 2026-09-23 — Reviewer concern resolved: assert the Function descriptor unchanged after each unsafe-key throw.
 - 2026-09-23 — Reviewer concern: assert Function descriptor unchanged at throw; add during implementation.
 - 2026-09-23 — Reuse each loader's lexical scope walker; accept only syntactically proven Symbol calls and immutable bindings.
+- 2026-09-23 — Repair: syntax selects candidates; runtime checks the key is a Symbol before use. CJS `with` cannot prove the key binding and keeps the named ceiling. → ADR-0171

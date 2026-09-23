@@ -4,6 +4,7 @@
 
 - Bind process stdio identity to the active bootstrap process for `Readable.pipe` (ADR-0455).
 
+- Validate admitted Symbol keys at runtime and keep CJS `with` writes behind the Function ceiling.
 - Advanced fork IPC rejects SAB-backed views before posting and validates Map/Set internal entries despite own iterator overrides (ADR-0454).
 
 - Expose Vitest-imported `fs.statfsSync`, `child_process.spawnSync`, and `process.memoryUsage` as named loud capabilities.

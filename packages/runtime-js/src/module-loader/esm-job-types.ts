@@ -47,6 +47,7 @@ export type EsmFactory = (
   metaResolve: (s: string) => string,
   Function: FunctionConstructor,
   webAssembly: typeof WebAssembly,
+  symbolKeyGuard: (value: unknown) => symbol,
 ) => EsmEvaluationIterator;
 
 export type EsmDirectFactory = (...args: Parameters<EsmFactory>) => Promise<void>;

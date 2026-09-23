@@ -1,12 +1,14 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { type Edit, applyEdits } from './cjs-source-rewrite.ts';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import {
+  type SymbolCallSpan,
   isComputedMember,
-  isSymbolOnlyKey,
   literalString,
   markSymbolConstBinding,
+  planRuntimeCheckedSymbolKey,
   staticPropertyKeyName,
   staticPropertyName,
   unwrapChain as unwrapGuardChain,
@@ -25,11 +27,14 @@ interface GuardScope {
   readonly maybeFunctionAliases: Set<string>;
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
-  readonly symbolBindings: Set<string>;
+  readonly symbolBindings: Map<string, SymbolCallSpan>;
 }
 
 interface EsmFunctionGuardCtx {
   readonly scopes: GuardScope[];
+  readonly edits: Edit[];
+  readonly symbolKeyHelperName: string;
+  readonly guardedSymbolCalls: Set<number>;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
   hasWithDynamicFunctionScope: boolean;
@@ -44,8 +49,12 @@ const functionRoutingAnalysisToken =
   /\bFunction\b|\bconstructor\b|\bglobalThis\b|\bglobal\b|\bObject\b|\bReflect\b|__define(?:Getter|Setter)__|\beval\b|\bwith\b/;
 const directEvalImportProbeHelper = '__riftyDynamicImport';
 
-export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): void {
-  if (!functionRoutingAnalysisToken.test(source)) return;
+export function rewriteEsmFunctionRoutingCeiling(
+  source: string,
+  id: string,
+  symbolKeyHelperName: string,
+): string {
+  if (!functionRoutingAnalysisToken.test(source)) return source;
   let program: Program;
   try {
     program = acornParse(source, {
@@ -55,7 +64,7 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
       locations: false,
     }) as Program;
   } catch {
-    return;
+    return source;
   }
 
   const rootScope = createGuardScope();
@@ -64,6 +73,9 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
   predeclareGuardLexicalScope(body, rootScope);
   const ctx: EsmFunctionGuardCtx = {
     scopes: [rootScope],
+    edits: [],
+    symbolKeyHelperName,
+    guardedSymbolCalls: new Set(),
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -94,6 +106,7 @@ export function assertNoEsmFunctionRoutingCeiling(source: string, id: string): v
       `ESM module ${id} writes the Function binding/global property; rifty cannot emulate that without mutating the host constructor, so this module is an explicit ceiling`,
     );
   }
+  return ctx.edits.length > 0 ? applyEdits(source, ctx.edits) : source;
 }
 
 function createGuardScope(): GuardScope {
@@ -103,7 +116,7 @@ function createGuardScope(): GuardScope {
     maybeFunctionAliases: new Set(),
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
-    symbolBindings: new Set(),
+    symbolBindings: new Map(),
   };
 }
 
@@ -1269,7 +1282,14 @@ function isGlobalFunctionReadMember(node: GuardNodeShape, ctx: EsmFunctionGuardC
 }
 
 function isGuardSymbolKey(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
-  return isSymbolOnlyKey(node, ctx.scopes, isGuardShadowed(ctx, 'Symbol'));
+  return planRuntimeCheckedSymbolKey(
+    node,
+    ctx.scopes,
+    isGuardShadowed(ctx, 'Symbol'),
+    ctx.symbolKeyHelperName,
+    ctx.guardedSymbolCalls,
+    ctx.edits,
+  );
 }
 
 function isGlobalFunctionWriteMember(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {

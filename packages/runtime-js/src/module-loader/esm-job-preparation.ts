@@ -3,7 +3,8 @@ import { ModuleLoadError } from './errors.ts';
 import { transformEsm } from './esm-ast.ts';
 import { syncTransformCeiling } from './esm-job-state.ts';
 import type { EsmDirectFactory, EsmFactory, EsmLoaderDeps, PreparedEsm } from './esm-job-types.ts';
-import { assertNoEsmFunctionRoutingCeiling } from './esm.ts';
+import { rewriteEsmFunctionRoutingCeiling } from './esm.ts';
+import { allocateSymbolKeyHelperNames } from './guard-property-key.ts';
 import type { ResolvedModule } from './resolver.ts';
 
 export function transformedLoaderForId(id: string): 'ts' | 'tsx' | 'jsx' | null {
@@ -41,8 +42,10 @@ export function finishPreparation(
   source: string,
   mode: 'async' | 'sync',
 ): PreparedEsm {
-  assertNoEsmFunctionRoutingCeiling(source, resolved.id);
-  const transformed = (deps.transformEsm ?? transformEsm)(source, resolved.id);
+  const { helperName: symbolKeyHelperName, argumentName: symbolKeyArgumentName } =
+    allocateSymbolKeyHelperNames(source);
+  const guardedSource = rewriteEsmFunctionRoutingCeiling(source, resolved.id, symbolKeyHelperName);
+  const transformed = (deps.transformEsm ?? transformEsm)(guardedSource, resolved.id);
   deps.sourceMaps?.setGeneratedLineMap(resolved.id, transformed.lineMap);
   const stash: Record<string, string> = readRuntimeGlobal('esmStash') ?? {};
   stash[resolved.id] = transformed.body;
@@ -64,14 +67,25 @@ export function finishPreparation(
       resolved,
       transformed,
       dependencies,
-      directFactory: compileDirectEsmFactory(resolved, transformed),
+      directFactory: compileDirectEsmFactory(
+        resolved,
+        transformed,
+        symbolKeyHelperName,
+        symbolKeyArgumentName,
+      ),
     };
   }
   return {
     resolved,
     transformed,
     dependencies,
-    factory: compileEsmFactory(resolved, transformed, transformed.hasTopLevelAwait),
+    factory: compileEsmFactory(
+      resolved,
+      transformed,
+      transformed.hasTopLevelAwait,
+      symbolKeyHelperName,
+      symbolKeyArgumentName,
+    ),
   };
 }
 
@@ -94,6 +108,8 @@ function compileEsmFactory(
   resolved: ResolvedModule,
   transformed: PreparedEsm['transformed'],
   asyncBody: boolean,
+  symbolKeyHelperName: string,
+  symbolKeyArgumentName: string,
 ): EsmFactory {
   const helper = transformed.helpers;
   try {
@@ -110,7 +126,8 @@ function compileEsmFactory(
       helper.metaResolve,
       'Function',
       helper.webAssembly,
-      `const ${helper.runtimeObject} = Object; return (${asyncBody ? 'async ' : ''}function* () {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody} yield;\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
+      symbolKeyArgumentName,
+      `const ${symbolKeyHelperName} = ${symbolKeyArgumentName}; const ${helper.runtimeObject} = Object; return (${asyncBody ? 'async ' : ''}function* () {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody} yield;\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
     ) as EsmFactory;
   } catch (error) {
     const message = (error as Error).message ?? String(error);
@@ -133,6 +150,8 @@ function compileEsmFactory(
 function compileDirectEsmFactory(
   resolved: ResolvedModule,
   transformed: PreparedEsm['transformed'],
+  symbolKeyHelperName: string,
+  symbolKeyArgumentName: string,
 ): EsmDirectFactory {
   const helper = transformed.helpers;
   try {
@@ -149,7 +168,8 @@ function compileDirectEsmFactory(
       helper.metaResolve,
       'Function',
       helper.webAssembly,
-      `const ${helper.runtimeObject} = Object; return (async function () {
+      symbolKeyArgumentName,
+      `const ${symbolKeyHelperName} = ${symbolKeyArgumentName}; const ${helper.runtimeObject} = Object; return (async function () {
 const ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody}
 ${transformed.body}
 })();

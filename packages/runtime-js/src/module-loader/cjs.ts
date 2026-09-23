@@ -8,10 +8,13 @@ import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
 import {
+  type SymbolCallSpan,
+  allocateSymbolKeyHelperNames,
+  assertSymbolPropertyKey,
   isComputedMember,
-  isSymbolOnlyKey,
   literalString,
   markSymbolConstBinding,
+  planRuntimeCheckedSymbolKey,
   staticPropertyKeyName,
   staticPropertyName,
   unwrapChain,
@@ -133,7 +136,7 @@ interface Scope {
   readonly maybeFunctionAliases: Set<string>;
   readonly maybeDerivedFunctionAliases: Set<string>;
   readonly maybeEvalAliases: Set<string>;
-  readonly symbolBindings: Set<string>;
+  readonly symbolBindings: Map<string, SymbolCallSpan>;
 }
 
 interface FunctionRewriteCtx {
@@ -142,6 +145,9 @@ interface FunctionRewriteCtx {
   readonly functionHelperName: string;
   readonly webAssemblyHelperName: string;
   readonly dynamicImportHelperName: string;
+  readonly symbolKeyHelperName: string;
+  readonly guardedSymbolCalls: Set<number>;
+  withDepth: number;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
   hasWithDynamicFunctionScope: boolean;
@@ -218,6 +224,8 @@ function rewriteCjsFunctionConstructorReferences(
   functionHelperName: string,
   webAssemblyHelperName: string,
   dynamicImportHelperName: string,
+  symbolKeyHelperName: string,
+  symbolKeyArgumentName: string,
 ): string {
   if (!functionRoutingAnalysisToken.test(source)) return source;
   let program: Program;
@@ -249,6 +257,9 @@ function rewriteCjsFunctionConstructorReferences(
     functionHelperName,
     webAssemblyHelperName,
     dynamicImportHelperName,
+    symbolKeyHelperName,
+    guardedSymbolCalls: new Set(),
+    withDepth: 0,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -278,6 +289,20 @@ function rewriteCjsFunctionConstructorReferences(
       `CJS module ${id} assigns the global Function binding; rifty cannot emulate that without mutating the host constructor, so this module is an explicit ceiling`,
     );
   }
+  if (ctx.guardedSymbolCalls.size > 0) {
+    const statements = program.body as unknown as AnyNodeShape[];
+    let insertion = statements[0]?.start ?? 0;
+    for (const statement of statements) {
+      if (statement.type !== 'ExpressionStatement' || typeof statement.directive !== 'string')
+        break;
+      insertion = statement.end;
+    }
+    ctx.edits.push({
+      start: insertion,
+      end: insertion,
+      text: `;const ${symbolKeyHelperName} = ${symbolKeyArgumentName};`,
+    });
+  }
   if (ctx.edits.length === 0) return source;
   return applyEdits(source, ctx.edits);
 }
@@ -289,7 +314,7 @@ function createScope(): Scope {
     maybeFunctionAliases: new Set(),
     maybeDerivedFunctionAliases: new Set(),
     maybeEvalAliases: new Set(),
-    symbolBindings: new Set(),
+    symbolBindings: new Map(),
   };
 }
 
@@ -696,7 +721,9 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
       ctx.hasDynamicFunctionScope = true;
       ctx.hasWithDynamicFunctionScope = true;
       walkFunctionReferences(n.object, ctx);
+      ctx.withDepth++;
       walkFunctionReferences(n.body, ctx);
+      ctx.withDepth--;
       return;
 
     case 'CallExpression': {
@@ -1457,7 +1484,15 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 }
 
 function isGuardSymbolKey(node: unknown, ctx: FunctionRewriteCtx): boolean {
-  return isSymbolOnlyKey(node, ctx.scopes, isShadowed(ctx, 'Symbol'));
+  if (ctx.withDepth > 0) return false;
+  return planRuntimeCheckedSymbolKey(
+    node,
+    ctx.scopes,
+    isShadowed(ctx, 'Symbol'),
+    ctx.symbolKeyHelperName,
+    ctx.guardedSymbolCalls,
+    ctx.edits,
+  );
 }
 
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
@@ -1763,6 +1798,7 @@ function compileCjsSource(
     __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
     __riftyFunction: FunctionConstructor,
     __riftyWebAssembly: typeof WebAssembly,
+    __riftySymbolKey: (value: unknown) => symbol,
   ) => void;
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
@@ -1777,12 +1813,19 @@ function compileCjsSource(
     '__riftyWebAssembly',
     new Set([dynamicImportHelperName, functionHelperName]),
   );
+  const { helperName: symbolKeyHelperName, argumentName: symbolKeyArgumentName } =
+    allocateSymbolKeyHelperNames(
+      sourceText,
+      new Set([dynamicImportHelperName, functionHelperName, webAssemblyHelperName]),
+    );
   const source = rewriteCjsFunctionConstructorReferences(
     rewriteDynamicImports(sourceText, filename, dynamicImportHelperName),
     filename,
     functionHelperName,
     webAssemblyHelperName,
     dynamicImportHelperName,
+    symbolKeyHelperName,
+    symbolKeyArgumentName,
   );
   let fn: CjsFactory;
   try {
@@ -1795,6 +1838,7 @@ function compileCjsSource(
       dynamicImportHelperName,
       functionHelperName,
       webAssemblyHelperName,
+      symbolKeyArgumentName,
       `${source}\n//# sourceURL=${filename}`,
     ) as CjsFactory;
   } catch (error) {
@@ -1819,6 +1863,7 @@ function compileCjsSource(
     dynamicImport,
     routedConstructors.Function,
     deps.WebAssembly,
+    (value) => assertSymbolPropertyKey(value, 'cjs'),
   );
 }
 
