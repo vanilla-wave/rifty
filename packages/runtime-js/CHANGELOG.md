@@ -4,6 +4,7 @@
 
 - Expose Vitest-imported `fs.statfsSync`, `child_process.spawnSync`, and `process.memoryUsage` as named loud capabilities.
 - Register `node:path/posix` as the existing POSIX path namespace.
+- Expose implemented process methods as own ESM named exports.
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 

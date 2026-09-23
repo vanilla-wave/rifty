@@ -22,3 +22,17 @@ node-parity-runner: 1 case(s) matching 'named-method-exports'
 
 Exit 1. The ESM link fails before the case body; no output shape can pass by
 faking the `cwd()` return value.
+
+## GREEN
+
+After making the implemented process methods own properties:
+
+```text
+$ node --import tsx tools/node-parity-runner/src/cli.ts named-method-exports
+node-parity-runner: 1 case(s) matching 'named-method-exports'
+  ✓ process/named-method-exports.case.ts
+all cases match
+```
+
+Exit 0. Four targeted unit files: 24/24 pass. Workspace typecheck and
+`check:file-size` pass (`process.ts` 1226 → 1221 lines).

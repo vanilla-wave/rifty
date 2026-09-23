@@ -702,11 +702,10 @@ export class NodeProcess extends EventEmitter {
     return result;
   }
 
-  cwd(): string {
-    return currentCwd;
-  }
+  // Node's process methods are own enumerable properties and ESM named exports.
+  cwd = (): string => currentCwd;
 
-  chdir(dir: string): void {
+  chdir = (dir: string): void => {
     if (typeof dir !== 'string') {
       throw Object.assign(new TypeError('chdir: path must be a string'), {
         code: 'ERR_INVALID_ARG_TYPE',
@@ -732,22 +731,23 @@ export class NodeProcess extends EventEmitter {
       });
     }
     currentCwd = target;
-  }
+  };
 
-  hrtime(time?: [number, number]): [number, number] {
-    const ms = performance.now();
-    const secs = Math.floor(ms / 1000);
-    const ns = Math.floor((ms - secs * 1000) * 1e6);
-    if (!time) return [secs, ns];
-    const [s0, n0] = time;
-    return [secs - s0, ns - n0];
-  }
+  hrtime = Object.assign(
+    (time?: [number, number]): [number, number] => {
+      const ms = performance.now();
+      const secs = Math.floor(ms / 1000);
+      const ns = Math.floor((ms - secs * 1000) * 1e6);
+      if (!time) return [secs, ns];
+      const [s0, n0] = time;
+      return [secs - s0, ns - n0];
+    },
+    { bigint: (): bigint => BigInt(Math.floor(performance.now() * 1e6)) },
+  );
 
-  uptime(): number {
-    return performance.now() / 1000;
-  }
+  uptime = (): number => performance.now() / 1000;
 
-  exit(code: unknown = 0): never {
+  exit = (code: unknown = 0): never => {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
     this.#exitCode = c;
     const exitCode = toUint8ExitCode(c);
@@ -761,9 +761,9 @@ export class NodeProcess extends EventEmitter {
     });
     if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
     throw exitError;
-  }
+  };
 
-  kill(pid: number, signal = 'SIGTERM'): boolean {
+  kill = (pid: number, signal = 'SIGTERM'): boolean => {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
       throw new NotImplementedError(
         'process.kill',
@@ -771,7 +771,7 @@ export class NodeProcess extends EventEmitter {
       );
     }
     return this.#requestSelfSignal(signal);
-  }
+  };
 
   /** Host bridge: deliver terminal/process stdin into this realm's process. */
   pushStdin(data: string | Uint8Array): void {
@@ -1171,9 +1171,6 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
   }
   return (receiver as () => NodeProcessWorkerIpc)();
 }
-
-(NodeProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>
-  BigInt(Math.floor(performance.now() * 1e6));
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();
