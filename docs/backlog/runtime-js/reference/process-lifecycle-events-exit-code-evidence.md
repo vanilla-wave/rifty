@@ -1076,9 +1076,10 @@ after `L|exit 0 0`); Node prints nothing then (`rej-exit-listener-exit2`,
     - Array []   + Array [ "Error: V8 …" ]
 ```
 
-GREEN: the five unit cases pass; the browser-unit spec passes every case, and
-the reviewer's probe (`rej-then-exit0-1ms`) matches Node 6/6 (logs in the
-Final+GREEN re-run). Probes on the fix before the guard (the guard acts only
+GREEN (`db9a3c439`): the five unit cases pass; `pnpm pr:check` test:run and
+test:parity pass; the browser-unit spec passes every case 3/3 runs, sibling
+browser-unit lanes 27/27, e2e chromium-light 25/25, `pnpm test:e2e:prod` 8/8;
+the reviewer's probe (`rej-then-exit0-1ms`) matches Node 6/6. Probes on the fix before the guard (the guard acts only
 after an earlier exit request): `p5-rej-listener-code` (rejection, `'exit'`
 listener sets `exitCode = 5`): rifty 5 = Node 3/3; `p5-rej-nonerror`
 (`Promise.reject(42)`): `UnhandledPromiseRejection` on stderr, status 1 = Node.
