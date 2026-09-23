@@ -62,6 +62,8 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ e727857522dd2faa97c839a25ea134aa830cf6ac
+
 - 2026-09-23 — mechanism: ADR-0443 (named-loud member per observed link/load edge). It partially supersedes ADR-0348 §2's link-only-placeholder clause; correction note in ADR-0348 + `docs/adr/README.md` §Corrections. Under DEC-2 a fresh decision review is still owed: this depth-1 worker could not spawn one (DEC-4). The driver runs it before IMPLEMENT.
 - 2026-09-23 — scope: exactly the three observed edges plus `memoryUsage.rss`, Node's own sub-member (O1). Siblings stay link-time misses (ADR-0443 §2).
 - 2026-09-23 — `spawnSync` is loud, not real. The `execSync` RPC is `node <script>` stdout-only (O4), and vitest never calls `spawnSync` (V1). The map's "`--changed` (git via spawnSync)" is inaccurate: `--changed` runs git through async `x` → `spawn` (V1). The map fix belongs to the land step.
