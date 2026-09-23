@@ -7,3 +7,4 @@
 - 2026-09-16 — final written-result check pass 3 (fresh read-only reviewer subagent over the working tree on main 51440931a): pass-2 problems resolved; 4 wording/citation problems (Outcome "default config", I4 evidence sentence, vite TS-config proof scope, §Oracle framing) fixed before landing; scope re-check clean → `status: ready`.
 
 - 2026-09-16 — landed refine + FIT set @ f872eb5c0 (reviewed revision for passes 1–3 = this set over main 51440931a).
+- 2026-09-23 — re-chart after overrides-spelling, path-posix, process-named-imports, loud-members (final-green PASS @ 06153584bde6f23a88084b9089052eed913a247b): I1 real Chromium install and first I6 import walls proven; items 5–12 remain. Review: `docs/backlog/runtime-js/reference/vitest-slices-1-4-final-green.json`.

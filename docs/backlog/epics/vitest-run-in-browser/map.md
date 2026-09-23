@@ -1,24 +1,13 @@
 # Map — vitest-run-in-browser
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). Where a child
+finding compiled to `ready` at its own PICKUP (`RDY-1`). Items 1–4 passed
+Final+GREEN and are in the ledger. Where a child
 depends on another (8 after 7, 11 after 8, 12 after 1–11) the order is also
 recorded as `blocked_by`; the other children are independent.
 
 ## Items
 
-1. `npm-client/overrides-bare-version-spec` — **overrides-spelling** — I1; npm's
-   `"vite": "8.0.16"` parses as a range, not a package name; unblocks the
-   scenario install with zero resolver work.
-2. `runtime-js/path-posix-win32-builtins` — **path-posix** — I6; register
-   `node:path/posix`. `node:path/win32` stays loud: the existing `path.win32`
-   aliases POSIX semantics and cannot honestly serve Windows paths.
-3. `runtime-js/builtin-static-names-prototype-methods` — **process-named-imports** —
-   I6; static export names of a builtin include its prototype methods
-   (`import { cwd } from 'node:process'`).
-4. `runtime-js/absent-builtin-members-loud-throws` — **loud-members** — I6;
-   `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as
-   real or named-loud members instead of link-time misses / `undefined.bind`.
 5. `runtime-js/symbol-key-global-write-guard-precision` — **guard-precision** — I6;
    ESM+CJS Function guards stop rejecting `globalThis[<Symbol const>]` writes
    (@vitest/utils, undici).
