@@ -570,10 +570,7 @@ describe('install — package.json defaults', () => {
       db.set(
         'vitest',
         new Map([
-          [
-            '4.1.11',
-            await makeEntry('vitest', '4.1.11', { vite: '^6.0.0 || ^7.0.0 || ^8.0.0' }),
-          ],
+          ['4.1.11', await makeEntry('vitest', '4.1.11', { vite: '^6.0.0 || ^7.0.0 || ^8.0.0' })],
         ]),
       );
       db.set(
@@ -596,7 +593,11 @@ describe('install — package.json defaults', () => {
         }),
       );
 
-      const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+      const registry = new FakeRegistry(db);
+      const packument = vi.spyOn(registry, 'getPackument');
+      const result = await install({ vfs, cwd: '/proj', registry });
+      expect(packument.mock.calls.map(([name]) => name)).not.toContain('8.0.16');
+      expect(packument.mock.calls.map(([name]) => name)).toContain('vite');
       expect(result.packages.filter((pkg) => pkg.name === 'vite')).toMatchObject([
         { name: 'vite', version: '8.0.16', installPath: 'node_modules/vite' },
       ]);

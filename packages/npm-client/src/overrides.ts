@@ -10,6 +10,7 @@
  * target-string parsing.
  */
 import { bakedOverrides } from '@riftydev/shadow-registry';
+import { parse } from './semver.ts';
 
 export interface OverrideMap {
   /** Map from package name (or `parent>child`) to replacement target. */
@@ -31,17 +32,22 @@ export function resolveOverride(
 ): ResolvedOverrideTarget | null {
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
-  if (userMatch) return { ...parseTarget(userMatch), source: 'user' };
+  if (userMatch) return { ...parseTarget(userMatch, name), source: 'user' };
   const builtin = bakedOverrides[name];
-  if (builtin) return { ...parseTarget(builtin), source: 'baked' };
+  if (builtin) return { ...parseTarget(builtin, name), source: 'baked' };
   return null;
 }
 
-function parseTarget(target: string): { name: string; range: string | null } {
+function parseTarget(
+  target: string,
+  requestedName: string,
+): { name: string; range: string | null } {
   // Accept formats:
+  //   "8.0.16"              → same name, range="8.0.16" (npm override)
   //   "bcryptjs"             → name=bcryptjs, range=null (latest)
   //   "bcryptjs@2.x"         → name=bcryptjs, range="2.x"
   //   "npm:bcryptjs@2.x"     → npm alias form, same as above
+  if (parse(target)) return { name: requestedName, range: target };
   let str = target;
   if (str.startsWith('npm:')) str = str.slice(4);
   const at = str.lastIndexOf('@');

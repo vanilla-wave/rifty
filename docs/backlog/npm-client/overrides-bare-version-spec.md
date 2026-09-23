@@ -51,5 +51,6 @@ remain outside this slice; the accepted goal covers only the exact Vite pin.
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ ac6136bedeef16b6f5bc11c913e0464885f731c2
 - 2026-09-23 — observed defect route: npm 11.17.0 lockfile oracle and rifty browser failure recorded in the goal evidence; installer RED reproduces the mistaken `8.0.16` packument lookup.
 - 2026-09-23 — same-name exact version is the parse branch; preserve the existing `name@range` extension and resolver placement (goal Decisions).

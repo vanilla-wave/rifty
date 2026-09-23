@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Treat a bare exact-version override as a pin on the requested package, matching npm.
+
 - Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.
 
 
