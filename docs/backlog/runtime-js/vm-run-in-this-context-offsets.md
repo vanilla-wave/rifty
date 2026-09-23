@@ -85,6 +85,7 @@ ADR-0450 accessor.
 
 ## Decisions
 
+- ready-verdict: 2026-09-23 — Contract+RED @ 75ea85bce3969246d1f3b31bc61f2d95863d937c
 - 2026-09-23 — carrier: ADR-0450 (per-script `sourceURL` identity + one owned `Error.prepareStackTrace` accessor projecting CallSites); source prefix, filename map, data-property dispatcher and `CallSite.prototype` patch rejected on evidence.
 - 2026-09-23 — Node v24.16.0 re-run replaces the goal evidence §Oracle `vmoff.cjs` reading (no clamp; `columnOffset` on physical line 1 only); Node 24's default `Error.prepareStackTrace` is a function, not undefined (evidence §Correction, P2).
 - 2026-09-23 — owner installed at the first offset script, not at realm boot: ADR-0136's scoped footprint holds for programs without offsets; the pre-offset default-hook shape stays a recorded gap (evidence §Discovered 4).
