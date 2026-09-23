@@ -20,8 +20,6 @@ is also recorded as `blocked_by`; the other children are independent.
    pool Workers stay unref'd) — else the parent never drains.
 9. `runtime-js/child-process-advanced-ipc-serialization` — **advanced-ipc** — I4;
    `fork(..., {serialization:'advanced'})` round-trips structured-clone values.
-10. `runtime-js/vm-run-in-this-context-offsets` — **vm-offsets** — I4/I5;
-    `lineOffset`/`columnOffset` honoured for stack traces instead of thrown.
 11. `runtime-js/worker-threads-stdio-streams-empty-exec-argv` — **worker-stdio** —
     I4/I5; `Worker.stdout/stderr` Readables (`stdout: true` semantics) and the
     pools' real startup options: vitest 4.1.11 passes a non-empty `execArgv`
@@ -37,10 +35,6 @@ is also recorded as `blocked_by`; the other children are independent.
 
 - ADR shape for I2/I3: correction note on ADR-0152 vs one short ADR citing it —
   owner: agent — decided at item 7 pickup (`DEC-2`).
-- vm offsets carrier: stack remap table vs source prefix — owner: agent — item 10
-  pickup. The evidence §Oracle reading is suspect (V8 applies `columnOffset`
-  to the first physical line only, no clamp; vite 8's module-runner
-  `prepareStackTrace` reads CallSite getters) — pickup re-runs the oracle.
 - `vitest.config.ts` loading (vite `loadConfigFromFile` → rolldown bundle of
   the TS config) and `.ts` test transform under vitest's module runner: no
   wall observed yet because earlier walls block — owner: agent — first
