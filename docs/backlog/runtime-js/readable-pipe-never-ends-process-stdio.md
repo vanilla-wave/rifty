@@ -33,7 +33,8 @@ real Node and a physical rifty Node Worker.
    stderr and exit 0. → I4
 3. Exemption is object identity, not `fd`, missing `end`, or another shape:
    an ordinary `Writable` with `fd = 1` still receives `end` and emits
-   `finish`. → I4
+   `finish`, while a foreign sink lacking `end` still throws at source EOF.
+   → I4
 
 ## Parity cases
 
@@ -44,6 +45,8 @@ real Node and a physical rifty Node Worker.
    → I4
 3. Same physical parity for a normal `Writable` given `fd = 1`; it must
    finish in both runtimes. → I4
+4. Same physical parity for a foreign EventEmitter sink with `fd = 1` and no
+   `end`: source EOF throws `TypeError` in both runtimes. → I4
 
 ## Out of scope
 

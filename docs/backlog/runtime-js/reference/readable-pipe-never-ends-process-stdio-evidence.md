@@ -11,6 +11,9 @@ first|second
 
 node -e 'const {Readable,Writable}=require("node:stream");const sink=new Writable({write(_c,_e,cb){cb()}});sink.fd=1;sink.on("finish",()=>console.log("lookalike-finished",sink.writableEnded));Readable.from(["x"]).pipe(sink)'
 lookalike-finished true
+
+node -e 'const {Readable}=require("node:stream");const {EventEmitter}=require("node:events");const source=new Readable({read(){}});const sink=new EventEmitter();sink.fd=1;sink.write=()=>true;source.pipe(sink);try{source.emit("end");console.log("no-throw")}catch(error){console.log(error.name,error.message)}'
+TypeError dest.end is not a function
 ```
 
 Before product change:
@@ -24,5 +27,6 @@ node-parity-runner: 1 case(s) matching 'pipe-process-stdio'
     Node stderr: first|second\n; exit 0
     rifty stderr: first|TypeError: dest.end is not a function; exit 1
     fd=1 ordinary Writable: lookalike-finished true; exit 0 in both
+    fd=1 foreign sink without end: TypeError dest.end is not a function in both
 1 case(s) failed
 ```
