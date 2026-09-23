@@ -10,8 +10,9 @@ recorded as `blocked_by`; the other children are independent.
 1. `npm-client/overrides-bare-version-spec` — **overrides-spelling** — I1; npm's
    `"vite": "8.0.16"` parses as a range, not a package name; unblocks the
    scenario install with zero resolver work.
-2. `runtime-js/path-posix-win32-builtins` — **path-subpaths** — I6; `node:path/posix`
-   and `node:path/win32` registered from the existing namespaces.
+2. `runtime-js/path-posix-win32-builtins` — **path-posix** — I6; register
+   `node:path/posix`. `node:path/win32` stays loud: the existing `path.win32`
+   aliases POSIX semantics and cannot honestly serve Windows paths.
 3. `runtime-js/builtin-static-names-prototype-methods` — **process-named-imports** —
    I6; static export names of a builtin include its prototype methods
    (`import { cwd } from 'node:process'`).
