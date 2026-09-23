@@ -2,7 +2,7 @@
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
 finding compiled to `ready` at its own PICKUP (`RDY-1`). Where a child
-depends on another (8 after 7; 11 after 8, 9; 12 after all) the order
+depends on another (8 after 7; 11 after 8; 12 after all) the order
 is also recorded as `blocked_by`; the other children are independent.
 
 ## Items
@@ -18,18 +18,16 @@ is also recorded as `blocked_by`; the other children are independent.
    `unref()` in Node's observable shape (napi-rs neuters `ref` through the
    Worker's own `Symbol(kHandle)`/`Symbol(kPublicPort)` objects; rolldown's
    pool Workers stay unref'd) — else the parent never drains.
-9. `runtime-js/child-process-advanced-ipc-serialization` — **advanced-ipc** — I4;
-   `fork(..., {serialization:'advanced'})` round-trips structured-clone values.
 11. `runtime-js/worker-threads-stdio-streams-empty-exec-argv` — **worker-stdio** —
     I4/I5; `Worker.stdout/stderr` Readables (`stdout: true` semantics) and the
     pools' real startup options: vitest 4.1.11 passes a non-empty `execArgv`
     (`--experimental-import-meta-resolve`, `--require <vitest>/suppress-warnings.cjs`,
     `--conditions …`) to both `fork` and `new Worker` — honoured with Node
     semantics, any other flag a named throw (today Worker throws, fork drops
-    it silently). After 8, 9.
+    it silently). After 8.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 7–11.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 7, 8, 11.
 
 ## Open questions
 
