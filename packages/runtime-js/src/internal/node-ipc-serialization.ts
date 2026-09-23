@@ -2,6 +2,21 @@ import { Buffer, NotImplementedError } from '@riftydev/io';
 
 export type NodeIpcSerialization = 'json' | 'advanced';
 
+// Preflight reads internal slots, never guest iterator/buffer overrides.
+const mapForEach = Map.prototype.forEach;
+const setForEach = Set.prototype.forEach;
+const typedArrayBufferGetter = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype),
+  'buffer',
+)?.get;
+const dataViewBufferGetter = Object.getOwnPropertyDescriptor(DataView.prototype, 'buffer')?.get;
+
+function viewBacking(view: ArrayBufferView): ArrayBufferLike {
+  const getter = view instanceof DataView ? dataViewBufferGetter : typedArrayBufferGetter;
+  if (getter === undefined) throw new Error('ArrayBufferView.buffer intrinsic is unavailable');
+  return Reflect.apply(getter, view, []) as ArrayBufferLike;
+}
+
 function assertAdvancedGraph(value: unknown, seen: WeakSet<object>): void {
   if (typeof value !== 'object' || value === null) return;
   if (Buffer.isBuffer(value)) {
@@ -9,6 +24,9 @@ function assertAdvancedGraph(value: unknown, seen: WeakSet<object>): void {
   }
   if (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer) {
     throw new Error('#<SharedArrayBuffer> could not be cloned.');
+  }
+  if (ArrayBuffer.isView(value) && !(viewBacking(value) instanceof ArrayBuffer)) {
+    throw new NotImplementedError('child_process.serialization.advanced.shared-view');
   }
   const prototype = Object.getPrototypeOf(value);
   if (
@@ -28,12 +46,12 @@ function assertAdvancedGraph(value: unknown, seen: WeakSet<object>): void {
   if (seen.has(value)) return;
   seen.add(value);
   if (value instanceof Map) {
-    for (const [key, entry] of value) {
+    mapForEach.call(value, (entry: unknown, key: unknown) => {
       assertAdvancedGraph(key, seen);
       assertAdvancedGraph(entry, seen);
-    }
+    });
   } else if (value instanceof Set) {
-    for (const entry of value) assertAdvancedGraph(entry, seen);
+    setForEach.call(value, (entry: unknown) => assertAdvancedGraph(entry, seen));
   }
   if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return;
   for (const key of Reflect.ownKeys(value)) {

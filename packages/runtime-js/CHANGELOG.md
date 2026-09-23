@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Advanced fork IPC rejects SAB-backed views before posting and validates Map/Set internal entries despite own iterator overrides (ADR-0454).
+
 - Expose Vitest-imported `fs.statfsSync`, `child_process.spawnSync`, and `process.memoryUsage` as named loud capabilities.
 - Register `node:path/posix` as the existing POSIX path namespace.
 - Expose implemented process methods as own ESM named exports.

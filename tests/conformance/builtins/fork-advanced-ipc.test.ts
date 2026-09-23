@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { Buffer as RiftyBuffer } from '../../../packages/io/src/buffer.ts';
 import { fork } from '../../../packages/runtime-js/src/builtins/child_process.ts';
 import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts';
 import { writeFileSync } from '../../../packages/runtime-js/src/builtins/fs.ts';
@@ -41,5 +42,31 @@ describe('child_process.fork — advanced IPC', () => {
     expect(result.missing).toEqual([undefined]);
     expect(result.bytes instanceof Uint8Array).toBe(true);
     expect([...result.bytes]).toEqual([0, 128, 255]);
+  });
+
+  it('keeps the public channel usable after shared-view and hidden-Buffer ceilings', async () => {
+    writeFileSync('/advanced.js', `__process.on('message', (message) => __process.send(message));`);
+    const child = fork('/advanced.js', [], { serialization: 'advanced' });
+    if (child.send === undefined) throw new Error('fork IPC send missing');
+    try {
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(() => child.send?.({ view: new Uint8Array(new SharedArrayBuffer(2)) })).toThrow(
+        /child_process\.serialization\.advanced\.shared-view/u,
+      );
+      const map = new Map([['key', RiftyBuffer.from([1, 2])]]);
+      Object.defineProperty(map, Symbol.iterator, { value: () => [][Symbol.iterator]() });
+      expect(() => child.send?.({ map })).toThrow(
+        /child_process\.serialization\.advanced\.Buffer/u,
+      );
+
+      const reply = new Promise<unknown>((resolve) => child.once('message', resolve));
+      expect(child.send({ after: true })).toBe(true);
+      expect(await reply).toEqual({ after: true });
+    } finally {
+      const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+      child.kill('SIGUSR2');
+      await closed;
+    }
   });
 });

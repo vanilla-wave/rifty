@@ -5,7 +5,7 @@ title: `child_process.fork` with `serialization: 'advanced'` round-trips structu
 created: 2026-09-15
 why: vitest's default forks pool calls `fork(entry, [], { env, execArgv, stdio: 'pipe', serialization: 'advanced' })`; rifty throws `NotImplementedError('child_process.serialization.advanced')` at spawn, so the default pool cannot start
 epic: vitest-run-in-browser
-sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md, docs/adr/runtime-js/0448-advanced-fork-ipc-over-the-existing-process-channel.md]
+sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md, docs/backlog/runtime-js/reference/advanced-ipc-clone-fidelity-evidence.md, docs/adr/runtime-js/0448-advanced-fork-ipc-over-the-existing-process-channel.md, docs/adr/runtime-js/0454-reject-unsupported-shared-backed-advanced-ipc-views.md]
 code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/child_process-worker.ts, packages/runtime-js/src/builtins/child_process-exec.ts, packages/runtime-js/src/internal/node-ipc-serialization.ts, packages/runtime-js/src/builtins/process.ts, packages/runtime-js/src/builtins/node-entry-runtime-config.ts]
 ---
 
@@ -25,6 +25,7 @@ in both directions. Top-level undefined/function and nested function reject
 synchronously with Node's observed error classes/codes; the channel remains
 usable. ADR-0448 fixes the standard structured-clone subset and the loud
 Buffer/accessor boundary on the existing ADR-0326 MessagePort.
+ADR-0454 records the observed SAB-backed view and Map/Set iterator faults.
 
 ## Acceptance
 
@@ -43,6 +44,7 @@ Buffer/accessor boundary on the existing ADR-0326 MessagePort.
    throw named `NotImplementedError`, not a silently changed type or
    getter evaluation. SharedArrayBuffer gets Node's clone error; unknown host
    objects stay loud. → ADR-0448
+5. SAB-backed views throw `NotImplementedError('child_process.serialization.advanced.shared-view')` before posting; Map/Set own iterators cannot hide Buffer/raw SAB entries or run user code during validation. → ADR-0454
 
 ## Parity cases
 
@@ -56,6 +58,7 @@ Buffer/accessor boundary on the existing ADR-0326 MessagePort.
    same feature-specific throw at `fork`; after the repair it proves the
    same-realm carrier does not silently fall back to JSON. → I4
 3. `child_process/public-ipc-json` remains green against Node. → ADR-0326
+4. `node-ipc-serialization.fault.test.ts` pins the executed SAB-view and Map/Set bypass RED from `reference/advanced-ipc-clone-fidelity-evidence.md`. → ADR-0454
 
 ## Fault matrix
 
@@ -68,11 +71,13 @@ Buffer/accessor boundary on the existing ADR-0326 MessagePort.
 | `sibling-drift` | SharedArrayBuffer follows Node's rejection although host structured clone accepts it; unknown host objects fail loudly | advanced IPC fault test → ADR-0448 |
 | `corrupt-input` | unknown launch IPC discriminator fails before guest entry | node-entry bootstrap test → ADR-0448 |
 | `corrupt-input` | unknown `options.serialization` rejects before Worker allocation | physical parity and conformance test → ADR-0448 |
+| `provenance-lie` | SAB-backed typed views cannot retain shared ownership across advanced fork IPC | advanced IPC fault test and Node physical oracle → ADR-0454 |
+| `sibling-drift` | Map and Set validation reads internal entries despite own iterators; hidden Buffer/raw SAB still fails before clone | advanced IPC fault test and Node physical oracle → ADR-0454 |
 
 ## Out of scope
 
 - Node's V8-specific Buffer wire representation, plain-object accessors, handles, callbacks/options,
-  channel `ref()`/`unref()` and non-structured-cloneable host objects remain
+  SAB-backed views, channel `ref()`/`unref()` and non-structured-cloneable host objects remain
   loud gaps in compat; no JSON fallback.
 
 ## Decisions
@@ -80,6 +85,7 @@ Buffer/accessor boundary on the existing ADR-0326 MessagePort.
 - ready-verdict: 2026-09-23 — Contract+RED @ ce86f977b6724eb6c10a15954b7503412837bae0
 - re-cut: 2026-09-23 — strengthened typed graph and unknown-option validation already owned by ADR-0448 — trace: ADR-0448
 - re-cut: 2026-09-23 — ADR-0448: plain-object accessor ceiling; Error.stack keeps native Node serialization — trace: ADR-0448
+- re-cut: 2026-09-23 — ADR-0454: SAB-backed views named-loud; Map/Set scan internal slots, no silent Buffer/SharedArrayBuffer escape — trace: ADR-0454
 - 2026-09-23 — ADR-0448 extends ADR-0326's launch discriminator, keeps one MessagePort and the JSON default; native structured clone carries the admitted graph, V8-only values stay loud.
 
 ## Challenge

@@ -7,6 +7,10 @@ Date: 2026-09
 > existing public MessagePort; default JSON, private control, and logical
 > disconnect stay on their current owners.
 
+**Corrected (2026-09-23, ADR-0454):** the typed-array claim covers
+ArrayBuffer-backed views. SAB-backed views cannot use native structured-clone
+passthrough faithfully and now throw a named ceiling before posting.
+
 ## Context
 
 Vitest 4.1.11 starts its default pool with `fork(...,

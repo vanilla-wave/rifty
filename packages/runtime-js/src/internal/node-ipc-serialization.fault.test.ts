@@ -75,4 +75,72 @@ describe('advanced Node IPC serialization faults', () => {
     );
     expect(advanced({ after: true })).toEqual({ after: true });
   });
+
+  it('rejects SAB-backed typed arrays and DataViews instead of retaining shared backing', () => {
+    const backing = new SharedArrayBuffer(4);
+    new Uint8Array(backing).set([1, 2, 3, 4]);
+    expect(() => advanced({ typed: new Uint8Array(backing, 1, 2) })).toThrow(
+      /child_process\.serialization\.advanced\.shared-view/u,
+    );
+    expect(() => advanced({ view: new DataView(backing, 1, 2) })).toThrow(
+      /child_process\.serialization\.advanced\.shared-view/u,
+    );
+    const ordinary = advanced({ view: new DataView(new ArrayBuffer(2)) }) as {
+      view: DataView;
+    };
+    expect(ordinary.view.buffer instanceof ArrayBuffer).toBe(true);
+  });
+
+  it('classifies view backing from its internal slot, not an own buffer property', () => {
+    const spoofed = new Uint8Array(new SharedArrayBuffer(4), 1, 2);
+    Object.defineProperty(spoofed, 'buffer', { value: new ArrayBuffer(4) });
+    expect(() => advanced({ spoofed })).toThrow(
+      /child_process\.serialization\.advanced\.shared-view/u,
+    );
+    const dataView = new DataView(new SharedArrayBuffer(4), 1, 2);
+    Object.defineProperty(dataView, 'buffer', { value: new ArrayBuffer(4) });
+    expect(() => advanced({ dataView })).toThrow(
+      /child_process\.serialization\.advanced\.shared-view/u,
+    );
+  });
+
+  it('reads Map internal entries despite an own iterator override', () => {
+    const map = new Map<string, unknown>([['key', 7]]);
+    Object.defineProperty(map, Symbol.iterator, {
+      value: () => {
+        throw new Error('user iterator called');
+      },
+    });
+    const result = advanced({ map }) as { map: Map<string, unknown> };
+    expect(result.map.get('key')).toBe(7);
+  });
+
+  it('reads Set internal entries despite an own iterator override', () => {
+    const set = new Set<unknown>([7]);
+    Object.defineProperty(set, Symbol.iterator, {
+      value: () => {
+        throw new Error('user iterator called');
+      },
+    });
+    const result = advanced({ set }) as { set: Set<unknown> };
+    expect(result.set.has(7)).toBe(true);
+  });
+
+  it('does not let Map or Set own iterators hide Buffer or raw SAB entries', () => {
+    const map = new Map<string, unknown>([['key', Buffer.from([1, 2])]]);
+    const set = new Set<unknown>([Buffer.from([3, 4])]);
+    for (const container of [map, set]) {
+      Object.defineProperty(container, Symbol.iterator, { value: () => [][Symbol.iterator]() });
+      Object.defineProperty(container, 'forEach', {
+        value: () => {
+          throw new Error('user forEach called');
+        },
+      });
+    }
+    expect(() => advanced({ map })).toThrow(/child_process\.serialization\.advanced\.Buffer/u);
+    expect(() => advanced({ set })).toThrow(/child_process\.serialization\.advanced\.Buffer/u);
+
+    map.set('key', new SharedArrayBuffer(2));
+    expect(() => advanced({ map })).toThrow(/SharedArrayBuffer.*could not be cloned/u);
+  });
 });
