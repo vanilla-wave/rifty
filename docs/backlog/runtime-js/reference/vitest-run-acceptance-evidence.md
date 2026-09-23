@@ -51,3 +51,12 @@ terminal history exit: 0; expected Node: 1
 The wall precedes config loading/file collection. It traces to goal I6 and
 the wrong exit status to I3/I4. Later pool/reporter assertions remain unrun
 until this first command reaches them.
+
+## Chromium RED after root slices 5/6/9 — 8a0936c92
+
+Same test and dedicated port 5319 after merging the newer goal branch into
+the temp acceptance branch. Install and package/binding verification still
+pass. The `@vitest/utils` loader ceiling is gone; first `vitest run` now
+prints no reporter or Startup Error text and returns terminal history exit 0.
+The e2e expects 1 and fails at that assertion. Config loading, collection,
+both pool results, verbose and fixed reruns are still unobserved in rifty.
