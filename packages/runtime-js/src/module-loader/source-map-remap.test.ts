@@ -308,4 +308,20 @@ describe('module loader source-map stack remapping', () => {
     expect(sharedA()).toContain('/virtual/shared.js:11:-13');
     expect(sharedB()).toContain('/virtual/shared.js:21:12');
   });
+
+  it('reinstalls scoped TS remapping after a guest removes the VM hook', async () => {
+    runInThisContext('1', { filename: '/virtual/offset.js', lineOffset: 1 });
+    Reflect.deleteProperty(Error, 'prepareStackTrace');
+
+    const registry = new SourceMapRegistry();
+    registry.set('/virtual/mapped.ts', {
+      lines: [[], [], [{ generatedColumn: 0, originalLine: 9, originalColumn: 0 }]],
+    });
+    await withStackRemapping(registry, '/virtual/mapped.ts', 0, async () => {
+      const stack = new Function(
+        'return new Error().stack\n//# sourceURL=/virtual/mapped.ts',
+      )() as string;
+      expect(stack).toContain('/virtual/mapped.ts:10:1');
+    });
+  });
 });
