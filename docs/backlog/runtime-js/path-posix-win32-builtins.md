@@ -57,6 +57,7 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ 26fff2916c5de06b3b4cb8298db14bc45dc7f7a5
 - 2026-09-23 — scope: `path/posix` only; `node:path/win32` dropped from the draft — no invariant needs it (tree scan: never imported; vite's `path.win32.basename` runs only under `process.platform === 'win32'`), registering it onto the `win32 === posix` alias would extend that lie, a real win32 port is machinery I6 is deliverable without (`REV-7`).
 - 2026-09-23 — discovery (`REV-12`, outside I6): `path.win32` silently answers with POSIX semantics (Node: `sep` `\`, `join('a','b')` `a\b`; evidence §Rifty baseline), tracked only by a code comment and traps.md `parity-win32-alias` — owed backlog capture `runtime-js/path-win32-namespace` (real `path.win32` + `node:path/win32` + `posix`/`win32` cross-refs); owner runtime-js; trigger: first Windows-path consumer.
 - 2026-09-23 — no ADR: a registry line on ADR-0035 with Node-literal identity; `packages/runtime-js/CHANGELOG.md` + compat `modules.md` note at implementation.
