@@ -100,6 +100,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0422 | Retire callbacks with completed command invocations |
 | 0443 | Named-loud builtin members for linked, unsuppliable Node edges |
 | 0444 | Check runtime global-write keys at Node's key coercion |
+| 0445 | Dispatch Node process lifecycle events before terminal handling |
 | 0447 | Count referenced MessagePorts in child-realm keepalive |
 | 0458 | Read the realm-bound `node:process` registry entry uncached in io |
 
@@ -504,6 +505,8 @@ superseded.
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 | 0152 §1 named handle set | 0447 | a manually referenced `MessagePort` is counted (one ref per port; `unref()` or `close()` of either pair end releases; transfers that would hide a release are named throws); listener referencing stays an explicit gap; §1 shape unchanged, named set grew |
+| 0152 §1 first zero-ref sample settles the drain; §3 every recorded rejection is fatal | 0445 | a zero-ref drain settles after one more host task confirms it (late Chromium `unhandledrejection`); a rejection or error a process listener handles is canceled and not recorded; the no-listener default stays stderr + exit 1 |
+| 0157 §1 `exit()` clause | 0445 | `exitCode` starts `undefined`; `exit()` without an argument uses it, emits `'exit'` once before the kernel exit request, and natural exit calls it |
 | 0155 §5 loud-only interactive-stdin clause | 0230 / note 2026-07-13 | owner PTY pump ships flowing stdin, explicit EOF, and pause/resume; ADR-0225 ships live resize; pull/raw gaps stay loud |
 | 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
