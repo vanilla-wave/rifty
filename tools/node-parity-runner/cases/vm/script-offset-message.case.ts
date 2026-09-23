@@ -13,6 +13,12 @@ const c: ParityCase = {
       });
       console.log(delayed().split('\\n')[0]);
     }
+    const multiline = 'prefix\\n    at eval (rifty-vm://offset/10/-20/%2Fvirtual%2Fx.js:1:7)';
+    const source = '() => new Error(' + JSON.stringify(multiline) + ').stack';
+    const delayed = vm.runInThisContext(source, {
+      filename: '/virtual/delayed.js', lineOffset: 10, columnOffset: -20,
+    });
+    console.log(JSON.stringify(delayed().split('\\n').slice(0, 2)));
   `,
 };
 

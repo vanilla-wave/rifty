@@ -323,5 +323,15 @@ describe('module loader source-map stack remapping', () => {
       )() as string;
       expect(stack).toContain('/virtual/mapped.ts:10:1');
     });
+
+    const previous = Error.prepareStackTrace;
+    if (!previous) throw new Error('VM stack dispatcher missing');
+    Error.prepareStackTrace = (error, frames) => previous(error, frames);
+    await withStackRemapping(registry, '/virtual/mapped.ts', 0, async () => {
+      const stack = new Function(
+        'return new Error().stack\n//# sourceURL=/virtual/mapped.ts',
+      )() as string;
+      expect(stack).toContain('/virtual/mapped.ts:10:1');
+    });
   });
 });

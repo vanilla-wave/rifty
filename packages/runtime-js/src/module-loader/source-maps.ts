@@ -2,7 +2,8 @@ const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
 const BASE64_VALUES = new Map([...BASE64].map((char, index) => [char, index] as const));
 const INLINE_SOURCE_MAP_RE =
   /(?:\/\/[@#]\s*sourceMappingURL=data:application\/json(?:;charset=[^;,]+)?;base64,([A-Za-z0-9+/=]+)\s*)$/;
-const VM_OFFSET_FRAME_RE = /rifty-vm:\/\/offset\/(-?\d+)\/(-?\d+)\/([^\s():]+):(\d+):(\d+)/g;
+const VM_OFFSET_FRAME_RE =
+  /rifty-vm:\/\/offset\/(-?\d+)\/(-?\d+)\/([^\s():]+):(\d+):(\d+)(?=\)?$)/g;
 
 export interface ExtractedSourceMap {
   readonly code: string;
@@ -77,14 +78,20 @@ interface ActiveSourceMap {
 
 const activeSourceMaps: ActiveSourceMap[] = [];
 let previousPrepareStackTrace: PrepareStackTrace | undefined;
-let stackDispatcherInstalled = false;
 let vmOffsetsRegistered = false;
+let preparingStackTrace = false;
 
 const dispatcherPrepareStackTrace: PrepareStackTrace = (err, stackTraces) => {
-  const rendered = previousPrepareStackTrace
-    ? String(previousPrepareStackTrace(err, stackTraces))
-    : renderDefaultStack(err, stackTraces);
-  return remapVmOffsetStack(remapActiveStack(rendered));
+  if (preparingStackTrace) return renderDefaultStack(err, stackTraces);
+  preparingStackTrace = true;
+  try {
+    const rendered = previousPrepareStackTrace
+      ? String(previousPrepareStackTrace(err, stackTraces))
+      : renderDefaultStack(err, stackTraces);
+    return remapActiveStack(remapVmStackFrames(rendered, stackTraces));
+  } finally {
+    preparingStackTrace = false;
+  }
 };
 
 export function sourceUrlForVmOffsets(
@@ -143,11 +150,10 @@ export async function withStackRemapping<T>(
 }
 
 function installStackDispatcher(): void {
-  if (stackDispatcherInstalled) return;
   const errorCtor = Error as ErrorWithPrepareStackTrace;
+  if (errorCtor.prepareStackTrace === dispatcherPrepareStackTrace) return;
   previousPrepareStackTrace = errorCtor.prepareStackTrace;
   errorCtor.prepareStackTrace = dispatcherPrepareStackTrace;
-  stackDispatcherInstalled = true;
 }
 
 function restoreStackDispatcherIfIdle(): void {
@@ -158,7 +164,6 @@ function restoreStackDispatcherIfIdle(): void {
     else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
   }
   previousPrepareStackTrace = undefined;
-  stackDispatcherInstalled = false;
 }
 
 function materializeErrorStack(err: unknown): void {
@@ -184,8 +189,8 @@ function remapActiveStack(stack: string): string {
   return out;
 }
 
-function remapVmOffsetStack(stack: string): string {
-  return stack.replace(
+function remapVmOffsetFrame(frame: string): string {
+  return frame.replace(
     VM_OFFSET_FRAME_RE,
     (
       _frame,
@@ -198,10 +203,27 @@ function remapVmOffsetStack(stack: string): string {
       const physicalLine = Number(lineText);
       const line = physicalLine + Number(lineDelta);
       const column = Number(colText) + (physicalLine === 1 ? Number(columnDelta) : 0);
-      const filename = decodeURIComponent(encoded);
+      let filename: string;
+      try {
+        filename = decodeURIComponent(encoded);
+      } catch {
+        return _frame;
+      }
       return `${filename}${line === 0 ? '' : `:${line}${column === 0 ? '' : `:${column}`}`}`;
     },
   );
+}
+
+function remapVmStackFrames(stack: string, frames: readonly StackFrameLike[]): string {
+  const lines = stack.split('\n');
+  if (lines.length <= frames.length) return stack;
+  for (let i = 0; i < frames.length; i++) {
+    const index = lines.length - frames.length + i;
+    const line = lines[index];
+    const frame = frames[i];
+    if (line && frame && line.includes(frame.toString())) lines[index] = remapVmOffsetFrame(line);
+  }
+  return lines.join('\n');
 }
 
 function renderDefaultStack(err: Error, stackTraces: readonly StackFrameLike[]): string {
