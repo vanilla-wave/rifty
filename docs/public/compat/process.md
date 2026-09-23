@@ -24,6 +24,7 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 | `fs.watch` / `fs.watchFile` keepalive | ✅ | The poll `setInterval` is keepalive-counted; `FSWatcher.ref()`/`.unref()` opt the realm in/out via the poll handle (Node parity) — an unrefed watcher no longer holds the realm to the drain cap |
 | Timer `.unref()` / `.ref()` / `.hasRef()` | ✅ | `setTimeout`/`setInterval` handles can opt out of and back into keepalive; `node:timers` uses the same wrapper as globals |
 | `process.exit(N)` propagates the exit code | ✅ | Via the `RIFTY_PROCESS_EXIT` shape (ADR-0039) |
+| `node:process` named imports of `cwd`/`chdir`/`hrtime`/`uptime`/`exit`/`kill`/`nextTick`/`exitCode` | ✅ | Own enumerable members with Node's descriptors, so they link as ESM names (ADR-0348 §2; tinyexec/rolldown `import { cwd } from 'node:process'`); detached `exit`/`kill` act on their process. EventEmitter methods and host hooks (`on`, `emit`, `pushStdin`, …) stay link `SyntaxError`s, as Node. Node-own members rifty lacks (`umask`, `cpuUsage`, …) are link-time misses; `kill` beyond `kill(process.pid, 'SIGUSR2')` throws `NotImplementedError`. Known over-export: a non-IPC process still links `send`/`disconnect`/`connected`/`channel`/`_listenersMap`/`_warned` (Node: `SyntaxError`). Parity: `process/esm-named-members`, `process/esm-named-members-off-surface`, `process/unbound-exit-kill` |
 
 ## Terminal `node <file>` command (ADR-0155)
 

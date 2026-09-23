@@ -139,6 +139,54 @@ function nextTick(fn: (...args: unknown[]) => void, ...args: unknown[]): void {
   ensureDrainScheduled();
 }
 
+// `this`-free Node-own members: own fields of every NodeProcess (like nextTick),
+// so `import { cwd } from 'node:process'` links and works unbound (Node shape).
+function cwd(): string {
+  return currentCwd;
+}
+
+function chdir(dir: string): void {
+  if (typeof dir !== 'string') {
+    throw Object.assign(new TypeError('chdir: path must be a string'), {
+      code: 'ERR_INVALID_ARG_TYPE',
+    });
+  }
+  const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
+  let stat: { isDirectory: boolean };
+  try {
+    stat = syncMirror().statSync(target);
+  } catch (err) {
+    throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
+      code: 'ENOENT',
+      syscall: 'chdir',
+      path: target,
+      cause: err,
+    });
+  }
+  if (!stat.isDirectory) {
+    throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
+      code: 'ENOTDIR',
+      syscall: 'chdir',
+      path: target,
+    });
+  }
+  currentCwd = target;
+}
+
+function hrtime(time?: [number, number]): [number, number] {
+  const ms = performance.now();
+  const secs = Math.floor(ms / 1000);
+  const ns = Math.floor((ms - secs * 1000) * 1e6);
+  if (!time) return [secs, ns];
+  const [s0, n0] = time;
+  return [secs - s0, ns - n0];
+}
+hrtime.bigint = (): bigint => BigInt(Math.floor(performance.now() * 1e6));
+
+function uptime(): number {
+  return performance.now() / 1000;
+}
+
 /** Patch `Promise.prototype.then` so nextTick beats `.then` (Node ordering). */
 export function patchPromiseForNextTick(): void {
   if (promisePatched) return;
@@ -430,18 +478,18 @@ export class NodeProcess extends EventEmitter {
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
-  // a numeric string coerces; reads return the validated integer.
+  // a numeric string coerces; reads return the validated integer. Own accessor
+  // (enumerable, non-configurable, as Node's) defined in the constructor.
   #exitCode = 0;
-  get exitCode(): number {
-    return this.#exitCode;
-  }
-  set exitCode(v: unknown) {
-    this.#exitCode = coerceExitCode(v);
-  }
+  declare exitCode: number;
   stdout: NodeStdioWriter;
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
   nextTick = nextTick;
+  cwd = cwd;
+  chdir = chdir;
+  hrtime = hrtime;
+  uptime = uptime;
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
   send?: (message: unknown, ...unsupported: unknown[]) => boolean;
@@ -466,6 +514,14 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, 'exitCode', {
+      get: (): number => this.#exitCode,
+      set: (v: unknown): void => {
+        this.#exitCode = coerceExitCode(v);
+      },
+      enumerable: true,
+      configurable: false,
+    });
     Object.defineProperty(this, 'release', {
       value: createNodeProcessRelease(),
       writable: false,
@@ -601,52 +657,9 @@ export class NodeProcess extends EventEmitter {
     return result;
   }
 
-  cwd(): string {
-    return currentCwd;
-  }
-
-  chdir(dir: string): void {
-    if (typeof dir !== 'string') {
-      throw Object.assign(new TypeError('chdir: path must be a string'), {
-        code: 'ERR_INVALID_ARG_TYPE',
-      });
-    }
-    const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
-    let stat: { isDirectory: boolean };
-    try {
-      stat = syncMirror().statSync(target);
-    } catch (err) {
-      throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
-        code: 'ENOENT',
-        syscall: 'chdir',
-        path: target,
-        cause: err,
-      });
-    }
-    if (!stat.isDirectory) {
-      throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
-        code: 'ENOTDIR',
-        syscall: 'chdir',
-        path: target,
-      });
-    }
-    currentCwd = target;
-  }
-
-  hrtime(time?: [number, number]): [number, number] {
-    const ms = performance.now();
-    const secs = Math.floor(ms / 1000);
-    const ns = Math.floor((ms - secs * 1000) * 1e6);
-    if (!time) return [secs, ns];
-    const [s0, n0] = time;
-    return [secs - s0, ns - n0];
-  }
-
-  uptime(): number {
-    return performance.now() / 1000;
-  }
-
-  exit(code: unknown = 0): never {
+  // Own instance-bound fields, not prototype methods: Node's detached
+  // `const { exit } = process; exit(3)` / `import { kill }` still hit this process.
+  exit = (code: unknown = 0): never => {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
     this.#exitCode = c;
     const exitCode = toUint8ExitCode(c);
@@ -660,9 +673,9 @@ export class NodeProcess extends EventEmitter {
     });
     if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
     throw exitError;
-  }
+  };
 
-  kill(pid: number, signal = 'SIGTERM'): boolean {
+  kill = (pid: number, signal = 'SIGTERM'): boolean => {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
       throw new NotImplementedError(
         'process.kill',
@@ -670,7 +683,7 @@ export class NodeProcess extends EventEmitter {
       );
     }
     return this.#requestSelfSignal(signal);
-  }
+  };
 
   /** Host bridge: deliver terminal/process stdin into this realm's process. */
   pushStdin(data: string | Uint8Array): void {
@@ -1070,9 +1083,6 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
   }
   return (receiver as () => NodeProcessWorkerIpc)();
 }
-
-(NodeProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>
-  BigInt(Math.floor(performance.now() * 1e6));
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();
