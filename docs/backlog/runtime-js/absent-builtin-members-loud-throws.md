@@ -5,7 +5,6 @@ title: `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist a
 created: 2026-09-15
 why: absent members surface as link-time SyntaxError (named import of statfsSync/spawnSync) or `undefined.bind` TypeError (vitest worker init binds process.memoryUsage) — worse than a NotImplementedError and fatal even when the member is never called on the claimed path
 epic: vitest-run-in-browser
-blocked_by: [runtime-js/builtin-static-names-prototype-methods]
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/backlog/runtime-js/node-builtins-loud-stub-capability-gaps.md]
 code: [packages/runtime-js/src/builtins/fs.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/process.ts]
 ---

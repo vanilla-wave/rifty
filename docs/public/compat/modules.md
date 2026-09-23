@@ -32,6 +32,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | ESM dynamic `import()` | ✅ | |
 | ESM top-level `await` | ✅ | |
 | ESM live bindings (named import + re-export) | ✅ | Via member access into source-module namespace |
+| ESM module code strict mode | ❌ | Module bodies run sloppy: undeclared writes create globals (Node: `ReferenceError`), top-level and plain-call `this` is an object (Node: `undefined`), and a call of an imported function gets the source namespace as `this`. Tracked in `backlog/runtime-js/esm-module-code-sloppy-mode` |
 | CJS cycles (half-populated exports visible) | ✅ | |
 | CJS `module` metadata and lifecycle | ✅ | One registry record owns `id`, `filename`, `path`, search `paths`, first `parent`, `children`, cache identity, cycle publication, `loaded`, and failed-load unlink (ADR-0325; Node 24 parity). The separate public `require.cache` mutation surface remains the gap below. |
 | ESM cycles (mutating exports visible) | ✅ | |
