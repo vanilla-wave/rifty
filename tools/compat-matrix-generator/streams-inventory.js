@@ -1,0 +1,127 @@
+// `docs/public/compat/streams.md` inventory — split out of cli.js (file-size ratchet).
+export const streamsMatrix = {
+  file: 'streams.md',
+  title: 'Compatibility matrix — `node:stream`',
+  intro:
+    'Public claim surface for the `node:stream` subset used by package servers, fs streams, HTTP bodies, and pipeline-style consumers.',
+  rows: [
+    [
+      '`Readable` push/data/end',
+      '⚠️',
+      'Late-bound `_read`, bounded refill, object identity, string/Buffer/plain-Uint8Array admission, byte no-ops, and coded EOF failure are parity-tested; other views and invalid byte values remain — backlog `runtime-js/stream-byte-chunk-kinds`',
+    ],
+    [
+      '`Readable.read(n)`',
+      '⚠️',
+      "Exact byte slicing works; sized reads do not raise `readableHighWaterMark` to Node's next-power-of-two projection or pass that projected HWM to `_read` — backlog `runtime-js/readable-sized-read-hwm-growth`",
+    ],
+    ['Readable async iteration', '✅', '`for await` over readable chunks'],
+    [
+      'Readable async-iterator helpers',
+      '✅',
+      '`map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/`every`/`find`/`iterator`; `{ concurrency }` runs N at once but emits in INPUT order; `{ signal }` aborts with `AbortError`; Node validation errors (`ERR_INVALID_ARG_TYPE`/`ERR_OUT_OF_RANGE`/`ERR_MISSING_ARGS`) — parity-tested',
+    ],
+    [
+      '`Readable.from(iterable)`',
+      '⚠️',
+      'Node object-mode defaults, atomic string/Buffer boundaries, HWM, and cold start are parity-tested; iterator async-value/throw/return cleanup still diverges — backlog `runtime-js/readable-from-iterator-lifecycle`',
+    ],
+    [
+      '`Readable.pipe`',
+      '⚠️',
+      "Routing, unpipe and Node's end rule are parity-tested: only a literal `{ end: false }` or the realm's own `process.stdout`/`process.stderr` skips `dest.end()`, and such a pipe unpipes at source end (vitest's pool-child stdio shape). No `'pipe'`/`'unpipe'` events on the destination; an already-ended source never ends/unpipes; `pipeline(src, process.stdout)` throws `TypeError` — process streams lack `end()`",
+    ],
+    [
+      '`Writable` write/end/finish',
+      '⚠️',
+      'decodeStrings, covered byte admission, and scalar/batch completion order, HWM returns, drain, errors, and finish are parity-tested; other chunk kinds and `writableNeedDrain` remain — backlogs `runtime-js/stream-byte-chunk-kinds`, `runtime-js/writable-sync-dispatch-state`',
+    ],
+    ['`Transform`', '✅', '`_transform` callback path'],
+    ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
+    ['`pipeline`', '✅', 'Promise/callback chaining, multi-stage, destroy-on-error parity'],
+    ['`finished`', '✅', 'Resolves on readable end and cleanup cases'],
+    [
+      '`compose` / `Readable.wrap`',
+      '✅',
+      '`compose(...stages)` → a `Duplex` wired via `pipeline`; `Readable.wrap(legacy)` adapts streams1 data/end with backpressure — parity-tested',
+    ],
+    [
+      '`Duplex.from`',
+      '⚠️',
+      'Accepted shapes are parity-tested. Iterable branches are eager through a second Readable; the returned Duplex incorrectly remains writable and silently discards writes — backlog `runtime-js/duplex-from-source-ownership`',
+    ],
+    ['`destroy` / cleanup', '✅', 'Writable destroy and async-iterator cleanup parity'],
+    ['`stream/consumers`', '✅', 'Text/buffer/json-style consumers covered'],
+    ['Legacy streams', '✅', 'Pipe/unpipe and callable core constructor parity'],
+    [
+      '`Readable.fromWeb`',
+      '⚠️',
+      'Cold demand, chunks, option/error/acquisition order, and invalid-signal lock behavior are parity-tested; terminal reason/events/lock release still diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
+    ],
+    [
+      '`node:stream/web` module',
+      '✅',
+      'Re-exports the host WHATWG globals (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/`TextEncoderStream`/`TextDecoderStream`); each `=== globalThis.<Name>`, parity-tested',
+    ],
+    [
+      '`Readable.toWeb`',
+      '✅',
+      'Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested)',
+    ],
+    [
+      '`Writable.toWeb` / `Writable.fromWeb` / `Duplex.toWeb` / `Duplex.fromWeb`',
+      '⚠️',
+      'Normal data/backpressure and allowHalfOpen work; reason identity, duplicate events, pending settlement, locks, and one-sided teardown diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
+    ],
+    [
+      '`Readable/Writable/Duplex.fromWeb({ signal })`',
+      '❌',
+      'Falsy signal is absent and invalid values preserve Node errors; a valid signal throws `NotImplementedError` before lock acquisition — backlog `runtime-js/web-stream-adapter-terminal-lifecycle`',
+    ],
+    [
+      '`isReadable` / `isWritable` / `isErrored` / `isDisturbed`',
+      '✅',
+      'Predicates over the existing state machine; `isDisturbed` backed by an explicit bit; non-stream input never throws (parity-tested truth tables)',
+    ],
+    [
+      '`getDefaultHighWaterMark` / `setDefaultHighWaterMark`',
+      '✅',
+      'Module-level default HWM read by the Readable/Writable ctors (explicit `{ highWaterMark }` still wins); parity-tested',
+    ],
+    [
+      '`addAbortSignal`',
+      '⚠️',
+      'Abort destroys with `AbortError`/`ABORT_ERR`; `error.cause === signal.reason` is missing — backlog `runtime-js/add-abort-signal-reason-identity`',
+    ],
+    [
+      '`Writable` `cork` / `uncork` / `_writev`',
+      '✅',
+      'Cork defers writes (nested counter); uncork flushes the batch in ONE `_writev` (Node `{chunk,encoding}` shape) — real `writev` option, sequential `_write` fallback, backpressure + `drain` preserved (parity-tested)',
+    ],
+  ],
+  tests: [
+    '`tests/conformance/builtins/stream.test.ts`',
+    '`tests/conformance/builtins/stream-legacy.test.ts`',
+    '`tests/conformance/builtins/stream-consumers.test.ts`',
+    '`packages/io/src/streams/readable.from.test.ts`',
+    '`packages/io/src/streams/readable.read-hook.fault.test.ts`',
+    '`packages/io/src/streams/readable.refill-terminal.fault.test.ts`',
+    '`packages/io/src/streams/from-web-options.fault.test.ts`',
+    '`packages/io/src/streams/writable.admission.fault.test.ts`',
+    '`packages/io/src/streams/writable.decode-strings.fault.test.ts`',
+    '`packages/io/src/streams/writable.completion-order.fault.test.ts`',
+    '`packages/io/src/streams/readable.to-web.test.ts`',
+    '`packages/io/src/streams/writable.to-web.test.ts`',
+    '`packages/io/src/streams/duplex.web-bridge.test.ts`',
+    '`packages/io/src/streams/readable.async-iter-helpers.test.ts`',
+    '`packages/io/src/streams/compose-wrap-from.test.ts`',
+    '`packages/io/src/streams/predicates-and-defaults.test.ts`',
+    '`packages/io/src/streams/writable.cork-writev.test.ts`',
+    '`packages/net/src/http/response.test.ts`',
+    '`tools/node-parity-runner/cases/stream/*.case.ts`',
+    '`tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts`',
+  ],
+  limitations: [
+    'Backpressure is covered at the JS API surface, not as an OS/socket throughput guarantee.',
+  ],
+};

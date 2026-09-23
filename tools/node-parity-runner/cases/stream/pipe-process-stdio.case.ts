@@ -54,12 +54,19 @@ const c: ParityCase = {
       Readable.from(['x']).pipe(w);
     }
     function forgedGlobal(next) {
+      // Reassignment held through source end: a lazy globalThis.process read at end must still end w.
       const w = sink();
-      w.on('finish', () => { console.log('Writable behind a reassigned globalThis.process finished'); next(); });
+      let finished = false;
+      w.on('finish', () => { finished = true; });
       const real = globalThis.process;
       globalThis.process = { stdout: w, stderr: w };
-      Readable.from(['y']).pipe(w);
-      globalThis.process = real;
+      const src = Readable.from(['y']);
+      src.pipe(w);
+      src.once('end', () => setImmediate(() => {
+        globalThis.process = real;
+        console.log('Writable behind a reassigned globalThis.process ' + (finished ? 'finished' : 'not finished'));
+        next();
+      }));
     }
     toStdout(() => toStderrEndTrue(() => lookalike(() => forgedGlobal(() => process.stdin.resume()))));
   `,

@@ -134,3 +134,28 @@ Candidate: `readable.ts` exemption from io's `loadBuiltin('process')` +
   55/55 ✓; `vitest run packages/io/src/streams` 597/597 ✓.
 - Mechanism probes P1–P11 are the scratch scripts summarized above; every row
   the contract asserts is re-executed against Node by a committed case.
+
+## IMPLEMENT (2026-09-23, on `a7d892a3a`)
+
+RED rerun before product change: 5/5 ✗ as above.
+
+`opts.end` coercion (Node `pipeOpts.end !== false`, readable.js:927), host v24.16.0:
+
+```
+$ node -e "for (const end of [null,0,undefined,false]) { const w=new Writable(…); Readable.from(['x']).pipe(w,{end}); … w.writableEnded }"
+end null writableEnded true / end 0 writableEnded true / end undefined writableEnded true / end false writableEnded false
+```
+
+rifty `opts.end ?? true` left `{end: 0}` open → new case `stream/pipe-end-option-coercion`
+(RED on the old coercion: `- {end: 0} ended true` / `+ {end: 0} ended false`).
+
+Mutants vs the hardened forged-global row (reassignment held through source end):
+`globalThis.process` read lazily at end or eagerly at pipe →
+`- Writable behind a reassigned globalThis.process finished` /
+`+ … not finished`.
+
+`pipeline(fs.createReadStream(f), dst)`: fs ReadStream's own `pipe` ignores
+`{end: false}`, so dst gets a second same-tick chunkless `end()` — a no-op on
+rifty `Writable` and `FileWriteStream` (probe: data, one `finish`, event order
+identical to base). Base and impl both report cb `err=null` where Node passes
+`undefined` (pre-existing).
