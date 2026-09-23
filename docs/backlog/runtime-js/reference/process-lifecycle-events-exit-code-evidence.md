@@ -1089,10 +1089,13 @@ default Worker report's status; Out of scope + compat ⚠️.
 Sibling sweep: every kernel child (program lifecycle, `.bin`, fork, execSync
 branch, worker thread) shares the realm trap and its control port — covered by
 the four cases above. Eval already claimed the first terminal
-(`beginNodeEvalUnhandled`). The no-COI project command has no control port: it
-prints the error on the invocation's stderr and its drain rejects with the
-exit signal (loud failed result, never 0; handler dispatch there stays ⚠️
-unclaimed).
+(`beginNodeEvalUnhandled`). The no-COI project command has no control port;
+by code reading (not executed, no carrier) it prints the error on the
+invocation's stderr and its drain rejects with the exit signal — a loud failed
+result, never 0; handler dispatch there stays ⚠️ unclaimed. Execsync probe
+(`node xs-parent.cjs`, parent prints the thrown message): `494474229` →
+`L|no-throw` 3/3 (child exited 0); the fix → `Command failed with exit code 1`
+3/3.
 
 Not fixed (Out of scope, delivery order): `rej-then-log-0ms` prints
 `L|after` then `L|exit 1 1` in rifty (6/6). The row order shows the 0 ms timer
