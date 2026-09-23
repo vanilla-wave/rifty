@@ -141,6 +141,25 @@ parentPort.postMessage('ready');
     }),
   ),
   {
+    name: 'parent-port-onmessage-setter',
+    entry: 'main.mjs',
+    parent: `${esmWorker}
+worker.on('message', (message) => {
+  console.log('WORKER|message=' + message);
+  if (message === 'ready') setTimeout(() => worker.postMessage('ping'), 50);
+});
+await exited;
+`,
+    child: `
+const { parentPort } = require('node:worker_threads');
+parentPort.onmessage = (event) => {
+  parentPort.postMessage('reply:' + event.data);
+  parentPort.onmessage = null;
+};
+parentPort.postMessage('ready');
+`,
+  },
+  {
     name: 'stdio-capture',
     entry: 'main.mjs',
     parent: `

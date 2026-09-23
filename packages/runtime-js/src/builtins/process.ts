@@ -1,8 +1,5 @@
-/**
- * ADR-0157: one spec-seeded process per child; riftyProcess for the REPL.
- * Node workers drain nextTicks before patched Promise callbacks; callbacks
- * registered through a previously captured native then bypass that ordering.
- */
+/** ADR-0157: spec-seeded process per child; singleton for REPL.
+ * nextTick precedes patched Promise callbacks; captured native then bypasses it. */
 import {
   type IpcFrame,
   type KernelProcessSpec,
@@ -502,6 +499,7 @@ export class NodeProcess extends EventEmitter {
   ppid: number;
   argv: string[];
   execArgv: string[] = [];
+  declare readonly _eval?: string;
   readonly argv0 = NODE_PROCESS_IDENTITY.argv0;
   readonly execPath = NODE_PROCESS_IDENTITY.execPath;
   readonly platform = NODE_PROCESS_IDENTITY.platform;
@@ -622,6 +620,14 @@ export class NodeProcess extends EventEmitter {
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
       this.execArgv = launch === undefined ? [] : [...launch.execArgv];
+      if (launch?.kind === 'eval') {
+        Object.defineProperty(this, '_eval', {
+          value: launch.source,
+          writable: false,
+          enumerable: true,
+          configurable: true,
+        });
+      }
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
@@ -1190,11 +1196,9 @@ export function writeProcessStdin(data: string | Uint8Array): void {
   riftyProcess.pushStdin(data);
 }
 
-/** Install REPL globals once; retain seeded bindings (ADR-0157;
- * backlog: runtime-js/worker-entry-process-globals-side-effect). */
+/** Retain seeded REPL bindings (ADR-0157; backlog: runtime-js/worker-entry-process-globals-side-effect). */
 export function installProcessGlobals(): void {
-  // A kernel-installed binding is realm-private authority. A later idempotent
-  // call must not let a guest-replaced public global replace or downgrade it.
+  // A guest-replaced global cannot override the installed binding.
   if (readActiveNodeProcessBootstrap() !== null) return;
   const active = (globalThis as { process?: unknown }).process;
   if (active instanceof NodeProcess) {
@@ -1204,8 +1208,7 @@ export function installProcessGlobals(): void {
   patchPromiseForNextTick();
   (globalThis as unknown as { process: NodeProcess }).process = riftyProcess;
   setActiveNodeProcessBootstrap(riftyProcess);
-  // `global === globalThis` via the single helper — Node's descriptor
-  // (writable+enumerable+configurable), not a private non-enumerable alias.
+  // Preserve Node's global alias descriptor.
   installGlobalAlias();
 }
 

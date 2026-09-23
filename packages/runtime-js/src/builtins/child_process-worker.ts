@@ -11,7 +11,6 @@ import {
   readActiveNodeProcessBootstrap,
   readNodeProcessBootstrapIdentity,
 } from './process-bootstrap-identity.ts';
-import { currentNodeProcess } from './process.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -47,7 +46,6 @@ export interface WorkerStdioPlan {
 interface ActiveProcess {
   readonly pid?: unknown;
   readonly argv?: unknown;
-  readonly execArgv?: unknown;
   readonly cwd?: unknown;
   readonly env?: unknown;
   readonly stdin?: unknown;
@@ -110,10 +108,6 @@ export function activeChildProcessContext(): ActiveChildProcessContext {
       ? { entryPath: process.argv[1] }
       : {}),
   };
-}
-
-export function activeProcessExecArgv(): unknown {
-  return (currentNodeProcess() as { readonly execArgv?: unknown }).execArgv ?? [];
 }
 
 export function activeProcessStdio(): ParentStdio {

@@ -64,9 +64,25 @@ for (const fixture of workerLifecycleCases) {
       const stderrRows = workerLifecycleRows(oracle.stderr);
       const rows = workerLifecycleRows(result.output);
       // Terminal multiplexes fds; compare stdout order independently of stderr delivery.
-      expect(rows.filter((row) => !stderrRows.includes(row))).toEqual(
-        workerLifecycleRows(oracle.stdout),
-      );
+      const stdoutRows = rows.filter((row) => !stderrRows.includes(row));
+      if (fixture.name === 'first-message-listener-refs') {
+        // Native may drain after its port closes before the unref'd Worker's exit callback.
+        for (const trace of [workerLifecycleRows(oracle.stdout), stdoutRows]) {
+          expect(trace.filter((row) => row !== 'WORKER|exit=0')).toEqual([
+            'WORKER|message=late',
+            'WORKER|parent-exit=0',
+          ]);
+          expect(trace.filter((row) => row === 'WORKER|exit=0').length).toBeLessThanOrEqual(1);
+          if (trace.includes('WORKER|exit=0')) {
+            expect(trace.indexOf('WORKER|exit=0')).toBeGreaterThan(
+              trace.indexOf('WORKER|message=late'),
+            );
+            expect(trace.indexOf('WORKER|exit=0')).toBeLessThan(
+              trace.indexOf('WORKER|parent-exit=0'),
+            );
+          }
+        }
+      } else expect(stdoutRows).toEqual(workerLifecycleRows(oracle.stdout));
       expect(rows.filter((row) => stderrRows.includes(row)).sort()).toEqual(stderrRows.sort());
     } finally {
       await closeOwner(page);

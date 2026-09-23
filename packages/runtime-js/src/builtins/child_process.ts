@@ -48,7 +48,6 @@ import { execSync } from './child_process-sync.ts';
 import {
   type SpawnStdio,
   activeChildProcessContext,
-  activeProcessExecArgv,
   activeProcessStdio,
   forwardWorkerStdio,
   resolveWorkerStdio,
@@ -61,6 +60,12 @@ import {
   readActiveNodeProcessBootstrap,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { currentNodeProcess } from './process.ts';
+
+const arrayLastIndexOf = Array.prototype.lastIndexOf;
+const arraySlice = Array.prototype.slice;
+const arraySplice = Array.prototype.splice;
+const reflectApply = Reflect.apply;
 
 // ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
 // no default handlers after ADR-0039 — execSync is Node-API knowledge and lives
@@ -688,11 +693,19 @@ export function fork(
   args: string[] = [],
   opts: SpawnOptions = {},
 ): ChildProcess {
-  const execArgv = compileNodeStartupOptions(
-    opts.execArgv === undefined ? activeProcessExecArgv() : opts.execArgv,
-    'fork',
-  ).execArgv;
-  return spawn('node', [modulePath, ...args], { ...opts, execArgv, __fork: true });
+  const parent = currentNodeProcess() as { readonly execArgv?: unknown; readonly _eval?: unknown };
+  const options = { ...opts };
+  let selected = options.execArgv === undefined ? (parent.execArgv ?? []) : options.execArgv;
+  // Native fork removes the last source pair only for the actual public argv array.
+  if (selected === parent.execArgv && parent._eval != null && Array.isArray(selected)) {
+    const index = reflectApply(arrayLastIndexOf, selected, [parent._eval]) as number;
+    if (index > 0) {
+      selected = reflectApply(arraySlice, selected, []) as unknown[];
+      reflectApply(arraySplice, selected, [index - 1, 2]);
+    }
+  }
+  const execArgv = compileNodeStartupOptions(selected, 'fork').execArgv;
+  return spawn('node', [modulePath, ...args], { ...options, execArgv, __fork: true });
 }
 
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback

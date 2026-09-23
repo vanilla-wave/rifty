@@ -199,3 +199,48 @@ Commands/logs: /private/tmp/rifty-startup-fork-regression-green.log,
 /private/tmp/rifty-startup-worker-all-green.log,
 /private/tmp/rifty-startup-final-fork-parity.log,
 /private/tmp/rifty-startup-final-harness-green.log.
+
+## Eval-parent fork regression — 2026-09-23
+
+A real Node -e/-p parent is distinct from an ordinary program parent. Native
+v24.16.0 fork first chooses options.execArgv or public process.execArgv; only
+when the selected object is that actual public array and process._eval is not
+null does it copy the array and remove the pair preceding/including the last
+matching source value. It does not match flags by spelling. An explicitly
+supplied same array gets the same filter; a cloned array does not.
+
+Executed native fork.toString plus real CLI parents, then fresh Chromium5443:
+0b8daa7bd rejected default and same-array forks with the startup -e/-p ceiling;
+explicit [] still produced FILE argv[] / exit0. Native default/same/[] all
+produce the file child, while cloned arrays re-execute eval. Probe artifacts:
+/private/tmp/rifty-eval-fork-probe/{native.log,rifty-e.json,rifty-p.json,browser.log}.
+
+Native eval process._eval descriptor is writable:false, enumerable:true,
+configurable:true; sloppy assignment retains it, defineProperty can replace
+it. A real .cjs file process has no own _eval. Stdin execution is not the
+ordinary-file oracle. The repair seeds this descriptor from the existing eval
+launch source, then applies native identity + lastIndexOf filtering before the
+unchanged startup compiler. Parent argv is never spliced; option snapshots
+remain construction-time. Worker/CLI flag support is not widened.
+
+Durable shared source: tests/browser-unit/fixtures/eval-fork-options-case.ts;
+real native + browser carrier: tests/browser-unit/eval-fork-options.spec.ts.
+It checks -e/-p, the descriptor and assignment behavior, ordinary-child absence,
+array identity, no parent mutation, and last-match semantics. Cloned arrays,
+redefined nonmatching _eval and a later duplicate source leave source-bearing
+flags and remain named ceilings; the native INLINE outcome proves why a blanket
+flag regex or value-equal array comparison would be wrong.
+
+```sh
+RIFTY_PLAYGROUND_PORT=5443 pnpm test:browser-unit tests/browser-unit/eval-fork-options.spec.ts
+RIFTY_PLAYGROUND_PORT=5443 pnpm test:browser-unit tests/browser-unit/eval-fork-options.spec.ts tests/browser-unit/fork-startup-options.spec.ts
+```
+
+Durable RED2/2, final GREEN3/3 including the unchanged ordinary fork startup
+fixture. Native-only unsupported-mode controls allow host color warning text;
+supported file-child stdout/stderr checks remain exact. Eval/Worker/fork IPC
+regression set61/61; runtime-js tsc, architecture, file-size, Biome and diffcheck
+pass. Logs: /private/tmp/rifty-eval-fork-durable-red.log,
+/private/tmp/rifty-eval-fork-final-green.log,
+/private/tmp/rifty-eval-fork-unit-green.log. No source-bearing eval override,
+CLI preload or Worker flag ceiling relaxed.

@@ -4,6 +4,9 @@ import * as kernel from '../src/index.ts';
 describe('kernel entry bootstrap public surface', () => {
   it('exposes clone metadata but no runtime-byte capability-port carrier', () => {
     expect(kernel.readKernelEntryBootstrap).toBeTypeOf('function');
+    // ADR-0452/0460 add these capabilities without restoring runtime-byte ports.
+    expect(kernel.getKernelHostMessageChannel).toBeTypeOf('function');
+    expect(kernel.setKernelFatalErrorSerializer).toBeTypeOf('function');
     expect(kernel).not.toHaveProperty('consumeKernelEntryCapabilityPorts');
     expect(Object.keys(kernel).sort()).toEqual([
       'DEFAULT_CWD',
@@ -36,6 +39,7 @@ describe('kernel entry bootstrap public surface', () => {
       'getIpcMode',
       'getKernelDispatcher',
       'getKernelDrainHook',
+      'getKernelHostMessageChannel',
       'getKernelPreEntryHook',
       'getKernelWorkerUrl',
       'globalProcessManager',
@@ -49,6 +53,7 @@ describe('kernel entry bootstrap public surface', () => {
       'readKernelSyncApi',
       'readRootProcessSnapshot',
       'setKernelDrainHook',
+      'setKernelFatalErrorSerializer',
       'setKernelPreEntryHook',
       'setKernelWorkerUrl',
       'spawnKernelWorker',
