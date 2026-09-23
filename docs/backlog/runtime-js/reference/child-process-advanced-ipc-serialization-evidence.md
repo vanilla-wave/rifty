@@ -118,3 +118,47 @@ A forcing callback consumer discovered in the real Vitest run remains goal work.
 - MessagePort alive excludes loss/duplicates/reorder; local bad values and
   public-disconnect/private-control retention are the relevant fault boundary.
   No transport recovery machinery added.
+
+## Implementation proof — 2026-09-23
+
+ADR-0446 implemented: v5 producer/reader; one mode-selected codec for Worker
+and same-realm public senders/receivers. Advanced snapshots the rich graph once,
+transports Buffer references in an outer runtime envelope, and restores brands
+with shared/cyclic identity after MessagePort cloning. Guest `value`/`buffers`
+keys cannot impersonate the envelope. Clone failure precedes transport catches.
+
+Reviewer liveness concern: added independent
+`child_process/public-ipc-advanced-listener.case.ts`; child has only a message
+listener, parent waits 80 ms before sending, child replies and disconnects.
+Pre-implementation RED: physical audit expected 1 Worker, constructed 0
+(unchanged advanced ceiling). Native v24.16.0 output:
+
+```text
+{"events":["ready","received:bigint:42","disconnect"],"code":0,"signal":null,"connected":false}
+```
+
+Executed GREEN:
+
+- `node --import tsx tools/node-parity-runner/src/cli.ts public-ipc`: all 4
+  physical cases match Node (rich, fault, listener-only, existing default JSON).
+- `pnpm exec vitest run packages/runtime-js/src/builtins/node-entry-advanced-ipc.test.ts packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts packages/runtime-js/src/ipc/install-process-ipc.test.ts`: 4 + 61 + 15 PASS after version criteria migrated.
+- `pnpm exec vitest run packages/runtime-js/src/builtins/child_process-worker-identity.test.ts packages/workbench/src/workers/workbench-project-runtime.test.ts tools/node-parity-runner/src/run-in-rifty.test.ts`: 10 + 201 + 48 PASS. Also requested legacy `tests/conformance/builtins/child_process-worker.test.ts`: its 2 opt-in tests skipped; they supply no acceptance proof.
+- `pnpm exec vitest run packages/runtime-js/src/internal/node-ipc-advanced.test.ts`: 2 PASS. Native v8 differential caught an implementation fault first (Object.toString classification invoked a symbol accessor which native serialization ignores); explicit intrinsic classification fixes it. Outer-envelope collision case also passes.
+- `pnpm check:arch`, `pnpm check:file-size`, `pnpm check:dir-owner`, targeted
+  Biome check: PASS. IPC comment shortened without dropping its existing
+  async-entry backlog limitation; process file ratchet holds.
+
+PR-4 protocol criteria: replace active v4 expected strings/regexes with v5 in
+bootstrap producer/reader and physical/workbench tests. Dedicated rejection
+keeps an actual v4 envelope and requires mismatch. Historical v2/v3 rejection
+semantics remain. Initial two old expected-error regex failures were rerun in
+isolation after migration: all 61 config tests PASS.
+
+The new caller-value boundary shares no retry, callback, delivery-ack or process
+owner. Callback/handle/options ceilings remain unchanged. Whole-goal Vitest
+acceptance is still the parent's required continuation.
+
+Final targeted verification: `pnpm --filter @riftydev/runtime-js typecheck`,
+`pnpm backlog:check`, `pnpm refs:check`, `git diff --check` → PASS. Earlier
+typecheck failures were concurrent source-map/guard edits outside this unit;
+latest run is green. No full pr:check run while other source work is active.

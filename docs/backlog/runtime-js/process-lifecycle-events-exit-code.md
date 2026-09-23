@@ -37,7 +37,8 @@ ADR-0445 records the independently chosen correction to ADR-0152 §3.
 ## Acceptance
 
 1. Natural/explicit exits emit once with the final selected code; omitted argument honours exitCode. → I3
-2. Timer/entry exceptions and detached rejections reach installed handlers; subsequent work runs and natural exit stays zero. → I3
+2. Unset/reset exitCode is undefined, so Vitest's nullish startup-failure check selects exit 1. → I3, I4
+3. Timer/entry exceptions and detached rejections reach installed handlers; subsequent work runs and natural exit stays zero. → I3
 
 ## Parity cases
 
@@ -58,6 +59,9 @@ beforeExit remains unclaimed; existing loud drain caps unchanged.
 
 ## Decisions
 
+re-cut: 2026-09-23 — include the observed unset exitCode baseline required by Vitest's startup failure path — trace: none
+
 - 2026-09-23 — RDY-8 observed defect RED: browser-unit six programs against native Node; missing exit lines, explicit status 0 vs 3, timer/rejection/entry fatal 1 vs handled 0. Command: `RIFTY_PLAYGROUND_PORT=5398 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/owner-node-process-lifecycle.spec.ts`.
 - 2026-09-23 — independent decision `/root/vm_contract_review`: partial ADR-0152 §3 supersession, preserved eval print/terminal/drain owners; ADR-0445. Native probes also establish exit-listener code mutation, rejection-to-uncaught fallback and throwing-handler status 7.
 - 2026-09-23 — expanded fault RED: timer/entry miss exit 1; zero-handle rejection exits 0; throwing uncaught handler wrongly emits exit 7. Existing late-unhandled-rejection-drain is required by I3, retained in this unit; no second drain owner.
+- 2026-09-23 — full Vitest RED exposes another I3 root: initial exitCode=0 prevents cac's nullish check assigning 1. `process/exit-code-unset` native differential RED: initial/reset values number 0 vs undefined, startup 0 vs 1; preserve undefined until assigned or terminating.

@@ -1,4 +1,5 @@
 import type { TransformResult } from './esm-ast.ts';
+import type { GlobalSymbolKeyValidator } from './global-mutation-keys.ts';
 import type { ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule, Resolver } from './resolver.ts';
 import type { SourceMapRegistry } from './source-maps.ts';
@@ -47,6 +48,7 @@ export type EsmFactory = (
   metaResolve: (s: string) => string,
   Function: FunctionConstructor,
   webAssembly: typeof WebAssembly,
+  symbolKey: GlobalSymbolKeyValidator,
 ) => EsmEvaluationIterator;
 
 export type EsmDirectFactory = (...args: Parameters<EsmFactory>) => Promise<void>;

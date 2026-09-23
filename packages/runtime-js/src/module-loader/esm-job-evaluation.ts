@@ -23,6 +23,7 @@ import {
   type PreparedEsm,
 } from './esm-job-types.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import { createGlobalSymbolKeyValidator } from './global-mutation-keys.ts';
 import { withStackRemapping } from './source-maps.ts';
 
 export function evaluateAsyncJob(
@@ -266,6 +267,7 @@ function factoryArguments(
     metaResolve,
     routedConstructors.Function,
     deps.WebAssembly,
+    createGlobalSymbolKeyValidator('esm'),
   ];
 }
 

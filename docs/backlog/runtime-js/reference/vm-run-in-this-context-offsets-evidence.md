@@ -177,3 +177,7 @@ parity is claimed and no silent accessor/descriptor substitution is used.
 
 Product sizes: vm/index.ts 489 lines; source-maps.ts 368. No ratchet changes.
 Full pr:check and independent Final+GREEN belong to parent integration.
+
+Typecheck follow-up: explicit `installedPrepareStackTrace !== undefined` before
+hook identity comparison removes TS2774 without changing behavior.
+`pnpm exec tsc --noEmit --project packages/runtime-js/tsconfig.json` — PASS.

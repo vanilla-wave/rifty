@@ -208,7 +208,10 @@ export async function withStackRemapping<T>(
 
 function installStackDispatcher(): void {
   const errorCtor = Error as ErrorWithPrepareStackTrace;
-  if (errorCtor.prepareStackTrace === installedPrepareStackTrace && installedPrepareStackTrace)
+  if (
+    installedPrepareStackTrace !== undefined &&
+    errorCtor.prepareStackTrace === installedPrepareStackTrace
+  )
     return;
   previousPrepareStackTrace = errorCtor.prepareStackTrace;
   // Capture the prior hook: a guest may wrap our dispatcher before another run.

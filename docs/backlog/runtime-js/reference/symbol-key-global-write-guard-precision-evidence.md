@@ -82,3 +82,64 @@ guarded global mutations"`: sandbox lock write initially EPERM; normal
 shared-state allocation succeeded with authorized escalation, ADR-0444.
 
 `pnpm exec biome check --write` on the three new test/case files: pass.
+
+## Implementation GREEN — 2026-09-23
+
+Contract+RED PASS: `57602c71a`, record committed at `0879f7bf6`.
+Certified tests unchanged. Shared `global-mutation-keys.ts` owns property
+classification, mutation-family shaping and the runtime primitive-symbol
+validator. Existing factory parameters inject it into CJS and both ESM
+execution carriers. No `source-maps.ts` edits; no source-file ratchet changes.
+
+- `pnpm test:run packages/runtime-js/src/module-loader
+  tests/conformance/modules/resolver.test.ts` — 31 files, 512/512 pass.
+- `node --import tsx tools/node-parity-runner/src/cli.ts modules/` — 41/41
+  match. Initial sandbox run blocked the five native TS oracles at tsx IPC
+  pipe creation; identical command passed with authorized escalation.
+- `pnpm --filter @riftydev/runtime-js typecheck` — pass.
+- `pnpm check:arch`, `pnpm check:file-size`, touched-source Biome — pass.
+  CJS/ESM guard files shrink through shared extraction; no pin increases.
+
+## Carrier hygiene repair
+
+New helper injection exposed a raw-name collision in existing
+`uniqueHelperName`: Unicode-escaped `const \u005f_riftyGlobalSymbolKey`
+collided with the generated validator. Real Node v24.16.0 leaves host
+Function unchanged for the following source:
+
+```sh
+node --input-type=module <<'NODE'
+console.log(process.version);
+const previous = Object.getOwnPropertyDescriptor(globalThis, 'Function');
+const \u005f_riftyGlobalSymbolKey = () => 'Function';
+const key = Symbol('safe');
+globalThis[key] = 17;
+delete globalThis[key];
+console.log(Object.getOwnPropertyDescriptor(globalThis, 'Function').value === previous.value);
+NODE
+```
+
+Output: `v24.16.0`, `true`. Dedicated
+`global-mutation-helper-hygiene.test.ts` RED: CJS duplicate-binding SyntaxError;
+ESM guest binding replaced the validator and deleted host Function (test
+restored the descriptor). Fix: existing unique-name owner also checks Acorn's
+decoded identifier names for escaped-identifier sources. GREEN: 2/2.
+
+`global-mutation-family.fault.test.ts`: 26/26 controls preserve host Function
+when a dynamic string key reaches each mutation form, including literal maps
+and accessor helpers. No new product claim or certified-test changes.
+
+## Revert checks
+
+Mutate one guard, run its discriminating suite, restore exact source:
+
+| Removed guard | Command filter | Observed RED |
+|---|---|---|
+| Runtime primitive-type validation | `symbol-global-writes.test.ts -t monkeypatched` | 2 failures |
+| Member-key rewrite | same file, `-t 'accepts const symbol assignment'` | 2 failures |
+| Reflection-key rewrite | same file, `-t 'accepts inline registry symbol'` | 2 failures |
+| Decoded helper-name exclusion | `global-mutation-helper-hygiene.test.ts` | 2 failures |
+| Literal map key validation | `global-mutation-family.fault.test.ts -t 'defineProperties\|assign'` | 4 failures |
+| Accessor key validation | same file, `-t 'getter\|setter'` | 4 failures |
+
+All restored before the 512-test GREEN and 41-case parity runs above.

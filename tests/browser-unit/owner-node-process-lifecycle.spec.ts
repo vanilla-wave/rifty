@@ -9,6 +9,7 @@ import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './
 const programs = {
   natural: `process.once('exit', code => console.log('exit', code)); console.log('body');`,
   explicit: `process.once('exit', code => console.log('exit', code)); process.exitCode = 3; process.exit();`,
+  startupFailure: `process.once('exit', code => console.log('exit', code)); if (process.exitCode == null) process.exitCode = 1; process.exit();`,
   override: `process.once('exit', code => console.log('exit', code)); process.exitCode = 3; process.exit(4);`,
   timer: `process.once('exit', code => console.log('exit', code)); process.on('uncaughtException', (error, origin) => console.log('caught', error.message, origin)); setTimeout(() => { throw new Error('boom'); }, 0); setTimeout(() => console.log('after'), 50);`,
   rejection: `process.once('exit', code => console.log('exit', code)); const rejected = Promise.reject(new Error('boom')); process.on('unhandledRejection', (error, promise) => console.log('caught', error.message, promise === rejected)); setTimeout(() => console.log('after'), 50);`,
@@ -62,6 +63,22 @@ test('Node program lifecycle handlers and exit status match native Node', async 
         .soft(output.match(/EXIT \d+/g) ?? [], name)
         .toEqual(stripVTControlCharacters(oracle.stdout).match(/EXIT \d+/g) ?? []);
     }
+    const binSource = `process.once('exit', code => console.log('EXIT', code)); setTimeout(() => { process.exitCode = 3; console.log('late'); }, 20);`;
+    writeFileSync(join(directory, 'bin.mjs'), binSource);
+    const binOracle = spawnSync(process.execPath, [join(directory, 'bin.mjs')], {
+      encoding: 'utf8',
+    });
+    await writeOwnerFile(page, '/scratch/node_modules/lifecycle/cli.mjs', binSource);
+    await writeOwnerFile(
+      page,
+      '/scratch/node_modules/.bin/lifecycle',
+      "#!/usr/bin/env node\nimport('../lifecycle/cli.mjs');",
+    );
+    const bin = await execLine(page, 'lifecycle');
+    expect.soft(bin.exit, bin.out).toBe(binOracle.status);
+    expect
+      .soft(stripVTControlCharacters(bin.out).trim(), 'bin late exit')
+      .toBe(stripVTControlCharacters(binOracle.stdout).trim());
   } finally {
     await closeOwner(page);
     rmSync(directory, { recursive: true, force: true });

@@ -502,6 +502,8 @@ superseded.
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 | 0152 §3 unconditional rejection fatal/default report | 0445 | handled process errors continue; unhandled fatal and drain ownership retained |
+| 0326 advanced ceiling / JSON-only program IPC | 0446 / note 2026-09-23 | explicit advanced codec over existing public lane; default JSON/private control retained |
+| 0416 active node-entry v4 version | 0446 / note 2026-09-23 | atomic v5 adds advanced IPC; SQLite and dev-server contracts retained |
 | 0155 §5 loud-only interactive-stdin clause | 0230 / note 2026-07-13 | owner PTY pump ships flowing stdin, explicit EOF, and pause/resume; ADR-0225 ships live resize; pull/raw gaps stay loud |
 | 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |

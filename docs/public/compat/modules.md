@@ -89,6 +89,13 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   constructor, deleting it, or silently mixing routed and replaced constructors:
   `module-loader.cjs-global-function-assignment` / `module-loader.esm-global-function-assignment`.
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
+- Dynamic global mutation keys are evaluated once and admitted when their actual
+  value is a primitive symbol (ADR-0444): member writes/update/delete, Object/Reflect
+  mutation calls, accessor helpers and computed keys in literal mutation maps.
+  Non-symbol values throw the same named ceiling before mutation, after preceding
+  source/key effects; they are not coerced. Static Function keys and opaque
+  maps/spreads retain parse-time ceilings. Symbol factory spelling, shadowing or
+  reassignment does not bypass the runtime type check.
 - A direct, unshadowed `eval` with a statically known string containing ordinary
   `import()` syntax is routed through the constructing module's collision-free
   lexical import helper; a returned importer keeps that VFS-relative base when

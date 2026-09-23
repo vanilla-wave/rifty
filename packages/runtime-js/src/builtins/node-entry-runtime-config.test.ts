@@ -60,8 +60,8 @@ describe('node-entry host bootstrap config', () => {
     resetNodeEntryWorkerUrl();
   });
 
-  it('uses the one atomic node-entry v4 wire contract', () => {
-    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v4');
+  it('uses the one atomic node-entry v5 wire contract', () => {
+    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v5');
   });
 
   it('snapshots host runtime values out of band from the guest environment', () => {
@@ -120,7 +120,7 @@ describe('node-entry host bootstrap config', () => {
     expect(entry).toMatchObject({
       kind: 'url',
       bootstrap: {
-        protocol: 'rifty.node-entry/v4',
+        protocol: 'rifty.node-entry/v5',
         payload: {
           launch: {
             kind: 'eval',
@@ -479,7 +479,7 @@ describe('node-entry host bootstrap config', () => {
     });
 
     expect(readNodeEntryBootstrapIfPresent()).toBeNull();
-    expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v4/i);
+    expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v5/i);
   });
 
   it.each([

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Allow actual symbol global mutation keys through shared CJS/ESM validation; preserve Function ceilings and helper binding hygiene.
+- Add advanced fork IPC value graphs and typed launch v5; keep JSON and private control separate (ADR-0446).
+- Preserve unset process.exitCode so CLI startup failures can select Node's nonzero default.
+
 - Deliver process error/exit events before terminal handling and allow a browser rejection checkpoint before natural drain (ADR-0445).
 - Honor host vm script offsets, including escaped functions and native CallSite positions (ADR-0443).
 
