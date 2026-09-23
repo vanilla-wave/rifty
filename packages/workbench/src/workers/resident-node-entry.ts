@@ -6,7 +6,11 @@ import {
 } from '@riftydev/net';
 import { createNetBuiltinOverrides } from '@riftydev/net/register-builtins';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
-import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  resetNodeProcessExit,
+  riftyProcess,
+  setProcessCwd,
+} from '@riftydev/runtime-js/builtins/process';
 import { createModuleLoaderWithBuiltinOverrides } from '@riftydev/runtime-js/internal';
 import type { FsSync } from '@riftydev/vfs';
 
@@ -83,7 +87,8 @@ export async function startResidentNodeEntry(
   const builtinOverrides = createNetBuiltinOverrides(owner);
   const process = riftyProcess as unknown as { argv: string[]; exitCode?: number };
   process.argv = ['node', input.entryPath, ...input.args];
-  process.exitCode = undefined;
+  // ADR-0445: a reused in-process process starts unset and not exiting.
+  resetNodeProcessExit(riftyProcess);
   setProcessCwd(input.cwd);
   const completion = runNodeEntry({
     vfs: input.vfs,

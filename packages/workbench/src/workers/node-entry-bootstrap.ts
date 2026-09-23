@@ -186,14 +186,17 @@ if (nodeServe) {
         previewScope === undefined ? {} : { scope: previewScope },
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, previewScope),
-    readExitCode: () => proc.exitCode,
-    exit: (code) => proc.exit(code),
+    exit: (...code) => proc.exit(...code),
   });
-} else {
+} else if (launch.kind === 'worker-thread') {
   await runEntry();
-  // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
-  // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero
-  // process.exitCode must surface it (proc.exit throws RIFTY_PROCESS_EXIT → kernel
-  // maps the code). exitCode 0 stays a clean exit 0.
+  // Worker-thread natural exit stays with backlog runtime-js/worker-threads-handle-keepalive
+  // (ADR-0445 rule 6); a set process.exitCode still surfaces (ADR-0157 D4).
   if (proc.exitCode) proc.exit(proc.exitCode);
+} else {
+  // execSync `node <script>` child: Node's natural exit after the loop drains —
+  // `'exit'` once, then `exitCode ?? 0` (ADR-0445 rule 6). The throw carries the code.
+  await runEntry();
+  await awaitDrain();
+  proc.exit();
 }

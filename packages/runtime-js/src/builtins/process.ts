@@ -51,6 +51,12 @@ import {
   type NodeProcessRelease,
   createNodeProcessRelease,
 } from './process-identity.ts';
+import {
+  NodeProcessExit,
+  attachNodeProcessExit,
+  dispatchUncaughtException,
+  rethrowUndispatched,
+} from './process-lifecycle-events.ts';
 import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
@@ -120,7 +126,15 @@ function drainNextTicks(): void {
       // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
       const active = (globalThis as { process?: unknown }).process;
       const target = active instanceof NodeProcess ? active : riftyProcess;
-      (target as unknown as EventEmitter).emit('uncaughtException', err);
+      const outcome = dispatchUncaughtException(err, 'uncaughtException', target);
+      if (outcome.kind === 'handled') continue;
+      // ADR-0445: the process is terminating — later ticks never run. An exit()
+      // already sent its request; a fatal error goes to the realm terminal path
+      // without a second dispatch.
+      nextTickQueue.length = 0;
+      drainHead = 0;
+      if (outcome.kind !== 'exited') rethrowUndispatched(err);
+      return;
     }
   }
   // Fully drained: clear the array + cursor so the next nextTick sees length
@@ -422,10 +436,7 @@ function processTerminalBootstrap(launch: NodeEntryLaunch | undefined): ProcessT
   };
 }
 
-/** Wrap an exit code to Node's unsigned 8-bit range (e.g. 257 → 1, -1 → 255). */
-export function toUint8ExitCode(n: number): number {
-  return ((Math.trunc(n) % 256) + 256) % 256;
-}
+export { resetNodeProcessExit, toUint8ExitCode } from './process-lifecycle-events.ts';
 
 /**
  * Node's `process.exitCode`/`process.exit(code)` coercion contract: a numeric
@@ -479,10 +490,28 @@ export class NodeProcess extends EventEmitter {
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
-  // a numeric string coerces; reads return the validated integer. Own accessor
+  // a numeric string coerces; reads return the validated integer, `undefined`
+  // until assigned or after `null`/`undefined` (ADR-0445). Own accessor
   // (enumerable, non-configurable, as Node's) defined in the constructor.
-  #exitCode = 0;
-  declare exitCode: number;
+  #exitCode: number | undefined;
+  declare exitCode: number | undefined;
+  readonly #exit = new NodeProcessExit({
+    process: this,
+    readExitCode: () => this.#exitCode,
+    writeExitCode: (v) => {
+      this.#exitCode = v === undefined || v === null ? undefined : coerceExitCode(v);
+    },
+    writeStderr: (text) => {
+      this.stderr.write(text);
+    },
+    requestExit: (signal) => {
+      const evalLifecycleOwned = beginNodeEvalExplicitExit(signal, () => {
+        this.#requestSelfExit(signal.exitCode);
+        return signal;
+      });
+      if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(signal.exitCode);
+    },
+  });
   stdout: NodeStdioWriter;
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
@@ -504,6 +533,7 @@ export class NodeProcess extends EventEmitter {
   #ipcPort: MessagePort | null = null;
   #ipcDisconnected = false;
   #controlClosed = false;
+  #selfExitRequested = false;
   #publicIpc = false;
   #jsonIpc = false;
   #ipcKeepaliveHeld = false;
@@ -518,13 +548,14 @@ export class NodeProcess extends EventEmitter {
   constructor(spec?: KernelProcessSpec) {
     super();
     Object.defineProperty(this, 'exitCode', {
-      get: (): number => this.#exitCode,
+      get: (): number | undefined => this.#exitCode,
       set: (v: unknown): void => {
-        this.#exitCode = coerceExitCode(v);
+        this.#exitCode = v === undefined || v === null ? undefined : coerceExitCode(v);
       },
       enumerable: true,
       configurable: false,
     });
+    attachNodeProcessExit(this, this.#exit);
     Object.defineProperty(this, 'release', {
       value: createNodeProcessRelease(),
       writable: false,
@@ -662,21 +693,10 @@ export class NodeProcess extends EventEmitter {
 
   // Own instance-bound fields, not prototype methods: Node's detached
   // `const { exit } = process; exit(3)` / `import { kill }` still hit this process.
-  exit = (code: unknown = 0): never => {
-    const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
-    this.#exitCode = c;
-    const exitCode = toUint8ExitCode(c);
-    const exitError = Object.assign(new Error(`process.exit(${c})`), {
-      code: RIFTY_PROCESS_EXIT,
-      exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
-    });
-    const evalLifecycleOwned = beginNodeEvalExplicitExit(exitError, () => {
-      this.#requestSelfExit(exitCode);
-      return exitError;
-    });
-    if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
-    throw exitError;
-  };
+  // Node `exit()` (ADR-0445): an argument assigns `exitCode`, `'exit'` fires once,
+  // the uint8 status is read after the listeners; throws the exit signal.
+  exit: (code?: unknown) => never = (...args: unknown[]): never =>
+    this.#exit.exit(args.length !== 0, args[0]);
 
   kill = (pid: number, signal = 'SIGTERM'): boolean => {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
@@ -845,8 +865,11 @@ export class NodeProcess extends EventEmitter {
     if (this.#controlClosed || this.#ipcPort === null) {
       throw new Error('process exit requires an active control port');
     }
+    // ADR-0445: the first delivered request is the status; a later exit() adds none.
+    if (this.#selfExitRequested) return;
     try {
       this.#ipcPort.postMessage({ kind: 'control:self-exit', code } satisfies IpcFrame);
+      this.#selfExitRequested = true;
     } catch (error) {
       this.#closeControl();
       throw error;

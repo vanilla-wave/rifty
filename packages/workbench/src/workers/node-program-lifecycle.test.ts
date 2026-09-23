@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  type NodeLifecycleDeps,
-  normalizeExitCode,
-  runNodeProgramLifecycle,
-} from './node-program-lifecycle.ts';
+import { type NodeLifecycleDeps, runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 
 /** Fake net registry: a mutable port set + change events (onRegistryChange shape). */
 function fakeRegistry(initial: number[] = []) {
@@ -34,7 +30,6 @@ function deps(over: Partial<NodeLifecycleDeps> = {}, reg = fakeRegistry()) {
     awaitDrain: vi.fn(async () => {}),
     servePreview: vi.fn(() => () => {}),
     postListening: vi.fn(),
-    readExitCode: vi.fn(() => 0),
     exit: vi.fn(),
     ...over,
   };
@@ -46,14 +41,17 @@ async function settle(times = 8): Promise<void> {
 }
 
 describe('runNodeProgramLifecycle', () => {
-  it('script (no listen): drains then exits 0', async () => {
+  // ADR-0445 rule 6 (ADR-0157 D4 moved into Node's `exit()`): natural exit passes
+  // no code, so `exit()` emits 'exit' and reads process.exitCode itself. Status
+  // proof: browser-unit `natural-exit-code`, parity `exit-lifecycle-child`.
+  it('script (no listen): drains then calls exit() with no argument', async () => {
     const { d } = deps();
     await runNodeProgramLifecycle(d);
     expect(d.runEntry).toHaveBeenCalledOnce();
     expect(d.awaitDrain).toHaveBeenCalledOnce();
     expect(d.servePreview).not.toHaveBeenCalled();
     expect(d.postListening).not.toHaveBeenCalled();
-    expect(d.exit).toHaveBeenCalledWith(0);
+    expect(vi.mocked(d.exit).mock.calls).toEqual([[]]);
   });
 
   it('server (listened): serves each port while its single drain remains pending', async () => {
@@ -160,40 +158,10 @@ describe('runNodeProgramLifecycle', () => {
     expect(d.exit).not.toHaveBeenCalled();
   });
 
-  // D4 (ADR-0157 review): natural exit honours process.exitCode (Node parity).
-  it('natural exit exits with process.exitCode, not a hardcoded 0', async () => {
-    const { d } = deps({ readExitCode: vi.fn(() => 7) });
-    await runNodeProgramLifecycle(d);
-    expect(d.awaitDrain).toHaveBeenCalledOnce();
-    expect(d.exit).toHaveBeenCalledWith(7);
-  });
-
-  it('a listened server ignores process.exitCode (stays alive, no exit)', async () => {
-    const { d } = deps({ readExitCode: vi.fn(() => 7) }, fakeRegistry([3000]));
+  it('a listened server stays alive (no exit)', async () => {
+    const { d } = deps({}, fakeRegistry([3000]));
     void runNodeProgramLifecycle(d);
     await settle();
     expect(d.exit).not.toHaveBeenCalled();
-  });
-});
-
-describe('normalizeExitCode (Node uint8 coercion)', () => {
-  it('passes through an in-range integer', () => {
-    expect(normalizeExitCode(7)).toBe(7);
-    expect(normalizeExitCode(0)).toBe(0);
-    expect(normalizeExitCode(255)).toBe(255);
-  });
-  it('wraps out-of-range integers to 8 bits like Node', () => {
-    expect(normalizeExitCode(256)).toBe(0);
-    expect(normalizeExitCode(257)).toBe(1);
-    expect(normalizeExitCode(-1)).toBe(255);
-  });
-  // normalizeExitCode is ONLY the final uint8 wrap — Node's string coercion +
-  // loud validation lives in the process.exitCode SETTER (see install-process-gate
-  // test). A raw non-number here is a defensive default to 0, NOT a parity claim
-  // that this function coerces strings (the setter turns '7' into 7 first).
-  it('defensively defaults a non-number to 0 (strings are coerced by the setter, not here)', () => {
-    expect(normalizeExitCode(undefined)).toBe(0);
-    expect(normalizeExitCode(Number.NaN)).toBe(0);
-    expect(normalizeExitCode(null)).toBe(0);
   });
 });

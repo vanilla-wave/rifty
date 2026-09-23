@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Node process lifecycle (ADR-0445, `builtins/process-lifecycle-events.ts`): uncaught errors (timers, `setImmediate`, fs/zlib/`util.callbackify` callbacks, `nextTick`, the entry) and unhandled rejections reach `uncaughtExceptionMonitor`/`uncaughtException`/`unhandledRejection` listeners before any terminal path, with Node's origins and `UnhandledPromiseRejection` wrap; no listener → `'exit'` 1 then the existing loud path; a throwing listener → stderr + status 7. `exit()` follows Node: `'exit'` once, no argument = `exitCode`, status read after the listeners, one kernel exit request. `NodeProcess.exitCode` is `number | undefined` (unset reads `undefined`); new `resetNodeProcessExit(process)` on `./builtins/process`. `awaitDrain` settles one host task after the first zero-ref sample, so a late Chromium `unhandledrejection` is never a silent exit 0.
+
 - `fs.statfsSync`, `child_process.spawnSync` and `process.memoryUsage` (+ `memoryUsage.rss`) exist with Node's descriptor, so vitest 4.1.11 / tinyexec named imports link and `process.memoryUsage.bind(process)` works; every call throws `NotImplementedError('<module>.<member>')` (ADR-0443, `builtins/loud-members.ts`). The internal `StatOptions` type moved from `fs.ts` to `fs-stats.ts`; `tests/published-dts.test.ts` builds the package d.ts and type-checks it without `@types/node`.
 
 - Register `node:path/posix` / bare `path/posix` as `require('node:path').posix` itself; `node:path/win32` stays an unregistered builtin miss.

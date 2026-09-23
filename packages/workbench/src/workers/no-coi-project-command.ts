@@ -2,7 +2,11 @@ import { NotImplementedError, captureEventEmitterListenerScope } from '@riftydev
 import { listPorts } from '@riftydev/net';
 import { type SerializedRuntimeError, awaitDrain } from '@riftydev/runtime-js';
 import { type RunNodeEntryOptions, runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
-import { riftyProcess, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  resetNodeProcessExit,
+  riftyProcess,
+  setProcessCwd,
+} from '@riftydev/runtime-js/builtins/process';
 import {
   type ToolchainCommandInput,
   type ToolchainCommandResult,
@@ -98,7 +102,8 @@ export async function runNoCoiProjectCommand(
     riftyProcess.env = { ...ctx.env };
     riftyProcess.argv = [...argv];
     riftyProcess.execArgv = [...execArgv];
-    riftyProcess.exitCode = 0;
+    // ADR-0445: each invocation starts with an unset exitCode, not exiting.
+    resetNodeProcessExit(riftyProcess);
     setProcessCwd(ctx.cwd);
     let executionError: unknown;
     let executionFailed = false;
@@ -134,7 +139,16 @@ export async function runNoCoiProjectCommand(
           (executionError instanceof Error ? executionError : new Error(String(executionError)))
         );
       }
-      return riftyProcess.exitCode;
+      // Natural exit = Node's `exit()`: `'exit'` once, status `exitCode ?? 0`.
+      let naturalExit: unknown;
+      try {
+        riftyProcess.exit();
+      } catch (error) {
+        naturalExit = error;
+      }
+      const exitCode = processExitCode(naturalExit);
+      if (exitCode === null) throw naturalExit;
+      return exitCode;
     } finally {
       ctx.signal?.removeEventListener('abort', abort);
       // A rejected drain leaves the realm owned until the host physically terminates it.
@@ -147,6 +161,7 @@ export async function runNoCoiProjectCommand(
         riftyProcess.env = previous.env;
         riftyProcess.argv = previous.argv;
         riftyProcess.execArgv = previous.execArgv;
+        resetNodeProcessExit(riftyProcess);
         riftyProcess.exitCode = previous.exitCode;
         setProcessCwd(previous.cwd);
       }

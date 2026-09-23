@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Node natural exit is `process.exit()` with no argument (ADR-0445): `'exit'` fires and `exitCode` sets the status on `node <file>`/`.bin`/spawn/fork/eval, and execSync children drain then exit the same way. `NodeLifecycleDeps.readExitCode` and `normalizeExitCode` are removed. No-COI project commands, toolchain run-bin and resident bins reset the reused process per invocation (unset `exitCode`, one `'exit'`).
+
 - Remove `checkSandboxSupport` scratch storage even when the probe deadline expires while the Worker still holds its OPFS sync access handle; the lock is waited out inside the cleanup deadline, and a lock that outlives it reports `cleanup: incomplete` naming the native error instead of a failure the caller cannot act on (ADR-0439).
 - Report an observed cleanup rejection ahead of deadline expiry, with each native name and message retained in the aggregate reason.
 - Keep an observed `module-worker: passed` when the probe Worker fails later; the observations still pending in it report that failure as `incomplete`.

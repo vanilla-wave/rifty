@@ -897,6 +897,82 @@ asymmetric matcher … [Error: process.exit(1)]` (re-entrant exit keeps 1);
 packages/runtime-js/src/internal/event-loop-keepalive-late-rejection.fault.test.ts`
 → `expected 'resolved' to be 'rejected:late-rejection'`.
 
+## §G IMPLEMENT — added carriers (RED → GREEN) and probes
+
+Oracle probes for implementation choices (host Node v24.16.0, 2026-09-23):
+
+```
+$ node esm-str.mjs      # uncaughtException listener; setTimeout after; ESM entry `throw 'str'`
+L|caught string str unhandledRejection
+L|after
+[exit 0]
+$ node cjs-str.cjs      # same, CommonJS entry
+L|caught string str uncaughtException
+L|after
+[exit 0]
+$ node mon-fatal.cjs    # monitor + exit listener, no uncaughtException listener, timer throw
+L|mon m uncaughtException
+L|exit 1 1
+[exit 1]
+$ node -e "process.exitCode=null;console.log(process.exitCode===null?'null':typeof process.exitCode)"
+undefined
+$ node -e "process.exitCode=3; process.exit(null)"; echo $?
+0
+$ node -p "process.on('uncaughtException',(e,o)=>console.log('caught',e,o));process.on('exit',c=>console.log('exit',c));throw 1"
+caught 1 uncaughtException
+exit 0
+$ node cb-throw.cjs     # fs.stat / util.callbackify / zlib.gzip callbacks throw; both listeners installed
+caught callbackify uncaughtException
+caught fs-stat uncaughtException
+caught zlib-gzip uncaughtException
+after
+exit 0 undefined
+[exit 0]
+```
+
+`tools/node-parity-runner/cases/process/eval-entry-throw-lifecycle.case.ts`
+(Contract+RED concern: eval entry throw uncovered). RED = the implementation
+minus the `runNodeEntry` dispatch (`git checkout node-entry.ts`), rest applied:
+
+```
+$ pnpm test:parity eval-entry-throw-lifecycle
+  ✗ process/eval-entry-throw-lifecycle.case.ts
+      -     "stdout": "caught ev uncaughtException\nafter\nexit 0 undefined\n",
+      +     "stdout": "",
+      -     "label": "print-entry-throw-handler",
+      -     "stdout": "caught 1 uncaughtException\nexit 0 undefined\n",
+      +     "code": 1,
+      -     "label": "entry-throw-fatal",
+      -     "stdout": "exit 1 1\n",
+      +     "stdout": "",
+```
+
+`tools/node-parity-runner/cases/process/callback-throw-uncaught-child.case.ts`
+(fault-class sweep: a callback run inside the promise reaction that settled it).
+RED = `runNodeCallback` without its catch (the BASE shape):
+
+```
+$ pnpm test:parity callback-throw-uncaught-child
+  ✗ process/callback-throw-uncaught-child.case.ts
+      - {"file":"fs-stat.js","stdout":["caught fs-stat uncaughtException","after","exit 0 undefined"],"code":0,"signal":null}
+      + {"file":"fs-stat.js","stdout":["unhandled fs-stat","after","exit 0 undefined"],"code":0,"signal":null}
+      - {"file":"fs-read-file.js","stdout":["caught fs-read-file uncaughtException","after","exit 0 undefined"],"code":0,"signal":null}
+      + {"file":"fs-read-file.js","stdout":["unhandled fs-read-file","after","exit 0 undefined"],"code":0,"signal":null}
+      - {"file":"callbackify.js","stdout":["caught callbackify uncaughtException","after","exit 0 undefined"],"code":0,"signal":null}
+      + {"file":"callbackify.js","stdout":["unhandled callbackify","after","exit 0 undefined"],"code":0,"signal":null}
+      - {"file":"zlib-gzip.js","stdout":["caught zlib-gzip uncaughtException","after","exit 0 undefined"],"code":0,"signal":null}
+      + {"file":"zlib-gzip.js","stdout":["unhandled zlib-gzip","after","exit 0 undefined"],"code":0,"signal":null}
+```
+
+Sibling probe (temporary case, not committed): `fs.createReadStream(f).on('data', throw)`
+and a throw inside a user `promises.stat().then` already match Node.
+
+GREEN (implementation applied): `pnpm test:parity process/` → 35/35 match
+(incl. `exit-lifecycle-child`, `eval-exit-lifecycle`, all `node-eval-context*`);
+`eval-entry-throw-lifecycle` and `callback-throw-uncaught-child` match;
+browser-unit `owner-node-process-lifecycle.spec.ts` → 1 passed (36/36 cases);
+`npx vitest run packages tests/conformance tools` → 628 files / 9353 tests pass.
+
 ## §V vitest 4.1.11 lifecycle uses (static)
 
 ```

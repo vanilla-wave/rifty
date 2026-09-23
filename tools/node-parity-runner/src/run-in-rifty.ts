@@ -1335,7 +1335,9 @@ async function installExecSyncMode(): Promise<() => void> {
   const { createModuleLoader } = await import(
     '../../../packages/runtime-js/src/module-loader/loader.ts'
   );
-  const { riftyProcess } = await import('../../../packages/runtime-js/src/builtins/process.ts');
+  const { resetNodeProcessExit, riftyProcess } = await import(
+    '../../../packages/runtime-js/src/builtins/process.ts'
+  );
   const { isAbsolute, joinPath, normalizePath } = await import('@riftydev/vfs');
 
   // Capability stubs so runtime-js `execSync` takes the SAB branch. SAB +
@@ -1411,7 +1413,7 @@ async function installExecSyncMode(): Promise<() => void> {
       const prevEnv = riftyProcess.env;
       const prevCwd = getProcessCwd();
       (riftyProcess as { stdout: unknown }).stdout = capture;
-      riftyProcess.exitCode = 0;
+      resetNodeProcessExit(riftyProcess);
       riftyProcess.env = { ...env };
       setProcessCwd(cwd);
       procHost.process = riftyProcess;
@@ -1425,12 +1427,13 @@ async function installExecSyncMode(): Promise<() => void> {
           isAbsolute(scriptPath) ? scriptPath : joinPath(cwd, scriptPath),
         );
         loader.require(entryAbs, entryAbs);
-        exitCode = riftyProcess.exitCode;
+        exitCode = riftyProcess.exitCode ?? 0;
       } catch {
         exitCode = riftyProcess.exitCode || 1;
       } finally {
         procHost.process = prevGlobalProcess;
         (riftyProcess as { stdout: unknown }).stdout = prevStdout;
+        resetNodeProcessExit(riftyProcess);
         riftyProcess.exitCode = prevExitCode;
         riftyProcess.env = prevEnv;
         setProcessCwd(prevCwd);

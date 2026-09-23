@@ -37,14 +37,20 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
    listeners `(reason, promise)`; without one, to `uncaughtException` with
    origin `unhandledRejection`, the reason wrapped as Node's
    `UnhandledPromiseRejection` (`ERR_UNHANDLED_REJECTION`, V8's
-   side-effect-free reason rendering) unless it has an own `stack`.
+   side-effect-free reason rendering) unless it has an own `stack`. A
+   Node-callback builtin (fs callbacks, zlib convenience, `util.callbackify`)
+   runs its callback outside the promise reaction that settled it
+   (`runNodeCallback`): a throw is an uncaught exception, not a rejection.
+   Mechanism: `builtins/process-lifecycle-events.ts`, reached across bundles
+   through a `Symbol.for` slot on the process.
 2. **Handled.** The trap calls `preventDefault()`, records nothing and claims
    no eval terminal; the loop keeps draining.
 3. **Unhandled.** `exitCode` becomes 1, `'exit'` is emitted (rule 5), then the
    existing terminal path runs unchanged: default Worker report or drain
    rejection (ADR-0152 §3), or the eval terminal (ADR-0339/0342): stderr +
    status 1. A `nextTick` throw with no listener takes this path instead of
-   being dropped.
+   being dropped: later ticks never run and the error reaches the realm
+   `error` trap once, undispatched.
 4. **Listener throws.** A throw from an `uncaughtException` listener is fatal
    with status 7, stderr naming it, and no `'exit'` event — never re-dispatched.
    The `RIFTY_PROCESS_EXIT` signal is control flow: never dispatched, and it
@@ -54,8 +60,11 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
    an argument assigns it (`exit(undefined)` resets). The first call marks the
    process exiting and emits `'exit'` with `exitCode ?? 0`, then requests the
    kernel exit with `uint8(exitCode ?? 0)` read after the listeners. `exit()`
-   inside a listener requests its own code and ends the emission; any later
-   call requests nothing more. Every call throws the exit signal.
+   inside a listener requests its own code and ends the emission; the control
+   port sends one request, so any later call requests nothing more. Every call
+   throws the exit signal. An in-process owner reusing one process per
+   invocation (no-COI, the Node-hosted execSync substitutes) resets it with
+   `resetNodeProcessExit` (`./builtins/process`).
 6. **Natural exit.** A lifecycle owner that sees the loop drain calls `exit()`
    with no argument — the program/eval lifecycle (after the `-p` print) and the
    execSync program branch (after its drain, which now precedes it). Worker
@@ -86,6 +95,9 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
 - Node lifecycle consumers (vitest, cac CLIs) recover from handled errors and
   see the final `'exit'`; unset `exitCode` presents as `undefined`, and
   numeric readers treat it as 0.
+- Published `./builtins/process` API: `NodeProcess.exitCode` is
+  `number | undefined`; `resetNodeProcessExit(process)` is new. Workbench
+  `NodeLifecycleDeps` loses `readExitCode` (natural exit passes no code).
 - No-listener errors stay loud: stderr + status 1 (ADR-0152 §3).
 - Zero-ref drains settle one host task later.
 - Explicit gaps (compat rows): `beforeExit` and `rejectionHandled` are not
