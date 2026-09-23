@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- User `overrides` values follow npm's reading (ADR-0451): a version/range (node-semver loose grammar) or `latest` is the overridden edge's spec, so `{"vite": "8.0.16"}` pins vite instead of fetching packument `8.0.16`; baked redirects, shadow recipes and the ADR-0051 native gate apply as for a declared `name@spec`; exact `''`/`*` keep the edge spec; `$name` throws `NotImplementedError('npm-client.dependency-spec.override-reference')`. `name@range` and bare replacement names unchanged.
+
 - Match npm tar root stripping for DefinitelyTyped and other named roots; preserve ordinary property-name files and traversal rejection.
 
 

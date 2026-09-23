@@ -15,6 +15,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `npm` top-level command help | ✅ | `npm help` prints the browser npm subset and exits 0; bare `npm` / `-h` / `--help` print the same list with npm's usage exit 1; `npm help <topic>` is an explicit `NotImplementedError('npm.help.topic')` ceiling |
 | Package lifecycle scripts | ❌ | Root `preinstall`/`install`/`postinstall`/`prepare` and registry tarball `preinstall`/`install`/`postinstall` throw `NotImplementedError('npm-client.lifecycle.<name>')`; registry tarball `prepare` metadata is ignored like npm's prepared package install path |
 | Non-registry dependency specs | ❌ | `file:`/local paths, `workspace:`, git/GitHub shorthand, URL tarball, and npm-alias specs are explicit npm-client ceilings, not silently skipped |
+| `package.json#overrides` version/range/`latest` values | ✅ | npm's reading (ADR-0451; proven against npm 11.17.0 locks, incl. `{"vite": "8.0.16"}` under vitest 4.1.11 in the browser shell): a value npm reads as a version or range (node-semver loose grammar — `8.0.16`, `v8.0.16`, `^2`, `2.0.x`, `>=2.0.0 <2.1.0`, `\|\|` unions) or the tag `latest` is the overridden edge's spec, so native `ENATIVEUNSUPPORTED`, shadow recipes and baked redirects apply as for a declared `name@spec`; exact `''`/`*` keep the edge spec. Ranges then match through rifty's semver subset like every dependency spec (hyphen, `~>`, partial `>`/`<=` bounds, `^0.0.x`, loose-dropped tokens, empty `\|\|` branches → `No matching version` or another version). Not claimed: npm's `EOVERRIDE` for a root direct dependency; npm's nesting when re-resolving over an existing lock (the version matches) |
+| `package.json#overrides` rifty spellings | ⚠️ | Extensions: `name@range` and a bare package name (npm: `EINVALIDTAGNAME` / a dist-tag) name a replacement package — the `incompatible-packages.md` escape hatch, exempt from the native gate; `npm:` aliases name a package (range-less `npm:x` keeps the edge range; npm `*`). Divergences: dist-tags other than `latest`, `@scope/pkg`, `*.tgz` and uppercase `NPM:` values read as package names |
+| `package.json#overrides` `$name` references and nested objects | ❌ | `$name` throws `NotImplementedError('npm-client.dependency-spec.override-reference')` before any registry read (npm resolves it against the root manifest); nested override objects throw `NotImplementedError('npm-client.package-json.overrides')` |
 | `.bin` launcher execution | ✅ | Bare and explicit-path `prettier`/`eslint` resolve through the same nearest-ancestor command authority and run their launcher target in a supervised Node worker |
 | Shell command discovery | ✅ | `which`, typo suggestions, and owner-backed Tab completion use the execution resolver's live registered + ancestor `.bin` inventory; `cd`/install changes are visible on the next request |
 | Direct VFS Node entry | ⚠️ | Relative/absolute regular VFS files such as `./scripts/tool.mjs` run in the supervised Node-entry child with exact argv/cwd/stdio/exit. VFS has no POSIX execute bits; host PATH, native/WASI shebang selection, and non-Node executable semantics are not claimed |
@@ -49,6 +52,10 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `packages/npm-client/src/installer.test.ts`
 - `packages/npm-client/src/installer-lockfile.test.ts`
 - `tests/e2e/npm-lock-replay.spec.ts`
+- `tests/e2e/npm-override-bare-version.spec.ts`
+- `packages/npm-client/src/overrides-npm-value.contract.test.ts`
+- `packages/npm-client/src/installer-override-npm-value.contract.test.ts`
+- `packages/npm-client/src/installer-override-npm-value-policy.contract.test.ts`
 
 ## Known Limitations
 
