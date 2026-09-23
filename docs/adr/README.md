@@ -101,6 +101,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0448 | Advanced fork IPC over the existing process channel |
 | 0450 | Persistent VM script stack offsets |
 | 0454 | Reject unsupported shared-backed advanced IPC views |
+| 0455 | Bind process stdio identity for Readable.pipe |
 
 ### runtime-wasi
 

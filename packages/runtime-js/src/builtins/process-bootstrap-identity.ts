@@ -1,3 +1,5 @@
+import { setProcessStdioOwner } from '@riftydev/io';
+
 interface NodeProcessBootstrapIdentity {
   readonly pid: number;
   readonly ppid: number;
@@ -30,6 +32,7 @@ export function readNodeProcessBootstrapIdentity(
 export function setActiveNodeProcessBootstrap(process: object | null, federated = false): void {
   activeProcess = process;
   activeProcessFederated = process === null ? false : federated;
+  setProcessStdioOwner(process);
 }
 
 export function readActiveNodeProcessBootstrap(): ActiveNodeProcessBootstrap | null {

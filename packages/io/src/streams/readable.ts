@@ -31,6 +31,7 @@ import {
 } from './callable-constructor.ts';
 import { acquireReadableFromWeb } from './from-web-validation.ts';
 import { methodNotImplementedError } from './method-not-implemented.ts';
+import { isProcessStdioDestination } from './process-stdio-owner.ts';
 
 export interface ReadableOptions {
   highWaterMark?: number;
@@ -741,10 +742,7 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     const existing = this.pipeCleanups.get(dest);
     if (existing) existing();
 
-    const activeProcess = (globalThis as { process?: { stdout?: unknown; stderr?: unknown } })
-      .process;
-    const endOnFinish =
-      opts.end !== false && dest !== activeProcess?.stdout && dest !== activeProcess?.stderr;
+    const endOnFinish = opts.end !== false && !isProcessStdioDestination(dest);
     const onData = (chunk: unknown): void => {
       const writeResult = dest.write(chunk);
       if (writeResult === false) {

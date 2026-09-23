@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- `Readable.pipe()` leaves process stdout/stderr open after source EOF, while ordinary destinations still end.
+- `Readable.pipe()` uses the runtime-bound process identity, so a replaced global cannot exempt a foreign sink or end genuine stdout/stderr (ADR-0455).
 
 - Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
 

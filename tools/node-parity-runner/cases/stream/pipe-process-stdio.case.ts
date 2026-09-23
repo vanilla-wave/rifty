@@ -38,16 +38,60 @@ const missingEndSource = `
   }
 `;
 
+const forgedGlobalSource = (stream: 'stdout' | 'stderr') => `
+  const { Readable } = require('node:stream');
+  const { EventEmitter } = require('node:events');
+  const real = require('node:process');
+  const foreign = new EventEmitter();
+  foreign.write = () => true;
+  const original = globalThis.process;
+  globalThis.process = { ${stream}: foreign };
+  const source = new Readable({ read() {} });
+  source.pipe(foreign);
+  let outcome;
+  try {
+    source.emit('end');
+    outcome = 'no-throw';
+  } catch (error) {
+    outcome = error.name + ': ' + error.message;
+  }
+  globalThis.process = original;
+  real.stdout.write('forged-${stream}=' + outcome + '\\n');
+`;
+
+const genuineUnderForgedGlobalSource = (stream: 'stdout' | 'stderr') => `
+  const { Readable } = require('node:stream');
+  const real = require('node:process');
+  const output = real.${stream};
+  const original = globalThis.process;
+  globalThis.process = { ${stream}: { write: () => true } };
+  Readable.from(['first|']).pipe(output, { end: true });
+  setTimeout(() => {
+    globalThis.process = original;
+    output.write('second\\n');
+  }, 5);
+`;
+
 const c: ParityCase = {
   kind: 'node-cli-eval',
   code: '',
-  expectedPhysicalWorkers: 4,
+  expectedPhysicalWorkers: 8,
   nodeCliEval: {
     sequential: [
       { label: 'pipe-stdout', nodeArgv: ['-e', stdoutSource] },
       { label: 'pipe-stderr', nodeArgv: ['-e', stderrSource] },
       { label: 'pipe-fd-lookalike', nodeArgv: ['-e', ordinarySource] },
       { label: 'pipe-missing-end-lookalike', nodeArgv: ['-e', missingEndSource] },
+      { label: 'pipe-forged-global-stdout', nodeArgv: ['-e', forgedGlobalSource('stdout')] },
+      { label: 'pipe-forged-global-stderr', nodeArgv: ['-e', forgedGlobalSource('stderr')] },
+      {
+        label: 'pipe-real-stdout-under-forged-global',
+        nodeArgv: ['-e', genuineUnderForgedGlobalSource('stdout')],
+      },
+      {
+        label: 'pipe-real-stderr-under-forged-global',
+        nodeArgv: ['-e', genuineUnderForgedGlobalSource('stderr')],
+      },
     ],
   },
 };

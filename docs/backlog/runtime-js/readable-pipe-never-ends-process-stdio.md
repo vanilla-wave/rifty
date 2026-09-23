@@ -48,6 +48,13 @@ real Node and a physical rifty Node Worker.
 4. Same physical parity for a foreign EventEmitter sink with `fd = 1` and no
    `end`: source EOF throws `TypeError` in both runtimes. → I4
 
+## Fault matrix
+
+- `provenance-lie` at the process-stdio owner: replacing guest
+  `globalThis.process.stdout` or `.stderr` with a foreign sink must still call
+  that sink's `end()` and keep the genuine process stream open. Physical parity
+  runs both destinations. → I4
+
 ## Out of scope
 
 - Direct `process.stdout.end()` and `process.stderr.end()` remain separate
@@ -56,8 +63,10 @@ real Node and a physical rifty Node Worker.
 
 ## Decisions
 
+- re-cut: 2026-09-23 — owner identity replaces guest-global lookup after observed forged-global fault — trace: I4
+- 2026-09-23 — ADR-0455 binds current process stdio owner through runtime-js bootstrap.
 - ready-verdict: 2026-09-23 — Contract+RED @ 97fc6a77fa5940d4e2a8c43d21e4e2ab3ff9b5e8
-- 2026-09-23 — carrier: `@riftydev/io` compares destination against current global process stream identities; no runtime-js reverse import or fd heuristic.
+- 2026-09-23 — original carrier: `@riftydev/io` compared destination against guest-global process streams.
 
 ## Challenge
 
