@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: Node children execute required startup options before their entry
 created: 2026-09-23
 why: Vitest 4.1.11 passes the same startup flags to both pools; Worker rejects them, while fork silently drops their argv, preload, conditions and resolver behavior.
@@ -28,8 +28,7 @@ spellings/options retain a named unsupported ceiling; no option is discarded.
 challenge: 2026-09-23 — accepted I4/I5/I6 premise reused; exact installed native
 Vitest census proves the flags are material defaults, not an optional config.
 Skipping flags or injecting Vitest's preload would change runtime behavior.
-Fresh independent Contract+RED remains pending; no implementation authorized by
-this draft alone.
+Independent Contract+RED accepted before product implementation (RDY-8).
 
 ## Reference contract
 
@@ -114,9 +113,11 @@ errors for it. The executed
 fork sibling failure is required in this unit; it is not deferred to the CLI
 preload residual.
 
+ready-verdict: 2026-09-23 — Contract+RED @ 9dfa2a003695fc9f8d025e034e851c27c5c7c776
+
 ## Decisions
 
 - re-cut: 2026-09-23 — required supported-Worker-startup subset of worker-threads-inherited-exec-argv enters this goal; broader draft obligations preserved — trace: none
-- 2026-09-23 — proposed ADR-0456 extends the exact worker-thread launch to v6; program adds the same raw startup vector; eval role semantics remain unchanged; no environment channel or second handshake.
+- 2026-09-23 — ADR-0456 extends the exact worker-thread launch to v6; program adds the same raw startup vector; eval role semantics remain unchanged; no environment channel or second handshake.
 - re-cut: 2026-09-23 — include executed fork sibling loss under one startup owner; preserve distinct native inheritance authorities — trace: none
-- 2026-09-23 — status stays draft pending fresh independent Contract+RED; product code unchanged by this preparation.
+- 2026-09-23 — Contract+RED accepted with advisory coverage notes; source implementation follows this checkpoint.

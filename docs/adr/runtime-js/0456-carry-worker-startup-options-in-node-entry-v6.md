@@ -1,6 +1,6 @@
 # ADR 0456: Carry Node child startup options in node-entry v6
 
-Status: Proposed
+Status: Accepted
 Date: 2026-09-23
 
 > TL;DR: one immutable child execArgv vector crosses the typed startup envelope; one runtime owner applies its supported semantics before entry.

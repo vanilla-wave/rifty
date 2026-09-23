@@ -1,0 +1,242 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED принят: native Worker 5/5 и fork 4 child подтверждены; physical RED 4+1, Chromium5432 RED 5+1. Переходить к реализации; merge после Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "9dfa2a003695fc9f8d025e034e851c27c5c7c776",
+  "unit_goal_source": "docs/backlog/runtime-js/worker-threads-startup-options.md @ 9dfa2a003695fc9f8d025e034e851c27c5c7c776 (draft pending Contract+RED); BASE a728f986a3376a9d273bcaa5dfc80c7f6e208fdd; accepted goal docs/backlog/epics/vitest-run-in-browser/goal.md I4/I5/I6. Detached scratch /private/tmp/rifty-startup-contract-review; Node v24.16.0, unchanged Vitest 4.1.11/Vite 8.0.16 census executed for both pools.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4/I5/I6: полный real Vitest acceptance после реализации startup options.",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:44",
+      "summary": "Полный unchanged browser fail/fix для обоих pools, npm test/verbose и Final+GREEN ещё требуются. Existing carrier сохранён; forks-only diagnostic не закрывает threads или goal."
+    },
+    {
+      "clause": "I7: compat claims и loud ceilings; открытый user fork по другим версиям/watch.",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:61",
+      "summary": "Решение пользователя ещё ожидается; goal.md не изменён. После решения нужны согласованная compat page и observable proof оставшихся ceilings. Не blocker независимого startup unit."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: точный Worker execArgv, snapshot caller-array, изоляция parent.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:70",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: preload order/cache/realm перед entry; Worker preload failure → error, exit 1, без entry.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:35; tests/browser-unit/fixtures/worker-startup-options-cases.ts:99; tests/browser-unit/worker-thread-startup-options.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: repeated conditions для require/static/dynamic import; default conditions и trusted policy.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:39; tests/browser-unit/fixtures/worker-startup-options-cases.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: flagged parentURL, ignored second argument без флага, builtin control.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:60; tests/browser-unit/fixtures/worker-startup-options-cases.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: recursive Worker наследует trusted vector после public mutation; [] снимает все эффекты.",
+      "source": "acceptance",
+      "trace": "I5+scenario+ADR-0267",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: отсутствующие Worker operands синхронно ERR_WORKER_INVALID_EXEC_ARGV; следующий [] Worker работает.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:119; tests/browser-unit/worker-thread-startup-options.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: fork explicit options/[]; omitted override из public execArgv; snapshot обоих caller vectors.",
+      "source": "acceptance",
+      "trace": "I4+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/fork-startup-options-case.ts:62",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: неизменённый Vitest pass/fail, counts/status для обоих pools — существующий acceptance carrier; GREEN ещё требуется.",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: effective-options — argv mutation, ordered preloads/cache, три resolver consumers, parentURL/builtin/parent control.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:65; tools/node-parity-runner/cases/worker_threads/startup-effective-options.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: trusted-recursive-inheritance — полные inherited/cleared snapshots после public mutation.",
+      "source": "acceptance",
+      "trace": "I5+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:80; tools/node-parity-runner/cases/worker_threads/startup-trusted-recursive-inheritance.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: preload-missing/preload-throwing — отсутствие entry, error перед exit 1.",
+      "source": "acceptance",
+      "trace": "I5+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:99; tests/browser-unit/worker-thread-startup-options.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: malformed Worker options в Chromium плюс работающий следующий physical [] Worker.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:119; tests/browser-unit/worker-thread-startup-options.spec.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Parity 5: четыре fork child — explicit family, caller snapshot, public default, explicit [] control.",
+      "source": "acceptance",
+      "trace": "I4+I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/fork-startup-options-case.ts:39; tests/browser-unit/fork-startup-options.spec.ts:56",
+      "note": ""
+    },
+    {
+      "row": "Parity 6: существующий real Vitest carrier — exact pair, TS config/tests, оба outcomes и pools.",
+      "source": "acceptance",
+      "trace": "I5+I6",
+      "status": "pass",
+      "citation": "tests/e2e/owner-shell-vitest.spec.ts:11; tests/e2e/fixtures/vitest-run/native-oracle.mts:23",
+      "note": ""
+    },
+    {
+      "row": "Fault: provenance-lie × raw startup identity — caller/public writes не меняют trusted Worker launch.",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0267",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:74; tests/browser-unit/fixtures/worker-startup-options-cases.ts:88",
+      "note": ""
+    },
+    {
+      "row": "Fault: observable-order × preload/entry — ordered same-realm preload; failure блокирует entry.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:35; tests/browser-unit/fixtures/worker-startup-options-cases.ts:104",
+      "note": ""
+    },
+    {
+      "row": "Fault: sibling-drift × resolver consumers — require/static/dynamic используют active conditions.",
+      "source": "fault-matrix",
+      "trace": "I6+scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:59",
+      "note": ""
+    },
+    {
+      "row": "Fault: corrupt-input × supported parse — synchronous Worker operand rejection; subsequent valid launch.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:124; tests/browser-unit/worker-thread-startup-options.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Fault: sibling-drift × recursive launch — Worker trusted, fork public default, explicit [] removes effects.",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:85; tests/browser-unit/fixtures/fork-startup-options-case.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Fault: sibling-drift × Worker/fork dispatch — одинаковые supported startup effects на обоих путях.",
+      "source": "fault-matrix",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:65; tests/browser-unit/fixtures/fork-startup-options-case.ts:62",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/worker-startup-options-cases.ts:42",
+          "evidence": "",
+          "summary": "Conditions-fixtures ставят development первым package-ключом и последним --conditions. По чтению они не различают declaration-order и last-condition priority; произвольный condition также не представлен. Mutant не исполнялся: по REV-4/REV-5 coverage остаётся pass, замечание только advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0456-carry-worker-startup-options-in-node-entry-v6.md:27",
+          "evidence": "В detached scratch: pnpm exec vitest run packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts → 61 passed; /private/tmp/rifty-startup-review-protocol-tests.log. Тест packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts:64 явно проверяет rifty.node-entry/v5. git diff --name-status a728f986a..9dfa2a003 показывает только docs и новые fixtures/tests, без product/public-API edits.",
+          "summary": "Нынешние semantic RED проверяют startup effects, но не exact v6 schema/no-v5-fallback. При реализации нужны прямые carriers для required program/Worker execArgv, snapshot/validation и версии; изменённые public API должны получить trace ADR-0456. Сейчас ADR Proposed, API в diff ещё не изменён: это замечание к будущему proof, не отсутствие scenario RED и не blocker. Новых public-api/frozen-artifact coverage rows на этом HEAD нет; oracle исполняемый, не golden.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}
