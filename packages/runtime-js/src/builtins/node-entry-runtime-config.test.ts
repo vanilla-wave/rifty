@@ -64,6 +64,23 @@ describe('node-entry host bootstrap config', () => {
     expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v4');
   });
 
+  it('admits advanced program IPC and rejects unknown discriminators', () => {
+    const entry = buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+      ...PROGRAM_LAUNCH,
+      ipc: 'advanced',
+    } as NodeEntryLaunch);
+    expect((entry.bootstrap?.payload as { launch?: { ipc?: unknown } })?.launch?.ipc).toBe(
+      'advanced',
+    );
+
+    expect(() =>
+      buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
+        ...PROGRAM_LAUNCH,
+        ipc: 'future',
+      } as unknown as NodeEntryLaunch),
+    ).toThrow(/launch\.ipc must be none, json, or advanced/u);
+  });
+
   it('snapshots host runtime values out of band from the guest environment', () => {
     const hostRuntime = {
       RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js',
