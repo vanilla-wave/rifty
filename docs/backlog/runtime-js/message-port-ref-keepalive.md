@@ -114,6 +114,7 @@ browser-unit specs run each source verbatim in live Node and in rifty. Sources:
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ e1676d095a25145fd4cf2f70f4cd6b84b2a2524c
 - 2026-09-23 — pickup: the map open question (which handle `vitest run` drains on) is answered by a Node control. With browser-shaped global ports, vitest exits 0 with 0 bytes; evidence §Holder. A rifty-side instrumented run is impossible on BASE because the I6 walls come first.
 - 2026-09-23 — carrier: ADR-0447, a short ADR citing ADR-0152 (ADR-0158 is the precedent). It records local pairs through a `MessageChannel` Proxy, adds prototype `ref`/`unref`/`hasRef`, releases the pair on `close()`, and refuses transfers of referenced pairs by name. Rejected: own-release-only (it hangs the uncapped terminal drain on peer close), #351's make-every-port-untransferable approach with close emulation, and any emnapi/rolldown/vitest patch.
 - 2026-09-23 — scope: listener referencing and the NodeEventTarget surface stay explicit gaps. I4 does not need them (evidence §Claimed-path sweep), and they would need a kernel primordial-constructor seam. The land step should re-cut map item 13's "listener auto-ref" wording.
