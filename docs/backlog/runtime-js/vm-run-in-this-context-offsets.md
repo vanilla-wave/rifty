@@ -11,11 +11,9 @@ code: [packages/runtime-js/src/builtins/vm/index.ts, packages/runtime-js/src/mod
 
 ## Context
 
-Oracle (Node v24.16.0, evidence §Oracle): `runInThisContext(src, { filename:
-'/virtual/mod.js', lineOffset: 0, columnOffset: -20 })` → frame
-`/virtual/mod.js:1:1` (column clamps at 1); `{ lineOffset: 10, columnOffset:
-5 }` on a script whose function sits on physical line 2 col 16 → `/virtual/mod2.js:12:21`.
-Execution semantics are unchanged; only reported positions move. `runInThisContext`
+Oracle (Node v24.16.0, evidence §Oracle): `lineOffset` shifts every frame line;
+`columnOffset` shifts only the first physical source line and may yield a
+negative reported column. Execution semantics are unchanged. `runInThisContext`
 is host-realm (not an engine op); rifty already remaps stacks
 (`source-maps.ts` `withStackRemapping`). Carrier (remap table vs source
 prefix) is agent-owned fog on the map; the parity case compares
@@ -32,7 +30,7 @@ Node v24.16.0 and RED command/output: `docs/backlog/runtime-js/reference/vm-run-
 
 ## Acceptance
 
-1. `runInThisContext` and `new Script(...).runInThisContext()` accept `lineOffset` and `columnOffset`, including negative column values. Their delayed Error stacks carry Node's adjusted line/column, with column clamped at 1. → I4, I5
+1. `runInThisContext` and `new Script(...).runInThisContext()` accept `lineOffset` and `columnOffset`. Delayed Error stacks shift all lines by `lineOffset`, only the first physical line by `columnOffset`, including negative reported columns. → I4, I5
 2. Source values remain unchanged, including a multiline template literal. → I4
 
 ## Parity cases
