@@ -39,3 +39,5 @@
 - 2026-09-23 — freshChromium5450 finalcomposedacceptance2/2PASS2.1m:10Vitest runs plus6installed/configured ceilings. CI35821064164 production/hostedPASS, parity exactlyonefailedadvanced-faultcase confirmedviajobAPI; remainingCI stillrunning. No user scope answers; goal staysopen.
 
 - 2026-09-23 — independent verify @cdf806fc9 BLOCKsameB1/pendingforks; production/packed/bootstrap/lifecycle fixes accepted, no newseparateproductblocker.201coveragerows. C5publicWorkerfatalwording corrected; nativepositivefrozen/locked records get3additionaldurableREDs (targetedfile4RED/13PASS), fullcontract unchanged. CIunitcdf reproducesonlyoriginalfrozenPromise (10636PASS/1FAIL/18SKIP). No goalclosure or boundPASS claimed.
+
+- 2026-09-23 — CIcdf browser-unit completed333PASS/1SKIP/2FAIL: eval-fork oracle rejected floating Node24.20.0 before guest execution. Pin that job24.16.0 like the other oracle lanes; retain strictversionguard/nativecriteria. Fresh5501 affectedbrowsercases2/2PASS6.6s onNode24.16.0. Scopeanswers stillabsent; this independentCIrepair proceeds within the samePR.

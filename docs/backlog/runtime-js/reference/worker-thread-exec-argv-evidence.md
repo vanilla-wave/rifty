@@ -244,3 +244,20 @@ pass. Logs: /private/tmp/rifty-eval-fork-durable-red.log,
 /private/tmp/rifty-eval-fork-final-green.log,
 /private/tmp/rifty-eval-fork-unit-green.log. No source-bearing eval override,
 CLI preload or Worker flag ceiling relaxed.
+
+## Browser CI oracle version repair
+
+CI35821064164 browser-unit:333PASS,1SKIP,2FAIL. Both eval-fork cases failed
+before guest execution: `node-cli-eval oracle requires v24.16.0; received
+v24.20.0` (job107052881213). The new browser carrier uses the existing exact
+oracle, but its CI job still selected floating Node24. Other CLI-oracle lanes
+(unit/parity, e2e, cross-browser, no-COI) already pin24.16.0.
+
+Pin browser-unit likewise; do not widen/remove assertNodeCliEvalOracleVersion,
+alter native expectations, or skip either case. Fault class: sibling-drift ×
+oracle-consuming CI lanes. Unrelated build/release jobs remain on their existing
+Node policy. No new source-grep/constant-mirror test: actual CI is the RED.
+
+Executed with real Nodev24.16.0:
+`RIFTY_PLAYGROUND_PORT=5501 pnpm exec playwright test --config playwright.browser-unit.config.ts tests/browser-unit/eval-fork-options.spec.ts`
+→2/2PASS6.6s on a fresh server. Full corrected CI remains the final verification.
