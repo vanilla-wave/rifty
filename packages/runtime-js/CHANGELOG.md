@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- CJS/ESM Function guards admit global writes/defines/deletes with non-folding computed keys (vitest 4.1.11, undici); the key is checked at Node's coercion and only `'Function'` throws the existing ceiling, at the write (ADR-0444). `delete` operands that are not references, and `delete globalThis?.Function`, no longer bypass the guard.
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

@@ -212,3 +212,57 @@ $ npx vitest run --project conformance tests/conformance/modules/global-computed
 
 The 2 passing tests are the kept load-time ceilings (runtime-key reads used as
 a constructor) — regression carriers, green before and after.
+
+## O6 — Node, remaining sites (parity cases `modules/global-computed-key-sites-{esm,cjs}`)
+
+Added at IMPLEMENT for the Contract+RED concerns (logical/update/for-in/pattern
+targets, tracked alias, comma/nested/`yield`/`await`/top-level-`await` keys,
+`__defineSetter__`, optional-chain `delete`, CJS coercion of `++`,
+`Reflect.set`, `delete`, `Symbol.toPrimitive` → Symbol, full restored descriptor):
+
+```
+$ tsx node-side.mts tools/node-parity-runner/cases/modules/global-computed-key-sites-{esm,cjs}.case.ts   (v24.16.0)
+## …/global-computed-key-sites-esm.case.ts
+[["nullish",1,1],["or",1],["and",4,4],["update",5,5,4],["forIn","last"],["objectPattern","object"],["defaultPattern","default"],["alias","alias"],["sequence","sequence"],["nested","__riftyParitySiteKey__","nested"],["setter","set","function"],["optionalDelete",true,false],["yield","yield"],["await","await"],["comma","comma"],["topLevelAwait","topLevelAwait",true],["coercion","nullishSet:key,rhs,key","nullishSkip:key","and:key,rhs,key","or:key","preIncrement:key,key","decrement:key,key","forIn:key","objectPattern:rhs,key","alias:rhs,key","sequence:rhs,key","defineSetter:key","optionalDelete:key","false"],["restore",{"value":"stubbed","writable":true,"enumerable":true,"configurable":true},{"value":"original","writable":false,"enumerable":false,"configurable":true},false],["clean",false,false]]
+## …/global-computed-key-sites-cjs.case.ts
+[["nullish",1,1],["or",1],["and",4,4],["update",5,5,4],["forIn","last"],["objectPattern","object"],["defaultPattern","default"],["alias","alias"],["sequence","sequence"],["nested","__riftyParityCjsSiteKey__","nested"],["setter","set","function"],["optionalDelete",true,false],["coercion","nullishSet:key,rhs,key","nullishSkip:key","postIncrement:key,key","reflectSet:rhs,key","forOf:rhs,key","alias:rhs,key","defineSetter:key","delete:key","reflectDefine:rhs,key","reflectDelete:key","toPrimitive:rhs,string","7","false"],["clean",false]]
+```
+
+## D1 — discovery: `delete` operands bypassed both guards (base `325ae797c`)
+
+Both guards walked every `delete` operand as an assignment target; a
+non-reference operand (call, assignment) or an optional chain fell through the
+pattern walker unvisited. Loader probe (ESM `import` / CJS `require`, then host
+check):
+
+```
+/delete-call-define.mjs loads; hostIntact false     delete Object.defineProperty(globalThis, 'Function', {…})
+/delete-call-define.js loads; hostIntact false
+/delete-assign.mjs loads; hostIntact false          delete (globalThis.Function = 2)
+/delete-assign.js loads; hostIntact false
+/delete-optchain-static.mjs loads; hostIntact false delete globalThis?.Function
+/delete-optchain-static.js loads; hostIntact false
+optchain-delete-computed.mjs loads; f(Function) -> true hostIntact false   delete globalThis?.[k]
+```
+
+Fix: `delete` walks a (chained) Identifier/MemberExpression as the target,
+any other operand as an ordinary expression. Carrier:
+`tests/conformance/modules/global-computed-key-guard-sites.test.ts`.
+
+## RED of the IMPLEMENT-stage carriers (product diff reverse-applied)
+
+```
+$ npx vitest run --project conformance tests/conformance/modules/global-computed-key-guard-sites.test.ts
+ × ESM … a runtime Function key throws the ceiling at each site; the module loads
+   → Not implemented: module-loader.esm-global-function-assignment (ESM module /sites.mjs writes the Function binding/global property; …)
+ × ESM … delete operands and folded keys keep the load-time ceiling before any statement runs
+   → promise resolved "{ [Symbol(Symbol.toStringTag)]: 'Mod…' }" instead of rejecting
+ × CJS … a runtime Function key throws the ceiling at each site; the module loads
+   → Not implemented: module-loader.cjs-global-function-assignment (CJS module /sites.js assigns the global Function binding; …)
+ × CJS … delete operands and folded keys keep the load-time ceiling before any statement runs
+   → delete global?.Function;
+      Tests  4 failed (4)
+$ pnpm test:parity global-computed-key-sites
+  ✗ modules/global-computed-key-sites-cjs.case.ts   error: NotImplementedError: … module-loader.cjs-global-function-assignment (CJS module /work/main.js …)
+  ✗ modules/global-computed-key-sites-esm.case.ts   error: NotImplementedError: … module-loader.esm-global-function-assignment (ESM module /work/main.mjs …)
+```

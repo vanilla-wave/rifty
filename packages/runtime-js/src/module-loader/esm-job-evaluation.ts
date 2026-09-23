@@ -23,6 +23,7 @@ import {
   type PreparedEsm,
 } from './esm-job-types.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import { createGlobalWriteKeyCheck } from './global-write-key.ts';
 import { withStackRemapping } from './source-maps.ts';
 
 export function evaluateAsyncJob(
@@ -266,6 +267,10 @@ function factoryArguments(
     metaResolve,
     routedConstructors.Function,
     deps.WebAssembly,
+    createGlobalWriteKeyCheck(
+      'module-loader.esm-global-function-assignment',
+      `ESM module ${resolved.id} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
+    ),
   ];
 }
 

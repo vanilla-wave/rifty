@@ -88,6 +88,12 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   etc.) throw directed `NotImplementedError`s instead of mutating the browser host
   constructor, deleting it, or silently mixing routed and replaced constructors:
   `module-loader.cjs-global-function-assignment` / `module-loader.esm-global-function-assignment`.
+  A single-key write/define/delete whose computed key does not fold (Symbol
+  consts, parameters, for-in keys — vitest, undici) loads and runs as in Node;
+  the key is checked when V8 coerces it and throws the same ceiling at that
+  write only when it is `'Function'` (earlier statements have run; `??=`/`||=`
+  throw even where Node would skip the write). `fn.toString()` and stack
+  columns of such a line show the loader's key-check helper (ADR-0444).
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
 - A direct, unshadowed `eval` with a statically known string containing ordinary
   `import()` syntax is routed through the constructing module's collision-free

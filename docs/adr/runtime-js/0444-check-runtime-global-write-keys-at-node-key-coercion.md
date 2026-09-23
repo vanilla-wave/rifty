@@ -6,7 +6,8 @@ Date: 2026-09-23
 > TL;DR: A non-constant key of a guarded global write/define/delete is checked when V8 coerces it, via a per-module helper; only a key that is `'Function'` throws the existing named ceiling — at the write, not at load.
 
 Adds a decision on the seam ADR-0171 §4 owns (global `Function` mutation stays
-a loud ceiling); nothing in ADR-0171 is overturned.
+a loud ceiling); nothing in ADR-0171 is overturned. Replaces the vitest goal's
+carrier note (static Symbol-key proof; see Alternatives).
 
 ## Context
 
@@ -29,8 +30,9 @@ realm, where that write would corrupt the host constructor.
    logical assignment, update, `delete`, destructuring/for-in/of target,
    `Object.defineProperty`, `Reflect.set|defineProperty|deleteProperty`,
    `__defineGetter__`/`__defineSetter__` — that does not fold to a constant is
-   no longer a load-time ceiling. The CJS/ESM loaders wrap it in a per-module
-   key-check helper, through their existing source-edit channels.
+   no longer a load-time ceiling. The loaders wrap it in a per-module
+   key-check helper passed as a module-wrapper parameter: CJS through its
+   guard's rewrite edits, ESM by editing the source before the ESM rewrite.
 2. The helper returns a primitive key other than the string `'Function'`
    unchanged. For `'Function'` and object/function keys it returns a coercion
    proxy whose `Symbol.toPrimitive` runs the key's ToPropertyKey once and
@@ -77,5 +79,5 @@ realm, where that write would corrupt the host constructor.
   (the proxy cannot tell a read coercion from a write one); a patched
   `Object.defineProperty`/`Reflect.*` receives the proxy, not the original
   object, for `'Function'`/object keys.
-- Guard: parity cases `modules/global-computed-key-writes-{esm,cjs}`;
-  conformance `tests/conformance/modules/global-computed-key-guard.test.ts`.
+- Guard: parity cases `modules/global-computed-key-{writes,sites}-{esm,cjs}`;
+  conformance `tests/conformance/modules/global-computed-key-guard{,-sites}.test.ts`.
