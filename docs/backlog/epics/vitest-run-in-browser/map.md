@@ -8,9 +8,6 @@ order is also recorded as `blocked_by`; the other children are independent.
 
 ## Items
 
-1. `npm-client/overrides-bare-version-spec` — **overrides-spelling** — I1; npm's
-   `"vite": "8.0.16"` parses as a range, not a package name; unblocks the
-   scenario install with zero resolver work.
 4. `runtime-js/absent-builtin-members-loud-throws` — **loud-members** — I6;
    `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as
    real or named-loud members instead of link-time misses / `undefined.bind`.
@@ -50,7 +47,7 @@ order is also recorded as `blocked_by`; the other children are independent.
     config bundle), the wait `vitest run` drains on. Independent.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 1, 4–11, 13.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 4–11, 13.
 
 ## Open questions
 
