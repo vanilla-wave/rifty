@@ -1,0 +1,248 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS (no blocker): mergeable once the land step runs; 4 advisory NOTEs (a hang from a getter that refs mid-transfer, the unrouted DataCloneError discovery, map item 13 wording, self-transfer error class) + 1 nit.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/runtime-js/message-port-ref-keepalive.md (status: ready; ready-verdict Contract+RED @ e1676d095a25145fd4cf2f70f4cd6b84b2a2524c, record docs/backlog/runtime-js/reference/message-port-ref-keepalive-contract-red.json with reviewed_sha) reviewed at HEAD 69cf64510ada931015955082e1cea6cc97630fd3 (branch vg/u13) against BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea. Goal: docs/backlog/epics/vitest-run-in-browser/goal.md I4, unchanged BASE..HEAD, as are map.md and ledger.md. ADRs: ADR-0447 (new; §4 refined in 71be444c1 before landing) and ADR-0152. Reviewer: fresh and independent, read-only on vg-u13. Probes ran in a detached scratch copy (/tmp/vgoal/u13/scratch-fg-1 @ HEAD, since removed). Executed checks: (1) RIFTY_PLAYGROUND_PORT=5463 pnpm test:browser-unit on the two new specs gave 10/10 passed in 15.1s, Chromium, Node oracle v24.16.0 (/tmp/vgoal/u13/fg1-green.log). (2) Four mutants of message-port-ref.ts were each killed (/tmp/vgoal/u13/fg1-mutants.log): M1 dropping release(record.peer) fails peer-close-releases on timedOut; M2 dropping record.moved=true fails transfer-ceiling on timedOut; M3 making unref unguarded fails the refcount-isolation rows (-5/+1); M4 leaving Worker#postMessage unwrapped fails transfer-ceiling on timedOut. (3) PR-4 check of the changed criterion tools/checks/esbuild-legacy-retirement.mjs: build:libs at HEAD gives typescript-worker.js sha256 ab5544b5...23f98 at 10022694 bytes. Rebuilding with the three product sources reverted to BASE gives 018ea49b...b422 at 10022694 bytes, matching the BASE pin. The byte diff is only hashed import names (chunk-*, module-loader-*), so the re-pin is not a weakening. (4) pnpm pr:check at HEAD passed 25/25, including test:run and test:parity (/tmp/vgoal/u13/fg1-prcheck.log). (5) Scratch-only live-Node-vs-rifty probe spec (/tmp/vgoal/u13/fg1-probe.log, source /tmp/vgoal/u13/zz-fg-review-probe.spec.ts.txt): ESM named/default/require MessageChannel identity true,true,true in both; subclass ref holds in both; the other outcomes are in the findings. Tests, fixtures and contract Acceptance/Parity/Fault rows are unchanged since the Contract+RED commit (git diff e1676d095..HEAD -- tests/ is empty; the contract diff touches only the code: list and Decisions). Implementer lane logs were also read: full browser-unit 283 passed, 25 light e2e specs 63 passed, heavy 6 passed, e2e:prod 8 passed.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:97",
+      "summary": "npm bare-version overrides spelling; map item 1 not landed on this branch."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:100",
+      "summary": "worker_threads.Worker counted handle; map item 8 not landed."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:104",
+      "summary": "process lifecycle events and exit()/exitCode; map item 7 not landed."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "End-to-end vitest run (config.ts, .ts tests, reporter, exit 1/0). This unit delivers one carrier, emnapi's referenced-port hold (proved on the real rolldown detached build). Items 6, 9, 10, 11 and 12 remain."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115",
+      "summary": "--pool=threads parity with forks; items 10, 11, 12."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "claimed-path module load walls; items 2-5."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "vitest.md compat page; item 12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: in a real Chromium child realm each Parity case 1-7 program prints the same PORT| rows and exits with the same code as a live Node run of the same source",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-ref-keepalive.spec.ts:12-35 (7/7 green vs live Node v24.16.0; M1 killed)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: on the vite 8 template, NAPI_RS_FORCE_WASI=1 node rolldown-detached.mjs prints ROLLDOWN|start and the bundle row and exits 0, as in the Node artifact",
+      "source": "acceptance",
+      "trace": "I4+ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-ref-keepalive.spec.ts:69-106 (green in Chromium on the real rolldown 1.0.3 wasm32-wasi + @emnapi/runtime 1.10.0; RED at e1676d095 printed only ROLLDOWN|start and exited 0)",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: docs/public/compat/process.md gets a ✅ referenced-MessagePort keepalive row and ❌/⚠️ rows for each ADR-0447 explicit gap (moved/received, listener referencing, NodeEventTarget, close timing, reflection)",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "docs/public/compat/process.md:26-31 (✅ :26; ❌ :27 moved/received, :28 listener, :29 NodeEventTarget/'close'; ⚠️ :30 close timing, :31 reflection; hasRef divergences named at :28 and :30)",
+      "note": ""
+    },
+    {
+      "row": "Parity 1 api-shape: alias, constructor/name/length, native ports, types, fresh false, ref/unref return undefined, peer unaffected, idempotent ref, builtin ctor, Illegal invocation x3",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-ref-cases.ts:24-50; packages/runtime-js/src/builtins/worker_threads.ts:715-727; packages/runtime-js/src/internal/message-port-ref.ts:162-200",
+      "note": ""
+    },
+    {
+      "row": "Parity 2 reference-holds-until-unref: emnapi-style optional ref holds a 300 ms Atomics.waitAsync; fresh and ref'd-then-unref'd ports do not hold",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-ref-cases.ts:51-66; message-port-ref.ts:175-190",
+      "note": ""
+    },
+    {
+      "row": "Parity 3 emnapi-waiting-request-counter: verbatim NodejsWaitingRequestCounter holds until count 0, then releases",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-ref-cases.ts:67-116",
+      "note": ""
+    },
+    {
+      "row": "Parity 4 close-releases: after own close(), unheld work does not run",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-ref-cases.ts:117-127; message-port-ref.ts:205-213",
+      "note": ""
+    },
+    {
+      "row": "Parity 5 peer-close-releases: peer close releases the referenced port; later ref() neither holds nor reports true",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-ref-cases.ts:128-139 (mutant M1 without release(record.peer) -> timedOut, killed)",
+      "note": ""
+    },
+    {
+      "row": "Parity 6 ref-after-close-does-not-hold",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-ref-cases.ts:140-150; message-port-ref.ts:177",
+      "note": ""
+    },
+    {
+      "row": "Parity 7 unreferenced-transfer-stays-native: Set transfer list read once through a getter, ArrayBuffer detached, received port carries messages, structuredClone with frozen options returns the clone",
+      "source": "acceptance",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/message-port-ref-cases.ts:151-179; message-port-ref.ts:98-126,221-254",
+      "note": ""
+    },
+    {
+      "row": "Parity 8 rolldown-detached real package: Node artifact rows ROLLDOWN|start + bundle row, exit 0; precondition rolldown-awaited",
+      "source": "acceptance",
+      "trace": "I4+ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-ref-keepalive.spec.ts:42-106",
+      "note": ""
+    },
+    {
+      "row": "Fault torn-state: redundant ref/unref/close on one port while a timer is live; at most one keepalive ref, releases only its own; Node rows late=true, released=false, timer, exit 0",
+      "source": "fault-matrix",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-ref-keepalive.fault.spec.ts:36-43; fixtures/message-port-ref-cases.ts:183-202 (mutant M3 unguarded unref killed)",
+      "note": ""
+    },
+    {
+      "row": "Fault provenance-lie: transfer of a referenced port or its peer via MessagePort#postMessage, structuredClone, Worker#postMessage, global postMessage -> NotImplementedError('MessagePort.transfer.referenced') before detach; buffer keeps 4 bytes; pair still delivers; no hang/early exit",
+      "source": "fault-matrix",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-ref-keepalive.fault.spec.ts:48-53; fixtures/message-port-ref-cases.ts:211-266; message-port-ref.ts:221-285 (mutant M4 Worker#postMessage unwrapped killed)",
+      "note": ""
+    },
+    {
+      "row": "Fault provenance-lie: ref() on a port whose pair was split by a transfer or that arrived through one -> NotImplementedError('MessagePort.ref.transferred'), hasRef() stays false",
+      "source": "fault-matrix",
+      "trace": "ADR-0447",
+      "status": "pass",
+      "citation": "fixtures/message-port-ref-cases.ts:235-240,263-264; message-port-ref.ts:175-184 (mutant M2 never-mark-moved killed on timedOut)",
+      "note": ""
+    },
+    {
+      "row": "Frozen Node artifact: ROLLDOWN_AWAITED_NODE_ROWS / ROLLDOWN_DETACHED_NODE_ROWS (v24.16.0, rolldown 1.0.3 wasm32-wasi, @emnapi/runtime 1.10.0)",
+      "source": "frozen-artifact",
+      "trace": "I4+ADR-0447",
+      "status": "pass",
+      "citation": "tests/browser-unit/message-port-ref-keepalive.spec.ts:56-60 (unchanged since the Contract+RED reproduction)",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:53",
+          "evidence": "",
+          "summary": "Carried from Contract+RED. Map item 13 still promises 'listener auto-ref', but the delivered unit makes listener referencing an explicit ❌ gap (docs/public/compat/process.md:28; contract Decisions). goal.md does not state it and I4 does not need it, so re-cut the item 13 wording at land and the map will not overstate what shipped.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md:409",
+          "evidence": "grep -rln DataCloneError docs/backlog -> only this unit's contract/evidence plus two unrelated references; no backlog item or rifty-fix record for the defect",
+          "summary": "The sibling sweep found a pre-existing defect. In rifty, worker_threads.Worker#postMessage({port}) or ({fn}) does not throw (Node throws DataCloneError), the kernel send catch closes the control channel, the later 'after' message is lost and the worker exits 1. The evidence prose records it only as 'reported outside this unit'. Route it by obligation (REV-12: rifty-fix for an observed defect, or rifty-to-backlog with owner/trigger; I5's threads pool is a likely consumer) so it is not left as a silent residual.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/internal/message-port-ref.ts:228-252",
+          "evidence": "Scratch probe spec, same source in live Node v24.16.0 and rifty `node main.cjs` (/tmp/vgoal/u13/fg1-probe.log): const {port1: kept, port2: sent} = new MessageChannel(); const {port1: via, port2: sink} = new MessageChannel(); via.postMessage({ p: sent, get x() { kept.ref(); return 1; } }, [sent]); sink.onmessage = (e) => { e.data.p.close(); via.close(); sink.close(); setTimeout(() => { log('after-copy-close=' + kept.hasRef()); pendingWork(300).then(() => log('held')); }, 50); }. NODE: code=0 rows [after-post=true,none, after-copy-close=false]. RIFTY: timedOut=true (6 s, uncapped terminal drain) rows [after-post=true,none, after-copy-close=true, held].",
+          "summary": "Check-then-act across guest code (torn-state/reentrancy). The referenced-pair check reads record.referenced before the native call. A getter on the message runs during structured serialization and can ref() the peer of a port that is about to move. The transfer then completes, and the kept end is left referenced with a split pair, where its release can no longer be observed. Rifty hangs where Node exits: the unobservable-release state ADR-0447 exists to refuse. The row declares the state at call entry, and the input is a contrived reentrant interleaving, so this is advisory hardening. A cheap fix: keep an in-flight set of moving records during the native call, and make ref() on a port whose peer is in flight throw MessagePort.ref.transferred.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/internal/message-port-ref.ts:228-236",
+          "evidence": "Scratch probe (/tmp/vgoal/u13/fg1-probe.log): const {port1: p} = new MessageChannel(); p.ref(); p.postMessage(null, [p]) -> NODE v24.16.0 'PORT|self=DataCloneError', RIFTY 'PORT|self=NotImplementedError'.",
+          "summary": "Posting a referenced port through itself is always invalid in Node and throws DataCloneError. Rifty throws NotImplementedError('MessagePort.transfer.referenced'), claiming a gap for an operation Node rejects. This is literal to Fault row 2, but the error class differs from Node. Consider letting the native source-port DataCloneError win, e.g. skip the refusal when the receiver is in the list.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/builtins/worker_threads.ts:715-727",
+          "evidence": "Scratch probe: Object.getOwnPropertyDescriptor(require('node:worker_threads'), 'MessageChannel') -> NODE 'value' in d = true; RIFTY false (accessor), enumerable/configurable true in both.",
+          "summary": "worker_threads.MessageChannel is now an accessor, while Node has a data property. Identity, ESM named import and assignment all match Node. This is small reflection drift, not in the ⚠️ reflection row (process.md:31 covers wrapped methods only), and the same pattern as the existing isMainThread accessor.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "69cf64510ada931015955082e1cea6cc97630fd3"
+}
