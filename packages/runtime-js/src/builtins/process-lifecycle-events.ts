@@ -30,13 +30,16 @@ const regexpSourceGetter = objectGetOwnPropertyDescriptor(RegExp.prototype, 'sou
 const queueMicrotaskPrimordial = globalThis.queueMicrotask.bind(globalThis);
 
 export type UncaughtOrigin = 'uncaughtException' | 'unhandledRejection';
-/** `handled`: a listener took it. `exited`: an `exit()`/exit-7 terminal owns it. */
+/**
+ * `handled`: a listener took it. `unhandled`: no listener; the fatal `'exit'` ran
+ * for `error`. `exited`: an `exit()`/exit-7 terminal owns it.
+ */
 export type LifecycleDispatch =
-  | { readonly kind: 'handled' | 'unhandled' | 'no-process' }
+  | { readonly kind: 'handled' | 'no-process' }
+  | { readonly kind: 'unhandled'; readonly error: unknown }
   | { readonly kind: 'exited'; readonly signal: RiftyProcessExitSignal };
 
 const HANDLED = { kind: 'handled' } as const;
-const UNHANDLED = { kind: 'unhandled' } as const;
 const NO_PROCESS = { kind: 'no-process' } as const;
 
 export interface RiftyProcessExitSignal extends Error {
@@ -76,6 +79,8 @@ export interface NodeProcessExitHost {
 export class NodeProcessExit {
   readonly #host: NodeProcessExitHost;
   #exiting = false;
+  /** The first requested terminal: after it the process is gone for Node. */
+  #terminal: RiftyProcessExitSignal | null = null;
 
   constructor(host: NodeProcessExitHost) {
     this.#host = host;
@@ -103,6 +108,16 @@ export class NodeProcessExit {
     }
   }
 
+  /**
+   * After `beginFatal`, Node prints and exits with `exitCode ?? 1` inside its
+   * handler — unless an `exit()` already ended it (e.g. in the fatal `'exit'`).
+   */
+  fatal(error: unknown): never {
+    if (this.#terminal !== null) throw this.#terminal;
+    this.#host.writeStderr(`${formatThrown(error)}\n`);
+    return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1));
+  }
+
   /** A throwing `uncaughtException` listener: stderr, status 7, no `'exit'`. */
   listenerThrew(error: unknown): never {
     this.#host.writeStderr(`${formatThrown(error)}\n`);
@@ -114,6 +129,7 @@ export class NodeProcessExit {
   reset(): void {
     this.#host.writeExitCode(undefined);
     this.#exiting = false;
+    this.#terminal = null;
   }
 
   #terminate(status: number): never {
@@ -122,11 +138,15 @@ export class NodeProcessExit {
       exitCode: status,
     }) as RiftyProcessExitSignal;
     this.#host.requestExit(signal);
+    this.#terminal ??= signal;
     throw signal;
   }
 }
 
-type NodeProcessExitLike = Pick<NodeProcessExit, 'beginFatal' | 'listenerThrew' | 'reset'>;
+type NodeProcessExitLike = Pick<
+  NodeProcessExit,
+  'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
+>;
 
 export function attachNodeProcessExit(process: object, exit: NodeProcessExit): void {
   Object.defineProperty(process, NODE_PROCESS_LIFECYCLE, {
@@ -187,7 +207,7 @@ export function dispatchUncaughtException(
     }
   }
   active.exit.beginFatal();
-  return UNHANDLED;
+  return { kind: 'unhandled', error };
 }
 
 /**
@@ -211,6 +231,21 @@ export function dispatchUnhandledRejection(
   }
   const error = isErrorLike(reason) ? reason : new UnhandledPromiseRejection(reason);
   return dispatchUncaughtException(error, 'unhandledRejection', target);
+}
+
+/**
+ * The fatal terminal of an `unhandled` dispatch, run now: stderr, then the one
+ * kernel exit request, so no later task's `exit()` overrides the status.
+ */
+export function terminateFatal(error: unknown, target?: unknown): RiftyProcessExitSignal | null {
+  const active = lifecycleTarget(target);
+  if (active === null) return null;
+  try {
+    return active.exit.fatal(error);
+  } catch (signal) {
+    if (isRiftyProcessExit(signal)) return signal;
+    throw signal;
+  }
 }
 
 /**

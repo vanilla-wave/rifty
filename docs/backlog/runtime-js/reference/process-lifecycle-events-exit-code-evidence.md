@@ -993,6 +993,113 @@ GREEN (implementation applied): `pnpm test:parity process/` → 35/35 match
 browser-unit `owner-node-process-lifecycle.spec.ts` → 1 passed (36/36 cases);
 `npx vitest run packages tests/conformance tools` → 628 files / 9353 tests pass.
 
+## §F Final+GREEN r1 — fatal rejection terminal (RED → GREEN)
+
+Blocker (review of `494474229`): a no-listener rejection ran the fatal `'exit'`
+1, then only recorded the reason; the terminal waited for the next drain
+sample, and a user task in between (`setTimeout(() => process.exit(0), 1)`)
+sent the first kernel exit request with 0. Node oracle (host Node v24.16.0,
+2026-09-23; every program starts `process.on('exit', (c) => console.log('L|exit', c, process.exitCode));`
+unless it is a parent):
+
+```
+$ node rej-then-exit0-1ms.cjs       # Promise.reject(new Error('V1')); setTimeout(() => process.exit(0), 1)
+L|exit 1 1
+stderr: … Error: V1 …   [exit 1]
+$ node rej-then-exit0-0ms.cjs       # same, 0 ms
+L|exit 1 1
+stderr: … Error: V2 …   [exit 1]
+$ node rej-then-log-0ms.cjs         # Promise.reject(new Error('V3')); setTimeout(() => console.log('L|after'), 0)
+L|exit 1 1
+stderr: … Error: V3 …   [exit 1]
+$ node rej-exit-listener-code.cjs   # 'exit' listener sets process.exitCode = 5; Promise.reject(new Error('V5'))
+L|exit 1 1
+stderr: … Error: V5 …   [exit 5]
+$ node throw-exit-listener-code.cjs # same listener; setTimeout(() => { throw new Error('T5') }, 0)
+L|exit 1 1
+stderr: … Error: T5 …   [exit 5]
+$ node fork-fatal-parent.cjs        # = browser-unit fork-fatal-rejection-then-exit
+L|child-exit 1 1
+L|child-close 1
+$ node wt-fatal-parent.cjs          # = worker-thread-fatal-rejection-then-exit, 'error' listener prints M|
+M|werror WT-FATAL
+L|wexit 1
+$ node xs-parent.cjs                # execSync of a child: reject + setTimeout(exit(0), 1); prints e.message line 1, e.status
+M| Command failed: node xs-child.cjs … 1
+$ node rej-exit-listener-exit2.cjs  # 'exit' listener calls process.exit(2); Promise.reject(new Error('V7'))
+L|exit 1 1
+[exit 2] stderr-bytes=0
+$ node exit0-then-rej.cjs           # setTimeout(() => { Promise.reject(new Error('V8')); process.exit(0); }, 0)
+L|exit 0 0
+[exit 0] stderr-bytes=0
+```
+
+So Node's fatal status is `exitCode` after the `'exit'` listeners (`?? 1`),
+and nothing of the program runs after it. Fix (ADR-0445 rule 3): the trap runs
+`NodeProcessExit.fatal` at once (stderr, then the one kernel exit request with
+`uint8(exitCode ?? 1)`); the drain records that exit signal.
+
+RED (fix's tests on `494474229` product code; GREEN = the fix):
+
+```
+$ npx vitest run packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts
+  × fatal unhandled rejection (ADR-0445) > prints and requests status 1 at the trap; a later exit(0) requests nothing
+-     "code": 1,
++     "code": 0,
+      "kind": "control:self-exit",
+$ RIFTY_PLAYGROUND_PORT=5407 npx playwright test --config playwright.browser-unit.config.ts tests/browser-unit/owner-node-process-lifecycle.spec.ts
+LIFECYCLE-MISMATCHES 4
+fatal-rejection-then-exit
+  node  {"rows":["L|exit 1 1"],"exit":1,"fatal":true}
+  rifty {"rows":["L|exit 1 1"],"exit":0,"fatal":false}
+fork-fatal-rejection-then-exit
+  node  {"rows":["L|child-exit 1 1","L|child-close 1"],"exit":0,"fatal":true}
+  rifty {"rows":["L|child-exit 1 1","L|child-close 0"],"exit":0,"fatal":true}
+worker-thread-fatal-rejection-then-exit
+  node  {"rows":["L|wexit 1"],"exit":0,"fatal":true}
+  rifty {"rows":["L|wexit 0"],"exit":0,"fatal":true}
+exec-sync-fatal-rejection-then-exit
+  node  {"rows":["L|exec-failed"],"exit":0,"fatal":true}
+  rifty {"rows":["L|exec-ok"],"exit":0,"fatal":true}
+```
+
+The first GREEN printed the error after an `exit()` that had already
+requested the kernel exit (probe `p5-rej-exit0-0ms` r0 showed `Error: P1`
+after `L|exit 0 0`); Node prints nothing then (`rej-exit-listener-exit2`,
+`exit0-then-rej`). RED for the guard (`process-exit-lifecycle.test.ts` cases
+4–5 before `NodeProcessExit.#terminal`):
+
+```
+× … an exit() inside the fatal exit listener owns the status and nothing prints
+    - Array []   + Array [ "Error: V7 …" ]
+× … a rejection seen after exit(0) prints nothing and keeps status 0
+    - Array []   + Array [ "Error: V8 …" ]
+```
+
+GREEN: the five unit cases pass; the browser-unit spec passes every case, and
+the reviewer's probe (`rej-then-exit0-1ms`) matches Node 6/6 (logs in the
+Final+GREEN re-run). Probes on the fix before the guard (the guard acts only
+after an earlier exit request): `p5-rej-listener-code` (rejection, `'exit'`
+listener sets `exitCode = 5`): rifty 5 = Node 3/3; `p5-rej-nonerror`
+(`Promise.reject(42)`): `UnhandledPromiseRejection` on stderr, status 1 = Node.
+`p5-throw-listener-code` (a throw, same listener): rifty 1, Node 5 3/3 — the
+default Worker report's status; Out of scope + compat ⚠️.
+
+Sibling sweep: every kernel child (program lifecycle, `.bin`, fork, execSync
+branch, worker thread) shares the realm trap and its control port — covered by
+the four cases above. Eval already claimed the first terminal
+(`beginNodeEvalUnhandled`). The no-COI project command has no control port: it
+prints the error on the invocation's stderr and its drain rejects with the
+exit signal (loud failed result, never 0; handler dispatch there stays ⚠️
+unclaimed).
+
+Not fixed (Out of scope, delivery order): `rej-then-log-0ms` prints
+`L|after` then `L|exit 1 1` in rifty (6/6). The row order shows the 0 ms timer
+ran before Chromium dispatched `unhandledrejection` — the trap had not run yet.
+The same order makes a 0 ms `exit(0)` win (`p5-rej-exit0-0ms`: rifty
+`L|exit 0 0`, status 0; Node `L|exit 1 1`, status 1; 3/3); Node processes the
+rejection first (o18).
+
 ## §V vitest 4.1.11 lifecycle uses (static)
 
 ```

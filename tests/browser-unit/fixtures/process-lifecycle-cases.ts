@@ -205,6 +205,14 @@ setTimeout(() => console.log('L|never'), 50);`,
   program('fatal-rejection', `${EXIT_ROW}\nPromise.reject(new Error('FATAL-REJECTION'));`, {
     fatal: 'FATAL-REJECTION',
   }),
+  // The fatal is final at once: a later task's exit(0) never overrides status 1.
+  program(
+    'fatal-rejection-then-exit',
+    `${EXIT_ROW}
+Promise.reject(new Error('FATAL-REJECTION-EXIT'));
+setTimeout(() => process.exit(0), 1);`,
+    { fatal: 'FATAL-REJECTION-EXIT' },
+  ),
   program(
     'fatal-nexttick',
     `${EXIT_ROW}
@@ -289,6 +297,48 @@ process.on('uncaughtException', (e, o) => {
 setTimeout(() => { throw new Error('wboom'); }, 0);`,
     },
     nodeArgv: ['worker-parent.cjs'],
+  },
+  // A fatal rejection's status 1 stays final on the forked and worker-thread owners.
+  {
+    name: 'fork-fatal-rejection-then-exit',
+    files: {
+      'fork-fatal-parent.cjs': `const { fork } = require('node:child_process');
+const child = fork('fork-fatal-child.cjs', [], { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+let out = '';
+child.stdout.setEncoding('utf8').on('data', (d) => { out += d; });
+child.on('close', (code) => {
+  for (const row of out.split('\\n').filter(Boolean)) console.log(row);
+  console.log('L|child-close', code);
+});`,
+      'fork-fatal-child.cjs': `process.on('exit', (c) => console.log('L|child-exit', c, process.exitCode));
+Promise.reject(new Error('FORK-FATAL'));
+setTimeout(() => process.exit(0), 1);`,
+    },
+    nodeArgv: ['fork-fatal-parent.cjs'],
+  },
+  {
+    name: 'worker-thread-fatal-rejection-then-exit',
+    files: {
+      'wt-fatal-parent.cjs': `const { Worker } = require('node:worker_threads');
+const pin = setInterval(() => {}, 1000);
+const w = new Worker('./wt-fatal-child.cjs');
+w.on('error', () => {});
+w.on('exit', (c) => { console.log('L|wexit', c); clearInterval(pin); });`,
+      'wt-fatal-child.cjs': `Promise.reject(new Error('WT-FATAL'));
+setTimeout(() => process.exit(0), 1);`,
+    },
+    nodeArgv: ['wt-fatal-parent.cjs'],
+  },
+  {
+    name: 'exec-sync-fatal-rejection-then-exit',
+    files: {
+      'xs-fatal-parent.cjs': `const { execSync } = require('node:child_process');
+try { execSync('node xs-fatal-child.cjs', { stdio: 'pipe' }); console.log('L|exec-ok'); }
+catch { console.log('L|exec-failed'); }`,
+      'xs-fatal-child.cjs': `Promise.reject(new Error('XS-FATAL'));
+setTimeout(() => process.exit(0), 1);`,
+    },
+    nodeArgv: ['xs-fatal-parent.cjs'],
   },
   {
     name: 'exec-sync-child',

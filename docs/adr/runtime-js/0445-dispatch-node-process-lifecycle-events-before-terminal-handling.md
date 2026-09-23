@@ -6,8 +6,9 @@ Date: 2026-09-23
 > TL;DR: One dispatch on the realm's active `NodeProcess` delivers uncaught errors and unhandled rejections to Node's listeners before any terminal path runs. A handled error cancels the browser report and the program continues. `exit()` follows Node: `exitCode` starts `undefined`, no argument means `exitCode`, and `'exit'` fires once before the kernel exit request. Natural exit calls the same `exit()`. A zero-ref drain confirms idleness across one more host task before it settles.
 
 Partially supersedes ADR-0152 §3 (a rejection a process listener handles is
-canceled and not recorded) and moves ADR-0152 §1's settle point one host task
-later; extends ADR-0157 §1 `exit()`. Drain ownership (ADR-0385) and the loud
+canceled and not recorded; a no-listener rejection's stderr and exit request
+run at the trap, the drain records that exit) and moves ADR-0152 §1's settle
+point one host task later; extends ADR-0157 §1 `exit()`. Drain ownership (ADR-0385) and the loud
 no-listener default stay.
 Evidence: `docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md`.
 
@@ -45,12 +46,18 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
    through a `Symbol.for` slot on the process.
 2. **Handled.** The trap calls `preventDefault()`, records nothing and claims
    no eval terminal; the loop keeps draining.
-3. **Unhandled.** `exitCode` becomes 1, `'exit'` is emitted (rule 5), then the
-   existing terminal path runs unchanged: default Worker report or drain
-   rejection (ADR-0152 §3), or the eval terminal (ADR-0339/0342): stderr +
-   status 1. A `nextTick` throw with no listener takes this path instead of
-   being dropped: later ticks never run and the error reaches the realm
-   `error` trap once, undispatched.
+3. **Unhandled.** `exitCode` becomes 1, `'exit'` is emitted (rule 5), then a
+   throw takes the existing terminal path unchanged: default Worker report,
+   or the eval terminal (ADR-0339/0342): stderr + status 1. A rejection takes
+   the eval terminal, else its fatal terminal runs in the trap at once, as
+   Node exits inside its handler: stderr, then the kernel exit request with
+   `uint8(exitCode ?? 1)` read after the listeners; the drain records that
+   exit signal, not the reason, so no later task's `exit()` overrides the
+   status and nothing prints twice. An `exit()` that already requested the
+   kernel exit (in the fatal `'exit'`, or before the rejection is seen) keeps
+   its status and nothing prints. A `nextTick` throw with no listener takes
+   this path instead of being dropped: later ticks never run and the error
+   reaches the realm `error` trap once, undispatched.
 4. **Listener throws.** A throw from an `uncaughtException` listener is fatal
    with status 7, stderr naming it, and no `'exit'` event — never re-dispatched.
    The `RIFTY_PROCESS_EXIT` signal is control flow: never dispatched, and it
@@ -87,6 +94,12 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   synchronously): killed — native async-function rejections and captured
   `then` intrinsics bypass a JS patch (process.ts header limitation).
 - Late rejection by a fixed delay: killed — a timing guess, not an order.
+- No-listener rejection terminal at the next drain sample (ADR-0152 §3's
+  record): killed — a user task in between can call `exit(0)` and send the
+  first kernel request, so the program exits 0 after `'exit'` 1 (evidence §F).
+- Rethrow it into the default Worker report: killed — the report carries the
+  message without the stack and is a parent-side task with no order against a
+  later exit request.
 - Keep `exitCode` numeric and map `0` to "unset": killed — `exitCode = 0` is a
   real assignment Node distinguishes (`== null` checks, evidence §V).
 
@@ -98,7 +111,9 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
 - Published `./builtins/process` API: `NodeProcess.exitCode` is
   `number | undefined`; `resetNodeProcessExit(process)` is new. Workbench
   `NodeLifecycleDeps` loses `readExitCode` (natural exit passes no code).
-- No-listener errors stay loud: stderr + status 1 (ADR-0152 §3).
+- No-listener errors stay loud: stderr + status 1; a rejection's status is
+  final at the trap on every kernel child (program, `.bin`, fork, execSync,
+  worker thread).
 - Zero-ref drains settle one host task later.
 - Explicit gaps (compat rows): `beforeExit` and `rejectionHandled` are not
   emitted; `setUncaughtExceptionCaptureCallback` is absent; the no-COI

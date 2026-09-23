@@ -6,10 +6,11 @@
  * reaping, so a child exits on "loop empty" like Node, not at top-level resolve.
  *
  * Loud-fail (no silent stub): a recorded `unhandledrejection` rejects the drain
- * (→ kernel stderr + exit 1); a never-draining loop rejects with a
- * self-explanatory cap error rather than hanging the worker forever. The cap is
- * a SAFETY-NET, not a faithfulness feature (Node has no cap) — generous + loud +
- * documented (see ADR + compat matrix).
+ * (→ stderr + exit 1: the process's fatal terminal, else the kernel's); a
+ * never-draining loop rejects with a self-explanatory cap error rather than
+ * hanging the worker forever. The cap is a SAFETY-NET, not a faithfulness
+ * feature (Node has no cap) — generous + loud + documented (see ADR + compat
+ * matrix).
  */
 
 import { setKernelDrainHook } from '@riftydev/kernel';
@@ -18,6 +19,7 @@ import {
   dispatchUnhandledRejection,
   isRiftyProcessExit,
   takeUndispatchedRethrow,
+  terminateFatal,
 } from '../builtins/process-lifecycle-events.ts';
 
 const PromiseConstructorPrimordial = Promise;
@@ -487,18 +489,17 @@ export function handleRealmUncaughtError(reason: unknown): boolean {
 
 /**
  * A realm-unhandled rejection (ADR-0445): process listeners first; unhandled →
- * the eval terminal claim, else recorded for the drain (ADR-0152 §3). True =
- * cancel the browser report. An exit signal is never dispatched: the drain
- * carries its code.
+ * the eval terminal claim, else the fatal terminal runs now (stderr, one exit
+ * request) and the drain settles with its exit signal. True = cancel the
+ * browser report. An exit signal is never dispatched: the drain carries its code.
  */
 export function handleRealmUnhandledRejection(reason: unknown, promise: unknown): boolean {
-  if (!isRiftyProcessExit(reason)) {
-    const { kind } = dispatchUnhandledRejection(reason, promise);
-    if (kind === 'handled' || kind === 'exited') return true;
-  }
+  const outcome = isRiftyProcessExit(reason) ? null : dispatchUnhandledRejection(reason, promise);
+  if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
   if (beginNodeEvalUnhandled(reason, 'rejection')) return true;
-  recordRejection(reason);
-  return false;
+  const fatal = outcome?.kind === 'unhandled' ? terminateFatal(outcome.error) : null;
+  recordRejection(fatal ?? reason);
+  return fatal !== null;
 }
 
 export function installUnhandledErrorTrap(
@@ -522,8 +523,9 @@ export function installUnhandledErrorTrap(
  * LOUDLY.
  *
  * Eval claims are controlled terminal paths: print flushes before the drain or
- * served-worker fallback emits the diagnostic and exit. Other realms retain
- * default reporting while their run-to-completion drain records the reason.
+ * served-worker fallback emits the diagnostic and exit. Other realms run the
+ * process's fatal terminal at once (ADR-0445 rule 3); a realm without a process
+ * keeps default reporting while its run-to-completion drain records the reason.
  */
 export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
