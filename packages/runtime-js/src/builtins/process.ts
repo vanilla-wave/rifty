@@ -1,9 +1,7 @@
 /**
  * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
  *
- * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0045 fork-IPC)
- * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
- * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
+ * Kernel pre-entry constructs `new NodeProcess(spec)` for kernel-spawned children
  * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
  * `riftyProcess`. No post-spawn `globalThis.process` swap.
  *
@@ -34,6 +32,7 @@ import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { memoryUsage } from './misc-stubs.ts';
 import {
   type NodeEntryLaunch,
   type NodeEntryTerminalBootstrap,
@@ -543,6 +542,7 @@ export class NodeProcess extends EventEmitter {
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
   nextTick = nextTick;
+  memoryUsage = memoryUsage;
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
   send?: (message: unknown, ...unsupported: unknown[]) => boolean;

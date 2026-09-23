@@ -1,0 +1,137 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED принят с двумя NOTE. Node oracle подтверждён; 3 unit RED и 1 parity RED воспроизведены. Merge — после реализации и Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "63422c251723e9dbffc5b99e70126934d2cdea27",
+  "unit_goal_source": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md @ 63422c251723e9dbffc5b99e70126934d2cdea27; BASE origin/main @ 0c4c1b070042a7a3079888cae92f25f15db24cdf; authority: docs/backlog/epics/vitest-run-in-browser/goal.md I6; запрос пользователя реализовать весь эпик одним PR.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:97",
+      "summary": "Реализация и acceptance npm overrides pin остаются в эпике."
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:100",
+      "summary": "Worker keepalive/ref/unref и Node parity ещё не закрыты."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:104",
+      "summary": "События процесса и exitCode ещё не закрыты."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "Полный Vitest forks-сценарий с config.ts, TypeScript, reporter и exit codes ещё не доказан."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115",
+      "summary": "Эквивалентный threads-сценарий ещё не доказан."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "Эта unit требует реализации и Final+GREEN; остальные module walls и загрузка exact Vitest tree остаются в эпике."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "Compat-страница и доказанные loud ceilings ещё не закрыты."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: callable named exports statfsSync/spawnSync и bindable memoryUsage.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-loud-members-present.case.ts:5",
+      "note": "C1: выполненный mutant проходит CJS parity при SyntaxError обоих ESM named imports; advisory по REV-4."
+    },
+    {
+      "row": "Acceptance 2: вызовы недоступных функций бросают NotImplementedError с конкретным module.feature.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "weak",
+      "citation": "packages/runtime-js/src/builtins/absent-members-loud.test.ts:10",
+      "note": "C2: все три toThrow принимают обычный Error с совпадающим сообщением; advisory по REV-4."
+    },
+    {
+      "row": "Parity 1: function types трёх members и boundMemoryUsage совпадают с Node.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/builtin-loud-members-present.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "Reference oracle: Node v24.16.0 возвращает function для трёх members и bound memoryUsage.",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/absent-builtin-members-loud-throws.md:35",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/modules/builtin-loud-members-present.case.ts:5",
+          "evidence": "node --import tsx /tmp/rifty-loud-members-esm-mutant.mts → exit 0. Nonenumerable loud-функции добавлены настоящим builtin-объектам только в памяти. Неизменённый committed parity case совпал с Node: {\"statfsSync\":\"function\",\"spawnSync\":\"function\",\"memoryUsage\":\"function\",\"boundMemoryUsage\":\"function\"}. ESM import statfsSync → SyntaxError: The requested module 'node:fs' does not provide an export named 'statfsSync'; spawnSync → аналогичный SyntaxError.",
+          "summary": "C1: проверяется CJS-доступ, но не обещанное ESM-связывание. Добавить parity с kind: 'esm' и named imports.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/absent-members-loud.test.ts:10",
+          "evidence": "node /var/folders/db/686y1tsx0cj84rn_2jmrf9680000gn/T/rifty-review-error-type-Lp3Tpa/probe.mjs; Node v24.16.0, установленный JestChaiExpect из Vitest 2.1.9. Для fs.statfsSync, child_process.spawnSync и process.memoryUsage assertion toThrow(new NotImplementedError(feature)) проходит при throw new Error('Not implemented: ' + feature): assertion=PASS, actualName=Error, isNotImplementedError=false.",
+          "summary": "C2: toThrow(Error instance) сравнивает только message. Проверки строк 10, 15, 23 не различают Error и обещанный NotImplementedError; добавить проверку типа.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

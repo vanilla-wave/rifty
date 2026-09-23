@@ -5,6 +5,14 @@
  */
 import { NotImplementedError } from '@riftydev/io';
 
+export function statfsSync(..._args: unknown[]): never {
+  throw new NotImplementedError('fs.statfsSync');
+}
+
+export function memoryUsage(): never {
+  throw new NotImplementedError('process.memoryUsage');
+}
+
 function loudProxy(name: string): Record<string, unknown> {
   return new Proxy(
     {},

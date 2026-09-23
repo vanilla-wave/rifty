@@ -666,6 +666,10 @@ export function fork(
   return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
 }
 
+export function spawnSync(..._args: unknown[]): never {
+  throw new NotImplementedError('child_process.spawnSync');
+}
+
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback
 // branch with its helpers. Re-exported here for the public `child_process`
 // surface.
@@ -673,5 +677,13 @@ export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+const child_process = {
+  spawn,
+  spawnSync,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

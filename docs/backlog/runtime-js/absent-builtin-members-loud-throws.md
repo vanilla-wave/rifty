@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as real or named-loud members
 created: 2026-09-15
 why: absent members surface as link-time SyntaxError (named import of statfsSync/spawnSync) or `undefined.bind` TypeError (vitest worker init binds process.memoryUsage) — worse than a NotImplementedError and fatal even when the member is never called on the claimed path
@@ -41,8 +41,12 @@ Node v24.16.0: `node -e "const fs=require('node:fs'); const cp=require('node:chi
 
 ## Parity cases
 
-1. `tools/node-parity-runner/cases/modules/builtin-loud-members-present.case.ts` observes the same `function` types and bindability as real Node for the three members. → I6
+1. `tools/node-parity-runner/cases/modules/builtin-loud-members-present.case.ts` and `builtin-loud-members-named-exports.case.ts` observe the same `function` types, ESM linking and bindability as real Node for the three members. → I6
 
 ## Out of scope
 
 Real filesystem capacity, OS process spawn and heap statistics cannot be supplied by the current browser runtime; these calls stay named loud ceilings. Vitest's claimed `run` path imports or binds them but does not invoke them.
+
+## Decisions
+
+ready-verdict: 2026-09-23 — Contract+RED @ 63422c251723e9dbffc5b99e70126934d2cdea27

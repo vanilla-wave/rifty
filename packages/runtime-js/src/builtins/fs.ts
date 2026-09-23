@@ -1,12 +1,7 @@
 /**
  * Node-compatible `node:fs` (subset).
  *
- * Sync and async APIs share one in-process tree via `syncMirror()`; async wraps
- * sync. OPFS backend (M4+) swaps the mirror for a `FileSystemSyncAccessHandle`
- * one inside the Worker.
- *
- * Encoding: no encoding → Uint8Array (Buffer-tagged); `'utf8'` → string. Matches
- * Node.
+ * Sync and async APIs share `syncMirror()`.
  */
 
 import { NotImplementedError, bytesToString } from '@riftydev/io';
@@ -16,6 +11,7 @@ import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
 import { Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { statfsSync } from './misc-stubs.ts';
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
 type OpenFlags = string | number;
@@ -1598,6 +1594,7 @@ const fs = {
   readdirSync,
   mkdirSync,
   statSync,
+  statfsSync,
   existsSync,
   unlinkSync,
   rmSync,

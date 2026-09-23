@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Expose Vitest-imported `fs.statfsSync`, `child_process.spawnSync`, and `process.memoryUsage` as named loud capabilities.
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
