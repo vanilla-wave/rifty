@@ -23,3 +23,4 @@ this payload and a differential contract can pin the V8 wire behavior.
 ## Challenge
 
 challenge: 2026-09-23 — factual mid-task capture; premise check deferred to pickup if a consumer requires support
+final-check: 2026-09-23 — fresh read-only reviewer PASS @ 47faa654947fa9857cab67520d8c3900f909a51a; dedup/scope/attribution clear
