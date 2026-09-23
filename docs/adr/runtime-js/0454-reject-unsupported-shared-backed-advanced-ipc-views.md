@@ -7,6 +7,14 @@ Date: 2026-09
 > V8 wire form can be reproduced; the existing validator reads Map/Set
 > internal entries, never a user-supplied iterator.
 
+**Corrected (2026-09-23, ADR-0457):** internal-slot inspection also covers
+changed prototypes. ArrayBuffer-backed views with a replaced, non-view
+prototype become named loud host objects, matching Node's rejection.
+
+**Corrected (2026-09-23, ADR-0458):** an ArrayBuffer-backed view remains
+admitted alone; a graph also carrying its backing ArrayBuffer throws a named
+ceiling because native clone retains an alias Node breaks.
+
 ## Context
 
 ADR-0448 admits typed arrays using native `structuredClone`. Node v24.16.0

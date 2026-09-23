@@ -48,6 +48,13 @@ describe('advanced Node IPC serialization faults', () => {
     expect(advanced({ after: true })).toEqual({ after: true });
   });
 
+  it('rejects top-level BigInt while admitting nested BigInt', () => {
+    expect(() => advanced(9n)).toThrow(
+      expect.objectContaining({ name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE' }) as Error,
+    );
+    expect(advanced({ big: 9n })).toEqual({ big: 9n });
+  });
+
   it('rejects a nested Buffer rather than silently changing its brand', () => {
     expect(() => advanced({ nested: [Buffer.from([1, 2])] })).toThrow(
       /child_process\.serialization\.advanced\.Buffer/u,
@@ -142,5 +149,76 @@ describe('advanced Node IPC serialization faults', () => {
 
     map.set('key', new SharedArrayBuffer(2));
     expect(() => advanced({ map })).toThrow(/SharedArrayBuffer.*could not be cloned/u);
+  });
+
+  it('rejects a raw SharedArrayBuffer after its prototype is replaced', () => {
+    const shared = new SharedArrayBuffer(2);
+    Object.setPrototypeOf(shared, Object.prototype);
+    expect(() => advanced({ shared })).toThrow(/could not be cloned/u);
+  });
+
+  it('inspects Map internal entries after its prototype is replaced', () => {
+    const map = new Map<string, unknown>([['key', Buffer.from([1, 2])]]);
+    Object.setPrototypeOf(map, Object.prototype);
+    expect(() => advanced({ map })).toThrow(/child_process\.serialization\.advanced\.Buffer/u);
+  });
+
+  it('inspects Set internal entries after its prototype is replaced', () => {
+    const set = new Set<unknown>([new SharedArrayBuffer(2)]);
+    Object.setPrototypeOf(set, Object.prototype);
+    expect(() => advanced({ set })).toThrow(/could not be cloned/u);
+  });
+
+  it('rejects an ordinary typed array after its prototype is replaced', () => {
+    const typed = new Uint8Array([1, 2]);
+    Object.setPrototypeOf(typed, Object.prototype);
+    expect(() => advanced({ typed })).toThrow(
+      /child_process\.serialization\.advanced\.host-object/u,
+    );
+  });
+
+  it('rejects a Buffer with a replaced prototype instead of sending Uint8Array', () => {
+    const buffer = Buffer.from([1, 2]);
+    Object.setPrototypeOf(buffer, Object.prototype);
+    expect(() => advanced({ buffer })).toThrow(
+      /child_process\.serialization\.advanced\.host-object/u,
+    );
+  });
+
+  it('rejects an ordinary DataView after its prototype is replaced', () => {
+    const ordinaryView = new DataView(new ArrayBuffer(2));
+    Object.setPrototypeOf(ordinaryView, Object.prototype);
+    expect(() => advanced({ ordinaryView })).toThrow(
+      /child_process\.serialization\.advanced\.host-object/u,
+    );
+  });
+
+  it('keeps a shared DataView named loud after its prototype is replaced', () => {
+    const sharedView = new DataView(new SharedArrayBuffer(2));
+    Object.setPrototypeOf(sharedView, Object.prototype);
+    expect(() => advanced({ sharedView })).toThrow(
+      /child_process\.serialization\.advanced\.shared-view/u,
+    );
+  });
+
+  it('rejects explicit ArrayBuffer/view aliases instead of retaining shared mutations', () => {
+    const backing = new ArrayBuffer(8);
+    const view = new Uint8Array(backing, 2, 3);
+    for (const payload of [
+      { backing, view },
+      { view, backing },
+      new Map<string, unknown>([
+        ['backing', backing],
+        ['view', view],
+      ]),
+    ]) {
+      expect(() => advanced(payload)).toThrow(
+        /child_process\.serialization\.advanced\.arraybuffer-view-alias/u,
+      );
+    }
+    const standalone = advanced({ view: new Uint8Array([1, 2]) }) as {
+      view: Uint8Array;
+    };
+    expect([...standalone.view]).toEqual([1, 2]);
   });
 });

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Inspect advanced IPC internal brands after prototype changes; reject hidden SAB, Buffer, and unsupported views (ADR-0457).
+- Reject explicit ArrayBuffer/view aliases in advanced IPC before they change data; reject top-level BigInt with Node's send error (ADR-0458).
+
 - Bind process stdio identity to the active bootstrap process for `Readable.pipe` (ADR-0455).
 
 - Validate admitted Symbol keys at runtime and keep CJS `with` writes behind the Function ceiling.

@@ -11,6 +11,10 @@ Date: 2026-09
 ArrayBuffer-backed views. SAB-backed views cannot use native structured-clone
 passthrough faithfully and now throw a named ceiling before posting.
 
+**Corrected (2026-09-23, ADR-0458):** an explicit ArrayBuffer and a view over it
+cannot share a successful advanced IPC graph: Node breaks that alias, while
+native structured clone preserves it. That graph now throws a named ceiling.
+
 ## Context
 
 Vitest 4.1.11 starts its default pool with `fork(...,

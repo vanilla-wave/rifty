@@ -72,6 +72,7 @@ const c: ParityCase = {
           for (const [label, candidate] of [
             ['missing', undefined],
             ['function', () => {}],
+            ['bigint', 9n],
             ['nested-function', { fn() {} }],
           ]) {
             try {
@@ -110,7 +111,8 @@ const c: ParityCase = {
     '"missing":true,"bytes":"1,127,254","big":"13","set":"c,d",' +
     '"regexp":"/cd+/gm","error":"fail/branch","cycle":true}],["after"]],' +
     '"invalid":["missing:TypeError/ERR_MISSING_ARGS",' +
-    '"function:TypeError/ERR_INVALID_ARG_TYPE","nested-function:Error/no-code"],' +
+    '"function:TypeError/ERR_INVALID_ARG_TYPE","bigint:TypeError/ERR_INVALID_ARG_TYPE",' +
+    '"nested-function:Error/no-code"],' +
     '"invalidOption":"TypeError/ERR_INVALID_ARG_VALUE",' +
     '"connectedBefore":true,"connectedAfter":false,"exit":{"code":0,"signal":null}}\n',
 };

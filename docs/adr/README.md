@@ -102,6 +102,8 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0450 | Persistent VM script stack offsets |
 | 0454 | Reject unsupported shared-backed advanced IPC views |
 | 0455 | Bind process stdio identity for Readable.pipe |
+| 0457 | Inspect advanced IPC internal brands after prototype changes |
+| 0458 | Reject explicit ArrayBuffer view aliases in advanced IPC |
 
 ### runtime-wasi
 
@@ -418,6 +420,7 @@ superseded.
 | ADR | corrected by | note |
 |---|---|---|
 | 0448 broad typed-array claim | 0454 / note 2026-09-23 | SAB-backed views are a named loud ceiling; ArrayBuffer-backed views remain supported |
+| 0448/0454 ArrayBuffer-view graph | 0458 / note 2026-09-23 | Explicit backing/view aliases are named loud; standalone views keep type/bytes support |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
