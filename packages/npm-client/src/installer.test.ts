@@ -563,6 +563,50 @@ describe('install — package ingress preflight (ADR-0261)', () => {
 });
 
 describe('install — package.json defaults', () => {
+  it.each(['8.0.16', 'vite@8.0.16'])(
+    'pins a transitive vite edge with override %s',
+    async (target) => {
+      const db = new Map<string, Map<string, FakeRegistryEntry>>();
+      db.set(
+        'vitest',
+        new Map([
+          [
+            '4.1.11',
+            await makeEntry('vitest', '4.1.11', { vite: '^6.0.0 || ^7.0.0 || ^8.0.0' }),
+          ],
+        ]),
+      );
+      db.set(
+        'vite',
+        new Map([
+          ['8.0.16', await makeEntry('vite', '8.0.16')],
+          ['8.0.17', await makeEntry('vite', '8.0.17')],
+        ]),
+      );
+
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      await vfs.writeFile(
+        '/proj/package.json',
+        JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          devDependencies: { vitest: '4.1.11' },
+          overrides: { vite: target },
+        }),
+      );
+
+      const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+      expect(result.packages.filter((pkg) => pkg.name === 'vite')).toMatchObject([
+        { name: 'vite', version: '8.0.16', installPath: 'node_modules/vite' },
+      ]);
+      expect(result.lockfile.packages['node_modules/vite']?.version).toBe('8.0.16');
+      expect(await vfs.readFileText('/proj/node_modules/vite/package.json')).toContain(
+        '"version":"8.0.16"',
+      );
+    },
+  );
+
   it('reads dependencies, devDependencies, optionalDependencies, overrides, name, and version from package.json when called with only options', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('dep', new Map([['1.0.0', await makeEntry('dep', '1.0.0')]]));
