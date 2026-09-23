@@ -61,6 +61,7 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ fb441a51459a6555cc03791ad4c1e3198d55f58b
 - 2026-09-23 — promise widened from Symbol-const keys to every runtime key on the claimed path (map item 5 re-chart, ledger 2026-09-23); carrier = runtime key check, not the goal note's static Symbol proof; ADR-0444 records candidates and kill evidence.
 - 2026-09-23 — object keys: exact Node coercion via a lazy `Symbol.toPrimitive` proxy, not a loud throw and not eager coercion (evidence §O4/§O5; eager diverges).
 - 2026-09-23 — CJS twin (undici) rides the same helper; its rows trace to ADR-0444, not I6 (undici is not in the vitest tree, §S1).
