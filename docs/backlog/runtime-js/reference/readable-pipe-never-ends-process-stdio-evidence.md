@@ -159,3 +159,9 @@ Mutants vs the hardened forged-global row (reassignment held through source end)
 rifty `Writable` and `FileWriteStream` (probe: data, one `finish`, event order
 identical to base). Base and impl both report cb `err=null` where Node passes
 `undefined` (pre-existing).
+
+Gate re-pin: after `pnpm build:libs`, `check:esbuild-legacy-retirement` →
+`typescript-worker.js: published output exceeds the exact 2 MB carrier ceiling`;
+`ls -l` 10022694 bytes (= pin), `shasum -a 256` `39b3991611f5…46ca0` (pin `018ea49b3a19…b422`);
+`grep -c pipeCleanups typescript-worker.js` → 0; the file imports `chunk-XXXXXXXX.js`
+by content-hashed name, so a changed io chunk changes its sha at equal length.
