@@ -178,6 +178,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0399 | Preserve declared companion policy through retained-lock acquisition |
 | 0433 | Preserve Vite module URLs at the filesystem root |
 | 0435 | Follow npm tar root stripping for materialized installs |
+| 0451 | User override values follow npm's version/range reading |
 
 ### playground
 

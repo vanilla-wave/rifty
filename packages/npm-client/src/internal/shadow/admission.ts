@@ -3,7 +3,7 @@ import {
   type BuiltinShadowSubstitutionRecipe,
   builtinShadowSubstitutionCatalog,
 } from '@riftydev/shadow-registry/internal';
-import type { OverrideMap } from '../../overrides.ts';
+import { type OverrideMap, userOverrideSpec } from '../../overrides.ts';
 import { matchesRange } from '../../semver.ts';
 import { resolveEffectivePackageRequest } from '../../shadow-shims.ts';
 
@@ -28,14 +28,16 @@ export function builtinRecipeForRequest(
     (candidate) => candidate.trigger.name === name,
   );
   if (!recipe) return null;
+  // A user version/range override IS the edge spec the recipe admits (ADR-0451).
+  const requested = userOverrideSpec(name, parent, overrides) ?? range;
   // Replay admits only a CONSISTENT recorded fact: the pinned entry is the
   // attested product AND the recorded range semantically admits the trigger
   // version (npm refuses an out-of-sync lock too — `npm ci` EUSAGE).
   if (
     replayedEntryVersion !== attestedProductVersion(recipe) ||
-    !matchesRange(recipe.trigger.version, range)
+    !matchesRange(recipe.trigger.version, requested)
   ) {
-    assertShadowRecipeAdmission(recipe, range);
+    assertShadowRecipeAdmission(recipe, requested);
   }
   return recipe;
 }
