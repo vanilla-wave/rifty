@@ -17,6 +17,16 @@ FAIL: NotImplementedError: Not implemented: child_process.serialization.advanced
 
 node --import tsx tools/node-parity-runner/src/cli.ts fork-structured-serialization
 FAIL: physical-worker parity expected 1 typed-bootstrap Worker; constructed 0
+
+./node_modules/.bin/vitest run --project unit packages/runtime-js/src/internal/node-ipc-serialization.fault.test.ts
+4 failed: circular graph enters JSON.stringify; nested function, Buffer and
+accessor tests expected a loud error but none was thrown.
+
+./node_modules/.bin/vitest run --project unit packages/runtime-js/src/builtins/node-entry-runtime-config.test.ts -t "admits advanced program IPC"
+1 failed: TypeError: node-entry bootstrap launch.ipc must be none or json
+
+node --import tsx tools/node-parity-runner/src/cli.ts public-ipc-json
+1 case passed: default JSON sibling baseline
 ```
 
 Node v24.16.0 extra probe: `Buffer` survives advanced IPC as `Buffer`, but
