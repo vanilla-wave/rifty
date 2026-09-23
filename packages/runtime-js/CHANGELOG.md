@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- `fs.statfsSync`, `child_process.spawnSync` and `process.memoryUsage` (+ `memoryUsage.rss`) exist with Node's descriptor, so vitest 4.1.11 / tinyexec named imports link and `process.memoryUsage.bind(process)` works; every call throws `NotImplementedError('<module>.<member>')` (ADR-0443, `builtins/loud-members.ts`). The `NodeJS.ErrnoException` global type moved from `fs.ts` to `fs-errors.ts`.
+- `fs.statfsSync`, `child_process.spawnSync` and `process.memoryUsage` (+ `memoryUsage.rss`) exist with Node's descriptor, so vitest 4.1.11 / tinyexec named imports link and `process.memoryUsage.bind(process)` works; every call throws `NotImplementedError('<module>.<member>')` (ADR-0443, `builtins/loud-members.ts`). The internal `StatOptions` type moved from `fs.ts` to `fs-stats.ts`; `tests/published-dts.test.ts` builds the package d.ts and type-checks it without `@types/node`.
 
 - Register `node:path/posix` / bare `path/posix` as `require('node:path').posix` itself; `node:path/win32` stays an unregistered builtin miss.
 

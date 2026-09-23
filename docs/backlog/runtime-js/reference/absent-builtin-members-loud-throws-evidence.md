@@ -250,3 +250,27 @@ byte diff: 6 ranges, all chunk-filename renames (chunk-RUYOBWKQ→V3T6QJ2M, 5GD6
 ```
 
 Only the sha pin changes; bytes stay `10_022_694`.
+
+## G3 — published `builtins/fs` d.ts self-containment (Final+GREEN r1)
+
+Node v24.16.0, tsup 8.5.1, TypeScript 5.9.3. Carrier
+`packages/runtime-js/tests/published-dts.test.ts`: the package's tsup d.ts
+build (`tsup --dts-only --out-dir <tmp>`, cwd `packages/runtime-js`), then a
+standalone program over every emitted d.ts (`types: []`,
+`skipLibCheck: false`, `strict`, lib `es2022`+`dom`). Only diagnostics in
+emitted files count.
+
+```
+$ npx vitest run packages/runtime-js/tests/published-dts.test.ts
+pre-fix 5017ab6e1 sources (global in fs-errors.ts):
+  × every published d.ts type-checks without @types/node
+  + "/builtins/fs.d.ts:197 TS2503 Cannot find namespace 'NodeJS'." … 9 rows (:197-204, :328, :331)
+BASE c2ab221de fs.ts + fs-errors.ts:   ✓ … Tests 1 passed (1)
+fix (global back in fs.ts, StatOptions → fs-stats.ts):   ✓ … Tests 1 passed (1)
+```
+
+Reviewer's probe (`tsc -p`, `files: [<out>/builtins/fs.d.ts]`, `paths`
+`@riftydev/io` → io `dist/index.d.ts`) on the fixed d.ts build: `tsc exit 0`.
+The fixed `builtins/fs.d.ts` declares `declare global { namespace NodeJS … }`
+at :733. Of the 28 emitted d.ts files, the pre-fix build fails only in
+`builtins/fs.d.ts`.

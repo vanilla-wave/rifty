@@ -14,7 +14,7 @@ import { VfsError } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
-import { Stats } from './fs-stats.ts';
+import { type StatOptions, Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { statfsSync } from './loud-members.ts';
 
@@ -47,10 +47,6 @@ interface WriteFileOptions extends ReadFileOptions {
 interface MkdirOptions {
   recursive?: boolean;
   mode?: number;
-}
-
-interface StatOptions {
-  bigint?: boolean;
 }
 
 interface RmOptions {
@@ -1634,3 +1630,16 @@ const fs = {
   FSWatcher,
 };
 export default fs;
+
+// eslint-disable-next-line @typescript-eslint/no-namespace
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace NodeJS {
+    interface ErrnoException extends Error {
+      code?: string;
+      errno?: number;
+      path?: string;
+      syscall?: string;
+    }
+  }
+}
