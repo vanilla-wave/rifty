@@ -1,0 +1,161 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED принят; GREEN/merge продукта не подтверждены. Node oracle: 8 запусков совпали. Chromium воспроизвёл loader ceiling и exit 0 вместо 1. Tracked-файлы не изменены.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "74d8047da8e618815fd0155b535427b83d8224ce",
+  "unit_goal_source": "docs/backlog/runtime-js/vitest-run-acceptance.md; authority: docs/backlog/epics/vitest-run-in-browser/goal.md, User scenario, I1/I4/I5/I6/I7, Decisions; BASE 06153584bde6f23a88084b9089052eed913a247b..HEAD",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4 + I5 + I6: Chromium GREEN всех run-веток",
+      "location": "tests/e2e/vitest-install-override.spec.ts:115",
+      "summary": "Повторено: RIFTY_PLAYGROUND_PORT=5327 pnpm exec playwright test tests/e2e/vitest-install-override.spec.ts --project=chromium-heavy --workers=1 --retries=0 --reporter=list --output=/private/tmp/vitest-contract-review-results. Установка проходит; первый vitest run: module-loader.esm-global-function-assignment, Expected 1 / Received 0. Последующие reporter/pool/fixed assertions не исполнены."
+    },
+    {
+      "clause": "I7: окончательная compat-страница, индекс и loud ceilings",
+      "location": "docs/public/compat/vitest.md:27",
+      "summary": "Skeleton честный: ✅ только установка, run явно RED. После Chromium GREEN нужны окончательные I1–I6 rows, README index и фактические доказательства named ceilings для каждого исключённого пути. Текущий позитивный e2e эти ceilings не проверяет; goal не закрыт."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: чистая установка, точные версии, отсутствие вложенного Vite, wasm32 binding",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: default run, TS config/source/tests, исключённый root test, counts/diff, exit 1",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:97",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: изменение только test-файла, один файл/two passes, exit 0",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:121",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: npm test и verbose, оба состояния, counts/status и verbose test names",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:108",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: threads совпадает с default forks по failing/fixed results/status",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:112",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: реальный CLI/worker path достигает reporter results вместо loader ceiling/silent exit",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: точная пара/precondition; честный pre-acceptance skeleton; финальные rows/index обусловлены GREEN",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "docs/public/compat/vitest.md:3",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: одинаковый проект; failing default/threads/verbose, counts/diff и exit 1",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:87",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: fixed runs дают two passes/exit 0; npm test выполняет тот же script",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:123",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: версии и один Vite tree проверяются до запуска CLI",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/e2e/vitest-install-override.spec.ts:72",
+      "note": ""
+    },
+    {
+      "row": "Node oracle: v24.16.0/npm 11.17.0, Vitest 4.1.11/Vite 8.0.16; failing/fixed default/npm/verbose/threads",
+      "source": "frozen-artifact",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md:5",
+      "note": ""
+    },
+    {
+      "row": "Chromium RED: реальная установка проходит; первый CLI упирается в названный loader ceiling и неверный exit",
+      "source": "frozen-artifact",
+      "trace": "I1 + I4 + I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md:37",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

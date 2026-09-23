@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: e2e acceptance — the vitest scenario runs on both pools and the compat page claims the exact pair
 created: 2026-09-15
 why: the goal closes only on observable proof: a Chromium e2e running the scenario (install, failing run exit 1, fixed run exit 0, threads == forks) plus a `vitest.md` page in `docs/public/compat/` with ✅/❌ rows — source greps and shimmed probes do not close acceptance
@@ -52,6 +52,7 @@ history for exit status, not printed status text. Timing/ANSI are unclaimed.
 
 ## Decisions
 
+- ready-verdict: 2026-09-23 — Contract+RED @ 74d8047da8e618815fd0155b535427b83d8224ce
 - 2026-09-23 — acceptance reuses the already-green install e2e; stdout assertions follow Node counts/diff/file names and terminal history exit, never timing or ANSI.
 - 2026-09-23 — compat skeleton records current RED truth; I7 ✅ rows and README index wait for end-to-end GREEN.
 
