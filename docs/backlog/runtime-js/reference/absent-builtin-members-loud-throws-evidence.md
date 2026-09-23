@@ -236,3 +236,17 @@ other named builtin import in the tree misses. Load-time `.bind` reads
 (`grep -rhoE '(process|fs|…)\.[A-Za-z_]+\.bind\(…\)'`): `process.memoryUsage`
 (this unit), `process.exit`/`send` (`init-forks`, fork IPC present),
 `on`/`off`/`listeners`/`removeAllListeners` (EventEmitter) — none absent.
+
+## G2 — `typescript-worker.js` re-pin (`check:esbuild-legacy-retirement`)
+
+`pnpm build:libs` at HEAD vs the same worktree with the four BASE builtin
+sources restored (BASE build reproduces the prior pin `4372af44…`):
+
+```
+base 4372af445707dc0c9d299d1ab4de14ccb763e5ebad4a20f05d286ab0374a764a 10022694
+head 093e9bc9f65230903c5461049662e88a388787e3c50f72c2c9744a7621d6e635 10022694
+byte diff: 6 ranges, all chunk-filename renames (chunk-RUYOBWKQ→V3T6QJ2M, 5GD6TZ3O→MYB3RH5D ×2,
+35RCSUTI→TORL2J7K, WSEOARYA→JBV4FHH5, module-loader-OXJPKURZ→FP4AWNXA)
+```
+
+Only the sha pin changes; bytes stay `10_022_694`.
