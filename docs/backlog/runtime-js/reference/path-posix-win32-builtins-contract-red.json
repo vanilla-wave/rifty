@@ -1,0 +1,144 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS (no blocker): promise matches Node v24.16.0, both REDs fail now for the right reason and discriminate identity mutants; proceed to IMPLEMENT; concerns are NOTE.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/path-posix-win32-builtins.md @ 26fff2916c5de06b3b4cb8298db14bc45dc7f7a5 (BASE 325ae797c0406453aed61b3a4e5d16f9c219d5ea); goal docs/backlog/epics/vitest-run-in-browser/goal.md I6; evidence docs/backlog/runtime-js/reference/path-posix-win32-builtins-evidence.md; oracle host Node v24.16.0 / npm 11.17.0",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117-121",
+      "summary": "node:path/posix wall only is this unit; remaining I6 walls (builtin static names, loud members, guard precision) open in map items 3-5."
+    },
+    {
+      "clause": "I1-I5, I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md",
+      "summary": "Other invariants open in map items 1, 6-13; goal closes only at item 12 e2e acceptance."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: ESM `import { join } from 'node:path/posix'` links, join('a','b') is a/b; default, namespace default and dynamic import are the path.posix object",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-import.case.ts:10-23",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: CJS require('node:path/posix') and bare require('path/posix') return require('node:path').posix itself; isBuiltin both spellings; builtinModules includes path/posix",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-require.case.ts:9-32",
+      "note": ""
+    },
+    {
+      "row": "Parity case 1: posix-subpath-import (esm) expected `join a/b /y/z.js`, `default true`, `namespace true true`, `dynamic true true` (Node v24.16.0)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-import.case.ts:22-24",
+      "note": ""
+    },
+    {
+      "row": "Parity case 2: posix-subpath-require (cjs, isolated probes) expected `node:path/posix true`, `path/posix true`, `join a/b`, `isBuiltin true true`, `builtinModules true` (Node v24.16.0)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-require.case.ts:26-32",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/path-posix-win32-builtins.md:61",
+          "evidence": "Rifty baseline probe (createModuleLoader(MemoryFsSync), scratch @ 26fff2916): `win32 === posix true`, `win32.sep \"/\"`; Node v24.16.0 `node w.cjs`: `win32 === posix false`, `win32.sep \"\\\\\"`, `win32.join \"a\\\\b\"`. `ls docs/backlog/runtime-js/ | grep win32` → no `path-win32-namespace.md`.",
+          "summary": "Pre-existing silent `path.win32 === posix` alias (POSIX answers under a Windows name) is now recorded only as an 'owed' capture `runtime-js/path-win32-namespace` in a Decisions line; file the backlog item (rifty-to-backlog, owner/trigger as written) in this slice so the gap is not a silent backlog before Final+GREEN.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:14-15",
+          "evidence": "",
+          "summary": "Map item 2 still reads '`node:path/posix` and `node:path/win32` registered from the existing namespaces'; the ready contract narrowed to path/posix (Decisions 2026-09-23 scope). Goal/ledger unchanged, no user-traced row dropped (draft had no rows; tree scan confirms path/win32 is off the claimed path), but the live map line is stale — update at re-chart.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tests/conformance/builtins/path.test.ts:81-100",
+          "evidence": "git diff 325ae797c..HEAD --stat: only contract, evidence, conformance test (pure addition, existing assertions untouched) and 2 parity cases; no packages/ source change (no implementation in diff). PR-4: no gate/oracle/lane config changed.",
+          "summary": "Diff is contract + evidence + REDs + one ceiling pin only; nothing outside the unit.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tools/node-parity-runner/cases/path/posix-subpath-import.case.ts:10-24",
+          "evidence": "Executed in scratch @ 26fff2916 (host Node v24.16.0): `pnpm -s test:parity posix-subpath` → import ✗ `ModuleLoadError: Built-in 'node:path/posix' is not implemented`; require ✗ diff `threw MODULE_NOT_FOUND` x3, `isBuiltin false false`, `builtinModules false`; PARITY-EXIT=1. Node side via runInNode: both outputs === expected. Mutants in builtins/index.ts: M0 `() => pathModule.posix` → both ✓ all cases match; M1 `() => pathModule` → ✗ both (default/namespace/dynamic false; require identity false); M2 `() => ({...pathModule.posix})` → ✗ both (same identity lines false); M3 M0 + `registerBuiltin('path/win32', () => pathModule.win32)` → parity ✓, conformance ceiling × `AssertionError: expected function to throw an error, but it didn't`. Ceiling passes at HEAD (9/9). tsc -p tools/node-parity-runner exit 0; root tsc: 0 errors in new files. backlog:check OK, check:contract-drift OK, check:parity-coverage ok. Oracle re-probed on Node v24.16.0: all contract oracle lines hold; tree scan (npm 11.17.0 vitest 4.1.11/vite 8.0.16/rolldown 1.0.3 + @rolldown/binding-wasm32-wasi 1.0.3 deps + lightningcss-wasm-1.32.0 shadow tgz): only @vitest/mocker/dist/node.js:7 imports path/posix, no path/win32 import.",
+          "summary": "REDs fail now for the named reason, pass only with the identity-correct registration; oracle and tree-scan facts reproduce.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/path-posix-win32-builtins.md:53-56",
+          "evidence": "Node v24.16.0: `typeof path.posix.posix/win32/matchesGlob/_makeLong` → `object object function function`. Rifty baseline probe: `posix.posix undefined`. Registering path.posix as node:path/posix exposes these as silent `undefined` on property access (Out of scope names only the named-import SyntaxError); `_makeLong` has no backlog owner.",
+          "summary": "Newly exposed node:path/posix object answers `.posix`/`.win32`/`.matchesGlob`/`._makeLong` with silent undefined (Node: object/object/function/function); state it in the compat modules.md note at implementation and give `_makeLong` a tracked owner.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/path-posix-win32-builtins.md:47-51",
+          "evidence": "Node v24.16.0 esm.mjs: `path===posix true`, `isBuiltin(..)` and `builtinModules.includes('path/win32')` true. Rifty baseline probe: `path === posix false`; bare `require('path/win32')` → `Error MODULE_NOT_FOUND \"Cannot find module 'path/win32'\"` (package-miss wording); ceiling test pins only the `node:` spelling (tests/conformance/builtins/path.test.ts:81-100).",
+          "summary": "Unrecorded/unpinned divergences around the claim: rifty `path !== path.posix` so `require('path/posix') === require('path')` is false (Node true, not listed in Out of scope); bare `path/win32` gives a package-miss message and `isBuiltin('path/win32')` false (silent to isBuiltin-driven tools such as @vitest/mocker redirect.js:70) — record in Out of scope/compat; optionally pin bare spelling.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "26fff2916c5de06b3b4cb8298db14bc45dc7f7a5"
+}

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Register `node:path/posix` / bare `path/posix` as `require('node:path').posix` itself; `node:path/win32` stays an unregistered builtin miss.
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

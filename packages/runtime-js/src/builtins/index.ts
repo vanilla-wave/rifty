@@ -71,6 +71,9 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   runtimeJsBuiltinsRegistered = true;
 
   registerBuiltin('path', () => pathModule);
+  // Node: `require('path/posix') === require('path').posix`. `path/win32` stays
+  // unregistered: `path.win32` aliases posix (no Windows semantics).
+  registerBuiltin('path/posix', () => pathModule.posix);
   registerBuiltin('events', () => {
     const exports = EventEmitter as unknown as Record<string, unknown>;
     exports.EventEmitter = EventEmitter;
