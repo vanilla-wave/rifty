@@ -54,4 +54,6 @@ property keys are distinct. Oracle commands and output live in
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ 3c5effd90836f7744b84566cc1f4632f51cfc60d
+- 2026-09-23 — Reviewer concern: assert Function descriptor unchanged at throw; add during implementation.
 - 2026-09-23 — Reuse each loader's lexical scope walker; accept only syntactically proven Symbol calls and immutable bindings.
