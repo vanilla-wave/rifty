@@ -1,3 +1,5 @@
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import path from '../../../packages/runtime-js/src/builtins/path.ts';
 
@@ -70,5 +72,29 @@ describe('node:path', () => {
     expect(path.isAbsolute('x')).toBe(false);
     expect(path.sep).toBe('/');
     expect(path.delimiter).toBe(':');
+  });
+});
+
+// Ceiling: no real Windows namespace exists (`path.win32` is the posix alias),
+// so `node:path/win32` stays a loud loader miss, never registered onto the
+// alias. Rifty-only: real Node resolves it (traps.md parity-win32-alias).
+describe('node:path/win32 ceiling', () => {
+  it('require/import of node:path/win32 throws the named builtin miss', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/app/main.cjs': "require('node:path/win32');",
+      '/app/main.mjs': "import 'node:path/win32';",
+    });
+    const loader = createModuleLoader(vfs);
+    const miss = {
+      code: 'MODULE_NOT_FOUND',
+      message: "Built-in 'node:path/win32' is not implemented",
+    };
+    expect(() => loader.require('./main.cjs', '/app/entry.js')).toThrow(
+      expect.objectContaining(miss),
+    );
+    await expect(loader.import('/app/main.mjs', '/app/__entry__.mjs')).rejects.toThrow(
+      expect.objectContaining(miss),
+    );
   });
 });
