@@ -5,7 +5,7 @@ import {
 } from '@riftydev/kernel';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
 
-export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v4' as const;
+export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v5' as const;
 
 export interface NodeEntryTerminalBootstrap {
   readonly stdinIsTTY: boolean;
@@ -24,8 +24,9 @@ export interface NodeEntryProgramLaunch {
   readonly kind: 'program';
   readonly bin: boolean;
   readonly remoteFs: boolean;
-  /** Public Node fork lane. Omitted and `none` are equivalent for non-fork launches. */
-  readonly ipc?: 'none' | 'json';
+  /** Public Node fork lane and its `serialization` (ADR-0448). Omitted and
+   * `none` are equivalent for non-fork launches. */
+  readonly ipc?: 'none' | 'json' | 'advanced';
   /** Host-only physical root behind the child's public `/` namespace. */
   readonly remoteFsRoot?: string;
   readonly nodeServe: boolean;
@@ -292,8 +293,8 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
     const remoteFsRoot = remoteFsRootValue(optionalOwnField(record, 'remoteFsRoot'), remoteFs);
     const ipc = optionalOwnField(record, 'ipc');
-    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json') {
-      throw new TypeError('node-entry bootstrap launch.ipc must be none or json');
+    if (ipc !== undefined && ipc !== 'none' && ipc !== 'json' && ipc !== 'advanced') {
+      throw new TypeError('node-entry bootstrap launch.ipc must be none, json or advanced');
     }
     const nodeServe = booleanOwnField(record, 'nodeServe', 'node-entry bootstrap launch');
     const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));

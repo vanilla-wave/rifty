@@ -3,6 +3,7 @@
 import { NotImplementedError, type Readable } from '@riftydev/io';
 import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
+import type { NodeIpcSerialization } from '../internal/node-ipc-serialization.ts';
 import {
   buildConfiguredNodeEntryWorkerEntry,
   nodeChildSpawnOptions,
@@ -11,6 +12,7 @@ import {
   readActiveNodeProcessBootstrap,
   readNodeProcessBootstrapIdentity,
 } from './process-bootstrap-identity.ts';
+import { stdinInheritHook } from './process-stdin-inherit.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -298,8 +300,26 @@ function forward(
   handle.once('close', cleanup);
 }
 
+/** Node's inherited fd: the child reads the parent's stdin, which stays unread and unheld. */
+function forwardStdin(source: ReadableSource, target: WritableTarget, handle: StdioHandle): void {
+  const inherit = stdinInheritHook(source);
+  if (inherit === undefined) {
+    forward(source, target, handle, true);
+    return;
+  }
+  const detach = inherit({
+    data: (chunk) => {
+      target.write(chunk);
+    },
+    end: () => {
+      target.end?.();
+    },
+  });
+  handle.once('close', detach);
+}
+
 export function forwardWorkerStdio(handle: StdioHandle, plan: WorkerStdioPlan): void {
-  if (plan.stdin) forward(plan.stdin, handle.stdin(), handle, true);
+  if (plan.stdin) forwardStdin(plan.stdin, handle.stdin(), handle);
   if (plan.stdout) forward(handle.stdout(), plan.stdout, handle, false);
   if (plan.stderr) forward(handle.stderr(), plan.stderr, handle, false);
 }
@@ -307,7 +327,8 @@ export function forwardWorkerStdio(handle: StdioHandle, plan: WorkerStdioPlan): 
 export interface SpawnWorkerChildOptions {
   readonly cwd?: string;
   readonly env?: Record<string, string>;
-  readonly fork: boolean;
+  /** The fork's public IPC lane (`serialization`); `none` for a plain spawn. */
+  readonly ipc: 'none' | NodeIpcSerialization;
 }
 
 /** Translate a validated `node <script>` launch to one real remote-FS Worker. */
@@ -324,7 +345,7 @@ export function spawnWorkerChild(
     kind: 'program',
     bin: false,
     remoteFs: true,
-    ipc: options.fork ? 'json' : 'none',
+    ipc: options.ipc,
     nodeServe: true,
   });
   const spec: SpawnWorkerSpec = {

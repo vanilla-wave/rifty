@@ -29,9 +29,14 @@ import {
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
 import { buildChildExecutionPlan } from '../internal/node-entry-path.ts';
 import { nodeIpcChannel } from '../internal/node-ipc-channel.ts';
-import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
+import {
+  type NodeIpcSerialization,
+  decodeNodeIpcMessage,
+  encodeNodeIpcMessage,
+} from '../internal/node-ipc-serialization.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
+import { inspect } from '../repl/inspect.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
 import {
   type BufferedExecutionCallback,
@@ -88,7 +93,7 @@ interface SpawnOptions {
   env?: Record<string, string>;
   stdio?: SpawnStdio;
   silent?: boolean;
-  serialization?: 'json' | 'advanced';
+  serialization?: NodeIpcSerialization;
   /** Internal flag set by `fork()` to enable IPC. */
   __fork?: boolean;
 }
@@ -132,7 +137,8 @@ class ChildProcess extends EventEmitter {
 
   constructor(
     handle: ProcessHandle,
-    ipcEnabled: boolean,
+    /** The fork's IPC `serialization`; `null` without an IPC channel. */
+    ipc: NodeIpcSerialization | null,
     streams: {
       readonly stdout: Readable;
       readonly stderr: Readable;
@@ -170,7 +176,7 @@ class ChildProcess extends EventEmitter {
     handle.on('peererror', (error) => {
       this.emitToOwner('error', error instanceof Error ? error : new Error(String(error)));
     });
-    if (ipcEnabled) {
+    if (ipc !== null) {
       this.connected = true;
       this.channel = nodeIpcChannel('child_process');
       this.send = (message: unknown, ...unsupported: unknown[]): boolean => {
@@ -178,9 +184,11 @@ class ChildProcess extends EventEmitter {
           throw new NotImplementedError('child_process.send.arguments');
         }
         if (!this.connected) return false;
-        const serialized = serializeNodeIpcMessage(message);
-        if (handle.kind === 'worker') return handle.send(serialized);
-        queueMicrotask(() => this.inboundIpc.emit('childMessage', serialized));
+        const payload = encodeNodeIpcMessage(message, ipc);
+        if (handle.kind === 'worker') return handle.send(payload);
+        queueMicrotask(() =>
+          this.inboundIpc.emit('childMessage', decodeNodeIpcMessage(payload, ipc)),
+        );
         return true;
       };
       this.disconnect = (): void => {
@@ -190,7 +198,7 @@ class ChildProcess extends EventEmitter {
       };
       if (handle.kind === 'worker') {
         handle.on('message', (message) => {
-          this.emitToOwner('message', serializeNodeIpcMessage(message));
+          this.emitToOwner('message', decodeNodeIpcMessage(message, ipc));
         });
         handle.on('disconnect', () => this.finishIpc());
       }
@@ -322,18 +330,15 @@ function rejectedChildCwd(cwd: string): ChildProcess | null {
 }
 
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  if (opts.serialization === 'advanced') {
-    throw new NotImplementedError(
-      'child_process.serialization.advanced',
-      "Node's advanced IPC serializer is not implemented; use default JSON",
-    );
-  }
   const stdio = resolveWorkerStdio(
     opts.stdio,
     activeProcessStdio(),
     opts.__fork === true,
     opts.silent === true,
   );
+  // Node validates it after stdio, with or without an IPC channel.
+  const serialization = validateSerialization(opts.serialization);
+  const ipc = stdio.ipc ? serialization : null;
   if (opts.cwd !== undefined) {
     // Only an explicitly requested directory is checked: an inherited cwd is
     // where the parent already runs, and Node does not re-validate it either.
@@ -351,10 +356,10 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     const handle = spawnWorkerChild(command, args, {
       cwd: opts.cwd,
       env: opts.env,
-      fork: opts.__fork === true,
+      ipc: ipc ?? 'none',
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
-    const child = new ChildProcess(handle, stdio.ipc, {
+    const child = new ChildProcess(handle, ipc, {
       stdin: handle.stdin(),
       stdout: handle.stdout(),
       stderr: handle.stderr(),
@@ -364,7 +369,19 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     forwardWorkerStdio(handle, stdio);
     return child;
   }
-  return spawnViaSameRealm(command, args, opts, stdio);
+  return spawnViaSameRealm(command, args, { ...opts, serialization }, stdio, ipc);
+}
+
+function validateSerialization(value: unknown): NodeIpcSerialization {
+  if (value === undefined || value === 'json' || value === 'advanced') return value ?? 'json';
+  let inspected = inspect(value);
+  if (inspected.length > 128) inspected = `${inspected.slice(0, 128)}...`;
+  throw Object.assign(
+    new TypeError(
+      `The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received ${inspected}`,
+    ),
+    { code: 'ERR_INVALID_ARG_VALUE' },
+  );
 }
 
 function spawnViaSameRealm(
@@ -372,6 +389,7 @@ function spawnViaSameRealm(
   args: string[],
   opts: SpawnOptions,
   stdio: ReturnType<typeof resolveWorkerStdio>,
+  ipc: NodeIpcSerialization | null,
 ): ChildProcess {
   warnSameRealmFallbackOnce();
   // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
@@ -429,7 +447,7 @@ function spawnViaSameRealm(
   wiring.handle = handle;
   handle.on('stdout', (chunk) => stdout.push(chunk));
   handle.on('stderr', (chunk) => stderr.push(chunk));
-  const child = new ChildProcess(handle, stdio.ipc, {
+  const child = new ChildProcess(handle, ipc, {
     stdin,
     stdout,
     stderr,

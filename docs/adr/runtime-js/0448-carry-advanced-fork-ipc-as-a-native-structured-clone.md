@@ -94,7 +94,7 @@ refusal text. They differ in four places (evidence §Chromium):
    JSON lane already does. A launch-less URL Worker that shares the physical
    port stays unheld (draft PR #349 held it and kept the Workbench owner
    alive). Node also refs the channel for a `'disconnect'` listener; rifty
-   does not on either serialization, a discovery routed to backlog.
+   does not on either serialization: a recorded discovery (REV-12).
 
 ## Not claimed
 

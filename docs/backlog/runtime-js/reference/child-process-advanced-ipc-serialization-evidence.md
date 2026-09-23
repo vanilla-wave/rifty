@@ -383,3 +383,36 @@ exit 0 null
 
 A `'disconnect'` listener alone holds the child too; rifty counts only
 `'message'` — a discovery outside this unit (contract Decisions).
+
+## Inherited stdin (Node) — IMPLEMENT
+
+The browser-unit run of the same-realm program (Worker route in Chromium, fork's
+default stdio = inherit, terminal stdin open) printed Node's rows, then timed
+out: rifty forwarded the parent's `process.stdin` with a `'data'` listener,
+which made it flowing and held the parent after the child closed (both
+serializations). Node shares fd 0 instead:
+
+```
+$ cat main.cjs    fork('child.cjs', [], {}); on child exit print process.stdin.readableFlowing; on parent exit print elapsed < 3000
+$ cat child.cjs   process.stdin.on('data', d => console.log('child-got', …)); setTimeout(() => process.exit(0), 300)
+$ (printf 'hello\n'; sleep 6) | node main.cjs     (v24.16.0; stdin pipe open 6 s)
+child-got "hello\n"
+child-exit 0 stdin-flowing null
+parent-exit-after-ms<3000 true
+```
+
+The child reads the input; the parent's stdin is never read (`readableFlowing`
+stays `null`) and does not hold the parent. RED:
+`packages/runtime-js/src/builtins/child_process-inherit-stdin.test.ts`
+(parent hold `1`, expected `0`).
+
+## Buffer-brand edges (IMPLEMENT probe, not new contract rows)
+
+A scratch Worker-route parity case (deleted after the run) sent through the
+echo child, parent → child → parent, and matched live Node v24.16.0 row for
+row: a `Buffer` subclass instance and a `Buffer` with own `constructor`
+`Uint8Array` → `Uint8Array`; a `DataView` and a `Float64Array` with own
+`constructor` `Buffer` → `Buffer` of their bytes; `Buffer` as Map key and value,
+Set member and Error `cause`; an own `"__proto__"` key beside a Buffer; a sparse
+array holding a Buffer; one Buffer reached twice (stays one object); a pooled
+`subarray`; a `Uint16Array` nested in a Map value.
