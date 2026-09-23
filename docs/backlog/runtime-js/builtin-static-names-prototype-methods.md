@@ -56,6 +56,8 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ 5f355a65423d5bb3db6e1bfed48e9e18e9717b6f
+
 - 2026-09-23 — mechanism: reshape `NodeProcess` (per-instance own enumerable members; `exitCode` own accessor defined in the constructor); the static-name rule in `cjs-interop-authority.ts` stays `Object.keys` (ADR-0348 §2). The draft's "include prototype methods" is rejected: a prototype walk exports EventEmitter methods and `pushStdin`, which Node rejects (evidence O2, O4, R4).
 - 2026-09-23 — scope: all seven prototype-hidden Node-own names, not only `cwd`. The builtin-wide scan shows the class is exactly these seven in `process` and nowhere else (evidence R1); one mechanism removes the whole class.
 - 2026-09-23 — no ADR: ADR-0348's rule is unchanged and the shape is Node's; the CHANGELOG line records it (DEC-1, reversible).
