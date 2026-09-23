@@ -1,14 +1,15 @@
 {
-  "overall_verdict": "concern",
-  "merge_call": "Contract+RED принят с advisory concern; переходить к IMPLEMENT, merge только после Final+GREEN.",
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS; переходить к IMPLEMENT, merge только после независимого Final+GREEN.",
   "checkpoint": "Contract+RED",
-  "unit_goal_source": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md @ 3c5effd90836f7744b84566cc1f4632f51cfc60d; BASE origin/main 0c4c1b070042a7a3079888cae92f25f15db24cdf; goal docs/backlog/epics/vitest-run-in-browser/goal.md I6",
+  "reviewed_sha": "fb69d4fa6a691d82b0ee51ce365dac835d859cd0",
+  "unit_goal_source": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md @ fb69d4fa6a691d82b0ee51ce365dac835d859cd0; BASE origin/main 0c4c1b070042a7a3079888cae92f25f15db24cdf; goal docs/backlog/epics/vitest-run-in-browser/goal.md I6; Node v24.16.0 runInNode: ESM/CJS both {\"values\":[7,8,9],\"descriptor\":true}; parity RED exit 1 with matching CJS/ESM global-function-assignment ceilings; unsafe-key suite 8/8 pass with descriptor assertion",
   "unit_residuals": [],
   "goal_residuals": [
     {
       "clause": "I6 / guard-precision",
       "location": "docs/backlog/epics/vitest-run-in-browser/map.md:21",
-      "summary": "Реализация Symbol-key guard и независимый Final+GREEN ещё требуются; этот checkpoint доказал только oracle и RED."
+      "summary": "Реализация Symbol-key guard и независимый Final+GREEN ещё требуются; этот checkpoint доказал oracle и изолированные RED."
     },
     {
       "clause": "I1-I5, I7 and composed scenario",
@@ -31,7 +32,7 @@
       "source": "acceptance",
       "trace": "ADR-0171",
       "status": "pass",
-      "citation": "packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:5",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:5; packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:33; packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:39",
       "note": ""
     },
     {
@@ -54,16 +55,8 @@
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:31",
-          "evidence": "node_modules/.bin/vitest run packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts -> 1 file passed, 8 tests passed. The assertions observe only the eventual named throw; lines 39-40 restore Function without asserting it was unchanged at throw time.",
-          "summary": "Unsafe-key REDs do not directly discriminate a matching error thrown after mutation, although Acceptance 2 requires rejection before mutation. No executed surviving product mutant, so REV-4/REV-5 keep coverage pass; strengthen during implementation if useful.",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Mission and architecture",
@@ -100,6 +93,5 @@
       "verdict": "pass",
       "findings": []
     }
-  ],
-  "reviewed_sha": "3c5effd90836f7744b84566cc1f4632f51cfc60d"
+  ]
 }
