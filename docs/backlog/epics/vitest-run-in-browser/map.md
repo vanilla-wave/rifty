@@ -1,16 +1,13 @@
 # Map — vitest-run-in-browser
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). Items 1–4 passed
+finding compiled to `ready` at its own PICKUP (`RDY-1`). Items 1–5 passed
 Final+GREEN and are in the ledger. Where a child
 depends on another (8 after 7, 11 after 8, 12 after 1–11) the order is also
 recorded as `blocked_by`; the other children are independent.
 
 ## Items
 
-5. `runtime-js/symbol-key-global-write-guard-precision` — **guard-precision** — I6;
-   ESM+CJS Function guards stop rejecting `globalThis[<Symbol const>]` writes
-   (@vitest/utils, undici).
 6. `runtime-js/readable-pipe-never-ends-process-stdio` — **pipe-stdio** — I4;
    `Readable.pipe(process.stdout|stderr)` never calls `end()` (Node exemption).
 7. `runtime-js/process-lifecycle-events-exit-code` — **process-events** — I3;

@@ -1,0 +1,141 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Unit 5 можно принимать: прежний blocker устранён; независимо подтверждены BASE RED, parity 3/3, unit 28/28, regression 11/11, typecheck и Biome. Полный pr:check не запускался; goal не завершён. Рабочее дерево чистое.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "ee3ebf558fc263c46e68d8e8ed9e47ac4c926ade",
+  "unit_goal_source": "docs/backlog/runtime-js/symbol-key-global-write-guard-precision.md Acceptance 1/2, Parity 1/2 → I6 и ADR-0171; BASE f6ddf83ed → HEAD ee3ebf558; /private/tmp/rifty-multi-final-review.json, только unit 5. BASE esm.ts загружен через registerHooks только в память: committed exported-ESM case дал Node v24.16.0 {\"value\":7}, rifty — module-loader.esm-global-function-assignment. На HEAD тот же physical parity проходит. Дополнительно проверены 9 допустимых export-форм против Node и 7 shadow-форм с сохранением Function descriptor через require/import.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:100",
+      "summary": "Остаётся acceptance Worker keepalive: поздние сообщения, exit, unref; unit 8."
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:104",
+      "summary": "Остаётся acceptance lifecycle: uncaughtException, unhandledRejection, exit и exitCode; unit 7."
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "Остаётся Chromium acceptance forks: config.ts, TS-тесты, reporter, pass/fail counts, exit 1/0, npm test и verbose; unit 12."
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115",
+      "summary": "Остаются worker stdio/execArgv и end-to-end равенство результатов threads/forks; units 11/12."
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117",
+      "summary": "Symbol-guard repair доказан; загрузка и выполнение всего заявленного дерева vitest 4.1.11 в CLI и обоих пулах ещё требуют goal acceptance."
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
+      "summary": "Остаётся доказать compat closure точной пары vitest/vite: подтверждённые I1–I6 и loud ceilings для исключённых режимов; unit 12."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: ESM/CJS Symbol-key assignment и defineProperty исполняются с Node-совместимыми значениями; exported const больше не отклоняется.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:89; tools/node-parity-runner/cases/modules/symbol-global-write-esm.case.ts:3; tools/node-parity-runner/cases/modules/symbol-global-write-cjs.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: mutable/shadowed ключи сохраняют named ceiling до изменения Function.",
+      "source": "acceptance",
+      "trace": "ADR-0171",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:50; packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:105",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: ESM assignment/descriptor/Reflect совпадают с Node.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-write-esm.case.ts:3; tools/node-parity-runner/cases/modules/symbol-global-write-exported-esm.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: CJS assignment/descriptor/Reflect совпадают с Node.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/modules/symbol-global-write-cjs.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "ModuleLoader.require: исправлен наблюдаемый результат загрузки ESM с exported const Symbol-key.",
+      "source": "public-api",
+      "trace": "Acceptance 1 → I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:89",
+      "note": ""
+    },
+    {
+      "row": "ModuleLoader.import: исправлен наблюдаемый результат загрузки ESM с exported const Symbol-key.",
+      "source": "public-api",
+      "trace": "Acceptance 1 → I6",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/symbol-global-write-guard.test.ts:89; tools/node-parity-runner/cases/modules/symbol-global-write-exported-esm.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Зафиксированный oracle exported ESM: Node v24.16.0 возвращает {\"value\":7}; BASE отклоняет, HEAD совпадает.",
+      "source": "frozen-artifact",
+      "trace": "Acceptance 1 → I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/symbol-key-global-write-guard-precision-evidence.md:73; tools/node-parity-runner/cases/modules/symbol-global-write-exported-esm.case.ts:3",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

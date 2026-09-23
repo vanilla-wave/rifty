@@ -8,3 +8,4 @@
 
 - 2026-09-16 — landed refine + FIT set @ f872eb5c0 (reviewed revision for passes 1–3 = this set over main 51440931a).
 - 2026-09-23 — re-chart after overrides-spelling, path-posix, process-named-imports, loud-members (final-green PASS @ 06153584bde6f23a88084b9089052eed913a247b): I1 real Chromium install and first I6 import walls proven; items 5–12 remain. Review: `docs/backlog/runtime-js/reference/vitest-slices-1-4-final-green.json`.
+- 2026-09-23 — re-chart after Symbol guard precision + exported-const repair (final-green PASS @ ee3ebf558fc263c46e68d8e8ed9e47ac4c926ade): item 5 closed; items 6–12 remain, with Rolldown async work and dynamic setup keys observed on the Chromium acceptance path. Review: `docs/backlog/runtime-js/reference/symbol-key-global-write-guard-precision-final-green.json`.
