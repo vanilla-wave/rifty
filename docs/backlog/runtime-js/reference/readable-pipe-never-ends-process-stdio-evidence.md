@@ -210,3 +210,10 @@ cache under none of them. The same-realm child's `require('process')` returns
 `childProcess` without the registry (`child_process-exec.ts:484`). A loader
 `require('node:process')` under the in-process runner's swap still caches. That
 runner exists only for tests, and the behavior predates this unit.
+
+Gate re-pin after the fix (`pnpm pr:check` → `check:esbuild-legacy-retirement`
+✗ on `typescript-worker.js`): `ls -l` 10022694 bytes (= pin), `shasum -a 256`
+`449a05a92df1…0d35` (pin `39b3991611f5…46ca0`). The file is identical to the
+`bf44b7b36` build once `chunk-[A-Z0-9]{8}.js` is normalized. The only other
+difference is one content-hashed `module-loader-*.js` import;
+`grep -c 'readBuiltinUncached\|pipeCleanups'` → 0.
