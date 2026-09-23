@@ -92,3 +92,28 @@ and real diagnostics, owner startup, Buffer identity, Express/SQLite, Hono,
 Koa and Webpack HMR/reload. Exact compiler pin gate plus10 negative payload
 testsPASS. Packed-consumer and full PR gate run separately; the user scope
 questions remain open.
+
+Packed external consumer after cdf806fc9: PASS178.9s; installs only tarballs,
+fresh independently reserved port/Chromium, preview/HMR and packaging proofs.
+Full `pnpm pr:check`:23/25 lanesPASS; unit10636PASS/1FAIL/18SKIP and
+parity297/298PASS. Both failures are the unchanged frozen-Promise native-error
+criterion; failed unit file rerun once in isolation, stillRED. No test exclusion
+in the full gate. `check:pass-binding` correctly remains RED: no current bound
+Final+GREEN PASS; old MessagePort verdict remains historical evidence.
+
+Final composed dev proof on the same production source cdf806fc9: fresh5450,
+unchanged Vitest10runs + six installed/configured negative modes,2/2PASS2.1m.
+CI run35821064164 production and hosted lanes PASS; parity reports exactly
+public-ipc-advanced-fault and one failedcase. Other CI lanes still running at
+this record; no all-green CI claim.
+
+Independent whole-delivery verify @cdf806fc9: BLOCK, same B1 pending scope;
+production/packed/lifecycle/bootstrap repairs accepted, no new separate product
+blocker.201 coverage rows retained/extended. C5 public Worker-error wording
+narrowed to entry/preload/drain rejection with explicit timer-gap owner.
+Added retained-contract positive frozen/non-extensible/readonly-constructor
+record oracles: native clones all three, candidate rejects; targeted file now
+4RED/13PASS (the original frozen-Promise RED plus3cloneable-record REDs).
+These additional REDs expose the proposed narrowing; no criterion weakened.
+CI unit job also reproduced only original frozen-Promise failure at cdf806fc9
+(10636PASS/1FAIL/18SKIP). Both user answers still absent.

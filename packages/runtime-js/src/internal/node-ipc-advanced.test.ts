@@ -148,3 +148,24 @@ it.each(uncloneableSources)('rejects intrinsic %s without reading guest properti
     expect(reads).toBe(0);
   }
 });
+
+it.each(['frozen', 'non-extensible', 'readonly-constructor'])(
+  'preserves native-cloneable %s plain records under the retained full contract',
+  (mode) => {
+    const source = { value: 7, nested: { text: 'hello' } };
+    if (mode === 'frozen') Object.freeze(source);
+    else if (mode === 'non-extensible') Object.preventExtensions(source);
+    else
+      Object.defineProperty(source, 'constructor', {
+        value: 7,
+        writable: false,
+        configurable: false,
+      });
+    const expected: unknown = deserialize(serialize(source));
+    const actual = deserializeNodeIpcMessage(
+      structuredClone(serializeNodeIpcMessage(source, 'advanced')),
+      'advanced',
+    );
+    expect(actual).toEqual(expected);
+  },
+);

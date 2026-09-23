@@ -1,36 +1,36 @@
 {
   "overall_verdict": "blocker",
-  "merge_call": "Не merge: B1 и gate RED; нужен verify. Chromium: 2/2 e2e, 24/24 browser-unit PASS. I7 открыт, goal не закрыт.",
+  "merge_call": "Не merge: B1/full IPC contract остаётся RED; opaque-brand и I7 ждут пользователя. C2–C4 проверены; production/packed PASS, pr:check 2/25 RED, текущий CI не подтверждён.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "0b8daa7bd0ef86c5245ff6dce4ffc387545f9170",
-  "unit_goal_source": "PR351 implementation delivery I1–I6 + supporting ceilings; ready docs/backlog/epics/vitest-run-in-browser/goal.md и unit contracts из map.md при 0b8daa7bd0ef86c5245ff6dce4ffc387545f9170; BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf (main). Весь source diff; MessagePort 35bcb5934 только reusable evidence. I7 wording — предложение, не принятое изменение цели.",
+  "reviewed_sha": "cdf806fc93b6af762574ac1f4d39a4af1ab82d89",
+  "unit_goal_source": "PR351 whole-delivery verify; ready docs/backlog/epics/vitest-run-in-browser/goal.md и map contracts @cdf806fc93b6af762574ac1f4d39a4af1ab82d89. Original BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf (main); inspected entire delta 0b8daa7bd0ef86c5245ff6dce4ffc387545f9170→cdf806fc93b6af762574ac1f4d39a4af1ab82d89. Все 186 исходных coverage obligations сохранены/rebound; добавлены новые. Coverage pass означает discriminating carrier, не GREEN реализации: frozen-Promise carrier сейчас RED. I7 и opaque-brand narrowing пользователем не приняты.",
   "unit_residuals": [
     {
-      "clause": "Advanced IPC Acceptance 2 → I4, ADR-0326; ADR-0446",
-      "location": "packages/runtime-js/src/internal/node-ipc-advanced.ts:122",
-      "summary": "B1: сохранить native clone rejection для uncloneable intrinsic values независимо от prototype/realm; добавить RED обоих senders и sibling sweep."
+      "clause": "Advanced IPC Acceptance 1/2 → I4, ADR-0326; ADR-0446/0453",
+      "location": "packages/runtime-js/src/internal/node-ipc-advanced.ts:36",
+      "summary": "B1 частично закрыт: пять brands и editable Promise исправлены. Locked Promise имеет ненативную ошибку; frozen/locked plain records отвергаются вместо успешной сериализации. Proposed ceiling не принят; полный контракт и RED сохраняются."
     },
     {
-      "clause": "Обязательный зелёный pnpm pr:check перед Final+GREEN",
-      "location": "packages/kernel/src/index.ts:58",
-      "summary": "Текущий полный gate: lint, compiler-output attestation и exact kernel-export assertion RED; последний повторён изолированно и независимо. Нужны исправление/обоснованная миграция критериев и GREEN."
+      "clause": "Зелёный pnpm pr:check перед Final+GREEN",
+      "location": "packages/runtime-js/src/internal/node-ipc-advanced.test.ts:145",
+      "summary": "Полный root gate завершился RED 2/25: unit frozen-Promise и physical advanced-fault parity. Isolated RED подтверждён независимо. Lint/export assertion/compiler pin исправлены; после разрешения B1 нужен полный GREEN."
     },
     {
-      "clause": "Production/CI verification текущей доставки",
-      "location": "packages/workbench/src/workers/node-entry-bootstrap.ts:194",
-      "summary": "Dev proof подтверждён; production e2e текущего SHA отсутствует. PR CI относится к b4a3219c, не reviewed SHA. Нужен актуальный production/CI результат после ремонтов."
+      "clause": "Актуальная CI verification доставки",
+      "location": "packages/runtime-js/src/index.ts:47",
+      "summary": "Production 5449 8/8 и packed-consumer PASS подтверждены raw logs; прежний production residual закрыт. CI текущего reviewed SHA не проверен, остаётся verification residual."
     }
   ],
   "goal_residuals": [
     {
       "clause": "I7; User scenario 5",
       "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122",
-      "summary": "Blanket bans watch/other Vite не подтверждаются; goal.md неизменён, ответа пользователя нет. Proposed vitest.md не закрывает I7; PR/goal не готовы к closure."
+      "summary": "Watch/other-version blanket bans не доказаны; exact-guarantee wording остаётся предложением. goal.md неизменён, ответа нет; цель/PR не готовы к closure."
     },
     {
-      "clause": "I4 — required generic advanced IPC repair",
-      "location": "docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md:43",
-      "summary": "B1 нарушает синхронное отклонение неклонируемых значений; продолжение внутри этой доставки."
+      "clause": "I4; full advanced IPC Acceptance 1/2",
+      "location": "docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md:45",
+      "summary": "Второй независимый user fork: принять locked-object opaque-brand ceiling либо выполнить исходный native graph/error контракт. Ответа нет; B1 и полный RED не закрыты."
     }
   ],
   "goal_complete": false,
@@ -264,7 +264,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:192",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:211",
       "note": ""
     },
     {
@@ -272,7 +272,7 @@
       "source": "acceptance",
       "trace": "I5",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:144",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:163",
       "note": ""
     },
     {
@@ -280,7 +280,7 @@
       "source": "acceptance",
       "trace": "I5",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:179",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:198",
       "note": ""
     },
     {
@@ -288,7 +288,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:67",
+      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:85",
       "note": ""
     },
     {
@@ -296,7 +296,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:67",
+      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:85",
       "note": ""
     },
     {
@@ -304,7 +304,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:192",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:211",
       "note": ""
     },
     {
@@ -312,7 +312,7 @@
       "source": "acceptance",
       "trace": "I5",
       "status": "pass",
-      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:67",
+      "citation": "tests/browser-unit/worker-thread-lifecycle.spec.ts:85",
       "note": ""
     },
     {
@@ -320,7 +320,7 @@
       "source": "acceptance",
       "trace": "I5",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:179",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:198",
       "note": ""
     },
     {
@@ -336,7 +336,7 @@
       "source": "fault-matrix",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:207",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:226",
       "note": ""
     },
     {
@@ -352,7 +352,7 @@
       "source": "fault-matrix",
       "trace": "I5",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:144",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:163",
       "note": ""
     },
     {
@@ -360,31 +360,31 @@
       "source": "fault-matrix",
       "trace": "I5",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:179",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:198",
       "note": ""
     },
     {
       "row": "advanced IPC Acceptance 1: Rich graph в обе стороны: Buffer/brands/cycles/aliases/snapshot.",
       "source": "acceptance",
       "trace": "I4",
-      "status": "pass",
+      "status": "weak",
       "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:4",
-      "note": ""
+      "note": "B1: rich carrier не различает отказ для native-cloneable frozen/locked records; proposed opaque-brand ceiling не принят."
     },
     {
       "row": "advanced IPC Acceptance 2: Оба send синхронно отвергают invalid/clone/getter failures без dispatch.",
       "source": "acceptance",
       "trace": "I4+ADR-0326",
-      "status": "weak",
+      "status": "pass",
       "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:7",
-      "note": "B1: existing carrier пропускает неклонируемые значения после смены prototype."
+      "note": ""
     },
     {
       "row": "advanced IPC Acceptance 3: Disconnect сохраняет private kill; JSON unchanged.",
       "source": "acceptance",
       "trace": "I4+ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:78",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:95",
       "note": ""
     },
     {
@@ -400,16 +400,16 @@
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:49",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:75",
       "note": ""
     },
     {
       "row": "advanced IPC Parity cases 2: Sender fault/getter identity/order parity.",
       "source": "acceptance",
       "trace": "I4+ADR-0326",
-      "status": "weak",
+      "status": "pass",
       "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:7",
-      "note": "B1: existing carrier пропускает неклонируемые значения после смены prototype."
+      "note": ""
     },
     {
       "row": "advanced IPC Parity cases 3: Default JSON regression.",
@@ -423,16 +423,16 @@
       "row": "advanced IPC Fault matrix 1: Corrupt input обоих senders: sync error, no dispatch, healthy channel.",
       "source": "fault-matrix",
       "trace": "I4+ADR-0326",
-      "status": "weak",
+      "status": "pass",
       "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:7",
-      "note": "B1: existing carrier пропускает неклонируемые значения после смены prototype."
+      "note": ""
     },
     {
       "row": "advanced IPC Fault matrix 2: Parent/child codec selection, native graph, JSON unchanged.",
       "source": "fault-matrix",
       "trace": "I4+ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:49",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:75",
       "note": ""
     },
     {
@@ -440,11 +440,11 @@
       "source": "fault-matrix",
       "trace": "I4+ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:24",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:31",
       "note": ""
     },
     {
-      "row": "advanced IPC Fault matrix 4: Typed launch сохраняет advanced и отвергает старый protocol.",
+      "row": "advanced IPC Fault matrix 6: Typed launch сохраняет advanced и отвергает старый protocol.",
       "source": "fault-matrix",
       "trace": "ADR-0267+ADR-0446",
       "status": "pass",
@@ -452,11 +452,11 @@
       "note": ""
     },
     {
-      "row": "advanced IPC Fault matrix 5: Public disconnect не отключает private SIGUSR2.",
+      "row": "advanced IPC Fault matrix 7: Public disconnect не отключает private SIGUSR2.",
       "source": "fault-matrix",
       "trace": "ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:77",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:95",
       "note": ""
     },
     {
@@ -1072,7 +1072,7 @@
       "source": "public-api",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:192",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:211",
       "note": ""
     },
     {
@@ -1080,7 +1080,7 @@
       "source": "public-api",
       "trace": "I5",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:144",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:163",
       "note": ""
     },
     {
@@ -1088,7 +1088,7 @@
       "source": "public-api",
       "trace": "I5",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:144",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:163",
       "note": ""
     },
     {
@@ -1112,7 +1112,7 @@
       "source": "public-api",
       "trace": "ADR-0449+ADR-0460",
       "status": "pass",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:207",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:226",
       "note": ""
     },
     {
@@ -1143,9 +1143,9 @@
       "row": "parentPort message/onmessage listener lifetime",
       "source": "public-api",
       "trace": "ADR-0449",
-      "status": "weak",
-      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:123",
-      "note": "C3: on/remove carrier не различает onmessage setter без syncListeners; отдельного onmessage lifetime case нет."
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:144",
+      "note": ""
     },
     {
       "row": "child_process.fork startup options",
@@ -1160,7 +1160,7 @@
       "source": "public-api",
       "trace": "I4+ADR-0446",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:53",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:75",
       "note": ""
     },
     {
@@ -1168,23 +1168,23 @@
       "source": "public-api",
       "trace": "I4+ADR-0446",
       "status": "weak",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:62",
-      "note": "B1: prototype-erased uncloneables проходят оба sender."
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:71",
+      "note": "B1: rich carrier не различает отказ для native-cloneable frozen/locked records; proposed opaque-brand ceiling не принят."
     },
     {
       "row": "process.send advanced",
       "source": "public-api",
       "trace": "I4+ADR-0446",
       "status": "weak",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:43",
-      "note": "B1: prototype-erased uncloneables проходят оба sender."
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:51",
+      "note": "B1: rich carrier не различает отказ для native-cloneable frozen/locked records; proposed opaque-brand ceiling не принят."
     },
     {
       "row": "ChildProcess.disconnect advanced",
       "source": "public-api",
       "trace": "ADR-0326",
       "status": "pass",
-      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:78",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:95",
       "note": ""
     },
     {
@@ -1522,21 +1522,133 @@
       "status": "pass",
       "citation": "tests/e2e/fixtures/vitest-run/native-oracle.mts:26",
       "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 4: SAB view bytes snapshot при encounter; aliases retained.",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0446",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced-shared-views.test.ts:42",
+      "note": ""
+    },
+    {
+      "row": "advanced IPC Fault matrix 5: Intrinsic rejection независимо от realm/prototype; locked Promise RED сохранён.",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0446+ADR-0453",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-advanced.test.ts:130",
+      "note": ""
+    },
+    {
+      "row": "Editable Promise probe: exact descriptor restoration, no getters/reactions; rejection остаётся unhandled.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0446+ADR-0453",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/internal/node-ipc-promise-brand.test.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Eval→fork: native identity/lastIndexOf filter, parent argv unchanged; cloned-source ceilings сохранены.",
+      "source": "acceptance",
+      "trace": "I4+ADR-0456",
+      "status": "pass",
+      "citation": "tests/browser-unit/eval-fork-options.spec.ts:79",
+      "note": ""
+    },
+    {
+      "row": "process._eval: native eval-only own descriptor и ordinary-child absence.",
+      "source": "public-api",
+      "trace": "ADR-0339+ADR-0456",
+      "status": "pass",
+      "citation": "tests/browser-unit/eval-fork-options.spec.ts:30",
+      "note": ""
+    },
+    {
+      "row": "Trusted bootstrap допускает вторую runtime copy, затем закрывает acquisition.",
+      "source": "acceptance",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Unmarked URL/source закрыты до entry; никакого default open.",
+      "source": "acceptance",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:54",
+      "note": ""
+    },
+    {
+      "row": "Owner producer маркирует только host deployment entry.",
+      "source": "acceptance",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/workbench-browser-owner.test.ts:807",
+      "note": ""
+    },
+    {
+      "row": "Dev-server producer переносит explicit runtime-bootstrap role.",
+      "source": "acceptance",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/dev-server-child-config.test.ts:73",
+      "note": ""
+    },
+    {
+      "row": "TS relay маркирует entry; endpoint boot закрывает phase до requests.",
+      "source": "acceptance",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:37",
+      "note": ""
+    },
+    {
+      "row": "WorkerEntryDescriptor.role: host-owned runtime-bootstrap URL role.",
+      "source": "public-api",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/owner-child-dev-server.test.ts:83",
+      "note": ""
+    },
+    {
+      "row": "sealNodeRuntimeBootstrap: public close-only, acquisition после closure запрещён.",
+      "source": "public-api",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:45",
+      "note": ""
+    },
+    {
+      "row": "installNodeRuntime entry policy: defer только trusted URL/typed Node bootstrap.",
+      "source": "public-api",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:6",
+      "note": ""
+    },
+    {
+      "row": "bootTsLanguageServiceWorker closes capture перед endpoint registration.",
+      "source": "public-api",
+      "trace": "ADR-0465",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-bootstrap-phase.fault.test.ts:37",
+      "note": ""
+    },
+    {
+      "row": "typescript-worker.js: 10022748 bytes, SHA256 c5ac589d55ce145febf6eb66d8535bbbd61aa01912cdc59d97aa8d4cad8fbed2; cap/negative payload checks unchanged.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391+ADR-0465",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.test.ts:54",
+      "note": ""
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
       "verdict": "blocker",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "packages/runtime-js/src/builtins/worker-thread-port.ts:58",
-          "evidence": "Untracked onmessage mutant: только setter лишён syncListeners; direct probe actual adds ref 1, mutant 0. Исходный Chromium lifecycle suite: 17 PASS, 1 native-oracle race (C4); изолированный first-message-listener-refs: PASS. Команда: RIFTY_PLAYGROUND_PORT=5442 node node_modules/@playwright/test/cli.js test --config review-browser-mutant.config.ts tests/browser-unit/worker-thread-lifecycle.spec.ts. Логи /private/tmp/rifty-review-onmessage-mutant{,-isolated}.log.",
-          "summary": "C3: ADR-0449 включает onmessage liveness, но lifecycle fixtures вызывают только on/removeListener. Отдельной проверки setter нет; это слабое покрытие существующей listener-family, не новый scope blocker.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Mission and architecture",
@@ -1549,9 +1661,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "docs/public/compat/vitest.md:47",
-          "evidence": "Raw watch diagnostic: initial 1 failed | 1 passed, Watching for file changes, timeout/interrupt; Vite8.0.15 diagnostic PASS. goal.md diff отсутствует.",
-          "summary": "C1: wording соответствует наблюдениям, но изменение I7 не принято. Сохранить fork/residual до ответа; не объявлять цель закрытой.",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:56",
+          "evidence": "git diff 0b8daa7bd cdf806fc9 -- goal.md: пусто. Acceptance 1/2 и frozen-Promise native criterion сохранены; новые pending forks явно записаны в map/evidence.",
+          "summary": "Оба fork остаются user-owned. Ни предложенный opaque-brand ceiling, ни I7 wording не считаются принятыми; решений пользователя не подменяю.",
           "authority": ""
         }
       ]
@@ -1572,37 +1684,30 @@
       "findings": [
         {
           "severity": "blocker",
-          "location": "packages/runtime-js/src/internal/node-ipc-advanced.ts:122",
-          "evidence": "Scratch @0b8daa7bd; node --import tsx review-ipc-probe.mts → Node24: weakmap-severed/promise-severed Error, no dispatch; Rifty real physical Worker: NO_THROW у child.send и process.send. /private/tmp/rifty-review-ipc-probe.log. node --import tsx review-ipc-slots.mts → 6 intrinsic types × foreign/severed: Node Error, Rifty NO_THROW; /private/tmp/rifty-review-ipc-slots.log. Existing codec/VM tests: 24 PASS.",
-          "summary": "B1: instanceof теряет brand у WeakMap/WeakSet/Promise/SharedArrayBuffer/WeakRef/FinalizationRegistry после смены prototype либо realm; codec посылает {} вместо sync clone error. Класс sibling-drift/provenance-lie. Нет RED этих форм; sweep обоих senders и всех шести intrinsic siblings. Это реальный host input, без VM pre-return потери.",
-          "authority": "Acceptance 2 → I4, ADR-0326 (child-process-advanced-ipc-serialization); ADR-0446: nested uncloneables throw before dispatch; ADR-0453: slot dispatch independently of realm/prototype."
+          "location": "packages/runtime-js/src/internal/node-ipc-advanced.ts:36",
+          "evidence": "Scratch @cdf806fc9. node --import tsx verify-probes.mts: frozen record native OK {a:1}, rifty opaque-brand; frozen erased Promise native Error/could not be cloned, rifty NotImplementedError/opaque-brand. Targeted vitest: 97 PASS/1 RED; isolated node-ipc-advanced.test.ts: 13 PASS/1 RED. node --import tsx tools/node-parity-runner/src/cli.ts public-ipc-advanced: rich/listener/proxy MATCH, fault differs only locked Promise on both physical senders. Editable six-brand differential MATCH; Promise guards 6/6, SAB views 25/25. Logs /private/tmp/rifty-verify-cdf-{probes,targeted,intrinsic-isolated,physical,editable-physical}.log.",
+          "summary": "B1 сохраняется в известном pending narrowing: ambiguous locked input получает ненативный ceiling, включая cloneable frozen records. Класс intrinsic-provenance/sibling-drift. Frozen-Promise RED уже есть и не ослаблен; positive frozen-record RED отсутствует. Пять intrinsic siblings и editable Promise исправлены; нового отдельного product blocker не найдено.",
+          "authority": "child-process-advanced-ipc-serialization Acceptance 1/2 → I4, ADR-0326; ADR-0446 native rich graph/errors; ADR-0453 intrinsic dispatch independent of realm/prototype."
         }
       ]
     },
     {
       "axis": "Regressions",
+      "verdict": "blocker",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
       "verdict": "concern",
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/kernel/src/index.ts:58",
-          "evidence": "pnpm pr:check → failed (3/25): lint, check:esbuild-legacy-retirement, test:run; 10594 tests pass, 1 fail; isolated rerun still fail. Independent node node_modules/vitest/vitest.mjs run ... entry-bootstrap-public-surface.test.ts → expected 46 exports, received 48. /private/tmp/rifty-review-targeted.log.",
-          "summary": "C2: gate ещё красный: newline review JSON, изменившийся compiler artifact, два ADR-разрешённых kernel exports не внесены в exact assertion. Это verification residual, не доказательство лишних API.",
-          "authority": ""
-        },
-        {
-          "severity": "concern",
-          "location": "tests/browser-unit/fixtures/worker-lifecycle-cases.ts:41",
-          "evidence": "node --import tsx: 20 вызовов nativeWorkerLifecycle(first-message-listener-refs), Node24.16.0: run0 содержит message=late,exit=0,parent-exit=0; run2 содержит message=late,parent-exit=0. В mutant Chromium suite единственный сбой — дополнительный exit=0 против такого native oracle; isolated rerun PASS.",
-          "summary": "C4: native unref→first-listener fixture недетерминирован по наличию Worker exit; точное сравнение всей строки иногда даёт ложный RED. Рассмотреть invariant/partial-order assertion.",
+          "location": "docs/backlog/runtime-js/worker-threads-kernel-error-event.md:46",
+          "evidence": "Новая backlog boundary явно оставляет unhandled timer/global Worker.error открытым; docs/public/compat/modules.md:27 всё ещё говорит Actual runtime failures arrive before exit без этого ограничения.",
+          "summary": "C5: уточнить публичную Worker fatal-error строку до entry/preload/drain rejection. Асинхронный timer gap уже имеет owner; это документационный NOTE, не новое требование реализовать его в I1–I6.",
           "authority": ""
         }
       ]
-    },
-    {
-      "axis": "Ecosystem UX",
-      "verdict": "pass",
-      "findings": []
     }
   ],
   "adjudication": []
