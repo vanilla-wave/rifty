@@ -1104,6 +1104,70 @@ The same order makes a 0 ms `exit(0)` win (`p5-rej-exit0-0ms`: rifty
 `L|exit 0 0`, status 0; Node `L|exit 1 1`, status 1; 3/3); Node processes the
 rejection first (o18).
 
+## §F2 Final+GREEN r1 reception — rejection vs an already-queued Node callback
+
+Sibling sweep of the §F fault class by trigger (reception, 2026-09-23, HEAD
+`91f6fa4e1`). Every program starts with the §F `'exit'` row. Node: host
+v24.16.0, `node <f>.cjs` ×3 (`/tmp/vgoal/u7/rcp/node-oracle{,2}.txt`).
+Rifty: scratch browser-unit probe (real Chromium, live Node oracle, spec
+`/tmp/vgoal/u7/rcp/zz-u7-reception-probe.spec.ts` copied into
+`tests/browser-unit/` and removed after; `RIFTY_PLAYGROUND_PORT=5407 npx
+playwright test --config playwright.browser-unit.config.ts
+tests/browser-unit/zz-u7-reception-probe.spec.ts`), `node <f>.cjs` in the
+shell, 3 rounds. "no stderr" = the terminal output holds only the rows.
+
+| program (after the `'exit'` row) | Node rows, status | rifty rows, status (3/3) |
+|---|---|---|
+| `Promise.reject(new Error('V1')); setTimeout(() => process.exit(0), 1)` | `L\|exit 1 1`, stderr, 1 | same |
+| `Promise.reject(new Error('I1')); setImmediate(() => process.exit(0))` | `L\|exit 1 1`, stderr, 1 | `L\|exit 0 0`, no stderr, 0 |
+| `Promise.reject(new Error('I2')); setImmediate(() => console.log('L\|after'))` | `L\|exit 1 1`, stderr, 1 | `L\|after`, `L\|exit 1 1`, stderr, 1 |
+| `Promise.reject(new Error('F1')); fs.readFile(__filename, () => process.exit(0))` | `L\|exit 1 1`, stderr, 1 | `L\|exit 0 0`, no stderr, 0 |
+| `Promise.reject(new Error('F2')); fs.readFile(__filename, () => console.log('L\|after'))` | `L\|exit 1 1`, stderr, 1 | `L\|after`, `L\|exit 1 1`, stderr, 1 |
+| `Promise.reject(new Error('F3')); fs.stat(__filename, () => process.exit(0))` | `L\|exit 1 1`, stderr, 1 | `L\|exit 0 0`, no stderr, 0 |
+| `Promise.reject(new Error('S3')); fs.promises.readFile(__filename).then(() => process.exit(0))` | `L\|exit 1 1`, stderr, 1 | `L\|exit 0 0`, no stderr, 0 |
+| `setTimeout(() => { Promise.reject(new Error('S1')) }, 1); setTimeout(() => process.exit(0), 1)` | `L\|exit 1 1`, stderr, 1 | `L\|exit 0 0`, no stderr, 0 |
+| `setImmediate(() => { Promise.reject(new Error('S2')) }); setImmediate(() => process.exit(0))` | `L\|exit 1 1`, stderr, 1 | `L\|exit 0 0`, no stderr, 0 |
+| `setTimeout(() => { Promise.reject(new Error('T1')); setImmediate(() => process.exit(0)) }, 1)` | `L\|exit 1 1`, stderr, 1 | `L\|exit 0 0`, no stderr, 0 |
+| `fs.readFile(__filename, () => { Promise.reject(new Error('S5')); setImmediate(() => process.exit(0)) })` | `L\|exit 1 1`, stderr, 1 | `L\|exit 0 0`, no stderr, 0 |
+| `Promise.reject(new Error('N1')); process.nextTick(() => process.exit(0))` | `L\|exit 0 0`, 0 | same |
+| `unhandledRejection` listener prints `L\|rej`; `Promise.reject(new Error('S4')); setImmediate(() => console.log('L\|imm'))` | `L\|rej S4`, `L\|imm`, `L\|exit 0 undefined`, 0 | `L\|imm`, `L\|rej S4`, `L\|exit 0 undefined`, 0 |
+
+Node runs `runNextTicks()` (microtasks, then `processTicksAndRejections` while
+a rejection is pending) between timers and before each immediate:
+
+```
+$ node --expose-internals -e "const q=require('internal/process/task_queues'); console.log(q.setupTaskQueue().runNextTicks.toString())"
+function runNextTicks() {
+  if (!hasTickScheduled() && !hasRejectionToWarn())
+    runMicrotasks();
+  if (!hasTickScheduled() && !hasRejectionToWarn())
+    return;
+
+  processTicksAndRejections();
+}
+$ node --expose-internals -e "<internal/timers getTimerCallbacks(runNextTicks): processImmediate + processTimers source, lines naming runNextTicks>"
+function processImmediate() {
+        runNextTicks();
+function processTimers(now) {
+        runNextTicks();
+```
+
+So in Node a no-listener rejection is fatal before the next Node callback.
+Chromium reports it in its own `unhandledrejection` task, which it queues
+after the task that made the rejection. A Node callback queued before that
+task runs first. That covers a `setImmediate` message posted in the same
+turn, a timer that becomes ripe at the same time, and an fs callback, which
+rifty runs as a promise reaction in the same task. §F's trap-time terminal is
+correct once the trap runs, but the trap cannot run earlier. The only
+order-true route found is a fence: each Node callback (timer, immediate,
+fs/I/O callback) runs in a host task posted after the previous callback's
+task ended. By design reasoning (not executed), that costs at least two
+host-task hops per callback and moves `setImmediate` behind a same-turn
+`setTimeout(0)` (ADR-0085). Parity 10
+("never 0") is violated as declared for these programs. The ready
+Out-of-scope delivery-order row names only a same-turn `setTimeout(0)`.
+Routed as a `STOP-1a` fork (unit `## Decisions`).
+
 ## §V vitest 4.1.11 lifecycle uses (static)
 
 ```

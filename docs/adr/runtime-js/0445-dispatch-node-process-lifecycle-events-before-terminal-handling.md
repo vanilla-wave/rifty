@@ -52,8 +52,8 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
    the eval terminal, else its fatal terminal runs in the trap at once, as
    Node exits inside its handler: stderr, then the kernel exit request with
    `uint8(exitCode ?? 1)` read after the listeners; the drain records that
-   exit signal, not the reason, so no later task's `exit()` overrides the
-   status and nothing prints twice. An `exit()` that already requested the
+   exit signal, not the reason, so no task that runs after the trap overrides
+   the status and nothing prints twice. An `exit()` that already requested the
    kernel exit (in the fatal `'exit'`, or before the rejection is seen) keeps
    its status and nothing prints. A `nextTick` throw with no listener takes
    this path instead of being dropped: later ticks never run and the error
@@ -113,7 +113,11 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   `NodeLifecycleDeps` loses `readExitCode` (natural exit passes no code).
 - No-listener errors stay loud: stderr + status 1; a rejection's status is
   final at the trap on every kernel child (program, `.bin`, fork, execSync,
-  worker thread).
+  worker thread). A Node callback queued before Chromium's
+  `unhandledrejection` task (same-turn `setTimeout(0)`/`setImmediate`, a timer
+  ripe at the same time, an fs callback) still runs before the trap, and its
+  `exit(0)` exits 0 where Node exits 1 (evidence §F2; open `STOP-1a` fork in
+  the unit).
 - Zero-ref drains settle one host task later.
 - Explicit gaps (compat rows): `beforeExit` and `rejectionHandled` are not
   emitted; `setUncaughtExceptionCaptureCallback` is absent; the no-COI
