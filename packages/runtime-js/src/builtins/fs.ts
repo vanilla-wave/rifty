@@ -14,8 +14,9 @@ import { VfsError } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
-import { Stats } from './fs-stats.ts';
+import { type StatOptions, Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { statfsSync } from './loud-members.ts';
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
 type OpenFlags = string | number;
@@ -46,10 +47,6 @@ interface WriteFileOptions extends ReadFileOptions {
 interface MkdirOptions {
   recursive?: boolean;
   mode?: number;
-}
-
-interface StatOptions {
-  bigint?: boolean;
 }
 
 interface RmOptions {
@@ -1598,6 +1595,7 @@ const fs = {
   readdirSync,
   mkdirSync,
   statSync,
+  statfsSync,
   existsSync,
   unlinkSync,
   rmSync,

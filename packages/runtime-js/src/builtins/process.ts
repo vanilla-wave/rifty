@@ -33,6 +33,7 @@ import { serializeNodeIpcMessage } from '../internal/node-ipc-serialization.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { memoryUsage } from './loud-members.ts';
 import {
   type NodeEntryLaunch,
   type NodeEntryTerminalBootstrap,
@@ -490,6 +491,8 @@ export class NodeProcess extends EventEmitter {
   chdir = chdir;
   hrtime = hrtime;
   uptime = uptime;
+  // Named-loud (ADR-0443): vitest pool workers bind it at load; every call throws.
+  memoryUsage = memoryUsage;
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
   send?: (message: unknown, ...unsupported: unknown[]) => boolean;
