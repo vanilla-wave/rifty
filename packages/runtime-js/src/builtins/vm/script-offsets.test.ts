@@ -2,6 +2,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   Script,
+  type ScriptOptions,
   compileFunction,
   createContext,
   runInContext,
@@ -83,6 +84,40 @@ describe('vm offsets outside the host realm', () => {
       'ERR_OUT_OF_RANGE',
       'The value of "options.columnOffset" is out of range. It must be an integer. Received 1.5',
     ]);
+  });
+
+  it("each entry point validates offsets in Node's order", () => {
+    // Node v24.16.0 (evidence P9): compileFunction checks columnOffset first,
+    // every Script-backed entry point lineOffset first.
+    const both = { lineOffset: 'x', columnOffset: 'y' } as unknown as ScriptOptions;
+    const messageOf = (fn: () => unknown) => (thrownBy(fn) as Error).message;
+    const lineFirst = `The "options.lineOffset" property must be of type number. Received type string ('x')`;
+    expect(messageOf(() => runInThisContext('1', both))).toBe(lineFirst);
+    expect(messageOf(() => new Script('1', both))).toBe(lineFirst);
+    expect(messageOf(() => runInContext('1', createContext({}), both))).toBe(lineFirst);
+    expect(messageOf(() => runInNewContext('1', {}, both))).toBe(lineFirst);
+    expect(messageOf(() => compileFunction('return 1', [], both))).toBe(
+      `The "options.columnOffset" property must be of type number. Received type string ('y')`,
+    );
+    // runInContext checks its context before any option.
+    expect(messageOf(() => runInContext('1', {}, both))).toBe(
+      'The "contextifiedObject" argument must be an vm.Context. Received an instance of Object',
+    );
+  });
+
+  it('Script run options carry no construction options, as in Node', () => {
+    // Node v24.16.0 (evidence P9): a Script's run methods ignore offsets, cachedData & co.
+    const runOptions = {
+      lineOffset: 'x',
+      columnOffset: 1.5,
+      cachedData: 5,
+      produceCachedData: 'y',
+      importModuleDynamically: 7,
+    } as unknown as ScriptOptions;
+    const script = new Script('40 + 2');
+    expect(script.runInThisContext(runOptions)).toBe(42);
+    expect(script.runInContext(createContext({}), runOptions)).toBe(42);
+    expect(script.runInNewContext({}, runOptions)).toBe(42);
   });
 
   it('zero offsets keep every entry point working', () => {

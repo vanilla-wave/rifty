@@ -160,4 +160,78 @@ describe('vm offset projection shares the stack hook slot', () => {
     runInThisContext('0', { filename: '/virtual/reinstall.js', lineOffset: 1 });
     expect(lateFrame(inner)).toBe(LATE_FRAME);
   });
+
+  it('an error formatted inside a stack hook bypasses the owner without a plausible wrong position', () => {
+    const inner = lateInner();
+    let nested = '';
+    Error.prepareStackTrace = (error: Error) => {
+      try {
+        inner();
+      } catch (innerError) {
+        nested = String((innerError as Error).stack);
+      }
+      return String(error);
+    };
+    void new Error('outer').stack;
+    (Error as { prepareStackTrace?: unknown }).prepareStackTrace = undefined;
+
+    expect(nested).toContain('Error: late');
+    expect(nested).not.toMatch(/\/virtual\/late\.js:\d/);
+    expect(lateFrame(inner)).toBe(LATE_FRAME);
+  });
+
+  it('a zero-offset filename shaped like an offset identity is never read back as offsets', () => {
+    lateInner();
+    const filename = 'rifty-vm://5/5/x.js';
+    let stack = '';
+    try {
+      runInThisContext('throw new Error("id")', { filename });
+    } catch (error) {
+      stack = String((error as Error).stack);
+    }
+    expect(stack).toContain(`${filename}:1:7`);
+  });
+});
+
+// Chromium starts with no `Error.prepareStackTrace` (evidence §Chromium); the
+// host vitest realm has its own hook, so these rows remove it first.
+describe('vm offset projection shares the stack hook slot from an unset hook', () => {
+  beforeEach(() => {
+    Reflect.deleteProperty(Error, 'prepareStackTrace');
+  });
+
+  it('source-map windows opened after an offset script keep the owner when they restore an unset hook', async () => {
+    globalThis.__riftyOffsetInner = lateInner();
+    const before = Error.prepareStackTrace;
+    const loader = loaderFor(['a', 'b'], false);
+
+    await loader.import('./a.ts', '/work/__entry__.ts');
+    await loader.import('./b.ts', '/work/__entry__.ts');
+
+    expect(globalThis.__riftyOffsetFrames).toEqual([
+      '/work/a.ts:3:1',
+      LATE_FRAME,
+      '/work/b.ts:3:1',
+      LATE_FRAME,
+    ]);
+    expect(Error.prepareStackTrace).toBe(before);
+    expect(lateFrame(globalThis.__riftyOffsetInner)).toBe(LATE_FRAME);
+  });
+
+  it('a window around the first offset script restores the unset hook it read and keeps the owner', async () => {
+    globalThis.__riftyOffsetEvaluate = () => {
+      globalThis.__riftyOffsetInner = lateInner();
+    };
+    const loader = loaderFor(['a'], true);
+
+    await loader.import('./a.ts', '/work/__entry__.ts');
+
+    expect(globalThis.__riftyOffsetFrames).toEqual(['/work/a.ts:3:1', LATE_FRAME]);
+    const afterWindow = Error.prepareStackTrace;
+    (Error as { prepareStackTrace?: unknown }).prepareStackTrace = undefined;
+    expect(afterWindow).toBe(Error.prepareStackTrace);
+    const inner = globalThis.__riftyOffsetInner;
+    if (!inner) throw new Error('offset script was not evaluated');
+    expect(lateFrame(inner)).toBe(LATE_FRAME);
+  });
 });

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import asyncCase from '../../tools/node-parity-runner/cases/vm/run-in-this-context-offsets-async.case.ts';
 import callSitesCase from '../../tools/node-parity-runner/cases/vm/run-in-this-context-offsets-callsites.case.ts';
 import offsetsCase from '../../tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts';
 import { normalise } from '../../tools/node-parity-runner/src/diff.ts';
@@ -26,6 +27,7 @@ interface WorkerRun {
 const cases: ReadonlyArray<readonly [string, ParityCase]> = [
   ['vm/run-in-this-context-offsets', offsetsCase],
   ['vm/run-in-this-context-offsets-callsites', callSitesCase],
+  ['vm/run-in-this-context-offsets-async', asyncCase],
 ];
 
 for (const [name, parityCase] of cases) {

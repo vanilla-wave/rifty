@@ -84,6 +84,22 @@ vm.runInContext('1', ctx, {lineOffset:'1'}) → ERR_INVALID_ARG_TYPE …lineOffs
 vm.compileFunction('return 1', [], {columnOffset:1.5}) → ERR_OUT_OF_RANGE (same) ; {lineOffset:'1'} → ERR_INVALID_ARG_TYPE (same)
 ```
 
+## P9 — validation order per entry point (IMPLEMENT, 2026-09-23)
+
+```
+$ node order.cjs      # node v24.16.0; t(label, fn) prints name/code/message or ok
+compileFunction both  {lineOffset:'x', columnOffset:'y'} → TypeError ERR_INVALID_ARG_TYPE The "options.columnOffset" property must be of type number. Received type string ('y')
+runInContext both / runInNewContext both                 → … "options.lineOffset" … Received type string ('x')
+runInContext('1', {}, {lineOffset:'x'})                  → The "contextifiedObject" argument must be an vm.Context. Received an instance of Object
+new vm.Script('1').runInThisContext({lineOffset:'x'}) / ({cachedData:5}) → ok (run options carry neither)
+$ node runopts.cjs   # run options {lineOffset:'x', columnOffset:1.5, cachedData:5, produceCachedData:'y', importModuleDynamically:7, filename:9}
+Script#runInThisContext / #runInContext / #runInNewContext → ok 42 (all ignored)
+lineOffset 1e21 → … Received 1e_+21 ; 2**32+1 → Received 4_294_967_297 ; 2**32 → Received 4294967296 ; -Infinity → It must be an integer. Received -Infinity
+lineOffset {} → Received an instance of Object ; Symbol('s') → Received type symbol (Symbol(s)) ; function foo(){} → Received function foo ; "it's" → Received type string ("it's")
+{displayErrors:'x', lineOffset:'x'} → options.lineOffset first ; {filename:1} → The "options.filename" property must be of type string. Received type number (1)
+filename '' with {lineOffset:3, columnOffset:2} → at <anonymous>:4:9 ; CallSite getScriptNameOrSourceURL '' ; toString "<anonymous>:4:9"
+```
+
 ## P4–P6 — non-positive shifted positions
 
 ```
@@ -158,6 +174,14 @@ restored default line3 /virtual/my project/src/sum.test.ts:3:9
 boundary col1 /virtual/bound.js,1,1,1,null,top
 boundary line0-col0 /virtual/bound.js,null,null,null,null,top
 boundary negative-line /virtual/bound.js,null,9,null,2,top
+```
+
+`vm/run-in-this-context-offsets-async` (added at IMPLEMENT; `node run-case-node.mjs`, v24.16.0):
+
+```
+async-default at inner (/virtual/async.js:13:46) | at async outer (/virtual/async.js:12:15)
+async-line1 at inner1 (/virtual/async1.js:4:90) | at async outer1 (/virtual/async1.js:4:30)
+async-hook false,inner2,13,47,inner2 (/virtual/async2.js:13:47) | true,outer2,12,15,async outer2 (/virtual/async2.js:12:15)
 ```
 
 ## Consumers on the claimed path
@@ -252,3 +276,26 @@ Verified above; not caused or changed by offsets:
 4. Realm default `Error.prepareStackTrace` is Chromium's `undefined`; Node 24
    ships `ErrorPrepareStackTrace` (data property, writable, non-enumerable,
    configurable) in every main/worker realm.
+
+## IMPLEMENT probes (2026-09-23)
+
+Node v24.16.0 (`misc.cjs`) vs rifty after ADR-0450 (`npx tsx rifty-probe.ts`,
+Node host, imports `packages/runtime-js/src/builtins/vm/index.ts`):
+
+```
+nested eval   Node  at eval (eval at g (/virtual/nested.js:1:24), <anonymous>:1:1) | at g (/virtual/nested.js:6:27)
+              rifty at eval (eval at g (rifty-vm://5/3/%2Fvirtual%2Fnested.js), <anonymous>:1:1) | at g (/virtual/nested.js:6:27)
+new Function  Node  at eval (eval at h (/virtual/nf.js:1:24), <anonymous>:3:8) ; rifty … eval at h (rifty-vm://5/3/%2Fvirtual%2Fnf.js) …
+format inside a hook  Node  outer:at inner (/virtual/in.js:6:31) (V8 internal formatting keeps origin offsets) ; rifty: encoded identity (fault test row)
+empty filename + offsets  rifty at eval (<anonymous>:4:9) (Node at <anonymous>:4:9)
+no filename + offsets     rifty at eval (evalmachine.<anonymous>:4:9) ; zero offsets, no filename: rifty `eval at <anonymous> (…vm/index.ts…)` (Node evalmachine.<anonymous>:1:7)
+zero offsets, filename 'rifty-vm://5/5/x'  rifty at eval (rifty-vm://5/5/x:1:7) (encoded, never read back as offsets)
+filename "/virtual/my 'q' (x) ü 😀.js" + lineOffset 1 → rifty at eval (/virtual/my 'q' (x) ü 😀.js:2:7)
+descriptor after an offset script {get, set, enumerable:false, configurable:true} ; assign fn → read back !== fn (wrapper "prepareStackTrace") ; assign 5 → read back ErrorPrepareStackTrace
+```
+
+Browser-unit oracle harness: Playwright 1.60.0 `WorkerHost` spawns workers
+with `FORCE_COLOR: "1"` (`playwright/lib/runner/index.js:4999`); `runInNode`
+inherited it, so the Node side printed `exec \x1b[33m42\x1b[39m \x1b[33m7\x1b[39m`
+against rifty's `exec 42 7`. The oracle child now drops `FORCE_COLOR`
+(`run-in-node.test.ts` RED: received `\x1b[33m42\x1b[39m x`).

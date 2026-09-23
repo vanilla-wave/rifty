@@ -25,6 +25,16 @@ const HOST_CLEAR_TIMEOUT = globalThis.clearTimeout.bind(globalThis);
 const DEFAULT_CASE_TIMEOUT_MS = 30_000;
 const KILL_CLOSE_GRACE_MS = 1_000;
 
+/**
+ * Oracle child env: the caller's minus `FORCE_COLOR`. Test runners set it
+ * (Playwright workers: `1`), which makes Node colour console output on a pipe
+ * — `node main.js > out` never does.
+ */
+function oracleEnv(): NodeJS.ProcessEnv {
+  const { FORCE_COLOR: _forced, ...env } = HOST_PROCESS.env;
+  return env;
+}
+
 export interface RunInNodeOptions {
   readonly timeoutMs?: number;
 }
@@ -213,6 +223,7 @@ async function runNodeCliEvalInvocation(
       const capture = createNodeCliEvalCapture();
       const child = spawn(HOST_PROCESS.execPath, [...invocation.nodeArgv], {
         cwd,
+        env: oracleEnv(),
         stdio: [invocation.stdioHandshake === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
       });
       const stdout = child.stdout;
@@ -380,6 +391,7 @@ export async function runInNode(
     return await new Promise<string>((resolve, reject) => {
       const proc = spawn(runner, runnerArgs, {
         cwd: childCwd,
+        env: oracleEnv(),
         stdio: [testCase.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       });
       let out = '';

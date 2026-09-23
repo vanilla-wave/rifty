@@ -44,14 +44,16 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
 ## Decision
 
 1. **Validation.** `lineOffset` / `columnOffset` are Node's `validateInt32`
-   (`ERR_INVALID_ARG_TYPE`, `ERR_OUT_OF_RANGE`, lineOffset first) on every
-   `vm` entry point. `vm.Script` stores its constructor offsets;
-   `Script#runInThisContext` options carry none.
+   (`ERR_INVALID_ARG_TYPE`, `ERR_OUT_OF_RANGE`) on every `vm` entry point, in
+   Node's order (lineOffset first; `compileFunction` columnOffset first).
+   `vm.Script` stores its constructor offsets; `Script#runInThisContext`
+   options carry none.
 2. **Identity.** A non-zero-offset script is evaluated with a `sourceURL`
-   carrying its offsets and its percent-encoded filename (Node's
+   carrying its offsets and its percent-escaped filename (Node's
    `evalmachine.<anonymous>` when absent). Stateless: no registry; two scripts
    share an identity only when filename and offsets are equal. Zero offsets
-   keep today's `sourceURL = filename`.
+   keep today's `sourceURL = filename`, unless the filename itself starts with
+   the identity scheme (then encoded, never read back as offsets).
 3. **One owner of `Error.prepareStackTrace`.** The first offset script (and
    every later one, if the owner was removed) installs a configurable,
    non-enumerable accessor that keeps the guest-assigned value. Getter: a
@@ -85,6 +87,8 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
 - `delete Error.prepareStackTrace`, an error formatted inside a hook, or stack
   overflow bypasses the owner: offset frames show the encoded identity
   (visible, never a plausible `file:line:col`) until the next offset script.
+- `eval` / `new Function` inside an offset script: their eval origin shows the
+  encoded identity without position (Node: `file:line:col`).
 - Unchanged, outside this ADR: eval-shaped host-realm frames, the absent
   default `displayErrors` decoration, and Chromium's `undefined` default hook
   before any offset script (evidence §Discovered).
