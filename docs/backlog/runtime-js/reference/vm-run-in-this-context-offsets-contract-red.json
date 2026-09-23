@@ -1,0 +1,145 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS; implement next, not merge-ready. Independently replayed native Node v24.16.0 oracle and node --import tsx tools/node-parity-runner/src/cli.ts this-context-offsets: both cases RED, exit 1, expected offset ceilings only.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "73874fabedcc4cdd85f26decbded82d75543e421",
+  "unit_goal_source": "docs/backlog/runtime-js/vm-run-in-this-context-offsets.md @ 73874fabedcc4cdd85f26decbded82d75543e421; BASE 106f7b37f; goal docs/backlog/epics/vitest-run-in-browser/goal.md; RDY-6 checked original whole-epic/one-green-PR request against unchanged accepted goal, map and this Node-reference refinement. No new user policy or scope exclusion introduced.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4/I5/I6 vm offsets",
+      "location": "docs/backlog/runtime-js/vm-run-in-this-context-offsets.md:38",
+      "summary": "Product implementation and independent Final+GREEN still required; this checkpoint certifies promise and RED only."
+    },
+    {
+      "clause": "I1\u2013I7 whole-goal acceptance",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:9",
+      "summary": "Remaining mapped work and end-to-end both-pool install/run/reporter/exit-code proof remain with the authorized one-PR goal; prior prerequisite work outside BASE not re-reviewed."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: signed offsets, first-line columns, native filenames and thrown/returned stacks",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: Script construction options persist across runs; run options ignored",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:22",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: escaped functions and late stacks preserve original script positions after filename reuse",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:30; tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:27",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: direct host offset matrix, returned function, late Error stack, caught throw",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: Script host offset matrix, constructor options, repeated runs, escaped function",
+      "source": "acceptance",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:16",
+      "note": ""
+    },
+    {
+      "row": "sibling-drift: direct and Script host evaluation share native offset semantics",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:15; tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:16",
+      "note": ""
+    },
+    {
+      "row": "poisoned-cache: filename reuse preserves prior Error/function positions",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:30; tools/node-parity-runner/cases/vm/script-this-context-offsets.case.ts:27",
+      "note": ""
+    },
+    {
+      "row": "provenance-lie: escaped function and caught Error preserve filename and signed positions",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:24; tools/node-parity-runner/cases/vm/run-in-this-context-offsets.case.ts:35",
+      "note": ""
+    },
+    {
+      "row": "Recorded native direct oracle matches Node v24.16.0 replay",
+      "source": "frozen-artifact",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-evidence.md:27",
+      "note": ""
+    },
+    {
+      "row": "Recorded native Script oracle matches Node v24.16.0 replay",
+      "source": "frozen-artifact",
+      "trace": "I4+I5+I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-evidence.md:42",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `vm.runInThisContext` / `Script` honour `lineOffset` and `columnOffset`
 created: 2026-09-15
 why: vitest's module evaluator (and vite-node 3) evaluate every transformed test module with `vm.runInThisContext(wrapped, { filename, lineOffset: 0, columnOffset: -N })`; rifty throws `NotImplementedError('vm.runInThisContext.columnOffset')` for any non-zero offset, so no test file can execute
@@ -68,6 +68,8 @@ nonzero offsets retain named `NotImplementedError` ceilings. Existing
 timeout, cachedData, displayErrors and importModuleDynamically ceilings remain.
 
 ## Decisions
+
+ready-verdict: 2026-09-23 — Contract+RED @ 73874fabedcc4cdd85f26decbded82d75543e421
 
 - 2026-09-23 — preparation is Contract+RED: existing offset rejection is an explicit ceiling; tests/docs prepared, implementation waits for independent checkpoint (RDY-8).
 - 2026-09-23 — boundary: owned in-process source-position projection; transport loss/duplicate/reorder physically excluded; no coordination owner introduced by preparation.

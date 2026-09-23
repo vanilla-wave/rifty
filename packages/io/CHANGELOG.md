@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Preserve process stdout/stderr on Readable pipe completion, including explicit end:true.
+
 - Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
 
 - Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,
