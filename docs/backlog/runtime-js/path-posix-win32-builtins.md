@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: Register the `node:path/posix` builtin as the existing POSIX path namespace
 created: 2026-09-15
 why: `import { join } from 'node:path/posix'` (@vitest/mocker) fails with "Built-in 'node:path/posix' is not implemented" although `path.posix` already exists
@@ -47,6 +47,7 @@ joins `a/b`; `module.isBuiltin('node:path/posix')` is true. Oracle and RED:
 
 ## Decisions
 
+- ready-verdict: 2026-09-23 — Contract+RED @ 08227d2c84e8d4ed52853d1546daab0a4a5ff7ab
 - re-cut: 2026-09-23 — dropped `node:path/win32` registration: no claimed Vitest path needs it; existing namespace is a POSIX alias, not Node win32 — trace: none
 
 ## Challenge

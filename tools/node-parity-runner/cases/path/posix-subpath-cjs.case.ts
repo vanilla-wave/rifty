@@ -13,8 +13,7 @@ const c: ParityCase = {
       joined: posix.join('a', 'b'),
     }));
   `,
-  expected:
-    '{"nodeIdentity":true,"bareIdentity":true,"isBuiltin":true,"joined":"a/b"}\n',
+  expected: '{"nodeIdentity":true,"bareIdentity":true,"isBuiltin":true,"joined":"a/b"}\n',
 };
 
 export default c;

@@ -1,0 +1,138 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED: к IMPLEMENT допущено; синхронизировать map.md с исключением win32.",
+  "checkpoint": "Contract+RED",
+  "unit_goal_source": "docs/backlog/runtime-js/path-posix-win32-builtins.md against BASE 0c4c1b070",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:97-99",
+      "summary": "overrides spelling pending"
+    },
+    {
+      "clause": "I2",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:100-103",
+      "summary": "Worker keepalive pending"
+    },
+    {
+      "clause": "I3",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:104-107",
+      "summary": "process lifecycle pending"
+    },
+    {
+      "clause": "I4",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108-114",
+      "summary": "forks acceptance pending"
+    },
+    {
+      "clause": "I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:115-116",
+      "summary": "threads acceptance pending"
+    },
+    {
+      "clause": "I6",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:117-121",
+      "summary": "remaining builtin/module walls pending"
+    },
+    {
+      "clause": "I7",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:122-129",
+      "summary": "compat page and end-to-end acceptance pending"
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "CJS node:path/posix and path/posix alias path.posix by identity; node:isBuiltin recognizes subpath.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-cjs.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "ESM default and named join import links and joins a/b.",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-esm.case.ts:6",
+      "note": ""
+    },
+    {
+      "row": "Same CJS alias/identity/isBuiltin case against Node and rifty.",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-cjs.case.ts:16",
+      "note": ""
+    },
+    {
+      "row": "Same static ESM named/default import case against Node and rifty.",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/path/posix-subpath-esm.case.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Node 24.16.0 oracle for CJS and ESM semantics.",
+      "source": "frozen-artifact",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/path-posix-win32-builtins-evidence.md:5",
+      "note": "Повторён: оба Node oracle вывода совпали."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/vitest-run-in-browser/map.md:13-14",
+          "evidence": "",
+          "summary": "Карта всё ещё планирует регистрацию node:path/win32, тогда как новый контракт обоснованно исключает её.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "08227d2c84e8d4ed52853d1546daab0a4a5ff7ab"
+}

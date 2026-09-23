@@ -71,6 +71,7 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   runtimeJsBuiltinsRegistered = true;
 
   registerBuiltin('path', () => pathModule);
+  registerBuiltin('path/posix', () => pathModule.posix);
   registerBuiltin('events', () => {
     const exports = EventEmitter as unknown as Record<string, unknown>;
     exports.EventEmitter = EventEmitter;
