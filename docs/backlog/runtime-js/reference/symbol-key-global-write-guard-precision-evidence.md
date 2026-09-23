@@ -266,3 +266,17 @@ $ pnpm test:parity global-computed-key-sites
   ✗ modules/global-computed-key-sites-cjs.case.ts   error: NotImplementedError: … module-loader.cjs-global-function-assignment (CJS module /work/main.js …)
   ✗ modules/global-computed-key-sites-esm.case.ts   error: NotImplementedError: … module-loader.esm-global-function-assignment (ESM module /work/main.mjs …)
 ```
+
+## Re-pin — `typescript-worker.js` fingerprint (`check:esbuild-legacy-retirement`)
+
+The Workbench TypeScript worker imports the module-loader chunk by content
+hash (traps `copied-asset-fingerprints`). `pnpm build:libs` with the product
+diff reverse-applied reproduces the old pin; the only difference is that import:
+
+```
+018ea49b…b422  typescript-worker.js (product diff reverse-applied) = old pin
+c13d29e5…32e5  typescript-worker.js (this unit, two builds)       bytes 10,022,694 both
+$ diff <(sed -n 211003p base) <(sed -n 211003p new)
+<   const { createModuleLoader } = await import("./module-loader-MN3ON23T.js");
+>   const { createModuleLoader } = await import("./module-loader-SUEXNKW2.js");
+```
