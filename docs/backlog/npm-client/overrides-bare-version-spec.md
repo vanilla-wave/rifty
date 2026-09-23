@@ -57,6 +57,7 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Decisions
 
+- ready-verdict: 2026-09-23 — Contract+RED @ 43beed245648f0657143cc0c4705b54dc49627a1
 - 2026-09-23 — value grammar and rejected candidates: ADR-0451 (npm version/range + `latest` → overridden package; `''`/`*` no override; `$` loud; rifty `name@range` and bare replacement names kept; baked table unchanged).
 - 2026-09-23 — bare-word dist-tag reading is agent-owned (RDY-6): the scenario uses a version; switching words to tags breaks the documented escape hatch (compat `incompatible-packages.md`, ADR-0051 self-map); goal Decision "минимальной заплаткой" keeps the extension.
 - 2026-09-23 — divergences outside I1 (other dist-tags, hyphen/`~>` matching, range-less `npm:` alias, alias placement, `EOVERRIDE`, re-resolve placement, `@scope/pkg`) recorded in ADR-0451 and the compat row (Acceptance 6).
