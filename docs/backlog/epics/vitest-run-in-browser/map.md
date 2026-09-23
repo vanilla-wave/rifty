@@ -11,8 +11,6 @@ order is also recorded as `blocked_by`; the other children are independent.
 1. `npm-client/overrides-bare-version-spec` — **overrides-spelling** — I1; npm's
    `"vite": "8.0.16"` parses as a range, not a package name; unblocks the
    scenario install with zero resolver work.
-2. `runtime-js/path-posix-win32-builtins` — **path-subpaths** — I6; `node:path/posix`
-   and `node:path/win32` registered from the existing namespaces.
 3. `runtime-js/builtin-static-names-prototype-methods` — **process-named-imports** —
    I6; static export names of a builtin include its prototype methods
    (`import { cwd } from 'node:process'`).
@@ -55,7 +53,7 @@ order is also recorded as `blocked_by`; the other children are independent.
     config bundle), the wait `vitest run` drains on. Independent.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 1–11, 13.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 1, 3–11, 13.
 
 ## Open questions
 
