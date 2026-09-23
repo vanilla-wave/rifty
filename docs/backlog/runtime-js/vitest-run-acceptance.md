@@ -1,9 +1,9 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: e2e acceptance — the vitest scenario runs on both pools and the compat page claims the exact pair
 created: 2026-09-15
-why: the goal closes only on observable proof: a Chromium e2e running the scenario (install, failing run exit 1, fixed run exit 0, threads == forks) plus a `vitest.md` page in `docs/public/compat/` with ✅/❌ rows — source greps and shimmed probes do not close acceptance
+why: the goal closes only on observable proof: a Chromium e2e running the scenario (install, failing run exit 1, fixed run exit 0, threads == forks) plus a `vitest.md` page in `docs/public/compat/` with ✅/⚠️/❌ rows — source greps and shimmed probes do not close acceptance
 epic: vitest-run-in-browser
 blocked_by: [npm-client/overrides-bare-version-spec, runtime-js/builtin-static-names-prototype-methods, runtime-js/absent-builtin-members-loud-throws, runtime-js/symbol-key-global-write-guard-precision, runtime-js/readable-pipe-never-ends-process-stdio, runtime-js/process-lifecycle-events-exit-code, runtime-js/worker-threads-handle-keepalive, runtime-js/child-process-advanced-ipc-serialization, runtime-js/vm-run-in-this-context-offsets, runtime-js/worker-threads-stdio-streams-empty-exec-argv, runtime-js/message-port-ref-keepalive]
 sources: [docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md, docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/public/compat/package-tooling.md]
@@ -17,20 +17,12 @@ Carrier = `tests/e2e/vitest-run.spec.ts` (heavy lane): real shell, real npm
 registry, exit codes from terminal history, expected lines from the host
 Node oracle (evidence §Oracle). Page = hand-maintained
 `docs/public/compat/vitest.md`, registered in the generated compat index.
-RED today fails at goal I1 (`Failed to fetch packument 8.0.16: 404`); with
-the override respelled `vite@8.0.16` (scratch run) the first `vitest run`
-prints `Startup Error / ModuleLoadError: Built-in 'node:path/posix'` and
-exits 0 — the rows below fail for the scenario's own walls.
-
-**Question (open, STOP-1e — draft until answered).** Goal scenario 5 + I7
-want watch mode and other vite versions ❌ "backed by a loud throw"; no
-honest throw exists on either path (evidence §Static reads, §Reception r1):
-shell children get a non-TTY stdin, so bare `vitest` runs once and exits as
-Node does with piped stdin, `vitest --watch` waits on polling `fs.watch`;
-vite 8.0.x–8.1.x declare `lightningcss ^1.32.0`, install and are expected to
-run, only 8.2+ fail loudly. Loud only via a mode/version ban, the route the
-goal rejects. The user amends the goal or picks a covering route; rows below
-are otherwise unaffected.
+RED (r2, on `52e469720`) fails at goal I1 (`Failed to fetch packument
+8.0.16: 404`); with the override respelled `vite@8.0.16` (scratch run) the
+first `vitest run` prints `Startup Error / NotImplementedError: Not
+implemented: module-loader.esm-global-function-assignment` (`@vitest/utils`
+`timers.js`) and exits 0 — the rows below fail for the scenario's own walls
+(evidence §RED r2).
 
 ## Challenge
 
@@ -56,7 +48,8 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 7. No claimed run of rows 3–6 prints `Startup Error`, `ModuleLoadError`, `SyntaxError` or `Not implemented:` → I6
 8. Unpinned manifest (`devDependencies: {vitest: "4.1.11"}` only): `npm install` exits 1 with `Not implemented: lightningcss.version` → I7
 9. With `jsdom@30.0.1`, `happy-dom@20.0.0`, `@vitest/coverage-v8@4.1.11`, `@vitest/browser-playwright@4.1.11`, `playwright@1.60.0` installed over the pinned scenario (passing tests), each mode exits 1, never prints `Tests 2 passed`, and names its ceiling on the throw's own line: `--environment=jsdom` → `Not implemented: …DONT_CONTEXTIFY…`; `--environment=happy-dom` → `Not implemented: module-loader.esm-global-function-assignment`; `--coverage` → `Built-in 'node:inspector/promises' is not implemented`; `--pool=vmThreads` and `--pool=vmForks` → `Not implemented: …experimental-vm-modules…`; browser-mode config → `Not implemented: node:http(s).Agent` → I7
-10. `docs/public/compat/vitest.md` claims exactly vitest 4.1.11 + vite 8.0.16, states the manifest precondition first (pin or npm-authored lock; unpinned = loud `lightningcss.version`), carries ✅ rows for I1–I6 including `vitest.config.ts` and TypeScript test files and both pools, ❌ rows for jsdom/happy-dom, coverage, browser mode, `vmThreads`/`vmForks` each naming the row-9 throw, watch-mode and other-versions rows per the STOP-1e answer (Context), cites `tests/e2e/vitest-run.spec.ts`, and is listed in `docs/public/compat/README.md` → I7
+10. `docs/public/compat/vitest.md` claims exactly vitest 4.1.11 + vite 8.0.16, states the manifest precondition first (pin or npm-authored lock; unpinned = loud `lightningcss.version`), carries ✅ rows for I1–I6 including `vitest.config.ts` and TypeScript test files and both pools, ❌ rows only for jsdom/happy-dom, coverage, browser mode, `vmThreads`/`vmForks` each naming the row-9 throw, ⚠️ unclaimed rows stating the observed boundary with no mode/version ban — watch mode (non-TTY shell stdin: bare `vitest` runs once, row 11; `--watch` untested, no named ceiling) and other Vite/vitest versions (releases requiring `lightningcss ^1.33.0` fail install loudly, row 8; 7.3.6/8.0.x/8.1.x untested) — cites `tests/e2e/vitest-run.spec.ts`, and is listed in `docs/public/compat/README.md` → I7
+11. Fixed state, bare `vitest` (no `run`; shell stdin is not a TTY): runs once and exits 0 with row 6's default-reporter lines and no row-7 wall, as Node `vitest < /dev/null` (parity 7) → I7
 
 ## Parity cases
 
@@ -70,9 +63,13 @@ reach (needs npm install + pools).
 4. `npm test` on Node = `vitest run` + npm banner (`> test`, `> vitest run`); same lines/exit → I4
 5. `test/decoy.test.ts` is collected by default (config moved away: `Tests 1 failed | 2 passed (3)`) and not with the config → I4
 6. `npm install` with the npm-spelled override: one hoisted `node_modules/vite@8.0.16`, `vite@8.0.16 deduped` under `@vitest/mocker`, no `node_modules/vitest/node_modules/vite` → I1
+7. `vitest` without `run`, stdin not a TTY (`< /dev/null`) on Node: `RUN v4.1.11`, `✓ src/sum.test.ts (2 tests)`, `Tests 2 passed (2)`, exit 0 — one run; a TTY stdin or `--watch` stays in `Waiting for file changes...` (evidence §Oracle — outside the claim) → I7
 
 ## Out of scope
 
+- `vitest --watch`, watch under a TTY stdin, Vite 7.3.6/8.0.x/8.1.x and
+  vitest other than 4.1.11: unclaimed ⚠️, untested, no mode/version ban
+  (goal amend 2026-09-23).
 - `typecheck` pool, `--changed`, `--logHeapUsage`, `--ui`,
   workspaces/projects: unclaimed, untested (page Known Limitations).
 - npm's `> test` script banner line (rifty's npm prints only
@@ -89,3 +86,5 @@ reach (needs npm install + pools).
 - 2026-09-23 — agent: assertions = lines common to TTY and non-TTY Node output (rifty children: stdout TTY, stdin not); draft PR #351's "passing file line omitted" was an agent-env artifact (evidence).
 - 2026-09-23 — agent: `vitest.md` ✅ rows are pending until this spec is GREEN; Test Sources gains the I2/I3/I6 parity cases the children land.
 - 2026-09-23 — reception (`REV-12`) of Contract+RED r1: blocker HOLDS — goal scenario 5 + I7 ("❌ rows for … watch mode … other vite versions — each ❌ backed by a loud throw") have no clause and no honest route (evidence §Static reads, §Reception r1); the earlier "asked at CLOSE" contradicted `STOP-1` (1e halts the run) → demoted to draft (`RDY-6` §4), STOP-1e asked now. Options: A amend I7/scenario 5 — exact pair guaranteed, watch/other versions ⚠️ unclaimed with the observed boundary, no bans (recommended; page drafted so); B keep I7 via mode/version bans (the goal's rejected source-shape route; a ban on a working version is a fake gap); C TTY stdin for shell children (terminal work + ADR, `terminal/raw-stdin-deferred-items`) so watch hits the loud `process.stdin.setRawMode` — versions still need A or B. Silence: run halted, goal PR draft.
+- 2026-09-23 — STOP-1e answered: goal amend 2026-09-23, user: "A: поправить I7 (Recommended)" — scenario 5 + I7: watch mode and other vite versions ⚠️ unclaimed with the observed boundary, no mode/version bans; ❌ + loud throw stays for jsdom/happy-dom, coverage, browser mode, `vmThreads`/`vmForks` → Context question removed, status ready.
+- re-cut: 2026-09-23 — row 10 names the ⚠️ watch/other-versions rows with their observed boundary (was "per the STOP-1e answer"); row 11 + parity 7 add bare `vitest` = one run under non-TTY shell stdin, the boundary the watch row states; Out of scope lists the unclaimed rest — trace: none

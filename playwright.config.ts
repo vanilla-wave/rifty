@@ -28,7 +28,7 @@ const HEAVY_SPECS = [
   '**/ai-mode.spec.ts',
   '**/preset-deep-link.spec.ts',
   '**/webpack-dev-server.spec.ts',
-  // Cold vitest+vite 8 install (rolldown WASI) and 12 real `vitest run`s.
+  // Cold vitest+vite 8 install (rolldown WASI) and 19 real vitest runs.
   '**/vitest-run.spec.ts',
 ];
 

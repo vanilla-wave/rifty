@@ -203,6 +203,12 @@ test.describe('vitest 4.1.11 on vite 8.0.16 in the browser shell', () => {
       expectPassingRun(result.output, verbose);
       if (line === 'npm test') expect(result.output).toContain('> vitest run');
     }
+
+    // Watch-mode ⚠️ boundary: shell stdin is not a TTY, so bare `vitest` runs once
+    // (Node `vitest < /dev/null`, evidence §Oracle — outside the claim).
+    const once = await run(page, 'vitest', 180_000);
+    expect(once.exitCode, `vitest\n${once.output}`).toBe(0);
+    expectPassingRun(once.output, false);
   });
 
   test('unclaimed modes fail loudly with a named ceiling, never a silent pass', async ({

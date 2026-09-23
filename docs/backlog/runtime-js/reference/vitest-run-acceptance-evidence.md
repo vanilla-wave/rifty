@@ -287,3 +287,31 @@ skipped; `packages/runtime-js/src/builtins/process.ts:322-323`
 `setRawMode()` → `throwStdinGap('process.stdin.setRawMode')` (loud, reachable
 only with a TTY stdin). Result: no honest named throw on the watch path or on
 installable versions; loudness needs a mode/version ban or TTY child stdin.
+
+## RED r2 — after goal amend, rebased on `52e469720` (2026-09-23)
+
+Spec + bare `vitest` step (row 11); `path/posix` and process named-member
+units landed on the goal branch since RED r1.
+
+```
+$ RIFTY_PLAYGROUND_PORT=5412 pnpm exec playwright test --project=chromium-heavy tests/e2e/vitest-run.spec.ts --workers=1
+  ✘ 1 … (6.0s)   $ npm install … npm: install failed: Failed to fetch packument 8.0.16: 404
+                 Expected: 0  Received: 1   (spec :115 via :181)
+  ✘ 2 … (13.2s)  unpinned step passed; pinned install: same 404 (spec :115 via :242)
+  2 failed
+```
+
+First failure unchanged: goal I1. Scratch copy (override `vite@8.0.16`,
+`--project=chromium-light`, not committed): install + tree probe pass; the
+`node:path/posix` wall is gone, the next is
+
+```
+  ✘ 1  Error: vitest run
+       ⎯⎯⎯ Startup Error ⎯⎯⎯
+       NotImplementedError: Not implemented: module-loader.esm-global-function-assignment (ESM module /node_modules/@vitest/utils/dist/timers.js writes the Function binding/global property; …)
+       Expected: 1  Received: 0
+  ✘ 2  Error: vitest run --environment=jsdom   (same Startup Error, exit 0)
+```
+
+→ goal I6 (the ESM `Function` write guard), still a scenario wall; the
+Startup Error exiting 0 is the I3/I4 exit-code path.
