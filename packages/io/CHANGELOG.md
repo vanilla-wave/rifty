@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `Readable.pipe()` leaves process stdout/stderr open after source EOF, while ordinary destinations still end.
+
 - Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
 
 - Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,

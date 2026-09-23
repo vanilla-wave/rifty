@@ -720,7 +720,7 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
    * Symmetric wiring (improves on the pre-fix shape that left dangling
    * listeners on either side after an error):
    *   - source `'data'` → `dest.write()` (pause on backpressure);
-   *   - source `'end'`  → `dest.end()` (unless `opts.end === false`);
+   *   - source `'end'`  → `dest.end()` (except process stdout/stderr or `opts.end === false`);
    *   - source `'error'`→ propagate to dest then cleanup the wiring;
    *   - dest   `'drain'`→ resume source;
    *   - dest   `'error'`→ cleanup the wiring on both ends;
@@ -733,7 +733,7 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
    *
    * @param dest Writable-like sink (anything matching {@link PipeableWritable}).
    * @param opts `{end?: boolean}` — when `false`, source's `end` does NOT call
-   *   `dest.end()`. Default `true`, matching Node.
+   *   `dest.end()`. Process stdout/stderr stay open, matching Node.
    */
   pipe<W extends PipeableWritable>(dest: W, opts: { end?: boolean } = {}): W {
     // Already piping to this dest: clean up first so the listener count returns
@@ -741,7 +741,10 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     const existing = this.pipeCleanups.get(dest);
     if (existing) existing();
 
-    const endOnFinish = opts.end ?? true;
+    const activeProcess = (globalThis as { process?: { stdout?: unknown; stderr?: unknown } })
+      .process;
+    const endOnFinish =
+      opts.end !== false && dest !== activeProcess?.stdout && dest !== activeProcess?.stderr;
     const onData = (chunk: unknown): void => {
       const writeResult = dest.write(chunk);
       if (writeResult === false) {

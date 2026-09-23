@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `Readable.pipe(process.stdout|stderr)` never calls `end()` on the process streams
 created: 2026-09-15
 why: rifty's pipe ends the destination on source end unconditionally; Node exempts process.stdout/stderr (`doEnd = end !== false && dest !== process.stdout && dest !== process.stderr`); vitest pipes each pool child's stdout into process.stdout and crashes with "dest.end is not a function"
@@ -22,7 +22,7 @@ Node v24.16.0 exempts only the current process stdout/stderr object identities
 from pipe's default destination end, even with `{ end: true }`. A normal
 `Writable` with `fd = 1` still reaches `finish`. The oracle and executed RED
 are in `reference/readable-pipe-never-ends-process-stdio-evidence.md`; the
-`stream/pipe-process-stdio` parity case executes the same three programs in
+`stream/pipe-process-stdio` parity case executes the same four programs in
 real Node and a physical rifty Node Worker.
 
 ## Acceptance
@@ -56,6 +56,7 @@ real Node and a physical rifty Node Worker.
 
 ## Decisions
 
+- ready-verdict: 2026-09-23 — Contract+RED @ 97fc6a77fa5940d4e2a8c43d21e4e2ab3ff9b5e8
 - 2026-09-23 — carrier: `@riftydev/io` compares destination against current global process stream identities; no runtime-js reverse import or fd heuristic.
 
 ## Challenge

@@ -1,0 +1,129 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED PASS; можно переходить к реализации. Node v24.16.0: stdout/stderr = first|second\\n, Writable = lookalike-finished true\\n, чужой sink = TypeError: dest.end is not a function\\n; все exit 0. `node --import tsx tools/node-parity-runner/src/cli.ts pipe-process-stdio` воспроизвёл RED: stdio падают на dest.end, exit 1. Прогон с временным loader-мутантом `if (endOnFinish && typeof dest.end === \"function\") dest.end()` оставил единственное расхождение: четвёртый запуск печатает missing-end-no-throw вместо TypeError; exit 1. Ошибочная missing-end эвристика не выживает. Tracked files не изменены.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "97fc6a77fa5940d4e2a8c43d21e4e2ab3ff9b5e8",
+  "unit_goal_source": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md; raw User scenario, Invariants и Decisions: docs/backlog/epics/vitest-run-in-browser/goal.md; полный diff 0c4c1b070..97fc6a77f.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4: реализация pipe-stdio и Final+GREEN",
+      "location": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:30",
+      "summary": "Этот checkpoint подтверждает контракт и RED; исправление ещё не реализовано."
+    },
+    {
+      "clause": "I1–I7: полный сценарий Vitest",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:9",
+      "summary": "Остальные units, оба пула, config.ts, TypeScript tests, reporter/exit codes и compat остаются обязательствами goal; сквозное принятие здесь не доказано."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: stdout сохраняет последующую запись при end:true; exit 0.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:3",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: stderr сохраняет последующую запись при end:true; exit 0.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:10",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Writable с fd=1 завершается; чужой sink без end вызывает TypeError.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:17",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: одинаковая stdout-программа в Node и физическом rifty Worker.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:47",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: одинаковая stderr-программа в Node и физическом rifty Worker.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: обычный Writable с fd=1 достигает finish в обоих runtime.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Parity 4: чужой EventEmitter sink с fd=1 без end вызывает TypeError в обоих runtime.",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/pipe-process-stdio.case.ts:50",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/readable-pipe-never-ends-process-stdio.md:25",
+          "evidence": "",
+          "summary": "«same three programs» устарело: committed case содержит четыре физических запуска.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
