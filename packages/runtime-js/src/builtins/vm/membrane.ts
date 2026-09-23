@@ -1,8 +1,8 @@
+import { RuntimeProxy } from '../../internal/proxy-provenance.ts';
 /**
  * Two-way membrane between host + guest realms.
  *
- * Guest→host (T6): wrap guest completion values for the host.
- * Host→guest (T7 read path): seed the live contextObject INTO the guest.
+ * Wrap completion values out; seed the live contextObject into the guest.
  *
  * Wraps OBJECT / FUNCTION / ARRAY guest values so the host sees them with
  * Node-faithful cross-realm identity. Real Node returns vm completion objects
@@ -1039,7 +1039,7 @@ export class Membrane {
     // GC/`releaseWrapper`) instead of an untracked live handle that would later
     // abort `ctx.dispose()`. See `#retainForWrapper`.
     const target: unknown[] = [];
-    const wrapper = new Proxy(target, { getPrototypeOf: () => null });
+    const wrapper = new RuntimeProxy(target, { getPrototypeOf: () => null });
     this.#retainForWrapper(wrapper, handle, id);
     try {
       for (let i = 0; i < length; i++) {
@@ -1140,7 +1140,7 @@ export class Membrane {
       this.#syncTargetWith(target, guest, () => this.#wrappedGuestProto(guest), key);
     };
 
-    const wrapper = new Proxy(target, {
+    const wrapper = new RuntimeProxy(target, {
       getPrototypeOf: () => this.#wrappedGuestProto(guest),
       get(_t, key) {
         if (typeof key === 'symbol' && !hasSymbolKey(key)) return undefined;
@@ -1488,7 +1488,7 @@ export class Membrane {
     // and redefine the thunk's own `name`/`length` (both configurable on a fn) so
     // the Proxy surfaces them. Done BEFORE the Proxy so the wrapper is final.
     this.#copyFnNameLength(handle, thunk);
-    const wrapper = new Proxy(thunk, { getPrototypeOf: () => null });
+    const wrapper = new RuntimeProxy(thunk, { getPrototypeOf: () => null });
     // dup+track the guest handle (and record the OUT round-trip) via the shared
     // leak-safe path. While the host HOLDS the wrapper (e.g. `stored = cb`), the
     // dup stays alive, so calling it AFTER the run does `callFunction` on a

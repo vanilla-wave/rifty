@@ -1,6 +1,8 @@
 import { NotImplementedError } from '@riftydev/io';
 import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { RuntimeProxy } from '../internal/proxy-provenance.ts';
+import type { Edit } from './cjs-source-rewrite.ts';
 import { rewriteDirectEvalImportArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 
@@ -17,12 +19,6 @@ type RuntimeFunctionConstructor = {
 
 export interface RoutedFunctionConstructors {
   readonly Function: RuntimeFunctionConstructor;
-}
-
-interface Edit {
-  readonly start: number;
-  readonly end: number;
-  readonly text: string;
 }
 
 interface AnyNodeShape {
@@ -67,7 +63,7 @@ function makeRoutedConstructor(
   dynamicImport: DynamicImport,
   baseId: string,
 ): RuntimeFunctionConstructor {
-  return new Proxy(realConstructor, {
+  return new RuntimeProxy(realConstructor, {
     apply(target, thisArg, rawArgs) {
       return routeOrCompile(rawArgs, dynamicImport, baseId, (args) =>
         Reflect.apply(target, thisArg, args),

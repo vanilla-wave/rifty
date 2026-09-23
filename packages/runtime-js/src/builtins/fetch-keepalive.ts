@@ -1,3 +1,4 @@
+import { RuntimeProxy } from '../internal/proxy-provenance.ts';
 /**
  * Event-loop keepalive for detached `fetch()` in a run-to-completion child realm
  * (keepalive gap-d). The realm reaps on keepalive drain (refCount→0, ADR-0152);
@@ -84,7 +85,7 @@ function installWebAssemblyStreamingCeilings(namespace: FetchTarget['WebAssembly
     const original = namespace[name];
     if (typeof original !== 'function') continue;
     const feature = `WebAssembly.${name}`;
-    const ceiling = new Proxy(original, {
+    const ceiling = new RuntimeProxy(original, {
       apply() {
         return Promise.reject(new NotImplementedError(feature));
       },

@@ -111,8 +111,8 @@ parentPort.on('message', (data) => {
     const worker = new Worker(new URL('file:///w-esm.mjs'), {
       workerData: { answer: 42 },
     });
-    expect(worker.unref()).toBe(worker);
-    expect(worker.ref()).toBe(worker);
+    expect(worker.unref()).toBeUndefined();
+    expect(worker.ref()).toBeUndefined();
 
     const messages: unknown[] = [];
     const nextMessage = () =>
@@ -486,7 +486,7 @@ globalThis.onmessage = ({ data }) => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it('rejects an explicit execArgv override before allocating a worker thread', async () => {
+  it('rejects a nonempty execArgv override before allocating a worker thread', async () => {
     _resetThreadIdCounterForTests();
     const spawn = vi
       .spyOn(globalProcessManager, 'spawnWorker')
@@ -497,7 +497,7 @@ globalThis.onmessage = ({ data }) => {
       RIFTY_KERNEL_WORKER_URL: 'https://rifty.test/kernel-worker.js',
     });
 
-    expect(() => new Worker('/workspace/worker.mjs', { execArgv: [] })).toThrow(
+    expect(() => new Worker('/workspace/worker.mjs', { execArgv: ['--trace-warnings'] })).toThrow(
       expect.objectContaining({
         name: 'NotImplementedError',
         feature: 'worker_threads.Worker.execArgv',
@@ -666,7 +666,7 @@ globalThis.onmessage = ({ data }) => {
       expect(capturedSpec).toMatchObject({
         argv: ['rifty', '/workspace/node_modules/@rolldown/binding-wasm32-wasi/wasi-worker.mjs'],
         cwd: '/project',
-        serve: true,
+        serve: false,
       });
       expect(capturedSpec?.env).toEqual({
         ROLLDOWN_TEST: '1',

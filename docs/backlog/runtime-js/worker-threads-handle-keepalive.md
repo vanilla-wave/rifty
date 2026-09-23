@@ -7,7 +7,7 @@ why: a live Worker currently fails to hold its parent, while a finished kernel W
 epic: vitest-run-in-browser
 blocked_by: [runtime-js/process-lifecycle-events-exit-code]
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/backlog/runtime-js/reference/worker-thread-lifecycle-evidence.md, docs/adr/runtime-js/0152-child-realm-event-loop-drain-loud-fail-exit-contract.md, docs/backlog/runtime-js/worker-threads-kernel-run-to-completion-exit.md, docs/backlog/runtime-js/worker-threads-stdio-streams-empty-exec-argv.md]
-code: [packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/process.ts, packages/workbench/src/workers/node-entry-bootstrap.ts]
+code: [packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/builtins/worker-thread-port.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/process.ts, packages/workbench/src/workers/node-entry-bootstrap.ts]
 ---
 
 ## Context
@@ -96,3 +96,4 @@ ready-verdict: 2026-09-23 — Contract+RED @ ef3da9c95855540a3c8f1d8a685e946cc19
 - re-cut: 2026-09-23 — merge worker-threads-stdio-streams-empty-exec-argv and required worker-threads-kernel-run-to-completion-exit into this lifecycle unit; preserve I2/I5 obligations — trace: none
 - 2026-09-23 — preparation requires Contract+RED for newly counted handles/streams; native baseline supplies existing child-exit defect authority; no product implementation in this preparation.
 - 2026-09-23 — MessagePort/dedicated Worker boundary: no transport loss/duplicate/reorder injection; lifetime termination and caller ref transitions are reachable faults. Source/file validation remains existing worker_threads.test.ts coverage.
+- 2026-09-23 — ADR-0449: existing refcount shared by parent Worker and child parentPort; kernel/Workbench drain owns natural exit; real streams carry output; targeted GREEN and actual Vitest acceptance in evidence.

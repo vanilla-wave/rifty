@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Count Worker and parentPort lifetimes through drain; carry real stdio and accept empty execArgv (ADR-0449).
+- Reject host guest Proxies before advanced IPC snapshots; preserve Buffer/getters and dense frozen builtinModules (ADR-0453).
+
 - Allow actual symbol global mutation keys through shared CJS/ESM validation; preserve Function ceilings and helper binding hygiene.
 - Add advanced fork IPC value graphs and typed launch v5; keep JSON and private control separate (ADR-0446).
 - Preserve unset process.exitCode so CLI startup failures can select Node's nonzero default.

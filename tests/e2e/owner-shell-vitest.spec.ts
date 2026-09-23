@@ -66,6 +66,10 @@ test('Vitest runs TypeScript tests with real results in both pools', async ({
       if (failing) {
         expect(output).toMatch(/1 passed/);
         expect(output).toContain('expected 3 to be 4');
+        expect(output).toContain('- Expected');
+        expect(output).toContain('+ Received');
+        expect(output).toMatch(/-\s+4/);
+        expect(output).toMatch(/\+\s+3/);
       }
       if (command.includes('verbose')) {
         expect(output).toContain('adds numbers');

@@ -3,7 +3,8 @@
 Live plan: index, not store. Minimal pattern first; each child a `draft`
 finding compiled to `ready` at its own PICKUP (`RDY-1`). Item 8 follows 7;
 item 11 is delivered inside 8's merged Worker lifecycle unit. Item 12 follows
-all deliveries 1–11. Remaining independent children retain their ordering.
+all deliveries 1–11 and new MessagePort unit 13. Remaining independent children
+retain their ordering.
 
 ## Items
 
@@ -42,15 +43,19 @@ all deliveries 1–11. Remaining independent children retain their ordering.
     no separate pickup.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 1–11.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 1–11 and 13.
+13. `runtime-js/message-port-ref-keepalive` — **manual-port-refs** — I4; emnapi's
+    global MessageChannel port keeps pending NAPI work alive after deliberate
+    Worker unref. Native local pairs, manual refs, honest local closure and
+    transfer boundary; no package patch. Added from actual Vitest-main trace
+    (RDY-5); I2 remains unchanged.
 
 ## Open questions
 
-- Coverage check, not a contract input: which handle vitest's cac-driven
-  `start()` awaits when rifty drains (the Worker class is proven; the vitest
-  main case may be the rolldown wasm binding's Worker or the pool child) —
-  owner: agent — instrumented run at item 8 pickup; a class outside I2 → re-chart
-  (`RDY-5`), never a widened I2 without the user.
+- Resolved startup-handle fog (2026-09-23): emnapi runtime's
+  NodejsWaitingRequestCounter calls missing ref/unref on a global MessageChannel
+  port; rolldown deliberately unrefs its Worker. New I4 unit 13 owns this class,
+  without widening I2. Evidence: message-port-ref-keepalive reference.
 - ADR shape for I2/I3: correction note on ADR-0152 vs one short ADR citing it —
   owner: agent — decided at item 7 pickup (`DEC-2`).
 - vm offsets carrier: stack remap table vs source prefix — owner: agent — item 10

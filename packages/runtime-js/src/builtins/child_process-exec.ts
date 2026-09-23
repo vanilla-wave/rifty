@@ -1,3 +1,4 @@
+import { RuntimeProxy } from '../internal/proxy-provenance.ts';
 /**
  * Inner script-execution helper for `child_process.spawn`. Split out of
  * `child_process.ts` to keep that file under the ADR-0024 line budget.
@@ -401,7 +402,7 @@ export async function execScript(a: ExecScriptArgs): Promise<void> {
       ) as Record<string, unknown>;
       const WorkerConstructor = builtin.Worker;
       if (typeof WorkerConstructor === 'function') {
-        const processWorker = new Proxy(WorkerConstructor, {
+        const processWorker = new RuntimeProxy(WorkerConstructor, {
           construct(target, args, newTarget) {
             return trackOwnedChild(
               withChildProcess(() => Reflect.construct(target, args, newTarget)),

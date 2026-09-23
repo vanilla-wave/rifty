@@ -102,6 +102,9 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0444 | Validate symbol keys before guarded global mutations |
 | 0445 | Deliver process lifecycle events before terminal handling |
 | 0446 | Carry advanced fork IPC through the typed Node launch |
+| 0449 | Count Worker and parentPort lifetimes through the existing drain |
+| 0452 | Reference locally owned native MessagePorts without counting infrastructure listeners |
+| 0453 | Track guest Proxy provenance before advanced IPC snapshots |
 
 ### runtime-wasi
 

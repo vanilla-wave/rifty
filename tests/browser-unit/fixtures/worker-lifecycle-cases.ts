@@ -38,6 +38,66 @@ console.error('WORKER|console-stderr');
 const cases: readonly WorkerLifecycleCase[] = [
   { name: 'parent-live-worker', entry: 'main.cjs', parent: cjsParent, child: lateChild },
   {
+    name: 'first-message-listener-refs',
+    entry: 'main.cjs',
+    parent: cjsParent.replace(
+      "const worker = new Worker('./child.cjs');",
+      "const worker = new Worker('./child.cjs'); worker.unref();",
+    ),
+    child: lateChild,
+  },
+  {
+    name: 'ref-return-values',
+    entry: 'main.cjs',
+    parent: `
+const { Worker } = require('node:worker_threads');
+const worker = new Worker('./child.cjs');
+console.log('WORKER|ref-returns=' + JSON.stringify([typeof worker.unref(), typeof worker.ref()]));
+worker.on('message', (message) => console.log('WORKER|port-ref-returns=' + JSON.stringify(message)));
+${exitHook}
+`,
+    child: `
+const { parentPort } = require('node:worker_threads');
+parentPort.postMessage([typeof parentPort.ref(), typeof parentPort.unref()]);
+`,
+  },
+  {
+    name: 'additional-message-listener-keeps-unref',
+    entry: 'main.cjs',
+    parent: `${cjsParent}\nworker.unref(); worker.on('message', () => {});`,
+    child: lateChild,
+  },
+  {
+    name: 'removed-message-listener-unrefs',
+    entry: 'main.cjs',
+    parent: `
+const { Worker } = require('node:worker_threads');
+const worker = new Worker('./child.cjs');
+worker.unref();
+const listener = () => console.log('WORKER|unexpected-message');
+worker.on('message', listener);
+worker.removeListener('message', listener);
+${exitHook}
+`,
+    child: lateChild,
+  },
+  {
+    name: 'once-message-listener-releases-ref',
+    entry: 'main.cjs',
+    parent: `
+const { Worker } = require('node:worker_threads');
+const worker = new Worker('./child.cjs');
+worker.unref();
+worker.once('message', (message) => console.log('WORKER|message=' + message));
+${exitHook}
+`,
+    child: `
+const { parentPort } = require('node:worker_threads');
+parentPort.on('message', () => {});
+setTimeout(() => parentPort.postMessage('ready'), 100);
+`,
+  },
+  {
     name: 'parent-ref-after-unref',
     entry: 'main.cjs',
     parent: `${cjsParent}\nworker.unref(); worker.ref(); worker.ref();`,
@@ -139,6 +199,52 @@ await exited;
 `,
     child: `
 const { parentPort } = require('node:worker_threads');
+parentPort.on('message', () => {});
+parentPort.postMessage('ready');
+`,
+  },
+  {
+    name: 'persistent-exit-counter',
+    entry: 'main.mjs',
+    parent: `
+import { Worker } from 'node:worker_threads';
+const worker = new Worker(new URL('./child.cjs', import.meta.url));
+let exitCount = 0;
+const exited = new Promise((resolve) => worker.on('exit', (code) => {
+  console.log('WORKER|exit-event=' + (++exitCount) + ':' + code);
+  resolve(code);
+}));
+process.on('exit', () => console.log('WORKER|exit-count=' + exitCount));
+await new Promise((resolve) => worker.once('message', resolve));
+console.log('WORKER|terminated=' + await worker.terminate());
+await exited;
+`,
+    child: `
+const { parentPort } = require('node:worker_threads');
+parentPort.on('message', () => {});
+parentPort.postMessage('ready');
+`,
+  },
+  {
+    name: 'terminate-drains-stdio',
+    entry: 'main.mjs',
+    parent: `
+import { Worker } from 'node:worker_threads';
+const worker = new Worker(new URL('./child.cjs', import.meta.url), {stdout: true});
+let output = '';
+const ended = new Promise((resolve) => {
+  worker.stdout.on('data', (chunk) => { output += chunk.toString(); });
+  worker.stdout.once('end', resolve);
+});
+await new Promise((resolve) => worker.once('message', resolve));
+const code = await worker.terminate();
+await ended;
+console.log('WORKER|terminal-output=' + JSON.stringify({code, exact: output === 'x'.repeat(262144)}));
+${exitHook}
+`,
+    child: `
+const { parentPort } = require('node:worker_threads');
+process.stdout.write('x'.repeat(262144));
 parentPort.on('message', () => {});
 parentPort.postMessage('ready');
 `,

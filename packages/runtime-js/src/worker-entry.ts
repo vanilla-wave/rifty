@@ -1,3 +1,4 @@
+import { installNodeProxyProvenance, sealNodeProxyBootstrap } from './internal/proxy-provenance.ts';
 /// <reference lib="webworker" />
 /**
  * Worker-side entry point for the JS runtime.
@@ -48,6 +49,8 @@ const startup = runtimeWorkerOptionsFromName(self.name);
 const selectedVmEngine = startup.vmEngine;
 if (selectedVmEngine !== undefined) setVmEngineOverride(selectedVmEngine);
 
+installNodeProxyProvenance();
+sealNodeProxyBootstrap();
 installProcessGlobals();
 installTimerGlobals();
 installWebGlobals();

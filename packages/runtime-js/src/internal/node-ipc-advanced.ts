@@ -1,4 +1,5 @@
 import { Buffer } from '@riftydev/io';
+import { proxyCloneFailure } from './proxy-provenance.ts';
 
 interface AdvancedFrame {
   readonly value: unknown;
@@ -30,6 +31,10 @@ export function encodeAdvancedIpc(message: unknown): AdvancedFrame {
   const seen = new Map<object, object>();
   const buffers: Uint8Array[] = [];
   function copy(value: unknown): unknown {
+    if (value !== null && (typeof value === 'object' || typeof value === 'function')) {
+      const failure = proxyCloneFailure(value);
+      if (failure !== undefined) throw new Error(failure);
+    }
     if (typeof value === 'function' || typeof value === 'symbol') {
       throw new Error(`${String(value)} could not be cloned.`);
     }
