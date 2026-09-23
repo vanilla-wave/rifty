@@ -5,6 +5,7 @@
 - Register `node:path/posix` / bare `path/posix` as `require('node:path').posix` itself; `node:path/win32` stays an unregistered builtin miss.
 
 - `process` owns `cwd`/`chdir`/`hrtime`/`uptime`/`exit`/`kill` (writable, enumerable, configurable) and an enumerable non-configurable `exitCode` accessor, as Node: `import { cwd } from 'node:process'` links, detached `exit`/`kill` act on their process; the `stdout`/`stderr` writer moved to `builtins/process-stdio-writer.ts`.
+- CJS/ESM Function guards admit global writes/defines/deletes with non-folding computed keys (vitest 4.1.11, undici); the key is checked at Node's coercion and only `'Function'` throws the existing ceiling, at the write (ADR-0444). `delete` operands that are not references, and `delete globalThis?.Function`, no longer bypass the guard.
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 

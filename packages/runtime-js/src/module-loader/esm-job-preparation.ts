@@ -1,4 +1,5 @@
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
+import { applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
 import { ModuleLoadError } from './errors.ts';
 import { transformEsm } from './esm-ast.ts';
 import { syncTransformCeiling } from './esm-job-state.ts';
@@ -41,8 +42,12 @@ export function finishPreparation(
   source: string,
   mode: 'async' | 'sync',
 ): PreparedEsm {
-  assertNoEsmFunctionRoutingCeiling(source, resolved.id);
-  const transformed = (deps.transformEsm ?? transformEsm)(source, resolved.id);
+  // ADR-0444: runtime global-write keys are wrapped in the checker passed as
+  // factory parameter `globalKeyCheck` before the ESM rewrite parses the module.
+  const globalKeyCheck = uniqueHelperName(source, '__riftyGlobalKey');
+  const keyEdits = assertNoEsmFunctionRoutingCeiling(source, resolved.id, globalKeyCheck);
+  const guarded = keyEdits.length === 0 ? source : applyEdits(source, keyEdits);
+  const transformed = (deps.transformEsm ?? transformEsm)(guarded, resolved.id);
   deps.sourceMaps?.setGeneratedLineMap(resolved.id, transformed.lineMap);
   const stash: Record<string, string> = readRuntimeGlobal('esmStash') ?? {};
   stash[resolved.id] = transformed.body;
@@ -64,14 +69,14 @@ export function finishPreparation(
       resolved,
       transformed,
       dependencies,
-      directFactory: compileDirectEsmFactory(resolved, transformed),
+      directFactory: compileDirectEsmFactory(resolved, transformed, globalKeyCheck),
     };
   }
   return {
     resolved,
     transformed,
     dependencies,
-    factory: compileEsmFactory(resolved, transformed, transformed.hasTopLevelAwait),
+    factory: compileEsmFactory(resolved, transformed, transformed.hasTopLevelAwait, globalKeyCheck),
   };
 }
 
@@ -94,6 +99,7 @@ function compileEsmFactory(
   resolved: ResolvedModule,
   transformed: PreparedEsm['transformed'],
   asyncBody: boolean,
+  globalKeyCheck: string,
 ): EsmFactory {
   const helper = transformed.helpers;
   try {
@@ -110,6 +116,7 @@ function compileEsmFactory(
       helper.metaResolve,
       'Function',
       helper.webAssembly,
+      globalKeyCheck,
       `const ${helper.runtimeObject} = Object; return (${asyncBody ? 'async ' : ''}function* () {\nconst ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody} yield;\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
     ) as EsmFactory;
   } catch (error) {
@@ -133,6 +140,7 @@ function compileEsmFactory(
 function compileDirectEsmFactory(
   resolved: ResolvedModule,
   transformed: PreparedEsm['transformed'],
+  globalKeyCheck: string,
 ): EsmDirectFactory {
   const helper = transformed.helpers;
   try {
@@ -149,6 +157,7 @@ function compileDirectEsmFactory(
       helper.metaResolve,
       'Function',
       helper.webAssembly,
+      globalKeyCheck,
       `const ${helper.runtimeObject} = Object; return (async function () {
 const ${helper.importMeta} = { url: ${helper.importMetaUrl}, dirname: ${helper.metaDirname}, filename: ${helper.metaFilename}, resolve: ${helper.metaResolve} }; ${transformed.instantiationBody}
 ${transformed.body}

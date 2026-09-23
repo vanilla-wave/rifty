@@ -7,6 +7,15 @@ import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
+import {
+  createGlobalWriteKeyCheck,
+  globalWriteKeyMayBeFunction,
+  isComputedMember,
+  literalString,
+  staticPropertyKeyName,
+  staticPropertyName,
+  unwrapChain,
+} from './global-write-key.ts';
 import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
@@ -132,6 +141,7 @@ interface FunctionRewriteCtx {
   readonly functionHelperName: string;
   readonly webAssemblyHelperName: string;
   readonly dynamicImportHelperName: string;
+  readonly globalKeyHelperName: string;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
   hasWithDynamicFunctionScope: boolean;
@@ -208,6 +218,7 @@ function rewriteCjsFunctionConstructorReferences(
   functionHelperName: string,
   webAssemblyHelperName: string,
   dynamicImportHelperName: string,
+  globalKeyHelperName: string,
 ): string {
   if (!functionRoutingAnalysisToken.test(source)) return source;
   let program: Program;
@@ -239,6 +250,7 @@ function rewriteCjsFunctionConstructorReferences(
     functionHelperName,
     webAssemblyHelperName,
     dynamicImportHelperName,
+    globalKeyHelperName,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
     hasWithDynamicFunctionScope: false,
@@ -738,7 +750,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
 
     case 'UnaryExpression':
       if ((n as unknown as { operator?: string }).operator === 'delete') {
-        walkAssignmentTarget(n.argument, ctx);
+        walkDeleteOperand(n.argument, ctx);
         return;
       }
       walkDefaultForFunctionReferences(n, ctx);
@@ -896,6 +908,16 @@ function walkAssignmentTarget(target: unknown, ctx: FunctionRewriteCtx): void {
     return;
   }
   walkAssignmentPatternTarget(t, ctx);
+}
+
+// `delete` deletes only a reference (optionally chained); any other operand is
+// an ordinary expression that still runs.
+function walkDeleteOperand(operand: unknown, ctx: FunctionRewriteCtx): void {
+  const o = operand as AnyNodeShape | undefined;
+  const target = o?.type === 'ChainExpression' ? (o.expression as AnyNodeShape) : o;
+  if (target?.type === 'Identifier' || target?.type === 'MemberExpression') {
+    walkAssignmentTarget(target, ctx);
+  } else walkFunctionReferences(operand, ctx);
 }
 
 function walkAssignmentPatternTarget(pattern: unknown, ctx: FunctionRewriteCtx): void {
@@ -1445,8 +1467,8 @@ function isGlobalFunctionReadMember(node: AnyNodeShape, ctx: FunctionRewriteCtx)
 
 function isGlobalFunctionWriteMember(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
   if (!isGlobalObjectExpression(node.object, ctx)) return false;
-  const propertyName = staticPropertyName(node);
-  return propertyName === 'Function' || (propertyName === undefined && isComputedMember(node));
+  if (!isComputedMember(node)) return staticPropertyName(node) === 'Function';
+  return globalWriteKeyMayBeFunction(node.property, ctx.globalKeyHelperName, ctx.edits);
 }
 
 function expressionMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1659,14 +1681,14 @@ function isGlobalFunctionMutationCall(node: AnyNodeShape, ctx: FunctionRewriteCt
     if (propertyName === 'defineProperties') {
       return objectMayContainFunctionKey(args[1]);
     }
-    return propertyMayBeFunction(args[1]);
+    return globalWriteKeyMayBeFunction(args[1], ctx.globalKeyHelperName, ctx.edits);
   }
 
   if (
     isGlobalObjectExpression(object, ctx) &&
     (propertyName === '__defineGetter__' || propertyName === '__defineSetter__')
   ) {
-    return propertyMayBeFunction(args[0]);
+    return globalWriteKeyMayBeFunction(args[0], ctx.globalKeyHelperName, ctx.edits);
   }
 
   return false;
@@ -1692,68 +1714,6 @@ function objectMayContainFunctionKey(node: unknown): boolean {
     const key = staticPropertyKeyName(property);
     return key === 'Function' || key === undefined;
   });
-}
-
-function staticPropertyName(node: AnyNodeShape): string | undefined {
-  const n = unwrapChain(node) as AnyNodeShape;
-  const member = n as unknown as { computed?: boolean; property?: AnyNodeShape };
-  const property = member.property;
-  if (!property) return undefined;
-  if (!member.computed && property.type === 'Identifier') {
-    return (property as unknown as { name?: string }).name;
-  }
-  return member.computed ? literalString(property) : undefined;
-}
-
-function isComputedMember(node: AnyNodeShape): boolean {
-  return Boolean((unwrapChain(node) as unknown as { computed?: boolean }).computed);
-}
-
-function staticPropertyKeyName(node: AnyNodeShape): string | undefined {
-  const property = node as unknown as { computed?: boolean; key?: AnyNodeShape };
-  const key = property.key;
-  if (!key) return undefined;
-  if (!property.computed && key.type === 'Identifier') {
-    return (key as unknown as { name?: string }).name;
-  }
-  return literalString(key);
-}
-
-function literalString(node: unknown): string | undefined {
-  if (!node || typeof node !== 'object') return undefined;
-  const n = unwrapChain(node) as AnyNodeShape;
-  if (n.type === 'Literal') {
-    const value = (n as unknown as { value?: unknown }).value;
-    return typeof value === 'string' ? value : undefined;
-  }
-  if (n.type === 'BinaryExpression' && (n as unknown as { operator?: string }).operator === '+') {
-    const left = literalString(n.left);
-    const right = literalString(n.right);
-    return left !== undefined && right !== undefined ? left + right : undefined;
-  }
-  if (n.type === 'TemplateLiteral') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    if (expressions.length > 0) return undefined;
-    const quasis = (n as unknown as { quasis?: AnyNodeShape[] }).quasis ?? [];
-    return quasis
-      .map((quasi) => {
-        const value = quasi.value as { cooked?: unknown } | undefined;
-        return typeof value?.cooked === 'string' ? value.cooked : '';
-      })
-      .join('');
-  }
-  return undefined;
-}
-
-function unwrapChain(node: unknown): unknown {
-  if (!node || typeof node !== 'object') return node;
-  const n = node as AnyNodeShape;
-  if (n.type === 'ChainExpression') return unwrapChain(n.expression);
-  if (n.type === 'SequenceExpression') {
-    const expressions = (n as unknown as { expressions?: unknown[] }).expressions ?? [];
-    return unwrapChain(expressions[expressions.length - 1]);
-  }
-  return node;
 }
 
 function walkDefaultForFunctionReferences(n: AnyNodeShape, ctx: FunctionRewriteCtx): void {
@@ -1797,6 +1757,7 @@ function compileCjsSource(
     __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
     __riftyFunction: FunctionConstructor,
     __riftyWebAssembly: typeof WebAssembly,
+    __riftyGlobalKey: (key: unknown) => unknown,
   ) => void;
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
@@ -1811,12 +1772,18 @@ function compileCjsSource(
     '__riftyWebAssembly',
     new Set([dynamicImportHelperName, functionHelperName]),
   );
+  const globalKeyHelperName = uniqueHelperName(
+    sourceText,
+    '__riftyGlobalKey',
+    new Set([dynamicImportHelperName, functionHelperName, webAssemblyHelperName]),
+  );
   const source = rewriteCjsFunctionConstructorReferences(
     rewriteDynamicImports(sourceText, filename, dynamicImportHelperName),
     filename,
     functionHelperName,
     webAssemblyHelperName,
     dynamicImportHelperName,
+    globalKeyHelperName,
   );
   let fn: CjsFactory;
   try {
@@ -1829,6 +1796,7 @@ function compileCjsSource(
       dynamicImportHelperName,
       functionHelperName,
       webAssemblyHelperName,
+      globalKeyHelperName,
       `${source}\n//# sourceURL=${filename}`,
     ) as CjsFactory;
   } catch (error) {
@@ -1853,6 +1821,10 @@ function compileCjsSource(
     dynamicImport,
     routedConstructors.Function,
     deps.WebAssembly,
+    createGlobalWriteKeyCheck(
+      'module-loader.cjs-global-function-assignment',
+      `CJS module ${filename} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
+    ),
   );
 }
 
