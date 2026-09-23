@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- `Readable.pipe` follows Node's end rule: `dest.end()` is skipped only for a literal `{end: false}` or the realm's
+  `process.stdout|stderr` (`require('node:process')`), and such a pipe unpipes at source end; `pipeline` pipes
+  `{end: false}` and ends each stage itself. Fixes vitest's `child.stdout.pipe(process.stdout)` crash. The process
+  is read via the registry factory uncached (`readBuiltinUncached`, io-internal, ADR-0458), so a same-realm
+  child's pipe never pins its process as the parent's `node:process`.
+
 - Retire completed command listener scopes without guest meta-events; preserve surviving host listeners (ADR-0422).
 
 - Canonical configurable preview paths: `normalizePreviewPrefix`, `previewPrefixPattern`,

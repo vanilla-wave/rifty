@@ -99,6 +99,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0385 | Keep one foreground drain across HTTP server close |
 | 0422 | Retire callbacks with completed command invocations |
 | 0444 | Check runtime global-write keys at Node's key coercion |
+| 0458 | Read the realm-bound `node:process` registry entry uncached in io |
 
 ### runtime-wasi
 

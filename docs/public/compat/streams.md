@@ -13,6 +13,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Readable async iteration | ✅ | `for await` over readable chunks |
 | Readable async-iterator helpers | ✅ | `map`/`filter`/`forEach`/`reduce`/`toArray`/`take`/`drop`/`flatMap`/`some`/`every`/`find`/`iterator`; `{ concurrency }` runs N at once but emits in INPUT order; `{ signal }` aborts with `AbortError`; Node validation errors (`ERR_INVALID_ARG_TYPE`/`ERR_OUT_OF_RANGE`/`ERR_MISSING_ARGS`) — parity-tested |
 | `Readable.from(iterable)` | ⚠️ | Node object-mode defaults, atomic string/Buffer boundaries, HWM, and cold start are parity-tested; iterator async-value/throw/return cleanup still diverges — backlog `runtime-js/readable-from-iterator-lifecycle` |
+| `Readable.pipe` | ⚠️ | Routing, unpipe and Node's end rule are parity-tested: only a literal `{ end: false }` or the realm's own `process.stdout`/`process.stderr` skips `dest.end()`, and such a pipe unpipes at source end (vitest's pool-child stdio shape). No `'pipe'`/`'unpipe'` events on the destination; an already-ended source never ends/unpipes; `pipeline(src, process.stdout)` throws `TypeError` — process streams lack `end()` |
 | `Writable` write/end/finish | ⚠️ | decodeStrings, covered byte admission, and scalar/batch completion order, HWM returns, drain, errors, and finish are parity-tested; other chunk kinds and `writableNeedDrain` remain — backlogs `runtime-js/stream-byte-chunk-kinds`, `runtime-js/writable-sync-dispatch-state` |
 | `Transform` | ✅ | `_transform` callback path |
 | `PassThrough` | ✅ | Forwards chunks unchanged |
@@ -54,6 +55,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `packages/io/src/streams/writable.cork-writev.test.ts`
 - `packages/net/src/http/response.test.ts`
 - `tools/node-parity-runner/cases/stream/*.case.ts`
+- `tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts`
+- `tools/node-parity-runner/cases/child_process/same-realm-child-pipe-parent-process.case.ts`
 
 ## Known Limitations
 
