@@ -147,6 +147,12 @@ execution controls (`timeout`/`displayErrors`/`cachedData`/`contextExtensions`/�
 for either false policy instead of claiming isolation it cannot enforce. `origin` and
 `microtaskMode` remain loud gaps.
 
+`vm.runInThisContext` and `Script.runInThisContext` honour Node 24 `lineOffset` and
+first-line `columnOffset` in delayed string stacks (✅; parity `vm/script-offsets`,
+ADR-0450). Offset-bearing context-engine runs remain ❌ with named
+`NotImplementedError`. Replacing `Error.prepareStackTrace` after evaluation
+can bypass this remapping (⚠️; `backlog/runtime-js/vm-offset-custom-stack-hook`).
+
 The default engine shares the live `contextObject` via a reconcile-based membrane (reseed
 host→guest before each run, sweep guest→host after) — observationally equivalent to Node's live
 context for synchronous code. Two caveats: a guest callback mutating the sandbox AFTER the run is

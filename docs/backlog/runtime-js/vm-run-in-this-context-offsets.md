@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `vm.runInThisContext` / `Script` honour `lineOffset` and `columnOffset`
 created: 2026-09-15
 why: vitest's module evaluator (and vite-node 3) evaluate every transformed test module with `vm.runInThisContext(wrapped, { filename, lineOffset: 0, columnOffset: -N })`; rifty throws `NotImplementedError('vm.runInThisContext.columnOffset')` for any non-zero offset, so no test file can execute
@@ -40,3 +40,7 @@ Node v24.16.0 and RED command/output: `docs/backlog/runtime-js/reference/vm-run-
 ## Out of scope
 
 Offsets in `runInContext` / `runInNewContext` stay named-loud until their engine-specific stack mapping is implemented. Other script options retain their current loud ceilings.
+
+## Decisions
+
+ready-verdict: 2026-09-23 — Contract+RED @ 7ca9012eb79b3e000818a9c4e63a7d8dc8930bc3

@@ -7,6 +7,7 @@
 - Expose implemented process methods as own ESM named exports.
 - Permit Symbol-key global writes through the CJS and ESM Function guards.
 - Fork advanced IPC now carries structured-clone data over the existing Worker channel; default JSON stays intact, Buffer/accessor graphs fail loudly.
+- Preserve Node VM script line/column offsets in delayed error stacks through the shared stack dispatcher (ADR-0450).
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 

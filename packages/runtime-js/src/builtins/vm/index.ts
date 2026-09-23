@@ -11,6 +11,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
+import { sourceUrlForVmOffsets } from '../../module-loader/source-maps.ts';
 import { recordDivergence } from '../../telemetry/divergence-sink.ts';
 import { selectEngine } from './engine-config.ts';
 import {
@@ -191,12 +192,16 @@ function assertSupportedRunOptions(options: RunningScriptOptions, feature: strin
   }
 }
 
-function assertSupportedScriptOptions(options: ScriptOptions, feature: string): void {
+function assertSupportedScriptOptions(
+  options: ScriptOptions,
+  feature: string,
+  offsetsAllowed = false,
+): void {
   assertSupportedRunOptions(options, feature);
-  if (options.lineOffset !== undefined && options.lineOffset !== 0) {
+  if (!offsetsAllowed && options.lineOffset !== undefined && options.lineOffset !== 0) {
     throw new NotImplementedError(`${feature}.lineOffset`);
   }
-  if (options.columnOffset !== undefined && options.columnOffset !== 0) {
+  if (!offsetsAllowed && options.columnOffset !== undefined && options.columnOffset !== 0) {
     throw new NotImplementedError(`${feature}.columnOffset`);
   }
   if (options.cachedData !== undefined) {
@@ -208,6 +213,21 @@ function assertSupportedScriptOptions(options: ScriptOptions, feature: string): 
   if (options.importModuleDynamically !== undefined) {
     throw new NotImplementedError(`${feature}.importModuleDynamically`);
   }
+}
+
+function scriptOffset(value: unknown, name: 'lineOffset' | 'columnOffset'): number {
+  if (value === undefined) return 0;
+  if (typeof value !== 'number') {
+    throw Object.assign(new TypeError(`The "options.${name}" property must be of type number.`), {
+      code: 'ERR_INVALID_ARG_TYPE',
+    });
+  }
+  if (!Number.isInteger(value)) {
+    throw Object.assign(new RangeError(`The value of "options.${name}" must be an integer.`), {
+      code: 'ERR_OUT_OF_RANGE',
+    });
+  }
+  return value;
 }
 
 function assertSupportedCompileOptions(options: CompileFunctionOptions): void {
@@ -333,8 +353,18 @@ export function isContext(value: unknown): boolean {
 
 export function runInThisContext(code: string, options?: VmOptions): unknown {
   const normalized = normalizeOptions(options);
-  assertSupportedScriptOptions(normalized, 'vm.runInThisContext');
-  return runGlobalScript(withSourceURL(asSource(code), normalized.filename));
+  assertSupportedScriptOptions(normalized, 'vm.runInThisContext', true);
+  const lineOffset = scriptOffset(normalized.lineOffset, 'lineOffset');
+  const columnOffset = scriptOffset(normalized.columnOffset, 'columnOffset');
+  const filename =
+    lineOffset === 0 && columnOffset === 0
+      ? normalized.filename
+      : sourceUrlForVmOffsets(
+          normalized.filename ?? 'evalmachine.<anonymous>',
+          lineOffset,
+          columnOffset,
+        );
+  return runGlobalScript(withSourceURL(asSource(code), filename));
 }
 
 export function runInContext(
@@ -367,6 +397,8 @@ export function runInNewContext(
 export class Script {
   readonly #code: string;
   readonly #filename?: string;
+  readonly #lineOffset: number;
+  readonly #columnOffset: number;
   // Memoised compiled payload — compile once, reuse across every run of this
   // Script instance. The engine keys its own per-script state (the rewrite, a
   // quickjs handle, …) on this stable CompiledScript identity, so reuse here is
@@ -375,9 +407,11 @@ export class Script {
 
   constructor(code: string, options?: VmOptions) {
     const normalized = normalizeOptions(options);
-    assertSupportedScriptOptions(normalized, 'vm.Script');
+    assertSupportedScriptOptions(normalized, 'vm.Script', true);
     this.#code = asSource(code);
     this.#filename = normalized.filename;
+    this.#lineOffset = scriptOffset(normalized.lineOffset, 'lineOffset');
+    this.#columnOffset = scriptOffset(normalized.columnOffset, 'columnOffset');
   }
 
   #getCompiled(): CompiledScript {
@@ -386,10 +420,19 @@ export class Script {
   }
 
   runInThisContext(options?: VmOptions): unknown {
-    return runInThisContext(this.#code, { ...normalizeOptions(options), filename: this.#filename });
+    return runInThisContext(this.#code, {
+      ...normalizeOptions(options),
+      filename: this.#filename,
+      lineOffset: this.#lineOffset,
+      columnOffset: this.#columnOffset,
+    });
   }
 
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
+    if (this.#lineOffset !== 0) throw new NotImplementedError('vm.Script.runInContext.lineOffset');
+    if (this.#columnOffset !== 0) {
+      throw new NotImplementedError('vm.Script.runInContext.columnOffset');
+    }
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
     assertContextified(contextifiedObject);
@@ -400,6 +443,12 @@ export class Script {
   }
 
   runInNewContext(contextObject?: Record<string, unknown>, options?: VmOptions): unknown {
+    if (this.#lineOffset !== 0) {
+      throw new NotImplementedError('vm.Script.runInNewContext.lineOffset');
+    }
+    if (this.#columnOffset !== 0) {
+      throw new NotImplementedError('vm.Script.runInNewContext.columnOffset');
+    }
     if (contextObject === null) {
       throw new TypeError('The "object" argument must be of type object. Received null');
     }

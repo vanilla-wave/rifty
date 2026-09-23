@@ -25,3 +25,7 @@ Option 3. Hand-rolled VLQ decode (lines+columns; 1-field segments advance the ru
 - Remap window is top-level evaluation ONLY — frames rendered later (exported handler throwing at request time) stay unmapped; tracked with worker/overlay residue in `docs/backlog/runtime-js/worker-stack-remap-error-overlay.md`.
 - Line offset 4 couples to V8's `new Function` rendering — fine for the Chromium-only target (D-001), wrong elsewhere.
 - No external sourcemap dependency; decoder stays subset-honest (no `sources`/`names` resolution, only line/column lookup).
+
+### Corrections (active, 2026-09-23)
+
+ADR-0450 changes only hook lifetime after an offset VM script: the shared dispatcher remains installed for delayed VM frames. TS maps still enter/leave their scoped registry as decided here.

@@ -1,0 +1,92 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Contract+RED принят. Node oracle подтверждён; parity RED воспроизведён. Прежние замечания устранены. Далее IMPLEMENT и Final+GREEN; merge пока нельзя. Tracked-файлы не изменены.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "7ca9012eb79b3e000818a9c4e63a7d8dc8930bc3",
+  "unit_goal_source": "docs/backlog/runtime-js/vm-run-in-this-context-offsets.md (draft); vitest-run-in-browser I4/I5; BASE origin/main 0c4c1b070042a7a3079888cae92f25f15db24cdf; HEAD 7ca9012eb79b3e000818a9c4e63a7d8dc8930bc3. Node v24.16.0: oracle совпал. node --import tsx tools/node-parity-runner/src/cli.ts script-offsets → exit 1, NotImplementedError: vm.runInThisContext.lineOffset. Мутанты clamp, запрета прямого отрицательного offset и игнорирования offsets обнаружены.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I4, I5",
+      "location": "docs/backlog/epics/vitest-run-in-browser/goal.md:108",
+      "summary": "End-to-end vitest forks/threads: config.ts, TypeScript-тесты, reporter и exit codes остаются последующей acceptance-работой; goal не закрыт."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: оба API; delayed stacks, lineOffset, columnOffset только первой строки, отрицательные колонки",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-offsets.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: значения исходника, включая multiline template literal, неизменны",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-offsets.case.ts:24",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: одинаковый источник в Node/rifty, delayed frames и literal",
+      "source": "acceptance",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/vm/script-offsets.case.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Node oracle: run 11:28, script 11:-12, negative 11:-13, later 12:25; literal first\\nsecond",
+      "source": "frozen-artifact",
+      "trace": "I4 + I5",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/vm-run-in-this-context-offsets-evidence.md:3",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import { runInThisContext } from '../builtins/vm/index.ts';
 import { createModuleLoader } from './loader.ts';
-import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
+import { SourceMapRegistry, extractInlineSourceMap, withStackRemapping } from './source-maps.ts';
 
 declare global {
   var __riftyStackFrame: string | undefined;
@@ -267,5 +268,44 @@ describe('module loader source-map stack remapping', () => {
 
     expect(globalThis.__riftyStackFrame).toBe('/work/main.ts:5:1');
     globalThis.__riftyStackFrame = undefined;
+  });
+
+  it('shares one stack dispatcher across scoped TS maps and delayed VM frames', async () => {
+    const registry = new SourceMapRegistry();
+    registry.set('/virtual/mapped.ts', {
+      // new Function places the body on generated line 3.
+      lines: [[], [], [{ generatedColumn: 0, originalLine: 9, originalColumn: 0 }]],
+    });
+    const mappedTsStack = (): string =>
+      new Function('return new Error().stack\n//# sourceURL=/virtual/mapped.ts')() as string;
+    let later!: () => string;
+
+    await withStackRemapping(registry, '/virtual/mapped.ts', 0, async () => {
+      later = runInThisContext('() => new Error().stack', {
+        filename: '/virtual/offset.js',
+        lineOffset: 5,
+        columnOffset: -20,
+      }) as () => string;
+      expect(mappedTsStack()).toContain('/virtual/mapped.ts:10:1');
+    });
+
+    expect(later()).toContain('/virtual/offset.js:6:-13');
+    await withStackRemapping(registry, '/virtual/mapped.ts', 0, async () => {
+      expect(mappedTsStack()).toContain('/virtual/mapped.ts:10:1');
+      expect(later()).toContain('/virtual/offset.js:6:-13');
+    });
+
+    const sharedA = runInThisContext('() => new Error().stack', {
+      filename: '/virtual/shared.js',
+      lineOffset: 10,
+      columnOffset: -20,
+    }) as () => string;
+    const sharedB = runInThisContext('() => new Error().stack', {
+      filename: '/virtual/shared.js',
+      lineOffset: 20,
+      columnOffset: 5,
+    }) as () => string;
+    expect(sharedA()).toContain('/virtual/shared.js:11:-13');
+    expect(sharedB()).toContain('/virtual/shared.js:21:12');
   });
 });

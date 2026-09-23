@@ -2,6 +2,7 @@ const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
 const BASE64_VALUES = new Map([...BASE64].map((char, index) => [char, index] as const));
 const INLINE_SOURCE_MAP_RE =
   /(?:\/\/[@#]\s*sourceMappingURL=data:application\/json(?:;charset=[^;,]+)?;base64,([A-Za-z0-9+/=]+)\s*)$/;
+const VM_OFFSET_FRAME_RE = /rifty-vm:\/\/offset\/(-?\d+)\/(-?\d+)\/([^\s():]+):(\d+):(\d+)/g;
 
 export interface ExtractedSourceMap {
   readonly code: string;
@@ -76,13 +77,30 @@ interface ActiveSourceMap {
 
 const activeSourceMaps: ActiveSourceMap[] = [];
 let previousPrepareStackTrace: PrepareStackTrace | undefined;
+let stackDispatcherInstalled = false;
+let vmOffsetsRegistered = false;
 
 const dispatcherPrepareStackTrace: PrepareStackTrace = (err, stackTraces) => {
   const rendered = previousPrepareStackTrace
     ? String(previousPrepareStackTrace(err, stackTraces))
     : renderDefaultStack(err, stackTraces);
-  return remapActiveStack(rendered);
+  return remapVmOffsetStack(remapActiveStack(rendered));
 };
+
+export function sourceUrlForVmOffsets(
+  filename: string,
+  lineOffset: number,
+  columnOffset: number,
+): string {
+  // TODO(backlog: runtime-js/vm-offset-custom-stack-hook): a later guest hook replacement bypasses remapping.
+  vmOffsetsRegistered = true;
+  installStackDispatcher();
+  const encoded = encodeURIComponent(filename).replace(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `rifty-vm://offset/${lineOffset}/${columnOffset}/${encoded}`;
+}
 
 export function extractInlineSourceMap(source: string): ExtractedSourceMap {
   const match = INLINE_SOURCE_MAP_RE.exec(source);
@@ -125,20 +143,22 @@ export async function withStackRemapping<T>(
 }
 
 function installStackDispatcher(): void {
-  if (activeSourceMaps.length > 0) return;
+  if (stackDispatcherInstalled) return;
   const errorCtor = Error as ErrorWithPrepareStackTrace;
   previousPrepareStackTrace = errorCtor.prepareStackTrace;
   errorCtor.prepareStackTrace = dispatcherPrepareStackTrace;
+  stackDispatcherInstalled = true;
 }
 
 function restoreStackDispatcherIfIdle(): void {
-  if (activeSourceMaps.length > 0) return;
+  if (activeSourceMaps.length > 0 || vmOffsetsRegistered) return;
   const errorCtor = Error as ErrorWithPrepareStackTrace;
   if (errorCtor.prepareStackTrace === dispatcherPrepareStackTrace) {
     if (previousPrepareStackTrace) errorCtor.prepareStackTrace = previousPrepareStackTrace;
     else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
   }
   previousPrepareStackTrace = undefined;
+  stackDispatcherInstalled = false;
 }
 
 function materializeErrorStack(err: unknown): void {
@@ -162,6 +182,26 @@ function remapActiveStack(stack: string): string {
     out = entry.registry.remapStack(out, entry.id, entry.lineOffset);
   }
   return out;
+}
+
+function remapVmOffsetStack(stack: string): string {
+  return stack.replace(
+    VM_OFFSET_FRAME_RE,
+    (
+      _frame,
+      lineDelta: string,
+      columnDelta: string,
+      encoded: string,
+      lineText: string,
+      colText: string,
+    ) => {
+      const physicalLine = Number(lineText);
+      const line = physicalLine + Number(lineDelta);
+      const column = Number(colText) + (physicalLine === 1 ? Number(columnDelta) : 0);
+      const filename = decodeURIComponent(encoded);
+      return `${filename}${line === 0 ? '' : `:${line}${column === 0 ? '' : `:${column}`}`}`;
+    },
+  );
 }
 
 function renderDefaultStack(err: Error, stackTraces: readonly StackFrameLike[]): string {

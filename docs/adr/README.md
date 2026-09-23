@@ -99,6 +99,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0385 | Keep one foreground drain across HTTP server close |
 | 0422 | Retire callbacks with completed command invocations |
 | 0448 | Advanced fork IPC over the existing process channel |
+| 0450 | Persistent VM script stack offsets |
 
 ### runtime-wasi
 
