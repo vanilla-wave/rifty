@@ -5,7 +5,9 @@ const { join } = require('node:path');
 
 const dir = mkdtempSync(join(tmpdir(), 'rifty-advanced-ipc-oracle-'));
 const childPath = join(dir, 'child.cjs');
-writeFileSync(childPath, `
+writeFileSync(
+  childPath,
+  `
 process.on('message', (message) => {
   if (message.kind === 'views') {
     const views = message.views;
@@ -28,7 +30,8 @@ process.on('message', (message) => {
     process.send({ value: Set.prototype.values.call(message.set).next().value });
   }
 });
-`);
+`,
+);
 
 function roundtrip(payload) {
   return new Promise((resolve, reject) => {
