@@ -79,6 +79,7 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ f47817a285428608fb28d9c9a6df1cfe6a1ae890
 - 2026-09-23 — identity source = io registry `loadBuiltin('process')` (ADR-0035 binding `require('node:process')` returns); rejected: `Symbol.for` brand on the streams (#349, observable via `getOwnPropertySymbols`), new io owner seam + ADR (#352, machinery the registry already carries), `globalThis.process` read (diverges on reassignment, P6). Internal, reversible — CHANGELOG, no ADR.
 - 2026-09-23 — promise widened at pickup: Node's same-line `unpipe` half (incl. `{end: false}`) and pipeline ending its last stage itself — the exemption alone approximates Node's rule and turns `pipeline(src, process.stdout)` from a loud TypeError into a never-settling pipeline (spike, evidence).
 - 2026-09-23 — no Fault matrix: in-realm stream wiring; no cache/persistence/network/concurrency boundary (the registry read is the existing `node:process` binding).
