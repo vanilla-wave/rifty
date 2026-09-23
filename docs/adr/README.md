@@ -101,6 +101,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0443 | Named-loud builtin members for linked, unsuppliable Node edges |
 | 0444 | Check runtime global-write keys at Node's key coercion |
 | 0447 | Count referenced MessagePorts in child-realm keepalive |
+| 0450 | Project vm script offsets through one owned stack hook |
 | 0458 | Read the realm-bound `node:process` registry entry uncached in io |
 
 ### runtime-wasi

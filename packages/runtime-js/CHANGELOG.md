@@ -9,6 +9,11 @@
 - `process` owns `cwd`/`chdir`/`hrtime`/`uptime`/`exit`/`kill` (writable, enumerable, configurable) and an enumerable non-configurable `exitCode` accessor, as Node: `import { cwd } from 'node:process'` links, detached `exit`/`kill` act on their process; the `stdout`/`stderr` writer moved to `builtins/process-stdio-writer.ts`.
 - CJS/ESM Function guards admit global writes/defines/deletes with non-folding computed keys (vitest 4.1.11, undici); the key is checked at Node's coercion and only `'Function'` throws the existing ceiling, at the write (ADR-0444). `delete` operands that are not references, and `delete globalThis?.Function`, no longer bypass the guard.
 - Node child realms give `MessagePort` Node's `ref`/`unref`/`hasRef`: a referenced port is a counted keepalive handle until unref or either pair end closes (emnapi napi async work, rolldown wasm32-wasi). Global and `worker_threads` `MessageChannel` are one recording Proxy; moving a referenced pair or referencing a split pair throws by name (ADR-0447).
+- `vm.runInThisContext` / `vm.Script` honour int32 `lineOffset` / `columnOffset` in stacks and guest `Error.prepareStackTrace` CallSites via one owned stack-hook accessor; offsets validate as Node on every `vm` entry point; sandbox offsets stay named gaps (ADR-0450).
+
+- `vm.runInThisContext` / `vm.Script` name a script by its own `sourceURL` comment as Node does (offsets dropped from line/column, kept on enclosing getters); `Script` sandbox runs check the context before the offset gap; a frozen `Error` is a named gap (ADR-0450).
+
+- A vm script evaluated while V8 formats another stack (inside a stack hook or a formatter's getter) gets the same own-`sourceURL` / filename naming: V8 skips the probe's hook there, so the name comes from V8's own rendering of the probe frame (ADR-0450).
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
