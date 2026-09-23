@@ -19,7 +19,6 @@
 import {
   type IpcFrame,
   type KernelProcessSpec,
-  type KernelStdioOutputWriter,
   decodeIpcFrame,
   globalProcessManager,
 } from '@riftydev/kernel';
@@ -51,6 +50,7 @@ import {
   type NodeProcessRelease,
   createNodeProcessRelease,
 } from './process-identity.ts';
+import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
 
 const NODE_PROCESS_TERMINAL_BOOTSTRAP = Symbol.for(
   'rifty.runtime-js.process-terminal-bootstrap.v1',
@@ -139,6 +139,54 @@ function nextTick(fn: (...args: unknown[]) => void, ...args: unknown[]): void {
   ensureDrainScheduled();
 }
 
+// `this`-free Node-own members: own fields of every NodeProcess (like nextTick),
+// so `import { cwd } from 'node:process'` links and works unbound (Node shape).
+function cwd(): string {
+  return currentCwd;
+}
+
+function chdir(dir: string): void {
+  if (typeof dir !== 'string') {
+    throw Object.assign(new TypeError('chdir: path must be a string'), {
+      code: 'ERR_INVALID_ARG_TYPE',
+    });
+  }
+  const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
+  let stat: { isDirectory: boolean };
+  try {
+    stat = syncMirror().statSync(target);
+  } catch (err) {
+    throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
+      code: 'ENOENT',
+      syscall: 'chdir',
+      path: target,
+      cause: err,
+    });
+  }
+  if (!stat.isDirectory) {
+    throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
+      code: 'ENOTDIR',
+      syscall: 'chdir',
+      path: target,
+    });
+  }
+  currentCwd = target;
+}
+
+function hrtime(time?: [number, number]): [number, number] {
+  const ms = performance.now();
+  const secs = Math.floor(ms / 1000);
+  const ns = Math.floor((ms - secs * 1000) * 1e6);
+  if (!time) return [secs, ns];
+  const [s0, n0] = time;
+  return [secs - s0, ns - n0];
+}
+hrtime.bigint = (): bigint => BigInt(Math.floor(performance.now() * 1e6));
+
+function uptime(): number {
+  return performance.now() / 1000;
+}
+
 /** Patch `Promise.prototype.then` so nextTick beats `.then` (Node ordering). */
 export function patchPromiseForNextTick(): void {
   if (promisePatched) return;
@@ -161,107 +209,6 @@ export function patchPromiseForNextTick(): void {
         : onR;
     return origThen.call(this, wrapF as never, wrapR as never);
   } as typeof Promise.prototype.then;
-}
-
-// --- stdio plumbing (shared by spec + no-spec processes) ---
-
-const STDIO_ENCODER = new TextEncoder();
-
-function encodeChunk(chunk: string | Uint8Array): Uint8Array {
-  return typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
-}
-
-type StdioCallback = () => void;
-
-interface NodeStdioWriter extends EventEmitter {
-  write(chunk: string | Uint8Array): boolean;
-  isTTY: boolean;
-  fd: number;
-  columns?: number;
-  rows?: number;
-  getWindowSize?(): [number, number];
-  clearLine?(dir?: number, cb?: StdioCallback): boolean;
-  cursorTo?(x: number, yOrCb?: number | StdioCallback, cb?: StdioCallback): boolean;
-  moveCursor?(dx: number, dy: number, cb?: StdioCallback): boolean;
-  clearScreenDown?(cb?: StdioCallback): boolean;
-}
-
-function writeControl(stream: NodeStdioWriter, sequence: string, cb?: StdioCallback): boolean {
-  const ok = stream.write(sequence);
-  if (cb) queueMicrotask(cb);
-  return ok;
-}
-
-function attachTtyControls(
-  stream: NodeStdioWriter,
-  size: { readonly cols: number; readonly rows: number },
-): NodeStdioWriter {
-  stream.columns = size.cols;
-  stream.rows = size.rows;
-  stream.getWindowSize = () => [stream.columns ?? 0, stream.rows ?? 0];
-  stream.clearLine = (dir, cb): boolean => {
-    const direction = dir ?? 0;
-    const mode = direction < 0 ? 1 : direction > 0 ? 0 : 2;
-    return writeControl(stream, `\x1b[${mode}K`, cb);
-  };
-  stream.cursorTo = (x, yOrCb, cb): boolean => {
-    const y = typeof yOrCb === 'number' ? yOrCb : undefined;
-    const callback = typeof yOrCb === 'function' ? yOrCb : cb;
-    const sequence = y === undefined ? `\x1b[${Math.max(0, x) + 1}G` : `\x1b[${y + 1};${x + 1}H`;
-    return writeControl(stream, sequence, callback);
-  };
-  stream.moveCursor = (dx, dy, cb): boolean => {
-    let sequence = '';
-    if (dx < 0) sequence += `\x1b[${-dx}D`;
-    else if (dx > 0) sequence += `\x1b[${dx}C`;
-    if (dy < 0) sequence += `\x1b[${-dy}A`;
-    else if (dy > 0) sequence += `\x1b[${dy}B`;
-    return writeControl(stream, sequence, cb);
-  };
-  stream.clearScreenDown = (cb): boolean => writeControl(stream, '\x1b[0J', cb);
-  return stream;
-}
-
-function detachTtyControls(stream: NodeStdioWriter): NodeStdioWriter {
-  Reflect.deleteProperty(stream, 'columns');
-  Reflect.deleteProperty(stream, 'rows');
-  Reflect.deleteProperty(stream, 'getWindowSize');
-  Reflect.deleteProperty(stream, 'clearLine');
-  Reflect.deleteProperty(stream, 'cursorTo');
-  Reflect.deleteProperty(stream, 'moveCursor');
-  Reflect.deleteProperty(stream, 'clearScreenDown');
-  return stream;
-}
-
-function applyTtyShape(
-  stream: NodeStdioWriter,
-  isTTY: boolean,
-  size: { readonly cols: number; readonly rows: number },
-): void {
-  stream.isTTY = isTTY;
-  if (isTTY) attachTtyControls(stream, size);
-  else detachTtyControls(stream);
-}
-
-/** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
-function makeStdioWriter(
-  port: KernelStdioOutputWriter,
-  fd: number,
-  isTTY: boolean,
-  size: { readonly cols: number; readonly rows: number },
-): NodeStdioWriter {
-  const stream = Object.assign(new EventEmitter(), {
-    isTTY,
-    fd,
-    write(chunk: string | Uint8Array) {
-      const bytes = encodeChunk(chunk);
-      // A passed-in view may share storage with its caller; the semantic writer
-      // owns transport, while this adapter preserves Node's non-detaching write.
-      port.write(typeof chunk === 'string' ? bytes : new Uint8Array(bytes));
-      return true;
-    },
-  }) as NodeStdioWriter;
-  return isTTY ? attachTtyControls(stream, size) : stream;
 }
 
 export interface NodeStdin extends EventEmitter {
@@ -531,18 +478,18 @@ export class NodeProcess extends EventEmitter {
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
   // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
-  // a numeric string coerces; reads return the validated integer.
+  // a numeric string coerces; reads return the validated integer. Own accessor
+  // (enumerable, non-configurable, as Node's) defined in the constructor.
   #exitCode = 0;
-  get exitCode(): number {
-    return this.#exitCode;
-  }
-  set exitCode(v: unknown) {
-    this.#exitCode = coerceExitCode(v);
-  }
+  declare exitCode: number;
   stdout: NodeStdioWriter;
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
   nextTick = nextTick;
+  cwd = cwd;
+  chdir = chdir;
+  hrtime = hrtime;
+  uptime = uptime;
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
   send?: (message: unknown, ...unsupported: unknown[]) => boolean;
@@ -567,6 +514,14 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, 'exitCode', {
+      get: (): number => this.#exitCode,
+      set: (v: unknown): void => {
+        this.#exitCode = coerceExitCode(v);
+      },
+      enumerable: true,
+      configurable: false,
+    });
     Object.defineProperty(this, 'release', {
       value: createNodeProcessRelease(),
       writable: false,
@@ -702,52 +657,9 @@ export class NodeProcess extends EventEmitter {
     return result;
   }
 
-  cwd(): string {
-    return currentCwd;
-  }
-
-  chdir(dir: string): void {
-    if (typeof dir !== 'string') {
-      throw Object.assign(new TypeError('chdir: path must be a string'), {
-        code: 'ERR_INVALID_ARG_TYPE',
-      });
-    }
-    const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
-    let stat: { isDirectory: boolean };
-    try {
-      stat = syncMirror().statSync(target);
-    } catch (err) {
-      throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
-        code: 'ENOENT',
-        syscall: 'chdir',
-        path: target,
-        cause: err,
-      });
-    }
-    if (!stat.isDirectory) {
-      throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
-        code: 'ENOTDIR',
-        syscall: 'chdir',
-        path: target,
-      });
-    }
-    currentCwd = target;
-  }
-
-  hrtime(time?: [number, number]): [number, number] {
-    const ms = performance.now();
-    const secs = Math.floor(ms / 1000);
-    const ns = Math.floor((ms - secs * 1000) * 1e6);
-    if (!time) return [secs, ns];
-    const [s0, n0] = time;
-    return [secs - s0, ns - n0];
-  }
-
-  uptime(): number {
-    return performance.now() / 1000;
-  }
-
-  exit(code: unknown = 0): never {
+  // Own instance-bound fields, not prototype methods: Node's detached
+  // `const { exit } = process; exit(3)` / `import { kill }` still hit this process.
+  exit = (code: unknown = 0): never => {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
     this.#exitCode = c;
     const exitCode = toUint8ExitCode(c);
@@ -761,9 +673,9 @@ export class NodeProcess extends EventEmitter {
     });
     if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
     throw exitError;
-  }
+  };
 
-  kill(pid: number, signal = 'SIGTERM'): boolean {
+  kill = (pid: number, signal = 'SIGTERM'): boolean => {
     if (pid !== this.pid || signal !== 'SIGUSR2') {
       throw new NotImplementedError(
         'process.kill',
@@ -771,7 +683,7 @@ export class NodeProcess extends EventEmitter {
       );
     }
     return this.#requestSelfSignal(signal);
-  }
+  };
 
   /** Host bridge: deliver terminal/process stdin into this realm's process. */
   pushStdin(data: string | Uint8Array): void {
@@ -1171,9 +1083,6 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
   }
   return (receiver as () => NodeProcessWorkerIpc)();
 }
-
-(NodeProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>
-  BigInt(Math.floor(performance.now() * 1e6));
 
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();

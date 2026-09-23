@@ -4,6 +4,8 @@
 
 - Register `node:path/posix` / bare `path/posix` as `require('node:path').posix` itself; `node:path/win32` stays an unregistered builtin miss.
 
+- `process` owns `cwd`/`chdir`/`hrtime`/`uptime`/`exit`/`kill` (writable, enumerable, configurable) and an enumerable non-configurable `exitCode` accessor, as Node: `import { cwd } from 'node:process'` links, detached `exit`/`kill` act on their process; the `stdout`/`stderr` writer moved to `builtins/process-stdio-writer.ts`.
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
