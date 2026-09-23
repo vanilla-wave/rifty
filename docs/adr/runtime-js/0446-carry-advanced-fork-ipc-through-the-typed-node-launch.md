@@ -1,6 +1,6 @@
 # ADR 0446: Carry advanced fork IPC through the typed Node launch
 
-Status: Proposed
+Status: Accepted
 Date: 2026-09
 
 > TL;DR: Select advanced fork serialization through the existing typed launch;

@@ -70,5 +70,7 @@ reads, derived-constructor and eval guards are unchanged.
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ 57602c71af088f69e2f973aa54ae3334644e8150
+
 - 2026-09-23 — observed false positives reproduced; Node v24.16.0 baseline and RED artifacts in [evidence](reference/symbol-key-global-write-guard-precision-evidence.md).
 - 2026-09-23 — ADR-0444 selects shared runtime primitive-symbol validation, supplements ADR-0171; Contract+RED required for the explicit rejection-timing policy before source implementation.

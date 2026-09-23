@@ -1,0 +1,180 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Contract+RED PASS with advisory. Node v24.16.0 rich/fault oracles reproduced; 4 launch RED; physical parity 2 RED traced by direct probe to advanced ceiling; default JSON GREEN. Implement then Final+GREEN.",
+  "checkpoint": "Contract+RED",
+  "reviewed_sha": "57602c71af088f69e2f973aa54ae3334644e8150",
+  "unit_goal_source": "docs/backlog/runtime-js/child-process-advanced-ipc-serialization.md @ 57602c71af088f69e2f973aa54ae3334644e8150; BASE 7a12d3214; accepted docs/backlog/epics/vitest-run-in-browser/goal.md and map.md; fresh reviewer /root/guard_ipc_contract_review",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I1\u2013I7 whole-goal acceptance",
+      "location": "docs/backlog/epics/vitest-run-in-browser/map.md:8",
+      "summary": "Preparation only: implement these prepared units and remaining map obligations; run actual browser Vitest forks/threads acceptance and final review before the requested one green PR closes."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: both directions preserve rich graph, brands, aliases, cycles and send snapshot",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:4; tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:47; tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:66",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: both senders throw synchronous native errors without delivery/disconnect; healthy sends remain ordered",
+      "source": "acceptance",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:5; tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:41; tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:63",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: disconnect retains private kill/terminal events; JSON unchanged",
+      "source": "acceptance",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:74; tools/node-parity-runner/cases/child_process/public-ipc-json.case.ts:87",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: producer/receiver preserve advanced; v5 replaces v4 atomically",
+      "source": "acceptance",
+      "trace": "ADR-0267+ADR-0446",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-advanced-ipc.test.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Parity 1: child-originated graph, parent echo, snapshot, disconnect and kill",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:37",
+      "note": ""
+    },
+    {
+      "row": "Parity 2: invalid/clone/getter faults in both realms, getter-error identity, channel recovery",
+      "source": "acceptance",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:32",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: existing default JSON mode remains unchanged",
+      "source": "acceptance",
+      "trace": "ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-json.case.ts:32",
+      "note": ""
+    },
+    {
+      "row": "Fault: corrupt-input \u00d7 both advanced senders",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:5",
+      "note": ""
+    },
+    {
+      "row": "Fault: sibling-drift \u00d7 parent/child codec selection",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:47; tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:66; tools/node-parity-runner/cases/child_process/public-ipc-json.case.ts:32",
+      "note": ""
+    },
+    {
+      "row": "Fault: observable-order \u00d7 serialization/queued sends",
+      "source": "fault-matrix",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced-fault.case.ts:63; tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Fault: provenance-lie \u00d7 typed launch ownership",
+      "source": "fault-matrix",
+      "trace": "ADR-0267+ADR-0446",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/node-entry-advanced-ipc.test.ts:23",
+      "note": ""
+    },
+    {
+      "row": "Fault: torn-state \u00d7 public disconnect/private control",
+      "source": "fault-matrix",
+      "trace": "ADR-0326",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Frozen native rich graph evidence",
+      "source": "frozen-artifact",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md:29",
+      "note": ""
+    },
+    {
+      "row": "Frozen native invalid/getter/ordered-recovery evidence",
+      "source": "frozen-artifact",
+      "trace": "I4+ADR-0326",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md:30",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/child_process/public-ipc-advanced.case.ts:51",
+          "summary": "Both new child fixtures keep setInterval alive. They do not isolate ADR-0446 public-IPC listener keepalive from timer keepalive; watch this boundary when replacing #jsonIpc. Advisory reading only, not an executed surviving mutant and not a Contract+RED blocker.",
+          "authority": "",
+          "evidence": "Read rich:51, advanced-fault:47 and existing process.ts:1047 (#jsonIpc gates listener keepalive). Executed current native and RED cases; no future implementation/liveness mutant claimed."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

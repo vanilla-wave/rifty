@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `child_process.fork` with `serialization: 'advanced'` round-trips structured-clone values
 created: 2026-09-15
 why: vitest's default forks pool calls `fork(entry, [], { env, execArgv, stdio: 'pipe', serialization: 'advanced' })`; rifty throws `NotImplementedError('child_process.serialization.advanced')` at spawn, so the default pool cannot start
@@ -73,6 +73,8 @@ stays goal work. No transport retries, duplicate/reorder injection, peer-death
 recovery or second serializer/channel owner.
 
 ## Decisions
+
+ready-verdict: 2026-09-23 — Contract+RED @ 57602c71af088f69e2f973aa54ae3334644e8150
 
 - 2026-09-23 — source: user's whole-epic handoff + goal I4 default forks → generic advanced fork codec; native Node fixes value/error semantics. Existing ADR-0326 callback/handle ceilings stay explicit, not an invented user exclusion.
 - 2026-09-23 — preparation: new parity promise; two physical REDs before production changes, Contract+RED pending. The pre-spawn ceiling prevents Worker allocation; same-source direct probe identifies it.
