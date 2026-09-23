@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: Manual MessagePort refs keep Node programs alive for pending NAPI work
 created: 2026-09-23
 why: emnapi's NodejsWaitingRequestCounter conditionally refs a global MessageChannel port; browser ports have no ref/unref so Vitest exits 0 while NAPI work remains
@@ -91,6 +91,8 @@ EventEmitter surface and automatic listener-driven keepalive. Owned transfers
 have the named ceiling above; no remote-close protocol or emnapi-specific patch.
 This item does not claim that merely attaching a browser message listener keeps
 the Node realm alive.
+
+ready-verdict: 2026-09-23 — Contract+RED @ 9836df2e0b839c5d4849dc5f4409449812a3b82d
 
 ## Decisions
 

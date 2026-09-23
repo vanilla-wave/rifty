@@ -1,6 +1,6 @@
 # ADR 0452: Reference locally owned native MessagePorts without counting infrastructure listeners
 
-Status: Proposed
+Status: Accepted
 Date: 2026-09
 
 Chosen carrier for Contract+RED: real same-realm native pairs, manual Node refs,
