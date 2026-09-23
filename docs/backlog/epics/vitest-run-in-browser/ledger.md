@@ -7,3 +7,9 @@
 - 2026-09-16 — final written-result check pass 3 (fresh read-only reviewer subagent over the working tree on main 51440931a): pass-2 problems resolved; 4 wording/citation problems (Outcome "default config", I4 evidence sentence, vite TS-config proof scope, §Oracle framing) fixed before landing; scope re-check clean → `status: ready`.
 
 - 2026-09-16 — landed refine + FIT set @ f872eb5c0 (reviewed revision for passes 1–3 = this set over main 51440931a).
+
+- 2026-09-23 — whole-goal implementation authorized as one green PR; branch `t3code/vitest-browser-runner`, draft PR #351. Existing Node/npm defect baselines use RDY-8 RED→repair; newly admitted VM/guard/IPC surfaces receive Contract+RED. No slice claims final acceptance yet.
+- 2026-09-23 — I1 Chromium install proof passes: one vite 8.0.16, vitest 4.1.11, rolldown WASM, lightningcss shadow; 87 npm unit/install/replay tests pass. Path aliases, process own exports and pipe stdio targeted parity pass; overall goal remains open.
+- 2026-09-23 — VM Contract+RED PASS @ 73874fabedcc4cdd85f26decbded82d75543e421; reference JSON committed. Node oracle corrected: negative coordinates survive, column offset applies only to physical first line.
+- 2026-09-23 — I3 browser fault sweep reproduces `runtime-js/late-unhandled-rejection-drain`: zero-handle rejection exits 0 before the browser event. Required repair stays in process lifecycle unit; also fatal exits must emit exit 1, while a throwing uncaught handler exits 7 without exit event (native Node v24.16.0).
+- 2026-09-23 — lifecycle unit run: 74 pass, one node-entry test timeout at 5 s under parallel host work; isolated node-entry file 20/20 pass. No test timeout changed; full gate remains pending.

@@ -5,6 +5,7 @@ title: Event-loop drain — late detached-Promise rejection can exit 0
 created: 2026-08-02
 why: awaitDrain can resolve on its final zero-ref sample before Chromium dispatches a detached Promise's unhandledrejection task, allowing a silent exit 0
 user_story: As a Node program with a detached async failure after its last live handle, I want stderr and exit 1 rather than a silent successful exit.
+epic: vitest-run-in-browser
 sources: [ADR-0152, docs/backlog/npm-client/reference/sass-embedded-contract-red.md]
 code: [packages/runtime-js/src/internal/event-loop-keepalive.ts]
 ---

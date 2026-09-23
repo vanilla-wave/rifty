@@ -673,5 +673,17 @@ export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+export function spawnSync(): never {
+  throw new NotImplementedError('child_process.spawnSync');
+}
+
+const child_process = {
+  spawn,
+  spawnSync,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

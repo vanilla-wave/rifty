@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as real or named-loud members
 created: 2026-09-15
 why: absent members surface as link-time SyntaxError (named import of statfsSync/spawnSync) or `undefined.bind` TypeError (vitest worker init binds process.memoryUsage) — worse than a NotImplementedError and fatal even when the member is never called on the claimed path
@@ -29,3 +29,30 @@ existing sync-child path if that is a real implementation, else loud.
 ## Challenge
 
 challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved in goal.md)
+
+## Reference contract
+
+Node v24.16.0: `modules/builtin-optional-members.case.ts` prints
+`statfsSync function true`, `spawnSync function true`,
+`memoryUsage function function`. Operations outside the claimed path remain
+named ceilings under AGENTS.md Fidelity.
+
+## Acceptance
+
+1. Named statfsSync/spawnSync imports link and equal default members; memoryUsage binds without being invoked. → I6
+2. Calls fail with named `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` NotImplementedError ceilings. → I6
+
+## Parity cases
+
+1. Callable import/default-member shape, same source against Node: `modules/builtin-optional-members`. → I6
+
+## Out of scope
+
+Filesystem capacity, synchronous spawn, heap measurements: named ceilings,
+never invented results; `emitWarning` remains outside this item's observed path.
+
+## Decisions
+
+- 2026-09-23 — RDY-8 observed missing surface: parity RED missing fs.statfsSync export; dedicated builtin-optional-members unit tests 3 RED, each undefined instead of function. Native oracle above executed through runInNode on v24.16.0.
+- 2026-09-23 — `sibling-drift` at builtin assembly: export and default assembly share each function; process member is own. Existing named-ceiling pattern supplies the honest call boundary.
+- 2026-09-23 — PR-4 independent adjudicator `/root/vm_contract_review`: new test's io-constructor identity exceeds I6; baseline process uses vfs NotImplementedError. Executed loader probe proves all three Error/name/message/feature shapes; criterion corrected to those observables, preserving loud failure requirements.

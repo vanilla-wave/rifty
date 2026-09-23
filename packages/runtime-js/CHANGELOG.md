@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Deliver process error/exit events before terminal handling and allow a browser rejection checkpoint before natural drain (ADR-0445).
+- Honor host vm script offsets, including escaped functions and native CallSite positions (ADR-0443).
+
+- Make statfsSync, spawnSync and process.memoryUsage callable named ceilings, so uncalled capabilities do not prevent module loading.
+
 - Register path/posix and path/win32 using existing namespaces; expose process methods as own named ESM exports.
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.

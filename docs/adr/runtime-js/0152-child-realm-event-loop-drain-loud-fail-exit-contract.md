@@ -42,6 +42,10 @@ The Vite HMR client `setInterval` was injected by the bundler into the entry chu
 
 ## Consequences
 
+**Correction (2026-09-23):** ADR-0445 partially supersedes §3: handled process
+events continue the drain and suppress browser default reporting. Only
+unhandled rejections retain the fatal path; the other decisions remain active.
+
 - (+) run-to-completion child exits on event-loop drain (over the counted handle set), much closer to real Node than the prior top-level-resolve reap — addresses the detached-async drop we attribute to the ADR-0150 P6a path.
 - (+) `unhandledrejection` → stderr + exit 1, never silent (fidelity + debuggability).
 - (+) Child realm free of bundler-injected infra by construction — generic fix, not a Vite workaround.

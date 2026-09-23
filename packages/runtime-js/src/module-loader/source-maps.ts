@@ -30,6 +30,9 @@ interface RawSourceMap {
 
 interface StackFrameLike {
   toString(): string;
+  getScriptNameOrSourceURL?(): string | null;
+  getLineNumber?(): number | null;
+  getColumnNumber?(): number | null;
 }
 
 type PrepareStackTrace = (err: Error, stackTraces: readonly StackFrameLike[]) => unknown;
@@ -76,13 +79,92 @@ interface ActiveSourceMap {
 
 const activeSourceMaps: ActiveSourceMap[] = [];
 let previousPrepareStackTrace: PrepareStackTrace | undefined;
+let installedPrepareStackTrace: PrepareStackTrace | undefined;
+let hostScriptStacks = false;
+let stackRenderDepth = 0;
 
-const dispatcherPrepareStackTrace: PrepareStackTrace = (err, stackTraces) => {
-  const rendered = previousPrepareStackTrace
-    ? String(previousPrepareStackTrace(err, stackTraces))
-    : renderDefaultStack(err, stackTraces);
-  return remapActiveStack(rendered);
-};
+/** Source identity carries offsets for escaped functions and lazy Error.stack. */
+export function hostScriptSource(
+  code: string,
+  filename: string,
+  lineOffset: number,
+  columnOffset: number,
+): string {
+  hostScriptStacks = true;
+  installStackDispatcher();
+  const name = encodeURIComponent(JSON.stringify(filename)).replace(/[()]/g, (char) =>
+    char === '(' ? '%28' : '%29',
+  );
+  const identity = `rifty-vm://${lineOffset}/${columnOffset}/${name}`;
+  return `${code}\n//# sourceURL=${identity}`;
+}
+
+function hostScriptPosition(identity: string, line: number, column: number) {
+  const match = /^rifty-vm:\/\/(-?\d+)\/(-?\d+)\/(.+)$/.exec(identity);
+  if (!match) return null;
+  let filename: unknown;
+  try {
+    filename = JSON.parse(decodeURIComponent(match[3] ?? ''));
+  } catch {
+    return null;
+  }
+  if (typeof filename !== 'string') return null;
+  return {
+    filename,
+    line: line + Number(match[1]),
+    column: column + (line === 1 ? Number(match[2]) : 0),
+  };
+}
+
+function remapHostScriptStack(stack: string): string {
+  return stack.replace(
+    /(rifty-vm:\/\/-?\d+\/-?\d+\/[^\s():]+):(\d+):(\d+)/g,
+    (frame, identity: string, line: string, column: string) => {
+      const position = hostScriptPosition(identity, Number(line), Number(column));
+      if (!position) return frame;
+      return (
+        position.filename +
+        (position.line ? `:${position.line}${position.column ? `:${position.column}` : ''}` : '')
+      );
+    },
+  );
+}
+
+/** Vite's renderer reads CallSite coordinates before its source-map lookup. */
+function mappedStackFrame(frame: StackFrameLike): StackFrameLike {
+  const identity = frame.getScriptNameOrSourceURL?.();
+  const line = frame.getLineNumber?.();
+  const column = frame.getColumnNumber?.();
+  if (!identity || line == null || column == null) return frame;
+  const hostPosition = hostScriptPosition(identity, line, column);
+  let position = hostPosition;
+  if (!position) {
+    const original = `${identity}:${line}:${column}`;
+    const mapped = remapActiveStack(original);
+    if (mapped === original) return frame;
+    const coordinates = /:(\d+):(\d+)$/.exec(mapped);
+    if (!coordinates) return frame;
+    position = { filename: identity, line: Number(coordinates[1]), column: Number(coordinates[2]) };
+  }
+  const projected = position;
+  return new Proxy(frame, {
+    get(target, key) {
+      if (key === 'getFileName' || key === 'getScriptNameOrSourceURL')
+        return () => projected.filename;
+      if (key === 'getLineNumber') return () => (projected.line > 0 ? projected.line : null);
+      if (key === 'getColumnNumber') return () => (projected.column > 0 ? projected.column : null);
+      if (hostPosition && key === 'isEval') return () => false;
+      if (hostPosition && key === 'getEvalOrigin') return () => undefined;
+      if (key === 'toString')
+        return () =>
+          hostPosition
+            ? remapHostScriptStack(target.toString())
+            : remapActiveStack(target.toString());
+      const value: unknown = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
 
 export function extractInlineSourceMap(source: string): ExtractedSourceMap {
   const match = INLINE_SOURCE_MAP_RE.exec(source);
@@ -125,20 +207,33 @@ export async function withStackRemapping<T>(
 }
 
 function installStackDispatcher(): void {
-  if (activeSourceMaps.length > 0) return;
   const errorCtor = Error as ErrorWithPrepareStackTrace;
+  if (errorCtor.prepareStackTrace === installedPrepareStackTrace && installedPrepareStackTrace)
+    return;
   previousPrepareStackTrace = errorCtor.prepareStackTrace;
-  errorCtor.prepareStackTrace = dispatcherPrepareStackTrace;
+  // Capture the prior hook: a guest may wrap our dispatcher before another run.
+  const previous = previousPrepareStackTrace;
+  installedPrepareStackTrace = (err, frames) => {
+    stackRenderDepth += 1;
+    try {
+      const projected = stackRenderDepth === 1 ? frames.map(mappedStackFrame) : frames;
+      return previous ? previous(err, projected) : renderDefaultStack(err, projected);
+    } finally {
+      stackRenderDepth -= 1;
+    }
+  };
+  errorCtor.prepareStackTrace = installedPrepareStackTrace;
 }
 
 function restoreStackDispatcherIfIdle(): void {
-  if (activeSourceMaps.length > 0) return;
+  if (activeSourceMaps.length > 0 || hostScriptStacks) return;
   const errorCtor = Error as ErrorWithPrepareStackTrace;
-  if (errorCtor.prepareStackTrace === dispatcherPrepareStackTrace) {
+  if (errorCtor.prepareStackTrace === installedPrepareStackTrace) {
     if (previousPrepareStackTrace) errorCtor.prepareStackTrace = previousPrepareStackTrace;
     else Reflect.deleteProperty(errorCtor, 'prepareStackTrace');
   }
   previousPrepareStackTrace = undefined;
+  installedPrepareStackTrace = undefined;
 }
 
 function materializeErrorStack(err: unknown): void {

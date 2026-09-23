@@ -1,20 +1,7 @@
 /**
- * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
- *
- * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0045 fork-IPC)
- * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
- * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
- * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
- * `riftyProcess`. No post-spawn `globalThis.process` swap.
- *
- * `nextTick` is queued via `queueMicrotask`. To match Node's ordering (nextTick
- * always wins over `Promise.then`), `patchPromiseForNextTick` patches
- * `Promise.prototype.then` in the realm so every then-callback drains pending
- * nextTicks before firing — gated to Node workers at the pre-entry seam (WASI
- * realms leave `then` native).
- * Limitation: code that captured the original `.then` before our patch (via
- * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
- * real package breaks.
+ * ADR-0157: one spec-seeded process per child; riftyProcess for the REPL.
+ * Node workers drain nextTicks before patched Promise callbacks; callbacks
+ * registered through a previously captured native then bypass that ordering.
  */
 import {
   type IpcFrame,
@@ -46,6 +33,7 @@ import {
   readNodeProcessBootstrapIdentity,
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
+import { NODE_PROCESS_EXIT_EVENT, dispatchProcessError } from './process-error-events.ts';
 import {
   NODE_PROCESS_IDENTITY,
   type NodeProcessRelease,
@@ -115,11 +103,7 @@ function drainNextTicks(): void {
     try {
       item.fn(...item.args);
     } catch (err) {
-      // Surface on the ACTIVE realm process (the one user code attached handlers
-      // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
-      const active = (globalThis as { process?: unknown }).process;
-      const target = active instanceof NodeProcess ? active : riftyProcess;
-      (target as unknown as EventEmitter).emit('uncaughtException', err);
+      if (!dispatchProcessError(err, 'uncaughtException')) throw err;
     }
   }
   // Fully drained: clear the array + cursor so the next nextTick sees length
@@ -526,6 +510,7 @@ export class NodeProcess extends EventEmitter {
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
   #exitCode = 0;
+  #exiting = false;
   get exitCode(): number {
     return this.#exitCode;
   }
@@ -536,6 +521,9 @@ export class NodeProcess extends EventEmitter {
   stderr: NodeStdioWriter;
   stdin: NodeStdin;
   nextTick = nextTick;
+  memoryUsage = (): never => {
+    throw new NotImplementedError('process.memoryUsage');
+  };
 
   /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
   send?: (message: unknown, ...unsupported: unknown[]) => boolean;
@@ -559,6 +547,9 @@ export class NodeProcess extends EventEmitter {
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    Object.defineProperty(this, NODE_PROCESS_EXIT_EVENT, {
+      value: (code: number, emit: boolean) => this.#beginExit(code, emit),
+    });
     // Node publishes these as own, receiver-independent functions; ESM uses own keys.
     for (const name of ['cwd', 'chdir', 'hrtime', 'uptime', 'exit', 'kill'] as const) {
       Object.defineProperty(this, name, {
@@ -746,10 +737,10 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
-  exit(code: unknown = 0): never {
+  exit(code: unknown = this.#exitCode): never {
     const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
-    this.#exitCode = c;
-    const exitCode = toUint8ExitCode(c);
+    this.#beginExit(c, true);
+    const exitCode = toUint8ExitCode(this.#exitCode);
     const exitError = Object.assign(new Error(`process.exit(${c})`), {
       code: RIFTY_PROCESS_EXIT,
       exitCode, // OS-style uint8 wrap (process.exit(257) → 1)
@@ -760,6 +751,13 @@ export class NodeProcess extends EventEmitter {
     });
     if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(exitCode);
     throw exitError;
+  }
+
+  #beginExit(code: number, emit: boolean): void {
+    this.#exitCode = code;
+    if (this.#exiting) return;
+    this.#exiting = true;
+    if (emit) this.emit('exit', code);
   }
 
   kill(pid: number, signal = 'SIGTERM'): boolean {
