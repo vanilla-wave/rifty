@@ -348,6 +348,11 @@ const matrices = [
         'Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias)',
       ],
       ['`existsSync` / `statSync`', '✅', '`Stats` shape plus `throwIfNoEntry: false` parity'],
+      [
+        '`statfsSync`',
+        '❌',
+        "Importable; calling throws `NotImplementedError('fs.statfsSync')` because browser VFS has no host filesystem capacity",
+      ],
       ['`rmSync({ recursive })`', '✅', 'Tree removal'],
       [
         '`copyFileSync` / `renameSync` / `cpSync`',
@@ -427,6 +432,7 @@ const matrices = [
       '`tests/conformance/builtins/shared-vfs.test.ts`',
       '`tests/conformance/builtins/fs-watch.test.ts`',
       '`tools/node-parity-runner/cases/fs/*.case.ts`',
+      '`packages/runtime-js/src/builtins/absent-members-loud.test.ts`',
     ],
     limitations: [
       '`O_SYNC`, `O_DSYNC`, reflink constants and unsupported numeric flag bits are intentionally absent or rejected.',

@@ -24,6 +24,7 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 | `fs.watch` / `fs.watchFile` keepalive | ✅ | The poll `setInterval` is keepalive-counted; `FSWatcher.ref()`/`.unref()` opt the realm in/out via the poll handle (Node parity) — an unrefed watcher no longer holds the realm to the drain cap |
 | Timer `.unref()` / `.ref()` / `.hasRef()` | ✅ | `setTimeout`/`setInterval` handles can opt out of and back into keepalive; `node:timers` uses the same wrapper as globals |
 | `process.exit(N)` propagates the exit code | ✅ | Via the `RIFTY_PROCESS_EXIT` shape (ADR-0039) |
+| `process.memoryUsage()` | ❌ | Importable and bindable; calling throws `NotImplementedError('process.memoryUsage')`, not invented heap numbers. |
 
 ## Terminal `node <file>` command (ADR-0155)
 
@@ -71,6 +72,7 @@ Chromium covers the real supervisor → application Worker journey.
 | Callable `EventEmitter` legacy construction | ✅ | `new`, subclassing, `EventEmitter.call(target)`, and `util.inherits` share one listener state and prototype identity. |
 | Recursive `spawn('node', …)` / `fork()` | ✅ | Each process child is a fresh Worker over the same owner-backed VFS; relative entry, argv, cwd, inherited/replacement env, reads, and writes are parity-proven. Missing launch provenance fails before guest execution; there is no project snapshot or direct-entry fallback. |
 | `execFile()` buffered adapter | ⚠️ | Direct argv, cwd/env, encoding/Buffer output, timeout, maxBuffer termination, callback errors, and `util.promisify`'s `{stdout, stderr}` projection match Node 24 over the real `spawn` owner. Browser-unavailable executable/shell carriers retain the spawn ceiling; `shell`, AbortSignal, uid/gid/argv0, and non-SIGTERM timeout signals throw directed `NotImplementedError`s. |
+| `spawnSync()` | ❌ | Named import links; calling throws `NotImplementedError('child_process.spawnSync')`. No synchronous OS process exists in the browser. |
 | Child stdio and fork IPC | ⚠️ | Claimed `pipe`/`inherit`/`ignore`, explicit process stream targets, fork's single `ipc` slot, final drain, exit-before-close, and default JSON messages work. Numeric extra descriptors, unrestricted inheritance, advanced serialization, handles, callbacks/options, and channel `ref()`/`unref()` throw loudly. |
 | PID/PPID tree, `ps`, and signals | ⚠️ | One owner-root ledger covers recursive Workers. Bare `ps`, `ps -A -o ppid,pid`, `SIGUSR2` child kill, and `kill -USR2 <pid>` work for nodemon/pstree; arbitrary formats, other signals, process groups, job control, and `/proc` remain loud gaps. |
 | Real nodemon restart loop | ✅ | Express, Hono, and Koa execute pinned installed nodemon. Chromium proves same-port edit/restart; Express additionally proves fresh realm state, rapid-edit convergence, syntax-crash recovery, and Ctrl-C/session-close subtree teardown without resurrection. |

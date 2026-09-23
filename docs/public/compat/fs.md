@@ -12,6 +12,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `mkdirSync({ recursive })` | ✅ | Creates parent directories |
 | `readdirSync` / `Dirent[]` | ✅ | Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias) |
 | `existsSync` / `statSync` | ✅ | `Stats` shape plus `throwIfNoEntry: false` parity |
+| `statfsSync` | ❌ | Importable; calling throws `NotImplementedError('fs.statfsSync')` because browser VFS has no host filesystem capacity |
 | `rmSync({ recursive })` | ✅ | Tree removal |
 | `copyFileSync` / `renameSync` / `cpSync` | ✅ | `COPYFILE_EXCL`, recursive copy, mtime-preserving rename; `cp` `{ filter, force, errorOnExist, preserveTimestamps }`; `dereference` loud-throws (no-symlink, ADR-0050) |
 | `openAsBlob(path[, { type }])` | ✅ | Reads VFS bytes into a resolved Blob (default type `""`) |
@@ -40,6 +41,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/shared-vfs.test.ts`
 - `tests/conformance/builtins/fs-watch.test.ts`
 - `tools/node-parity-runner/cases/fs/*.case.ts`
+- `packages/runtime-js/src/builtins/absent-members-loud.test.ts`
 
 ## Known Limitations
 
