@@ -6,6 +6,7 @@
 
 - `process` owns `cwd`/`chdir`/`hrtime`/`uptime`/`exit`/`kill` (writable, enumerable, configurable) and an enumerable non-configurable `exitCode` accessor, as Node: `import { cwd } from 'node:process'` links, detached `exit`/`kill` act on their process; the `stdout`/`stderr` writer moved to `builtins/process-stdio-writer.ts`.
 - CJS/ESM Function guards admit global writes/defines/deletes with non-folding computed keys (vitest 4.1.11, undici); the key is checked at Node's coercion and only `'Function'` throws the existing ceiling, at the write (ADR-0444). `delete` operands that are not references, and `delete globalThis?.Function`, no longer bypass the guard.
+- Node child realms give `MessagePort` Node's `ref`/`unref`/`hasRef`: a referenced port is a counted keepalive handle until unref or either pair end closes (emnapi napi async work, rolldown wasm32-wasi). Global and `worker_threads` `MessageChannel` are one recording Proxy; moving a referenced pair or referencing a split pair throws by name (ADR-0447).
 
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
