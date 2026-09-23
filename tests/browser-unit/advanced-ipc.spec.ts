@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
 import {
   type AdvancedIpcProgram,
+  ceilingNodeRows,
   ceilingProgram,
   ceilingRows,
   parityPrograms,
@@ -68,15 +69,14 @@ for (const program of parityPrograms) {
   });
 }
 
-test('Chromium platform objects in an advanced message fail by name', async ({ page }) => {
+test('Chromium ceiling values in an advanced message fail by name, posting nothing', async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   const oracle = await runNodeProgram(ceilingProgram);
   const isRow = (line: string): boolean => line.startsWith('CEIL|');
-  // Node's v8 serializer writes each value as a plain object: a gap, not parity.
-  expect(programRows(oracle.stdout, isRow), oracle.stderr).toEqual([
-    ...ceilingRows.slice(0, -1).map((row) => row.replace(/\|[^|]*$/, '|sent')),
-    'CEIL|after|true',
-  ]);
+  // Node sends or refuses each its own way: a gap, not parity.
+  expect(programRows(oracle.stdout, isRow), oracle.stderr).toEqual(ceilingNodeRows);
 
   await withOwner(page, ceilingProgram.name, async () => {
     const run = await runInRifty(page, ceilingProgram);

@@ -37,19 +37,59 @@ export const parityPrograms: readonly AdvancedIpcProgram[] = [
 ];
 
 /**
- * Platform objects a Chromium realm can put in a message. Node's v8 serializer
- * writes each as a plain object (the live oracle prints `sent`); a browser
- * clone would deliver a different value or refuse with a DOM error, so rifty
- * refuses by name (ADR-0448 §Explicit gaps).
+ * Values a Chromium realm can put in a message that rifty refuses by name
+ * (ADR-0448 §Explicit gaps): platform objects Node's v8 serializer writes as
+ * plain objects (a browser clone would deliver a different value or refuse
+ * with a DOM error), a detached buffer or view (Chromium prefixes its refusal
+ * text) and an own accessor beside a Buffer. An echo child reports every
+ * label that arrived: in rifty only `after`, since a refused send posts nothing.
  */
+const hostObject = 'NotImplementedError:child_process.serialization.advanced.host-object';
+const ceilingCases: readonly {
+  readonly label: string;
+  readonly node: string;
+  readonly rifty: string;
+}[] = [
+  { label: 'blob', node: 'sent', rifty: hostObject },
+  { label: 'file', node: 'sent', rifty: hostObject },
+  { label: 'dom-exception', node: 'sent', rifty: hostObject },
+  { label: 'url', node: 'sent', rifty: hostObject },
+  { label: 'abort-controller', node: 'sent', rifty: hostObject },
+  { label: 'text-encoder', node: 'sent', rifty: hostObject },
+  { label: 'headers', node: 'sent', rifty: hostObject },
+  { label: 'message-port', node: 'sent', rifty: hostObject },
+  {
+    label: 'detached-array-buffer',
+    node: 'Error:An ArrayBuffer is detached and could not be cloned.',
+    rifty: 'NotImplementedError:child_process.serialization.advanced.detached-array-buffer',
+  },
+  {
+    label: 'detached-view',
+    node: 'TypeError:Cannot perform Construct on a detached ArrayBuffer',
+    rifty: 'NotImplementedError:child_process.serialization.advanced.detached-array-buffer',
+  },
+  {
+    label: 'getter-beside-buffer',
+    node: 'sent',
+    rifty: 'NotImplementedError:child_process.serialization.advanced.accessor-with-view',
+  },
+];
+
 export const ceilingProgram: AdvancedIpcProgram = {
   name: 'host-objects',
   files: {
-    'idle.cjs': "process.on('message', () => {});\n",
+    'echo.cjs': "process.on('message', (message) => process.send(message.label));\n",
   },
   main: `const { fork } = require('node:child_process');
-const child = fork('idle.cjs', [], { serialization: 'advanced', stdio: 'ignore' });
+const { Buffer } = require('node:buffer');
+const child = fork('echo.cjs', [], { serialization: 'advanced', stdio: 'ignore' });
 child.on('error', () => {});
+const detached = (make) => {
+  const buffer = new ArrayBuffer(4);
+  const holder = make(buffer);
+  structuredClone(buffer, { transfer: [buffer] });
+  return holder;
+};
 const values = [
   ['blob', () => new Blob(['x'])],
   ['file', () => new File(['x'], 'f.txt')],
@@ -59,34 +99,44 @@ const values = [
   ['text-encoder', () => new TextEncoder()],
   ['headers', () => new Headers({ a: '1' })],
   ['message-port', () => new MessageChannel().port1],
+  ['detached-array-buffer', () => detached((buffer) => buffer)],
+  ['detached-view', () => detached((buffer) => new Uint8Array(buffer))],
+  ['getter-beside-buffer', () => ({ get count() { return 1; }, data: Buffer.from('x') })],
 ];
+const received = [];
+child.on('message', (label) => {
+  received.push(label);
+  if (label !== 'after') return;
+  console.log('CEIL|received|' + JSON.stringify(received));
+  child.disconnect();
+});
 for (const [label, make] of values) {
   try {
-    child.send({ value: make() });
+    child.send({ label, value: make() });
     console.log('CEIL|' + label + '|sent');
   } catch (error) {
     console.log('CEIL|' + label + '|' + error.name + ':' + (error.feature ?? error.message));
   }
 }
-console.log('CEIL|after|' + child.send({ ok: true }));
-child.disconnect();
+console.log('CEIL|after|' + child.send({ label: 'after' }));
 `,
 };
 
-export const ceilingRows: readonly string[] = [
-  ...[
-    'blob',
-    'file',
-    'dom-exception',
-    'url',
-    'abort-controller',
-    'text-encoder',
-    'headers',
-    'message-port',
-  ].map(
-    (label) => `CEIL|${label}|NotImplementedError:child_process.serialization.advanced.host-object`,
-  ),
+/** Live Node's rows for the ceiling program: what it sends arrives, in order. */
+export const ceilingNodeRows: readonly string[] = [
+  ...ceilingCases.map(({ label, node }) => `CEIL|${label}|${node}`),
   'CEIL|after|true',
+  `CEIL|received|${JSON.stringify([
+    ...ceilingCases.filter(({ node }) => node === 'sent').map(({ label }) => label),
+    'after',
+  ])}`,
+];
+
+/** rifty's rows in Chromium: each refused by name, nothing posted. */
+export const ceilingRows: readonly string[] = [
+  ...ceilingCases.map(({ label, rifty }) => `CEIL|${label}|${rifty}`),
+  'CEIL|after|true',
+  'CEIL|received|["after"]',
 ];
 
 /** Stdout rows: the lines a program printed, CR-free, blank lines dropped. */

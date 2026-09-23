@@ -39,6 +39,18 @@ const c: ParityCase = {
           });
         }
       }
+      // A plain spawn validates the option too, though it has no IPC.
+      try {
+        const child = spawn('node', ['plain.cjs'], { cwd, serialization: 'bogus' });
+        child.kill();
+        row('spawn-option:bogus', 'spawned');
+      } catch (error) {
+        row('spawn-option:bogus', {
+          class: error.constructor.name,
+          code: error.code ?? null,
+          message: error.message,
+        });
+      }
 
       const plain = await new Promise((resolve) => {
         try {

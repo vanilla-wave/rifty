@@ -37,26 +37,27 @@ refusal text. They differ in four places (evidence §Chromium):
    prefix.
 4. Platform objects (`Blob`, `File`, `DOMException`, `URL`, `AbortController`,
    `Headers`, `MessagePort`, `WebAssembly.Module`, …): Node's serializer writes
-   them as plain objects of their own enumerable properties (or its receiver
-   crashes, for a wasm module); the browser clones some and refuses others with
-   Blink's text.
+   most as plain objects of their own enumerable properties (a `DOMException`
+   arrives as a message-less `Error`; a wasm module crashes the receiver); the
+   browser clones some and refuses others with Blink's text.
 
 ## Decision
 
 1. **Option and launch.** `serialization` accepts `undefined`, `'json'` or
    `'advanced'`; anything else is Node's `TypeError`
-   `ERR_INVALID_ARG_VALUE`. A plain spawn ignores it (no IPC). A fork with
-   `'advanced'` launches its child with `ipc: 'advanced'`. That widens the
-   program launch, so under ADR-0267's version rule `rifty.node-entry/v4`
-   becomes `v5` atomically, with no v4 reader (ADR-0416 precedent). The JSON
-   path is unchanged.
+   `ERR_INVALID_ARG_VALUE`, in `fork` and plain `spawn` alike. A plain spawn
+   otherwise ignores it (no IPC). A fork with `'advanced'` launches its child
+   with `ipc: 'advanced'`. That widens the program launch, so under ADR-0267's
+   version rule `rifty.node-entry/v4` becomes `v5` atomically, with no v4
+   reader (ADR-0416 precedent). JSON serialization itself is unchanged.
 2. **One codec, every site.** One module encodes at every advanced send (parent
    Worker route, parent same-realm route, child `process.send`) and decodes at
    every advanced receive. The existing channel, frames, order, disconnect and
    exit handling are reused; no new coordination mechanism.
 3. **Encode.**
    - Top-level validation is shared with JSON (`ERR_MISSING_ARGS`,
-     `ERR_INVALID_ARG_TYPE` with Node's `Received …` text).
+     `ERR_INVALID_ARG_TYPE` with Node's `Received …` text, which the JSON path
+     gains too).
    - `structuredClone(message)` in the sending realm. V8 decides traversal,
      getters (once, in order), refusals, and every intrinsic type.
    - A `DataCloneError` carrying V8's own text (`<x> could not be cloned.`,
@@ -92,7 +93,8 @@ refusal text. They differ in four places (evidence §Chromium):
    `'message'` listener in both serializations (Node's channel ref), as the
    JSON lane already does. A launch-less URL Worker that shares the physical
    port stays unheld (draft PR #349 held it and kept the Workbench owner
-   alive).
+   alive). Node also refs the channel for a `'disconnect'` listener; rifty
+   does not on either serialization, a discovery routed to backlog.
 
 ## Not claimed
 
@@ -105,8 +107,9 @@ allocation policy, like Buffer pool offsets, and is not claimed.
 
 Named throws, listed in `docs/public/compat/process.md`:
 
-- `…advanced.host-object`: a platform object in the message. Node sends a plain
-  object of its own enumerable properties.
+- `…advanced.host-object`: a platform object in the message. Node sends most
+  as a plain object of their own enumerable properties, a `DOMException` as a
+  message-less `Error`.
 - `…advanced.detached-array-buffer`: a detached ArrayBuffer, or a view over
   one. Node throws `Error` or `TypeError` respectively.
 - `…advanced.accessor-with-view`: an own accessor on the traversal path of a

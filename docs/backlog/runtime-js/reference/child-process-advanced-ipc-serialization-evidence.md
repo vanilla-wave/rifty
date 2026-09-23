@@ -8,7 +8,9 @@ COOP/COEP page, `crossOriginIsolated === true`). vitest **4.1.11** / vite
 
 The four parity programs are the committed case files
 `tools/node-parity-runner/cases/child_process/public-ipc-advanced{,-fault,-options,-same-realm}.case.ts`
-(shared pieces: `advanced-ipc-program.ts`). "Materialize" = write each setup
+(shared pieces: `advanced-ipc-program.ts`), plus the JSON-path Parity case 11
+`public-ipc-json-refusal-text{,-same-realm}.case.ts` (`json-ipc-refusal-program.ts`,
+one program for both routes). "Materialize" = write each setup
 file (directory prefix dropped) plus `code` as `main.js` into one directory,
 then `node main.js` there — the parity runner's Node side does the same with
 its own temp layout.
@@ -21,7 +23,14 @@ $ pnpm test:parity public-ipc-advanced-options
   + option:bogus "forked"
   … (JSON, 1, null alike)
   - spawn-advanced-without-ipc {"send":"undefined","stdout":"plain-ran:undefined","code":0}
+  - spawn-option:bogus {"class":"TypeError","code":"ERR_INVALID_ARG_VALUE","message":"The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received 'bogus'"}
+  + spawn-option:bogus "spawned"
   + spawn-advanced-without-ipc {"threw":"NotImplementedError:Not implemented: child_process.serialization.advanced (Node's advanced IPC serializer is not implemented; use default JSON)"}
+$ pnpm test:parity public-ipc-json-refusal-text   (JSON path; Worker route and same-realm route alike)
+  - parent:anonymous-function {…,"message":"The \"message\" argument must be one of type string, object, number, or boolean. Received function "}
+  + parent:anonymous-function {…,"message":"The \"message\" argument must be one of type string, object, number, or boolean"}
+  … (parent and child: named-function, symbol, bigint alike; undefined and exit rows match)
+  2 case(s) failed
 $ pnpm test:parity public-ipc-advanced            (values, child-worker)
     error: physical-worker parity expected 1 typed-bootstrap Workers … constructed 0
 $ same program, rifty same-realm route (diagnostic run, not committed)
@@ -30,7 +39,9 @@ $ same program, rifty same-realm route (diagnostic run, not committed)
 
 `child_process.ts` `spawn()` throws `NotImplementedError('child_process.serialization.advanced')`
 for any `serialization: 'advanced'` (plain spawn included) and forwards every
-other value as JSON; `node-entry-runtime-config.ts` rejects a program launch
+other value as JSON; `node-ipc-serialization.ts` words the JSON top-level
+refusal without Node's `Received …` suffix (every send site: parent, Worker
+child, same-realm child); `node-entry-runtime-config.ts` rejects a program launch
 `ipc` other than `none`/`json`; the child's IPC keepalive is gated on
 `#jsonIpc` (`process.ts` `#syncIpcKeepalive`).
 
@@ -171,8 +182,36 @@ option:bogus {"class":"TypeError","code":"ERR_INVALID_ARG_VALUE","message":"The 
 option:JSON {"class":"TypeError","code":"ERR_INVALID_ARG_VALUE","message":"The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received 'JSON'"}
 option:1 {"class":"TypeError","code":"ERR_INVALID_ARG_VALUE","message":"The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received 1"}
 option:null {"class":"TypeError","code":"ERR_INVALID_ARG_VALUE","message":"The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received null"}
+spawn-option:bogus {"class":"TypeError","code":"ERR_INVALID_ARG_VALUE","message":"The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received 'bogus'"}
 spawn-advanced-without-ipc {"send":"undefined","stdout":"plain-ran:undefined","code":0}
 ```
+
+A plain `spawn` validates `serialization` like `fork` (three runs byte-identical,
+2026-09-23 re-run with the `spawn-option` row).
+
+## Oracle — JSON top-level refusal text (Parity case 11)
+
+`$ node --version` → `v24.16.0`; `$ node main.js` (materialized
+`public-ipc-json-refusal-text.case.ts`; the same-realm case materializes to the
+identical program), three runs byte-identical:
+
+```
+parent:undefined {"class":"TypeError","code":"ERR_MISSING_ARGS","message":"The \"message\" argument must be specified"}
+parent:anonymous-function {"class":"TypeError","code":"ERR_INVALID_ARG_TYPE","message":"The \"message\" argument must be one of type string, object, number, or boolean. Received function "}
+parent:named-function {"class":"TypeError","code":"ERR_INVALID_ARG_TYPE","message":"The \"message\" argument must be one of type string, object, number, or boolean. Received function namedFn"}
+parent:symbol {"class":"TypeError","code":"ERR_INVALID_ARG_TYPE","message":"The \"message\" argument must be one of type string, object, number, or boolean. Received type symbol (Symbol(parent))"}
+parent:bigint {"class":"TypeError","code":"ERR_INVALID_ARG_TYPE","message":"The \"message\" argument must be one of type string, object, number, or boolean. Received type bigint (1n)"}
+child:undefined {"class":"TypeError","code":"ERR_MISSING_ARGS","message":"The \"message\" argument must be specified"}
+child:anonymous-function {"class":"TypeError","code":"ERR_INVALID_ARG_TYPE","message":"The \"message\" argument must be one of type string, object, number, or boolean. Received function "}
+child:named-function {"class":"TypeError","code":"ERR_INVALID_ARG_TYPE","message":"The \"message\" argument must be one of type string, object, number, or boolean. Received function namedFn"}
+child:symbol {"class":"TypeError","code":"ERR_INVALID_ARG_TYPE","message":"The \"message\" argument must be one of type string, object, number, or boolean. Received type symbol (Symbol(child))"}
+child:bigint {"class":"TypeError","code":"ERR_INVALID_ARG_TYPE","message":"The \"message\" argument must be one of type string, object, number, or boolean. Received type bigint (1n)"}
+exit {"code":0,"signal":null}
+```
+
+Default JSON serialization words its top-level refusals exactly as the
+advanced values program does (`refused:top-*`, `child-refusals`), on both
+sides; a function's name follows `Received function`.
 
 ## Oracle — same-realm program
 
@@ -202,8 +241,20 @@ detached-view THREW TypeError: Cannot perform Construct on a detached ArrayBuffe
 getter-beside-buffer {"count":1,"data":Buffer [120]}
 getter-returns-buffer {"data":Buffer [120]}
 getter-beside-float64array {"count":1,"numbers":Float64Array}
-$ node main.cjs            (browser-unit ceiling program: Blob, File, DOMException, URL, AbortController, TextEncoder, Headers, MessagePort)
-CEIL|<each>|sent … CEIL|after|true
+$ node main.cjs            (browser-unit ceiling program, `ceilingProgram`; echo child replies with each label; three runs identical)
+CEIL|blob|sent
+CEIL|file|sent
+CEIL|dom-exception|sent
+CEIL|url|sent
+CEIL|abort-controller|sent
+CEIL|text-encoder|sent
+CEIL|headers|sent
+CEIL|message-port|sent
+CEIL|detached-array-buffer|Error:An ArrayBuffer is detached and could not be cloned.
+CEIL|detached-view|TypeError:Cannot perform Construct on a detached ArrayBuffer
+CEIL|getter-beside-buffer|sent
+CEIL|after|true
+CEIL|received|["blob","file","dom-exception","url","abort-controller","text-encoder","headers","message-port","getter-beside-buffer","after"]
 $ fork + send({ wasm: new WebAssembly.Module(<8-byte empty module>) })
 child exit 1: "Error: Unable to deserialize cloned data." (receiver crashes)
 ```
@@ -324,4 +375,11 @@ graphs accepted — JSON would drop the first and throw on the second.
 $ node listen2.cjs   (child: process.on('message', m => process.send({echo:m})) only)
 EV send1 true / EV message {"echo":1} / EV connected true null (after 300 ms) / EV message {"echo":2}
 EV disconnect / EV stdout "child-disconnect\n" / EV exit 0 null
+$ node main.cjs      (v24.16.0; default JSON; child: process.on('disconnect', …) only; parent disconnects at 300 ms)
+alive-after-300ms true true
+child-disconnect
+exit 0 null
 ```
+
+A `'disconnect'` listener alone holds the child too; rifty counts only
+`'message'` — a discovery outside this unit (contract Decisions).

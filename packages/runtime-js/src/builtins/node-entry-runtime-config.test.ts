@@ -120,7 +120,7 @@ describe('node-entry host bootstrap config', () => {
     expect(entry).toMatchObject({
       kind: 'url',
       bootstrap: {
-        protocol: 'rifty.node-entry/v4',
+        protocol: 'rifty.node-entry/v5',
         payload: {
           launch: {
             kind: 'eval',
