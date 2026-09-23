@@ -56,6 +56,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `packages/net/src/http/response.test.ts`
 - `tools/node-parity-runner/cases/stream/*.case.ts`
 - `tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts`
+- `tools/node-parity-runner/cases/child_process/same-realm-child-pipe-parent-process.case.ts`
 
 ## Known Limitations
 

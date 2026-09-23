@@ -48,7 +48,8 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 - Mechanism reused: Node compares against its bootstrap `process`; rifty's
   equivalent binding is the `node:process` entry of io's builtin registry
   (ADR-0035) — the active kernel bootstrap that `require('node:process')`
-  returns, unaffected by reassigning `globalThis.process`.
+  returns, unaffected by reassigning `globalThis.process`. Read through its
+  factory, never the name-keyed cache (ADR-0458).
 
 ## Parity cases
 
@@ -57,6 +58,12 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 3. `pnpm test:parity stream/pipe-process-stdio-exit` (node-cli-eval, kernel Worker) — Node: stdout `piped to stdout\nstdout still writable\n`, stderr `piped to stderr\nstderr still writable\n`, code 0 per launch; rifty today: `TypeError: dest.end is not a function`, code 1 → I4
 4. `pnpm test:parity fork-stdout-pipe-process-stdio` (child-worker) — Node: `child stdout line` / `child closed 0; parent stdout still writable`; rifty today: `TypeError: dest.end is not a function` → I4
 5. `pnpm test:parity stream/pipe-end-false-unpipe` (default mode, no process) — Node: `dest listener delta 0,0,0,0,0,0,0; source data/end listeners 0/0` / `dest ended false` / `dest still writable: one,two`; rifty today: `delta 0,0,1,1,1,0,0; … 1/1` → REV-2
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| `poisoned-cache` × `pipe()` inside a same-realm child (active bootstrap swapped to the child) | the parent's later `require('node:process')` is still its own process (`=== process`, pid, `exitCode` writes); its `pipe(process.stdout)` stays exempt | `pnpm test:parity same-realm-child-pipe-parent-process` (seeded) — Node: `"child piped\n" close 0; require(node:process) === process true; pid match true; exitCode via require 3` / `parent piped` / `parent stdout still writable`; rifty @ bf44b7b36: `TypeError: dest.end is not a function` | → ADR-0458 |
 
 ## Out of scope
 
@@ -88,3 +95,5 @@ ready-verdict: 2026-09-23 — Contract+RED @ f47817a285428608fb28d9c9a6df1cfe6a1
 - 2026-09-23 — IMPLEMENT: `opts.end !== false` (Node's `pipeOpts.end !== false`) replaces `opts.end ?? true`, so `{end: 0}` ends like Node; new carrier `stream/pipe-end-option-coercion.case.ts` (RED on the old coercion).
 - 2026-09-23 — Contract+RED concerns: forged-global row now holds the reassignment through source end, expected unchanged (strictly stronger; lazy/eager `globalThis.process` mutants ✗); REV-2 traces kept as carrier notes; stderr half of the fork case not hardened (stdout-only mutant still dies); untracked gaps reported for routing.
 - 2026-09-23 — gate re-pin (PR-4): `check:esbuild-legacy-retirement` `typescript-worker.js` sha `018ea49b…` → `39b39916…`, bytes unchanged 10,022,694 — the worker carries no pipe code; only its references to content-hashed chunk names (`chunk-XXXXXXXX.js`, fixed width) changed with the io chunk.
+- 2026-09-23 — Final+GREEN r1 reception (REV-12): the registry-cache poisoning blocker HOLDS. RED `same-realm-child-pipe-parent-process` ✗ @ bf44b7b36; identity probe `=== process false; pid match false; exitCode via require 0`. FIX: pipe reads the `node:process` factory uncached (`readBuiltinUncached`, ADR-0458, a decision on the ADR-0035 seam per DEC-2).
+re-cut: 2026-09-23 — `## Fault matrix` added (poisoned-cache row → ADR-0458) and the uncached read added to the Reference contract; supersedes the "no Fault matrix" line and the `loadBuiltin('process')` identity source — trace: none

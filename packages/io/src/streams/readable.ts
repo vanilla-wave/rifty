@@ -23,7 +23,7 @@
  */
 
 import { Buffer } from '../buffer.ts';
-import { loadBuiltin } from '../builtin-registry.ts';
+import { readBuiltinUncached } from '../builtin-registry.ts';
 import { EventEmitter } from '../event-emitter.ts';
 import {
   type CallableStreamConstructor,
@@ -744,7 +744,8 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     if (existing) existing();
 
     // Node compares its bootstrap process: ours = `require('node:process')`, not `globalThis.process`.
-    const proc = loadBuiltin('process');
+    // Uncached: a same-realm child's pipe must not pin its process in the registry (ADR-0458).
+    const proc = readBuiltinUncached('process');
     const endOnFinish = opts.end !== false && dest !== proc?.stdout && dest !== proc?.stderr;
     const onData = (chunk: unknown): void => {
       const writeResult = dest.write(chunk);

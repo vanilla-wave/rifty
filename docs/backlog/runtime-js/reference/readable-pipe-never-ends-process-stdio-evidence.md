@@ -165,3 +165,48 @@ Gate re-pin: after `pnpm build:libs`, `check:esbuild-legacy-retirement` →
 `ls -l` 10022694 bytes (= pin), `shasum -a 256` `39b3991611f5…46ca0` (pin `018ea49b3a19…b422`);
 `grep -c pipeCleanups typescript-worker.js` → 0; the file imports `chunk-XXXXXXXX.js`
 by content-hashed name, so a changed io chunk changes its sha at equal length.
+
+## Final+GREEN r1 reception (2026-09-23, on `bf44b7b36`)
+
+Blocker: `pipe()` called `loadBuiltin('process')`, and the registry caches per
+name. Inside a same-realm child (`child_process-exec.ts` `withChildProcess`
+swaps the active bootstrap), the first pipe cached the child's process.
+
+Oracle, host Node v24.16.0 (`/tmp/vgoal/u6/oracle/rv1/{main,child}.js`, the case's code verbatim):
+
+```
+$ node main.js < /dev/null
+"child piped\n" close 0; require(node:process) === process true; pid match true; exitCode via require 3
+parent piped
+parent stdout still writable
+exit=0
+```
+
+rifty @ bf44b7b36, carrier `child_process/same-realm-child-pipe-parent-process.case.ts`:
+
+```
+$ pnpm -s test:parity same-realm-child-pipe-parent-process
+  ✗ child_process/same-realm-child-pipe-parent-process.case.ts
+    error: TypeError: dest.end is not a function
+```
+
+The parent's own `pipe(process.stdout)` was no longer exempt. The same code
+without the parent pipe (scratch probe) shows the identity loss:
+
+```
+- "child piped\n" close 0; require(node:process) === process true; pid match true; exitCode via require 3
++ "child piped\n" close 0; require(node:process) === process false; pid match false; exitCode via require 0
+```
+
+Fix: `readBuiltinUncached('process')` calls the factory and leaves the cache
+untouched (ADR-0458). With it, the carrier passes, the reviewer's three
+`fg1-same-realm-*` probes pass, and `pnpm -s test:parity pipe` passes 12/12
+(two runs).
+
+Sibling sweep (active-bootstrap swaps): `child_process-exec.ts:179`,
+`child_process.ts:211`, `worker_threads.ts:386`,
+`in-process-node-entry-runner.ts:72`. With the uncached read, pipe writes the
+cache under none of them. The same-realm child's `require('process')` returns
+`childProcess` without the registry (`child_process-exec.ts:484`). A loader
+`require('node:process')` under the in-process runner's swap still caches. That
+runner exists only for tests, and the behavior predates this unit.

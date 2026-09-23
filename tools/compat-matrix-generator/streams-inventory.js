@@ -120,6 +120,7 @@ export const streamsMatrix = {
     '`packages/net/src/http/response.test.ts`',
     '`tools/node-parity-runner/cases/stream/*.case.ts`',
     '`tools/node-parity-runner/cases/child_process/fork-stdout-pipe-process-stdio.case.ts`',
+    '`tools/node-parity-runner/cases/child_process/same-realm-child-pipe-parent-process.case.ts`',
   ],
   limitations: [
     'Backpressure is covered at the JS API surface, not as an OS/socket throughput guarantee.',
