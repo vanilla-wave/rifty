@@ -115,6 +115,8 @@ child-realm drain (ADR-0152).
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ 6fdaaedf149044f3921eeb845a37541f87879aa3
+
 - 2026-09-23 — carrier: ADR-0445, one dispatch on the active `NodeProcess` + Node `exit()` + one-more-task drain settle; partially supersedes ADR-0152 §3 (listener-handled rejections are canceled, not recorded) and extends ADR-0157 §1. The DEC-2 decision-subagent pass is owed (this worker runs at depth 1 of 1).
 - 2026-09-23 — scope: absorbs `runtime-js/late-unhandled-rejection-drain` (evidence §B: `fatal-rejection`, `rejection-only-handler`, `eval-rejection-handler` exit 0 with no output); the draft is deleted when this unit lands.
 - 2026-09-23 — scope: claimed launch owners are the node-entry program lifecycle (`node <file>`, `.bin`, spawn/fork), eval, the execSync program branch (its natural `exit()` after its drain), worker-thread dispatch, and no-COI exit state; the rest is Out of scope.
