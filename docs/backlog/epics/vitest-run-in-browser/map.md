@@ -11,12 +11,6 @@ order is also recorded as `blocked_by`; the other children are independent.
 4. `runtime-js/absent-builtin-members-loud-throws` — **loud-members** — I6;
    `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as
    real or named-loud members instead of link-time misses / `undefined.bind`.
-5. `runtime-js/symbol-key-global-write-guard-precision` — **guard-precision** — I6;
-   ESM+CJS Function guards stop rejecting `globalThis[<Symbol const>]` writes
-   (@vitest/utils, undici) and the claimed path's dynamic keys (vitest worker
-   `for (const key in config.defines) globalThis[key] = …`, `vi.stubGlobal`
-   param key, imported `Symbol.for` consts); the ceiling still fires when the
-   key IS `'Function'`.
 6. `runtime-js/readable-pipe-never-ends-process-stdio` — **pipe-stdio** — I4;
    `Readable.pipe(process.stdout|stderr)` never calls `end()` (Node exemption).
 7. `runtime-js/process-lifecycle-events-exit-code` — **process-events** — I3;
@@ -47,7 +41,7 @@ order is also recorded as `blocked_by`; the other children are independent.
     config bundle), the wait `vitest run` drains on. Independent.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 4–11, 13.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 4, 6–11, 13.
 
 ## Open questions
 
