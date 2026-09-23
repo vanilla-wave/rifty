@@ -33,7 +33,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Browser mode (`@vitest/browser-playwright`) | ❌ | `Not implemented: node:https.Agent` (or `node:http.Agent`) when Playwright loads; no browser is launched from inside the browser |
 | `--pool=vmThreads` / `--pool=vmForks` | ❌ | Named `NotImplementedError` for the pools' `--experimental-vm-modules` startup flag (`vm.SourceTextModule` is absent) |
 | Watch mode (`vitest` without `run`, `--watch`) | ⚠️ | Not claimed. Shell children get a non-TTY stdin, so bare `vitest` runs once and exits as Node does with piped stdin; `vitest --watch` has no ceiling on its path and is untested |
-| Other Vite / vitest versions | ⚠️ | Not claimed. Vite 8.2+ fails `npm install` loudly (`lightningcss.version`); Vite 8.0.x/8.1.x install and are untested |
+| Other Vite / vitest versions | ⚠️ | Not claimed. Vite 8.2+ fails `npm install` loudly (`lightningcss.version`); Vite 8.0.x/8.1.x and 7.3.6 install and are untested |
 
 ## Test Sources
 

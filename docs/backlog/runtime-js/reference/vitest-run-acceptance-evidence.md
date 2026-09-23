@@ -266,3 +266,24 @@ probe (`VITE-DIRS`/`LOCK-VITE`/`VITEST`/`WASM32=true`) pass; the next wall:
     Expected: 1
     Received: 0
 ```
+
+## Reception r1 — watch / other-versions premise (2026-09-23)
+
+Re-verified for the Contract+RED r1 blocker (goal scenario 5 + I7); host
+Node v24.16.0 / npm 11.17.0, public registry, `--prefer-online`:
+
+```
+$ npm view vite@<v> dependencies.lightningcss --registry=https://registry.npmjs.org
+8.0.15 ^1.32.0 · 8.0.16 ^1.32.0 · 8.1.0 ^1.32.0 · 8.1.5 ^1.32.0      (shadow recipe admits → installs)
+8.2.0 ^1.33.0 · 8.2.2 ^1.33.0 · 8.3.0 ^1.33.0                        (→ loud lightningcss.version)
+7.3.6 (none)                                                          (installs; rifty's vite-command.md pair)
+$ npm view vite dist-tags.latest   → 8.3.0     (a lagging mirror answered 8.2.2)
+$ npm view vitest@4.1.11 dependencies.vite   → ^6.0.0 || ^7.0.0 || ^8.0.0
+```
+
+rifty at this branch: `packages/workbench/src/glue/child-terminal.ts:26`
+`stdinIsTTY: false` (unconditional) → vitest `watch` default off, shortcuts
+skipped; `packages/runtime-js/src/builtins/process.ts:322-323`
+`setRawMode()` → `throwStdinGap('process.stdin.setRawMode')` (loud, reachable
+only with a TTY stdin). Result: no honest named throw on the watch path or on
+installable versions; loudness needs a mode/version ban or TTY child stdin.

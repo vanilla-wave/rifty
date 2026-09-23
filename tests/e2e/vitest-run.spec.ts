@@ -245,7 +245,11 @@ test.describe('vitest 4.1.11 on vite 8.0.16 in the browser shell', () => {
       expect(result.output).not.toMatch(/Tests\s+2 passed/u);
     }
 
-    await expectCeiling('vitest run --environment=jsdom', /Not implemented: /u, 'DONT_CONTEXTIFY');
+    // Name bound to the throw's own line (serialize joins soft-wrapped rows).
+    await expectCeiling(
+      'vitest run --environment=jsdom',
+      /Not implemented: [^\n]*DONT_CONTEXTIFY/u,
+    );
     await expectCeiling(
       'vitest run --environment=happy-dom',
       'Not implemented: module-loader.esm-global-function-assignment',
@@ -256,13 +260,11 @@ test.describe('vitest 4.1.11 on vite 8.0.16 in the browser shell', () => {
     );
     await expectCeiling(
       'vitest run --pool=vmThreads',
-      /Not implemented: /u,
-      'experimental-vm-modules',
+      /Not implemented: [^\n]*experimental-vm-modules/u,
     );
     await expectCeiling(
       'vitest run --pool=vmForks',
-      /Not implemented: /u,
-      'experimental-vm-modules',
+      /Not implemented: [^\n]*experimental-vm-modules/u,
     );
 
     const browserConfig = writeFile('vitest.config.ts', [
