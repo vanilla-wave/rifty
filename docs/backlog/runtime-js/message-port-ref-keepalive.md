@@ -7,7 +7,7 @@ why: emnapi holds the Node loop for pending napi async work with `new MessageCha
 epic: vitest-run-in-browser
 blocked_by: []
 sources: [docs/backlog/runtime-js/reference/message-port-ref-keepalive-evidence.md, docs/adr/runtime-js/0447-count-referenced-messageports-in-child-realm-keepalive.md, docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/adr/runtime-js/0152-child-realm-event-loop-drain-loud-fail-exit-contract.md, docs/backlog/runtime-js/keepalive-residual-gaps.md]
-code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/ipc/worker-realm-compat.ts, packages/runtime-js/src/ipc/install-process.ts]
+code: [packages/runtime-js/src/internal/message-port-ref.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/ipc/worker-realm-compat.ts, packages/runtime-js/src/ipc/install-process.ts]
 ---
 
 ## Context
@@ -119,3 +119,6 @@ ready-verdict: 2026-09-23 — Contract+RED @ e1676d095a25145fd4cf2f70f4cd6b84b2a
 - 2026-09-23 — carrier: ADR-0447, a short ADR citing ADR-0152 (ADR-0158 is the precedent). It records local pairs through a `MessageChannel` Proxy, adds prototype `ref`/`unref`/`hasRef`, releases the pair on `close()`, and refuses transfers of referenced pairs by name. Rejected: own-release-only (it hangs the uncapped terminal drain on peer close), #351's make-every-port-untransferable approach with close emulation, and any emnapi/rolldown/vitest patch.
 - 2026-09-23 — scope: listener referencing and the NodeEventTarget surface stay explicit gaps. I4 does not need them (evidence §Claimed-path sweep), and they would need a kernel primordial-constructor seam. The land step should re-cut map item 13's "listener auto-ref" wording.
 - 2026-09-23 — no parity-runner case: in the Node host it would compare Node with Node. The carrier is browser-unit with a live Node oracle, plus the captured rolldown artifact.
+- 2026-09-23 — implement: carrier `packages/runtime-js/src/internal/message-port-ref.ts`, called from `installNodeRuntime` (Node realms). The per-port ref flag feeds the existing ADR-0152 refcount, the same shape as Timer `ref`/`unref`; no second count authority (fault-classes §Class-kill sweep). `worker_threads.MessageChannel` reads the realm's recorded constructor late (it was captured before pre-entry).
+- 2026-09-23 — implement: a moved end is closed here, as Node closes a transferred source (`ref()` no-op, `hasRef()` false; evidence §IMPLEMENT). A zero-length probe buffer tells whether a transfer really moved anything, because Chromium drops a transfer through a closed port. ADR-0447 §4 records both.
+- 2026-09-23 — sibling sweep: rifty `worker_threads.Worker#postMessage` sends through `ports.ipc.postMessage(frame)` with no transfer list, so a port in the payload is a DataCloneError and never moves; the same-realm fallback passes by reference. Chromium's worker global exposes transfer only on `MessagePort`, `Worker`, the global `postMessage` and `structuredClone` (evidence §IMPLEMENT); all four are wrapped. Same-realm `child_process` children share the parent loop by design, so their refs count there.

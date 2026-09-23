@@ -17,6 +17,7 @@ import {
   observeProcessTerminalOutcome,
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { nodeMessageChannel } from '../internal/message-port-ref.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
@@ -703,13 +704,27 @@ function decodeWorkerData(encoded: string | undefined): unknown {
 
 const worker_threads: Record<string, unknown> = {
   Worker,
-  MessageChannel: globalThis.MessageChannel,
   markAsUntransferable,
   isMarkedAsUntransferable,
   markAsUncloneable,
 };
 
 Object.defineProperties(worker_threads, {
+  // Read late: the realm's recorded constructor is installed pre-entry (ADR-0447).
+  // Assignment still works as on Node's writable data property.
+  MessageChannel: {
+    enumerable: true,
+    configurable: true,
+    get: nodeMessageChannel,
+    set(value: unknown) {
+      Object.defineProperty(worker_threads, 'MessageChannel', {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    },
+  },
   isMainThread: {
     enumerable: true,
     get: () => activeWorkerContext() === null,

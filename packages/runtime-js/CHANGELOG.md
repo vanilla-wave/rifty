@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Node child realms give `MessagePort` Node's `ref`/`unref`/`hasRef`: a referenced port is a counted keepalive handle until unref or either pair end closes (emnapi napi async work, rolldown wasm32-wasi). Global and `worker_threads` `MessageChannel` are one recording Proxy; moving a referenced pair or referencing a split pair throws by name (ADR-0447).
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

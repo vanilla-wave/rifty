@@ -51,14 +51,18 @@ fault outcome (`docs/process/rules/fault-classes.md`).
    that can move a port: `MessagePort.prototype.postMessage`, `structuredClone`,
    `Worker.prototype.postMessage` and the realm's global `postMessage`. It reads
    the transfer argument once (the sequence, or the options `transfer` member),
-   builds an array from it, and passes that array to the native call. The
-   return value is the native one. If a referenced port, or the peer of one, is
-   in the list, the call throws
-   `NotImplementedError('MessagePort.transfer.referenced')` before anything is
-   detached. After a successful transfer, each recorded port that moved is
-   marked split. `ref()` throws `NotImplementedError('MessagePort.ref.transferred')`
-   on a port that belongs to a split pair, and on a port it did not record (for
-   example, one received through a transfer). Every other transfer stays native.
+   builds an array from it, and passes that array to the native call (options
+   go as an object inheriting the caller's, so Chromium reads any other member,
+   such as `includeUserActivation`, from it once). The return value is the
+   native one. If a referenced port, or the peer of one, is in the list, the
+   call throws `NotImplementedError('MessagePort.transfer.referenced')` before
+   anything is detached. After a successful transfer, each recorded port that
+   moved is closed here, as Node closes a transferred source; its pair is now
+   split. A zero-length probe buffer rides in the list to tell whether anything
+   moved, because Chromium silently drops a transfer posted through a closed
+   port. `ref()` throws `NotImplementedError('MessagePort.ref.transferred')` on
+   the kept end of a split pair, and on a port it did not record (for example,
+   one received through a transfer). Every other transfer stays native.
 5. Emnapi, rolldown and vitest are not changed. Listeners, `start()` and message
    delivery are not wrapped.
 

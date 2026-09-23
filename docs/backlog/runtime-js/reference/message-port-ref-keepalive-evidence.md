@@ -324,6 +324,70 @@ real packages. The other cases fail because the API is missing. An earlier RED
 run (before the pair/transfer revision) failed the same eight shared cases the
 same way.
 
+## IMPLEMENT (2026-09-23)
+
+Carrier `packages/runtime-js/src/internal/message-port-ref.ts`, installed by
+`installNodeRuntime` (Node realms, pre-entry). Pre-change RED rerun on the
+Contract+RED record commit: 10/10 fail as above (`TypeError: …ref is not a
+function` ×7; drained wait ×3, rolldown detached `exit=0` with only
+`ROLLDOWN|start`). After the change, same command: 10/10 pass (17.1 s).
+
+Chromium 148.0.7778.96 dedicated Worker probes (`probe-options.mjs`, below):
+
+```text
+transfer-capable postMessage owners: Worker.prototype, MessagePort.prototype, the global itself (own
+  property); BroadcastChannel#postMessage has no transfer list; navigator.serviceWorker undefined
+structuredClone owner: WorkerGlobalScope.prototype
+options reads: port/worker/global postMessage → @@iterator, transfer, includeUserActivation;
+  structuredClone → transfer only; sequence → @@iterator ×2 + length (Chromium re-read)
+receiver checked first: MessagePort.prototype.postMessage.call({}, …) → TypeError: Illegal invocation, 0 reads
+sequence [5, {}] → stops after the first item (Failed to convert value to 'object')
+closedTransfer: closed port.postMessage('x', [buf]) → no throw, buf.byteLength 4 (nothing detached)
+neuteredPostTransfer: transferred-away port.postMessage('x', [buf]) → no throw, buf.byteLength 4
+transferClosed: structuredClone(closedPort, {transfer:[closedPort]}) → a MessagePort
+```
+
+So the wrapper reads the argument once, checks the receiver before reading,
+forwards options as an object inheriting the caller's, and detects a real move
+with a zero-length probe buffer (a transfer through a closed port moves
+nothing in Chromium).
+
+Node v24.16.0, a port moved away and then `ref()`'d (`moved-source-ref2.cjs`,
+3 runs):
+
+```text
+sync true false false      (sent.hasRef, kept.hasRef, copy.hasRef)
+immediate true
+timeout50 false
+exit=0                     (no held-by-moved-source: the moved source never holds)
+```
+
+Rifty treats a moved end as closed (`ref()` no-op, `hasRef()` false): the same
+end result, with the close-timing gap already recorded.
+
+Reflection probe (scratch browser-unit spec, not committed; same source in
+Node and rifty `node main.cjs`):
+
+```text
+                         rifty (Chromium 148)                      Node v24.16.0
+desc-close               true:true:true:function:close:0:false     …:close:1:true
+desc-postMessage         …:postMessage:1:false                     …:postMessage:0:false
+desc-ref / unref         true:true:true:function:ref:0:false       same
+desc-hasRef              true:true:true:function:hasRef:0:false    …:hasRef:0:true
+desc-structuredClone     …:structuredClone:1:false                 …:structuredClone:2:true
+global MessageChannel    true:false:true:function:MessageChannel:0 same
+proto constructor        MessageChannel (the Proxy)                same identity row
+toString(MessageChannel) "function () { [native code] }"           "function MessageChannel() { [native code] }"
+subclass                 true,true,true                            same
+moved-source             undefined,false                           undefined,true   (close-timing gap)
+closed-post-kept         true,4                                    true,0           (Chromium keeps a closed port's transfer)
+exit                     0, no PROBE|held                          0, no PROBE|held
+```
+
+Wrapped methods keep Chromium's native descriptor, name and length; `close`,
+`postMessage` and `structuredClone` lengths already differed from Node. The
+closed-port transfer row is pre-existing Chromium behavior, not claimed here.
+
 ## Probe sources (verbatim)
 
 Node probes ran as `node <file> [mode]` (`p8` modes `own`/`peer`; `p10` modes as printed) under `perl -e 'alarm N; exec @ARGV'`. The Chromium probe ran from the repo root, so `@playwright/test` resolves.
@@ -505,4 +569,35 @@ Descriptor and NodeEventTarget probes (`node -e`):
 for (const k of ['ref','unref','hasRef','close','start','postMessage']) { const d = Object.getOwnPropertyDescriptor(MessagePort.prototype, k); console.log(k, d ? JSON.stringify({w:d.writable,e:d.enumerable,c:d.configurable,type:typeof d.value, name: d.value && d.value.name, length: d.value && d.value.length}) : 'not-own'); }
 try { MessagePort.prototype.ref.call({}); } catch (e) { console.log('ref-on-object', e.name, e.code, e.message); }
 let p = Object.getPrototypeOf(MessagePort.prototype); while (p && p !== Object.prototype) { console.log(p.constructor.name + ': ' + Object.getOwnPropertyNames(p).filter((n) => n !== 'constructor').join(',')); p = Object.getPrototypeOf(p); }
+```
+
+`moved-source-ref2.cjs`:
+
+```js
+const { port1: kept, port2: sent } = new MessageChannel();
+const copy = structuredClone(sent, { transfer: [sent] });
+sent.ref();
+console.log('sync', sent.hasRef(), kept.hasRef(), copy.hasRef());
+setImmediate(() => console.log('immediate', sent.hasRef()));
+setTimeout(() => console.log('timeout50', sent.hasRef()), 50);
+const cell = new Int32Array(new SharedArrayBuffer(4));
+Atomics.waitAsync(cell, 0, 0, 300).value.then(() => console.log('held-by-moved-source'));
+```
+
+`probe-options.mjs` (Playwright chromium, a Blob dedicated Worker; `spy` logs
+every `get` on a Proxy; `tryIt` records `name:message`):
+
+```js
+const { port1 } = new MessageChannel();
+port1.postMessage('x', spy('portOpts', { transfer: [] }));
+port1.postMessage('x', spy('portSeq', []));
+structuredClone('x', spy('scOpts', { transfer: [] }));
+structuredClone('x', spy('scSeq', []));
+postMessage('noop', spy('globalOpts', { transfer: [] }));
+new Worker(blobUrl('')).postMessage('x', spy('workerOpts', { transfer: [] }));
+tryIt('illegal', () => MessagePort.prototype.postMessage.call({}, 'x', { get transfer() { log.push('read'); return []; } }));
+tryIt('seqStops', () => port1.postMessage('x', { *[Symbol.iterator]() { iterLog.push(1); yield 5; iterLog.push(2); yield {}; } }));
+tryIt('closedTransfer', () => { const c = new MessageChannel(); const buf = new ArrayBuffer(4); c.port1.close(); c.port1.postMessage('x', [buf]); });
+tryIt('neuteredPostTransfer', () => { const c = new MessageChannel(); structuredClone(c.port1, { transfer: [c.port1] }); const buf = new ArrayBuffer(4); c.port1.postMessage('x', [buf]); });
+tryIt('transferClosed', () => { const c = new MessageChannel(); c.port1.close(); structuredClone(c.port1, { transfer: [c.port1] }); });
 ```
