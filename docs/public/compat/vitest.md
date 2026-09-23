@@ -22,7 +22,7 @@ Vitest run claim.
 | Feature | Status | Evidence |
 |---|---|---|
 | Clean `npm install` with the manifest above | ✅ | Chromium installs one Vite 8.0.16, Vitest 4.1.11 and rolldown wasm32 binding (`tests/e2e/vitest-install-override.spec.ts`). |
-| `vitest run` with `vitest.config.ts` and `.ts` tests | ❌ | On latest tested root snapshot 8a0936c92, the command prints no reporter output and incorrectly exits 0 before config loading. An earlier snapshot hit a named `module-loader.esm-global-function-assignment` ceiling. Both REDs are recorded in `docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md`; there is no run claim. |
+| `vitest run` with `vitest.config.ts` and `.ts` tests | ❌ | On latest tested goal branch 062056ba0, the command prints no reporter output and incorrectly exits 0 before config loading. An earlier snapshot hit a named `module-loader.esm-global-function-assignment` ceiling. REDs are recorded in `docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md`; there is no run claim. |
 
 ## Pending acceptance
 

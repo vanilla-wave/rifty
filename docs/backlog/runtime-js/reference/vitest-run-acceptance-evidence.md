@@ -60,3 +60,7 @@ pass. The `@vitest/utils` loader ceiling is gone; first `vitest run` now
 prints no reporter or Startup Error text and returns terminal history exit 0.
 The e2e expects 1 and fails at that assertion. Config loading, collection,
 both pool results, verbose and fixed reruns are still unobserved in rifty.
+
+## Chromium RED on integrated goal branch 062056ba0
+
+`pnpm build:libs` then `RIFTY_PLAYGROUND_PORT=5392 node_modules/.bin/playwright test --project=chromium-heavy --workers=1 tests/e2e/vitest-install-override.spec.ts` on committed 062056ba08bdfb74d34e0619e0475f4c8c026910: install/versions/wasm checks pass; first `vitest run` prints no reporter text and has history exit 0, so the test fails at its exit-1 assertion (1 test failed, 18.5 s). This tree includes Symbol guard, pipe, advanced IPC and VM offsets; lifecycle/Worker keepalive are still pending.
