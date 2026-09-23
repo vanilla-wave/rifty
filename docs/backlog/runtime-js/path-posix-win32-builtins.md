@@ -46,18 +46,24 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 - `node:path/win32`: stays unregistered — `require`/`import` throw the loader's
   `ModuleLoadError` `MODULE_NOT_FOUND` "Built-in 'node:path/win32' is not
-  implemented" (bare `path/win32`: `MODULE_NOT_FOUND` package miss); pinned by
-  `tests/conformance/builtins/path.test.ts` "node:path/win32 ceiling". Compat ❌.
+  implemented" (bare `path/win32`: `MODULE_NOT_FOUND` package miss); `isBuiltin`
+  false for both spellings, absent from `builtinModules` (Node: builtin; evidence
+  §GREEN); pinned by `tests/conformance/builtins/path.test.ts` "node:path/win32
+  ceiling". Compat ❌.
 - `path.win32` Windows semantics: the property keeps today's `win32 === posix`
   alias, untouched here (Decisions: discovery routed outside I6).
 - `node:path/posix` members Node 24 has and `path.posix` lacks: `matchesGlob`
   (backlog `runtime-js/fs-glob-matchesglob-minimatch`), `_makeLong`, and the
-  `posix` / `win32` cross-references; a named import of any of them is a
-  link-time `SyntaxError`, as for `node:path` today.
+  `posix` / `win32` cross-references; a property read answers `undefined`, a
+  named import is a link-time `SyntaxError`, as for `node:path` today. Compat ⚠️.
+- `node:path` identity: rifty's `path` is a separate object holding `posix`, so
+  `require('path/posix') === require('path')` is `false` (Node: `path` is
+  `path.posix`, `true`; evidence §GREEN). Compat ⚠️.
 
 ## Decisions
 
 ready-verdict: 2026-09-23 — Contract+RED @ 26fff2916c5de06b3b4cb8298db14bc45dc7f7a5
 - 2026-09-23 — scope: `path/posix` only; `node:path/win32` dropped from the draft — no invariant needs it (tree scan: never imported; vite's `path.win32.basename` runs only under `process.platform === 'win32'`), registering it onto the `win32 === posix` alias would extend that lie, a real win32 port is machinery I6 is deliverable without (`REV-7`).
 - 2026-09-23 — discovery (`REV-12`, outside I6): `path.win32` silently answers with POSIX semantics (Node: `sep` `\`, `join('a','b')` `a\b`; evidence §Rifty baseline), tracked only by a code comment and traps.md `parity-win32-alias` — owed backlog capture `runtime-js/path-win32-namespace` (real `path.win32` + `node:path/win32` + `posix`/`win32` cross-refs); owner runtime-js; trigger: first Windows-path consumer.
+- 2026-09-23 — implementation: Contract+RED concerns taken — compat `modules.md` rows `node:path/posix` ⚠️ + `node:path/win32` / `path.win32` ❌ and Out of scope name every surrounding divergence; the owed `runtime-js/path-win32-namespace` capture also owns `_makeLong` and `path === path.posix` identity (filing routed to the goal's land step as a `REV-12` discovery).
 - 2026-09-23 — no ADR: a registry line on ADR-0035 with Node-literal identity; `packages/runtime-js/CHANGELOG.md` + compat `modules.md` note at implementation.

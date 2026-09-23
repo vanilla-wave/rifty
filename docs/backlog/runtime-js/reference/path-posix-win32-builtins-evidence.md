@@ -163,3 +163,52 @@ Ceiling pin `tests/conformance/builtins/path.test.ts` ("node:path/win32
 ceiling"): passes @ 325ae797c; with `registerBuiltin('path/win32', () =>
 pathModule.win32)` added → `AssertionError: expected function to throw an
 error, but it didn't`.
+
+## GREEN (implementation: `registerBuiltin('path/posix', () => pathModule.posix)`)
+
+```
+$ pnpm -s test:parity posix-subpath
+node-parity-runner: 2 case(s) matching 'posix-subpath'
+  ✓ path/posix-subpath-import.case.ts
+  ✓ path/posix-subpath-require.case.ts
+all cases match
+```
+
+Surrounding divergences (Out of scope), Node v24.16.0 `ceiling.cjs`:
+
+```js
+const path = require('path');
+const mod = require('node:module');
+console.log('require(path/posix) === require(path)', require('path/posix') === require('path'));
+const x = require('node:path/posix');
+console.log('posix members', JSON.stringify([typeof x.posix, typeof x.win32, typeof x.matchesGlob, typeof x._makeLong]));
+console.log('isBuiltin path/win32', mod.isBuiltin('path/win32'), mod.isBuiltin('node:path/win32'));
+console.log('builtinModules path/win32', mod.builtinModules.includes('path/win32'));
+console.log('require path/win32 === path.win32', require('path/win32') === path.win32);
+```
+
+```
+$ node --version && node ceiling.cjs
+v24.16.0
+require(path/posix) === require(path) true
+posix members ["object","object","function","function"]
+isBuiltin path/win32 true true
+builtinModules path/win32 true
+require path/win32 === path.win32 true
+```
+
+Rifty after the registration (scratch vitest probe, deleted;
+`createModuleLoader(MemoryFsSync)`, same probes in try/catch):
+
+```
+path === path.posix false
+require(path/posix) === require(path) false
+posix members ["undefined","undefined","undefined","undefined"]
+require path/win32 threw Error MODULE_NOT_FOUND "Cannot find module 'path/win32'\nRequire stack:\n- /app/main.js"
+require node:path/win32 threw ModuleLoadError MODULE_NOT_FOUND "Built-in 'node:path/win32' is not implemented"
+isBuiltin path/win32 [false,false]
+builtinModules path/win32 false
+win32 === posix true
+named matchesGlob threw SyntaxError "The requested module 'node:path/posix' does not provide an export named 'matchesGlob' (imported by /app/named.mjs)"
+ns keys basename,default,delimiter,dirname,extname,format,isAbsolute,join,normalize,parse,relative,resolve,sep,toNamespacedPath
+```
