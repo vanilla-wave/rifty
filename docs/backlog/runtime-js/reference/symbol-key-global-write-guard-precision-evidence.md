@@ -267,6 +267,22 @@ $ pnpm test:parity global-computed-key-sites
   ✗ modules/global-computed-key-sites-esm.case.ts   error: NotImplementedError: … module-loader.esm-global-function-assignment (ESM module /work/main.mjs …)
 ```
 
+## S1 after IMPLEMENT — same tree, same scan
+
+```
+$ tsx scan.mts /tmp/vgoal/u5/vt/node_modules      (vitest 4.1.11 + undici 8.10.2 tree of §S1)
+scanned esm=191 cjs=206                            (no module-loader.* ceiling; 8 files before)
+```
+
+Key-wrap syntax safety over real sources: every `.js/.mjs/.cjs` of the repo's
+`node_modules/.pnpm` plus the §S1 tree through the ESM guard; files with key
+edits re-parsed (acorn, module) after `applyEdits`:
+
+```
+$ tsx edit-syntax-scan.mts node_modules/.pnpm /tmp/vgoal/u5/vt/node_modules
+{"files":53145,"parsedAsModule":53117,"edited":311,"wrappedKeys":476,"loadTimeCeilings":57,"reparseFailures":0}
+```
+
 ## Re-pin — `typescript-worker.js` fingerprint (`check:esbuild-legacy-retirement`)
 
 The Workbench TypeScript worker imports the module-loader chunk by content
