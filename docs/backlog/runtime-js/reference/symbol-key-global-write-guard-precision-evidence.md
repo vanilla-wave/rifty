@@ -67,3 +67,18 @@ top-level await; Symbol parity 2/2;
 Function-constructor parity 2/2; existing ESM/CJS Function ceiling conformance
 3/3; runtime-js typecheck pass. The `Function` descriptor remains unchanged on
 every rejected write.
+
+## Exported declaration repair (2026-09-23)
+
+Independent Final review at `218f643a6` found the ESM lexical prepass skipped
+`ExportNamedDeclaration` wrappers. `export const key = Symbol.for(...); globalThis[key] = 7`
+worked in Node v24.16.0 (`{"value":7}`) but rifty threw
+`module-loader.esm-global-function-assignment`. Same physical parity case and
+both loader entry paths were RED; `symbol-global-write-guard.test.ts` had 1
+failure / 26 passes. The fault is sibling drift at the ESM declaration boundary:
+exported lexical declarations need the same predeclaration as ordinary ones.
+
+After unwrapping exported declarations in that prepass, the new physical parity
+matches Node, and the unit suite passes 28/28. A shadowed exported `Symbol`
+factory remains behind the named ceiling with the `Function` descriptor intact.
+Runtime-js typecheck and targeted Biome also pass.

@@ -86,6 +86,40 @@ describe.each(['cjs', 'esm'] as const)('%s Symbol value guard', (kind) => {
   });
 });
 
+it('accepts an exported ESM const holding a Symbol key through require and import', async () => {
+  const filename = '/work/entry.mjs';
+  const source =
+    "export const key = Symbol.for('rifty.guard.exported'); globalThis[key] = 7; export const observed = globalThis[key]; Reflect.deleteProperty(globalThis, key);";
+  for (const entry of ['require', 'import'] as const) {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({ [filename]: source });
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+    const exports =
+      entry === 'require'
+        ? loader.require(filename)
+        : await loader.import(filename, '/work/parent.mjs');
+    expect(exports).toMatchObject({ observed: 7 });
+  }
+});
+
+it('keeps an exported shadow Symbol factory behind the Function ceiling', () => {
+  const filename = '/work/entry.mjs';
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({
+    [filename]:
+      "export const Symbol = { for: () => 'Function' }; const key = Symbol.for('guard'); globalThis[key] = 0;",
+  });
+  const loader = createModuleLoader(vfs, { cwd: '/work' });
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Function');
+  expect(() => loader.require(filename)).toThrow(
+    expect.objectContaining({
+      name: 'NotImplementedError',
+      feature: 'module-loader.esm-global-function-assignment',
+    }) as Error,
+  );
+  expect(Object.getOwnPropertyDescriptor(globalThis, 'Function')).toEqual(descriptor);
+});
+
 it('guards an ESM Symbol key after top-level await', async () => {
   const filename = '/work/entry.mjs';
   const vfs = new MemoryFsSync();

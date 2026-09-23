@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Predeclare exported ESM Symbol keys in the Function guard's lexical scope.
 - Inspect advanced IPC internal brands after prototype changes; reject hidden SAB, Buffer, and unsupported views (ADR-0457).
 - Reject explicit ArrayBuffer/view aliases in advanced IPC before they change data; reject top-level BigInt with Node's send error (ADR-0458).
 

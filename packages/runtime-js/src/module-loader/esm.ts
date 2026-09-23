@@ -362,7 +362,13 @@ function collectGuardFunctionScopeBindings(node: unknown, scope: GuardScope): vo
 }
 
 function predeclareGuardLexicalScope(body: readonly GuardNodeShape[], scope: GuardScope): void {
-  for (const node of body) {
+  for (const statement of body) {
+    const declaration =
+      statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportDefaultDeclaration'
+        ? statement.declaration
+        : null;
+    const node =
+      declaration && typeof declaration === 'object' ? (declaration as GuardNodeShape) : statement;
     if (node.type === 'ImportDeclaration') {
       declareGuardImport(scope, node);
     } else if (
