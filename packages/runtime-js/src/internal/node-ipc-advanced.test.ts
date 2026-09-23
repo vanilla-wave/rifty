@@ -118,3 +118,33 @@ it('does not interpret guest value/buffers fields as codec metadata', () => {
   const wire = structuredClone(serializeNodeIpcMessage(source, 'advanced'));
   expect(deserializeNodeIpcMessage(wire, 'advanced')).toEqual(expected);
 });
+
+const uncloneableSources = [
+  'new WeakMap()',
+  'new WeakSet()',
+  'Promise.resolve(1)',
+  'new SharedArrayBuffer(2)',
+  'new WeakRef({})',
+  'new FinalizationRegistry(() => {})',
+];
+it.each(uncloneableSources)('rejects intrinsic %s without reading guest properties', (source) => {
+  for (const severed of [false, true]) {
+    const value: object = runInNewContext(source);
+    if (severed) Object.setPrototypeOf(value, null);
+    let reads = 0;
+    Object.defineProperty(value, 'probe', {
+      enumerable: true,
+      get() {
+        reads++;
+        return 1;
+      },
+    });
+    Object.freeze(value);
+    expect(() => serialize({ bad: value })).toThrow(/could not be cloned/);
+    expect(reads).toBe(0);
+    expect(() => serializeNodeIpcMessage({ bad: value }, 'advanced')).toThrow(
+      /could not be cloned/,
+    );
+    expect(reads).toBe(0);
+  }
+});

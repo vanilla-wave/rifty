@@ -289,6 +289,7 @@ export function buildDevServerChildEntry(
   return Object.freeze({
     kind: 'url',
     url,
+    role: 'runtime-bootstrap',
     bootstrap: Object.freeze({
       protocol: DEV_SERVER_CHILD_BOOTSTRAP_PROTOCOL,
       payload: Object.freeze({

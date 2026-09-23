@@ -53,6 +53,11 @@ retain their ordering.
 
 ## Open questions
 
+- Advanced IPC scope fork pending: candidate Promise brand guard rejects ambiguous
+  locked-constructor records with a named opaque-brand ceiling. Exact Vitest10runs
+  stays GREEN5447; frozen-Promise native-parity RED remains. User approval required
+  before changing the full graph contract; evidence in
+  `runtime-js/reference/advanced-ipc-intrinsic-brands-evidence.md`.
 - I7 user fork pending: fresh Chromium5428 also runs Vitest4.1.11/Vite8.0.15
   fail/fix correctly. The accepted blanket other-version ceiling is false.
   Watch also ran tests and waited45s without a ceiling (Chromium5429).
@@ -78,13 +83,12 @@ retain their ordering.
   (probe: jsdom 30 installs and parses DOM; vitest forces `runScripts:
   'dangerously'` → `vm.constants.DONT_CONTEXTIFY` + Window as a vm-realm global;
   feasibility open). Until then a loud `NotImplementedError` naming that epic.
-- watch mode (`vitest` without `run`): first loud wall stays
-  `readline.emitKeypressEvents` NotImplementedError; not claimed.
-- coverage (`@vitest/coverage-v8` → `node:inspector` Session): loud proxy throw.
-- `vmThreads` / `vmForks` pools (`vm.SourceTextModule` absent): loud.
+- watch mode: observed tests + wait without ceiling; I7 user fork above remains open.
+- coverage: installed @vitest/coverage-v8 reaches missing node:inspector/promises.
+- `vmThreads` / `vmForks`: unsupported --experimental-vm-modules child execArgv is loud.
 - vitest browser mode, `typecheck` pool, `--changed` (git via spawnSync): loud.
-- vite versions other than exact 8.0.16 and vitest other than 4.1.11: unclaimed;
-  vite outside the exact set keeps today's loud shadow/patch ceilings.
+- Other versions: outside the guarantee; 8.0.15 also passed. Blanket bans remain
+  the pending I7 user fork, not an observed runtime boundary.
 - re-running `npm install` after changing the pin over an existing
   `node_modules/vite`: stale files survive and the vite install patch aborts —
   `npm-client/stale-package-dir-on-version-change` (honest-npm territory); the

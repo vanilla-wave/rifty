@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Close runtime bootstrap capture before the language-service worker admits requests (ADR-0465).
+
 ### Changed
 
 - **Owner-FS relay consumes the complete SyncRpc v5 API (ADR-0366).** The

@@ -61,6 +61,8 @@ validation and clone failure. Successful sends snapshot their input.
 | corrupt-input × both advanced senders | sync native error; no dispatch/disconnect; healthy send survives | advanced-fault invalid/nested/getter rows | → I4, ADR-0326 |
 | sibling-drift × parent/child codec selection | native graph retained on child-originated message and parent echo; JSON unchanged | advanced + existing json cases | → I4, ADR-0326 |
 | observable-order × serialization/queued sends | getter failure thrown before return; admitted messages retain order and send-time snapshot | advanced-fault sequences 1/2; advanced mutation | → I4, ADR-0326 |
+| observable-order × SAB-backed view encounter | bytes captured before later getter/post-send writes; same view aliases retained | node-ipc-advanced-shared-views + rich physical IPC case | → I4, ADR-0446 |
+| sibling-drift × uncloneable intrinsic brands | realm/prototype cannot erase rejection; constructor-locked Promise remains pending user fork | node-ipc-advanced intrinsic census + advanced-fault; intrinsic-brands evidence | → I4, ADR-0446, ADR-0453 |
 | provenance-lie × typed launch ownership | advanced survives producer/receiver; old protocol rejected | node-entry-advanced-ipc owner parser tests | → ADR-0267, ADR-0446 |
 | torn-state × public disconnect/private control | connected false; private kill still terminates exact child | advanced disconnect/SIGUSR2 | → ADR-0326 |
 
@@ -79,3 +81,9 @@ ready-verdict: 2026-09-23 — Contract+RED @ 57602c71af088f69e2f973aa54ae3334644
 - 2026-09-23 — source: user's whole-epic handoff + goal I4 default forks → generic advanced fork codec; native Node fixes value/error semantics. Existing ADR-0326 callback/handle ceilings stay explicit, not an invented user exclusion.
 - 2026-09-23 — preparation: new parity promise; two physical REDs before production changes, Contract+RED pending. The pre-spawn ceiling prevents Worker allocation; same-source direct probe identifies it.
 - 2026-09-23 — boundary: dedicated MessagePort is ordered/exactly-once while alive; inject real caller serialization failures, not physically excluded transport duplication/reorder. No coordination owner added.
+
+- 2026-09-23 — Final B1: six uncloneable intrinsic brands lost by instanceof.
+  Five slot repairs proven; Promise probe + locked-object named ceiling is a
+  concrete candidate, not an accepted narrowing. User question pending;
+  Acceptance2 and its frozen-Promise native-error RED remain unchanged.
+  Evidence: `reference/advanced-ipc-intrinsic-brands-evidence.md`.

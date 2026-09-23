@@ -68,7 +68,7 @@ function errorFrom(error: unknown): Error {
 
 function spawnSpec(options: TsLspOwnerRelayOptions): SpawnWorkerSpec {
   return {
-    entry: { kind: 'url', url: options.workerUrl },
+    entry: { kind: 'url', url: options.workerUrl, role: 'runtime-bootstrap' },
     argv: ['rifty', 'ts-lsp'],
     env: {
       ...options.nodeWorkerRuntimeEnv,

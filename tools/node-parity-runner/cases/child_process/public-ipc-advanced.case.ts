@@ -5,6 +5,9 @@ const values = `
   let getterReads = 0;
   function value() {
     const shared = { n: 7 };
+    const sharedBytes = new Uint8Array(new SharedArrayBuffer(8));
+    sharedBytes.set([1, 2, 3, 4, 5, 6, 7, 8]);
+    const sharedView = new Uint8Array(sharedBytes.buffer, 2, 4);
     const result = {
       date: new Date('2020-01-02T03:04:05.000Z'),
       map: new Map([['key', shared]]), set: new Set([shared]),
@@ -12,10 +15,16 @@ const values = `
       buffer: Buffer.from([4, 5, 254]), bigint: 9007199254740993n,
       error: new TypeError('failure', { cause: new Error('cause') }),
       array: [undefined, NaN, Infinity, -0], shared,
+      sharedView, sharedViewAlias: sharedView,
+      sharedData: new DataView(sharedBytes.buffer, 2, 4),
     };
     result.self = result;
     Object.defineProperty(result, 'bufferAlias', {
-      enumerable: true, get() { getterReads++; return result.buffer; },
+      enumerable: true, get() {
+        getterReads++;
+        sharedBytes.fill(88);
+        return result.buffer;
+      },
     });
     return result;
   }
@@ -32,6 +41,11 @@ const values = `
       array: [v.array.length, 0 in v.array, v.array[0] === undefined,
         Number.isNaN(v.array[1]), v.array[2] === Infinity, Object.is(v.array[3], -0)],
       cycle: v.self === v, shared: v.shared.n,
+      sharedView: [v.sharedView instanceof Uint8Array, Array.from(v.sharedView),
+        v.sharedView === v.sharedViewAlias, v.sharedView.buffer instanceof ArrayBuffer],
+      sharedData: [v.sharedData instanceof DataView,
+        Array.from(new Uint8Array(v.sharedData.buffer, v.sharedData.byteOffset,
+          v.sharedData.byteLength)), v.sharedData.buffer instanceof ArrayBuffer],
     };
   }
 `;
@@ -47,7 +61,9 @@ const c: ParityCase = {
         process.on('message', message => {
           process.send({ tag: 'echo', received: describe(message), value: message });
         });
-        process.send({ tag: 'ready', value: value() });
+        const initial = value();
+        process.send({ tag: 'ready', value: initial });
+        initial.sharedView.fill(99);
         setInterval(() => {}, 1000);
       `,
     },
@@ -70,6 +86,7 @@ const c: ParityCase = {
           result.getterReads = getterReads - before;
           sent.shared.n = 99;
           sent.bytes[0] = 99;
+          sent.sharedView.fill(99);
           return;
         }
         result.childReceived = message.received;

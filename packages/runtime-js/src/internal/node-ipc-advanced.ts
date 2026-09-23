@@ -1,4 +1,5 @@
-import { Buffer } from '@riftydev/io';
+import { Buffer, NotImplementedError } from '@riftydev/io';
+import { snapshotSharedView } from './node-ipc-shared-view.ts';
 import { cloneFailureMessage, proxyCloneFailure } from './proxy-provenance.ts';
 
 const mapEntries = Map.prototype.entries;
@@ -18,6 +19,67 @@ const boxedReaders = [
   Symbol.prototype.valueOf,
 ];
 const apply = Reflect.apply;
+const promiseResolve = Promise.resolve;
+const ownDescriptor = Object.getOwnPropertyDescriptor;
+const defineProperty = Object.defineProperty;
+const deleteProperty = Reflect.deleteProperty;
+const isExtensible = Object.isExtensible;
+const nonPromise = {};
+function PromiseBrandProbe(): never {
+  throw nonPromise;
+}
+
+/** No reactions or guest callbacks: PromiseResolve returns the same Promise,
+ * or constructs the private throwing probe before inspecting a plain object's then. */
+function isPromise(value: object): boolean {
+  const prior = ownDescriptor(value, 'constructor');
+  if (
+    (prior && !prior.configurable && (!('value' in prior) || !prior.writable)) ||
+    (!prior && !isExtensible(value))
+  ) {
+    throw new NotImplementedError('child_process.serialization.advanced.opaque-brand');
+  }
+  defineProperty(
+    value,
+    'constructor',
+    prior?.configurable === false
+      ? { value: PromiseBrandProbe }
+      : { value: PromiseBrandProbe, configurable: true, writable: true, enumerable: false },
+  );
+  try {
+    try {
+      return apply(promiseResolve, PromiseBrandProbe, [value]) === value;
+    } catch (error) {
+      if (error === nonPromise) return false;
+      throw error;
+    }
+  } finally {
+    if (prior) defineProperty(value, 'constructor', prior);
+    else deleteProperty(value, 'constructor');
+  }
+}
+const weakMapHas = WeakMap.prototype.has;
+const weakSetHas = WeakSet.prototype.has;
+const weakRefDeref = WeakRef.prototype.deref;
+const unregister = FinalizationRegistry.prototype.unregister;
+const sharedBufferLength =
+  typeof SharedArrayBuffer === 'undefined'
+    ? undefined
+    : Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength')?.get;
+// Never exposed or registered: probing a registry cannot remove a guest registration.
+const brandToken = {};
+
+function hasWeakSlot(value: object): boolean {
+  for (const read of [weakMapHas, weakSetHas, weakRefDeref, unregister]) {
+    try {
+      apply(read, value, [brandToken]);
+      return true;
+    } catch {
+      /* Wrong intrinsic receiver. */
+    }
+  }
+  return false;
+}
 
 function slot<T>(value: object, read: (this: never) => T): T | undefined {
   try {
@@ -110,7 +172,7 @@ export function encodeAdvancedIpc(message: unknown): AdvancedFrame {
       if (cause && 'value' in cause) result.cause = copy(cause.value);
       return result;
     }
-    if (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer) {
+    if (sharedBufferLength !== undefined && slot(value, sharedBufferLength) !== undefined) {
       throw new Error('#<SharedArrayBuffer> could not be cloned.');
     }
     if (
@@ -119,17 +181,16 @@ export function encodeAdvancedIpc(message: unknown): AdvancedFrame {
       slot(value, arrayBufferLength) !== undefined ||
       ArrayBuffer.isView(value) ||
       boxedReaders.some((read) => slot(value, read as (this: never) => unknown) !== undefined) ||
-      value instanceof WeakMap ||
-      value instanceof WeakSet ||
-      value instanceof Promise ||
-      value instanceof WeakRef ||
-      value instanceof FinalizationRegistry
+      hasWeakSlot(value)
     ) {
-      const result = nativeClone(value);
+      const cloned = nativeClone(value);
+      const result = ArrayBuffer.isView(cloned) ? snapshotSharedView(cloned) : cloned;
       seen.set(value, result);
       return result;
     }
-    const result: object = Array.isArray(value) ? new Array(value.length) : {};
+    const array = Array.isArray(value);
+    if (!array && isPromise(value)) return nativeClone(value);
+    const result: object = array ? new Array(value.length) : {};
     seen.set(value, result);
     for (const key of Object.keys(value)) define(result, key, copy(Reflect.get(value, key)));
     return result;

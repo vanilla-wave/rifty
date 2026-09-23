@@ -70,6 +70,15 @@ function envelope(
 afterEach(() => publishKernelEntryBootstrap(null));
 
 describe('dev-server entry bootstrap', () => {
+  it('marks the host-owned entry for trusted runtime bootstrap', () => {
+    const entry = buildDevServerChildEntry('/workers/dev.js', {
+      cfg: CFG,
+      nodeWorkerRuntime: NODE_WORKER_RUNTIME,
+      terminal: TERMINAL,
+    });
+    expect(entry.role).toBe('runtime-bootstrap');
+  });
+
   it('accepts guest root only with a typed private remote-root binding', () => {
     const remoteFsRoot = '/.rifty/workbench/v2/projects/project-a/tree';
     const cfg = {

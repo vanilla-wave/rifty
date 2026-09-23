@@ -2,10 +2,12 @@
 
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
+import { sealNodeRuntimeBootstrap } from '@riftydev/runtime-js';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { runWorkbenchOwner } from './workbench-owner-runtime.ts';
 import { installBundleLocalBuffer, installRuntimeGlobals } from './worker-runtime-globals.ts';
 
+sealNodeRuntimeBootstrap();
 registerNetBuiltins();
 registerSqliteBuiltin();
 

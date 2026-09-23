@@ -69,7 +69,7 @@ describe('session-bound TS-LSP owner relay', () => {
     await handled;
 
     expect(spawn).toHaveBeenCalledWith({
-      entry: { kind: 'url', url: 'ts-lsp-worker.js' },
+      entry: { kind: 'url', url: 'ts-lsp-worker.js', role: 'runtime-bootstrap' },
       argv: ['rifty', 'ts-lsp'],
       env: {
         RIFTY_KERNEL_WORKER_URL: 'kernel.js',

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Keep Proxy provenance capture open only for explicit trusted runtime bootstrap imports, then seal before guest work (ADR-0465).
+- Filter the canonical eval source pair from default fork startup while preserving explicit execArgv.
+- Snapshot SharedArrayBuffer-backed view bytes at advanced IPC send time while preserving view metadata.
+
 - Execute child startup preloads, conditions and flagged import.meta.resolve parent URLs; preserve Worker trusted inheritance and fork public defaults through exact node-entry v6 (ADR-0456).
 - Deliver originating Worker failures before exit; distinguish explicit exits, handled exceptions and unsupported custom-inspect projection (ADR-0460).
 - Preserve native postMessage return values used by Node BroadcastChannel infrastructure.

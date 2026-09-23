@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Mark owner, dev-server and TypeScript service bootstraps for trusted capture; close it before serving guest work (ADR-0465).
+
 - Produce exact node-entry v6 startup vectors for Node programs and bin launches; old v5 payloads fail atomically (ADR-0456).
 - Drain Worker entry handles before natural process exit (ADR-0449).
 

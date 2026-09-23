@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Carry the host-owned runtime-bootstrap URL role without weakening default guest entry sealing (ADR-0465).
+
 - Carry originating runtime failures through the existing attested exit and terminal owner; serializer failure still settles the process (ADR-0460).
 - Pin the primordial MessageChannel across bundles so runtime manual-port refs cannot capture kernel infrastructure (ADR-0452).
 ### Added

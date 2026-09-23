@@ -107,6 +107,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0452 | Reference locally owned native MessagePorts without counting infrastructure listeners |
 | 0453 | Track guest Proxy provenance before advanced IPC snapshots |
 | 0456 | Carry Node child startup options in node-entry v6 |
+| 0465 | Seal Proxy provenance after trusted runtime bootstrap imports |
 
 ### runtime-wasi
 

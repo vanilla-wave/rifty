@@ -70,7 +70,11 @@ function spawnBrowserOwner(input: WorkbenchOwnerStartInput): WorkerProcessHandle
 /** Deployment chooses the entry; owner/project identity never enters guest env. */
 export function workbenchOwnerSpawnSpec(input: WorkbenchOwnerStartInput): SpawnWorkerSpec {
   return Object.freeze({
-    entry: Object.freeze({ kind: 'url' as const, url: input.deployment.workers.owner }),
+    entry: Object.freeze({
+      kind: 'url' as const,
+      url: input.deployment.workers.owner,
+      role: 'runtime-bootstrap' as const,
+    }),
     argv: Object.freeze(['rifty', 'workbench-owner']),
     env: Object.freeze({}),
     cwd: '/',

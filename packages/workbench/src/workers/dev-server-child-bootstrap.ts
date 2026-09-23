@@ -14,7 +14,11 @@
 import { getKernelDispatcher, readKernelProcessSpec, readKernelSyncApi } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
+import {
+  installConsole,
+  installRemoteSyncFs,
+  sealNodeRuntimeBootstrap,
+} from '@riftydev/runtime-js';
 import {
   applyNodeProcessTerminalBootstrap,
   setProcessCwd,
@@ -35,6 +39,7 @@ import {
 } from './worker-runtime-globals.ts';
 
 async function bootstrapDevServerChild(): Promise<void> {
+  sealNodeRuntimeBootstrap();
   registerNetBuiltins();
   registerSqliteBuiltin();
 

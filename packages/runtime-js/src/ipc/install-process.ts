@@ -105,7 +105,7 @@ export function installNodeProcessShim(
  * Timers + keepalive stay universal at `kernel-worker-entry.ts` module top-level.
  */
 export function installNodeRuntime(
-  spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>,
+  spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'> & Partial<Pick<WorkerSpawnSpec, 'entry'>>,
 ): void | Promise<void> {
   const isNodeEntry = readNodeEntryBootstrapIfPresent() !== null;
   const isNode = isNodeEntry || spec.env.__RIFTY_WASI_WASM_URL === undefined;
@@ -122,7 +122,8 @@ export function installNodeRuntime(
   if (isNode) {
     setKernelFatalErrorSerializer(serializeWorkerFatalError);
     installNodeProxyProvenance();
-    if (!isNodeEntry) sealNodeProxyBootstrap();
+    const trustedBootstrap = spec.entry?.kind === 'url' && spec.entry.role === 'runtime-bootstrap';
+    if (!isNodeEntry && !trustedBootstrap) sealNodeProxyBootstrap();
     patchPromiseForNextTick();
     (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
     installWebGlobals();

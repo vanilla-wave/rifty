@@ -11,6 +11,13 @@ const failures = `
       ['nested-function', { bad() {} }],
       ['nested-symbol', { bad: Symbol('x') }],
       ['weakmap', { bad: new WeakMap() }],
+      ...[
+        ['weakmap', new WeakMap()], ['weakset', new WeakSet()],
+        ['promise', Promise.resolve(1)], ['shared-buffer', new SharedArrayBuffer(2)],
+        ['weakref', new WeakRef({})], ['finalization', new FinalizationRegistry(() => {})],
+      ].map(([label, value]) => [label + '-severed', {
+        bad: Object.freeze(Object.setPrototypeOf(value, null)),
+      }]),
     ]) {
       try { send(message); result.push([label, 'NO_THROW']); }
       catch (error) {
