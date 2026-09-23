@@ -508,10 +508,7 @@ export function coerceExitCode(v: unknown): number {
   );
 }
 
-/**
- * The unified Node `process`. `instanceof EventEmitter` holds so user code doing
- * `process instanceof require('events')` keeps working.
- */
+/** The realm's Node process and event emitter. */
 export class NodeProcess extends EventEmitter {
   pid: number;
   ppid: number;
@@ -522,16 +519,12 @@ export class NodeProcess extends EventEmitter {
   readonly platform = NODE_PROCESS_IDENTITY.platform;
   readonly arch = NODE_PROCESS_IDENTITY.arch;
   readonly version = NODE_PROCESS_IDENTITY.version;
-  // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
-  // without throwing and doesn't leak across processes (ADR-0150: each
-  // foreground CLI gets an isolated child worker). `Record` keeps absent-key reads type-safe.
+  // ADR-0150: mutable versions belong to each process.
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
   readonly features = { require_module: true } as const;
   declare readonly release: NodeProcessRelease;
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
-  // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
-  // a numeric string coerces; reads return the validated integer.
   #exitCode = 0;
   get exitCode(): number {
     return this.#exitCode;
@@ -561,12 +554,20 @@ export class NodeProcess extends EventEmitter {
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
   #descendantAuthority: NodeProcessDescendantAuthority | null = null;
-  // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
-  // in order on the first listener; mirrors makeStdinReader's pending buffer.
+  // ADR-0045: buffer until the first message listener.
   readonly #ipcBacklog: unknown[] = [];
 
   constructor(spec?: KernelProcessSpec) {
     super();
+    // Node publishes these as own, receiver-independent functions; ESM uses own keys.
+    for (const name of ['cwd', 'chdir', 'hrtime', 'uptime', 'exit', 'kill'] as const) {
+      Object.defineProperty(this, name, {
+        value: Object.assign(this[name].bind(this), this[name]),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
     Object.defineProperty(this, 'release', {
       value: createNodeProcessRelease(),
       writable: false,
@@ -626,8 +627,6 @@ export class NodeProcess extends EventEmitter {
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
       this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
-      // Copy so per-process env mutation does not leak into the published
-      // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);

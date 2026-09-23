@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Register path/posix and path/win32 using existing namespaces; expose process methods as own named ESM exports.
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).
