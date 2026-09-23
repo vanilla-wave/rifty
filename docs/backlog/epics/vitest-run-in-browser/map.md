@@ -3,7 +3,7 @@
 Live plan: index, not store. Minimal pattern first; each child a `draft`
 finding compiled to `ready` at its own PICKUP (`RDY-1`). Where a child
 depends on another (7 and 9 after 4 — shared `process.ts` shape and
-file-size headroom; 8 after 7; 11 after 8, 9, 13; 12 after all) the
+file-size headroom; 8 after 7; 11 after 8, 9; 12 after all) the
 order is also recorded as `blocked_by`; the other children are independent.
 
 ## Items
@@ -32,21 +32,13 @@ order is also recorded as `blocked_by`; the other children are independent.
     (`--experimental-import-meta-resolve`, `--require <vitest>/suppress-warnings.cjs`,
     `--conditions …`) to both `fork` and `new Worker` — honoured with Node
     semantics, any other flag a named throw (today Worker throws, fork drops
-    it silently). After 8, 9, 13.
-13. `runtime-js/message-port-ref-keepalive` — **port-keepalive** — I4; a ref'd
-    `MessagePort` (`ref`/`unref`/`hasRef`, listener auto-ref) is a counted
-    handle — emnapi's holder for pending rolldown napi async work (vite 8
-    config bundle), the wait `vitest run` drains on. Independent.
+    it silently). After 8, 9.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 4, 7–11, 13.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 4, 7–11.
 
 ## Open questions
 
-- Coverage check, not a contract input: which handle vitest's cac-driven
-  `start()` awaits when rifty drains — answered by prior attempts' reads
-  (emnapi `MessagePort.ref`, re-charted as item 13 under I4, not a widened
-  I2); owner: agent — instrumented run at item 13 pickup confirms it.
 - ADR shape for I2/I3: correction note on ADR-0152 vs one short ADR citing it —
   owner: agent — decided at item 7 pickup (`DEC-2`).
 - vm offsets carrier: stack remap table vs source prefix — owner: agent — item 10
