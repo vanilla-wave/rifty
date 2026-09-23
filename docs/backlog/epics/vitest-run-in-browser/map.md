@@ -2,15 +2,11 @@
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
 finding compiled to `ready` at its own PICKUP (`RDY-1`). Where a child
-depends on another (7 and 9 after 4 — shared `process.ts` shape and
-file-size headroom; 8 after 7; 11 after 8, 9; 12 after all) the
-order is also recorded as `blocked_by`; the other children are independent.
+depends on another (8 after 7; 11 after 8, 9; 12 after all) the order
+is also recorded as `blocked_by`; the other children are independent.
 
 ## Items
 
-4. `runtime-js/absent-builtin-members-loud-throws` — **loud-members** — I6;
-   `fs.statfsSync`, `child_process.spawnSync`, `process.memoryUsage` exist as
-   real or named-loud members instead of link-time misses / `undefined.bind`.
 7. `runtime-js/process-lifecycle-events-exit-code` — **process-events** — I3;
    uncaught/unhandled handlers, `exit` event, `exit()` honours `exitCode`
    (unset `exitCode` reads `undefined`, as cac/vitest branch on it).
@@ -35,7 +31,7 @@ order is also recorded as `blocked_by`; the other children are independent.
     it silently). After 8, 9.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 4, 7–11.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 7–11.
 
 ## Open questions
 
@@ -62,7 +58,9 @@ order is also recorded as `blocked_by`; the other children are independent.
   fs polling; no ceiling, no ban.
 - coverage (`@vitest/coverage-v8` → `node:inspector` Session): loud proxy throw.
 - `vmThreads` / `vmForks` pools (`vm.SourceTextModule` absent): loud.
-- vitest browser mode, `typecheck` pool, `--changed` (git via spawnSync): loud.
+- vitest browser mode, `typecheck` pool: loud.
+- `--changed` (git through tinyexec `x` → async `spawn`, not `spawnSync` —
+  loud-members evidence V1): unclaimed, unprobed.
 - vite versions other than exact 8.0.16 and vitest other than 4.1.11: unclaimed
   ⚠️ (goal amend 2026-09-23); vite 8.2+ fails loudly at install
   (`lightningcss.version`), 7.3.6/8.0.x/8.1.x install unverified; no ban.
