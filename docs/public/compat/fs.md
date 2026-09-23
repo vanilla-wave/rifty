@@ -29,6 +29,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `fs.watchFile` / `fs.unwatchFile` | ✅ | Poll-based; listener receives the same `Stats` class `statSync` returns (missing target = one zeroed call, Node ENOENT contract); uint32 `interval` validation (`ERR_OUT_OF_RANGE`, 0 valid) |
 | `fs.watch` buffer/exotic filename encodings | ❌ | `encoding:'buffer'` and non-UTF-8 filename encodings throw `NotImplementedError` only where Node would succeed (missing target stays `ENOENT`); UTF-8 string filenames are the claimed subset |
 | `{ bigint: true }` stats (`statSync`/`lstatSync`/`fstatSync`/promises/`watchFile`) | ❌ | Throws `NotImplementedError('fs.<surface>.bigint')` AFTER Node-visible errors (missing target stays `ENOENT`, bad fd stays `EBADF`); number-shaped `Stats` are never returned for a BigIntStats request |
+| `statfsSync` | ❌ | Present, every call throws: own enumerable member with Node's descriptor, so `import { statfsSync } from 'node:fs'` links (vitest 4.1.11 `cli-api`). A call throws `NotImplementedError('fs.statfsSync')` — no browser source for host filesystem statistics, never a fabricated value; `typeof` feature detection sees a function (ADR-0443). `statfs` / `promises.statfs` stay link-time misses. Parity: `modules/builtin-loud-members-link` |
 | Durable `fsync` / inode-like open-unlink semantics | ❌ | Tracked as VFS fd durability residual |
 | Full `FileHandle` object API | ❌ | Tracked separately; high-frequency fd wall covered first |
 

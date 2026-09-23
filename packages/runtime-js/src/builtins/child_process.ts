@@ -49,6 +49,7 @@ import {
   spawnWorkerChild,
 } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { spawnSync } from './loud-members.ts';
 import { nodeChildSpawnOptions } from './node-entry-runtime-config.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 import {
@@ -673,5 +674,13 @@ export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 
-const child_process = { spawn, exec, execFile, fork, execSync, ChildProcess: ChildProcess_ };
+const child_process = {
+  spawn,
+  spawnSync,
+  exec,
+  execFile,
+  fork,
+  execSync,
+  ChildProcess: ChildProcess_,
+};
 export default child_process;

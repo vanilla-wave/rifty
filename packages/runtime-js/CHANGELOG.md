@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `fs.statfsSync`, `child_process.spawnSync` and `process.memoryUsage` (+ `memoryUsage.rss`) exist with Node's descriptor, so vitest 4.1.11 / tinyexec named imports link and `process.memoryUsage.bind(process)` works; every call throws `NotImplementedError('<module>.<member>')` (ADR-0443, `builtins/loud-members.ts`). The `NodeJS.ErrnoException` global type moved from `fs.ts` to `fs-errors.ts`.
+
 - Register `node:path/posix` / bare `path/posix` as `require('node:path').posix` itself; `node:path/win32` stays an unregistered builtin miss.
 
 - `process` owns `cwd`/`chdir`/`hrtime`/`uptime`/`exit`/`kill` (writable, enumerable, configurable) and an enumerable non-configurable `exitCode` accessor, as Node: `import { cwd } from 'node:process'` links, detached `exit`/`kill` act on their process; the `stdout`/`stderr` writer moved to `builtins/process-stdio-writer.ts`.

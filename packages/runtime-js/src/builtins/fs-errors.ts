@@ -110,3 +110,16 @@ export function withSyscall<T>(
     throw toNodeFsError(err, spec, p, dest);
   }
 }
+
+// eslint-disable-next-line @typescript-eslint/no-namespace
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace NodeJS {
+    interface ErrnoException extends Error {
+      code?: string;
+      errno?: number;
+      path?: string;
+      syscall?: string;
+    }
+  }
+}

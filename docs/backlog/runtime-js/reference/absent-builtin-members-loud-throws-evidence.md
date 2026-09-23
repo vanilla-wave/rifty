@@ -200,3 +200,39 @@ $ npx vitest run packages/runtime-js/src/builtins/loud-members.test.ts
    × … a kernel-seeded NodeProcess carries the same loud member               → expected memoryUsage to be a function, got undefined
       Tests  5 failed (5)
 ```
+
+## G1 — GREEN after IMPLEMENT
+
+Members from `packages/runtime-js/src/builtins/loud-members.ts` on `fs`,
+`child_process` and `NodeProcess` (own class field):
+
+```
+$ npx vitest run packages/runtime-js/src/builtins/loud-members.test.ts
+      Tests  5 passed (5)
+$ pnpm test:parity loud-members
+  ✓ child_process/pool-worker-loud-members.case.ts
+  ✓ modules/builtin-loud-members-link.case.ts
+all cases match
+```
+
+## S1 — sibling sweep (same fault class: builtin named import rifty lacks)
+
+`/tmp/vgoal/u4/probes/sweep-named.mts` regex-scans every `.js`/`.mjs` under
+the V1 tree (266 files) for `import { … } from '<builtin>'` and checks each
+name against `Object.keys(loadBuiltin('node:<builtin>'))` after IMPLEMENT
+(runtime-js builtins only; `http`/`https` register from `@riftydev/net`):
+
+```
+$ npx tsx /tmp/vgoal/u4/probes/sweep-named.mts
+files 266
+MISS http <unregistered> vite/dist/node/chunks/node.js
+MISS https <unregistered> vite/dist/node/chunks/node.js
+MISS worker_threads.receiveMessageOnPort vite/dist/node/chunks/node.js
+```
+
+`receiveMessageOnPort` is inside a generated-worker template string
+(`vite/dist/node/chunks/node.js:3062`), not a link edge of vite's module. No
+other named builtin import in the tree misses. Load-time `.bind` reads
+(`grep -rhoE '(process|fs|…)\.[A-Za-z_]+\.bind\(…\)'`): `process.memoryUsage`
+(this unit), `process.exit`/`send` (`init-forks`, fork IPC present),
+`on`/`off`/`listeners`/`removeAllListeners` (EventEmitter) — none absent.
