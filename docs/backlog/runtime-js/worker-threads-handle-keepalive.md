@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: Worker lifecycle — parent keepalive, child natural exit and stdio streams
 created: 2026-09-15
 why: a live Worker currently fails to hold its parent, while a finished kernel Worker never exits; Vitest threads additionally needs Worker stdout/stderr streams and explicit empty execArgv
@@ -90,6 +90,8 @@ runtime-error event identity remain their
 existing separately recorded gaps. No full Worker capability claim.
 
 ## Decisions
+
+ready-verdict: 2026-09-23 — Contract+RED @ ef3da9c95855540a3c8f1d8a685e946cc19b5541
 
 - re-cut: 2026-09-23 — merge worker-threads-stdio-streams-empty-exec-argv and required worker-threads-kernel-run-to-completion-exit into this lifecycle unit; preserve I2/I5 obligations — trace: none
 - 2026-09-23 — preparation requires Contract+RED for newly counted handles/streams; native baseline supplies existing child-exit defect authority; no product implementation in this preparation.
