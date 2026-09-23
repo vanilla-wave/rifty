@@ -81,6 +81,7 @@ reach (needs npm install + pools).
 
 ## Decisions
 
+ready-verdict: 2026-09-23 — Contract+RED @ 2c490a807d0729e00d7962ba0fb5e21681b2da55
 - 2026-09-23 — agent: page = hand-maintained `vitest.md` (package-tooling.md shape); the README index is generator-owned (`renderReadme` in `tools/compat-matrix-generator/cli.js`, pinned at 1269 lines, zero headroom) → IMPLEMENT moves `renderReadme` into a new `tools/compat-matrix-generator/readme.js` and adds the vitest line there; `check:compat-drift` diffs generator output only.
 - 2026-09-23 — agent: loud throws row 9 needs that no child owns ride this unit (`REV-12`): jsdom `vm.constants`/`DONT_CONTEXTIFY`, browser-mode `http.Agent`; carrier chosen at IMPLEMENT, any parity claim it adds (e.g. real `vm.constants` symbols) carries its own parity case.
 - 2026-09-23 — agent: assertions = lines common to TTY and non-TTY Node output (rifty children: stdout TTY, stdin not); draft PR #351's "passing file line omitted" was an agent-env artifact (evidence).
