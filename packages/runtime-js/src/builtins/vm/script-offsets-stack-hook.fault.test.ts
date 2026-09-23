@@ -19,6 +19,8 @@ declare global {
 const LATE_SOURCE = '(function outer() {\n  return function inner() { throw new Error("late") } })';
 const LATE_OPTIONS = { filename: '/virtual/late.js', lineOffset: 2, columnOffset: -4 };
 const LATE_FRAME = '/virtual/late.js:4:35';
+const OWN_SOURCE = '(function f() {\n  return new Error("s") })\n//# sourceURL=/virtual/own.js';
+const PLAIN_SOURCE = 'var s = "sourceURL";\n(function p() {\n  return new Error("s") })';
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -263,6 +265,40 @@ describe('vm offset projection shares the stack hook slot from an unset hook', (
     ]);
     expect(Error.prepareStackTrace).toBe(before);
     expect(lateFrame(globalThis.__riftyOffsetInner)).toBe(LATE_FRAME);
+  });
+
+  it("a script's own-sourceURL probe reached from inside the source-map dispatcher names it as Node", async () => {
+    // The dispatcher's default rendering reads `message`; V8 skips the probe's
+    // hook there. Node v24.16.0: parity vm/run-in-this-context-own-source-url-in-hook.
+    const made: Array<() => Error> = [];
+    globalThis.__riftyOffsetInner = () => {};
+    globalThis.__riftyOffsetEvaluate = () => {
+      const error = new Error();
+      Object.defineProperty(error, 'message', {
+        configurable: true,
+        get() {
+          if (made.length > 0) return 'm';
+          made.push(
+            runInThisContext(OWN_SOURCE, {
+              filename: '/virtual/file.js',
+              lineOffset: 3,
+              columnOffset: 2,
+            }) as () => Error,
+            runInThisContext(PLAIN_SOURCE, { filename: '/virtual/plain.js' }) as () => Error,
+          );
+          return 'm';
+        },
+      });
+      void error.stack;
+    };
+    const loader = loaderFor(['a'], true);
+
+    await loader.import('./a.ts', '/work/__entry__.ts');
+
+    expect(globalThis.__riftyOffsetFrames).toEqual(['/work/a.ts:3:1']);
+    expect(
+      made.map((make) => /\/virtual\/\w+\.js:\d+:\d+/.exec(String(make().stack))?.[0]),
+    ).toEqual(['/virtual/own.js:2:10', '/virtual/plain.js:3:10']);
   });
 
   it('a window around the first offset script restores the unset hook it read and keeps the owner', async () => {

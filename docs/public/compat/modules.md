@@ -174,7 +174,7 @@ opt-in; supersedes ADR-0138, which had recorded the rewrite direct-eval leak as 
 | Behavior | Status | Notes |
 |---|---|---|
 | `runInThisContext` / `new Script(…).runInThisContext()` with `lineOffset` / `columnOffset` | ✅ | Node's int32 validation; `.stack`, guest `Error.prepareStackTrace` CallSites (line/column/enclosing getters, `toString`) and default rendering show Node's positions: every line + `lineOffset`, physical line 1 + `columnOffset`, unclamped (≤ 0 getters null, zero omitted). Parity `vm/run-in-this-context-offsets{,-callsites,-async}` + Chromium browser-unit `vm-script-offsets.spec.ts` |
-| Script whose code has its own `//# sourceURL=` / `//@ sourceURL=` (any offsets) | ✅ | Named by it as in Node (last valid comment, as V8 parses it): line/column/`toString` without offsets, enclosing getters with them. Parity `vm/run-in-this-context-own-source-url` + Chromium browser-unit |
+| Script whose code has its own `//# sourceURL=` / `//@ sourceURL=` (any offsets) | ✅ | Named by it as in Node (last valid comment, as V8 parses it), also when evaluated inside a stack hook or a formatter's getter: line/column/`toString` without offsets, enclosing getters with them. Parity `vm/run-in-this-context-own-source-url{,-in-hook}` + Chromium browser-unit |
 | Offset validation on `runInContext` / `runInNewContext` / `compileFunction` | ✅ | `ERR_INVALID_ARG_TYPE` / `ERR_OUT_OF_RANGE`, Node's order (`compileFunction`: `columnOffset` first) |
 | Non-zero offsets in `runInContext` / `runInNewContext` | ❌ | `NotImplementedError('vm.runInContext.lineOffset' \| 'vm.runInContext.columnOffset')` |
 | `Script` built with offsets run by `runInContext` / `runInNewContext` | ❌ | `NotImplementedError('vm.Script.lineOffset' \| 'vm.Script.columnOffset')` |

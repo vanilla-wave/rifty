@@ -62,8 +62,14 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
    spells `sourceURL`, V8 itself reads the name first: the code as the body of
    a never-called function, named by frame 0 of an error created before it,
    with `Error.stackTraceLimit` / `Error.prepareStackTrace` borrowed by
-   descriptor and restored as found. Zero offsets: nothing appended (V8 keeps
-   the own name). Offsets: the identity carries the own name too. An
+   descriptor and restored as found. V8 skips a JS hook while it formats a
+   stack (vm called inside a hook or a formatter's getter, overflow); the
+   probe knows its hook ran and otherwise reads V8's own rendering of the
+   frame (`Error\n    at eval (<name>:3:8)`; unnamed code renders its eval
+   origin, spaced, never a name), the probe error's `name` / `message` being
+   own data so no guest accessor runs; any other rendering is
+   `NotImplementedError('vm.runInThisContext.ownSourceURL')`. Zero offsets:
+   nothing appended (V8 keeps the own name). Offsets: the identity carries the own name too. An
    identity-shaped own name always goes through an identity. A JS lexer was
    rejected: regex/division, templates and V8's comment grammar are V8's to
    decide.

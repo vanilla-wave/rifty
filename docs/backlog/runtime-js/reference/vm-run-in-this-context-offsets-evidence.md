@@ -394,3 +394,68 @@ append `//# sourceURL=<id>` after guest code the same way
 (`module-loader/cjs.ts`, `esm-job-preparation.ts`, `loader.ts` `[eval]`,
 `worker_threads.ts`, `child_process-exec.ts`, the vm sandbox engines), so a
 guest `sourceURL` comment there is overridden too; not measured against Node.
+
+## Probe while V8 formats a stack (Final+GREEN r2 reception, 2026-09-23)
+
+Blocker: a vm script evaluated inside a stack hook took V8's default-formatted
+probe text as its own name. Oracle Node v24.16.0; Chromium 148.0.7778.96
+(Playwright `chromium.launch()`); scripts in `/tmp/vgoal/u10/recv2/` (not
+committed).
+
+`node node-recursion.cjs` — V8 skips a nested JS hook in Node too (the review
+read "Node's callback has no guard"; it has one, so Node-host lanes see it):
+
+```
+outside {"called":true,"st":"inner-hook"}
+inside hook {"called":false,"st":"Error: i\n    at inner (…/node-recursion.cjs…"}
+in message getter (default hook) {"called":false,"st":"Error: i\n    at inner (…"}
+```
+
+`node chrome-probe.mjs` — the probe (`stackTraceLimit` 1, own data
+`name`/`message` on its error) inside a hook, Chromium:
+
+```
+"var s = \"sourceURL\""               => "Error\n    at eval (eval at probeText (eval at evaluate (:302:30)), <anonymous>:3:8)"
+"1\n//# sourceURL=/virtual/own.js"    => "Error\n    at eval (/virtual/own.js:3:8)"
+"1\n//# sourceURL=<anonymous>"        => "Error\n    at eval (<anonymous>:3:8)"
+"1\n//# sourceURL=a)b:3:8)"           => "Error\n    at eval (a)b:3:8):3:8)"
+"\"use strict\";\n1\n//# sourceURL=/v/strict.js" => "Error\n    at eval (/v/strict.js:3:8)"
+Error.prototype.name getter during the probe: 0 runs
+```
+
+`node empty.cjs` (Node) — an empty `//# sourceURL=` is no name (vm filename +
+offsets), so `<anonymous>` in the rendering is the literal name
+`<anonymous>` (`vm at f (<anonymous>:2:10)` for any offsets).
+
+`node chrome-msg.mjs` — Chromium's native formatter (no hook) never reads a
+`message` getter defined after construction (`calls 0`, header `Error`); Node's
+default does (`calls 1`, `Error: m`): the recorded "Chromium's `undefined`
+default hook" gap, so parity case 13 has no pre-owner getter row.
+
+Parity case `vm/run-in-this-context-own-source-url-in-hook`
+(`node run-case-node.mjs`, per row `in guest hook` / `in owned guest hook` /
+`in owned default`, tags 1/2/3):
+
+```
+in guest hook own0 at z1 (/virtual/own01.js:2:10)
+in guest hook plain0 at q1 (/virtual/plain01.js:3:10)
+in guest hook anonymous0 at a1 (<anonymous>:2:10)
+in guest hook own at f1 (/virtual/own1.js:2:10)
+in guest hook plain at p1 (/virtual/plain1.js:6:10)
+in guest hook Script at s1 (/virtual/ownS1.js:2:10)
+```
+
+RED at `46920ac36` product: Node host `tsx cli.ts
+run-in-this-context-own-source-url-in-hook` 12 rows differ, e.g. `+ in guest
+hook own at f1 (Error`, `+ in guest hook plain0 at q1 (eval at <anonymous>
+(eval at <anonymous> (…vm/index.ts:1:891)), <anonymous>:3:10)`; Chromium
+browser-unit `- Expected - 12 / + Received + 12`. Fault rows RED: `inside a
+stack hook` (`Error.prototype.name` getter ran 3 times), `source-map
+dispatcher` (`/virtual/own.js:3:8`, `undefined`). GREEN: Node host 5/5 vm
+offset cases, Chromium 5/5, vm + module-loader unit 260 passed.
+
+Mutants: hook-ran flag ignored → case 13 + both fault rows; eval origin read
+as a name → same; probe error's own `name`/`message` dropped → `inside a
+stack hook` row (`NotImplementedError('vm.runInThisContext.ownSourceURL')`).
+Not carried: `SyntaxError`-only compile catch (only overflow / CSP reach
+another error; not drivable on demand).

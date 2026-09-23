@@ -6,6 +6,8 @@
 
 - `vm.runInThisContext` / `vm.Script` name a script by its own `sourceURL` comment as Node does (offsets dropped from line/column, kept on enclosing getters); `Script` sandbox runs check the context before the offset gap; a frozen `Error` is a named gap (ADR-0450).
 
+- A vm script evaluated while V8 formats another stack (inside a stack hook or a formatter's getter) gets the same own-`sourceURL` / filename naming: V8 skips the probe's hook there, so the name comes from V8's own rendering of the probe frame (ADR-0450).
+
 - Clarify capability sufficient as passive Worker/ServiceWorker presence, not startup proof.
 
 - Emit canonical legacy/corrupt OPFS startup diagnostics before readiness; never expose native corruption payloads (ADR-0432).

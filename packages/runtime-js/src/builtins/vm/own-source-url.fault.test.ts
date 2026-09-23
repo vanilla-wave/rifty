@@ -16,6 +16,7 @@ declare global {
 const OWN_SOURCE = '(function f() {\n  return new Error("s") })\n//# sourceURL=/virtual/own.js';
 const OWN_FRAME = '/virtual/own.js:2:10';
 const OFFSETS = { filename: '/virtual/file.js', lineOffset: 3, columnOffset: 2 };
+const PLAIN_SOURCE = 'var s = "sourceURL";\n(function p() {\n  return new Error("s") })';
 const LATE_SOURCE = '(function outer() {\n  return function inner() { throw new Error("late") } })';
 const LATE_FRAME = '/virtual/late.js:4:35';
 
@@ -34,9 +35,13 @@ function lateFrame(inner: () => void): string {
 
 let saved: { limit?: PropertyDescriptor; hook?: PropertyDescriptor };
 
-function restore(key: string, descriptor: PropertyDescriptor | undefined): void {
-  if (descriptor) Object.defineProperty(Error, key, descriptor);
-  else Reflect.deleteProperty(Error, key);
+function restore(
+  key: string,
+  descriptor: PropertyDescriptor | undefined,
+  target: object = Error,
+): void {
+  if (descriptor) Object.defineProperty(target, key, descriptor);
+  else Reflect.deleteProperty(target, key);
 }
 
 beforeEach(() => {
@@ -114,6 +119,63 @@ describe("a script's own sourceURL is read without disturbing the stack slots", 
     expect(Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace')).toEqual(owner);
     expect(frameOf(own())).toBe(OWN_FRAME);
     expect(lateFrame(inner)).toBe(LATE_FRAME);
+  });
+
+  it("inside a stack hook V8 skips the probe's hook: the name is V8's own frame, no guest accessor runs", () => {
+    // Node v24.16.0 (parity vm/run-in-this-context-own-source-url-in-hook):
+    // own name, offsets dropped; unnamed code keeps its filename and offsets.
+    const calls: string[] = [];
+    const lie = 'Error\n    at eval (/virtual/lie.js:3:8)';
+    const proto = {
+      name: Object.getOwnPropertyDescriptor(Error.prototype, 'name'),
+      message: Object.getOwnPropertyDescriptor(Error.prototype, 'message'),
+    };
+    let made: Array<() => Error> = [];
+    let thrown: unknown;
+    Error.prepareStackTrace = () => {
+      Object.defineProperty(Error.prototype, 'name', {
+        configurable: true,
+        get() {
+          calls.push('name');
+          return lie;
+        },
+        set() {},
+      });
+      Object.defineProperty(Error.prototype, 'message', {
+        configurable: true,
+        get() {
+          calls.push('message');
+          return '';
+        },
+        set() {},
+      });
+      try {
+        made = [
+          runInThisContext(OWN_SOURCE, OFFSETS) as () => Error,
+          runInThisContext(PLAIN_SOURCE, {
+            ...OFFSETS,
+            filename: '/virtual/plain.js',
+          }) as () => Error,
+          runInThisContext(PLAIN_SOURCE, { filename: '/virtual/zero.js' }) as () => Error,
+        ];
+      } catch (error) {
+        thrown = error;
+      } finally {
+        restore('name', proto.name, Error.prototype);
+        restore('message', proto.message, Error.prototype);
+      }
+      return 'hooked';
+    };
+    void new Error('outer').stack;
+    (Error as { prepareStackTrace?: unknown }).prepareStackTrace = undefined;
+
+    expect(thrown).toBeUndefined();
+    expect(calls).toEqual([]);
+    expect(made.map((make) => frameOf(make()))).toEqual([
+      OWN_FRAME,
+      '/virtual/plain.js:6:10',
+      '/virtual/zero.js:3:10',
+    ]);
   });
 
   it('a frozen Error is a named gap wherever the slots are needed', () => {
