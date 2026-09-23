@@ -1,6 +1,7 @@
 ---
 area: runtime-js
 status: draft
+epic: vitest-run-in-browser
 title: worker_threads kernel path — run-to-completion Worker never auto-emits 'exit'
 created: 2026-06-21
 why: the kernel-backed Worker hardcodes serve:true (to keep a message-driven Worker alive, Node parity + Rolldown's pool), so a Worker that finishes its entry with no live handle is never drain-reaped and never emits 'exit' — Node exits it 0
@@ -75,3 +76,7 @@ same program against Node before claiming a lifecycle defect or selecting a fix.
 Owner: runtime-js; trigger: pickup of this existing Worker lifecycle item.
 Dedup: this item + kernel/server-shaped-worker-process-lifecycle own the adjacent
 lifetime boundary; no new mechanism proposed.
+
+## Decisions
+
+- re-cut: 2026-09-23 — required repair compiled into runtime-js/worker-threads-handle-keepalive with real Chromium natural-exit and parentPort close/remove/unref REDs; original observations remain here — trace: none

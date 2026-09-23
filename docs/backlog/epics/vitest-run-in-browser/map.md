@@ -1,9 +1,9 @@
 # Map — vitest-run-in-browser
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
-finding compiled to `ready` at its own PICKUP (`RDY-1`). Where a child
-depends on another (8 after 7, 11 after 8, 12 after 1–11) the order is also
-recorded as `blocked_by`; the other children are independent.
+finding compiled to `ready` at its own PICKUP (`RDY-1`). Item 8 follows 7;
+item 11 is delivered inside 8's merged Worker lifecycle unit. Item 12 follows
+all deliveries 1–11. Remaining independent children retain their ordering.
 
 ## Items
 
@@ -25,9 +25,12 @@ recorded as `blocked_by`; the other children are independent.
    `Readable.pipe(process.stdout|stderr)` never calls `end()` (Node exemption).
 7. `runtime-js/process-lifecycle-events-exit-code` — **process-events** — I3;
    uncaught/unhandled handlers, `exit` event, `exit()` honours `exitCode`.
-8. `runtime-js/worker-threads-handle-keepalive` — **handle-keepalive** — I2; a
-   live `worker_threads.Worker` is a counted handle. After 7 (`exit` must
-   exist before the drain contract changes). Contract is fixed by I2; the
+8. `runtime-js/worker-threads-handle-keepalive` — **worker-lifecycle** — I2/I5; a
+   live Worker is a counted handle; child natural exit follows parentPort
+   listener lifetime; includes item 11's stdio/empty-execArgv and the required
+   `worker-threads-kernel-run-to-completion-exit` repair in one checkpoint.
+   After 7 (`exit` must exist before the drain contract changes). I2 fixes
+   the keepalive contract; the
    instrumented vitest-main run at pickup only confirms coverage (fog below).
 9. `runtime-js/child-process-advanced-ipc-serialization` — **advanced-ipc** — I4;
    `fork(..., {serialization:'advanced'})` round-trips structured-clone values.
@@ -35,7 +38,8 @@ recorded as `blocked_by`; the other children are independent.
     `lineOffset`/`columnOffset` honoured for stack traces instead of thrown.
 11. `runtime-js/worker-threads-stdio-streams-empty-exec-argv` — **worker-stdio** —
     I5; `Worker.stdout/stderr` Readables (`stdout: true` semantics) and explicit
-    `execArgv: []` accepted; after 8.
+    `execArgv: []` accepted; merged into item 8's delivery (RDY-5, 2026-09-23),
+    no separate pickup.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
     `vitest.md` page in `docs/public/compat/`; closes the goal. After 1–11.

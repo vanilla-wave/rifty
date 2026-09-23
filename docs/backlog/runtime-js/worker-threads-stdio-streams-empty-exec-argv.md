@@ -25,3 +25,7 @@ inherits a nonempty execArgv) stays with the inherited-exec-argv item.
 ## Challenge
 
 challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved in goal.md; P4 both pools chosen)
+
+## Decisions
+
+- re-cut: 2026-09-23 — contract/RED and delivery merged into runtime-js/worker-threads-handle-keepalive; original I5 stdio and explicit-empty-execArgv obligations preserved there; no separate pickup — trace: none
