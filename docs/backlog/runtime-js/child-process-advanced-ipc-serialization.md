@@ -5,6 +5,7 @@ title: `child_process.fork` with `serialization: 'advanced'` round-trips structu
 created: 2026-09-15
 why: vitest's default forks pool calls `fork(entry, [], { env, execArgv, stdio: 'pipe', serialization: 'advanced' })`; rifty throws `NotImplementedError('child_process.serialization.advanced')` at spawn, so the default pool cannot start
 epic: vitest-run-in-browser
+blocked_by: [runtime-js/absent-builtin-members-loud-throws]
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/internal/node-ipc-serialization.ts, packages/runtime-js/src/builtins/process.ts]
 ---

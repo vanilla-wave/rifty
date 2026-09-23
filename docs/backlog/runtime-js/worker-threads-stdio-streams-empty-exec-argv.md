@@ -5,7 +5,7 @@ title: `worker_threads.Worker` exposes `stdout`/`stderr` Readables and accepts a
 created: 2026-09-15
 why: vitest's threads pool does `new Worker(entry, { env, execArgv: [], stdout: true, stderr: true })` then `thread.stdout.pipe(...)`; rifty throws `worker_threads.Worker.execArgv` for any own `execArgv` (even `[]`) and its Worker has no stdout/stderr streams (it only emits 'stdout'/'stderr' events)
 epic: vitest-run-in-browser
-blocked_by: [runtime-js/worker-threads-handle-keepalive]
+blocked_by: [runtime-js/readable-pipe-never-ends-process-stdio, runtime-js/worker-threads-handle-keepalive, runtime-js/child-process-advanced-ipc-serialization, runtime-js/message-port-ref-keepalive]
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/backlog/runtime-js/worker-threads-inherited-exec-argv.md, docs/public/compat/modules.md]
 code: [packages/runtime-js/src/builtins/worker_threads.ts]
 ---

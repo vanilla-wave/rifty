@@ -7,3 +7,4 @@
 - 2026-09-16 — final written-result check pass 3 (fresh read-only reviewer subagent over the working tree on main 51440931a): pass-2 problems resolved; 4 wording/citation problems (Outcome "default config", I4 evidence sentence, vite TS-config proof scope, §Oracle framing) fixed before landing; scope re-check clean → `status: ready`.
 
 - 2026-09-16 — landed refine + FIT set @ f872eb5c0 (reviewed revision for passes 1–3 = this set over main 51440931a).
+- 2026-09-23 — run start (whole-goal hand-off, branch t3code/vitest-run-browser): re-chart before first pickup. Prior draft PRs #349/#351/#352 read as evidence only (their code is not authority; #349 took the rejected cac-rewrite route). New child 13 `message-port-ref-keepalive` (I4); item 5 widened to the claimed path's dynamic keys; item 11 re-cut to vitest's non-empty `execArgv`; item 8 absorbs kernel run-to-completion exit + Node `unref` shape; order 3→4→{7→8, 9}, 11 after 6/8/9/13.
