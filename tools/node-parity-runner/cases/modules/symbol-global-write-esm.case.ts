@@ -13,7 +13,6 @@ const c: ParityCase = {
       console.log(JSON.stringify({
         values: [globalThis[safe], globalThis[descriptor], globalThis[reflected]],
         descriptor: Object.getOwnPropertyDescriptor(globalThis, descriptor)?.configurable,
-        stringFunctionUntouched: typeof globalThis.Function === 'function',
       }));
     } finally {
       Reflect.deleteProperty(globalThis, safe);

@@ -36,6 +36,7 @@ describe.each(['cjs', 'esm'] as const)('%s Symbol-key guard', (kind) => {
           feature: `module-loader.${kind}-global-function-assignment`,
         }) as Error,
       );
+      expect(Object.getOwnPropertyDescriptor(globalThis, 'Function')).toEqual(descriptor);
     } finally {
       if (descriptor) Object.defineProperty(globalThis, 'Function', descriptor);
     }

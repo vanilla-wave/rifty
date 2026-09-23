@@ -6,8 +6,8 @@ programs through `runInNode`:
 
 ```text
 Node v24.16.0
-ESM "{\"values\":[7,8,9],\"descriptor\":true,\"stringFunctionUntouched\":true}"
-CJS "{\"values\":[7,8,9],\"descriptor\":true,\"stringFunctionUntouched\":true}"
+ESM "{\"values\":[7,8,9],\"descriptor\":true}"
+CJS "{\"values\":[7,8,9],\"descriptor\":true}"
 ```
 
 RED command: `node --import tsx tools/node-parity-runner/src/cli.ts symbol-global-write`
@@ -23,3 +23,11 @@ node-parity-runner: 2 case(s) matching 'symbol-global-write'
 
 Exit 1. Baseline unsafe-key guard test: 8/8 pass on both loader paths; those
 existing ceilings must remain after the Symbol refinement.
+
+Correction (2026-09-23): the first parity revision also read
+`globalThis.Function`, an independently unsupported ADR-0171 path. Removed
+that read from both cases. Re-ran the Node oracle and the two RED cases above
+against the unchanged `origin/main` product source: same two directed Symbol
+key false positives; no unrelated `Function` read remains in either case.
+The unsafe-key tests now also assert that the `Function` descriptor is
+unchanged immediately after the expected throw.
