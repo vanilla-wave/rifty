@@ -384,6 +384,12 @@ closed-post-kept         true,4                                    true,0       
 exit                     0, no PROBE|held                          0, no PROBE|held
 ```
 
+`check:esbuild-legacy-retirement` pin: after `build:libs`,
+`packages/workbench/dist/assets/typescript-worker.js` keeps 10 022 694 bytes but
+its sha256 becomes `ab5544b5…23f98`. It holds none of this code; it imports the
+runtime-js chunk whose content-hash name changed (`chunk-3AM62KA3.js` carries
+`MessagePort.ref.transferred`). Re-pinned sha with bytes unchanged.
+
 Wrapped methods keep Chromium's native descriptor, name and length; `close`,
 `postMessage` and `structuredClone` lengths already differed from Node. The
 closed-port transfer row is pre-existing Chromium behavior, not claimed here.
