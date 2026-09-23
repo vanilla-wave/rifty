@@ -144,6 +144,19 @@ describe('user override value — npm 11.17.0 reading (ADR-0451)', () => {
     });
   });
 
+  // Complement of the version/range rows: every other value npm reads as a
+  // dist-tag stays a rifty replacement name, never a range of the key.
+  it.each(classified(({ npa }) => npa.type === 'tag' && npa.fetchSpec !== 'latest'))(
+    'npm tag $value keeps the rifty replacement-name reading → ADR-0451',
+    ({ value }) => {
+      expect(resolveOverride('vite', undefined, { vite: value })).toEqual({
+        name: value,
+        range: null,
+        source: 'user',
+      });
+    },
+  );
+
   it('baked substitutions keep the rifty name grammar → I1', () => {
     expect(resolveOverride('bcrypt', undefined, {})).toEqual({
       name: 'bcryptjs',

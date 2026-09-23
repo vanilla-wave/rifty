@@ -253,6 +253,324 @@
       "npa": {
         "error": "EINVALIDTAGNAME"
       }
+    },
+    {
+      "value": " * ",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "*"
+      }
+    },
+    {
+      "value": " ",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ""
+      }
+    },
+    {
+      "value": ">= 8.0.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ">= 8.0.0"
+      }
+    },
+    {
+      "value": ">=8.0.0  <8.1.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ">=8.0.0  <8.1.0"
+      }
+    },
+    {
+      "value": "~ 8.0.1",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "~ 8.0.1"
+      }
+    },
+    {
+      "value": "^ 8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "^ 8"
+      }
+    },
+    {
+      "value": "~> 8.0",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "~> 8.0"
+      }
+    },
+    {
+      "value": "~8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "~8"
+      }
+    },
+    {
+      "value": "8.x.x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.x.x"
+      }
+    },
+    {
+      "value": "8.X",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.X"
+      }
+    },
+    {
+      "value": "8.*",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.*"
+      }
+    },
+    {
+      "value": "x.x.x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "x.x.x"
+      }
+    },
+    {
+      "value": "^0.0.x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "^0.0.x"
+      }
+    },
+    {
+      "value": "8.0.0 - 9",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.0.0 - 9"
+      }
+    },
+    {
+      "value": "8 - 9 || ^10",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8 - 9 || ^10"
+      }
+    },
+    {
+      "value": "<8.0.0-rc.1",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "<8.0.0-rc.1"
+      }
+    },
+    {
+      "value": "8.0.x-beta",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "8.0.x-beta"
+      }
+    },
+    {
+      "value": "8.0.16+build.5",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.16+build.5"
+      }
+    },
+    {
+      "value": "8.0.16beta",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.16beta"
+      }
+    },
+    {
+      "value": "8.0.016",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "8.0.016"
+      }
+    },
+    {
+      "value": "v8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "v8"
+      }
+    },
+    {
+      "value": "=v8.0.16",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "=v8.0.16"
+      }
+    },
+    {
+      "value": "v 8.0.16",
+      "npa": {
+        "type": "version",
+        "name": "vite",
+        "fetchSpec": "v 8.0.16"
+      }
+    },
+    {
+      "value": ">8 <=9",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": ">8 <=9"
+      }
+    },
+    {
+      "value": "<=8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "<=8"
+      }
+    },
+    {
+      "value": "<x",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "<x"
+      }
+    },
+    {
+      "value": "^8.0.0 ||",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "^8.0.0 ||"
+      }
+    },
+    {
+      "value": "||",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "||"
+      }
+    },
+    {
+      "value": "1.2.3 foo",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "1.2.3 foo"
+      }
+    },
+    {
+      "value": "foo || 8",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "foo || 8"
+      }
+    },
+    {
+      "value": "foo *",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "foo *"
+      }
+    },
+    {
+      "value": "foo * bar",
+      "npa": {
+        "error": "EINVALIDTAGNAME"
+      }
+    },
+    {
+      "value": "+1",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "+1"
+      }
+    },
+    {
+      "value": "1.2.3*",
+      "npa": {
+        "type": "range",
+        "name": "vite",
+        "fetchSpec": "1.2.3*"
+      }
+    },
+    {
+      "value": " latest ",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "latest"
+      }
+    },
+    {
+      "value": "next",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "next"
+      }
+    },
+    {
+      "value": "x.1",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "x.1"
+      }
+    },
+    {
+      "value": "1.2.3.4",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "1.2.3.4"
+      }
+    },
+    {
+      "value": "2fa",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "2fa"
+      }
+    },
+    {
+      "value": "v",
+      "npa": {
+        "type": "tag",
+        "name": "vite",
+        "fetchSpec": "v"
+      }
     }
   ],
   "installs": [
@@ -550,6 +868,62 @@
       "entries": {
         "node_modules/ms": {
           "version": "2.1.2"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "star-padded",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": " * "
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": "*"
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.3"
+        }
+      },
+      "edges": {
+        "node_modules/debug": "2.1.2"
+      }
+    },
+    {
+      "id": "whitespace-only",
+      "manifest": {
+        "name": "override-probe",
+        "version": "1.0.0",
+        "private": true,
+        "dependencies": {
+          "debug": "4.3.4"
+        },
+        "overrides": {
+          "ms": " "
+        }
+      },
+      "npa": {
+        "type": "range",
+        "name": "ms",
+        "fetchSpec": ""
+      },
+      "exit": 0,
+      "entries": {
+        "node_modules/ms": {
+          "version": "2.1.3"
         }
       },
       "edges": {
