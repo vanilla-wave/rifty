@@ -16,7 +16,9 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 | Keepalive counts `setTimeout`/`setInterval` | ✅ | libuv-style refcount; loop stays alive while a refed timer exists |
 | Keepalive counts `setImmediate` | ✅ | |
 | Keepalive counts pending dynamic `import()` | ✅ | Both `loader.import` and routed user-code `import()` (`__import`) |
-| `unhandledrejection` → stderr + non-zero exit | ⚠️ | Observed events are loud, but a detached rejection dispatched after the final zero-ref sample can race reap and exit 0. See `backlog/runtime-js/late-unhandled-rejection-drain` |
+| Process error and exit events | ✅ | Runtime-owned `uncaughtException` / `unhandledRejection` listeners run before fatal handling; handled errors continue. Two zero-ref task checkpoints admit late browser rejection delivery before natural exit. One `exit` event carries the final code; `process.exit()` defaults to `process.exitCode`, whose initial value stays undefined. Native/Chromium differential: `tests/browser-unit/owner-node-process-lifecycle.spec.ts` (ADR-0445). |
+| Worker and parentPort keepalive | ✅ | Live Worker and public message-listener refs compose; child parentPort listeners hold its drain. Explicit unref releases the relevant hold (ADR-0449). |
+| Local MessagePort manual refs | ⚠️ | Global and worker_threads MessageChannel share native ports with ref/unref/hasRef. Default ports do not hold drain; explicit ref does. Local own/peer close releases once asynchronously. Managed endpoint transfer throws MessagePort.transfer.managed before any detachment; raw kernel channels and ordinary ArrayBuffer transfers remain native. Automatic listener refs, transferred ownership and full EventEmitter APIs are outside this claim (ADR-0452; browser message-port-keepalive.spec.ts). |
 | **Drain cap: a refed loop that never drains is force-killed** | ⚠️ | **Deliberate non-Node divergence.** At 30 s the worker exits 1 + a self-explanatory stderr line, where Node runs forever. Browser-worker safety-net against a genuine hang/leak — generous + loud. Legit-forever programs use `serve:true` (the cap never fires there). See ADR-0152 §4 |
 | Detached `fetch()` / network keepalive | ✅ | The global `fetch` is keepalive-counted: ref on dispatch, held until a public Body consumer drains/cancels/errors (Node keeps the socket refed until the body is read). `http.request` to an external host routes through `fetch` (covered); loopback is in-process; `https`/`net.connect` are loud-throws. A never-consumed body holds the realm to the drain cap (loud). ADR-0158 |
 | `Response.clone()` on a keepalive-tracked fetch | ❌ | The public Body wrapper can retain the pre-clone internal stream; later read/cancel may hit a locked stale source instead of Chromium semantics. Explicit draft: `backlog/runtime-js/fetch-keepalive-response-clone-lifecycle`. |
@@ -80,7 +82,7 @@ Chromium covers the real supervisor → application Worker journey.
 
 - The drain cap uses wall-clock (`performance.now()`), so a CPU-busy worker could in principle trip
   the 30 s cap; the cap is generous, so the risk is low.
-- The keepalive model is honestly the count of timers/immediates/pending imports + global `fetch`
-  + `fs.watch` polls — NOT the full libuv handle set. The reachable network/timer/import surface is
-  now covered (rows above); other libuv handle classes are not browser-reachable. ADR-0152 §1 (set
-  shape) + ADR-0158 (fetch added).
+- Counted handles: timers/immediates/imports, global fetch, fs.watch polls,
+  Worker/parentPort, public process IPC and manually referenced local MessagePorts.
+  This is a browser handle subset, not the full libuv set
+  (ADR-0152, ADR-0158, ADR-0446, ADR-0449, ADR-0452).

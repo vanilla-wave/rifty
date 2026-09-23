@@ -1,5 +1,6 @@
 export interface ProxyProvenanceAuthority {
   readonly Proxy: ProxyConstructor;
+  readonly targetCloneFailure: (target: object) => string;
   readonly cloneFailure: (value: object) => string | undefined;
   readonly markGuestProxy: (wrapper: object, failure: () => string) => void;
 }

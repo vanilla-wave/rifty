@@ -27,6 +27,8 @@
  *     would false-negative and skip the patch the emnapi guest actually needs.
  */
 
+import { installMessagePortKeepalive } from '../internal/message-port-keepalive.ts';
+
 /** Install `global === globalThis` (Node realm-global parity). Never clobbers a
  * pre-existing `global` (a host that already shaped it wins). */
 export function installGlobalAlias(): void {
@@ -102,6 +104,7 @@ export function installSharedMemoryTolerantTextDecoder(
  * before the user entry evaluates.
  */
 export function installWorkerRealmCompat(): void {
+  installMessagePortKeepalive();
   installGlobalAlias();
   installWritableSelf();
   installSharedMemoryTolerantTextDecoder();

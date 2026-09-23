@@ -114,6 +114,7 @@ export {
   type KernelSyncApi,
   type KernelSyncBinaryCall,
   type KernelSyncCall,
+  getKernelHostMessageChannel,
   publishKernelEntryBootstrap,
   publishKernelProcessSpec,
   publishKernelSyncApi,

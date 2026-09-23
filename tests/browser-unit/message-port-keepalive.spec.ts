@@ -79,6 +79,10 @@ test('managed MessagePort transfer has a named ceiling without detaching ArrayBu
 const {port1: managed, port2: peer} = new MessageChannel();
 const {port1: sender, port2: receiver} = new MessageChannel();
 managed.ref();
+const retained = new Promise((resolve) => {
+  managed.addEventListener('message', (event) => resolve(Array.from(event.data)), {once: true});
+  managed.start();
+});
 const outcomes = [];
 for (const send of [
   (buffer) => sender.postMessage({port: managed, buffer}, [managed, buffer]),
@@ -89,12 +93,36 @@ for (const send of [
   catch (error) { outcomes.push([error.name, error.feature, buffer.byteLength, managed.hasRef()]); }
 }
 console.log('PORT|transfer=' + JSON.stringify(outcomes));
-managed.unref();managed.close();peer.close();sender.close();receiver.close();
+peer.postMessage(new Uint8Array([4, 8, 12]));
+void retained.then((bytes) => {
+  console.log('PORT|retained=' + JSON.stringify(bytes));
+  managed.unref();managed.close();peer.close();sender.close();receiver.close();
+});
 `,
     );
     const result = await page.evaluate(async (url) => {
       const fixture = await import(/* @vite-ignore */ url);
-      return fixture.executeProjectLine('node main.cjs');
+      const terminal = fixture.currentProject().terminals.open();
+      let out = '';
+      const detach = terminal.attach((chunk: string) => {
+        out += chunk;
+      });
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const run = terminal.run('node main.cjs');
+        const exit = await Promise.race([
+          run.exited.then((exit: { code: number | null }) => exit.code),
+          new Promise<null>((resolve) => {
+            timeout = setTimeout(() => resolve(null), 6_000);
+          }),
+        ]);
+        await terminal.close();
+        return { exit, out };
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+        detach();
+        await terminal.close();
+      }
     }, sealedWorkbenchFixtureUrl);
     expect(result.exit, result.out).toBe(0);
     expect(messagePortRows(result.out)).toEqual([
@@ -106,6 +134,7 @@ managed.unref();managed.close();peer.close();sender.close();receiver.close();
           true,
         ]),
       )}`,
+      'PORT|retained=[4,8,12]',
     ]);
   } finally {
     await closeOwner(page);

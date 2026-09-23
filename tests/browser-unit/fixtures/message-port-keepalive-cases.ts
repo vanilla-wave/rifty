@@ -127,6 +127,32 @@ process.on('exit', () => console.log('PORT|queued=' + JSON.stringify({
     child: '',
   },
   {
+    name: 'transfer-overloads-remain-native',
+    entry: 'main.cjs',
+    parent: `
+const {port1: port, port2: peer} = new MessageChannel();
+let received = 0;
+port.onmessage = (event) => {
+  console.log('PORT|overload-bytes=' + JSON.stringify(Array.from(new Uint8Array(event.data))));
+  if (++received === 3) { port.unref(); port.close(); peer.close(); }
+};
+port.ref();
+for (const mode of ['set', 'frozen', 'getter']) {
+  const buffer = new Uint8Array([1, 6, 10]).buffer;
+  let reads = 0;
+  const options = mode === 'set' ? new Set([buffer]) : mode === 'frozen'
+    ? Object.freeze({transfer: [buffer]}) : {get transfer() { reads++; return [buffer]; }};
+  peer.postMessage(buffer, options);
+  console.log('PORT|overload=' + JSON.stringify([mode, buffer.byteLength, reads]));
+}
+const cloneBuffer = new Uint8Array([3, 8]).buffer;
+const clone = structuredClone(cloneBuffer, Object.freeze({transfer: [cloneBuffer]}));
+console.log('PORT|frozen-clone=' + JSON.stringify([cloneBuffer.byteLength, Array.from(new Uint8Array(clone))]));
+${exitHook}
+`,
+    child: '',
+  },
+  {
     name: 'array-buffer-transfer-remains-native',
     entry: 'main.cjs',
     parent: `

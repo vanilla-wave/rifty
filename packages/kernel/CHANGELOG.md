@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Pin the primordial MessageChannel across bundles so runtime manual-port refs cannot capture kernel infrastructure (ADR-0452).
 ### Added
 
 - **SyncRpc v5 binary requests (ADR-0366).** One claimed ring now carries

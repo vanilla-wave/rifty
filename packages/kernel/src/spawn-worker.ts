@@ -16,6 +16,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcCallerContext, SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
+import { getKernelHostMessageChannel } from './shared-globals.ts';
 import type {
   WorkerEntryDescriptor,
   WorkerInitMessage,
@@ -352,7 +353,8 @@ export function spawnKernelWorker(
     ring = createdRing.ring;
 
     const createTrackedChannel = (): MessageChannel => {
-      const channel = new MessageChannel();
+      const HostMessageChannel = getKernelHostMessageChannel();
+      const channel = new HostMessageChannel();
       acquiredFixedPorts.push(channel.port1, channel.port2);
       return channel;
     };

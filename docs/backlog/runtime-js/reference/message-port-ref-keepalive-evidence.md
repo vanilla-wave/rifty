@@ -182,3 +182,43 @@ MessageChannel allocation sweep found kernel/spawn-worker.ts and the eager
 runtime timers channel; this motivates one shared primordial owner rather than
 a third independent capture. Existing event-loop-keepalive remains the only
 refcount/drain owner; kernel receives no Node-specific port-reference policy.
+
+## Implementation proof, 2026-09-23
+
+Contract+RED accepted at `9836df2e0`; implementation uses ADR-0452's shared
+primordial constructor, real native pair registry and existing drain counter.
+Only manual refs count. Intercepted local close waits queued native messages and
+the check-phase checkpoint; no timer infers remote closure. Managed transfer is
+checked before native serialization; raw kernel ports remain transferable.
+
+C1 strengthened: after both refused transfer calls, the original managed port
+must receive `[4,8,12]` from its original peer. The native detach mutant
+`/private/tmp/rifty-message-port-detach-mutant-c1.mjs` passes the former state-only
+assertion (`hasRef` remains true after actual detach), then fails the new byte
+assertion (`null` versus `[4,8,12]`). Thus original endpoint ownership is observed.
+
+An additional preservation regression uses Set transfer lists, frozen options,
+a getter read once, and frozen structuredClone options. Real Node passes;
+initial shim RED on fresh 5417: Set.prototype.values incompatible receiver.
+The common transfer normalization now snapshots the actual iterable once and
+uses a fresh options facade, avoiding frozen caller-property Proxy invariants.
+Certified lifecycle/transfer assertions remain unchanged.
+
+```sh
+RIFTY_PLAYGROUND_PORT=5417 pnpm test:browser-unit tests/browser-unit/message-port-keepalive.spec.ts
+pnpm test:run packages/runtime-js/src/ipc/worker-realm-compat.test.ts packages/runtime-js/src/builtins/worker_threads.test.ts packages/runtime-js/src/internal/event-loop-keepalive.test.ts packages/kernel/src/shared-globals-binary-sync.test.ts
+pnpm exec tsc --noEmit --project packages/runtime-js/tsconfig.json
+pnpm exec tsc --noEmit --project packages/kernel/tsconfig.json
+```
+
+Fresh server (`reuseExistingServer:false`), 11/11 Chromium PASS, 10.6s;
+62/62 unit PASS; both package typechecks PASS. Logs:
+`/private/tmp/rifty-message-port-final-green.log`,
+`/private/tmp/rifty-message-port-unit.log`,
+`/private/tmp/rifty-message-port-types.log`,
+`/private/tmp/rifty-message-port-kernel-types.log`.
+Transfer RED: `/private/tmp/rifty-message-port-transfer-red.log`.
+
+Root's separate fresh5419 Vitest diagnostic now reaches thread startup and
+fails the named Worker.execArgv ceiling; this is not full Vitest acceptance.
+Full goal proof and independent Final+GREEN remain parent-owned.

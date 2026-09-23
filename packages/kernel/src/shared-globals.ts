@@ -24,6 +24,29 @@
 /** Type of the in-Worker sync call shim. Narrow so callers stay `any`-free. */
 export type KernelSyncCall = (method: string, payload: unknown) => unknown;
 
+const HOST_MESSAGE_CHANNEL = Symbol.for('rifty.kernel.host-message-channel.v1');
+type HostChannelRealm = typeof globalThis & {
+  [HOST_MESSAGE_CHANNEL]?: Readonly<{ constructor: typeof MessageChannel | null }>;
+};
+const hostChannelRealm = globalThis as HostChannelRealm;
+// First kernel import precedes runtime shims. Later bundles share this record.
+if (!Object.hasOwn(hostChannelRealm, HOST_MESSAGE_CHANNEL)) {
+  Object.defineProperty(hostChannelRealm, HOST_MESSAGE_CHANNEL, {
+    value: Object.freeze({
+      constructor:
+        typeof globalThis.MessageChannel === 'function' ? globalThis.MessageChannel : null,
+    }),
+  });
+}
+
+/** ADR-0452: never recapture a possibly wrapped ambient constructor. */
+export function getKernelHostMessageChannel(): typeof MessageChannel {
+  const constructor = hostChannelRealm[HOST_MESSAGE_CHANNEL]?.constructor;
+  if (typeof constructor !== 'function')
+    throw new Error('kernel host MessageChannel is unavailable');
+  return constructor;
+}
+
 /** Binary application payload call on the same SyncRpc ring. */
 export type KernelSyncBinaryCall = (method: string, payload: Uint8Array) => unknown;
 

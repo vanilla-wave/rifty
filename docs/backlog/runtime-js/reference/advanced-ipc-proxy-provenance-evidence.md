@@ -107,3 +107,64 @@ new Uint8Array([1,2]) {"nodeBrand":"[object Uint8Array]","riftyBrand":"[object U
 
 These are executed silent-loss observations, not inferred universal VM coverage.
 The driver retains them as required current IPC work under the unchanged scope.
+
+Codec boundary: native `vm.runInNewContext` Map/Set/Date and severed prototypes
+also lost slots through `instanceof` dispatch. Added two differential cases in
+`internal/node-ipc-advanced.test.ts`: RED `expected {} to be an instance of Map`,
+then captured native slot readers replace those three realm-local checks.
+Both pass, including cycles and object-key aliases. Existing two codec tests,
+four physical advanced IPC parity cases and runtime-js tsc also pass. VM carrier
+repair remains separate; this does not certify its implementation.
+
+
+## VM completion and independent boundary assessment
+
+VM private eager metadata, zero-trap Proxy/revoked rejection, real Map/Set
+backings/cycles, and Error cause descriptors implemented. Targeted VM tests:
+54 pass, 4 existing skips; guard reverts reproduce9 Proxy failures and3
+collection failures. Existing vm/ parity32/32 passes. Native and QuickJS
+codec tests24/24 pass after class sweep: Date/Map/Set/RegExp/Error, real
+ArrayBuffer and boxed primitive slots. Node24 and Chromium148 expose native
+Error.isError; it recognizes real Error backing without guest tag getters.
+Error message/cause accessors are ignored by native serialization (reads0);
+prior codec read both. Data descriptors now preserve cause cycles/aliases.
+Formatting native clone failures no longer coerces the rejected value.
+
+Independent read-only codex review, session01a0cc0d-a8b7-78a1-a2b2-873d0d1bffaa,
+re-ran original probes and boundary controls. Ruling: advanced IPC Acceptance1
+owns the actual input to send, not reconstruction of state already lost at a
+VM return boundary. Real intrinsic codec losses remain FIX and were repaired.
+VM missing exotic mirrors and retained-mirror mutations are separate baseline
+residuals, with explicit public ❌ and owner/trigger drafts. Error.cause was
+also a baseline omission, but the bounded descriptor repair landed here.
+No guest-refresh was added: reviewer verified host Map write x=3 is retained
+at send while subsequent x=4 does not change the sent snapshot; refreshing
+from guest would incorrectly erase x=3.
+
+Reproduce both residual classes from repository root (Node v24.16.0):
+
+```sh
+node --import tsx --input-type=module <<'JS'
+import native from 'node:vm';
+import vm from './packages/runtime-js/src/builtins/vm/index.ts';
+import {setVmEngineOverride} from './packages/runtime-js/src/builtins/vm/engine-config.ts';
+import {ensureVmEngineReady} from './packages/runtime-js/src/builtins/vm/quickjs-loader.ts';
+setVmEngineOverride('quickjs'); await ensureVmEngineReady();
+console.log(process.version);
+for(const source of ['new ArrayBuffer(4)','new DataView(new ArrayBuffer(4))','Object(true)','Object(3)','Object("x")']) {
+ console.log(source,...[native,vm].map(engine=>Object.prototype.toString.call(engine.runInNewContext(source))));
+}
+for(const [source,mutation,read] of [
+ ['new Map([["x",1]])','x.set("x",2)',x=>JSON.stringify([...x])],
+ ['new Set([1])','x.add(2)',x=>JSON.stringify([...x])],
+ ['new Date(0)','x.setTime(123)',x=>String(x.getTime())],
+ ['[1]','x.push(2)',x=>JSON.stringify(x)]
+]) {
+ console.log(source,...[native,vm].map(engine=>{const c=engine.createContext({});const x=engine.runInContext('var x='+source+';x',c);engine.runInContext(mutation,c);return read(x)}));
+}
+JS
+```
+
+Native brands: ArrayBuffer/DataView/Boolean/Number/String; rifty: Object for all5.
+Retained values: Map [[x,2]] versus [[x,1]], Set [1,2] versus [1], Date123
+versus0, Array[1,2] versus[1]. These are explicit VM gaps, not GREEN carriers.

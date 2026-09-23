@@ -36,8 +36,8 @@ Supplement ADR-0446; its full graph/getter promise remains.
 - QuickJS semantic provenance belongs to trusted pre-eval bootstrap and a
   host-retained metadata handle, never a guest-visible checker/marker. Membrane
   host-origin identity wins before guest classification; guest wrapper marking
-  retains its existing reverse-handle/GC owners. Complete this required seam
-  before claiming the generic advanced promise closed.
+  retains its existing reverse-handle/GC owners. Native slot dispatch preserves
+  actual exotic backings independently of their realm or prototype.
 - `module.builtinModules` uses a real frozen dense snapshot shared by both
   module export surfaces, refreshed when registered names change. Empty-target
   virtual arrays are a builtin-owner defect, not a codec exception.
@@ -52,5 +52,6 @@ observed ingress. No public `util.types.isProxy` expansion.
 - (+) Host guest Proxy/revocable/revoked failures precede traps and preserve channel health.
 - (+) Buffer/getter controls retain the unchanged codec, including global Buffer.
 - (-) New realm bootstrap owner and constructor facades require Node/Chromium proof.
-- VM Proxy ingress and existing Map/Set/Date carrier losses remain required work,
-  explicitly recorded in evidence; no blanket VM ceiling or closed-unit claim.
+- VM Proxy ingress and Map/Set carriers share the existing membrane owner.
+  Older retained-mirror mutation and missing exotic-mirror gaps remain explicit
+  in compat and their backlog drafts; the codec snapshots its actual host input.

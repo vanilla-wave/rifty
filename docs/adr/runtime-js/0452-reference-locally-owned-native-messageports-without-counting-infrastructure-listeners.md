@@ -69,5 +69,7 @@ implicit peer death and GC-driven closure are outside this local-pair promise.
 
 ## Status
 
-No production implementation at preparation. Contract+RED must pass before
-installing the public shim, shared primordial seam or lifecycle bookkeeping.
+Contract+RED accepted at `9836df2e0`; implemented in the kernel primordial owner
+and runtime-js manual-port installer. Fresh5417: 11 Chromium cases PASS; 62
+related unit cases PASS. Evidence retains original RED and transfer-detach mutant.
+Independent Final+GREEN remains required.

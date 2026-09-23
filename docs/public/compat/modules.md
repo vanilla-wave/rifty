@@ -22,7 +22,8 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `file:` URL imports | ✅ | ESM-only, as in Node: ASCII-case-insensitive `file:` specifiers resolve through the VFS loader with Node-shaped percent decoding, encoded-separator rejection, and one canonical module identity; `import.meta.url` / `import.meta.resolve` encode resolved POSIX paths through the same codec (parity `modules/file-url-module-identity`). CJS never URL-dispatches: URL-looking strings use ordinary alias/path/package resolution and ordinary misses report `MODULE_NOT_FOUND` (parity `modules/require-url-specifier-strings`, `modules/require-bare-file-package`). |
 | `data:` URL imports | ❌ | ESM `import` throws `UNSUPPORTED_PROTOCOL` for every ASCII casing. CJS treats the string as an ordinary path/package name; a usual miss is `MODULE_NOT_FOUND` |
 | `worker_threads.Worker` entry | ⚠️ | Path strings enforce Node's absolute/`./`/`../` grammar and construction-time cwd; file URL objects and cross-realm/Node URL-shaped values decode; invalid strings/types/schemes throw synchronously before thread-id allocation. Data URL objects are constructor-valid but execution emits `NotImplementedError('worker_threads.Worker.data-url')`; `eval: true` throws `NotImplementedError('worker_threads.Worker.eval')`. Tracked in `backlog/runtime-js/worker-eval-data-url-entry` |
-| `worker_threads.Worker` `execArgv` inheritance/override | ❌ | A nonempty trusted parent identity or explicit `options.execArgv` throws `NotImplementedError('worker_threads.Worker.execArgv')` before allocation; node-entry v3 cannot carry the option without false worker identity. Tracked in `backlog/runtime-js/worker-threads-inherited-exec-argv` |
+| `worker_threads.Worker` `execArgv` inheritance/override | ⚠️ | Explicit `execArgv: []` overrides inherited arguments. Nonempty effective arguments throw `NotImplementedError('worker_threads.Worker.execArgv')` before allocation. ADR-0449; nonempty support: `backlog/runtime-js/worker-threads-inherited-exec-argv`. |
+| Worker lifetime and stdio | ✅ | Live Workers hold their parent; `unref()` releases that hold. Public message listeners and explicit refs compose; child `parentPort` listeners hold the child. Natural exit drains handles, delivers output and closes real stdout/stderr streams. `stdout: true` / `stderr: true` capture; defaults forward to process streams. Live Node/Chromium differential: `tests/browser-unit/worker-thread-lifecycle.spec.ts` (ADR-0449). |
 | ESM static `import` | ✅ | Named, default, namespace, side-effect-only |
 | ESM `export` named / default / re-export | ✅ | |
 | ESM `export * from` | ✅ | |
@@ -116,6 +117,18 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 
 ### `node:vm` — engines + ES2023-vs-V8 divergences
 
+Host `runInThisContext` / `Script.runInThisContext` support signed line/column
+offsets; columns apply only to physical line one. Constructor offsets survive
+repeated runs and escaped functions/errors, including filename reuse. Native
+CallSites reach an already-installed custom renderer (ADR-0443; parity
+`vm/*this-context-offsets`, `vm/host-offset-*`; browser `vm-host-offsets.spec.ts`).
+
+❌ Replacing/deleting `Error.prepareStackTrace` after evaluation bypasses that
+projection until another offset evaluation: late stacks expose encoded source
+coordinates. This includes unclaimed vi mocking/import-helper paths; tracked in
+`backlog/runtime-js/vm-offset-stack-hook-replacement`. Sandbox/compileFunction
+nonzero offsets retain named ceilings.
+
 | Tier / SDK selection | Engine | Observable behavior |
 |---|---|---|
 | Generic runtime default | quickjs | Real realm, existing QuickJS limits below |
@@ -156,6 +169,13 @@ host→guest before each run, sweep guest→host after) — observationally equi
 context for synchronous code. Two caveats: a guest callback mutating the sandbox AFTER the run is
 seen only at the next run; the host→guest side retains one seed per DISTINCT inbound object/fn for
 the context's life (not GC-evicted), so keep `vm` off a hot loop that streams fresh objects in.
+
+❌ Retained Array/Date/Map/Set mirrors are snapshots: later guest mutations do
+not update an earlier host backing. Tracked in
+`backlog/runtime-js/vm-retained-mirror-mutations`. ❌ QuickJS returns ordinary
+objects for ArrayBuffer/DataView/boxed Boolean/Number/String; intrinsic brands
+are missing before any IPC serialization. Tracked in
+`backlog/runtime-js/vm-missing-exotic-mirrors`.
 
 **ES2023 (QuickJS) ≠ V8 residual divergences** (default engine; each verified vs real Node, pinned
 by conformance + parity cases; workaround = the `rewrite` opt-in, which is V8-correct for these):

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Count manual refs on local native MessagePorts; preserve raw infrastructure channels and reject managed transfer before detachment (ADR-0452).
+- Preserve VM Proxy provenance and Map/Set/Error cause carriers; serialize real cross-realm slots without duplicate Error accessor reads (ADR-0453).
+- Record explicit VM retained-mirror, missing-exotic and replaced-stack-hook limitations.
 - Count Worker and parentPort lifetimes through drain; carry real stdio and accept empty execArgv (ADR-0449).
 - Reject host guest Proxies before advanced IPC snapshots; preserve Buffer/getters and dense frozen builtinModules (ADR-0453).
 

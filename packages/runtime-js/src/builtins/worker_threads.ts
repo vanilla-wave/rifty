@@ -714,13 +714,16 @@ function decodeWorkerData(encoded: string | undefined): unknown {
 
 const worker_threads: Record<string, unknown> = {
   Worker,
-  MessageChannel: globalThis.MessageChannel,
   markAsUntransferable,
   isMarkedAsUntransferable,
   markAsUncloneable,
 };
 
 Object.defineProperties(worker_threads, {
+  MessageChannel: {
+    enumerable: true,
+    get: () => globalThis.MessageChannel,
+  },
   isMainThread: {
     enumerable: true,
     get: () => activeWorkerContext() === null,

@@ -1,5 +1,31 @@
 import { Buffer } from '@riftydev/io';
-import { proxyCloneFailure } from './proxy-provenance.ts';
+import { cloneFailureMessage, proxyCloneFailure } from './proxy-provenance.ts';
+
+const mapEntries = Map.prototype.entries;
+const setValues = Set.prototype.values;
+const dateTime = Date.prototype.getTime;
+const regexpSource = Object.getOwnPropertyDescriptor(RegExp.prototype, 'source')?.get as (
+  this: never,
+) => string;
+const isError = (Error as ErrorConstructor & { isError(value: unknown): value is Error }).isError;
+const arrayBufferLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')
+  ?.get as (this: never) => number;
+const boxedReaders = [
+  Boolean.prototype.valueOf,
+  Number.prototype.valueOf,
+  String.prototype.valueOf,
+  BigInt.prototype.valueOf,
+  Symbol.prototype.valueOf,
+];
+const apply = Reflect.apply;
+
+function slot<T>(value: object, read: (this: never) => T): T | undefined {
+  try {
+    return apply(read, value, []) as T;
+  } catch {
+    return undefined;
+  }
+}
 
 interface AdvancedFrame {
   readonly value: unknown;
@@ -11,7 +37,7 @@ function nativeClone(value: object): object {
     return structuredClone(value) as object;
   } catch (error) {
     if (error instanceof Error && error.name === 'DataCloneError') {
-      throw new Error(`${String(value)} could not be cloned.`);
+      throw new Error(cloneFailureMessage(error));
     }
     throw error;
   }
@@ -47,20 +73,21 @@ export function encodeAdvancedIpc(message: unknown): AdvancedFrame {
       buffers.push(bytes);
       return bytes;
     }
-    if (value instanceof Map) {
+    const entries = slot(value, mapEntries);
+    if (entries !== undefined) {
       const result = new Map<unknown, unknown>();
       seen.set(value, result);
-      for (const [key, entry] of Map.prototype.entries.call(value))
-        result.set(copy(key), copy(entry));
+      for (const [key, entry] of entries) result.set(copy(key), copy(entry));
       return result;
     }
-    if (value instanceof Set) {
+    const values = slot(value, setValues);
+    if (values !== undefined) {
       const result = new Set<unknown>();
       seen.set(value, result);
-      for (const entry of Set.prototype.values.call(value)) result.add(copy(entry));
+      for (const entry of values) result.add(copy(entry));
       return result;
     }
-    if (value instanceof Error) {
+    if (isError(value)) {
       const constructors: Readonly<Record<string, ErrorConstructor>> = {
         Error,
         EvalError,
@@ -70,32 +97,33 @@ export function encodeAdvancedIpc(message: unknown): AdvancedFrame {
         TypeError,
         URIError,
       };
+      const name = value.name;
       const Constructor =
-        (Object.hasOwn(constructors, value.name) ? constructors[value.name] : undefined) ?? Error;
-      const result = new Constructor(value.message);
+        (Object.hasOwn(constructors, name) ? constructors[name] : undefined) ?? Error;
+      const message = Object.getOwnPropertyDescriptor(value, 'message');
+      const result = new Constructor(
+        message && 'value' in message ? `${message.value}` : undefined,
+      );
       seen.set(value, result);
       result.stack = value.stack;
-      if (Object.hasOwn(value, 'cause')) result.cause = copy(value.cause);
+      const cause = Object.getOwnPropertyDescriptor(value, 'cause');
+      if (cause && 'value' in cause) result.cause = copy(cause.value);
       return result;
     }
     if (typeof SharedArrayBuffer !== 'undefined' && value instanceof SharedArrayBuffer) {
       throw new Error('#<SharedArrayBuffer> could not be cloned.');
     }
     if (
-      value instanceof Date ||
-      value instanceof RegExp ||
-      value instanceof ArrayBuffer ||
+      slot(value, dateTime) !== undefined ||
+      slot(value, regexpSource) !== undefined ||
+      slot(value, arrayBufferLength) !== undefined ||
       ArrayBuffer.isView(value) ||
-      value instanceof Boolean ||
-      value instanceof Number ||
-      value instanceof String ||
+      boxedReaders.some((read) => slot(value, read as (this: never) => unknown) !== undefined) ||
       value instanceof WeakMap ||
       value instanceof WeakSet ||
       value instanceof Promise ||
       value instanceof WeakRef ||
-      value instanceof FinalizationRegistry ||
-      Object.getPrototypeOf(value) === BigInt.prototype ||
-      Object.getPrototypeOf(value) === Symbol.prototype
+      value instanceof FinalizationRegistry
     ) {
       const result = nativeClone(value);
       seen.set(value, result);

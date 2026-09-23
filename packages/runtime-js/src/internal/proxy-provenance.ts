@@ -1,6 +1,13 @@
 import type { ProxyProvenanceAuthority, ProxyProvenanceOwner } from './proxy-provenance-types.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from './worker-globals.ts';
 
+export function cloneFailureMessage(error: Error): string {
+  return error.message.replace(
+    /^Failed to execute 'structuredClone' on '(?:WorkerGlobalScope|Window)': /,
+    '',
+  );
+}
+
 function createOwner(): ProxyProvenanceOwner {
   const NativeProxy = Proxy;
   const apply = Reflect.apply;
@@ -20,24 +27,28 @@ function createOwner(): ProxyProvenanceOwner {
   let sealed = false;
   let installed = false;
 
+  function nativeFailure(value: object): string {
+    try {
+      clone(value);
+    } catch (error) {
+      if (error instanceof ErrorConstructor) {
+        return cloneFailureMessage(error);
+      }
+      throw error;
+    }
+    throw new ErrorConstructor('tracked Proxy unexpectedly passed structuredClone');
+  }
+
   const authority: ProxyProvenanceAuthority = freeze({
     Proxy: NativeProxy,
+    targetCloneFailure(target: object): string {
+      return nativeFailure(new NativeProxy(target, {}));
+    },
     cloneFailure(value: object): string | undefined {
       const guestFailure = apply(get, guestProxies, [value]) as (() => string) | undefined;
       if (guestFailure) return guestFailure();
       if (!apply(has, proxies, [value])) return undefined;
-      try {
-        clone(value);
-      } catch (error) {
-        if (error instanceof ErrorConstructor) {
-          return error.message.replace(
-            /^Failed to execute 'structuredClone' on '(?:WorkerGlobalScope|Window)': /,
-            '',
-          );
-        }
-        throw error;
-      }
-      throw new ErrorConstructor('tracked Proxy unexpectedly passed structuredClone');
+      return nativeFailure(value);
     },
     markGuestProxy(wrapper: object, failure: () => string): void {
       apply(set, guestProxies, [wrapper, failure]);
@@ -102,6 +113,7 @@ if (owner === null) {
 // writable provenance authority remains obtainable after bootstrap (ADR-0453).
 const authority = owner.acquireDuringBootstrap();
 export const RuntimeProxy = authority.Proxy;
+export const proxyTargetCloneFailure = authority.targetCloneFailure;
 export const proxyCloneFailure = authority.cloneFailure;
 export const markGuestProxy = authority.markGuestProxy;
 export const installNodeProxyProvenance = owner.install;
