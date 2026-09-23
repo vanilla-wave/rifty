@@ -172,6 +172,7 @@ describe('owner-child-node-executor', () => {
             hostRuntime: NODE_WORKER_RUNTIME_ENV,
             launch: {
               kind: 'program',
+              execArgv: [],
               bin: false,
               remoteFs: true,
               nodeServe: true,
@@ -267,6 +268,7 @@ describe('owner-child-node-executor', () => {
               hostRuntime: expect.objectContaining(NODE_WORKER_RUNTIME_ENV),
               launch: {
                 kind: 'program',
+                execArgv: [],
                 bin: false,
                 remoteFs: true,
                 remoteFsRoot: REMOTE_FS_ROOT,

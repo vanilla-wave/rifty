@@ -10,6 +10,7 @@ import {
 const hostRuntime = { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' };
 const launch = {
   kind: 'program',
+  execArgv: [],
   bin: false,
   remoteFs: true,
   nodeServe: true,
@@ -20,7 +21,7 @@ describe('advanced public IPC launch ownership', () => {
   afterEach(() => publishKernelEntryBootstrap(null));
 
   it('atomically versions the extended launch discriminator', () => {
-    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v5');
+    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v6');
   });
 
   it('validates and preserves advanced mode at the producer', () => {

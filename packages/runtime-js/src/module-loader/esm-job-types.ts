@@ -45,7 +45,7 @@ export type EsmFactory = (
   metaDirname: string,
   metaFilename: string,
   assetPath: (s: string) => string,
-  metaResolve: (s: string) => string,
+  metaResolve: (s: string, parentURL?: string | URL) => string,
   Function: FunctionConstructor,
   webAssembly: typeof WebAssembly,
   symbolKey: GlobalSymbolKeyValidator,

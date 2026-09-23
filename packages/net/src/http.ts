@@ -8,6 +8,7 @@
  */
 
 export {
+  Agent,
   IncomingMessage,
   IncomingMessageFromFetch,
   ServerResponse,

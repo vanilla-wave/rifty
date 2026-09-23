@@ -476,8 +476,16 @@ export function compileFunction(
   return new Function(...params, asSource(code)) as (...args: unknown[]) => unknown;
 }
 
+export const constants = Object.freeze({
+  get DONT_CONTEXTIFY(): never {
+    // Unwrapped guest globals: docs/backlog/epics/jsdom-environment-in-browser/goal.md.
+    throw new NotImplementedError('vm.constants.DONT_CONTEXTIFY');
+  },
+});
+
 const vmModule = {
   Script,
+  constants,
   compileFunction,
   createContext,
   isContext,

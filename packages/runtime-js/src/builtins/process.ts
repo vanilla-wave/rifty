@@ -621,7 +621,7 @@ export class NodeProcess extends EventEmitter {
       this.ppid = spec.ppid;
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
-      this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
+      this.execArgv = launch === undefined ? [] : [...launch.execArgv];
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
       const terminal = processTerminalBootstrap(launch);
@@ -1177,18 +1177,21 @@ export function nodeProcessWorkerIpc(process: unknown): NodeProcessWorkerIpc {
 /** REPL/default singleton (no spec). Kernel children get their own seeded one. */
 export const riftyProcess = new NodeProcess();
 
+/** Canonical Node builtin process; an embedder's host process is a different realm. */
+export function currentNodeProcess(): object {
+  const active = readActiveNodeProcessBootstrap()?.process;
+  if (active !== undefined) return active;
+  const live = (globalThis as { process?: unknown }).process;
+  return live instanceof NodeProcess ? live : riftyProcess;
+}
+
 /** Host bridge: deliver terminal/process stdin into the REPL Worker process. */
 export function writeProcessStdin(data: string | Uint8Array): void {
   riftyProcess.pushStdin(data);
 }
 
-/**
- * Install the no-spec REPL `process` on `globalThis` + patch Promise for nextTick
- * ordering. Idempotent: skips when `globalThis.process` is already a `NodeProcess`
- * (the kernel pre-entry seam already installed the seeded one), so a stray
- * top-level call in a co-bundled chunk cannot clobber it (ADR-0157;
- * backlog: runtime-js/worker-entry-process-globals-side-effect).
- */
+/** Install REPL globals once; retain seeded bindings (ADR-0157;
+ * backlog: runtime-js/worker-entry-process-globals-side-effect). */
 export function installProcessGlobals(): void {
   // A kernel-installed binding is realm-private authority. A later idempotent
   // call must not let a guest-replaced public global replace or downgrade it.
@@ -1206,11 +1209,7 @@ export function installProcessGlobals(): void {
   installGlobalAlias();
 }
 
-/**
- * Test/host helper: override the per-Worker cwd cell, bypassing `chdir`'s VFS
- * validation. Used by the parity-runner so `process.cwd()` sees a stable anchor
- * matching the Node child's `--cwd`. Not Node API — production code uses `chdir`.
- */
+/** Host/test cwd override; production uses validated chdir. */
 export function setProcessCwd(next: string): void {
   currentCwd = next;
 }

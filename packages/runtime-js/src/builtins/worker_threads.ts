@@ -18,7 +18,9 @@ import {
 } from '@riftydev/kernel';
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { ref as refEventLoop, unref as unrefEventLoop } from '../internal/event-loop-keepalive.ts';
+import { compileNodeStartupOptions } from '../internal/node-startup-options.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
+import { deserializeWorkerFatalError } from '../internal/worker-fatal-error.ts';
 import { Buffer } from './buffer.ts';
 import type { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -83,6 +85,7 @@ export class Worker extends MessageListenerEmitter {
   readonly stderr: Readable = new Readable({ read() {} });
   private readonly entry: WorkerEntry;
   private readonly workerData: unknown;
+  private readonly execArgv: readonly string[];
   private readonly env: Record<string, string>;
   private readonly processContext: NodeProcessContextSnapshot | null;
   private readonly ownerProcess: unknown;
@@ -105,17 +108,17 @@ export class Worker extends MessageListenerEmitter {
     this.ownerBootstrap = readActiveNodeProcessBootstrap();
     const entry = parseWorkerEntry(script, getProcessCwd(), opts.eval);
     const inheritedLaunch = readNodeEntryBootstrapIfPresent()?.launch;
+    this.execArgv = compileNodeStartupOptions(
+      opts.execArgv === undefined ? (inheritedLaunch?.execArgv ?? []) : opts.execArgv,
+      'worker-thread',
+    ).execArgv;
     if (
-      (opts.execArgv !== undefined &&
-        (!Array.isArray(opts.execArgv) || opts.execArgv.length > 0)) ||
-      (opts.execArgv === undefined &&
-        inheritedLaunch?.kind === 'eval' &&
-        inheritedLaunch.execArgv.length > 0)
+      this.execArgv.length > 0 &&
+      !(isSabIpcSupported() && getKernelWorkerUrl() !== null && getNodeEntryWorkerUrl() !== null)
     ) {
-      // TODO(backlog: runtime-js/worker-threads-inherited-exec-argv)
       throw new NotImplementedError(
         'worker_threads.Worker.execArgv',
-        'nonempty worker-thread execArgv is not implemented',
+        'startup options require an isolated Worker',
       );
     }
     const processContext = snapshotNodeProcessContext();
@@ -183,6 +186,7 @@ export class Worker extends MessageListenerEmitter {
       const encodedWorkerData = encodeWorkerData(this.workerData);
       const entry = buildConfiguredNodeEntryWorkerEntry({
         kind: 'worker-thread',
+        execArgv: this.execArgv,
         remoteFs: true,
         threadId: this.threadId,
         ...(encodedWorkerData === undefined ? {} : { workerDataJson: encodedWorkerData }),
@@ -228,12 +232,12 @@ export class Worker extends MessageListenerEmitter {
           }
           return;
         }
-        // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a
-        // worker-runtime uncaught throw exits 1 here with the stack on stderr,
-        // but Node also emits 'error' (the real Error) first. Needs a child-side
-        // uncaught handler posting an IPC error frame; faking an Error from the
-        // exit code would lie. Same-realm path already emits 'error'.
-        this.finish(typeof outcome.code === 'number' ? outcome.code : 1);
+        try {
+          if (outcome.fatalError !== undefined)
+            this.emitWorkerError(deserializeWorkerFatalError(outcome.fatalError.reason));
+        } finally {
+          this.finish(typeof outcome.code === 'number' ? outcome.code : 1);
+        }
       });
     } catch (err) {
       this.emitWorkerError(err);

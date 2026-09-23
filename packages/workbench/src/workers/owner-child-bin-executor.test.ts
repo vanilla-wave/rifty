@@ -56,6 +56,7 @@ describe('buildChildSpawnSpec', () => {
           hostRuntime: NODE_WORKER_RUNTIME_ENV,
           launch: {
             kind: 'program',
+            execArgv: [],
             bin: true,
             remoteFs: true,
             nodeServe: true,
@@ -112,7 +113,7 @@ describe('buildChildSpawnSpec', () => {
     const spec = buildChildSpawnSpec(req, 'blob:node-entry-url', NODE_WORKER_RUNTIME_ENV);
 
     expect(spec.entry).toMatchObject({
-      bootstrap: { payload: { launch: { kind: 'program', bin: false } } },
+      bootstrap: { payload: { launch: { kind: 'program', execArgv: [], bin: false } } },
     });
     expect(spec.argv).toEqual(['rifty', '/workspace/scripts/tool.mjs', 'first', 'second']);
   });
@@ -148,15 +149,17 @@ describe('buildChildSpawnSpec', () => {
     expect(exitCodes).toEqual([0, 0, 0]);
     expect(specs).toMatchObject([
       {
-        entry: { bootstrap: { payload: { launch: { kind: 'program', bin: false } } } },
+        entry: {
+          bootstrap: { payload: { launch: { kind: 'program', execArgv: [], bin: false } } },
+        },
         argv: ['rifty', '/workspace/scripts/tool.mjs', 'direct'],
       },
       {
-        entry: { bootstrap: { payload: { launch: { kind: 'program', bin: true } } } },
+        entry: { bootstrap: { payload: { launch: { kind: 'program', execArgv: [], bin: true } } } },
         argv: ['rifty', '/workspace/node_modules/.bin/probe', 'explicit'],
       },
       {
-        entry: { bootstrap: { payload: { launch: { kind: 'program', bin: true } } } },
+        entry: { bootstrap: { payload: { launch: { kind: 'program', execArgv: [], bin: true } } } },
         argv: ['rifty', '/workspace/node_modules/.bin/probe', 'bare'],
       },
     ]);

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Execute child startup preloads, conditions and flagged import.meta.resolve parent URLs; preserve Worker trusted inheritance and fork public defaults through exact node-entry v6 (ADR-0456).
+- Deliver originating Worker failures before exit; distinguish explicit exits, handled exceptions and unsupported custom-inspect projection (ADR-0460).
+- Preserve native postMessage return values used by Node BroadcastChannel infrastructure.
+- Keep vm.constants importable and refuse DONT_CONTEXTIFY with its named ceiling instead of jsdom's undefined-property TypeError.
 - Count manual refs on local native MessagePorts; preserve raw infrastructure channels and reject managed transfer before detachment (ADR-0452).
 - Preserve VM Proxy provenance and Map/Set/Error cause carriers; serialize real cross-realm slots without duplicate Error accessor reads (ADR-0453).
 - Record explicit VM retained-mirror, missing-exotic and replaced-stack-hook limitations.

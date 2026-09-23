@@ -1,10 +1,8 @@
 /**
  * HTTP `Server` + `request()` client over the port registry.
  *
- * Server: registers a handler that builds `IncomingMessage` + streaming
- * `ServerResponse` for each request and returns the response (a fetch
- * `Response` whose body is the streaming `ReadableStream` written by user
- * code).
+ * Server: registered handlers build `IncomingMessage` + streaming
+ * `ServerResponse`; its fetch Response streams the user's writes.
  *
  * Client: `http.request()` loops back through the registry for registered local
  * ports; a loopback port with no LOCAL handler is probed across sibling Worker
@@ -33,6 +31,7 @@ import {
 import { type AddressInfo, createVirtualAddressInfo } from '../server-address.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import type { WsMessage } from '../ws/in-process.ts';
+import { Agent } from './agent.ts';
 import { METHODS, maxHeaderSize } from './methods.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
@@ -996,6 +995,7 @@ export function get(
 }
 
 const http = {
+  Agent,
   createServer,
   request,
   get,

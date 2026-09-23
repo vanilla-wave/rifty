@@ -230,11 +230,12 @@ export function installMessagePortKeepalive(): void {
     const state = ports.get(this);
     if (state) state.started = true;
   });
-  replaceMethod(proto, 'postMessage', function (this: MessagePort, ...args: unknown[]): void {
+  replaceMethod(proto, 'postMessage', function (this: MessagePort, ...args: unknown[]): unknown {
     if (args.length > 1) args[1] = transferArgument(args[1]);
-    Reflect.apply(nativePost, this, args);
+    const result: unknown = Reflect.apply(nativePost, this, args);
     const state = ports.get(this);
     if (state?.phase === 'open' && state.peer.phase === 'open') state.peer.pending += 1;
+    return result;
   });
 
   const onmessage = Object.getOwnPropertyDescriptor(proto, 'onmessage');
@@ -264,18 +265,18 @@ export function installMessagePortKeepalive(): void {
     replaceMethod(
       WorkerCtor.prototype,
       'postMessage',
-      function (this: Worker, ...args: unknown[]): void {
+      function (this: Worker, ...args: unknown[]): unknown {
         if (args.length > 1) args[1] = transferArgument(args[1]);
-        Reflect.apply(workerPost, this, args);
+        return Reflect.apply(workerPost, this, args);
       },
     );
   }
   const globalPost: unknown = Reflect.get(globalThis, 'postMessage');
   if (typeof globalPost === 'function')
-    replaceMethod(globalThis, 'postMessage', function (this: unknown, ...args: unknown[]): void {
+    replaceMethod(globalThis, 'postMessage', function (this: unknown, ...args: unknown[]): unknown {
       if (args.length > 1) args[1] = transferArgument(args[1]);
       if (args.length > 2) args[2] = checkedTransfer(args[2]);
-      Reflect.apply(globalPost, this, args);
+      return Reflect.apply(globalPost, this, args);
     });
 
   const PublicChannel = new Proxy(HostChannel, {

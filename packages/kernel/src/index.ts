@@ -55,6 +55,7 @@ export {
   setKernelPreEntryHook,
   getKernelDrainHook,
   setKernelDrainHook,
+  setKernelFatalErrorSerializer,
 } from './worker-entry.ts';
 
 // ADR-0011 phase 2 — kernel.spawnWorker allocator + host-side URL setter.

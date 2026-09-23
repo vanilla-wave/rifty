@@ -113,9 +113,9 @@ errors for it. The executed
 fork sibling failure is required in this unit; it is not deferred to the CLI
 preload residual.
 
-ready-verdict: 2026-09-23 — Contract+RED @ 9dfa2a003695fc9f8d025e034e851c27c5c7c776
-
 ## Decisions
+
+ready-verdict: 2026-09-23 — Contract+RED @ 9dfa2a003695fc9f8d025e034e851c27c5c7c776
 
 - re-cut: 2026-09-23 — required supported-Worker-startup subset of worker-threads-inherited-exec-argv enters this goal; broader draft obligations preserved — trace: none
 - 2026-09-23 — ADR-0456 extends the exact worker-thread launch to v6; program adds the same raw startup vector; eval role semantics remain unchanged; no environment channel or second handshake.

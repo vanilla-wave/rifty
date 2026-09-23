@@ -43,6 +43,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0347 | Idempotent process-manager kill during settlement |
 | 0351 | Async pre-entry readiness gates worker entry |
 | 0366 | Binary request frames for hot fs sync-RPC |
+| 0460 | Carry originating runtime failures in sealed Worker exits |
 
 ### runtime-js
 
@@ -134,6 +135,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0189 | Preview loopback WebSocket bridge |
 | 0315 | Report the effective virtual server address |
 | 0354 | Preview WebSocket browser Origin propagation |
+| 0459 | Expose unsupported HTTP Agent construction as a named ceiling |
 
 ### service-worker
 

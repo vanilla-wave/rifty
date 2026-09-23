@@ -11,6 +11,7 @@ import {
   readActiveNodeProcessBootstrap,
   readNodeProcessBootstrapIdentity,
 } from './process-bootstrap-identity.ts';
+import { currentNodeProcess } from './process.ts';
 
 type Listener = (...args: unknown[]) => void;
 
@@ -46,6 +47,7 @@ export interface WorkerStdioPlan {
 interface ActiveProcess {
   readonly pid?: unknown;
   readonly argv?: unknown;
+  readonly execArgv?: unknown;
   readonly cwd?: unknown;
   readonly env?: unknown;
   readonly stdin?: unknown;
@@ -108,6 +110,10 @@ export function activeChildProcessContext(): ActiveChildProcessContext {
       ? { entryPath: process.argv[1] }
       : {}),
   };
+}
+
+export function activeProcessExecArgv(): unknown {
+  return (currentNodeProcess() as { readonly execArgv?: unknown }).execArgv ?? [];
 }
 
 export function activeProcessStdio(): ParentStdio {
@@ -305,6 +311,7 @@ export function forwardWorkerStdio(handle: StdioHandle, plan: WorkerStdioPlan): 
 }
 
 export interface SpawnWorkerChildOptions {
+  readonly execArgv?: readonly string[];
   readonly cwd?: string;
   readonly env?: Record<string, string>;
   readonly fork: boolean;
@@ -323,6 +330,7 @@ export function spawnWorkerChild(
   const entryPath = plan.entryPath;
   const entry = buildConfiguredNodeEntryWorkerEntry({
     kind: 'program',
+    execArgv: options.execArgv ?? [],
     bin: false,
     remoteFs: true,
     ipc: options.fork ? (options.serialization ?? 'json') : 'none',

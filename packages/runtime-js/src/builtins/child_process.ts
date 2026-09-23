@@ -34,6 +34,7 @@ import {
   deserializeNodeIpcMessage,
   serializeNodeIpcMessage,
 } from '../internal/node-ipc-serialization.ts';
+import { compileNodeStartupOptions } from '../internal/node-startup-options.ts';
 import { isSandboxToolchainRealm } from '../internal/sandbox-toolchain-realm.ts';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { SameRealmStdinPipe, execScript } from './child_process-exec.ts';
@@ -47,6 +48,7 @@ import { execSync } from './child_process-sync.ts';
 import {
   type SpawnStdio,
   activeChildProcessContext,
+  activeProcessExecArgv,
   activeProcessStdio,
   forwardWorkerStdio,
   resolveWorkerStdio,
@@ -87,6 +89,7 @@ export function ensureExecSyncHandlerInstalled(): void {
 }
 
 interface SpawnOptions {
+  execArgv?: readonly string[];
   cwd?: string;
   env?: Record<string, string>;
   stdio?: SpawnStdio;
@@ -355,6 +358,7 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
       cwd: opts.cwd,
       env: opts.env,
       fork: opts.__fork === true,
+      execArgv: opts.__fork === true ? opts.execArgv : [],
       serialization: opts.serialization,
     });
     if (handle.kind !== 'worker') throw new Error('child_process.spawn: expected Worker handle');
@@ -372,6 +376,12 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     );
     forwardWorkerStdio(handle, stdio);
     return child;
+  }
+  if (opts.__fork && opts.execArgv?.length) {
+    throw new NotImplementedError(
+      'child_process.fork.execArgv',
+      'startup options require an isolated child',
+    );
   }
   return spawnViaSameRealm(command, args, opts, stdio);
 }
@@ -678,7 +688,11 @@ export function fork(
   args: string[] = [],
   opts: SpawnOptions = {},
 ): ChildProcess {
-  return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
+  const execArgv = compileNodeStartupOptions(
+    opts.execArgv === undefined ? activeProcessExecArgv() : opts.execArgv,
+    'fork',
+  ).execArgv;
+  return spawn('node', [modulePath, ...args], { ...opts, execArgv, __fork: true });
 }
 
 // `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback

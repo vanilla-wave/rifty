@@ -35,6 +35,7 @@ import {
   type WorkerSpawnSpec,
   globalProcessManager,
   readKernelProcessSpec,
+  setKernelFatalErrorSerializer,
   setKernelPreEntryHook,
 } from '@riftydev/kernel';
 import { Buffer } from '../builtins/buffer.ts';
@@ -48,6 +49,7 @@ import {
 import { resolveVmEngineName } from '../builtins/vm/engine-config.ts';
 import { QUICKJS_WASM_URL_ENV, ensureVmEngineReady } from '../builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
+import { serializeWorkerFatalError } from '../internal/worker-fatal-error.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
 
 /** Host bootstrap key for the QuickJS asset consumed by this pre-entry installer. */
@@ -118,6 +120,7 @@ export function installNodeRuntime(
   // (ADR-0334).
   if (!isNodeEntry) bindNodeProcessDescendantAuthority(process, globalProcessManager);
   if (isNode) {
+    setKernelFatalErrorSerializer(serializeWorkerFatalError);
     installNodeProxyProvenance();
     if (!isNodeEntry) sealNodeProxyBootstrap();
     patchPromiseForNextTick();

@@ -98,6 +98,7 @@ export function createOwnerExecSyncRunner(
         {
           entry: buildNodeEntryWorkerEntry(nodeEntryUrl, nodeWorkerRuntimeEnv, {
             kind: 'program',
+            execArgv: [],
             bin: false,
             remoteFs: true,
             remoteFsRoot,
@@ -214,6 +215,7 @@ export function buildNodeChildSpawnSpec(
     typeof execution === 'string'
       ? {
           kind: 'program',
+          execArgv: [],
           bin: false,
           ...common,
           nodeServe: true,

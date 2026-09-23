@@ -2,6 +2,20 @@ import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { expect, it } from 'vitest';
 import { createModuleLoader } from './loader.ts';
 
+it('loads vm constants without claiming DONT_CONTEXTIFY support', async () => {
+  const loader = createModuleLoader(new MemoryFsSync(), { cwd: '/' });
+  const namespace = await loader.import('node:vm', '/entry.mjs');
+  const builtin = namespace.default as { constants: object };
+  expect(namespace.constants).toBe(builtin.constants);
+  expect(builtin.constants).toBeTypeOf('object');
+  expect(() => Reflect.get(builtin.constants, 'DONT_CONTEXTIFY')).toThrowError(
+    expect.objectContaining({
+      name: 'NotImplementedError',
+      feature: 'vm.constants.DONT_CONTEXTIFY',
+    }),
+  );
+});
+
 it.each([
   ['fs', 'statfsSync'],
   ['child_process', 'spawnSync'],

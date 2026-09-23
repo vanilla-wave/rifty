@@ -421,6 +421,7 @@ globalThis.onmessage = ({ data }) => {
           { RIFTY_SQLITE_WASM_URL: 'https://host.test/sqlite.wasm' },
           {
             kind: 'worker-thread',
+            execArgv: [],
             remoteFs: true,
             threadId: worker.threadId,
           },
@@ -590,6 +591,7 @@ globalThis.onmessage = ({ data }) => {
       { RIFTY_KERNEL_WORKER_URL: 'https://host.test/kernel.js' },
       {
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
@@ -610,7 +612,7 @@ globalThis.onmessage = ({ data }) => {
         entry: {
           bootstrap: {
             payload: {
-              launch: { kind: 'worker-thread', remoteFsRoot: REMOTE_FS_ROOT },
+              launch: { kind: 'worker-thread', execArgv: [], remoteFsRoot: REMOTE_FS_ROOT },
             },
           },
         },
@@ -685,6 +687,7 @@ globalThis.onmessage = ({ data }) => {
           },
           {
             kind: 'worker-thread',
+            execArgv: [],
             remoteFs: true,
             threadId: worker.threadId,
           },
@@ -811,6 +814,7 @@ globalThis.onmessage = ({ data }) => {
         hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'kernel.js' },
         launch: {
           kind: 'worker-thread',
+          execArgv: [],
           remoteFs: true,
           threadId: 77,
           workerDataJson: '{"mode":"rolldown"}',

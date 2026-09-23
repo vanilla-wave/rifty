@@ -19,8 +19,9 @@ import { sealNodeProxyBootstrap } from '../internal/proxy-provenance.ts';
  */
 
 import { NotImplementedError } from '@riftydev/io';
-import type { FsSync } from '@riftydev/vfs';
+import { type FsSync, joinPath } from '@riftydev/vfs';
 import { registerNodeEvalDrainLifecycle } from '../internal/event-loop-keepalive.ts';
+import { readNodeStartupOptions } from '../internal/node-startup-options.ts';
 import { ModuleLoadError } from '../module-loader/errors.ts';
 import {
   type ModuleLoader,
@@ -251,6 +252,9 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   }
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
   try {
+    for (const preload of readNodeStartupOptions().preloads) {
+      loader.require(preload, joinPath(opts.cwd, '__preload__.cjs'));
+    }
     if (opts.bin) {
       const shim = utf8.decode(opts.vfs.readFileBytesSync(opts.entryPath));
       const target = parseBinLauncherTarget(shim);

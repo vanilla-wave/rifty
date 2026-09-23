@@ -18,6 +18,7 @@ import {
 
 const PROGRAM_LAUNCH = {
   kind: 'program' as const,
+  execArgv: [],
   bin: true,
   remoteFs: true,
   nodeServe: true,
@@ -60,8 +61,8 @@ describe('node-entry host bootstrap config', () => {
     resetNodeEntryWorkerUrl();
   });
 
-  it('uses the one atomic node-entry v5 wire contract', () => {
-    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v5');
+  it('uses the one atomic node-entry v6 wire contract', () => {
+    expect(NODE_ENTRY_BOOTSTRAP_PROTOCOL).toBe('rifty.node-entry/v6');
   });
 
   it('snapshots host runtime values out of band from the guest environment', () => {
@@ -93,7 +94,7 @@ describe('node-entry host bootstrap config', () => {
       buildNodeEntryWorkerEntry(
         'https://host.test/node.js',
         { RIFTY_TEST_VALUE: 'host-snapshot' },
-        { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
+        { kind: 'program', execArgv: [], bin: false, remoteFs: true, nodeServe: false },
       ),
     ).toMatchObject({
       kind: 'url',
@@ -102,7 +103,7 @@ describe('node-entry host bootstrap config', () => {
         protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
         payload: {
           hostRuntime: { RIFTY_TEST_VALUE: 'host-snapshot' },
-          launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
+          launch: { kind: 'program', execArgv: [], bin: false, remoteFs: true, nodeServe: false },
         },
       },
     });
@@ -120,7 +121,7 @@ describe('node-entry host bootstrap config', () => {
     expect(entry).toMatchObject({
       kind: 'url',
       bootstrap: {
-        protocol: 'rifty.node-entry/v5',
+        protocol: 'rifty.node-entry/v6',
         payload: {
           launch: {
             kind: 'eval',
@@ -146,6 +147,7 @@ describe('node-entry host bootstrap config', () => {
     ];
     const entry = buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
       kind: 'program',
+      execArgv: [],
       bin: false,
       remoteFs: true,
       nodeServe: false,
@@ -193,6 +195,7 @@ describe('node-entry host bootstrap config', () => {
     expect(() =>
       buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: true,
         nodeServe: false,
@@ -204,8 +207,10 @@ describe('node-entry host bootstrap config', () => {
   it.each([
     {
       kind: 'program',
+      execArgv: [],
       launch: {
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: true,
         nodeServe: false,
@@ -218,8 +223,10 @@ describe('node-entry host bootstrap config', () => {
     },
     {
       kind: 'worker-thread',
+      execArgv: [],
       launch: {
         kind: 'worker-thread',
+        execArgv: [],
         remoteFs: true,
         remoteFsRoot: REMOTE_FS_ROOT,
         threadId: 7,
@@ -240,6 +247,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: {
           kind: 'program',
+          execArgv: [],
           bin: false,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
@@ -250,9 +258,9 @@ describe('node-entry host bootstrap config', () => {
     configureNodeEntryWorker('https://host.test/node.js', HOST_RUNTIME);
 
     const nestedLaunches: NodeEntryLaunch[] = [
-      { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
+      { kind: 'program', execArgv: [], bin: false, remoteFs: true, nodeServe: false },
       evalLaunch({ previewScope: undefined, terminal: undefined }),
-      { kind: 'worker-thread', remoteFs: true, threadId: 11 },
+      { kind: 'worker-thread', execArgv: [], remoteFs: true, threadId: 11 },
     ];
     for (const nestedLaunch of nestedLaunches) {
       expect(buildConfiguredNodeEntryWorkerEntry(nestedLaunch)).toMatchObject({
@@ -268,6 +276,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: {
           kind: 'program',
+          execArgv: [],
           bin: true,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
@@ -281,6 +290,7 @@ describe('node-entry host bootstrap config', () => {
     const nestedLaunches: NodeEntryLaunch[] = [
       {
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: true,
         nodeServe: true,
@@ -317,6 +327,7 @@ describe('node-entry host bootstrap config', () => {
     expect(
       buildConfiguredNodeEntryWorkerEntry({
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: true,
         nodeServe: true,
@@ -340,6 +351,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: {
           kind: 'program',
+          execArgv: [],
           bin: false,
           remoteFs: true,
           nodeServe: true,
@@ -351,6 +363,7 @@ describe('node-entry host bootstrap config', () => {
     expect(() =>
       buildConfiguredNodeEntryWorkerEntry({
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: true,
         nodeServe: false,
@@ -374,6 +387,7 @@ describe('node-entry host bootstrap config', () => {
     expect(() =>
       buildNodeEntryWorkerEntry('https://host.test/node.js', HOST_RUNTIME, {
         kind: 'program',
+        execArgv: [],
         bin: false,
         remoteFs: false,
         remoteFsRoot: REMOTE_FS_ROOT,
@@ -389,6 +403,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: {
           kind: 'program',
+          execArgv: [],
           bin: false,
           remoteFs: true,
           remoteFsRoot: REMOTE_FS_ROOT,
@@ -401,6 +416,7 @@ describe('node-entry host bootstrap config', () => {
     expect(() =>
       buildConfiguredNodeEntryWorkerEntry({
         kind: 'worker-thread',
+        execArgv: [],
         remoteFs: true,
         remoteFsRoot: '/.rifty/workbench/v1/projects/project-b/tree',
         threadId: 12,
@@ -456,7 +472,7 @@ describe('node-entry host bootstrap config', () => {
       protocol: NODE_ENTRY_BOOTSTRAP_PROTOCOL,
       payload: {
         hostRuntime: { RIFTY_KERNEL_WORKER_URL: 'kernel.js' },
-        launch: { kind: 'program', bin: 'yes' },
+        launch: { kind: 'program', execArgv: [], bin: 'yes' },
       },
     });
     expect(() => readNodeEntryBootstrap()).toThrow(/node-entry bootstrap.*bin/i);
@@ -469,18 +485,21 @@ describe('node-entry host bootstrap config', () => {
     expect(() => readNodeEntryBootstrap()).toThrow(/protocol/i);
   });
 
-  it.each(['v2', 'v3'])('does not read or fall back to retired node-entry %s', (version) => {
-    publishKernelEntryBootstrap({
-      protocol: `rifty.node-entry/${version}`,
-      payload: {
-        hostRuntime: HOST_RUNTIME,
-        launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
-      },
-    });
+  it.each(['v2', 'v3', 'v4', 'v5'])(
+    'does not read or fall back to retired node-entry %s',
+    (version) => {
+      publishKernelEntryBootstrap({
+        protocol: `rifty.node-entry/${version}`,
+        payload: {
+          hostRuntime: HOST_RUNTIME,
+          launch: { kind: 'program', execArgv: [], bin: false, remoteFs: true, nodeServe: false },
+        },
+      });
 
-    expect(readNodeEntryBootstrapIfPresent()).toBeNull();
-    expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v5/i);
-  });
+      expect(readNodeEntryBootstrapIfPresent()).toBeNull();
+      expect(() => readNodeEntryBootstrap()).toThrow(/protocol.*v6/i);
+    },
+  );
 
   it.each([
     {
@@ -488,7 +507,7 @@ describe('node-entry host bootstrap config', () => {
       extra: 'futurePayloadField',
       payload: {
         hostRuntime: HOST_RUNTIME,
-        launch: { kind: 'program', bin: false, remoteFs: true, nodeServe: false },
+        launch: { kind: 'program', execArgv: [], bin: false, remoteFs: true, nodeServe: false },
         futurePayloadField: true,
       },
     },
@@ -499,6 +518,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: {
           kind: 'program',
+          execArgv: [],
           bin: false,
           remoteFs: true,
           nodeServe: false,
@@ -521,6 +541,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: {
           kind: 'worker-thread',
+          execArgv: [],
           remoteFs: true,
           threadId: 1,
           futureWorkerField: true,
@@ -534,6 +555,7 @@ describe('node-entry host bootstrap config', () => {
         hostRuntime: HOST_RUNTIME,
         launch: {
           kind: 'program',
+          execArgv: [],
           bin: false,
           remoteFs: true,
           nodeServe: false,
@@ -659,7 +681,10 @@ describe('node-entry host bootstrap config', () => {
   it.each([
     ['program', PROGRAM_LAUNCH],
     ['eval', EVAL_LAUNCH],
-    ['worker-thread', { kind: 'worker-thread' as const, remoteFs: true, threadId: 7 }],
+    [
+      'worker-thread',
+      { kind: 'worker-thread' as const, execArgv: [], remoteFs: true, threadId: 7 },
+    ],
   ])('rejects inherited required %s launch fields', (_kind, launch) => {
     const inherited = Object.create(launch) as typeof launch;
 

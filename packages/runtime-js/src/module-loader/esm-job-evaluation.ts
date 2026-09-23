@@ -1,6 +1,11 @@
 import { dirname } from '@riftydev/vfs';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
-import { fileURLFromResolvedPath } from '../internal/posix-file-url.ts';
+import { readNodeStartupOptions } from '../internal/node-startup-options.ts';
+import {
+  URLConstructor,
+  fileURLFromResolvedPath,
+  fileURLToPathPosix,
+} from '../internal/posix-file-url.ts';
 import { hasURLScheme } from '../internal/url-scheme.ts';
 import { ModuleLoadError } from './errors.ts';
 import { collectLinkedJobs } from './esm-job-linker.ts';
@@ -246,9 +251,14 @@ function factoryArguments(
     }
   };
   const assetPath = (specifier: string): string => deps.resolve(specifier, resolved.id, true).id;
-  const metaResolve = (specifier: string): string => {
+  const resolveParentURL = readNodeStartupOptions().resolveParentURL;
+  const metaResolve = (specifier: string, parentURL?: string | URL): string => {
     if (hasURLScheme(specifier, 'node')) return specifier;
-    const dependency = deps.resolve(specifier, resolved.id, true);
+    const parent =
+      resolveParentURL && parentURL !== undefined
+        ? fileURLToPathPosix(new URLConstructor(String(parentURL)))
+        : resolved.id;
+    const dependency = deps.resolve(specifier, parent, true);
     return dependency.kind === 'builtin'
       ? dependency.id
       : fileURLFromResolvedPath(dependency.id).href;

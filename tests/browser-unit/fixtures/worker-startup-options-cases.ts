@@ -31,6 +31,10 @@ const flags = [
   'node',
   '--conditions',
   'development',
+  '--conditions',
+  'argument-first',
+  '--conditions',
+  'declaration-first',
 ];
 const common: Readonly<Record<string, string>> = {
   'preload-a.cjs': `globalThis.preloadOrder = ['a']; require('./shared.cjs').count++;`,
@@ -40,8 +44,15 @@ const common: Readonly<Record<string, string>> = {
     name: 'branch-pkg',
     imports: {
       '#branch': { development: './development.cjs', node: './node.cjs', default: './default.cjs' },
+      '#ordered': {
+        'declaration-first': './declaration.cjs',
+        'argument-first': './argument.cjs',
+        node: './node.cjs',
+      },
     },
   }),
+  'declaration.cjs': 'module.exports="declaration-first";',
+  'argument.cjs': 'module.exports="argument-first";',
   'development.cjs': 'module.exports="development";',
   'node.cjs': 'module.exports="node";',
   'default.cjs': 'module.exports="default";',
@@ -51,12 +62,14 @@ const common: Readonly<Record<string, string>> = {
 import {parentPort} from 'node:worker_threads';
 import {createRequire} from 'node:module';
 import branch from '#branch';
+import ordered from '#ordered';
 const require = createRequire(import.meta.url);
 parentPort.postMessage({
   argv: process.execArgv,
   preloads: globalThis.preloadOrder ?? [],
   cached: require('./shared.cjs').count,
   branches: [require('#branch'), branch, (await import('#branch')).default],
+  order: [require('#ordered'), ordered, (await import('#ordered')).default],
   alternateParent: import.meta.resolve('./target.js', new URL('./alternate/anchor.mjs', import.meta.url)).endsWith('/alternate/target.js'),
   builtin: import.meta.resolve('node:fs'),
 });`,
@@ -126,4 +139,91 @@ function child(options) { return new Promise((done,reject) => {
  catch(error){console.log('OPTIONS|'+JSON.stringify([error.name,error.code]));}
 }console.log('OPTIONS|'+await run('entry.cjs',[]));})()${finish}`,
   },
+  ...(
+    [
+      'typed',
+      'explicit-exit',
+      'handled',
+      'non-error',
+      'undefined',
+      'function',
+      'proxy',
+      'code-function',
+      'cause-function',
+      'serialization-failure',
+      'cross-realm',
+      'severed-error',
+      'metadata',
+    ] as const
+  ).map(
+    (mode): WorkerStartupOptionsCase => ({
+      name: `preload-terminal-${mode}`,
+      workers: 1,
+      files: {
+        'entry.cjs': `console.log('OPTIONS|ENTRY-MUST-NOT-RUN');`,
+        'fatal.cjs':
+          mode === 'typed'
+            ? `process.stdout.write('before-fatal\\n'); throw Object.assign(new TypeError('typed-preload-failure'), {code:'E_PRELOAD'});`
+            : mode === 'explicit-exit'
+              ? 'process.exit(1);'
+              : mode === 'handled'
+                ? `process.on('uncaughtException', error => { process.stdout.write('handled:' + error.message + '\\n'); }); throw new Error('handled-preload');`
+                : mode === 'undefined'
+                  ? 'throw undefined;'
+                  : mode === 'function'
+                    ? 'throw function nope(){};'
+                    : mode === 'proxy'
+                      ? 'throw new Proxy({a:1},{});'
+                      : mode === 'code-function'
+                        ? `throw Object.assign(new Error('code-function'),{code:()=>1});`
+                        : mode === 'cause-function'
+                          ? `throw new Error('cause-function',{cause:()=>1});`
+                          : mode === 'serialization-failure'
+                            ? `const failure=function(){};Object.defineProperty(failure,'name',{get(){throw new Error('name-getter')}});throw failure;`
+                            : mode === 'cross-realm'
+                              ? `const error=require('node:vm').runInNewContext("new TypeError('foreign')");
+Object.assign(error,{code:'E_FOREIGN',requireStack:['one'],custom:{n:4},stack:'TypeError: foreign\\n    at foreign-origin'});throw error;`
+                              : mode === 'severed-error'
+                                ? `const error=Object.assign(new TypeError('severed'),{code:'E_SEVERED'});Object.setPrototypeOf(error,null);throw error;`
+                                : mode === 'metadata'
+                                  ? `throw Object.assign(new TypeError('metadata'),{code:42,requireStack:['one','two'],custom:{n:4}});`
+                                  : `throw {kind:'plain-throw', code:'E_PLAIN'};`,
+      },
+      parent: `${launch}
+(async () => {
+ await new Promise((done) => {
+  const events=[];
+  const worker=new Worker(resolve('entry.cjs'),{execArgv:['--require','./fatal.cjs'], stdout:true, stderr:true});
+  worker.stdout.on('data', bytes=>events.push(['stdout', bytes.toString().trim()]));
+  worker.stderr.resume();
+  worker.on('error',error=>events.push(['error', ${
+    ['cross-realm', 'severed-error', 'metadata'].includes(mode)
+      ? `({name:error.name,message:error.message,code:error.code,requireStack:error.requireStack,custom:error.custom,isTypeError:error instanceof TypeError,stackMessage:typeof error.stack === 'string' && error.stack.includes(error.message)})`
+      : `error instanceof Error ? {
+   name:error.name, message:error.message, code:error.code, cause:error.cause, source:error.stack.includes('fatal.cjs:')
+  } : error`
+  }]));
+  worker.once('exit',code=>{events.push(['exit',code]);console.log('OPTIONS|'+JSON.stringify(events));done();});
+ });
+})()${finish}`,
+    }),
+  ),
 ];
+
+/** Existing util.inspect.custom boundary; deliberately separate from supported native parity. */
+export const workerCustomInspectCeilingCase: WorkerStartupOptionsCase = {
+  name: 'custom-inspect-ceiling',
+  workers: 1,
+  files: {
+    'entry.cjs': `console.log('OPTIONS|ENTRY-MUST-NOT-RUN');`,
+    'custom.cjs': `throw {fn:()=>1, [Symbol.for('nodejs.util.inspect.custom')](){throw function inspectFailure(){}}};`,
+  },
+  parent: `${launch}
+(async()=>{await new Promise(done=>{
+ const events=[];
+ const worker=new Worker(resolve('entry.cjs'),{execArgv:['--require','./custom.cjs'],stderr:true});
+ worker.stderr.resume();
+ worker.on('error',error=>events.push(['error',error.name,error.code ?? null,error.feature ?? null]));
+ worker.on('exit',code=>{events.push(['exit',code]);console.log('OPTIONS|'+JSON.stringify(events));done();});
+});})()${finish}`,
+};
