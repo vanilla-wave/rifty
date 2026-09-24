@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { pickStarter } from './helpers/playground.ts';
+import { pickStarter, waitForProjectIndex } from './helpers/playground.ts';
 test('Playground names legacy storage loss without a false recovery action', async ({ page }) => {
   await page.goto('/unit-harness.html');
   await page.evaluate(async () => {
@@ -13,6 +13,7 @@ test('Playground names legacy storage loss without a false recovery action', asy
     await writer.close();
   });
   await page.goto('/');
+  await waitForProjectIndex(page);
   const notice = page.locator('[data-health-scope="storage-layout"]');
   await expect(notice).toContainText('legacy per-file OPFS v1');
   await expect(notice).toContainText('not carried over');
@@ -22,6 +23,7 @@ test('Playground names legacy storage loss without a false recovery action', asy
   await pickStarter(page, 'project-files');
   await expect(notice).toBeVisible();
   await page.reload();
+  await waitForProjectIndex(page);
   await expect(page.locator('[data-workbench-health="opening"]')).toHaveCount(0);
   await expect(page.locator('[data-action="open-launcher"]')).toBeEnabled();
   await expect(notice).toHaveCount(0);

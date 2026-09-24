@@ -8,6 +8,7 @@ import {
   pickStarter,
   resetSandboxThroughUi,
   terminalBuffer,
+  waitForProjectIndex,
 } from './helpers/playground.ts';
 
 function editorTab(page: Page, name: string) {
@@ -95,6 +96,7 @@ test.describe('M0 — Foundation', () => {
     page,
   }) => {
     await page.goto('/');
+    await waitForProjectIndex(page);
     await expect(page.getByRole('strong').filter({ hasText: 'rifty' })).toBeVisible();
     const launcher = page.locator('[data-testid="launcher"]');
     await expect(launcher).toBeVisible({ timeout: 30_000 });
@@ -244,6 +246,7 @@ test.describe('M0 — Foundation', () => {
     // opposite regression (guard accidentally removed and App renders without
     // SAB available, downstream code blows up silently).
     await page.goto('/');
+    await waitForProjectIndex(page);
     await expect(page.locator('[data-banner="coi-fatal"]')).toHaveCount(0);
     // The App must have rendered — the storage badge proves `bootstrapPlayground`
     // resolved (it only paints after `initBackend()` returns).

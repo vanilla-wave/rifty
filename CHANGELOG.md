@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- e2e: `pickStarter`/`selectPreset`/`resetSandboxThroughUi` open the launcher through one `openLauncher`, and specs touching the App shell after `goto`/`reload` wait `waitForProjectIndex`, instead of 2s/5s deadlines (hosted webpack flake on cold CI runners; closes `toolchain-build/hosted-webpack-launcher-readiness-timeout`).
+
 - Add the public `checkSandboxSupport()` browser prerequisite report to `@riftydev/workbench`, and settle its probe teardown against the terminated Worker's OPFS lock (ADR-0437, ADR-0438, ADR-0439). SDK README samples keep gating on `checkCapabilities().sufficient`; the published support assets build from one publishing step the browser suite reuses in a scratch directory.
 
 - Make replica browser fixture setup join native settlement before judging short

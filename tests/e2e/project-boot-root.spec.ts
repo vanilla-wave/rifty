@@ -1,6 +1,6 @@
 /** The companion exposes one public project-rooted cwd; owner storage stays private. */
 import { expect, test } from '@playwright/test';
-import { pickStarter } from './helpers/playground.ts';
+import { pickStarter, waitForProjectIndex } from './helpers/playground.ts';
 
 test.describe('project boot root', () => {
   test('root-keyed surfaces expose /, never an owner root or Starter-derived path', async ({
@@ -8,6 +8,7 @@ test.describe('project boot root', () => {
   }) => {
     test.setTimeout(60_000);
     await page.goto('/');
+    await waitForProjectIndex(page);
     await expect(page.locator('[data-action="open-launcher"]')).toContainText('Choose project');
     await pickStarter(page, 'project-files');
 
