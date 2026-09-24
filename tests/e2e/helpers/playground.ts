@@ -102,14 +102,22 @@ export async function openShellTerminal(
   return target;
 }
 
-export async function pickStarter(page: Page, id = 'project-files'): Promise<void> {
+/**
+ * Open the launcher once the App shell is ready. The shell mounts only after
+ * Workbench admission (owner Worker boot) — seconds past `load` on a cold dev
+ * server — so wait for readiness, never a fixed sub-boot deadline. The cold-boot
+ * chooser auto-opens in the same task that reports the index ready: no race.
+ */
+export async function openLauncher(page: Page): Promise<Locator> {
   const launcher = page.locator('[data-testid="launcher"]');
-  if (!(await launcher.isVisible({ timeout: 1_000 }).catch(() => false))) {
-    await page.click('[data-action="open-launcher"]', { timeout: 2_000 }).catch(async (err) => {
-      if (!(await launcher.isVisible({ timeout: 0 }).catch(() => false))) throw err;
-    });
-  }
-  await expect(launcher).toBeVisible({ timeout: 5_000 });
+  await waitForProjectIndex(page);
+  if (!(await launcher.isVisible())) await page.locator('[data-action="open-launcher"]').click();
+  await expect(launcher).toBeVisible({ timeout: 10_000 });
+  return launcher;
+}
+
+export async function pickStarter(page: Page, id = 'project-files'): Promise<void> {
+  const launcher = await openLauncher(page);
   await page.getByRole('button', { name: 'Starters', exact: true }).click();
   await page.click(`[data-preset="${id}"]`);
 
@@ -183,13 +191,7 @@ export async function bootShell(page: Page): Promise<void> {
 
 export async function resetSandboxThroughUi(page: Page): Promise<void> {
   await page.goto('/');
-  const launcher = page.locator('[data-testid="launcher"]');
-  if (!(await launcher.isVisible({ timeout: 10_000 }).catch(() => false))) {
-    const trigger = page.locator('[data-action="open-launcher"]');
-    await expect(trigger).toBeEnabled({ timeout: 90_000 });
-    await trigger.click({ force: true });
-  }
-  await expect(launcher).toBeVisible({ timeout: 30_000 });
+  const launcher = await openLauncher(page);
   await launcher.getByRole('button', { name: /^Projects/ }).click();
   await launcher.getByRole('button', { name: 'Reset sandbox' }).click();
   const dialog = page.locator('.rf-dialog[role="dialog"]');
@@ -439,17 +441,7 @@ function terminalPattern(text: string | RegExp): string | RegExp {
 }
 
 export async function selectPreset(page: Page, id: string): Promise<void> {
-  const launcher = page.locator('[data-testid="launcher"]');
-  const trigger = page.locator('[data-action="open-launcher"]');
-  // The project-first chooser auto-opens on cold boot. Open it ourselves only
-  // when that did not happen.
-  if (!(await launcher.isVisible({ timeout: 3_000 }).catch(() => false))) {
-    await expect(trigger).toBeEnabled({ timeout: 90_000 });
-    // The auto-open may win after the visibility sample; force keeps this
-    // idempotent open intent from hanging behind the launcher's own veil.
-    await trigger.click({ force: true });
-  }
-  await expect(launcher).toBeVisible({ timeout: 10_000 });
+  const launcher = await openLauncher(page);
   const row = page.locator(`[data-preset="${id}"]`);
   if (!(await row.isVisible().catch(() => false))) {
     await page.getByRole('button', { name: 'Starters' }).click();
