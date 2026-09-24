@@ -176,7 +176,7 @@ challenge: 2026-09-15 — 6 problems (all resolved before FIT; lines below)
   proven for the 7.3.6/esbuild path only; the 8.0.16/rolldown config bundle
   and vitest's `.ts` transform are first exercised at item 12 — map fog), a
   wall found there re-charts the map.
-- amend: 2026-09-23 — user: "A: поправить I7 (Recommended)" — scenario 5 + I7: watch mode and other vite versions move from ❌-with-loud-throw to ⚠️ unclaimed with the observed boundary, no mode/version bans (STOP-1e from item 12 Contract+RED: non-TTY shell stdin makes bare `vitest` run once as Node does with piped stdin and `--watch` wait on fs polling; vite 7.3.6/8.0.x/8.1.x install, 8.2+ fails loudly on `lightningcss.version`; evidence `docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md` on the goal branch).
+- amend: 2026-09-23 — user: "A: поправить I7 (Recommended)" — scenario 5 + I7: watch mode and other vite versions move from ❌-with-loud-throw to ⚠️ unclaimed with the observed boundary, no mode/version bans (STOP-1e from item 12 Contract+RED: non-TTY shell stdin makes bare `vitest` run once as Node does with piped stdin and `--watch` wait on fs polling; vite 7.3.6/8.0.x/8.1.x install, 8.2+ fails loudly on `lightningcss.version`; evidence: item 12's acceptance evidence file, landing with item 12).
 - tier: works (2026-09-15, agent) — honest happy path + loud throws; the
   scenario has no crash/reload or fault-injection axis. A child touching
   concurrency/IPC (keepalive, advanced IPC) still owes its DoD `## Fault matrix`
