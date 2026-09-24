@@ -40,6 +40,19 @@ these replace host `Function` with no ceiling —
 - CJS: `eval('global[k] = 1')`, `(function(){return this})()[k] = 1`,
   `(0, global)[k] = 1`.
 
+## Known false positives
+
+Observed 2026-09-23 (symbol-key-global-write-guard-precision IMPLEMENT,
+REV-12), re-run 2026-09-24 @ `8c8993649` (`createModuleLoader(vfs).require`
+over the installed `fetch-blob@3.2.0/streams.cjs`, `pnpm exec tsx`):
+`THROW module-loader.cjs-global-function-assignment`. The module's
+`Object.assign(globalThis, require('node:stream/web'))` (non-literal
+source) sits inside `if (!globalThis.ReadableStream)` — dead in every
+browser realm — yet the load-time ceiling rejects the module, so
+`node-fetch@3.3.2` (`src/index.js` → `fetch-blob/from.js` → `index.js` →
+`streams.cjs`) cannot load. A per-key runtime
+check of `Object.assign` sources (ADR-0444's shape) is one candidate.
+
 ## Options or Next
 
 - Define a finite closure target: list the exact alias/property/reflection shapes
