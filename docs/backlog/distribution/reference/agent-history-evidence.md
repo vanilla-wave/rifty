@@ -80,3 +80,7 @@ fields and their native content variants at the same boundary (Pi 0.85.1 types.d
 - GREEN: history/session suite — 30 passed; agent typecheck passed.
 - Browser agent-core rerun: 17 passed (16.3s).
 - Full `pnpm pr:check` after repair: 25/25 passed; test:run passed first attempt (228.7s), no isolated reruns.
+
+Independent final_review verify: Final+GREEN PASS at e8f41f1920c602d3fa4ffc2da4d62dede9ca59d9.
+Reviewer acknowledged original admission miss, independently reran 30 tests and
+verified preservation of valid optional metadata/deep isolation. No residuals.

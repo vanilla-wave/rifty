@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "PASS: original issue #355 and ready contract delivered; implementation, preparation and raw RED/GREEN evidence independently reviewed. Unit/session rerun: 18 passed; native Pi seed/reset/prompt probe passed; supplied full pr:check and 17-test browser run passed.",
+  "merge_call": "PASS after admission repair: Greptile discussion_r4099302456 violation fixed against pinned Pi 0.85.1 required fields. Raw RED: 12 new failures; independent GREEN rerun: 30 passed. Native optional-metadata/isolation probe passed. Full gate 25/25 and browser 17/17 raw logs checked; no residuals.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "55f756c5f4acedc83713790980361d809fcde54d",
-  "unit_goal_source": "docs/backlog/distribution/agent-history.md at 55f756c5f4acedc83713790980361d809fcde54d; original https://github.com/vanilla-wave/rifty/issues/355 retrieved with gh issue view; ADR-0466, ADR-0424, ADR-0436, ADR-0427; BASE 2c9bbd30109692647c0174f8930f713007150f67",
+  "reviewed_sha": "e8f41f1920c602d3fa4ffc2da4d62dede9ca59d9",
+  "unit_goal_source": "PR #356 https://github.com/vanilla-wave/rifty/pull/356; original issue #355 https://github.com/vanilla-wave/rifty/issues/355; historical agent-history contract read at 55f756c5f4acedc83713790980361d809fcde54d; ADR-0466, ADR-0424, ADR-0436, ADR-0427; BASE 2c9bbd30109692647c0174f8930f713007150f67",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -21,7 +21,7 @@
       "source": "acceptance",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/agent/src/history.test.ts:115; packages/agent/src/history.test.ts:128; packages/agent/src/history.test.ts:176",
+      "citation": "packages/agent/src/history.test.ts:115; packages/agent/src/history.test.ts:128; packages/agent/src/history.test.ts:194",
       "note": ""
     },
     {
@@ -53,15 +53,15 @@
       "source": "fault-matrix",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/agent/src/history.test.ts:160; packages/agent/src/history.ts:25; packages/agent/src/history.ts:41; packages/agent/src/session.ts:54",
+      "citation": "packages/agent/src/history.test.ts:160; packages/agent/src/history.ts:87; packages/agent/src/history.ts:103; packages/agent/src/session.ts:54",
       "note": ""
     },
     {
-      "row": "Orphan/duplicate/mismatched result or malformed envelope rejects before host/model work",
+      "row": "Orphan/duplicate/mismatched result or malformed native required fields reject before host/model work",
       "source": "fault-matrix",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/agent/src/history.test.ts:163; packages/agent/src/history.ts:9; packages/agent/src/history.ts:20",
+      "citation": "packages/agent/src/history.test.ts:163; packages/agent/src/history.test.ts:169; packages/agent/src/history.ts:27; packages/agent/src/history.ts:36; packages/agent/src/history.ts:53; packages/agent/src/history.ts:81",
       "note": ""
     },
     {
@@ -69,7 +69,7 @@
       "source": "fault-matrix",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/agent/src/history.test.ts:195",
+      "citation": "packages/agent/src/history.test.ts:213",
       "note": ""
     },
     {
