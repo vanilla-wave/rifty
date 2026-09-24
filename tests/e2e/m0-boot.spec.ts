@@ -8,6 +8,7 @@ import {
   pickStarter,
   resetSandboxThroughUi,
   terminalBuffer,
+  waitForProjectIndex,
 } from './helpers/playground.ts';
 
 function editorTab(page: Page, name: string) {
@@ -95,6 +96,7 @@ test.describe('M0 — Foundation', () => {
     page,
   }) => {
     await page.goto('/');
+    await waitForProjectIndex(page);
     await expect(page.getByRole('strong').filter({ hasText: 'rifty' })).toBeVisible();
     const launcher = page.locator('[data-testid="launcher"]');
     await expect(launcher).toBeVisible({ timeout: 30_000 });

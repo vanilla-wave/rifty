@@ -18,7 +18,8 @@ async function waitForWorkspaceOwner(page: Page): Promise<void> {
   });
 }
 
-async function waitForProjectIndex(page: Page): Promise<void> {
+/** App shell ready: mounted after Workbench admission and the project index loaded. */
+export async function waitForProjectIndex(page: Page): Promise<void> {
   await expect(page.locator('.rf-app[data-project-index="ready"]')).toBeVisible({
     timeout: 90_000,
   });
@@ -111,7 +112,9 @@ export async function openShellTerminal(
 export async function openLauncher(page: Page): Promise<Locator> {
   const launcher = page.locator('[data-testid="launcher"]');
   await waitForProjectIndex(page);
-  if (!(await launcher.isVisible())) await page.locator('[data-action="open-launcher"]').click();
+  if (!(await launcher.isVisible())) {
+    await page.locator('[data-action="open-launcher"]').click({ timeout: 10_000 });
+  }
   await expect(launcher).toBeVisible({ timeout: 10_000 });
   return launcher;
 }

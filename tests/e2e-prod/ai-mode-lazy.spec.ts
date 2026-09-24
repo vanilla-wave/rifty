@@ -2,7 +2,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { agentModelServer } from '../e2e/fixtures/agent-model-server.ts';
-import { pickStarter } from '../e2e/helpers/playground.ts';
+import { pickStarter, waitForProjectIndex } from '../e2e/helpers/playground.ts';
 
 test('production loads Monaco for the project and agent/Pi only for chat', async ({ page }) => {
   test.setTimeout(120_000);
@@ -36,6 +36,7 @@ test('production loads Monaco for the project and agent/Pi only for chat', async
   const model = await agentModelServer(['Production chat streamed.']);
   try {
     await page.goto('/');
+    await waitForProjectIndex(page);
     await expect(page.getByRole('button', { name: '+chat', exact: true })).toBeDisabled();
     expect(editorsFetched).toEqual([]);
     await pickStarter(page);
