@@ -180,6 +180,9 @@ describe('restored native agent history', () => {
       try {
         await session.send('continue');
         expect(session.status(), session.detail()).toBe('done');
+        expect(run.contexts[0]?.messages.slice(0, seed.length)).toEqual(seed);
+        expect((await session.exportTrace()).transcript.slice(0, seed.length)).toEqual(seed);
+        expect(run.executions()).toBe(0);
       } finally {
         await session.dispose();
       }
