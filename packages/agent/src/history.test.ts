@@ -66,7 +66,7 @@ function setup(initialMessages: readonly AgentMessage[] = [], replies = [assista
         parameters: Type.Object({}),
         async execute() {
           executions++;
-          return { content: [{ type: 'text' as const, text: 'new result' }] };
+          return { content: [{ type: 'text' as const, text: 'new result' }], details: {} };
         },
       },
     ],
