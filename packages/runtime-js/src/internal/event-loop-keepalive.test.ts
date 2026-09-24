@@ -39,6 +39,7 @@ describe('event-loop keepalive', () => {
     expect(queue).toHaveLength(1);
     unref();
     queue.shift()!();
+    queue.shift()!(); // ADR-0445 rule 7: idle confirmed one host task later
     await expect(drain).resolves.toBeUndefined();
     recordRejection(new Error('next invocation'));
     const next = awaitDrain({ scheduleMacrotask: (callback) => queue.push(callback) });
@@ -70,6 +71,8 @@ describe('event-loop keepalive', () => {
     expect(flushed).toEqual([]);
     unref();
     queue.shift()!();
+    expect(flushed).toEqual([]);
+    queue.shift()!(); // ADR-0445 rule 7: idle confirmed one host task later
     await drain;
     expect(flushed).toEqual(['print']);
   });
@@ -98,7 +101,8 @@ describe('event-loop keepalive', () => {
     const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     queue.shift()!(); // first tick: refCount=1, re-schedules
     unref();
-    queue.shift()!(); // next tick: refCount=0 → resolves
+    queue.shift()!(); // next tick: refCount=0 → confirms one host task later
+    queue.shift()!(); // ADR-0445 rule 7: still 0, no rejection → resolves
     await expect(p).resolves.toBeUndefined();
   });
 
@@ -122,13 +126,17 @@ describe('event-loop keepalive', () => {
     await expect(p).rejects.toThrow(/exceeded keepalive drain cap/);
   });
 
-  it('awaitDrain resolves on the first tick when already drained (refCount 0)', async () => {
+  // ADR-0445 rule 7 (was: resolves on the first tick): a Chromium
+  // `unhandledrejection` task may sit behind the first zero-ref sample.
+  it('awaitDrain resolves one confirming tick after the first zero-ref sample', async () => {
     // No ref() — refCount stays 0
     const queue: Array<() => void> = [];
     const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     expect(queue.length).toBe(1);
-    queue.shift()!(); // first tick: refCount=0 → resolves immediately
-    expect(queue.length).toBe(0); // no second tick queued
+    queue.shift()!(); // first tick: refCount=0 → one confirming tick
+    expect(queue.length).toBe(1);
+    queue.shift()!(); // still 0, no rejection → resolves
+    expect(queue.length).toBe(0); // no third tick queued
     await expect(p).resolves.toBeUndefined();
   });
 
@@ -166,6 +174,7 @@ describe('event-loop keepalive', () => {
       });
       drain = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
       queue.shift()!();
+      queue.shift()!(); // ADR-0445 rule 7: idle confirmed one host task later
       interceptedCalls = calls;
     } finally {
       Object.defineProperty(Promise, 'resolve', descriptor);

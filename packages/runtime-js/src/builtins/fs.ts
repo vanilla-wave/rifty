@@ -17,6 +17,7 @@ import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
 import { type StatOptions, Stats } from './fs-stats.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { statfsSync } from './loud-members.ts';
+import { runNodeCallback } from './process-lifecycle-events.ts';
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
 type OpenFlags = string | number;
@@ -255,8 +256,8 @@ class Dir implements AsyncIterable<Dirent> {
       Promise.resolve()
         .then(() => this.readSync())
         .then(
-          (dirent) => cb(null, dirent),
-          (err) => cb(err as NodeJS.ErrnoException),
+          (dirent) => runNodeCallback(cb, null, dirent),
+          (err) => runNodeCallback(cb, err as NodeJS.ErrnoException),
         );
       return;
     }
@@ -275,8 +276,8 @@ class Dir implements AsyncIterable<Dirent> {
       Promise.resolve()
         .then(() => this.closeSync())
         .then(
-          () => cb(null),
-          (err) => cb(err as NodeJS.ErrnoException),
+          () => runNodeCallback(cb, null),
+          (err) => runNodeCallback(cb, err as NodeJS.ErrnoException),
         );
       return;
     }
@@ -1116,8 +1117,8 @@ export function futimes(
   Promise.resolve()
     .then(() => futimesSync(fd, atime, mtime))
     .then(
-      () => cb(null),
-      (e) => cb(e as NodeJS.ErrnoException),
+      () => runNodeCallback(cb, null),
+      (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1236,8 +1237,8 @@ export function readFile(
   const optsFinal = typeof opts === 'function' ? null : opts;
   const cbFinal = (typeof opts === 'function' ? opts : cb) as Callback<Uint8Array | string>;
   promises.readFile(p, optsFinal).then(
-    (v) => cbFinal(null, v),
-    (e) => cbFinal(e as NodeJS.ErrnoException),
+    (v) => runNodeCallback(cbFinal, null, v),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );
 }
 
@@ -1255,8 +1256,8 @@ export function open(
   Promise.resolve()
     .then(() => openSync(p, flags, mode))
     .then(
-      (fd) => cbFinal(null, fd),
-      (e) => cbFinal(e as NodeJS.ErrnoException),
+      (fd) => runNodeCallback(cbFinal, null, fd),
+      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1264,8 +1265,8 @@ export function close(fd: number, cb: VoidCallback): void {
   Promise.resolve()
     .then(() => closeSync(fd))
     .then(
-      () => cb(null),
-      (e) => cb(e as NodeJS.ErrnoException),
+      () => runNodeCallback(cb, null),
+      (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1319,8 +1320,8 @@ export function read(
   Promise.resolve()
     .then(() => readSync(fd, buffer, options))
     .then(
-      (bytesRead) => cbFinal(null, bytesRead, buffer),
-      (e) => cbFinal(e as NodeJS.ErrnoException),
+      (bytesRead) => runNodeCallback(cbFinal, null, bytesRead, buffer),
+      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1358,8 +1359,8 @@ export function write(
       return writeSync(fd, data, offset, length, position);
     })
     .then(
-      (bytesWritten) => cbFinal(null, bytesWritten, data),
-      (e) => cbFinal(e as NodeJS.ErrnoException),
+      (bytesWritten) => runNodeCallback(cbFinal, null, bytesWritten, data),
+      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1367,8 +1368,8 @@ export function fstat(fd: number, cb: StatsCallback): void {
   Promise.resolve()
     .then(() => fstatSync(fd))
     .then(
-      (stats) => cb(null, stats),
-      (e) => cb(e as NodeJS.ErrnoException),
+      (stats) => runNodeCallback(cb, null, stats),
+      (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1378,8 +1379,8 @@ export function ftruncate(fd: number, lenOrCb?: number | VoidCallback, cb?: Void
   Promise.resolve()
     .then(() => ftruncateSync(fd, len))
     .then(
-      () => cbFinal(null),
-      (e) => cbFinal(e as NodeJS.ErrnoException),
+      () => runNodeCallback(cbFinal, null),
+      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1392,8 +1393,8 @@ export function writeFile(
   const optsFinal = typeof opts === 'function' ? null : opts;
   const cbFinal = (typeof opts === 'function' ? opts : cb) as Callback<void>;
   promises.writeFile(p, data, optsFinal).then(
-    () => cbFinal(null),
-    (e) => cbFinal(e as NodeJS.ErrnoException),
+    () => runNodeCallback(cbFinal, null),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );
 }
 
@@ -1405,8 +1406,8 @@ export function readdir(
   const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
   const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<string[] | Dirent[]>;
   promises.readdir(p, opts).then(
-    (v) => cbFinal(null, v),
-    (e) => cbFinal(e as NodeJS.ErrnoException),
+    (v) => runNodeCallback(cbFinal, null, v),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );
 }
 
@@ -1418,8 +1419,8 @@ export function mkdir(
   const opts = typeof optsOrCb === 'function' ? {} : optsOrCb;
   const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<void>;
   promises.mkdir(p, opts).then(
-    () => cbFinal(null),
-    (e) => cbFinal(e as NodeJS.ErrnoException),
+    () => runNodeCallback(cbFinal, null),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );
 }
 
@@ -1433,15 +1434,15 @@ export function stat(
   const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
   const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<Stats>;
   promises.stat(p, opts).then(
-    (v) => cbFinal(null, v),
-    (e) => cbFinal(e as NodeJS.ErrnoException),
+    (v) => runNodeCallback(cbFinal, null, v),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );
 }
 
 export function unlink(p: string, cb: Callback<void>): void {
   promises.unlink(p).then(
-    () => cb(null),
-    (e) => cb(e as NodeJS.ErrnoException),
+    () => runNodeCallback(cb, null),
+    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
   );
 }
 
@@ -1455,15 +1456,15 @@ export function lstat(
   const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
   const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<Stats>;
   promises.lstat(p, opts).then(
-    (v) => cbFinal(null, v),
-    (e) => cbFinal(e as NodeJS.ErrnoException),
+    (v) => runNodeCallback(cbFinal, null, v),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );
 }
 
 const _realpath = (p: string, cb: Callback<string>): void => {
   promises.realpath(p).then(
-    (v) => cb(null, v),
-    (e) => cb(e as NodeJS.ErrnoException),
+    (v) => runNodeCallback(cb, null, v),
+    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
   );
 };
 // `fs.realpath.native` mirrors `realpathSync.native` — chokidar/promisify reach
@@ -1474,16 +1475,16 @@ export const realpath: typeof _realpath & { native: typeof _realpath } = Object.
 
 export function readlink(p: string, cb: Callback<string>): void {
   promises.readlink(p).then(
-    (v) => cb(null, v),
-    (e) => cb(e as NodeJS.ErrnoException),
+    (v) => runNodeCallback(cb, null, v),
+    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
   );
 }
 
 export function access(p: string, modeOrCb: number | Callback<void>, cb?: Callback<void>): void {
   const cbFinal = (typeof modeOrCb === 'function' ? modeOrCb : cb) as Callback<void>;
   promises.access(p).then(
-    () => cbFinal(null),
-    (e) => cbFinal(e as NodeJS.ErrnoException),
+    () => runNodeCallback(cbFinal, null),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );
 }
 
@@ -1496,15 +1497,15 @@ export function copyFile(
   const mode = typeof modeOrCb === 'number' ? modeOrCb : 0;
   const cbFinal = (typeof modeOrCb === 'function' ? modeOrCb : cb) as Callback<void>;
   promises.copyFile(src, dst, mode).then(
-    () => cbFinal(null),
-    (e) => cbFinal(e as NodeJS.ErrnoException),
+    () => runNodeCallback(cbFinal, null),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );
 }
 
 export function rename(src: string, dst: string, cb: Callback<void>): void {
   promises.rename(src, dst).then(
-    () => cb(null),
-    (e) => cb(e as NodeJS.ErrnoException),
+    () => runNodeCallback(cb, null),
+    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
   );
 }
 
@@ -1514,8 +1515,8 @@ export function truncate(p: PathLike, lenOrCb?: number | VoidCallback, cb?: Void
   Promise.resolve()
     .then(() => truncateSync(p, len))
     .then(
-      () => cbFinal(null),
-      (e) => cbFinal(e as NodeJS.ErrnoException),
+      () => runNodeCallback(cbFinal, null),
+      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1529,8 +1530,8 @@ export function mkdtemp(
   Promise.resolve()
     .then(() => mkdtempSync(prefix, opts))
     .then(
-      (dir) => cbFinal(null, dir),
-      (e) => cbFinal(e as NodeJS.ErrnoException),
+      (dir) => runNodeCallback(cbFinal, null, dir),
+      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
     );
 }
 
@@ -1544,8 +1545,8 @@ export function opendir(
   Promise.resolve()
     .then(() => opendirSync(p, opts))
     .then(
-      (dir) => cbFinal(null, dir),
-      (e) => cbFinal(e as NodeJS.ErrnoException),
+      (dir) => runNodeCallback(cbFinal, null, dir),
+      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
     );
 }
 

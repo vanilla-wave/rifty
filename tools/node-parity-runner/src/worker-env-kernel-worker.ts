@@ -27,8 +27,8 @@ import {
 } from '../../../packages/kernel/src/worker-stdio-drain.ts';
 import { runNodeEntry } from '../../../packages/runtime-js/src/builtins/node-entry.ts';
 import {
-  beginNodeEvalUnhandled,
-  recordRejection,
+  handleRealmUncaughtError,
+  handleRealmUnhandledRejection,
   resetKeepalive,
 } from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { runNodeProgramLifecycle } from '../../../packages/workbench/src/workers/node-program-lifecycle.ts';
@@ -125,18 +125,13 @@ setSyncMirror(vfs);
 
 resetKeepalive();
 installTimerGlobals();
-installNodeHostRejectionEvents(hostProcess, (reason) => {
-  if (!beginNodeEvalUnhandled(reason, 'rejection')) recordRejection(reason);
+// The host process stands in for the browser realm traps: the same product
+// handlers dispatch to the child's Node listeners first (ADR-0445).
+installNodeHostRejectionEvents(hostProcess, (reason, promise) => {
+  handleRealmUnhandledRejection(reason, promise);
 });
 const onUncaughtException = (error: unknown): void => {
-  if (
-    (typeof error === 'object' &&
-      error !== null &&
-      (error as { readonly code?: unknown }).code === 'RIFTY_PROCESS_EXIT') ||
-    beginNodeEvalUnhandled(error, 'uncaught-error')
-  ) {
-    return;
-  }
+  if (handleRealmUncaughtError(error)) return;
   hostProcess.removeListener('uncaughtException', onUncaughtException);
   throw error;
 };
@@ -306,8 +301,7 @@ async function runConfiguredNodeEntry(spec: WorkerSpawnSpec): Promise<void> {
         launch.previewScope === undefined ? {} : { scope: launch.previewScope },
       ),
     postListening: (ports) => postNodeProcessListeningControl(proc, ports, launch.previewScope),
-    readExitCode: () => proc.exitCode,
-    exit: (code) => proc.exit(code),
+    exit: (...code) => proc.exit(...code),
   });
 }
 
