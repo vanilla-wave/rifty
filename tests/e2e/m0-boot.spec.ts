@@ -246,6 +246,7 @@ test.describe('M0 — Foundation', () => {
     // opposite regression (guard accidentally removed and App renders without
     // SAB available, downstream code blows up silently).
     await page.goto('/');
+    await waitForProjectIndex(page);
     await expect(page.locator('[data-banner="coi-fatal"]')).toHaveCount(0);
     // The App must have rendered — the storage badge proves `bootstrapPlayground`
     // resolved (it only paints after `initBackend()` returns).
