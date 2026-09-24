@@ -1168,6 +1168,14 @@ host-task hops per callback and moves `setImmediate` behind a same-turn
 Out-of-scope delivery-order row names only a same-turn `setTimeout(0)`.
 Routed as a `STOP-1a` fork (unit `## Decisions`).
 
+Resolved 2026-09-24 (user, option B): Parity 10 and its fault row claim
+rejections Chromium has already delivered; the already-queued-callback case is
+Out of scope, compat ⚠️, and the fence goes to backlog
+`runtime-js/late-unhandled-rejection-drain` (draft kept). The probe stays here
+as evidence, not a committed test: the repo has no known-failing test pattern
+(`git grep` for `test.fails`/`it.fails`/`.fixme(` over tests, packages and
+the parity runner: none; the runner fails on any divergence).
+
 ## §V vitest 4.1.11 lifecycle uses (static)
 
 ```

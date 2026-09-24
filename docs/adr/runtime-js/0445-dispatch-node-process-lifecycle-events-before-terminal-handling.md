@@ -79,8 +79,9 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
 7. **Late rejection.** `awaitDrain` does not settle as drained on the first
    zero-ref sample: it settles only after a following host task confirms zero
    refs and no new rejection, so an `unhandledrejection` task Chromium queued
-   behind the first sample reaches rule 1 first. Absorbs backlog
-   `runtime-js/late-unhandled-rejection-drain`.
+   behind the first sample reaches rule 1 first. Absorbs the drain race of backlog
+   `runtime-js/late-unhandled-rejection-drain`; the already-queued-callback case
+   stays there (Consequences).
 
 ## Alternatives
 
@@ -116,8 +117,9 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   worker thread). A Node callback queued before Chromium's
   `unhandledrejection` task (same-turn `setTimeout(0)`/`setImmediate`, a timer
   ripe at the same time, an fs callback) still runs before the trap, and its
-  `exit(0)` exits 0 where Node exits 1 (evidence §F2; open `STOP-1a` fork in
-  the unit).
+  `exit(0)` exits 0 where Node exits 1 (evidence §F2). User fork 2026-09-24:
+  Out of scope + compat ⚠️; the fence (≥ 2 host-task hops per callback,
+  reorders ADR-0085) → backlog `runtime-js/late-unhandled-rejection-drain`.
 - Zero-ref drains settle one host task later.
 - Explicit gaps (compat rows): `beforeExit` and `rejectionHandled` are not
   emitted; `setUncaughtExceptionCaptureCallback` is absent; the no-COI
