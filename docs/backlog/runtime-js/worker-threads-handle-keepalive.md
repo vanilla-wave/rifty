@@ -103,6 +103,7 @@ and `tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts` (9–12). Nod
 
 ## Decisions
 
+ready-verdict: 2026-09-24 — Contract+RED @ 09f929faa197f35ead4f1474aff91e35b304bd2b
 - 2026-09-24 — carrier: ADR-0446, a short ADR citing ADR-0152 §1 (following ADR-0158 and ADR-0447) that decides ADR-0445 rule 6's worker-thread clause. Rejected: #349's single hold without Node's objects, a real MessagePort as `kPublicPort`, #351's `serve:false` + kernel drain hook, and a kernel-side IPC count.
 - 2026-09-24 — scope: absorbs `runtime-js/worker-threads-kernel-run-to-completion-exit`. The draft and its `worker_threads.ts` TODO marker are deleted when this unit lands. Its 2026-09-10 parent-lifetime question ("does a pending kernel Worker message keep its CJS parent alive?") is answered by Parity 1/9: a live Worker holds its parent.
 - 2026-09-24 — scope: the map's open question (natural exit calls the reassignable `process.exit`, owner: agent, first exercised here) is answered for every node-entry owner (ADR-0446 §6, Parity 5/8/11/12, traced to I3). The no-COI owner is recorded as a discovery.
