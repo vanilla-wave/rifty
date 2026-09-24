@@ -38,6 +38,7 @@ import {
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
 import { type NodeProcessContextSnapshot, snapshotNodeProcessContext } from './process-context.ts';
+import { isNodeProcessExiting } from './process-lifecycle-events.ts';
 import { getProcessCwd, nodeProcessWorkerIpc } from './process.ts';
 
 interface WorkerOptions {
@@ -146,13 +147,12 @@ export class Worker extends EventEmitter {
   private start(): void {
     if (this.entry.kind === 'data-url') {
       // TODO(backlog: runtime-js/worker-eval-data-url-entry)
-      this.emitWorkerError(
+      this.fail(
         new NotImplementedError(
           'worker_threads.Worker.data-url',
           'data: URL Worker entries are not implemented',
         ),
       );
-      void this.terminate(1);
       return;
     }
     const script = this.entry.path;
@@ -215,11 +215,7 @@ export class Worker extends EventEmitter {
       }
       observeProcessTerminalOutcome(handle, (outcome) => {
         if (outcome.kind === 'peererror') {
-          try {
-            this.emitWorkerError(outcome.error);
-          } finally {
-            this.finish(1);
-          }
+          this.fail(outcome.error);
           return;
         }
         // TODO(backlog: runtime-js/worker-threads-kernel-error-event): a
@@ -230,8 +226,7 @@ export class Worker extends EventEmitter {
         this.finish(typeof outcome.code === 'number' ? outcome.code : 1);
       });
     } catch (err) {
-      this.emitWorkerError(err);
-      void this.terminate(1);
+      this.fail(err);
     }
   }
 
@@ -291,8 +286,8 @@ export class Worker extends EventEmitter {
         this.sameRealmGlobalOnMessage !== null;
       if (!keepsAlive) void this.terminate(0);
     } catch (err) {
-      this.emitWorkerError(err);
-      void this.terminate(1);
+      // Node: an unlistened 'error' is an uncaught exception, never a rejection.
+      queueMicrotask(() => this.fail(err));
     }
   }
 
@@ -378,8 +373,19 @@ export class Worker extends EventEmitter {
     this.pendingParentMessages.push(msg);
   }
 
-  private emitWorkerError(error: unknown): void {
-    this.emitToOwner('error', error);
+  /**
+   * Node: 'error', then 'exit' 1 after the microtasks its handling queued. An
+   * unlistened 'error' throws on as the owner's uncaught exception; 'exit' still
+   * follows (releasing every hold) unless that exception ended the owner.
+   */
+  private fail(error: unknown): void {
+    try {
+      this.emitToOwner('error', error);
+    } finally {
+      queueMicrotask(() => {
+        if (!isNodeProcessExiting(this.ownerProcess)) void this.terminate(1);
+      });
+    }
   }
 
   private finish(code: number): void {

@@ -2,7 +2,11 @@ import { type Page, expect, test } from '@playwright/test';
 import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
 import { type AdvancedIpcProgram, runNodeProgram } from './fixtures/advanced-ipc-cases.ts';
 import { runOwnerCommand } from './fixtures/message-port-ref-cases.ts';
-import { workerHandlePrograms, workerRows } from './fixtures/worker-handle-keepalive-cases.ts';
+import {
+  failedStartPrograms,
+  workerHandlePrograms,
+  workerRows,
+} from './fixtures/worker-handle-keepalive-cases.ts';
 
 // ADR-0446 / goal I2: a live worker_threads.Worker holds its parent, an
 // unref()'d one does not, and a worker realm exits when its loop drains — in a
@@ -41,6 +45,16 @@ test('Worker lifetime holds the parent as in live Node (Chromium child realm)', 
       rows: workerRows(oracle.stdout),
     });
   }
+  const expectedFailedStarts: ProgramRun[] = [];
+  for (const { node } of failedStartPrograms) {
+    const oracle = await runNodeProgram(node);
+    expectedFailedStarts.push({
+      name: node.name,
+      timedOut: false,
+      exit: oracle.code,
+      rows: workerRows(oracle.stdout),
+    });
+  }
 
   await gotoHarness(page);
   await bootOwner(page, {
@@ -54,7 +68,14 @@ test('Worker lifetime holds the parent as in live Node (Chromium child realm)', 
     expect(install.exit, install.out).toBe(0);
     const actual: ProgramRun[] = [];
     for (const program of workerHandlePrograms) actual.push(await runInRifty(page, program));
-    expect(actual).toEqual(expected);
+    const actualFailedStarts: ProgramRun[] = [];
+    for (const { rifty } of failedStartPrograms) {
+      actualFailedStarts.push(await runInRifty(page, rifty));
+    }
+    expect({ actual, actualFailedStarts }).toEqual({
+      actual: expected,
+      actualFailedStarts: expectedFailedStarts,
+    });
   } finally {
     await closeOwner(page);
   }

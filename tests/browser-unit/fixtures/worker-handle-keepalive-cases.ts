@@ -110,6 +110,63 @@ setTimeout(() => console.log('tick'), 20);
   ),
 ];
 
+/**
+ * A Worker whose start fails and whose 'error' has no listener (ADR-0446 §3):
+ * the uncaught exception comes first, then 'exit' 1, unless it ended the
+ * owner. Rifty's loud `data:` URL gap fails the start in the parent, as a
+ * missing entry file does in Node, so the live-Node run takes `./missing.cjs`.
+ */
+const failedStartSources: ReadonlyArray<readonly [string, string]> = [
+  [
+    'failed-start-uncaught',
+    `process.on('uncaughtException', (e) => {
+  console.log('uncaught', e instanceof Error);
+  queueMicrotask(() => console.log('micro'));
+});
+process.on('exit', (c) => console.log('EXIT', c));
+const w = new Worker(ENTRY);
+w.on('message', () => {});
+w.on('exit', (c) => console.log('wexit', c));
+console.log('start');
+`,
+  ],
+  [
+    'failed-start-fatal',
+    `process.on('exit', (c) => console.log('EXIT', c));
+const w = new Worker(ENTRY);
+w.on('message', () => {});
+w.on('exit', (c) => console.log('wexit', c));
+console.log('start');
+`,
+  ],
+  [
+    'failed-start-listened',
+    `process.on('exit', (c) => console.log('EXIT', c));
+const w = new Worker(ENTRY);
+w.on('message', () => {});
+w.on('error', (e) => {
+  console.log('error', e instanceof Error);
+  queueMicrotask(() => console.log('micro'));
+});
+w.on('exit', (c) => console.log('wexit', c));
+console.log('start');
+`,
+  ],
+];
+
+function failedStartProgram(name: string, source: string, entry: string): AdvancedIpcProgram {
+  const code = `const { Worker } = require('node:worker_threads');\n${source}`;
+  return program(name, code.replace('ENTRY', entry), {});
+}
+
+export const failedStartPrograms: ReadonlyArray<{
+  readonly node: AdvancedIpcProgram;
+  readonly rifty: AdvancedIpcProgram;
+}> = failedStartSources.map(([name, source]) => ({
+  node: failedStartProgram(name, source, "'./missing.cjs'"),
+  rifty: failedStartProgram(name, source, "new URL('data:text/javascript,0')"),
+}));
+
 export function workerRows(output: string): string[] {
   return output
     .replaceAll('\r', '')

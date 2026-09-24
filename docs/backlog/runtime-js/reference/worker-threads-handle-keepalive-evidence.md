@@ -348,3 +348,65 @@ print `WT|child exit-event 0`).
   `--project=chromium-light tests/e2e/vite7-build-preview.spec.ts tests/e2e/vite-command-honesty.spec.ts` 3 passed.
 - `pnpm pr:check` → 24/25 then `check:esbuild-legacy-retirement` only (typescript-worker.js
   same 10 022 694 bytes, new sha256 `40dc0aee…`) → re-pinned in `3e4f5e3ac`.
+
+## Final+GREEN reception (2026-09-25) — failed start without an `'error'` listener
+
+Blocker (Final+GREEN r1, Bugs): a Worker whose start fails through rifty's own
+`'error'` path (refused kernel spawn, `data:` URL `NotImplementedError`,
+same-realm load failure) with no `'error'` listener threw before
+`terminate(1)`: no `'exit'`, `kHandle` held forever, so a parent that survives
+the throw (`process.on('uncaughtException')`) never exited. BASE exits 0 there.
+
+### Node rows (the class: a start that fails, entry `./missing.cjs`)
+
+`node <file>` in a dir without `missing.cjs`, v24.16.0, 5 runs each, stable:
+
+```text
+uncaught.cjs  (uncaughtException logs `e instanceof Error`, queues a 'micro' row; w.on('message'), w.on('exit'))
+  start | uncaught true | wexit 1 | micro | EXIT 0        rc 0, stderr ""
+fatal.cjs     (no uncaughtException listener; w.on('message'), w.on('exit'))
+  start | EXIT 1                                         rc 1, stderr = the MODULE_NOT_FOUND stack (no wexit row)
+listened.cjs  (w.on('error') logs, queues a 'micro' row)
+  start | error true | micro | wexit 1 | EXIT 0         rc 0, stderr ""
+```
+
+Also (3 runs each): a Worker whose script throws, parent with
+`uncaughtException` → `uncaught worker boom / wexit 1 / EXIT 0`, rc 0; without
+it → `EXIT 1`, rc 1, no `wexit`. So: `'error'` (or the uncaught exception it
+becomes) first, `'exit'` 1 after the microtasks that handling queued, and no
+`'exit'` once the uncaught exception ended the parent.
+
+### Fix
+
+`Worker#fail(error)` (`worker_threads.ts`) is the one failure path for the data:
+URL start, the kernel spawn catch, the peer error and the same-realm catch: emit
+`'error'`, then in `finally` queue `terminate(1)` (release both, `'exit'` 1)
+unless the owner's exit has begun (`isNodeProcessExiting`, Node `_exiting`,
+`process-lifecycle-events.ts`). The same-realm catch calls it from a microtask,
+so an unlistened `'error'` is an uncaught exception, not a rejection.
+
+### RED (HEAD `30a429e00` product, new carriers)
+
+- `npx vitest run --project unit packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts`
+  → 7 failed / 5 passed: each unlistened-uncaught row `- "exit:1"`, `releasedAtExit: false`;
+  each listened row `[ 'error', 'exit:1', 'micro' ]` vs `[ 'error', 'micro', 'exit:1' ]`;
+  same-realm rows: `Unhandled Rejection VfsError: ENOENT: /workspace/w-missing.cjs`, events `[]`.
+  The kernel/data: URL "ends the owner" rows pass on HEAD (they pin the no-`'exit'` guard).
+- `RIFTY_PLAYGROUND_PORT=5408 npx playwright test --config playwright.browser-unit.config.ts tests/browser-unit/worker-handle-keepalive.spec.ts`
+  → failed: `failed-start-uncaught` `timedOut: true`, rows `WT|start / WT|uncaught true / WT|micro`
+  (no `wexit 1`, no `EXIT 0`); `failed-start-listened` `wexit 1` before `micro`;
+  `failed-start-fatal` already `WT|start / WT|EXIT 1`, exit 1; the 13 other programs equal live Node.
+
+### Mutants (fault test, fixed tree)
+
+- `finally { void this.terminate(1) }` (sync release, the blocker's literal fix) → 9 failed
+  (`exit:1` before `uncaught`; `exit:1` after `owner-exit:1`; `exit:1` before `micro`).
+- no `isNodeProcessExiting` guard → 3 failed (`[ 'owner-exit:1', 'exit:1' ]`).
+- same-realm catch calls `fail` directly (rejection route) → 2 failed (same-realm rows).
+
+### GREEN
+
+- fault + `worker_threads.test.ts` → 39 passed.
+- browser-unit `worker-handle-keepalive`, `message-port-ref-keepalive` (+ `.fault`),
+  `advanced-ipc`, `owner-node-process-lifecycle`, `kernel-process-terminal-drain-real-worker`
+  (`--workers=1`, port 5408) → 21 passed; the three `failed-start-*` programs equal live Node.

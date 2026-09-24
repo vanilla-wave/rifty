@@ -57,7 +57,11 @@ The constraints come from real packages (evidence:
 3. **Terminal release.** On every way a Worker ends, before `'exit'` is emitted,
    both references are released and set to `null` (Node's `kDispose`). Those
    ways are: a kernel exit, a peer error, a refused spawn, `terminate()`, and the
-   same-realm end. After that, `ref()` / `unref()` do nothing.
+   same-realm end. After that, `ref()` / `unref()` do nothing. A failed start or
+   peer error emits `'error'`, then `'exit'` 1 on a later microtask, as Node
+   does. An unlistened `'error'` throws on as the parent's uncaught exception
+   (never a rejection); `'exit'` still follows and releases both, unless that
+   exception began the parent's exit (Node `_exiting`).
 4. **`parentPort` reference.** In a worker-thread realm, `parentPort` gets the
    same `ref()` / `unref()` / `hasRef()` over one keepalive ref in that realm.
    The first `'message'` listener references it. That covers
