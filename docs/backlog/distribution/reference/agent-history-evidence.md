@@ -105,3 +105,7 @@ paired isError toolResult], new rifty/openai-completions model) returned only to
 Independent reviewer confirmed both reasons through actual convertMessages.
 - GREEN after interrupted-proposal repair: history/session 34 passed; agent typecheck passed;
   browser agent-core 17 passed (17.6s); full pr:check 25/25, test:run first attempt (227.8s).
+
+Independent final_review verify PASS at e467bf5bcf1fdbeac79ec6b032c806ff52fb5de6:
+34 tests independently passed; actual default transport rejects aborted/error proposals
+before host/fetch, normal toolUse + isError retains valid native wire. No residuals.

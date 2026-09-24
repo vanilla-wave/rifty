@@ -1,8 +1,8 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "PASS after admission repair: Greptile discussion_r4099302456 violation fixed against pinned Pi 0.85.1 required fields. Raw RED: 12 new failures; independent GREEN rerun: 30 passed. Native optional-metadata/isolation probe passed. Full gate 25/25 and browser 17/17 raw logs checked; no residuals.",
+  "merge_call": "PASS after interrupted-proposal repair. Both aborted/error tool proposals reject before host/fetch; native Pi convertMessages still demonstrates the prevented orphan, while toolUse + isError remains accepted with exact seed and paired wire. Independent history/session rerun: 34 passed. Raw RED 2 failed/26 passed, full gate 25/25 and browser 17/17 checked; no residuals.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "e8f41f1920c602d3fa4ffc2da4d62dede9ca59d9",
+  "reviewed_sha": "e467bf5bcf1fdbeac79ec6b032c806ff52fb5de6",
   "unit_goal_source": "PR #356 https://github.com/vanilla-wave/rifty/pull/356; original issue #355 https://github.com/vanilla-wave/rifty/issues/355; historical agent-history contract read at 55f756c5f4acedc83713790980361d809fcde54d; ADR-0466, ADR-0424, ADR-0436, ADR-0427; BASE 2c9bbd30109692647c0174f8930f713007150f67",
   "unit_residuals": [],
   "goal_residuals": [],
@@ -21,7 +21,7 @@
       "source": "acceptance",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/agent/src/history.test.ts:115; packages/agent/src/history.test.ts:128; packages/agent/src/history.test.ts:194",
+      "citation": "packages/agent/src/history.test.ts:115; packages/agent/src/history.test.ts:128; packages/agent/src/history.test.ts:202; packages/agent/src/history.test.ts:215",
       "note": ""
     },
     {
@@ -49,11 +49,11 @@
       "note": ""
     },
     {
-      "row": "Interrupted call without result rejects with initialMessages TypeError before host/model work",
+      "row": "Incomplete calls, including native aborted/error proposals even when host-paired, reject with initialMessages TypeError before host/model work",
       "source": "fault-matrix",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/agent/src/history.test.ts:160; packages/agent/src/history.ts:87; packages/agent/src/history.ts:103; packages/agent/src/session.ts:54",
+      "citation": "packages/agent/src/history.test.ts:160; packages/agent/src/history.test.ts:169; packages/agent/src/history.ts:72; packages/agent/src/history.ts:109; packages/agent/src/session.ts:54",
       "note": ""
     },
     {
@@ -61,7 +61,7 @@
       "source": "fault-matrix",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/agent/src/history.test.ts:163; packages/agent/src/history.test.ts:169; packages/agent/src/history.ts:27; packages/agent/src/history.ts:36; packages/agent/src/history.ts:53; packages/agent/src/history.ts:81",
+      "citation": "packages/agent/src/history.test.ts:163; packages/agent/src/history.test.ts:177; packages/agent/src/history.ts:27; packages/agent/src/history.ts:36; packages/agent/src/history.ts:53; packages/agent/src/history.ts:87",
       "note": ""
     },
     {
@@ -69,7 +69,7 @@
       "source": "fault-matrix",
       "trace": "scenario",
       "status": "pass",
-      "citation": "packages/agent/src/history.test.ts:213",
+      "citation": "packages/agent/src/history.test.ts:234; packages/agent/README.md:58",
       "note": ""
     },
     {
