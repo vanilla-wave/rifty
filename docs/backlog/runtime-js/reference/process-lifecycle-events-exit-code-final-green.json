@@ -1,0 +1,389 @@
+{
+ "overall_verdict": "concern",
+ "merge_call": "Mergeable for this unit: the r1 blocker is fixed and verified on 9ec0b196004d (carriers + mutants + 16-program live-Node probe), and the narrowing carries the user's fork. Only advisory concerns remain: add the ledger fork line and fix the stale draft-delete Decisions line at landing.",
+ "checkpoint": "Final+GREEN",
+ "reviewed_sha": "9ec0b196004d6e4dd662a0c443c997ac745f3a50",
+ "unit_goal_source": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md @ 9ec0b196004d6e4dd662a0c443c997ac745f3a50 (branch vg/u7), BASE 92215e3b4f94bd20801f5d57b5e109e83f809d48; ready-verdict Contract+RED @ 6fdaaedf149044f3921eeb845a37541f87879aa3 (docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-contract-red.json); re-cut rows prepared as observed defect (evidence §F RED @ 494474229, fork 2026-09-24 user answer B); goal docs/backlog/epics/vitest-run-in-browser/goal.md I3; ADR-0445; verify pass 1 of /tmp/vgoal/u7/final-green-r1-adjudicated.json",
+ "unit_residuals": [],
+ "goal_residuals": [
+  {
+   "clause": "I2 live worker_threads.Worker keeps the program alive",
+   "location": "docs/backlog/epics/vitest-run-in-browser/map.md item 8",
+   "summary": "runtime-js/worker-threads-handle-keepalive (also owns worker-thread natural exit left ⚠️ here)."
+  },
+  {
+   "clause": "I4 vitest run (forks) real reporter output + exit code",
+   "location": "docs/backlog/epics/vitest-run-in-browser/map.md items 9, 10, 11, 12",
+   "summary": "Advanced IPC, vm offsets, worker stdio/execArgv and the acceptance e2e remain on this branch's map."
+  },
+  {
+   "clause": "I5 --pool=threads parity",
+   "location": "docs/backlog/epics/vitest-run-in-browser/map.md items 8, 10, 11, 12",
+   "summary": "Open."
+  },
+  {
+   "clause": "I6 every vitest 4.1.11 module loads on the claimed path",
+   "location": "docs/backlog/epics/vitest-run-in-browser/map.md items 11, 12",
+   "summary": "Open; proven end-to-end only at item 12."
+  },
+  {
+   "clause": "I7 vitest.md compat page",
+   "location": "docs/backlog/epics/vitest-run-in-browser/map.md item 12",
+   "summary": "Open."
+  }
+ ],
+ "goal_complete": false,
+ "coverage": [
+  {
+   "row": "Acceptance 1: real Chromium supervised children (live Node oracle) print the same L| rows, status and fatal marker for every Parity 1-12 case on node <file>, -e, .bin, fork, worker thread, execSync",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:15; tests/browser-unit/fixtures/process-lifecycle-cases.ts:46",
+   "note": ""
+  },
+  {
+   "row": "Acceptance 2: forked program children in the parity runner match Node rows, status and loud-stderr flag for Parity 1 (nextTick), 6-8, 10",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tools/node-parity-runner/cases/process/exit-lifecycle-child.case.ts:12",
+   "note": ""
+  },
+  {
+   "row": "Acceptance 3: physical node -e/-p children match stdout, stderr, frames and status for Parity 1 (nextTick), 6, 7, 8 incl. the -p print before natural 'exit'",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tools/node-parity-runner/cases/process/eval-exit-lifecycle.case.ts:15",
+   "note": ""
+  },
+  {
+   "row": "Acceptance 4: exit() after the first terminal re-emits nothing and sends one control:self-exit with the first code; exit(2) inside an 'exit' listener runs listeners once and requests only 2",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:61; packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:74",
+   "note": ""
+  },
+  {
+   "row": "Acceptance 5: a rejection recorded one host task after the drain's first zero-ref sample rejects the drain; never a clean exit first",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "packages/runtime-js/src/internal/event-loop-keepalive-late-rejection.fault.test.ts:15",
+   "note": ""
+  },
+  {
+   "row": "Acceptance 6: two rounds of natural-exit / exit-no-arg in one no-COI worker each match Node's §O3 rows and status",
+   "source": "acceptance",
+   "trace": "ADR-0445",
+   "status": "pass",
+   "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:203",
+   "note": ""
+  },
+  {
+   "row": "Acceptance 7: compat ✅ rows for handler dispatch, 'exit', exit()/exitCode and the late-rejection drain (replacing BASE's drain-race ⚠️ row); ❌/⚠️ rows per Out-of-scope gap; runtime-js + workbench CHANGELOG lines",
+   "source": "acceptance",
+   "trace": "ADR-0445",
+   "status": "pass",
+   "citation": "docs/public/compat/process.md:19; docs/public/compat/process.md:46; packages/runtime-js/CHANGELOG.md:5; packages/workbench/CHANGELOG.md:5",
+   "note": ""
+  },
+  {
+   "row": "Parity 1: a throw from a timer, setImmediate, fs callback, nextTick callback or CJS entry reaches uncaughtException as (err,'uncaughtException'); continues; exit 0 with 'exit' 0",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:47; tests/browser-unit/fixtures/process-lifecycle-cases.ts:54; tests/browser-unit/fixtures/process-lifecycle-cases.ts:61; tests/browser-unit/fixtures/process-lifecycle-cases.ts:68; tests/browser-unit/fixtures/process-lifecycle-cases.ts:119; tools/node-parity-runner/cases/process/callback-throw-uncaught-child.case.ts:17",
+   "note": ""
+  },
+  {
+   "row": "Parity 2: an ESM entry throw reaches uncaughtException with origin 'unhandledRejection', not the unhandledRejection listener; continues",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:126",
+   "note": ""
+  },
+  {
+   "row": "Parity 3: uncaughtExceptionMonitor listeners run before uncaughtException listeners with the same (err, origin)",
+   "source": "acceptance",
+   "trace": "ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:92",
+   "note": ""
+  },
+  {
+   "row": "Parity 4: unhandledRejection listeners get (reason, promise) with the promise's identity; continues, also when the rejection is the last pending work",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:99; tests/browser-unit/fixtures/process-lifecycle-cases.ts:106; tests/browser-unit/fixtures/process-lifecycle-cases.ts:238",
+   "note": ""
+  },
+  {
+   "row": "Parity 5: no unhandledRejection listener → uncaughtException (reason,'unhandledRejection'); UnhandledPromiseRejection wrap with V8 rendering for a reason without own stack; own-stack object and thrown string raw",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:75; tests/browser-unit/fixtures/process-lifecycle-cases.ts:112",
+   "note": ""
+  },
+  {
+   "row": "Parity 6: exitCode reads undefined until assigned (also in a natural 'exit' listener); '3' reads 3; null/undefined reset",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:146; tests/browser-unit/fixtures/process-lifecycle-cases.ts:136",
+   "note": ""
+  },
+  {
+   "row": "Parity 7: exit() without argument exits with exitCode (3; cac's == null → 1); exit(undefined) after exitCode=3 → 0; exit(5) over exitCode 9 → 'exit' 5, status 5",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:157; tests/browser-unit/fixtures/process-lifecycle-cases.ts:159; tests/browser-unit/fixtures/process-lifecycle-cases.ts:164; tests/browser-unit/fixtures/process-lifecycle-cases.ts:165; tests/browser-unit/fixtures/process-lifecycle-cases.ts:242; tests/browser-unit/fixtures/process-lifecycle-cases.ts:251",
+   "note": ""
+  },
+  {
+   "row": "Parity 8: 'exit' fires once with exitCode ?? 0 at natural exit after pending timers (and after the -p print); listener exitCode sets the status; exit(2) in a listener skips later listeners; a timer scheduled in 'exit' never runs",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "weak",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:136; tests/browser-unit/fixtures/process-lifecycle-cases.ts:141; tests/browser-unit/fixtures/process-lifecycle-cases.ts:172; tests/browser-unit/fixtures/process-lifecycle-cases.ts:179",
+   "note": "Carried from r1 (unchanged at HEAD): natural exit calls the user-reassignable process.exit property (packages/workbench/src/workers/node-entry-bootstrap.ts:189 `exit: (...code) => proc.exit(...code)`), and no carrier reassigns process.exit, so a program that patches it gets no natural 'exit' (no-op patch hangs; vitest startModuleRunner's throwing patch exits 1) where Node fires 'exit' 0 and exits 0 — r1 probe /tmp/vgoal/u7/fg1-probe/zz-review-probe.spec.ts; BASE identical. Advisory (Ecosystem UX concern)."
+  },
+  {
+   "row": "Parity 9: process.exit() inside an unhandledRejection or uncaughtException listener exits with that call's code after one 'exit'",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:187; tests/browser-unit/fixtures/process-lifecycle-cases.ts:194",
+   "note": ""
+  },
+  {
+   "row": "Parity 10: with no listener a throw (timer, nextTick, entry) or a rejection prints the error, emits 'exit' 1 with exitCode 1 and exits 1 — never 0, also when a later task calls exit(0); for a rejection, a task that runs after Chromium delivered it",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "weak",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:202; tests/browser-unit/fixtures/process-lifecycle-cases.ts:205; tests/browser-unit/fixtures/process-lifecycle-cases.ts:210; tests/browser-unit/fixtures/process-lifecycle-cases.ts:217; tests/browser-unit/fixtures/process-lifecycle-cases.ts:223; tests/browser-unit/fixtures/process-lifecycle-cases.ts:246; tests/browser-unit/fixtures/process-lifecycle-cases.ts:303; tests/browser-unit/fixtures/process-lifecycle-cases.ts:320; tests/browser-unit/fixtures/process-lifecycle-cases.ts:333",
+   "note": "The rejection half is discriminated (terminateFatal→null mutant: 4 LIFECYCLE-MISMATCHES in fatal-rejection-then-exit / fork- / worker-thread- / exec-sync-fatal-rejection-then-exit, /tmp/vgoal/u7/fgb-run2.log). The throw half of 'also when a later task calls exit(0)' has no timer/entry carrier with later work: a plausible wrong implementation that cancels a timer/entry throw's Worker report and defers its terminal to the drain (the r1 rejection shape) passes fatal-timer and fatal-entry (no pending work after the throw); only fatal-nexttick's later L|never timer discriminates promptness. HEAD behaves correctly (probe t-timer-/t-entry-/t-tick-throw-then-exit0, t-timer-throw-then-log SAME 3/3, /tmp/vgoal/u7/fgb-run3.log). Advisory."
+  },
+  {
+   "row": "Parity 11: a throw from an uncaughtException listener prints it and exits 7 with no 'exit'",
+   "source": "acceptance",
+   "trace": "ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:225",
+   "note": ""
+  },
+  {
+   "row": "Parity 12: .bin program, forked child rows + close code, worker-thread handler rows + 'exit' code, execSync child rows through the parent match Node",
+   "source": "acceptance",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:251; tests/browser-unit/fixtures/process-lifecycle-cases.ts:266; tests/browser-unit/fixtures/process-lifecycle-cases.ts:284; tests/browser-unit/fixtures/process-lifecycle-cases.ts:344",
+   "note": ""
+  },
+  {
+   "row": "Fault: observable-order × zero-ref drain vs Chromium's later unhandledrejection task → listener runs, exit 0; no listener stderr + exit 1, never a silent 0",
+   "source": "fault-matrix",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "packages/runtime-js/src/internal/event-loop-keepalive-late-rejection.fault.test.ts:15; tests/browser-unit/fixtures/process-lifecycle-cases.ts:106; tests/browser-unit/fixtures/process-lifecycle-cases.ts:205; tests/browser-unit/fixtures/process-lifecycle-cases.ts:238",
+   "note": ""
+  },
+  {
+   "row": "Fault: observable-order × exit() again after the kernel exit request → no second 'exit', no second request, status stays the first terminal's",
+   "source": "fault-matrix",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:61; tests/browser-unit/fixtures/process-lifecycle-cases.ts:179",
+   "note": ""
+  },
+  {
+   "row": "Fault: observable-order × a no-listener rejection Chromium has delivered vs a later task's exit(0) → stderr + status-1 request at the trap; the later exit() re-emits/requests nothing; status 1 on every kernel child; an exit() already requested (fatal 'exit' listener, same turn) keeps its status, no stderr",
+   "source": "fault-matrix",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:95; packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:116; packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:131; tests/browser-unit/fixtures/process-lifecycle-cases.ts:210; tests/browser-unit/fixtures/process-lifecycle-cases.ts:303; tests/browser-unit/fixtures/process-lifecycle-cases.ts:320; tests/browser-unit/fixtures/process-lifecycle-cases.ts:333",
+   "note": ""
+  },
+  {
+   "row": "Fault: observable-order × exit() re-entered inside an 'exit' listener → not re-emitted, later listeners skipped, status = re-entrant code",
+   "source": "fault-matrix",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "packages/runtime-js/src/builtins/process-exit-lifecycle.test.ts:74; tests/browser-unit/fixtures/process-lifecycle-cases.ts:172",
+   "note": ""
+  },
+  {
+   "row": "Fault: provenance-lie × listener-handled error vs Worker default error report → handled canceled, continues, 0; unhandled report unchanged, stderr + 1",
+   "source": "fault-matrix",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:47; tests/browser-unit/fixtures/process-lifecycle-cases.ts:202; tests/browser-unit/fixtures/process-lifecycle-cases.ts:284; tests/browser-unit/fixtures/process-lifecycle-cases.ts:266",
+   "note": ""
+  },
+  {
+   "row": "Fault: observable-order × throwing uncaughtException listener → 7 + stderr, no 'exit', never re-dispatched",
+   "source": "fault-matrix",
+   "trace": "ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:225",
+   "note": ""
+  },
+  {
+   "row": "Fault: corrupt-input × RIFTY_PROCESS_EXIT thrown out of an error listener → never dispatched; status = that exit() code, one 'exit'",
+   "source": "fault-matrix",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:187; tests/browser-unit/fixtures/process-lifecycle-cases.ts:194",
+   "note": ""
+  },
+  {
+   "row": "Fault: sibling-drift × launch owners (program, eval, .bin, fork, worker thread, execSync, no-COI invocation) → same rows on every claimed owner",
+   "source": "fault-matrix",
+   "trace": "I3+ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/owner-node-process-lifecycle.spec.ts:15; tools/node-parity-runner/cases/process/exit-lifecycle-child.case.ts:12; tools/node-parity-runner/cases/process/eval-exit-lifecycle.case.ts:15; packages/workbench/src/workers/no-coi-project-command.test.ts:203",
+   "note": ""
+  },
+  {
+   "row": "Fault: torn-state × no-COI per-invocation exit state on the shared in-process process → each invocation unset, not exiting; one 'exit' per invocation",
+   "source": "fault-matrix",
+   "trace": "ADR-0445",
+   "status": "pass",
+   "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:203",
+   "note": ""
+  },
+  {
+   "row": "Public API ./builtins/process: NodeProcess.exitCode is number | undefined (unset reads undefined)",
+   "source": "public-api",
+   "trace": "ADR-0445",
+   "status": "pass",
+   "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:146; tools/node-parity-runner/cases/process/exit-lifecycle-child.case.ts:17",
+   "note": ""
+  },
+  {
+   "row": "Public API ./builtins/process: resetNodeProcessExit(process) resets a reused in-process process to unset, not exiting",
+   "source": "public-api",
+   "trace": "ADR-0445",
+   "status": "pass",
+   "citation": "packages/workbench/src/workers/no-coi-project-command.test.ts:203",
+   "note": ""
+  }
+ ],
+ "axes": [
+  {
+   "axis": "Completeness",
+   "verdict": "pass",
+   "findings": [
+    {
+     "severity": "nit",
+     "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:125",
+     "evidence": "",
+     "summary": "Decisions scope line still says the absorbed draft `late-unhandled-rejection-drain` is deleted when this unit lands; the 2026-09-24 re-cut keeps it (it owns the already-queued-callback case). The later re-cut governs; the stale line invites a wrong delete at landing.",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Mission and architecture",
+   "verdict": "pass",
+   "findings": []
+  },
+  {
+   "axis": "Goal drift",
+   "verdict": "concern",
+   "findings": [
+    {
+     "severity": "concern",
+     "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:137-139",
+     "evidence": "pnpm -s check:contract-drift → contract-drift: OK (158 path(s) vs 0c4c1b070042); git diff 92215e3b4..HEAD -- docs/backlog/epics/ → empty; grep process-lifecycle docs/backlog/epics/vitest-run-in-browser/ledger.md → no line",
+     "summary": "Parity 10 / fault row narrowing and the wider Out-of-scope delivery-order row carry the STOP-1a record with the pre-demotion rows verbatim and the user's answer ('B: сузить + backlog (Recommended)') on a `re-cut: … fork: … trace: I3` line; goal.md unchanged BASE..HEAD; check:contract-drift OK. The narrowed rows match the fork's words. But the goal ledger has no stop/fork line for this STOP-1a (item 12's STOP-1e has one); add it at the landing re-chart (RDY-5 ledger link).",
+     "authority": ""
+    },
+    {
+     "severity": "concern",
+     "location": "docs/backlog/runtime-js/process-lifecycle-events-exit-code.md:124",
+     "evidence": "",
+     "summary": "DEC-2 decision-subagent pass for ADR-0445 (partially supersedes ADR-0152 §1/§3, extends ADR-0157 §1) is still recorded as owed (carried from r1).",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Approach cost",
+   "verdict": "pass",
+   "findings": [
+    {
+     "severity": "concern",
+     "location": "packages/runtime-js/src/builtins/process-lifecycle-events.ts:83; packages/runtime-js/src/builtins/process.ts:869",
+     "evidence": "",
+     "summary": "Two records of the same 'first terminal wins' fact: `NodeProcessExit.#terminal` (added by the fix, gates fatal stderr) and `NodeProcess.#selfExitRequested` (gates the port request). One owner (#terminate skipping requestExit once #terminal is set) would likely suffice; pure shrinkage, not required machinery (REV-7 capture).",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Scope",
+   "verdict": "pass",
+   "findings": []
+  },
+  {
+   "axis": "Bugs",
+   "verdict": "pass",
+   "findings": [
+    {
+     "severity": "concern",
+     "location": "packages/runtime-js/src/builtins/process-lifecycle-events.ts:115-119; packages/runtime-js/src/builtins/process.ts:865-869",
+     "evidence": "Scratch detached copy /tmp/vgoal/u7/scratch-fg-b-1 @ 9ec0b196004d6e4dd662a0c443c997ac745f3a50 (RIFTY_PLAYGROUND_PORT=5457, live Node v24.16.0). (1) npx vitest run process-exit-lifecycle / keepalive / late-rejection fault / no-coi-project-command / node-program-lifecycle / install-process-ipc / install-process-gate: 7 files, 89 tests pass. (2) pnpm test:parity process/exit-lifecycle-child, eval-exit-lifecycle, eval-entry-throw-lifecycle, eval-print-explicit-exit, callback-throw-uncaught-child: all match. (3) browser-unit owner-node-process-lifecycle --repeat-each=2: 2 passed. (4) Mutant `terminateFatal(outcome.error)` disabled (event-loop-keepalive.ts:500): unit 3/5 fail (cases 3-5); browser-unit LIFECYCLE-MISMATCHES 4 (fatal-rejection-then-exit exit 0 fatal false; fork child-close 0; worker-thread wexit 0; exec-sync exec-ok). Mutant `#terminal` guard removed (process-lifecycle-events.ts:116): unit cases 4-5 fail. (5) Adversarial probe spec (16 programs x 3 rounds, /tmp/vgoal/u7/zz-fgb-probe.spec.ts, log /tmp/vgoal/u7/fgb-run1.log): all SAME incl. rej+exit(0)@1ms, rej+log@20ms (no L|late), vitest onExit shape (exit listener schedules setTimeout(exit,1)) → 1, exit listener exit(2) → 2 no stderr, exit listener exitCode=5 → 5, same-turn exit(0) → 0 no stderr, two rejections + monitor (monitor once), async-fn rejection, exit-listener throws → 1, .mjs entry, node -e, Promise.reject(42) → UnhandledPromiseRejection, rejection in timer + exit(0)@20ms, preset exitCode=3 → 1, fork child stderr carries the error + close 1, handler exitCode=1;exit() → 1. (6) pnpm test:e2e:prod 8 passed.",
+     "summary": "r1 blocker (deferred no-listener rejection terminal, Parity 10 → I3) is fixed on this tree: the trap now prints and requests `uint8(exitCode ?? 1)` at once, records the exit signal, and a later exit() adds no request; an exit() already requested keeps its status with no stderr. Residual edge carried from r1: #requestSelfExit checks #controlClosed before #selfExitRequested, and #terminal is set only after requestExit returns, so a closed control port makes fatal()/a later exit() throw a plain Error out of the trap instead of the exit signal. Reading only.",
+     "authority": ""
+    },
+    {
+     "severity": "concern",
+     "location": "docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md:1092-1096",
+     "evidence": "git grep -n 'installProcessGlobals(' -- packages/*/src → only process.ts:1128 (def) and runtime-js/src/worker-entry.ts:51",
+     "summary": "§F sibling sweep says, by code reading, a no-COI project command's fatal rejection prints on the invocation's stderr. The no-COI toolchain worker never calls installProcessGlobals (only runtime-js/src/worker-entry.ts:51 does), so readActiveNodeProcessBootstrap() is likely null there and the traps take the NO_PROCESS path (BASE record + default report). Unclaimed (compat ⚠️), but the evidence line is probably wrong; mark it or probe it.",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Regressions",
+   "verdict": "pass",
+   "findings": [
+    {
+     "severity": "concern",
+     "location": "pnpm pr:check",
+     "evidence": "/tmp/vgoal/u7/fgb-run2.log: '✗ pr:check failed (2/25): refs:check, test:parity'; /tmp/vgoal/u7/fgb-run3.log + fgb-run4.log: parity-full LANE-EXIT 0 x4; pnpm -s refs:check → 1 dangling reference goal.md → vitest-run-acceptance-evidence.md; e2e:prod 8 passed",
+     "summary": "pr:check on the scratch copy of HEAD: 23/25 pass. refs:check fails on the pre-existing goal.md dangling reference (present at BASE, fixed on the goal branch by 44925c645). test:parity reported '1 case(s) failed' once; the failing case name was lost to output truncation, and 4 later full `pnpm test:parity` runs on the same tree exit 0 (fgb-run3/run4). Treat as a flake to watch, not a reproduced failure.",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Ecosystem UX",
+   "verdict": "concern",
+   "findings": [
+    {
+     "severity": "concern",
+     "location": "packages/workbench/src/workers/node-entry-bootstrap.ts:189",
+     "evidence": "r1 probe /tmp/vgoal/u7/fg1-probe/zz-review-probe.spec.ts (patched-exit: HEAD timeout, Node exit 0; patched-exit-throws: HEAD exit 1, Node exit 0); code unchanged since",
+     "summary": "Natural exit still calls the user-reassignable process.exit property (carried from r1, not routed): a program that patches process.exit gets no natural 'exit' (no-op patch hangs; vitest base.js startModuleRunner's throwing patch exits 1) where Node fires 'exit' 0 and exits 0. vitest pool workers patch process.exit, so item 12 may surface it; cheap fix is the internal NodeProcessExit for natural exit, else a backlog capture.",
+     "authority": ""
+    },
+    {
+     "severity": "concern",
+     "location": "docs/public/compat/process.md:46",
+     "evidence": "",
+     "summary": "Accepted gap (user fork 2026-09-24): after a no-listener rejection, an already-queued Node callback (same-turn setImmediate/setTimeout(0), same-due timers, fs callbacks, fs.promises) still runs first and its exit(0) exits 0 silently where Node exits 1. It is now explicit (Out of scope, compat ⚠️, backlog draft with owner/trigger). Test runners that exit from an immediate after a stray rejection would report success; the draft's trigger covers that.",
+     "authority": ""
+    }
+   ]
+  }
+ ]
+}
