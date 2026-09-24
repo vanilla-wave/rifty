@@ -84,3 +84,24 @@ fields and their native content variants at the same boundary (Pi 0.85.1 types.d
 Independent final_review verify: Final+GREEN PASS at e8f41f1920c602d3fa4ffc2da4d62dede9ca59d9.
 Reviewer acknowledged original admission miss, independently reran 30 tests and
 verified preservation of valid optional metadata/deep isolation. No residuals.
+
+## Interrupted-proposal admission repair
+
+Driver and final_review independently found a reachable accepted seed with an
+aborted/error assistant toolCall plus the host's synthetic isError result. Pi 0.85.1
+transformMessages/convertMessages drop the assistant but retain an orphan tool result.
+Independent public-session probe: admitted each seed, host called twice; native wire
+roles [tool] for aborted/error, [assistant, tool] for toolUse control.
+
+Authority: issue #355 interruption and host-independent pairing, historical Acceptance 1 /
+Fault 3. Existing session completeSkippedCalls already excludes aborted/error proposals.
+Decision: reject these incomplete proposals before host work even when paired; preserve
+text-only interrupted messages and ordinary toolUse + isError. No stripping or invented stopReason.
+
+RED: `pnpm test:run packages/agent/src/history.test.ts`: 2 failed / 26 passed before fix.
+Native probe (Node v24.16.0, Pi 0.85.1): transformMessages([assistant with stopReason
+aborted, toolCall id interrupted/name action/arguments {}, full native metadata,
+paired isError toolResult], new rifty/openai-completions model) returned only toolResult.
+Independent reviewer confirmed both reasons through actual convertMessages.
+- GREEN after interrupted-proposal repair: history/session 34 passed; agent typecheck passed;
+  browser agent-core 17 passed (17.6s); full pr:check 25/25, test:run first attempt (227.8s).

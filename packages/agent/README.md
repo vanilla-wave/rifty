@@ -58,7 +58,9 @@ matching id/name results in the immediately following tool-result group. Missing
 orphan, duplicate or mismatched results throw `TypeError` naming `initialMessages`
 before host/model work. Required native fields (including assistant identity/usage,
 content block payloads and tool-call arguments) are validated there too. A host-supplied paired `isError` result is accepted. Restored
-tools never execute automatically. The host may change models for a new session;
+tools never execute automatically. An `aborted/error` assistant containing tool calls
+is incomplete and rejected even with paired results: Pi omits that proposal on wire.
+Text-only aborted/error messages remain accepted. The host may change models for a new session;
 Pi owns provider conversion. Storage, JSON decoding and migrations stay with the host.
 
 `reset()` clears restored and new messages. Also clear the host's stored history on

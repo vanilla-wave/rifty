@@ -166,6 +166,14 @@ describe('restored native agent history', () => {
       [call(), { ...result(), toolName: 'other' }],
       [{ role: 'system', content: 'invalid role', timestamp: 1 }],
       [{ role: 'user', content: 'missing timestamp' }],
+      [
+        { ...call(), stopReason: 'aborted' },
+        { ...result(), isError: true },
+      ],
+      [
+        { ...call(), stopReason: 'error' },
+        { ...result(), isError: true },
+      ],
       [{ ...assistant(), usage: undefined }],
       [{ ...assistant(), usage: { ...assistant().usage, cost: undefined } }],
       [{ ...assistant(), usage: { ...assistant().usage, input: '2' } }],
@@ -189,6 +197,19 @@ describe('restored native agent history', () => {
     const run = setup(seed as AgentMessage[]);
     expect(run.create).toThrow(/initialMessages/i);
     expect(run.capabilities()).toBe(0);
+  });
+
+  it.each(['aborted', 'error'] as const)('retains text-only %s messages', async (stopReason) => {
+    const seed = [{ ...assistant(), stopReason }];
+    const run = setup(seed);
+    const session = run.create();
+    try {
+      await session.send('continue');
+      expect(session.status(), session.detail()).toBe('done');
+      expect(run.contexts[0]?.messages.slice(0, seed.length)).toEqual(seed);
+    } finally {
+      await session.dispose();
+    }
   });
 
   it('starts fresh when initialMessages is absent', async () => {

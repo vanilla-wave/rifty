@@ -70,6 +70,12 @@ export function restoreMessages(input: readonly AgentMessage[] = []): AgentMessa
               fail('assistant thinking block requires thinking');
             break;
           case 'toolCall':
+            // Pi omits these proposals on wire; their results would become orphans.
+            if (
+              message.role === 'assistant' &&
+              (message.stopReason === 'aborted' || message.stopReason === 'error')
+            )
+              fail('incomplete aborted/error tool proposal cannot be restored, even with a result');
             if (message.role !== 'assistant' || !record(block.arguments))
               fail('assistant tool call requires arguments object');
             break;
