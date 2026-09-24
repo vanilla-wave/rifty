@@ -332,3 +332,19 @@ the Playwright worker's `FORCE_COLOR` reached the live-Node oracle, whose piped
 execSync child colored the number. The oracle now runs without `FORCE_COLOR`
 (the evidence's `oracle-bu.mts` run outside Playwright, and a user's terminal,
 print `WT|child exit-event 0`).
+
+### GREEN (tree of `efbf2c855` + fingerprint re-pin `3e4f5e3ac`)
+
+- `pnpm test:parity worker_threads/` → 14/14 match (incl. `handle-*` ×5, `worker-*` ×4);
+  `pnpm test:parity natural-exit-patched` and `child_process/` (23) match.
+- `npx vitest run --project unit packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts` → 3/3.
+- `RIFTY_PLAYGROUND_PORT=5408 pnpm exec playwright test --config playwright.browser-unit.config.ts
+  tests/browser-unit/worker-handle-keepalive.spec.ts tests/browser-unit/advanced-ipc.spec.ts
+  tests/browser-unit/message-port-ref-keepalive.spec.ts --workers=1` → 14 passed (the 13
+  worker programs equal live Node; Acceptance 4's detached rolldown build unchanged).
+- `RIFTY_PLAYGROUND_PORT=5408 pnpm test:e2e:prod` → 9 passed, incl.
+  `worker-threads-keepalive.spec.ts` (Acceptance 3).
+- vite regression: `--project=chromium-heavy tests/e2e/react-vite-build.spec.ts` 1 passed;
+  `--project=chromium-light tests/e2e/vite7-build-preview.spec.ts tests/e2e/vite-command-honesty.spec.ts` 3 passed.
+- `pnpm pr:check` → 24/25 then `check:esbuild-legacy-retirement` only (typescript-worker.js
+  same 10 022 694 bytes, new sha256 `40dc0aee…`) → re-pinned in `3e4f5e3ac`.
