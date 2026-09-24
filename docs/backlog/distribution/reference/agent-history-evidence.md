@@ -65,3 +65,18 @@ expectations; retained exact seed/reset assertions. Reviewer record adjacent.
 Independent final_review: Final+GREEN PASS at 55f756c5f4acedc83713790980361d809fcde54d;
 10 coverage rows, no findings/residuals. Unit/session 18 tests independently repeated.
 Completed temporary contract removed; review reads its reviewed revision.
+
+## PR review repair — required native fields
+
+Greptile discussion_r4099302456: assistant without usage or tool call without arguments
+was admitted before host work. Accepted: corrupt-input at history admission; required
+field validation was incomplete. Sibling sweep: user/assistant/toolResult required
+fields and their native content variants at the same boundary (Pi 0.85.1 types.d.ts).
+
+- RED: `pnpm test:run packages/agent/src/history.test.ts` — 12 new failures, 12 existing passes.
+- Fix: validate required identity, stopReason, usage/cost numbers, isError and content
+  payloads before host work; pairing stays at the same boundary. Optional provider
+  metadata preserved; host still owns JSON parsing/migrations.
+- GREEN: history/session suite — 30 passed; agent typecheck passed.
+- Browser agent-core rerun: 17 passed (16.3s).
+- Full `pnpm pr:check` after repair: 25/25 passed; test:run passed first attempt (228.7s), no isolated reruns.

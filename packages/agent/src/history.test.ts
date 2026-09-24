@@ -166,6 +166,24 @@ describe('restored native agent history', () => {
       [call(), { ...result(), toolName: 'other' }],
       [{ role: 'system', content: 'invalid role', timestamp: 1 }],
       [{ role: 'user', content: 'missing timestamp' }],
+      [{ ...assistant(), usage: undefined }],
+      [{ ...assistant(), usage: { ...assistant().usage, cost: undefined } }],
+      [{ ...assistant(), usage: { ...assistant().usage, input: '2' } }],
+      [{ ...assistant(), model: undefined }],
+      [{ ...assistant(), stopReason: 'unknown' }],
+      [{ ...call(), content: [{ type: 'toolCall', id: 'old-call', name: 'action' }] }, result()],
+      [
+        {
+          ...call(),
+          content: [{ type: 'toolCall', id: 'old-call', name: 'action', arguments: [] }],
+        },
+        result(),
+      ],
+      [call(), { ...result(), isError: undefined }],
+      [{ role: 'user', content: [{ type: 'text' }], timestamp: 1 }],
+      [{ role: 'user', content: [{ type: 'image', data: 'AA==' }], timestamp: 1 }],
+      [{ ...assistant(), content: [{ type: 'thinking' }] }],
+      [{ ...assistant(), content: [{ type: 'unknown' }] }],
     ].map((seed) => [seed]),
   )('rejects incomplete or malformed history before host work: %j', (seed) => {
     const run = setup(seed as AgentMessage[]);

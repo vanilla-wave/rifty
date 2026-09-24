@@ -56,7 +56,8 @@ caller mutations cannot alter it. Supply native Pi 0.85.1 `user`, `assistant` an
 `toolResult` messages with numeric timestamps and native content. Calls must have
 matching id/name results in the immediately following tool-result group. Missing,
 orphan, duplicate or mismatched results throw `TypeError` naming `initialMessages`
-before host/model work. A host-supplied paired `isError` result is accepted. Restored
+before host/model work. Required native fields (including assistant identity/usage,
+content block payloads and tool-call arguments) are validated there too. A host-supplied paired `isError` result is accepted. Restored
 tools never execute automatically. The host may change models for a new session;
 Pi owns provider conversion. Storage, JSON decoding and migrations stay with the host.
 
