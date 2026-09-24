@@ -7,10 +7,15 @@ Date: 2026-09-23
 
 Partially supersedes ADR-0152 §3 (a rejection a process listener handles is
 canceled and not recorded; a no-listener rejection's stderr and exit request
-run at the trap, the drain records that exit) and moves ADR-0152 §1's settle
-point one host task later; extends ADR-0157 §1 `exit()`. Drain ownership (ADR-0385) and the loud
-no-listener default stay.
+run at the trap, the drain records that exit) and partially supersedes
+ADR-0152 §1 (the first zero-ref sample no longer settles the drain); corrects
+ADR-0157 §1's `exit()` clause (a no-argument call no longer sets `exitCode`;
+`'exit'` and the kernel exit request come before the throw). Drain ownership
+(ADR-0385) and the loud no-listener default stay.
 Evidence: `docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md`.
+Independent DEC-2 decision review, 2026-09-25: justified-with-fixes; each
+overturned clause is now named here with one verb, and dated notes land in
+ADR-0152 §1/§3, ADR-0157 §1 and the README §Corrections rows.
 
 ## Context
 

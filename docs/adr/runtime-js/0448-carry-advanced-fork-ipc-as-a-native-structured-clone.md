@@ -146,7 +146,11 @@ the message could tell.
 - Deploy matching Worker assets together; a v4 child bundle rejects a v5 launch.
 - DEC-2: corrects ADR-0326 (§Decision "Advanced IPC serialization … directed
   loud gaps": advanced serialization is now carried; handles, callbacks/options
-  and channel `ref()`/`unref()` stay gaps) and ADR-0416's active v4 version.
+  and channel `ref()`/`unref()` stay gaps; §One validated launch plan
+  `ipc: 'none' | 'json'` widened to `'advanced'`) and ADR-0416's active v4
+  version. Independent DEC-2 decision review, 2026-09-25: justified-with-fixes
+  (launch-plan clause named here, in ADR-0326's dated note and the README
+  §Corrections row).
 
 ## References
 

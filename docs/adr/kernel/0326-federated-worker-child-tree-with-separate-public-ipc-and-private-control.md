@@ -31,6 +31,9 @@ MessagePort, or SAB allocation. Invalid/duplicate IPC slots and unsupported
 descriptor forms fail synchronously and allocate nothing. Worker and
 same-realm claimed surfaces consume the same plan.
 
+> **Correction (2026-09-25, ADR-0448):** the plan's `ipc` is now
+> `'none' | 'json' | 'advanced'` (fork `serialization: 'advanced'`, node-entry v5).
+
 `rifty.node-entry/v1` becomes `rifty.node-entry/v2` atomically. V2 carries the
 exact public IPC discriminator and continues ADR-0267's launch role,
 `remoteFsRoot`, `previewScope`, terminal shape, and exact guest env. There is no

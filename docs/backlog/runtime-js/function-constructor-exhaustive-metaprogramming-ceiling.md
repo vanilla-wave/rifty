@@ -40,6 +40,12 @@ these replace host `Function` with no ceiling —
 - CJS: `eval('global[k] = 1')`, `(function(){return this})()[k] = 1`,
   `(0, global)[k] = 1`.
 
+## Known false positives
+
+- Non-literal `Object.assign(globalThis, src)` in a dead branch rejects
+  `fetch-blob@3.2.0` (`node-fetch@3.3.2`) at load: own finding
+  `runtime-js/object-assign-global-nonliteral-load-time-false-positive`.
+
 ## Options or Next
 
 - Define a finite closure target: list the exact alias/property/reflection shapes

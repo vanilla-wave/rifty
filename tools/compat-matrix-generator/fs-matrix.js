@@ -50,8 +50,8 @@ export const fsMatrix = {
     ['`mkdtemp` / `opendir`', '✅', 'Sync and promises; async directory iteration'],
     [
       '`createReadStream` / `createWriteStream`',
-      '✅',
-      "Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests",
+      '⚠️',
+      "Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests. Gap: `ReadStream.pipe` ignores options and always calls `dest.end()` (`{ end: false }` still ends; `pipe(process.stdout)` throws `dest.end is not a function`) — backlog `runtime-js/fs-readstream-pipe-node-options`",
     ],
     [
       'Stream unsupported options',

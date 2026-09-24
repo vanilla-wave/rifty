@@ -98,8 +98,13 @@ Each is pre-existing or outside I1; npm's side is in the probe output:
   applies it (the escape hatch relies on it);
 - re-resolve after adding an override to an existing lock: npm nests the new
   copy under the dependent; rifty claims the version, not the placement;
-- `@scope/pkg` and `*.tgz` values: npm reads a directory/file, rifty a
-  package name; uppercase `NPM:` aliases read as a package name (404).
+- `@scope/pkg` and `*.tgz`/`*.tar(.gz)` values: npm reads a directory/file
+  (npa tests file extensions before semver); rifty reads a non-version name
+  (`vite-8.0.16.tgz`) as a package name (404) and a version-shaped one
+  (`8.0.16.tgz`, npm `validRange` loose `8.0.1-6.tgz`) as a decision-5 range
+  of the same package that rifty's matcher matches nothing
+  (`No matching version`); uppercase `NPM:` aliases read as a package name
+  (404).
 
 ## Consequences
 

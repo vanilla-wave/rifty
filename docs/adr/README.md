@@ -421,9 +421,9 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
-| 0326 advanced-IPC-serialization loud-gap clause | 0448 / note 2026-09-23 | fork `serialization: 'advanced'` rides the public lane as a native structured clone with Node's view/refusal rules; handles, callbacks/options, channel `ref()`/`unref()` stay gaps |
+| 0326 advanced-IPC-serialization loud-gap + launch-plan `ipc: 'none' \| 'json'` clauses | 0448 / notes 2026-09-23, 2026-09-25 | fork `serialization: 'advanced'` rides the public lane as a native structured clone with Node's view/refusal rules; handles, callbacks/options, channel `ref()`/`unref()` stay gaps; launch plan `ipc` gains `'advanced'` |
 | 0416 active node-entry v4 version | 0448 / note 2026-09-23 | v5 carries program launch `ipc: 'advanced'`; SQLite absence semantics unchanged |
-| 0348 §2 link-only-placeholder clause | 0443 / note 2026-09-23 | an observed link/load-time edge the browser cannot supply ships as a named `NotImplementedError` member; called edges still need the real contract |
+| 0348 §2 link-only-placeholder clause | 0443 / note 2026-09-23 | an observed link/load-time edge whose real behavior rifty cannot supply ships as a named `NotImplementedError` member; called edges still need the real contract |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |
 | 0006 debug-disable-flag clause | note 2026-08-23 | withdrawn: substituted packages are native — behavioral comparison lives in Node parity oracles; per-package override stays |
@@ -508,9 +508,9 @@ superseded.
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
-| 0152 §1 named handle set | 0447 | a manually referenced `MessagePort` is counted (one ref per port; `unref()` or `close()` of either pair end releases; transfers that would hide a release are named throws); listener referencing stays an explicit gap; §1 shape unchanged, named set grew |
-| 0152 §1 first zero-ref sample settles the drain; §3 every recorded rejection is fatal | 0445 | a zero-ref drain settles after one more host task confirms it (late Chromium `unhandledrejection`); a rejection or error a process listener handles is canceled and not recorded; the no-listener default stays stderr + exit 1, a rejection's printed and requested at the trap and the drain records that exit |
-| 0157 §1 `exit()` clause | 0445 | `exitCode` starts `undefined`; `exit()` without an argument uses it, emits `'exit'` once before the kernel exit request, and natural exit calls it |
+| 0152 §1 named handle set | 0447 / note 2026-09-25 | a manually referenced `MessagePort` is counted (one ref per port; `unref()` or `close()` of either pair end releases; transfers that would hide a release are named throws); listener referencing stays an explicit gap; §1 shape unchanged, named set grew |
+| 0152 §1 first zero-ref sample settles the drain; §3 every recorded rejection is fatal | 0445 / note 2026-09-25 | a zero-ref drain settles after one more host task confirms it (late Chromium `unhandledrejection`); a rejection a process listener handles is canceled and not recorded; the no-listener default stays stderr + exit `uint8(exitCode ?? 1)` read after the `'exit'` listeners (1 unless one reassigns it), a rejection's printed and requested at the trap and the drain records that exit |
+| 0157 §1 `exit()` clause | 0445 / note 2026-09-25 | `exitCode` starts `undefined`; `exit()` without an argument uses it, emits `'exit'` once before the kernel exit request, and natural exit calls it |
 | 0155 §5 loud-only interactive-stdin clause | 0230 / note 2026-07-13 | owner PTY pump ships flowing stdin, explicit EOF, and pause/resume; ADR-0225 ships live resize; pull/raw gaps stay loud |
 | 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |
 | 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |

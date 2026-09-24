@@ -38,8 +38,16 @@ export const streamsMatrix = {
     ],
     ['`Transform`', '✅', '`_transform` callback path'],
     ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
-    ['`pipeline`', '✅', 'Promise/callback chaining, multi-stage, destroy-on-error parity'],
-    ['`finished`', '✅', 'Resolves on readable end and cleanup cases'],
+    [
+      '`pipeline`',
+      '⚠️',
+      'Promise/callback chaining, multi-stage, destroy-on-error parity; a successful callback gets `(null)`, Node `(undefined, undefined)` — backlog `runtime-js/stream-pipeline-finished-callback-args`',
+    ],
+    [
+      '`finished`',
+      '⚠️',
+      'Resolves on readable end and cleanup cases; a successful callback gets `(null)`, Node no arguments — backlog `runtime-js/stream-pipeline-finished-callback-args`',
+    ],
     [
       '`compose` / `Readable.wrap`',
       '✅',
