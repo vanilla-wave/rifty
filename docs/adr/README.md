@@ -101,6 +101,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0443 | Named-loud builtin members for linked, unsuppliable Node edges |
 | 0444 | Check runtime global-write keys at Node's key coercion |
 | 0445 | Dispatch Node process lifecycle events before terminal handling |
+| 0446 | Count live `worker_threads` Workers in child-realm keepalive |
 | 0447 | Count referenced MessagePorts in child-realm keepalive |
 | 0448 | Carry advanced fork IPC as a native structured clone |
 | 0450 | Project vm script offsets through one owned stack hook |
@@ -510,6 +511,7 @@ superseded.
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 | 0152 §1 named handle set | 0447 | a manually referenced `MessagePort` is counted (one ref per port; `unref()` or `close()` of either pair end releases; transfers that would hide a release are named throws); listener referencing stays an explicit gap; §1 shape unchanged, named set grew |
 | 0152 §1 first zero-ref sample settles the drain; §3 every recorded rejection is fatal | 0445 | a zero-ref drain settles after one more host task confirms it (late Chromium `unhandledrejection`); a rejection or error a process listener handles is canceled and not recorded; the no-listener default stays stderr + exit 1, a rejection's printed and requested at the trap and the drain records that exit |
+| 0152 §1 named handle set; 0445 rule 6 worker-thread clause | 0446 | a live `worker_threads.Worker` is counted through Node's own `Symbol(kHandle)`/`Symbol(kPublicPort)` references (napi-rs can neuter them), a worker realm's `parentPort` is counted while referenced by its `'message'` listeners, worker-thread realms drain uncapped then exit naturally, and no natural exit calls the reassignable `process.exit`; §1 shape unchanged, named set grew |
 | 0157 §1 `exit()` clause | 0445 | `exitCode` starts `undefined`; `exit()` without an argument uses it, emits `'exit'` once before the kernel exit request, and natural exit calls it |
 | 0155 §5 loud-only interactive-stdin clause | 0230 / note 2026-07-13 | owner PTY pump ships flowing stdin, explicit EOF, and pause/resume; ADR-0225 ships live resize; pull/raw gaps stay loud |
 | 0157 §4 forward-target/interim-guard clause | 0230 / note 2026-07-13 | Node and `.bin` children consume flowing stdin; pull/raw surfaces remain exact loud gaps |

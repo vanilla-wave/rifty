@@ -1,0 +1,254 @@
+# worker-threads-handle-keepalive — evidence (PICKUP + Contract+RED, 2026-09-24)
+
+Unit: `docs/backlog/runtime-js/worker-threads-handle-keepalive.md`. Decision: ADR-0446.
+BASE `8c899364986d6cde48b71bd4147cf29d8bd0faae`. Oracle host: Node v24.16.0, npm 11.17.0
+(macOS arm64). Browser: Playwright 1.60.0 Chromium. Probe scripts are run as
+`node <file>` from one directory, under a 10 s `perl -e 'alarm 10; exec @ARGV'`.
+Each probe was run at least 3 times, and outputs were identical unless noted.
+
+## Baseline (rifty, BASE)
+
+The goal evidence (`vitest-run-in-browser-evidence.md` §I2/I3) shows that
+`node t3.cjs` gives no output and exits 0 at 427 ms. Node prints `got hi true` /
+`wexit 0` / `EXIT 0`. The RED run below reproduces this on BASE in real Chromium
+and in the production build. Now that ADR-0445 has landed, only
+`EXIT 0` prints (§RED).
+
+Code on BASE:
+
+- `worker_threads.ts:105-135`: the constructor takes no keepalive ref
+  (`child_process.ts:161` does take one, `refEventLoop()`).
+- `:330-336`: `ref()`/`unref()` return `this` and change nothing.
+- `:565-566`: `parentPort.ref`/`unref` do nothing.
+- `:195`: `serve: true`, marked `TODO(backlog: runtime-js/worker-threads-kernel-run-to-completion-exit)`.
+- `node-entry-bootstrap.ts:191-195`: the worker-thread branch runs the entry, then
+  calls `proc.exit(proc.exitCode)` only if `exitCode` is truthy. Otherwise the realm
+  stays alive until `terminate()`.
+- Natural exit calls the reassignable property: `node-entry-bootstrap.ts:189`
+  `exit: (...code) => proc.exit(...code)` and `:201` `proc.exit()`.
+
+## Node's Worker reference model (source + probes)
+
+Node v24.16.0 internals, read with `node -e "process.binding('natives')['internal/worker']…"`:
+
+- `internal/worker` line 498:
+  `ref() { if (this[kHandle] === null) return; this[kHandle].ref(); this[kPublicPort].ref(); }`.
+  `unref()` is the same.
+- Line 353: `setupPortReferencing(this[kPublicPort], this, 'message')`.
+- Line 444: `[kDispose]()` sets `this[kHandle] = null` and `this[kPublicPort] = null`.
+- `internal/worker/io` line 211: `setupPortReferencing(port, eventEmitter, eventName)`
+  starts by calling `port.unref()`. It then adds `'newListener'` / `'removeListener'`
+  listeners and own `kNewListener` / `kRemoveListener` hooks. When the listener
+  count goes 0→1 it calls `port.ref()` and `start`; when it drops to 0 it calls
+  `port.unref()`.
+- A live Worker has these own symbols: `Symbol(shapeMode), Symbol(kCapture), Symbol(kHandle),
+  Symbol(kPort), Symbol(kParentSideStdio), Symbol(kPublicPort), Symbol(kNewListener),
+  Symbol(kRemoveListener), Symbol(kLoopStartTime), Symbol(kIsOnline)`.
+- `kHandle`'s prototype is `Worker` with `startThread, stopThread, hasRef, ref, unref,
+  getResourceLimits, takeHeapSnapshot, loopIdleTime, loopStartTime, getHeapStatistics,
+  cpuUsage, startCpuProfile, stopCpuProfile, startHeapProfile, stopHeapProfile`.
+
+Parent probes. `w-late.cjs` is `setTimeout(() => parentPort.postMessage('late'), 700)`.
+`p01` adds `on('message')` and `on('exit')`, then `w.unref()` and `process.on('exit')`. The
+other probes vary that shape:
+
+```text
+p01 unref                               → P|EXIT 0                                   rc 0, 43 ms
+p02 unref; ref                          → P|message late / P|wexit 0 / P|EXIT 0       rc 0, 743 ms
+p03 unref; then on('message')           → P|message late / P|wexit 0 / P|EXIT 0       rc 0, 744 ms (8/8)
+p04 no listeners at all                 → P|EXIT 0 wexit-listeners 0                  rc 0, 744 ms
+p06 napi-rs neuter + once/unref/ref/on  → P|EXIT 0                                   rc 0, 32 ms
+p07 ref; ref; unref                     → P|EXIT 0                                   rc 0, 32 ms
+p08 on('message'); unref                → P|EXIT 0                                   rc 0, 33 ms
+p09 neuter kHandle only; unref; on(msg) → P|message late / P|wexit 0 / P|EXIT 0       rc 0
+p10 neuter kPublicPort only; unref; ref → P|wexit 0 / P|EXIT 0                        rc 0
+p11 unref; once('message') (late1 500 ms, late2 1200 ms) → P|message late1 / P|EXIT 0  rc 0, 546 ms
+p05 shape: symbols Symbol(kHandle),Symbol(kPublicPort); own descriptors enumerable/writable/configurable;
+    kHandle ref/unref/hasRef functions; kPublicPort instanceof MessagePort, hasRef() false;
+    Worker#hasRef undefined; ref/unref own on Worker.prototype, length 0, return undefined;
+    inside 'exit': w[kHandle] null, w[kPublicPort] null, ref()/unref() → undefined,
+    listenerCount('message') 0, listenerCount('exit') 1
+p12 flags [kHandle.hasRef(), kPublicPort.hasRef()]: initial true,false; on(message) true,true;
+    unref false,false; ref true,true; removeAllListeners('message') true,false; on again true,true
+```
+
+## Unref'd port hold — Node's 'exit' delivery depends on loop timing
+
+The worker (`w-300.cjs`) posts once after 300 ms. The parent calls `unref()`, then
+adds `on('message')` and `on('exit')`:
+
+```text
+p20 (no other statement)             → P|message late1 / P|wexit 0   (5/5)
+p22 (+ top-level console.log start)  → P|start / P|message late1       (5/5; no wexit)
+p23 (p20 + exit listener spawning)   → P|message late1 / P|wexit 0   (5/5)
+```
+
+When the public port is the only hold, a top-level `console.log` decides whether
+the Worker's `'exit'` reaches the parent before it exits. So no carrier puts an
+`'exit'` listener on a Worker in that state (`handle-listener-reference.case.ts`).
+ADR-0446 §Explicit gaps records that rifty always delivers it.
+
+## napi-rs / emnapi sources (the scenario tree)
+
+The tree is the goal scenario install, copied from the message-port unit's oracle
+tree. Versions: vitest 4.1.11, `@rolldown/binding-wasm32-wasi` 1.0.3,
+`@emnapi/wasi-threads` 1.2.1, `@emnapi/core` 1.10.0.
+
+- `rolldown-binding.wasi.cjs:62-91` (`onCreateWorker`): runs `new Worker(wasi-worker.mjs)`
+  and sets `worker.onmessage` (an expando). It then replaces `ref` on
+  `Object.getOwnPropertySymbols(worker).find(s => s.toString().includes("kPublicPort"))`
+  and on the `"kHandle"` symbol, and calls `worker.unref()`.
+- `wasi-threads.cjs.js:168-169`: `worker.once('message', () => { }); worker.unref();`
+  (`preparePool`). `:183`: `worker.ref()` (`loadWasmModuleToAllWorkers`), then
+  `:186`/`:190` call `unref`. `:287-297`: `worker.on('message' | 'error' | 'detachedExit')`.
+  `:227`, `:264` and `:584` call `unref` too.
+- `emnapi-core.cjs.js:409-425`: `_emnapi_worker_ref`/`_unref` call `worker.ref()` /
+  `worker.unref()` when those exist.
+- Pool Workers are never terminated while the parent runs. In Node, the neutered
+  `ref` (p06) is what lets vite and vitest exit.
+
+## Worker side — parentPort reference (probes)
+
+`p14` / `p13` run one Worker per worker script and print `msg:` / `exit:` rows:
+
+```text
+w-port-shape: initial=false on=true unref=false ref=true off=false onmessage=true onmessage-null=false
+              removeAll('message')=true once=true removeAllListeners()=true returns=undefined,undefined → exit:0
+w-once   (once + parent posts a)              → msg:echo:a exit:0
+w-unref-port (on + parentPort.unref())        → exit:0
+w-remove (off inside the listener)            → msg:echo:a exit:0
+w-echo   (on; parent terminate() at +300 ms)  → msg:echo:a exit:1 terminate:1
+w-onmessage (onmessage =; terminate)          → msg:echo:a exit:1 terminate:1
+w-port-ref-nolistener (ref(); terminate)      → msg:ref=true exit:1
+w-port-listener-unref-ref (terminate)         → msg:held exit:1
+w-teardown (on; removeAllListeners('message') after 'bye') → never exits: alarm at 10 s (rc 142)
+w-exitcode (exitCode = 3; 100 ms timer)       → exit:3
+w-exitcall (process.exit(5) in a timer)       → exit:5
+w-throw  (top-level throw)                    → error:Error:boom exit:1
+w-post-return (two posts, returns)            → msg:first msg:second exit:0
+w-proc-exit (process.on('exit') in the worker)→ W|worker-exit-event 0 … exit:0
+```
+
+`removeAllListeners('message')` leaves the port referenced. Node's NodeEventTarget
+skips its `kRemoveListener` hook there. vitest 4.1.11 relies on this:
+`chunks/init-threads.6kl1khcL.js:9-11` has `on: parentPort.on("message", …)`,
+`off: parentPort.off(…)` and `teardown: () => parentPort.removeAllListeners("message")`,
+and `cli-api.CnMVyzaz.js:3241` (`ThreadsPoolWorker.stop`) does
+`await this.thread.terminate()`.
+
+## Natural exit ignores a reassigned `process.exit`
+
+```text
+p15 worker: process.on('exit', post) ; process.exit = () => { throw … } ; 50 ms tick
+    → msg:tick msg:worker-exit-event:0 exit:0
+p16 program: same three statements → P|tick / P|exit-event 0, rc 0
+node -e "process.on('exit', (code) => console.log('exit-event', code)); process.exitCode = 4; process.exit = () => { throw new Error('patched process.exit called'); };"
+    → exit-event 4, rc 4
+```
+
+vitest 4.1.11 `chunks/base.B6Opl8PE.js:108-110` replaces `process.exit` with a
+throwing function in every pool worker. The threads pool never restores it; the
+forks pool restores it (`init-forks.H5ZuobOQ.js:31`) and is stopped with
+`fork.kill()` (`cli-api.CnMVyzaz.js:3179`).
+
+Rifty on BASE (`node -e`, parity `node-cli-eval` harness = the Workbench eval
+lifecycle): `tick`, then stderr `Error: patched process.exit called … at Object.exit
+(node-entry-bootstrap.ts:189:29) at runNodeProgramLifecycle (node-program-lifecycle.ts:142:14)`,
+status 1. The map's open question ("natural exit calls the user-reassignable
+`process.exit` property", owner: agent, first exercised at item 8) is answered
+by ADR-0446 §6. It applies to every node-entry owner: worker thread, `node <file>`,
+`node -e` and the execSync child.
+
+## Discoveries (not in this unit's promise)
+
+- **`terminate()` before the worker starts.** Node gives `P|exit 0` / `P|terminate 0`
+  (p17, 6/6). After `'online'` it gives `exit 1` / `terminate 1` (p18, 4/4). Rifty
+  finishes with 1 before the deferred start and still spawns the kernel Worker in
+  the queued `start()`, which is never observed afterwards (`worker_threads.ts:134`
+  queues `start`, `:311-327` does not stop it). A same-boundary divergence
+  that predates this unit; to be routed by the land step (REV-12).
+- **The no-COI in-process project command's natural exit** calls the shared
+  process's reassignable `exit()` (`no-coi-project-command.ts:145`). That is the
+  same class as §Natural exit. The no-COI tier is an unclaimed lifecycle owner
+  (ADR-0445 Consequences), so this is routed by the land step.
+
+## Parity cases — Node rows
+
+Each case's setup files and `code` (saved as `main.js`) are run with `node main.js`,
+Node v24.16.0, twice, byte-identical apart from timing
+(`/tmp`-local runner; the same sources run live in `pnpm test:parity`):
+
+```text
+## handle-keepalive          start / message late / exit 0
+## handle-reference-api      symbols Symbol(kHandle) Symbol(kPublicPort) / descriptors true/true/true true/true/true /
+                             methods function function undefined 0 0 / initial true,false / listener true,true /
+                             unref undefined false,false / ref undefined true,true / double-ref-single-unref false,false /
+                             second-listener false,false / remove-all false,false / relisten false,true / off false,false /
+                             once false,true / removed-once false,false
+## handle-listener-reference start / first message late / second message late1
+## handle-napi-rs-unref      neutered false false true true
+## worker-natural-exit       w-return.cjs message:first message:second exit:0 after-exit:null,null,undefined,undefined /
+                             w-exit-code.cjs message:after-timer exit:3 / w-exit-call.cjs message:before-exit exit:5 /
+                             w-patched-exit.cjs message:tick message:worker exit event 0 exit:0
+## worker-port-reference     w-shape.cjs message:initial=false on=true unref=false ref=true off=false onmessage=true
+                             onmessage-null=false remove-all=true once=true once-removed=false returns=undefined,undefined exit:0 /
+                             w-once.cjs message:echo:a exit:0 / w-off.cjs message:echo:a exit:0 / w-unref.cjs message:ready exit:0
+## worker-port-held          w-on.cjs message:echo:a exit:1 terminate:1 / w-onmessage.cjs message:echo:a exit:1 terminate:1 /
+                             w-ref.cjs message:ready exit:1 terminate:1 / w-remove-all.cjs message:echo:a exit:1 terminate:1
+## process/natural-exit-patched-process-exit (node -e)  patched-exit: stdout "tick\nexit-event 0\n", stderr "", code 0 /
+                             patched-exit-code: stdout "exit-event 4\n", stderr "", code 4
+```
+
+All eight exit 0 with empty stderr (the `node -e` launches exit 0 and 4).
+
+## Browser-unit programs — Node rows
+
+Command (repo root): `npx tsx oracle-bu.mts`. The script imports `workerHandlePrograms`
+and `workerRows` from `tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts`
+and `runNodeProgram` from `tests/browser-unit/fixtures/advanced-ipc-cases.ts`, runs
+each program, and prints its `WT|` rows. Three runs were byte-identical (`cmp`). The
+seven parity programs give the rows above with a `WT|` prefix, code 0, stderr "".
+The other programs give:
+
+```text
+## i2-oracle              WT|got hi true / WT|wexit 0 / WT|EXIT 0          code=0 stderr=""
+## unref-process-exit     WT|start / WT|EXIT 0                           code=0 stderr=""
+## patched-exit-program   WT|tick / WT|exit-event 0                      code=0 stderr=""
+## patched-exit-exec-sync WT|child tick / WT|child exit-event 0 / WT|exec-ok   code=0 stderr=""
+```
+
+## Prod programs
+
+These are the four files `tests/e2e-prod/worker-threads-keepalive.spec.ts` writes with
+`echo`, run with Node v24.16.0 (3 runs each):
+
+```text
+node keepalive.cjs → KA|got hi true / KA|wexit 0 / KA|EXIT 0     rc 0
+node listener.cjs  → KA|echo ping / KA|echo-exit 1                rc 0
+```
+
+## RED (BASE code + this unit's carriers, 2026-09-24)
+
+- `pnpm test:parity worker_threads/handle-` → 4 failed:
+  - `handle-keepalive`: `- message late` `- exit 0` (rifty prints only `start`).
+  - `handle-listener-reference`: `- first message late` `- second message late1`.
+  - `handle-napi-rs-unref`: `- neutered false false true true` / `+ neutered false false false false`.
+  - `handle-reference-api`: `+ symbols undefined undefined`, `+ unref [object Object] undefined,undefined`, and so on.
+- `pnpm test:parity worker_threads/worker-` → 3 failed. Rifty stdout is empty for
+  `worker-natural-exit`, `worker-port-reference` and `worker-port-held`, because the
+  parent drains before any Worker reports.
+- `pnpm test:parity natural-exit-patched` → 1 failed. `patched-exit`:
+  `+ "stderr": "Error: patched process.exit called\n at process.exit ([eval]:1:93)\n at Object.exit
+  (…/node-entry-bootstrap.ts:189:29)…"`, `+ "code": 1`. `patched-exit-code`:
+  `+ "stdout": ""`, status 1 instead of `exit-event 4` / 4.
+- `npx vitest run --project unit packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts`
+  → 3 failed: `- "heldWhileAlive": true` / `+ "heldWhileAlive": false` (peer death;
+  refused spawn), and `- "heldAfterConstruct": true` / `+ false` (the constructor-throw row
+  holds 0, as asserted).
+- `RIFTY_PLAYGROUND_PORT=5408 npx playwright test --config playwright.browser-unit.config.ts
+  tests/browser-unit/worker-handle-keepalive.spec.ts` → 1 failed. Every program except
+  `unref-process-exit` differs, for example `i2-oracle`: `- WT|got hi true`, `- WT|wexit 0`,
+  with `WT|EXIT 0` kept. The patched-exit rows are listed in the contract.
+- `RIFTY_PLAYGROUND_PORT=5408 npx playwright test --config playwright.prod.config.ts
+  --project=chromium tests/e2e-prod/worker-threads-keepalive.spec.ts` → 1 failed:
+  `- "KA|got hi true" - "KA|wexit 0"`, `"KA|EXIT 0"` kept, `- "KA|echo ping" - "KA|echo-exit 1"`.
