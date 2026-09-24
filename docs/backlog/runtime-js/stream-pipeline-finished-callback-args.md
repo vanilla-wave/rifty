@@ -5,7 +5,7 @@ title: "`stream.pipeline` / `stream.finished` success callbacks get Node's argum
 created: 2026-09-24
 why: Node calls a successful `pipeline` callback with `(undefined, value)` and `finished`'s with no arguments; rifty passes `null` to both, so `err === undefined` / `arguments.length` checks take the error branch
 sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/public/compat/streams.md]
-code: [packages/io/src/streams/pipeline.ts]
+code: [packages/io/src/streams/pipeline.ts, tools/compat-matrix-generator/streams-inventory.js]
 ---
 
 ## Context
@@ -26,8 +26,8 @@ node v24.16.0: pipeline 2 ["undef","undef"] | finished 0 []
 rifty:         pipeline 1 ["null"]          | finished 1 ["null"]
 ```
 
-`docs/public/compat/streams.md` lists `finished` ✅ without this
-(generator-rendered page: update via `tools/compat-matrix-generator`).
+Compat: `streams.md` `pipeline`/`finished` rows ⚠️ link here (source
+`tools/compat-matrix-generator/streams-inventory.js`).
 
 ## Next
 

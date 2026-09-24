@@ -26,6 +26,10 @@ the `awaitDrain` in the serve branch). A referenced port whose release cannot
 be seen would therefore hang forever, where Node exits. That is not an honest
 fault outcome (`docs/process/rules/fault-classes.md`).
 
+Independent DEC-2 decision review, 2026-09-25: justified-with-fixes; the
+ADR-0152 §1 extension now carries a dated note in ADR-0152 and a dated README
+§Corrections row.
+
 ## Decision
 
 1. **Local pairs.** In Node child realms, the global `MessageChannel` becomes a

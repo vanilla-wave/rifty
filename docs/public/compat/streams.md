@@ -17,8 +17,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `Writable` write/end/finish | ⚠️ | decodeStrings, covered byte admission, and scalar/batch completion order, HWM returns, drain, errors, and finish are parity-tested; other chunk kinds and `writableNeedDrain` remain — backlogs `runtime-js/stream-byte-chunk-kinds`, `runtime-js/writable-sync-dispatch-state` |
 | `Transform` | ✅ | `_transform` callback path |
 | `PassThrough` | ✅ | Forwards chunks unchanged |
-| `pipeline` | ✅ | Promise/callback chaining, multi-stage, destroy-on-error parity |
-| `finished` | ✅ | Resolves on readable end and cleanup cases |
+| `pipeline` | ⚠️ | Promise/callback chaining, multi-stage, destroy-on-error parity; a successful callback gets `(null)`, Node `(undefined, undefined)` — backlog `runtime-js/stream-pipeline-finished-callback-args` |
+| `finished` | ⚠️ | Resolves on readable end and cleanup cases; a successful callback gets `(null)`, Node no arguments — backlog `runtime-js/stream-pipeline-finished-callback-args` |
 | `compose` / `Readable.wrap` | ✅ | `compose(...stages)` → a `Duplex` wired via `pipeline`; `Readable.wrap(legacy)` adapts streams1 data/end with backpressure — parity-tested |
 | `Duplex.from` | ⚠️ | Accepted shapes are parity-tested. Iterable branches are eager through a second Readable; the returned Duplex incorrectly remains writable and silently discards writes — backlog `runtime-js/duplex-from-source-ownership` |
 | `destroy` / cleanup | ✅ | Writable destroy and async-iterator cleanup parity |

@@ -24,7 +24,15 @@ Compat ❌ `docs/public/compat/modules.md` `node:path/win32` / `path.win32`.
 
 ## Next
 
-Owner runtime-js; trigger: first real consumer reading Windows-path
-semantics or importing `path/win32`. Until then the alias stays a loud-ish
-compat ❌, never registered as `node:path/win32` (would extend the lie;
-pinned by conformance `tests/conformance/builtins/path.test.ts` win32 ceiling).
+Owner runtime-js; trigger: now (standing Fidelity violation — AGENTS.md
+§Fidelity: a placeholder that lies; no ADR or user decision admits the
+alias, only the `path.ts` "POSIX only" comment), or the first consumer
+reading Windows-path semantics or importing `path/win32`. Parity first:
+the evidence probe above. Honest outcomes to decide at pickup: real win32
+semantics (then `node:path/win32` registers), or a named
+`NotImplementedError('path.win32')` when `path.win32` is accessed + compat
+❌. Never register `node:path/win32` over the alias (extends the lie).
+Probe before choosing the loud form: pre-bundled Vite deps link a `win32`
+binding by name (ADR-0009 §Context), so a throw must not fire at link or
+namespace build. Conformance `tests/conformance/builtins/path.test.ts`
+pins today's ceiling.

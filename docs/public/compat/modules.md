@@ -101,6 +101,11 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   throw even where Node would skip the write). `fn.toString()` and stack
   columns of such a line show the loader's key-check helper (ADR-0444).
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
+  ❌ False positive: a non-literal `Object.assign(globalThis, src)` rejects the
+  module at load even in a branch that never runs — `fetch-blob@3.2.0`
+  `streams.cjs`'s `if (!globalThis.ReadableStream)` polyfill, so
+  `node-fetch@3.3.2` cannot load (Node loads it). Tracked in
+  `docs/backlog/runtime-js/object-assign-global-nonliteral-load-time-false-positive.md`.
 - A direct, unshadowed `eval` with a statically known string containing ordinary
   `import()` syntax is routed through the constructing module's collision-free
   lexical import helper; a returned importer keeps that VFS-relative base when

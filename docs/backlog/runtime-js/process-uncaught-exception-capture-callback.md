@@ -32,4 +32,7 @@ Owner runtime-js (ADR-0445 dispatch). Trigger: a claimed consumer (REPLs,
 domain-style wrappers) calling them. Parity first: capture replaces
 `'uncaughtException'` listeners, second set throws
 `ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET`, `null` clears, `has…` state.
-Until real: a named loud member is the honest floor (ADR-0443 shape).
+Until real: the members stay absent (a named import is a link-time miss)
+per ADR-0443 §2; a claimed consumer linking or reading them at load
+admits named-loud members under ADR-0443 §1. Otherwise ship the real
+capture semantics.
