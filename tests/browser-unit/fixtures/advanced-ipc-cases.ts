@@ -163,6 +163,11 @@ export async function runNodeProgram(program: AdvancedIpcProgram): Promise<{
     return await new Promise((resolve, reject) => {
       const child = spawn(process.execPath, ['main.cjs'], {
         cwd: directory,
+        // Playwright's FORCE_COLOR would color a piped child's console numbers;
+        // the rifty terminal (and a user's) has none.
+        env: Object.fromEntries(
+          Object.entries(process.env).filter(([name]) => name !== 'FORCE_COLOR'),
+        ),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '';

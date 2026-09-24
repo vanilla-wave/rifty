@@ -252,3 +252,83 @@ node listener.cjs  → KA|echo ping / KA|echo-exit 1                rc 0
 - `RIFTY_PLAYGROUND_PORT=5408 npx playwright test --config playwright.prod.config.ts
   --project=chromium tests/e2e-prod/worker-threads-keepalive.spec.ts` → 1 failed:
   `- "KA|got hi true" - "KA|wexit 0"`, `"KA|EXIT 0"` kept, `- "KA|echo ping" - "KA|echo-exit 1"`.
+
+## IMPLEMENT (2026-09-25)
+
+Same host: Node v24.16.0, npm 11.17.0. Probes run `node <file>` under the 10 s
+alarm, 3 runs each, identical output.
+
+### Worker `removeAllListeners` (Parity 13)
+
+`p-rmall2.cjs`: `w-late300.cjs` posts after 300 ms. `first`: `unref()`, two
+`'message'` listeners, `removeAllListeners('message')`. `second`: one listener,
+`removeAllListeners()`, `unref()`, a new listener. Flags `[kHandle, kPublicPort]`:
+
+```text
+first listeners false,true / first remove-all-message false,false /
+second listener true,true / second remove-all true,false / second relisten false,false   rc 0, no message
+```
+
+Node's `EventEmitter#removeAllListeners` emits `'removeListener'` per dropped
+listener (LIFO; no argument: own-key order, `'removeListener'` last), which the
+Worker's referencing listener sees. `ee-remove-all.cjs` (plain emitter):
+
+```text
+rm:x:bound onceWrapper:2 / rm:x:b:1 / rm:x:a:0 / after-x:0,1,1 / rm:y:a:0 / rm:x:a:0 / after-all:0
+```
+
+`@riftydev/io`'s `removeAllListeners` emits nothing. Making it emit (tried) turned
+`packages/workbench/src/workers/no-coi-project-watches.test.ts` "silently retires
+FSWatcher abort and event callbacks" red (`old-remove: expected true to be false`):
+ADR-0422's retirement (`fs-watch.ts`) and the kernel's `process-manager.ts` teardown
+rely on the silent clear. So the Worker's `removeAllListeners` applies Node's effect
+on `kPublicPort` itself (ADR-0446 §1); the emitter gap is a discovery.
+
+Without that override (current tree, override removed) Parity 13 fails:
+`+ first remove-all-message false,true`, `+ second remove-all true,true`,
+`+ second message late late`.
+
+### `parentPort` edges
+
+- `p-close.cjs` + `w-close.cjs` (`on('message')`, post `hasRef()`, `close()`):
+  `P|message before-close true` / `P|exit 0`. `close()` releases the port.
+- `p-onm.cjs w-onm.cjs`: `null-first=true fn=true fn-fn-after-unref=false
+  five=false:5 null=false dup-count=4 false off-g=3 false` then
+  `after-remove-all=false`, `P|exit 0`. Node's first `onmessage` assignment
+  registers its handler wrapper even for `null`, so `onmessage = null` first
+  references the port; rifty does not (compat ⚠️ shape row). `fn → fn` changes
+  nothing; a non-function reads back as assigned and references nothing.
+
+### New carriers — Node rows
+
+`npx tsx /tmp/vgoal/u8/nodecase/run-case.mts <abs case path>` (setup + `code` as
+`main.js`), 3 runs each, code 0, stderr `""`:
+
+```text
+## handle-remove-all-listeners  first listeners false,true / first remove-all-message false,false /
+                                second listener true,true / second remove-all true,false / second relisten false,false
+## worker-port-esm              w-off.mjs message:echo:a exit:0 / w-teardown.mjs message:echo:a exit:1 terminate:1 /
+                                w-exit.mjs message:tick exit:2 / w-close.mjs message:before-close exit:0
+## exec-sync-encoding           utf8 string "héllo\n" / piped string "héllo\n" / hex 68c3a96c6c6f0a / buffer true / default true
+```
+
+### RED of the new carriers on the BASE product (harness at HEAD)
+
+`worker_threads.ts`, `node-entry-bootstrap.ts`, `child_process-sync.ts` at
+`09f929faa`: `handle-remove-all-listeners` → `TypeError: Cannot read properties of
+undefined (reading 'hasRef')`; `worker-port-esm` → rifty stdout empty (4 rows
+missing); `exec-sync-encoding` → `+ utf8 object {"type":"Buffer",…}`,
+`+ piped object …`, `+ hex <Buffer 68 c3 a9 6c 6c 6f 0a>`.
+
+### Parity 12's carrier needed two repairs
+
+With the natural exit fixed, `patched-exit-exec-sync` still printed
+`WT|exec-failed `: rifty's `execSync` ignored `encoding` and returned a Buffer, so
+`out.split` threw (a scratch browser-unit run printed
+`OUT {"type":"Buffer","data":[116,105,99,107,…]}` = `tick\nexit-event 0\n`).
+Fixed per Node's `spawnSync` (`stdout.toString(encoding)` unless `'buffer'`);
+Parity 15. Then the only diff was the oracle's `WT|child exit-event \x1b[33m0\x1b[39m`:
+the Playwright worker's `FORCE_COLOR` reached the live-Node oracle, whose piped
+execSync child colored the number. The oracle now runs without `FORCE_COLOR`
+(the evidence's `oracle-bu.mts` run outside Playwright, and a user's terminal,
+print `WT|child exit-event 0`).

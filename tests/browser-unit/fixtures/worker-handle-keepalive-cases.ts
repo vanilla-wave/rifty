@@ -3,7 +3,9 @@ import handleKeepalive from '../../../tools/node-parity-runner/cases/worker_thre
 import handleListenerReference from '../../../tools/node-parity-runner/cases/worker_threads/handle-listener-reference.case.ts';
 import handleNapiRsUnref from '../../../tools/node-parity-runner/cases/worker_threads/handle-napi-rs-unref.case.ts';
 import handleReferenceApi from '../../../tools/node-parity-runner/cases/worker_threads/handle-reference-api.case.ts';
+import handleRemoveAllListeners from '../../../tools/node-parity-runner/cases/worker_threads/handle-remove-all-listeners.case.ts';
 import workerNaturalExit from '../../../tools/node-parity-runner/cases/worker_threads/worker-natural-exit.case.ts';
+import workerPortEsm from '../../../tools/node-parity-runner/cases/worker_threads/worker-port-esm.case.ts';
 import workerPortHeld from '../../../tools/node-parity-runner/cases/worker_threads/worker-port-held.case.ts';
 import workerPortReference from '../../../tools/node-parity-runner/cases/worker_threads/worker-port-reference.case.ts';
 import type { ParityCase } from '../../../tools/node-parity-runner/src/types.ts';
@@ -11,7 +13,7 @@ import type { AdvancedIpcProgram } from './advanced-ipc-cases.ts';
 
 /**
  * ADR-0446 programs for a real Chromium child realm (`node main.cjs` in the
- * owner terminal) and live Node. The seven parity programs run verbatim as
+ * owner terminal) and live Node. The nine parity programs run verbatim as
  * `program.cjs`; `main.cjs` only prefixes the parent's console rows with `WT|`
  * so shell noise and stderr stay out of the comparison. The other programs add
  * what the parity harness cannot see: the process's own 'exit' event, the time
@@ -50,6 +52,8 @@ export const workerHandlePrograms: readonly AdvancedIpcProgram[] = [
   fromParityCase('worker-natural-exit', workerNaturalExit),
   fromParityCase('worker-port-reference', workerPortReference),
   fromParityCase('worker-port-held', workerPortHeld),
+  fromParityCase('handle-remove-all-listeners', handleRemoveAllListeners),
+  fromParityCase('worker-port-esm', workerPortEsm),
   // Goal I2's oracle program (vitest-run-in-browser evidence §Oracle, t3.cjs).
   program(
     'i2-oracle',

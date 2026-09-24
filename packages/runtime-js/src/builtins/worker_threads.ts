@@ -19,6 +19,12 @@ import {
 import { type FsSync, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { nodeMessageChannel } from '../internal/message-port-ref.ts';
 import { fileURLToPathPosix, isNodeUrl } from '../internal/posix-file-url.ts';
+import {
+  type WorkerReferences,
+  attachWorkerReferences,
+  referenceParentPort,
+  referenceWorker,
+} from '../internal/worker-reference.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -62,10 +68,10 @@ interface WorkerMessageEvent {
 type WorkerMessageHandler = (event: WorkerMessageEvent) => void;
 
 interface WorkerPort extends EventEmitter {
-  onmessage: WorkerMessageHandler | null;
+  onmessage: unknown;
   postMessage(msg: unknown): void;
-  ref(): WorkerPort;
-  unref(): WorkerPort;
+  ref(): unknown;
+  unref(): unknown;
   start(): void;
   close(): void;
 }
@@ -101,6 +107,7 @@ export class Worker extends EventEmitter {
   /** ADR-0011 phase 2: when present, backed by a real `kernel.spawnWorker`
    * realm and `terminate` routes through it. */
   private workerHandle: ProcessHandle | null = null;
+  private readonly references: WorkerReferences;
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
@@ -128,6 +135,8 @@ export class Worker extends EventEmitter {
     this.workerData = opts.workerData;
     this.processContext = processContext;
     this.env = env;
+    // ADR-0446: held from here (after every synchronous validation) to the end.
+    this.references = attachWorkerReferences(this);
     // TODO(backlog: runtime-js/worker-threads-prompt-start-atomics-wait):
     // synchronous allocation cannot close prompt-start while entry loading
     // still needs parent-serviced remote FS.
@@ -185,13 +194,8 @@ export class Worker extends EventEmitter {
         argv: ['rifty', script],
         env,
         cwd: this.processContext.cwd,
-        // serve:true keeps a message-driven Worker alive (Node parity, and the
-        // shape Rolldown's pthread pool needs) — the kernel never drain-reaps a
-        // serve child. Cost: a run-to-completion Worker (no live handle after the
-        // entry resolves) does NOT auto-emit 'exit' here like Node; the
-        // same-realm path does (keepsAlive -> terminate(0)). Explicit, tracked
-        // divergence (not a silent hang):
-        // TODO(backlog: runtime-js/worker-threads-kernel-run-to-completion-exit).
+        // serve:true: the kernel never drain-reaps the worker; its node-entry
+        // bootstrap drains it without a cap and exits the Node way (ADR-0446 §5).
         serve: true,
       };
       const handle = globalProcessManager.spawnWorkerThread(
@@ -327,11 +331,16 @@ export class Worker extends EventEmitter {
     return code;
   }
 
-  ref(): this {
-    return this;
+  ref(): void {
+    referenceWorker(this, 'ref');
   }
 
-  unref(): this {
+  unref(): void {
+    referenceWorker(this, 'unref');
+  }
+
+  override removeAllListeners(event?: string | symbol): this {
+    this.references.removeAll(event, () => super.removeAllListeners(event));
     return this;
   }
 
@@ -376,6 +385,7 @@ export class Worker extends EventEmitter {
   private finish(code: number): void {
     if (this.exited) return;
     this.exited = true;
+    this.references.dispose();
     this.emitToOwner('exit', code);
   }
 
@@ -574,7 +584,8 @@ function createWorkerPort(postMessage: (msg: unknown) => void): WorkerPort {
 
 function deliverToPort(port: WorkerPort, msg: unknown): void {
   port.emit('message', msg);
-  port.onmessage?.({ data: msg });
+  const handler = port.onmessage;
+  if (typeof handler === 'function') handler({ data: msg });
 }
 
 function readGlobalOnMessage(): WorkerMessageHandler | null {
@@ -623,6 +634,7 @@ function readProcessWorkerContext(): WorkerThreadContext | null {
       );
     }
   });
+  referenceParentPort(parentPort);
   const context: WorkerThreadContext = {
     parentPort,
     workerData: decodeWorkerData(launch.workerDataJson),

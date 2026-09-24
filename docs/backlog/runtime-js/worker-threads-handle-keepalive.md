@@ -1,13 +1,13 @@
 ---
 area: runtime-js
 status: ready
-title: A live `worker_threads.Worker` holds its parent and a worker thread exits when its loop drains, as in Node
+title: A live `worker_threads.Worker` holds its parent, a worker thread exits when its loop drains, and no natural exit calls a reassigned `process.exit`, as in Node
 created: 2026-09-15
 why: the keepalive counts timers/immediates/pending imports (+ fetch, ADR-0158; referenced MessagePorts, ADR-0447) only; a program whose only pending work is a running Worker drains and exits 0 before the worker's message, and a kernel worker thread never exits by itself (Node keeps the parent alive until the worker exits or is unref'd, and ends a worker whose loop drained)
 epic: vitest-run-in-browser
 blocked_by: []
-sources: [docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-evidence.md, docs/adr/runtime-js/0446-count-live-worker-threads-workers-in-child-realm-keepalive.md, docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/adr/runtime-js/0152-child-realm-event-loop-drain-loud-fail-exit-contract.md, docs/backlog/runtime-js/worker-threads-kernel-run-to-completion-exit.md]
-code: [packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, tools/node-parity-runner/src/worker-env-kernel-worker.ts]
+sources: [docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-evidence.md, docs/adr/runtime-js/0446-count-live-worker-threads-workers-in-child-realm-keepalive.md, docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/adr/runtime-js/0152-child-realm-event-loop-drain-loud-fail-exit-contract.md]
+code: [packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/internal/worker-reference.ts, packages/runtime-js/src/builtins/child_process-sync.ts, packages/workbench/src/workers/node-entry-bootstrap.ts, tools/node-parity-runner/src/worker-env-kernel-worker.ts, tools/node-parity-runner/src/run-in-rifty.ts]
 ---
 
 ## Context
@@ -53,8 +53,8 @@ challenge: 2026-09-15 — reuse epic vitest-run-in-browser (6 problems, resolved
 
 ## Acceptance
 
-1. The parity runner (`kind: 'worker-env'`, a physical kernel Worker running the production node-entry bootstrap) matches live Node v24.16.0 stdout for Parity cases 1–7, and `kind: 'node-cli-eval'` matches stdout, stderr and status for Parity case 8. → I2, I3, ADR-0446
-2. In a real Chromium child realm (`tests/browser-unit/worker-handle-keepalive.spec.ts`), `node main.cjs` runs each program in `tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts`: Parity cases 1–7 verbatim, plus Parity cases 9–12. Each prints the same `WT|` rows and exits with the same code as a live Node run of the same sources, without timing out. → I2, I3, ADR-0446
+1. The parity runner (`kind: 'worker-env'`, a physical kernel Worker running the production node-entry bootstrap) matches live Node v24.16.0 stdout for Parity cases 1–7, 13 and 14, `kind: 'node-cli-eval'` matches stdout, stderr and status for Parity case 8, and `kind: 'exec-sync'` matches stdout for Parity case 15. → I2, I3, ADR-0446
+2. In a real Chromium child realm (`tests/browser-unit/worker-handle-keepalive.spec.ts`), `node main.cjs` runs each program in `tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts`: Parity cases 1–7, 13 and 14 verbatim, plus Parity cases 9–12. Each prints the same `WT|` rows and exits with the same code as a live Node run of the same sources, without timing out. → I2, I3, ADR-0446
 3. Production build (`tests/e2e-prod/worker-threads-keepalive.spec.ts`): in the shell, `node keepalive.cjs` prints `KA|got hi true`, `KA|wexit 0`, `KA|EXIT 0`, and `node listener.cjs` prints `KA|echo ping`, `KA|echo-exit 1`. Both exit 0, matching the Node artifact (evidence §Prod programs). → I2, ADR-0446
 4. Rolldown's wasm32-wasi pool never holds its parent. The existing real-package spec, `tests/browser-unit/message-port-ref-keepalive.spec.ts` "detached rolldown build on the vite 8 template completes as under Node", still passes, with its rows and exit 0 unchanged. The pool Workers run the napi-rs neutering from Parity case 4. → I2, I4, ADR-0446
 5. `docs/public/compat/process.md` gets these rows. ✅: Worker keepalive (`ref`/`unref`, `'message'`-listener referencing, `parentPort` referencing) and worker-thread natural exit, which replaces the ⚠️ "Worker-thread natural exit" row. ⚠️: the internal reference objects' shape, the public-port-only `'exit'` delivery, and the same-realm fallback's worker lifetime. ❌: the kernel-path `'error'` for a worker-runtime throw. → ADR-0446
@@ -77,16 +77,20 @@ and `tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts` (9–12). Nod
 10. `unref-process-exit`: an `unref()`'d Worker. The process's `'exit'` fires first and no worker row prints. Node rows: `WT|start`, `WT|EXIT 0`, code 0. → I2
 11. `patched-exit-program` (`node <file>`): Node rows `WT|tick`, `WT|exit-event 0`, code 0. → I3, ADR-0446
 12. `patched-exit-exec-sync` (the execSync child's natural exit): Node rows `WT|child tick`, `WT|child exit-event 0`, `WT|exec-ok`, code 0. → I3, ADR-0446
+13. `handle-remove-all-listeners`: `removeAllListeners('message')` unreferences `kPublicPort` (Node's emitter emits `'removeListener'` per listener); with no argument it also drops the referencing listener, so a later `'message'` listener holds nothing. Node rows: `first listeners false,true` … `second relisten false,false` (5 rows); no late message. → I2, ADR-0446
+14. `worker-port-esm`: ESM worker realms (vitest's pool workers `import { parentPort }`): `off()` drains (`exit:0`), vitest's teardown `removeAllListeners('message')` holds until `terminate()` (`exit:1 terminate:1`), natural exit reads `exitCode` 2 and ignores a reassigned `process.exit`, `close()` releases a listened port (`exit:0`). Node rows: 4 rows in evidence. → I2, I3, ADR-0446
+15. `child_process/exec-sync-encoding`: `execSync`'s `encoding` decodes stdout (with or without `stdio: 'pipe'`); Parity 12's program splits a `utf8` result. Node rows: `utf8 string "héllo\n"` … `default true`. → I3
 
 ## Fault matrix
 
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
 | `torn-state` × repeated `ref`/`unref`, `'message'` listener add/remove, and calls after exit on one Worker | Each reference object adds at most one hold and releases only its own. After `'exit'`, both are `null`, `ref()`/`unref()` do nothing, and nothing is held (Node rows) | Parity 2 (transition rows), Parity 5 (`after-exit:null,null,undefined,undefined`) | → I2, ADR-0446 |
+| `torn-state` × `removeAllListeners('message')` / `removeAllListeners()` on a Worker; `close()` on a listened `parentPort` | the public port is released as in Node (a no-argument call also drops the referencing listener); a closed `parentPort` never holds again and its worker exits | Parity 13, Parity 14 (`w-close.mjs`) | → I2, ADR-0446 |
 | `torn-state` × a Worker constructor that throws (invalid path, `eval` with a URL) | no hold is taken; a valid Worker holds from construction | `worker_threads-keepalive.fault.test.ts` "takes no hold when the constructor throws…" | → ADR-0446 |
 | `observable-order` × worker messages (including one posted from the worker's own `'exit'` listener) vs the parent's `'exit'` | every message arrives before `'exit'`; the hold is released only at the Worker's end | Parity 5 (`message:first message:second exit:0`, `message:worker exit event 0 exit:0`) | → I2, ADR-0446 |
 | peer death (fault-classes §Boundary: dedicated Worker) × a kernel peer closing, or the DOM Worker boundary refusing the spawn | `'error'` then `'exit'` 1, and every hold the Worker took is released; the parent never hangs | `worker_threads-keepalive.fault.test.ts` rows 1–2 (real ProcessManager; only the absent DOM Worker is substituted) | → I2, ADR-0446 |
-| `unbounded-read` × a worker whose `parentPort` stays referenced | the worker and its referencing parent stay alive until `terminate()` or Ctrl-C, as in Node. The worker drain is uncapped; the parent's own drain policy is unchanged (the terminal `node` is uncapped, `.bin`/execSync keep ADR-0152 §4's loud 30 s cap) | Parity 7 | → I2, ADR-0152 |
+| `unbounded-read` × a worker whose `parentPort` stays referenced | the worker and its referencing parent stay alive until `terminate()` or Ctrl-C, as in Node. The worker drain is uncapped; the parent's own drain policy is unchanged (the terminal `node`, `.bin` and spawn/fork children are uncapped; only the execSync child keeps ADR-0152 §4's loud 30 s cap) | Parity 7, Parity 14 (`w-teardown.mjs`); the uncapped worker drain by reading (`node-entry-bootstrap.ts` worker-thread branch) | → I2, ADR-0152 |
 | `provenance-lie` × napi-rs replacing `ref` on the reference objects | no later `ref()` or `'message'` listener holds again; rolldown's pool never pins its parent | Parity 4; Acceptance 4 | → I2, ADR-0446 |
 | `sibling-drift` × natural-exit owners (worker thread, `node <file>`, `node -e`, execSync child; the parity runner's worker-env adapter) | the same Node exit on each: one `'exit'` with `exitCode ?? 0`, never through a reassigned `process.exit` | Parity 5, 8, 11, 12; Acceptance 1 (adapter) and 2 (Workbench bootstrap) | → I2, I3, ADR-0446 |
 
@@ -104,7 +108,10 @@ and `tests/browser-unit/fixtures/worker-handle-keepalive-cases.ts` (9–12). Nod
 ## Decisions
 
 ready-verdict: 2026-09-24 — Contract+RED @ 09f929faa197f35ead4f1474aff91e35b304bd2b
+re-cut: 2026-09-25 — widened: Parity 13–15 + torn-state row for `removeAllListeners`/`close()` (Node probes, evidence §IMPLEMENT); title names the natural-exit owners; unbounded-read parenthetical corrected (Contract+RED NOTEs) — trace: none
 - 2026-09-24 — carrier: ADR-0446, a short ADR citing ADR-0152 §1 (following ADR-0158 and ADR-0447) that decides ADR-0445 rule 6's worker-thread clause. Rejected: #349's single hold without Node's objects, a real MessagePort as `kPublicPort`, #351's `serve:false` + kernel drain hook, and a kernel-side IPC count.
 - 2026-09-24 — scope: absorbs `runtime-js/worker-threads-kernel-run-to-completion-exit`. The draft and its `worker_threads.ts` TODO marker are deleted when this unit lands. Its 2026-09-10 parent-lifetime question ("does a pending kernel Worker message keep its CJS parent alive?") is answered by Parity 1/9: a live Worker holds its parent.
 - 2026-09-24 — scope: the map's open question (natural exit calls the reassignable `process.exit`, owner: agent, first exercised here) is answered for every node-entry owner (ADR-0446 §6, Parity 5/8/11/12, traced to I3). The no-COI owner is recorded as a discovery.
 - 2026-09-24 — carriers: the parity-runner worker-env adapter must run worker-thread launches through the Workbench bootstrap (sibling-drift row). Every row whose Node outcome is not timing-dependent has a live-Node carrier. No carrier puts an `'exit'` listener on a Worker held only by its public port (evidence §Unref'd port hold).
+- 2026-09-25 — criterion (`PR-4`): `worker_threads.test.ts` asserted `ref()`/`unref()` return the Worker (BASE no-op); Node returns `undefined` (Parity 2) — assertion follows Node. `runNodeProgram`'s live-Node oracle drops Playwright's `FORCE_COLOR` (it colored the execSync child's piped numbers; the rifty terminal has none; precedent `tests/e2e/cli-report.spec.ts`).
+- 2026-09-25 — required repairs (`REV-12`): `execSync` ignored `encoding` (Parity 12's carrier failed on it; Parity 15); `@riftydev/io` `removeAllListeners` emits no `'removeListener'` — the Worker mirrors Node's effect on `kPublicPort` instead of changing the shared emitter (its silent clear backs ADR-0422 retirement and kernel teardown); the emitter gap is a land-step discovery.

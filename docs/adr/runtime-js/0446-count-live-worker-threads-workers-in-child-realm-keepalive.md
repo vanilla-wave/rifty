@@ -47,7 +47,10 @@ The constraints come from real packages (evidence:
    `kPublicPort` starts unreferenced. The constructor adds `'newListener'` /
    `'removeListener'` listeners that call `this[kPublicPort].ref()` when the
    `'message'` count goes from 0 to 1, and `.unref()` when it drops to 0
-   (Node's `setupPortReferencing`, looked up at call time).
+   (Node's `setupPortReferencing`, looked up at call time). The Worker's
+   `removeAllListeners` releases `kPublicPort` as Node's `'removeListener'`
+   emission does; `@riftydev/io`'s emitter clears silently, and its silent
+   clear stays (ADR-0422 retirement and kernel teardown rely on it).
 2. **`Worker#ref()` / `unref()`** do what Node does:
    `if (this[kHandle] === null) return; this[kHandle].ref(); this[kPublicPort].ref();`
    (`unref` is the same). Both return `undefined`. `Worker#hasRef` stays absent.
@@ -61,7 +64,8 @@ The constraints come from real packages (evidence:
    `on`/`addListener`/`once`/`prependListener`/`prependOnceListener`, and
    `onmessage` going from null to a function. Removing the last listener
    unreferences it: `off`/`removeListener`, a `once` firing, or `onmessage = null`.
-   `removeAllListeners()` leaves the flag as it is, as in Node.
+   `removeAllListeners()` leaves the flag as it is, as in Node. `close()`
+   releases it for good.
 5. **Worker-thread natural exit.** The kernel spec stays `serve: true`
    (ADR-0144). The Workbench node-entry bootstrap owns the worker-thread
    lifecycle the way it owns the terminal program's (ADR-0385). After the entry,

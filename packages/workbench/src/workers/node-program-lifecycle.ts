@@ -28,7 +28,8 @@ export interface NodeLifecycleDeps {
   /** Report the CURRENT listened port set to the owner (rifty:node-listening). */
   readonly postListening: (ports: number[]) => void;
   /**
-   * `process.exit`. Natural exit passes no argument: Node's `exit()` emits
+   * The process's own `exit`, captured before user code (ADR-0446 §6), never
+   * a reassigned `process.exit`. Natural exit passes no argument: Node's `exit()` emits
    * `'exit'` and reads `process.exitCode` itself (ADR-0445 rule 6).
    */
   readonly exit: (...code: [] | [number]) => void;
