@@ -1092,7 +1092,7 @@ the four cases above. Eval already claimed the first terminal
 (`beginNodeEvalUnhandled`). The no-COI project command has no control port;
 by code reading (not executed, no carrier) it prints the error on the
 invocation's stderr and its drain rejects with the exit signal — a loud failed
-result, never 0; handler dispatch there stays ⚠️ unclaimed. Execsync probe
+result, never 0; handler dispatch there stays ⚠️ unclaimed. (Final+GREEN b-r1 reading disputes this: the no-COI toolchain worker never calls `installProcessGlobals`, so its traps likely take the NO_PROCESS path — unprobed either way; nothing claimed.) Execsync probe
 (`node xs-parent.cjs`, parent prints the thrown message): `494474229` →
 `L|no-throw` 3/3 (child exited 0); the fix → `Command failed with exit code 1`
 3/3.

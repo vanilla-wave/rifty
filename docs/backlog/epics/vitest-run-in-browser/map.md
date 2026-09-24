@@ -2,17 +2,13 @@
 
 Live plan: index, not store. Minimal pattern first; each child a `draft`
 finding compiled to `ready` at its own PICKUP (`RDY-1`). Where a child
-depends on another (8 after 7; 11 after 8; 12 after all) the order
+depends on another (11 after 8; 12 after all) the order
 is also recorded as `blocked_by`; the other children are independent.
 
 ## Items
 
-7. `runtime-js/process-lifecycle-events-exit-code` — **process-events** — I3;
-   uncaught/unhandled handlers, `exit` event, `exit()` honours `exitCode`
-   (unset `exitCode` reads `undefined`, as cac/vitest branch on it).
 8. `runtime-js/worker-threads-handle-keepalive` — **handle-keepalive** — I2; a
-   live `worker_threads.Worker` is a counted handle. After 7 (`exit` must
-   exist before the drain contract changes). Contract is fixed by I2. A
+   live `worker_threads.Worker` is a counted handle. Contract is fixed by I2. A
    counted Worker needs a run-to-completion Worker to exit (absorbs
    `runtime-js/worker-threads-kernel-run-to-completion-exit`) and a real
    `unref()` in Node's observable shape (napi-rs neuters `ref` through the
@@ -27,12 +23,15 @@ is also recorded as `blocked_by`; the other children are independent.
     it silently). After 8.
 12. `runtime-js/vitest-run-acceptance` — **acceptance** — I4, I5, I7; e2e spec
     running the scenario (`vitest.config.ts`, `.ts` tests) on both pools + a
-    `vitest.md` page in `docs/public/compat/`; closes the goal. After 7, 8, 11.
+    `vitest.md` page in `docs/public/compat/`; closes the goal. After 8, 11.
 
 ## Open questions
 
-- ADR shape for I2/I3: correction note on ADR-0152 vs one short ADR citing it —
-  owner: agent — decided at item 7 pickup (`DEC-2`).
+- Natural exit calls the user-reassignable `process.exit` property
+  (`node-entry-bootstrap.ts` `exit: (...code) => proc.exit(...code)`): vitest
+  4.1.11 pool workers patch it (a throwing patch → exit 1 where Node fires
+  `'exit'` 0 and exits 0) — owner: agent — first exercised at item 8 (worker
+  natural exit) / item 12; a wall there is a re-chart.
 - `vitest.config.ts` loading (vite `loadConfigFromFile` → rolldown bundle of
   the TS config) and `.ts` test transform under vitest's module runner: no
   wall observed yet because earlier walls block — owner: agent — first

@@ -5,7 +5,7 @@ title: A live `worker_threads.Worker` keeps the child event loop alive
 created: 2026-09-15
 why: the keepalive counts timers/immediates/pending imports (+ fetch, ADR-0158) only; a program whose only pending work is a running Worker drains and exits 0 before the worker's message (Node keeps the parent alive until the worker exits or is unref'd)
 epic: vitest-run-in-browser
-blocked_by: [runtime-js/process-lifecycle-events-exit-code]
+blocked_by: []
 sources: [docs/backlog/runtime-js/reference/vitest-run-in-browser-evidence.md, docs/adr/runtime-js/0152-child-realm-event-loop-drain-loud-fail-exit-contract.md, docs/backlog/runtime-js/keepalive-residual-gaps.md, docs/backlog/runtime-js/worker-threads-kernel-run-to-completion-exit.md]
 code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/builtins/child_process.ts, packages/workbench/src/workers/node-program-lifecycle.ts]
 ---
