@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Restore native `initialMessages` in fresh sessions; reject incomplete tool pairs, expose trace provenance and count only new-run usage (ADR-0466).
+
 - Refuse pi-expandable commands inside `send` after resource discovery and budget/cancellation checks; first and later sends report the same error without model dispatch (ADR-0442).
 - Load pi 0.85.1 project context/skills by default; resource reports, opt-outs and explicit reload. Preserve profile paragraphs; adopt custom-prompt tail (ADR-0440 supersedes ADR-0434 tail clause).
 - `reload()` retries a failed startup read; `list` entries outside the listed directory are reported; unreadable ignore files skip silently as the CLI.

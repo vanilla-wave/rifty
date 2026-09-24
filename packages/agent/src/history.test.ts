@@ -118,7 +118,7 @@ describe('restored native agent history', () => {
       });
       await session.send('fresh');
       expect(run.contexts[1]?.messages).toEqual([
-        expect.objectContaining({ role: 'user', content: 'fresh' }),
+        expect.objectContaining({ role: 'user', content: [{ type: 'text', text: 'fresh' }] }),
       ]);
     } finally {
       await session.dispose();
@@ -173,7 +173,26 @@ describe('restored native agent history', () => {
     expect(run.capabilities()).toBe(0);
   });
 
-  it('accepts a host-supplied error result and an omitted history', async () => {
+  it('starts fresh when initialMessages is absent', async () => {
+    const run = setup();
+    const { initialMessages: _seed, ...options } = run.options;
+    const session = createAgentSession(options);
+    try {
+      expect(await session.exportTrace()).toMatchObject({
+        transcript: [],
+        restoredMessageCount: 0,
+      });
+      await session.send('fresh');
+      expect(session.status(), session.detail()).toBe('done');
+      expect(run.contexts[0]?.messages).toEqual([
+        expect.objectContaining({ role: 'user', content: [{ type: 'text', text: 'fresh' }] }),
+      ]);
+    } finally {
+      await session.dispose();
+    }
+  });
+
+  it('accepts a host-supplied error result and an empty history', async () => {
     for (const seed of [[call(), { ...result(), isError: true }], []]) {
       const run = setup(seed as AgentMessage[]);
       const session = run.create();

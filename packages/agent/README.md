@@ -35,6 +35,37 @@ const agent = createAgentSession({
 });
 ```
 
+Restore a conversation by passing native Pi messages captured from `message_end`:
+
+```ts
+import type { AgentMessage } from '@riftydev/agent';
+
+const history: AgentMessage[] = loadNativeMessages(); // host-owned storage/decoding
+const agent = createAgentSession({ host, settings: { baseUrl, model }, initialMessages: history });
+agent.subscribe(event => {
+  if (event.type === 'agent' && event.event.type === 'message_end') {
+    history.push(event.event.message);
+    saveNativeMessages(history);
+  }
+});
+await agent.send('Continue from the saved work.');
+```
+
+`initialMessages` also works with `streamFn`; creation copies the history, so later
+caller mutations cannot alter it. Supply native Pi 0.85.1 `user`, `assistant` and
+`toolResult` messages with numeric timestamps and native content. Calls must have
+matching id/name results in the immediately following tool-result group. Missing,
+orphan, duplicate or mismatched results throw `TypeError` naming `initialMessages`
+before host/model work. A host-supplied paired `isError` result is accepted. Restored
+tools never execute automatically. The host may change models for a new session;
+Pi owns provider conversion. Storage, JSON decoding and migrations stay with the host.
+
+`reset()` clears restored and new messages. Also clear the host's stored history on
+conversation/project reset. `exportTrace().restoredMessageCount` marks the restored
+prefix of `transcript`; events, timings, aggregate usage and per-run limits describe
+only new runs. Reset clears that count. Trace export still redacts the settings key;
+persist native messages rather than the diagnostic trace when exact history matters.
+
 The session owns its host handle. The Workbench adapter opens/closes one
 dedicated terminal unless the caller supplies a terminal (caller-owned).
 It never closes the ProjectSession. Attach the supplied terminal to the UI
@@ -94,8 +125,8 @@ Consumer tools must put their own model-relevant outcome in text.
 Limits default to 100 tool calls / 180 seconds per `send`. Tool text results
 use a 16 KiB UTF-8 head/tail cap. Trace includes native transcript, events and
 agent output, timing, token usage and host diff (or explicit unavailability/error).
-Chat persistence and multimodal/image tool results are unsupported; the latter
-throws `NotImplementedError('agent.tool-image-result')`.
+Storage remains host-owned. Multimodal/image tool results are unsupported and
+throw `NotImplementedError('agent.tool-image-result')`.
 
 | Capability | Support |
 |---|---|

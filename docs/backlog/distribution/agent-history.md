@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Restore native agent history in fresh headless sessions
 created: 2026-09-25
 why: External hosts must remove their published-dist history patch.
@@ -42,9 +42,15 @@ No schema migration or arbitrary JSON decoder; callers supply native Pi 0.85.1 m
 
 ## Decisions
 
+ready-verdict: 2026-09-25 — Contract+RED @ b9dbd490888cc3f5fb3d3dc8a0a27dd0c384aee2
+
 - 2026-09-25 — ADR-0466 adds native seed and trace prefix; issue permits rejection, avoiding invented tool outcomes.
 - 2026-09-25 — issue model-change clause applies to fresh host sessions; Playground settings policy ADR-0427 unchanged.
 
 ## Challenge
 
-Pending independent Contract+RED and RDY-6 written-result check.
+challenge: 2026-09-25 — clear
+
+Independent reviewer contract_review: Contract+RED permits implementation after accepted
+carrier repair. RDY-6 final written-result check and Challenge clear; no unresolved
+material user fork. Evidence: reference/agent-history-contract-red.json.

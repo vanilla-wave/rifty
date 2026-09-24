@@ -3,6 +3,7 @@ import type { Model, ToolResultMessage } from '@earendil-works/pi-ai';
 import { streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
 import { NotImplementedError } from '@riftydev/io';
 import { unsupportedChatCommand } from './chat-command.ts';
+import { restoreMessages } from './history.ts';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
 import { loadResources } from './resources.ts';
 import { isToolFailure, standardTools, wrapTool } from './tools.ts';
@@ -50,6 +51,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     : undefined;
   const maxToolCalls = positiveInteger(options.maxToolCalls ?? 100, 'maxToolCalls');
   const runTimeoutMs = positiveInteger(options.runTimeoutMs ?? 180_000, 'runTimeoutMs');
+  const initialMessages = restoreMessages(options.initialMessages);
+  let restoredMessageCount = initialMessages.length;
   const listeners = new Set<(event: AgentSessionEvent) => void>();
   const events: { at: number; event: AgentSessionEvent }[] = [];
   const timings: { startedAt: number; endedAt: number }[] = [];
@@ -113,7 +116,11 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   }
 
   const agent = new Agent({
-    initialState: { ...(model ? { model } : {}), ...refreshCapabilities() },
+    initialState: {
+      ...(model ? { model } : {}),
+      ...refreshCapabilities(),
+      messages: initialMessages,
+    },
     toolExecution: 'sequential',
     streamFn:
       options.streamFn ??
@@ -313,6 +320,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (active || reloading) throw new Error('Stop the agent before Reset');
       if (disposed) throw new Error('Agent session is disposed');
       agent.reset();
+      restoredMessageCount = 0;
       events.length = 0;
       timings.length = 0;
       budgetReason = undefined;
@@ -326,7 +334,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     },
     async exportTrace(): Promise<AgentTrace> {
       const usage = { input: 0, output: 0, totalTokens: 0 };
-      for (const message of agent.state.messages) {
+      for (const message of agent.state.messages.slice(restoredMessageCount)) {
         if (message.role !== 'assistant') continue;
         usage.input += message.usage.input;
         usage.output += message.usage.output;
@@ -354,6 +362,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
             }
           : { transport: 'custom', maxToolCalls, runTimeoutMs },
         transcript: agent.state.messages,
+        restoredMessageCount,
         events,
         timings,
         status,
