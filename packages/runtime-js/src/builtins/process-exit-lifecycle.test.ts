@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -6,6 +7,7 @@ import {
   resetKeepalive,
 } from '../internal/event-loop-keepalive.ts';
 import { installNodeProcessShim } from '../ipc/install-process.ts';
+import { dispatchUncaughtException } from './process-lifecycle-events.ts';
 
 // ADR-0445 fault rows (observable-order): `exit()` re-entered from an `'exit'`
 // listener, or called again by a timer that listener scheduled (vitest's
@@ -126,6 +128,59 @@ describe('fatal unhandled rejection (ADR-0445)', () => {
     expect(frames).toEqual([{ kind: 'control:self-exit', code: 2 }]);
     expect(stderr).toEqual([]);
     await expect(awaitDrain()).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 2 });
+  });
+
+  // An in-process host (no-COI runBin) projects a declared gap from the fatal
+  // failure; the recorded exit signal must still name it. A guest-owned exit
+  // names nothing.
+  it('the recorded fatal exit signal keeps the error it terminated for', async () => {
+    processWithControl();
+    const gap = new NotImplementedError('toolchain.threaded-wasm');
+    const reason = new Error('WASI binding not found', { cause: gap });
+    const promise = Promise.reject(reason);
+    promise.catch(() => {});
+
+    handleRealmUnhandledRejection(reason, promise);
+
+    const signal = await awaitDrain().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(signal).toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 1 });
+    expect((signal as Error).cause).toBe(reason);
+  });
+
+  it('a throwing uncaughtException listener exit keeps the listener error', () => {
+    const { process } = processWithControl();
+    const thrown = new NotImplementedError('child_process.execSync');
+    process.on('uncaughtException', () => {
+      throw thrown;
+    });
+
+    const outcome = dispatchUncaughtException(new Error('entry'), 'uncaughtException');
+
+    expect(outcome).toMatchObject({
+      kind: 'exited',
+      signal: { code: 'RIFTY_PROCESS_EXIT', exitCode: 7 },
+    });
+    expect(outcome.kind === 'exited' && outcome.signal.cause).toBe(thrown);
+  });
+
+  it('a guest exit() in the fatal exit listener carries no fatal cause', async () => {
+    const { process } = processWithControl();
+    process.on('exit', () => process.exit(2));
+    const reason = new Error('V9');
+    const promise = Promise.reject(reason);
+    promise.catch(() => {});
+
+    handleRealmUnhandledRejection(reason, promise);
+
+    const signal = await awaitDrain().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(signal).toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 2 });
+    expect((signal as Error).cause).toBeUndefined();
   });
 
   it('a rejection seen after exit(0) prints nothing and keeps status 0', async () => {
