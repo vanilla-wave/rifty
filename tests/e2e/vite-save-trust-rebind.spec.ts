@@ -2,6 +2,7 @@ import { type Page, expect, test } from '@playwright/test';
 import {
   bootProjectFiles,
   expectViteDevServerReady,
+  openLauncher,
   openShellTerminal,
   pickStarter,
   readActiveProjectText,
@@ -11,8 +12,7 @@ import {
 const TRANSITION_TIMEOUT = 120_000;
 
 async function openProjects(page: Page): Promise<void> {
-  await page.click('[data-action="open-launcher"]');
-  await expect(page.locator('[data-testid="launcher"]')).toBeVisible({ timeout: 5_000 });
+  await openLauncher(page);
   await page.getByRole('button', { name: /^Projects/ }).click();
 }
 
