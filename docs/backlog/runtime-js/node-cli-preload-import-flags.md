@@ -3,10 +3,10 @@ area: runtime-js
 status: draft
 title: Node CLI preload and import flags
 created: 2026-07-30
-why: Node loads `--require`/`-r` and `--import` modules before eval or entry execution, while Rifty stops each valid form at a named no-child gap.
+why: Node loads `--require`/`-r` and `--import` modules before eval or entry execution, while Rifty stops each valid terminal/Workbench `node` form at a named no-child gap.
 user_story: As a Node CLI author using startup hooks, I want preload modules to run before my command with exact Node identity, but today Rifty throws one named unsupported-context error.
-sources: [M11, ADR-0155, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md, docs/backlog/runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md]
-code: [packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/builtins/child_process-worker.ts]
+sources: [M11, ADR-0155, docs/backlog/runtime-js/reference/node-v24.16.0-cli-eval-probe.md]
+code: [packages/workbench/src/workers/node-entry-resolve.ts, packages/workbench/src/workers/workbench-project-runtime.ts, packages/runtime-js/src/module-loader/loader.ts]
 ---
 
 ## Context
@@ -21,15 +21,16 @@ all five valid spellings (`-r <specifier>`, `--require <specifier>`,
 `process.execArgv`:
 `reference/node-v24.16.0-cli-eval-probe.md` §Residual CLI contexts.
 
-Rifty throws `NotImplementedError('workbench.node.preload-context')` before
-child allocation for those valid eval and program-entry forms. A separated
+Rifty's terminal/Workbench `node` command throws
+`NotImplementedError('workbench.node.preload-context')` before child
+allocation for those valid eval and program-entry forms. A separated
 empty argument is still a consumed specifier and reaches this named gap; in
 Node it instead enters CommonJS loading (`ERR_INVALID_ARG_VALUE`) or ESM
 resolution (`ERR_MODULE_NOT_FOUND`). Only omitted
 `-r`/`--require`/`--import` arguments and empty inline
-`--require=`/`--import=` retain Node's exact exit-9 usage error. Rifty never
-misreports a supported form as an invalid option or silently ignores a
-requested preload.
+`--require=`/`--import=` retain Node's exact exit-9 usage error. On that
+command Rifty never misreports a supported form as an invalid option or
+silently ignores a requested preload.
 
 No matching title, `code:` owner, epic child, or Node CLI preload item was found
 on 2026-07-30. The terminal commands above supply the user-action path. A
@@ -38,14 +39,5 @@ preload/eval realm identity, `process.execArgv`, preload failure priority, and
 program versus eval consumers, including separated empty specifiers. This draft
 chooses no loader or launch mechanism; no coordination mechanism is proposed.
 
-## `spawn('node', [flags…, file])` (2026-09-25)
-
-REV-12 discovery of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`
-(evidence §Discoveries). Node v24.16.0: `spawn('node', ['--require',
-'./pre.cjs', 'c.cjs'])` runs `c.cjs` after the preload (`spawn-flags 0
-"child [\"--require\",\"./pre.cjs\"] pre\n"`). rifty reads the first flag as
-the entry (`buildChildExecutionPlan(…, args[0])` in `child_process-worker.ts`):
-`Error: Cannot find module '/project/--require'`, exit 1 — a wrong error, not
-the named gap. `fork`/`Worker` `execArgv` already carry `-r`/`-C`/
-`--experimental-import-meta-resolve` (ADR-0449). Open: a spawned `node` argv
-reusing that compiler vs the `workbench.node.preload-context` named gap.
+Scope: the top-level CLI only. `spawn('node', [--require …, file])` reads the
+first option as the entry — owned by `runtime-js/spawn-node-eval-arg`.

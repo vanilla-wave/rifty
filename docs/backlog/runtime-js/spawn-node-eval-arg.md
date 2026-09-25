@@ -1,12 +1,12 @@
 ---
 area: runtime-js
 status: draft
-title: spawn('node') consumes -e as a script path in both tiers; missing-script failure leaks raw VfsError
+title: spawn('node') consumes any leading Node option (-e, --require, …) as a script path in both tiers; missing-script failure leaks raw VfsError
 created: 2026-08-28
-why: two defects on one probe — spawn-routed `-e`/`--eval` never reaches the existing eval runner (args[0] treated as filename in BOTH tiers), and the same-realm path surfaces a raw internal `VfsError` stack for ANY missing script path (not just flags) instead of Node's error shape
+why: two defects on one probe — a spawn-routed leading Node option (`-e`/`--eval`, `--require`, any other) is taken as the entry (args[0] treated as filename in BOTH tiers), so `-e` never reaches the existing eval runner and preloads never run, and the same-realm path surfaces a raw internal `VfsError` stack for ANY missing script path (not just flags) instead of Node's error shape
 user_story: As a dev whose script does `spawn('node', ['-e', '…'])`, I want the eval to run (or a Node-shaped failure), but today rifty resolves `-e` as a file and the fallback leaks an internal error class
-sources: [docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, docs/backlog/runtime-js/node-cli-esm-eval-context.md]
-code: [packages/runtime-js/src/builtins/child_process-exec.ts, packages/runtime-js/src/builtins/child_process.ts]
+sources: [docs/backlog/runtime-js/reference/no-coi-degradation-probes.md, docs/backlog/runtime-js/node-cli-esm-eval-context.md, docs/backlog/runtime-js/reference/worker-threads-stdio-streams-empty-exec-argv-evidence.md, docs/adr/runtime-js/0449-carry-node-startup-options-and-worker-stdio-streams.md]
+code: [packages/runtime-js/src/builtins/child_process-exec.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/child_process-worker.ts]
 ---
 
 ## Context
@@ -28,6 +28,24 @@ Scope notes:
   `VfsError`). Node parity case: `Cannot find module` shape + exit 1.
 - Sibling scope: `node-cli-esm-eval-context` owns workbench ESM eval-context forms; `node-cli-*`
   family owns top-level CLI eval contexts. THIS item is the child_process spawn path only.
+
+## Any leading Node option (2026-09-25)
+
+Not `-e`-specific: the product route passes `args[0]` as the entry for any
+token (`child_process.ts` `workerRoute` → `child_process-worker.ts`
+`buildChildExecutionPlan(parent.cwd, options.cwd, args[0])`), so
+`--require`, `--no-warnings`, `-C`, `--inspect`, … each become
+`Cannot find module '/<cwd>/<option>'` (code reading beyond `--require`).
+Probe (REV-12 discovery of `runtime-js/worker-threads-stdio-streams-empty-exec-argv`,
+evidence §Discoveries): Node v24.16.0 `spawn('node', ['--require',
+'./pre.cjs', 'c.cjs'])` runs `c.cjs` after the preload (`spawn-flags 0
+"child [\"--require\",\"./pre.cjs\"] pre\n"`); rifty `spawn-flags 1 ""
+"Error: Cannot find module '/project/--require'"`, exit 1 — a wrong error, no
+named gap. `fork`/`Worker` `execArgv` already carry `-r`/`-C`/
+`--experimental-import-meta-resolve` (ADR-0449). Open: a spawned `node` argv
+reusing that compiler for its supported tokens vs a named throw per
+unsupported token. Terminal/Workbench `node --require …` stays
+`runtime-js/node-cli-preload-import-flags`.
 
 ## Challenge
 

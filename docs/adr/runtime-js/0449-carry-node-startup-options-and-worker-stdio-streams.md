@@ -122,9 +122,10 @@ existing kernel-path `'error'` gap `runtime-js/worker-threads-kernel-error-event
 - vitest's pool children start with Node's options through one generic path;
   nothing vitest-shaped.
 - Deploy matching Worker assets together; a v5 bundle rejects a v6 launch.
-- DEC-2: corrects ADR-0448's active node-entry v5 version (dated note there);
-  follows ADR-0267's version rule and leaves ADR-0339's eval-CLI preload gap
-  (`workbench.node.preload-context`) unchanged.
+- DEC-2: corrects ADR-0448 §Decision 1's active node-entry v5 version (dated
+  note there); follows ADR-0267's version rule and leaves ADR-0339's eval-CLI
+  preload gap (`workbench.node.preload-context`) unchanged. Independent DEC-2
+  decision review, 2026-09-25: justified-with-fixes (§Decision 1 named).
 
 ## References
 

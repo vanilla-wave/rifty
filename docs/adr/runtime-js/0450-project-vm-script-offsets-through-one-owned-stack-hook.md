@@ -8,6 +8,22 @@ Date: 2026-09
 > projecting every CallSite of that script through one rifty-owned
 > `Error.prepareStackTrace` accessor; sandbox entry points stay loud.
 
+Partially supersedes ADR-0136: its Context option-1 rejection of a permanent
+rifty-owned global `Error.prepareStackTrace` hook no longer holds once an
+offset script ran, because §3's accessor then stays until `delete`. Corrects
+ADR-0136's Decision install/restore clause: while the owner is installed the
+window reads and writes the assigned hook through it (§5); idle restores the
+value, never the slot, and never deletes the owner. Reason: Node offsets every
+frame of a script whenever it is formatted (parity `deferred-line1/2`,
+`captureStackTrace`, `vm/run-in-this-context-offsets-async`), and vitest
+4.1.11 calls test bodies after its module evaluator returns, so a window
+scoped to evaluation (the ADR-0136 pattern) misses them. Scope bound: nothing
+is installed before the first offset script. ADR-0136's scoped TS remap,
+decoder, registry and top-level scope stand. ADR-0142 D2 host-realm routing
+and the sandbox engines are unchanged (additive).
+Independent DEC-2 decision review, 2026-09-25: justified-with-fixes; dated
+note in ADR-0136 and README §Corrections row.
+
 ## Context
 
 vitest 4.1.11 evaluates every test module with
@@ -39,7 +55,11 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
    module's source map (vite `module-runner.js:829,954`).
 4. **Patch `CallSite.prototype` getters** — would reach every hook. Killed:
    Chromium rejects the write (`Cannot redefine property: getLineNumber`).
-5. **Per-script identity + owned accessor** — chosen.
+5. **Scoped window** (ADR-0136 pattern: install while the script evaluates,
+   restore when idle). Killed: functions the script defines are formatted
+   after evaluation (parity `deferred-line1/2`, `captureStackTrace`, async
+   rows).
+6. **Per-script identity + owned accessor** — chosen.
 
 ## Decision
 

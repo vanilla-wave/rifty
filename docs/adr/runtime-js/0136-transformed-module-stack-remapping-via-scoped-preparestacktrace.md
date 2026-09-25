@@ -25,3 +25,14 @@ Option 3. Hand-rolled VLQ decode (lines+columns; 1-field segments advance the ru
 - Remap window is top-level evaluation ONLY — frames rendered later (exported handler throwing at request time) stay unmapped; tracked with worker/overlay residue in `docs/backlog/runtime-js/worker-stack-remap-error-overlay.md`.
 - Line offset 4 couples to V8's `new Function` rendering — fine for the Chromium-only target (D-001), wrong elsewhere.
 - No external sourcemap dependency; decoder stays subset-honest (no `sources`/`names` resolution, only line/column lookup).
+
+## Corrections (active)
+
+2026-09-25 (ADR-0450): once a host-realm vm script with a non-zero offset ran,
+the realm keeps ADR-0450's rifty-owned `Error.prepareStackTrace` accessor
+permanently. Option 1's no-permanent-global-hook premise no longer holds for
+such realms (bounded to offset scripts; read-back divergences are compat ❌).
+While that owner is installed, the window's install/restore reads and writes
+the assigned hook through it: idle restores the value it read and never
+deletes the owner. Without an offset script, Option 3 is unchanged. Remap
+scope, decoder, registry and line offset 4 stand.

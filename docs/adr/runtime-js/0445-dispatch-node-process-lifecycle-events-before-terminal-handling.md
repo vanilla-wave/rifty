@@ -81,6 +81,16 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
    with no argument — the program/eval lifecycle (after the `-p` print) and the
    execSync program branch (after its drain, which now precedes it). Worker
    threads keep their current exit path (map item 8).
+
+   > **Corrected (2026-09-25, ADR-0446):** worker threads no longer keep their
+   > exit path: a worker-thread realm drains uncapped, then exits naturally.
+   > Every owner's natural exit (program/eval, execSync, worker thread) calls
+   > the `NodeProcess` exit the bootstrap captured before user code, never the
+   > reassignable `process.exit` property. The Consequences gap "worker-thread
+   > natural exit stays with map item 8" is closed; the no-COI in-process
+   > command stays a gap (draft
+   > `distribution/no-coi-command-natural-exit-reassigned-exit`).
+
 7. **Late rejection.** `awaitDrain` does not settle as drained on the first
    zero-ref sample: it settles only after a following host task confirms zero
    refs and no new rejection, so an `unhandledrejection` task Chromium queued
