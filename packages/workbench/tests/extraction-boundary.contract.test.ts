@@ -365,7 +365,8 @@ describe('@riftydev/workbench extraction boundary', () => {
     // PR #299: targeted page reads extracted from the ratcheted owner module.
     // ADR-0432: native storage diagnosis shares the owner's existing publication point.
     // ADR-0437: three diagnostic modules and four separately emitted probe assets.
-    expect(packageProductionFiles).toHaveLength(171);
+    // ADR-0445: one no-COI invocation scope shared by project command and runBin.
+    expect(packageProductionFiles).toHaveLength(172);
     expect([...closure.files].sort()).toEqual(packageProductionFiles);
   });
 
