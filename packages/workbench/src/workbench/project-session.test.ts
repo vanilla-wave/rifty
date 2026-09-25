@@ -11,6 +11,7 @@ import {
   ProjectBusyError,
   ProjectRunExitedBeforeReadyError,
   createProjectSession,
+  projectSessionCloseAdmission,
   registerProjectSessionBeforeClose,
 } from './project-session.ts';
 import { createProjectTerminal } from './project-terminal.ts';
@@ -278,7 +279,9 @@ describe('ProjectSession lifecycle contract', () => {
     const document = await h.session.documents.open('/src/main.ts');
     document.replace('dirty');
 
+    expect(projectSessionCloseAdmission(h.session)).toBeNull();
     const firstClose = h.session.close();
+    expect(projectSessionCloseAdmission(h.session)).toBeNull();
     expect(h.session.close()).toBe(firstClose);
     expect(() => h.session.terminals.open()).not.toThrow();
     await expect(firstClose).rejects.toBeInstanceOf(DirtyProjectDocumentError);
@@ -300,7 +303,30 @@ describe('ProjectSession lifecycle contract', () => {
     await run.close();
 
     await document.close({ dirty: 'discard' });
-    await expect(h.session.close()).resolves.toBeUndefined();
+    const retriedClose = h.session.close();
+    const admission = projectSessionCloseAdmission(h.session);
+    expect(admission).not.toBeNull();
+    await expect(admission).resolves.toBeUndefined();
+    await expect(retriedClose).resolves.toBeUndefined();
+  });
+
+  it('signals synchronous core admission without waiting for a pending owner terminal reply', async () => {
+    const h = createHarness();
+    const reply = deferred<void>();
+    h.port.closeGates.set('terminal-default', reply);
+    let finished = false;
+    const closing = h.session.close().then(() => {
+      finished = true;
+    });
+    const admission = projectSessionCloseAdmission(h.session);
+    expect(h.port.closeCalls).toEqual(['terminal-default']);
+    expect(h.runtimeCloseCalls()).toBe(1);
+    expect(h.ownerCloseCalls()).toBe(1);
+    expect(admission).not.toBeNull();
+    await admission;
+    expect(finished).toBe(false);
+    reply.resolve();
+    await closing;
   });
 
   it('fences a successful clean close in the same tick', async () => {
@@ -361,7 +387,14 @@ describe('ProjectSession lifecycle contract', () => {
     });
 
     const closing = h.session.close();
+    const admission = projectSessionCloseAdmission(h.session);
+    expect(admission).not.toBeNull();
+    let admitted = false;
+    void admission?.then(() => {
+      admitted = true;
+    });
     await settleMicrotasks();
+    expect(admitted).toBe(false);
     expect(events).toEqual(['tools:start']);
     expect(h.port.closeCalls).toEqual([]);
     expect(h.runtimeCloseCalls()).toBe(0);
@@ -370,6 +403,7 @@ describe('ProjectSession lifecycle contract', () => {
     gate.resolve();
     const failure = await closing.catch((error: unknown) => error);
 
+    expect(admitted).toBe(true);
     expect(events).toEqual(['tools:start', 'tools:end']);
     expect(h.port.closeCalls).toEqual(['terminal-default']);
     expect(h.runtimeCloseCalls()).toBe(1);

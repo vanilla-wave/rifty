@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Start owner shutdown only after session pre-close hooks and core teardown admission; preserve pending-operation cancellation and original close failures (ADR-0468).
+
 - Remove the Proxy-capture bootstrap role/closer after adopting native non-binary IPC (ADR-0467).
 
 

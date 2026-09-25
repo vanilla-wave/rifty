@@ -66,3 +66,13 @@ remain at reviewed_sha and earlier git history. All reference evidence and the
 explicit outside-result drafts remain. Final packaging is docs-only; pass-binding
 and documentation gates verify that the reviewed source remains unchanged.
 User requested one green PR, not merge; no merge performed.
+
+## Post-CLOSE CI repair
+
+Final b0 browser CI reproduced an existing Workbench close race:337PASS/1FAIL,
+then isolatedrealfile5PASS/1FAIL. That supersedes any current-green implication
+of the earlier source verdict. ADR-0468 repairs owner shutdown overtaking
+session tool hooks, with a private causal admission signal. Fresh5509 real
+browser9/9PASS and122unitPASS; no timeout/error masking. Full repair history and
+fault matrix: `workbench-close-admission-evidence.md`. Re-bound Final and current
+CI required before delivery; original source approval remains historical.
