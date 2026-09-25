@@ -373,6 +373,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0439 | Settle probe cleanup against the terminated Worker's OPFS lock |
 | 0440 | Load pi project resources through rooted agent hosts |
 | 0442 | Refuse pi-expandable commands inside agent session admission |
+| 0466 | Restore native agent conversation history |
 | 0468 | Admit session teardown before Workbench owner shutdown |
 
 ## Superseded (removed)
