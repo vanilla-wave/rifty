@@ -3,12 +3,14 @@
 Status: Accepted
 Date: 2026-09-25
 
-> TL;DR: A Node-own member that an unclaimed mode listed ❌ on a compat page reaches first, whose absence gives a bare `TypeError` instead of a named ceiling, ships with Node's shape: real where Node's value is data, a named `NotImplementedError` where the behavior is unsuppliable. Partially supersedes ADR-0443 §2's "stay absent" clause (dated note there); admitted: `vm.constants` (+ the `DONT_CONTEXTIFY` context ceiling) and `http.Agent`.
+> TL;DR: A Node-own member that an unclaimed mode listed ❌ on a compat page reaches first, whose absence gives a bare `TypeError` instead of a named ceiling, ships with Node's shape: real where Node's value is data, a named `NotImplementedError` where the behavior is unsuppliable. Partially supersedes ADR-0443 §2's "stay absent" clause and further narrows ADR-0348 §2's link-only-placeholder ban (as ADR-0443 narrowed it) for these members (dated notes there); admitted: `vm.constants` (+ the `DONT_CONTEXTIFY` context ceiling) and `http.Agent`.
 
 ## Context
 
 ADR-0443 §2 admits a named-loud builtin member only for a claimed consumer's
-link/load edge; the rest stay absent. Goal `vitest-run-in-browser` I7 needs
+link/load edge; the rest stay absent. ADR-0348 §2's link-only-placeholder
+ban, as ADR-0443 narrowed it, is narrowed further here for these loud
+members (`http.Agent`). Goal `vitest-run-in-browser` I7 needs
 each ❌ mode on `docs/public/compat/vitest.md` to fail with a named throw, never
 a bare error. Two modes reach an absent Node member first (evidence
 `docs/backlog/runtime-js/reference/vitest-run-acceptance-evidence.md`
@@ -35,17 +37,29 @@ a bare error. Two modes reach an absent Node member first (evidence
 2. Shape follows ADR-0443 §1: Node's descriptor on the same owner. Data the
    realm supplies faithfully ships real (parity); unsuppliable behavior
    throws `NotImplementedError('<feature>')` where it is exercised, after
-   Node's argument validation.
+   Node's argument validation (one ordering gap: §3).
 3. `vm.constants`: Node's value (parity `vm/constants`). `createContext`,
    `runInNewContext` and `Script#runInNewContext` given `DONT_CONTEXTIFY`
    throw `NotImplementedError('vm.createContext.DONT_CONTEXTIFY')`: both
    engines (ADR-0142) contextify a given object; neither hands out a realm's
    own global. As `importModuleDynamically`, `USE_MAIN_CONTEXT_DEFAULT_LOADER`
-   hits that option's existing throw.
+   hits that option's existing throw. `createContext` validates `name` first,
+   as Node; `vm.runInNewContext` / `Script#runInNewContext` raise the ceiling
+   at context creation, before Node's `contextName` (and `runInNewContext`'s
+   `filename`/offset) validation — ordering gap, backlog
+   `runtime-js/vm-run-in-new-context-options`.
 4. `http.Agent`: a class with Node's name, `length` and descriptor,
-   subclassable; construction throws `NotImplementedError('node:http.Agent')`
-   — no socket pool, as ADR-0181 D3 rules for `https.Agent`. `http.globalAgent`
-   is not admitted (no observed edge).
+   subclassable with `class extends` (the observed edge, parity
+   `http/agent-shape`); the call and `util.inherits` + `Agent.call(this)`
+   forms (Node's callable constructor) get V8's bare class-call `TypeError`
+   — recorded gap, backlog `net/http-agent-call-shape`. Construction throws
+   `NotImplementedError('node:http.Agent')` — no socket pool, as ADR-0181 D3
+   rules for `https.Agent`. `http.globalAgent` is not admitted (no observed
+   edge).
+
+Independent DEC-2 decision review, 2026-09-25: justified-with-fixes (goal I7 +
+acceptance row 9 + evidence §IMPLEMENT/§GREEN); ADR-0348 §2 naming,
+`runInNewContext` ordering and `Agent` call-shape wording fixed in place.
 
 ## Alternatives and evidence
 

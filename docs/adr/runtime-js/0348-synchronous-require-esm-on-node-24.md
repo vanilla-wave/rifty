@@ -8,6 +8,10 @@ Date: 2026-08
 > behavior rifty cannot supply: it ships as a named `NotImplementedError` member.
 > Called edges still need their real contract; the rest of ADR-0348 stands.
 
+> Correction 2026-09-25 (ADR-0464): the exception also covers a member that a
+> mode listed ❌ on a compat page reaches first with a bare `TypeError`
+> (`http.Agent`); called edges on the claimed path still need their real contract.
+
 > TL;DR: one loader-owned ESM job links a graph before synchronously evaluating
 > `require(ESM)`; Node 24 defines its result, errors, cache, cycles, and resolver
 > conditions.

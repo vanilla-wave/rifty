@@ -11,7 +11,7 @@ code: [packages/workbench/src/workers/no-coi-project-command.ts]
 ## Context
 
 REV-12 discovery of `runtime-js/worker-threads-handle-keepalive`
-(vitest-run-in-browser item 8; unit Out of scope). Same fault class as
+(vitest-run-in-browser item 8; evidence §Discoveries). Same fault class as
 evidence §Natural exit: ADR-0446 §6 moved every node-entry owner (worker
 thread, `node <file>`, `node -e`, execSync child) to the `NodeProcess` exit
 captured before user code (`node-entry-bootstrap.ts` `nodeExit`).

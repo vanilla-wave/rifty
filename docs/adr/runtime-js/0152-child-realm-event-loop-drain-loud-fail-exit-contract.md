@@ -46,6 +46,8 @@ The Vite HMR client `setInterval` was injected by the bundler into the entry chu
 
 **Extended (2026-09-25, ADR-0447):** ADR-0447 adds a handle class to Decision §1's counted set: a manually referenced `MessagePort` holds one keepalive ref until `unref()` or `close()` of either end of its recorded `MessageChannel` pair. A transfer that would hide that release throws `NotImplementedError('MessagePort.transfer.referenced')`, and `ref()` on a split or received port throws `NotImplementedError('MessagePort.ref.transferred')`. Listener referencing stays an explicit gap. §1's "other libuv handle classes are NOT counted" and the 2026-06-20 set "timers/immediates/imports + global fetch" now also include referenced MessagePorts; §1's shape is unchanged. Listed in README "Corrections (active)".
 
+**Extended (2026-09-25, ADR-0446):** ADR-0446 adds a handle class to §1: a live `worker_threads.Worker` holds one keepalive ref per referenced own `Symbol(kHandle)`/`Symbol(kPublicPort)` reference (released and nulled at the Worker's end), and a worker realm's `parentPort` holds while its `'message'` listeners reference it. §1's "other libuv handle classes are NOT counted" and the named set now also include these; §1's shape unchanged; §4 cap unchanged (worker realms stay `serve:true`, bootstrap drain uncapped). Listed in README "Corrections (active)".
+
 ## Consequences
 
 - (+) run-to-completion child exits on event-loop drain (over the counted handle set), much closer to real Node than the prior top-level-resolve reap — addresses the detached-async drop we attribute to the ADR-0150 P6a path.

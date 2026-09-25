@@ -4,14 +4,15 @@ status: draft
 title: "`Worker#terminate()` before the worker starts reports `'exit'` 0 and resolves 0, as in Node"
 created: 2026-09-25
 why: Node reports `'exit'` 0 / `terminate()` 0 for a Worker terminated before it starts; rifty reports 1 and still spawns the kernel Worker from the queued `start()`, which nothing observes afterwards
-sources: [docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-evidence.md, docs/backlog/runtime-js/worker-threads-handle-keepalive.md, docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-final-green.json]
+sources: [docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-evidence.md, docs/backlog/runtime-js/reference/worker-threads-handle-keepalive-final-green.json]
 code: [packages/runtime-js/src/builtins/worker_threads.ts]
 ---
 
 ## Context
 
 REV-12 discovery of `runtime-js/worker-threads-handle-keepalive`
-(vitest-run-in-browser item 8; unit Out of scope). It predates that unit.
+(vitest-run-in-browser item 8; evidence §Discoveries, final-green verdict
+concerns). It predates that unit.
 
 Node v24.16.0, probes in evidence §Discoveries:
 `new Worker(…)` then `terminate()` in the same tick → `P|exit 0` /

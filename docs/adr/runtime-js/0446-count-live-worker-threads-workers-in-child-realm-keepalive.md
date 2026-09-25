@@ -5,6 +5,18 @@ Date: 2026-09
 
 > TL;DR: A live `worker_threads.Worker` holds its parent through Node's own two reference objects, own `Symbol(kHandle)` and `Symbol(kPublicPort)` properties whose `ref`/`unref`/`hasRef` each hold one ADR-0152 keepalive ref. `Worker#ref()`/`unref()` call through them at call time, so napi-rs can neuter them as it does in Node. Inside the worker, `parentPort` is a reference of the same kind, driven by its `'message'` listeners. A worker-thread realm drains without a cap and then exits the Node way. No lifecycle owner's natural exit calls the reassignable `process.exit`. This adds a handle class to ADR-0152 §1 (like ADR-0158 and ADR-0447) and decides ADR-0445 rule 6's worker-thread clause.
 
+Extends ADR-0152 §1 named handle set (Worker `kHandle`/`kPublicPort`
+references; worker-realm `parentPort`). Partially supersedes ADR-0445 rule 6:
+its worker-thread clause and the Consequences gap "worker-thread natural exit
+stays with map item 8" (replaced by §5), and its "calls `exit()`" for the
+program/eval lifecycle and execSync branch (now the `NodeProcess` exit
+captured before user code, never the reassignable `process.exit`; evidence
+§Natural exit ignores a reassigned `process.exit`, p15/p16/`node -e`; BASE
+`node-entry-bootstrap.ts:189`/`:201`). ADR-0152 §4, ADR-0144, ADR-0155 §2 /
+ADR-0385 and ADR-0447's listener gap stand.
+Independent DEC-2 decision review, 2026-09-25: justified-with-fixes; dated
+notes land in ADR-0152 §1, ADR-0445 rule 6 and README §Corrections.
+
 ## Context
 
 `worker_threads.ts` takes no keepalive ref, and its `ref`/`unref` are no-ops
@@ -105,6 +117,10 @@ Each gap is a named row in `docs/public/compat/process.md`:
   (draft `runtime-js/worker-threads-kernel-error-event`).
 - Node's listener cleanup at exit is unchanged: it removes the `'message'`
   listeners before `'exit'` and every listener after.
+- **No-COI in-process project command.** Not a node-entry owner: its natural
+  exit still calls the reassignable `process.exit` (`no-coi-project-command.ts:145`;
+  compat ⚠️ "Handler dispatch in no-COI in-process project commands"; draft
+  `distribution/no-coi-command-natural-exit-reassigned-exit`).
 
 ## Rejected
 
