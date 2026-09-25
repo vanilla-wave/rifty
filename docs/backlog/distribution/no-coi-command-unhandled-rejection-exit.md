@@ -17,7 +17,9 @@ every drain rejection as `requiresTermination`; the host then replaces the
 Worker and reports `worker: 'replaced'`, `effects: unknown`. `runInstalledBin`
 (ADR-0423) instead takes the pending rejection, maps a projected process exit to
 its code and keeps the Worker. Real Node prints the error and exits 1; pending
-timers die with the process.
+timers die with the process. Since ADR-0445 the recorded rejection is the fatal
+exit signal: the command's `error` reads `process.exit(1)` (the reason is its
+`cause`; a declared gap behind it is reported by name), stderr has the stack.
 
 ## Options or Next
 

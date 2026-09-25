@@ -120,14 +120,14 @@ export class NodeProcessExit {
   fatal(error: unknown): never {
     if (this.#terminal !== null) throw this.#terminal;
     this.#host.writeStderr(`${formatThrown(error)}\n`);
-    return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1));
+    return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1), { cause: error });
   }
 
   /** A throwing `uncaughtException` listener: stderr, status 7, no `'exit'`. */
   listenerThrew(error: unknown): never {
     this.#host.writeStderr(`${formatThrown(error)}\n`);
     this.#exiting = true;
-    return this.#terminate(7);
+    return this.#terminate(7, { cause: error });
   }
 
   /** A fresh in-process invocation on a reused process (no-COI, test harness). */
@@ -137,8 +137,12 @@ export class NodeProcessExit {
     this.#terminal = null;
   }
 
-  #terminate(status: number): never {
-    const signal = Object.assign(new Error(`process.exit(${status})`), {
+  /**
+   * `died.cause`: the error a runtime terminal ended the process for; an
+   * in-process host (no-COI runBin) reads a declared gap from it.
+   */
+  #terminate(status: number, died?: { readonly cause: unknown }): never {
+    const signal = Object.assign(new Error(`process.exit(${status})`, died), {
       code: RIFTY_PROCESS_EXIT,
       exitCode: status,
     }) as RiftyProcessExitSignal;

@@ -205,9 +205,13 @@ async function runInstalledBin(
   } catch (error) {
     const pendingRejection = takeUnhandledRejection();
     const failure = pendingRejection === null ? error : pendingRejection.reason;
+    // A runtime fatal exit keeps its error as `cause` (ADR-0445): a declared gap
+    // stays the named throw; a guest-owned exit carries none.
+    const gap = declaredGapCause(failure);
+    if (gap !== null) throw gap;
     const signalled = processExitCode(failure);
-    if (signalled !== null) exitCode = signalled;
-    else throw declaredGapCause(failure) ?? failure;
+    if (signalled === null) throw failure;
+    exitCode = signalled;
   }
   await flushMirror();
   return { exitCode };
