@@ -76,3 +76,13 @@ session tool hooks, with a private causal admission signal. Fresh5509 real
 browser9/9PASS and122unitPASS; no timeout/error masking. Full repair history and
 fault matrix: `workbench-close-admission-evidence.md`. Re-bound Final and current
 CI required before delivery; original source approval remains historical.
+
+## Repair closure2026-09-25
+
+Exact repaired/merged source1179ddfd4: fullgate25/25PASS, packed consumerPASS,
+fresh5511 exactVitest10runsPASS; CI36139754267 completedSUCCESS19/19jobs,
+including browser-unit108086559627. Independent Final rebinds214/214coverage
+with no required residuals; canonical `vitest-delivery-final-green.json`.
+The private admission repair carries real RED/GREEN and literal-revert RED;
+no timeout changes or cancellation masking. Final records are docs-only;
+ready-PR pass-binding and CI verify the delivered head. No merge performed.

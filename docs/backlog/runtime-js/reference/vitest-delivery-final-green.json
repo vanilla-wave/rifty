@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final PASS: CI36130870229 и browser job108057706790 completed SUCCESS на exact f98099bf; все19jobs GREEN. CI residual закрыт. Готово к docs-only CLOSE и PR ready после pass-binding; merge не выполнялся.",
+  "merge_call": "Final PASS на1179ddfd4912519004a1e44bdd911f72f9178d3a: merge сохранён,214/214 coverage PASS, CI36139754267 completed SUCCESS, все19jobs GREEN. Единственный CI/binding residual закрыт; goal_complete=true. Готово к публикации re-bound record и PR ready; merge не запрашивался и не выполнялся.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "f98099bf7aa5304b344a3b3b1cc215fcd379c0b8",
-  "unit_goal_source": "PR351 whole-delivery Final+GREEN verify @f98099bf7aa5304b344a3b3b1cc215fcd379c0b8; accepted docs/backlog/epics/vitest-run-in-browser/goal.md, Decisions2026-09-25 и текущие map contracts. Current main BASE 2c9bbd30109692647c0174f8930f713007150f67; original whole-source BASE 0c4c1b070042a7a3079888cae92f25f15db24cdf. Проверен весь delta 6a2da600→f980, включая main readiness merge. Исходные201 rows: 191 retained/migrated; 10 retired по ADR-0467 (sealed authority; trusted/unmarked capture phases; owner/dev-server/TS role proofs; WorkerEntryDescriptor.role; seal API; installNodeRuntime phase; TS endpoint phase). Binary success заменён binary refusal по user2026-09-25; VM Proxy-mirror IPC ограничение и удаление host facades явно разрешены ADR-0467. Предыдущие198 rows сохранены, добавлены5 ready-acceptance clauses + platform-error proof =204. Acceptance2 error-class критерий явно re-cut под принятую native-clone/Vitest-only стратегию: platform DataCloneError, исходные getter exceptions неизменны. Это не утверждение старой Node error-class parity. Оба user forks закрыты; B1/B2/C6/C7 исправлены.",
+  "reviewed_sha": "1179ddfd4912519004a1e44bdd911f72f9178d3a",
+  "unit_goal_source": "PR351 post-CLOSE Workbench close repair, merged verification; current BASE main99fdf6c91c02439c0b22967f0207be3def20a07e; reviewed1179ddfd4912519004a1e44bdd911f72f9178d3a. Observed repair BASE b0b54f6ab8ab8ce74ed001e6f2ec2a4cf1356b0f; preceding independent review8573c7521781480f72e5d1cea2f621b746e0edec. Accepted goal slug vitest-run-in-browser: historical goal/contracts at f98099bf7aa5304b344a3b3b1cc215fcd379c0b8, до CLOSE; live goal contract отсутствует. Canonical vitest-delivery-final-green.json остаётся историческим Final PASS f980, 204/204 и CI36130870229 все19jobs GREEN. Весь repair delta b0b54f6ab→8573 прочитан: 2production files, supplemental unit criteria, новый real-browser carrier, ADR0468/evidence/changelog. Все204 прежние coverage rows сохранены без изменений. Их исполняемые carriers/source и frozen artifacts неизменны; единственное изменение cited compat/vitest — явная строка уже принятого binary ceiling. Сохраняется прежняя миграция исходных201:191retained/migrated,10retired по ADR0467; последующие13 обязательств дают204. User2026-09-25: Vitest-only native clone, binary refusal, platform clone errors, exact Vitest4.1.11/Vite8.0.16 run/bothpools и unclaimed другие modes/versions; forks закрыты, не пересмотрены. Добавлены10 строк ADR0468/0319/0278/0273:4fault,4acceptance,2 изменённых public close entry points; новый публичный API/frozen artifact отсутствует. Source inspection: admission создаётся только после clean preflight, hooks allSettled перед core invocations, resolve до core settlement; Workbench ждёт admission. Dirty veto/retry, no-hooks, повторный/reentrant close, exact failures, external adapters и opening/deleting cancellation проверены; private WeakMap/deferred reused, error classifier и owner authority не изменены. Raw baseline /private/tmp/rifty-final-ci-companion-isolated.log: неизменный real instant Vite1FAIL/5PASS, inactive-token+SIGTERM, не timeout. Raw /private/tmp/rifty-close-admission-red.log:3RED — реальный owner уже closed, readFile отвергнут при удержанном hook. Raw /private/tmp/rifty-close-admission-browser-green.log: fresh5509 новые3 и неизменные6=9PASS14.2s, originalVite1.7s. Независимо исполнено на detached8573: node node_modules/vitest/vitest.mjs run project-session.test.ts open-workbench.test.ts open-workbench.contract.test.ts internal/playground-workbench.contract.test.ts (полные пути packages/workbench/src/workbench/);165/165PASS, /private/tmp/rifty-close-admission-independent-unit.log. Producer raw /private/tmp/rifty-close-admission-pr-check.log завершён:25/25PASS, test:run229.1s, parity79.4s. Broad/browser lanes повторно не запускались. Verification-only continuation1179: весь merge delta8573→1179 проверен по Git blobs —14 новых/изменённых файлов точь-в-точь из main99fdf6c91, единственный residual merge edit ADR index добавляет0466 и сохраняет0468; иных merge edits нет. Ремонт Workbench production/tests и все59 файлов carriers для214 coverage rows byte-identical8573; все214 rows/trace/status/citation сохранены целиком. PR356 agent-history уже входит в новый BASE, новых delivery obligations или scope fork здесь не создаёт. Fresh exact1179 raw /private/tmp/rifty-close-admission-merged-pr-check.log:25/25PASS, test:run220.7s, parity86.3s; /private/tmp/rifty-close-admission-packed.log:real external tarball consumerPASS187.7s; /private/tmp/rifty-close-admission-vitest.log: unchanged10-run Vitest e2e fresh5511PASS46.7s. Дополнительный literal-revert /private/tmp/rifty-close-admission-revert/red.log: unchangedfulfilled-hook RED, owner.closed=true и readFile lost при старом microtask; trace фиксирует оригинальный @fs URL open-workbench.ts, bootstrap/registry identity не подменён отдельным модулем. Новых tests/browser/full-suite review runs не выполнялось: неопределённость снята exact blob comparison и новыми raw gates. Read-only review; tracked source не изменён; без children/env inspection/PR actions. Единственный verification residual закрыт authoritative GitHub read в этой сессии: CI36139754267 completed SUCCESS на exact1179ddfd4912519004a1e44bdd911f72f9178d3a, все19jobs completed SUCCESS, включая browser-unit job108086559627 и production/hosted/e2e/no-COI/unit/parity lanes. Статусы сохранены в /private/tmp/rifty-close-admission-verified-ci-status.json; run https://github.com/vanilla-wave/rifty/actions/runs/36139754267. Все accepted obligations доказаны; unit/goal residuals пусты. Никаких новых scope решений, product changes, tests или merge actions в verification-only continuation.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -1638,6 +1638,86 @@
       "trace": "ADR-0467",
       "status": "pass",
       "citation": "tests/browser-unit/owner-advanced-ipc-proxy.spec.ts:118",
+      "note": ""
+    },
+    {
+      "row": "Close repair baseline: unchanged real instant Vite port5174 session closes through Workbench without inactive-token/SIGTERM.",
+      "source": "acceptance",
+      "trace": "ADR-0319+ADR-0278+ADR-0468",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-playground-companion.spec.ts:928",
+      "note": ""
+    },
+    {
+      "row": "Close admission without hooks: signal follows synchronous core invocations but does not wait for pending terminal settlement.",
+      "source": "acceptance",
+      "trace": "ADR-0468",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/project-session.test.ts:312",
+      "note": ""
+    },
+    {
+      "row": "Close identity: repeated/reentrant successful session and Workbench close share one settlement and teardown attempt.",
+      "source": "acceptance",
+      "trace": "ADR-0468",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/project-session.test.ts:496; packages/workbench/src/workbench/open-workbench.contract.test.ts:987",
+      "note": ""
+    },
+    {
+      "row": "Existing external session adapters retain preflight fallback; opening/deleting retain early owner cancellation.",
+      "source": "acceptance",
+      "trace": "ADR-0468",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/open-workbench.contract.test.ts:1015; packages/workbench/src/workbench/open-workbench.contract.test.ts:1078; packages/workbench/src/workbench/open-workbench.contract.test.ts:1095",
+      "note": ""
+    },
+    {
+      "row": "Close Fault matrix 1: observable-order / hook vs owner shutdown — hooks settle, all core closes invoked, then owner shutdown.",
+      "source": "fault-matrix",
+      "trace": "ADR-0319+ADR-0278",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-close-admission.spec.ts:48; packages/workbench/src/workbench/project-session.test.ts:377",
+      "note": ""
+    },
+    {
+      "row": "Close Fault matrix 2: torn-state / dirty preflight and retry — no hook/core/owner close on veto; later clean attempt admits.",
+      "source": "fault-matrix",
+      "trace": "ADR-0273+ADR-0319",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-close-admission.spec.ts:54; packages/workbench/src/workbench/project-session.test.ts:277",
+      "note": ""
+    },
+    {
+      "row": "Close Fault matrix 3: liveness / admitted VFS close — owner teardown may cancel after admission; full project settlement is not prerequisite.",
+      "source": "fault-matrix",
+      "trace": "ADR-0319",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/project-session.test.ts:312; packages/workbench/src/workbench/open-workbench.contract.test.ts:1112; packages/workbench/src/workbench/open-workbench.test.ts:1290",
+      "note": ""
+    },
+    {
+      "row": "Close Fault matrix 4: hook/core failure — attempt teardown siblings, preserve original failures, no broad cancellation mask.",
+      "source": "fault-matrix",
+      "trace": "ADR-0278",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-close-admission.spec.ts:95; packages/workbench/src/workbench/project-session.test.ts:652; packages/workbench/src/workbench/open-workbench.contract.test.ts:1133",
+      "note": ""
+    },
+    {
+      "row": "ProjectSession.close: successful private admission after hooks/core invocation; dirty veto has no admission; existing public signature unchanged.",
+      "source": "public-api",
+      "trace": "ADR-0468+ADR-0319+ADR-0278",
+      "status": "pass",
+      "citation": "packages/workbench/src/workbench/project-session.test.ts:277; packages/workbench/src/workbench/project-session.test.ts:312; packages/workbench/src/workbench/project-session.test.ts:377",
+      "note": ""
+    },
+    {
+      "row": "Workbench.close: real owner survives pending beforeClose hook; failed hook identity retained, clean retry succeeds, owner.closed fulfills after release.",
+      "source": "public-api",
+      "trace": "ADR-0468+ADR-0278",
+      "status": "pass",
+      "citation": "tests/browser-unit/workbench-close-admission.spec.ts:5",
       "note": ""
     }
   ],

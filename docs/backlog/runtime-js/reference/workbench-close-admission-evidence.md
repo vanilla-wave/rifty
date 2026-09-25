@@ -53,3 +53,26 @@ size/BiomePASS. Logs `/private/tmp/rifty-close-admission-{red,unit,browser-green
 
 Full PR gate and independent post-CLOSE verify remain required. Earlier Final
 atf980 is historical; this production change requires a new bound verdict.
+
+## Revert and merged verification
+
+Fresh5510 literal revert restores only the old microtask rule through a scratch
+Vite pre-transform at the original module identity. Unchanged fulfilled-hook
+browser guard turns RED: owner closed before release and RPC read lost. No
+tracked source/assertion/timeout edits. Initial alias setup failure (duplicate
+private WeakMap identity) is excluded from proof; the corrected run is
+`/private/tmp/rifty-close-admission-revert/red.log`. Server stopped afterward.
+
+Main99fdf6c91 (agent history) merged in1179ddfd4; only ADR-index conflict,
+both0466/0468 retained. All59 source/test files cited by214review rows unchanged
+from8573. Exact merged-head `pnpm pr:check`25/25PASS (unit220.7s/parity86.3s),
+packedconsumerPASS187.7s, fresh5511 originalVitest10runsPASS46.7s.
+Logs: `/private/tmp/rifty-close-admission-merged-pr-check.log`,
+`/private/tmp/rifty-close-admission-packed.log`,
+`/private/tmp/rifty-close-admission-vitest.log`.
+Independentreview:214/214coverage,165independenttestsPASS; onlyCI/rebinding
+verification remains at this record. CI36139754267 targets exact1179ddfd4.
+
+Exact1179 CI36139754267 completedSUCCESS:19/19jobs, browser-unit108086559627
+included. Independent merged-source Final covers214/214rows; canonical verdict
+`vitest-delivery-final-green.json`. Final packaging changes evidence only.
