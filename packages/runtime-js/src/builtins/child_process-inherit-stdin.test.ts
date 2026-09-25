@@ -15,6 +15,7 @@ import {
   resolveWorkerStdio,
 } from './child_process-worker.ts';
 import { setActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
+import { stdinInheritHook } from './process-stdin-inherit.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
 
@@ -85,5 +86,18 @@ describe('fork child inheriting stdin', () => {
     // Unread input waits for the parent's own reader, as in the fd.
     const later = new Promise((resolve) => parent.stdin.once('data', resolve));
     expect(String(await later)).toBe('after-close');
+  });
+
+  // A production realm runs the process (pre-entry bundle) and child_process
+  // (node-entry bundle) from separate runtime-js copies: the hook key must be
+  // the registered one, or the fork falls back to a 'data' listener that holds
+  // the parent forever (tests/e2e-prod/worker-stdio-exec-argv.spec.ts).
+  it("finds the inherit hook another runtime-js copy's process installed", () => {
+    const hook = () => () => {};
+    const otherCopyStdin = {};
+    Object.defineProperty(otherCopyStdin, Symbol.for('rifty.runtime-js.process-stdin-inherit.v1'), {
+      value: hook,
+    });
+    expect(stdinInheritHook(otherCopyStdin)).toBeTypeOf('function');
   });
 });

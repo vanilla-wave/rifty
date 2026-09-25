@@ -634,7 +634,7 @@ export class NodeProcess extends EventEmitter {
       this.ppid = spec.ppid;
       this.argv = [...spec.argv];
       const launch = readNodeEntryBootstrapIfPresent()?.launch;
-      this.execArgv = launch?.kind === 'eval' ? [...launch.execArgv] : [];
+      this.execArgv = [...(launch?.execArgv ?? [])];
       // Copy so per-process env mutation does not leak into the published
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };

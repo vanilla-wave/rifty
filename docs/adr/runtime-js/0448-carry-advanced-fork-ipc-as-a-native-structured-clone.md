@@ -157,3 +157,7 @@ the message could tell.
 - ADR-0326, ADR-0267, ADR-0416, ADR-0152 (keepalive drain)
 - `packages/runtime-js/src/internal/node-ipc-serialization.ts`
 - `docs/backlog/runtime-js/reference/child-process-advanced-ipc-serialization-evidence.md`
+
+## Corrections (active)
+
+2026-09-25 — ADR-0449: Node entry now uses v6 (program and worker-thread launches carry `execArgv`); advanced IPC unchanged.

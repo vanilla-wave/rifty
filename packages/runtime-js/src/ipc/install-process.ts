@@ -45,6 +45,7 @@ import { resolveVmEngineName } from '../builtins/vm/engine-config.ts';
 import { QUICKJS_WASM_URL_ENV, ensureVmEngineReady } from '../builtins/vm/quickjs-loader.ts';
 import { installWebGlobals } from '../builtins/web-globals.ts';
 import { installMessagePortReference } from '../internal/message-port-ref.ts';
+import { installNodeStartupOptions } from '../internal/node-startup-options.ts';
 import { installGlobalAlias, installWorkerRealmCompat } from './worker-realm-compat.ts';
 
 /** Host bootstrap key for the QuickJS asset consumed by this pre-entry installer. */
@@ -102,8 +103,13 @@ export function installNodeProcessShim(
 export function installNodeRuntime(
   spec: Pick<WorkerSpawnSpec, 'pid' | 'ppid' | 'env'>,
 ): void | Promise<void> {
-  const isNodeEntry = readNodeEntryBootstrapIfPresent() !== null;
+  const launch = readNodeEntryBootstrapIfPresent()?.launch;
+  const isNodeEntry = launch !== undefined;
   const isNode = isNodeEntry || spec.env.__RIFTY_WASI_WASM_URL === undefined;
+  // ADR-0449 §5: conditions/preloads/import.meta.resolve before any loader exists.
+  if (launch !== undefined) {
+    installNodeStartupOptions(launch.kind === 'eval' ? [] : (launch.execArgv ?? []));
+  }
   const processSpec = readKernelProcessSpec();
   if (processSpec === null || processSpec.pid !== spec.pid || processSpec.ppid !== spec.ppid) {
     throw new Error('installNodeRuntime requires the matching kernel-published process spec');

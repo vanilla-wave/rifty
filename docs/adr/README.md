@@ -104,6 +104,7 @@ ADRs are immutable while active. A new decision on a seam an ADR owns is a NEW A
 | 0446 | Count live `worker_threads` Workers in child-realm keepalive |
 | 0447 | Count referenced MessagePorts in child-realm keepalive |
 | 0448 | Carry advanced fork IPC as a native structured clone |
+| 0449 | Carry Node startup options on fork and Worker launches; expose Worker stdio streams |
 | 0450 | Project vm script offsets through one owned stack hook |
 | 0458 | Read the realm-bound `node:process` registry entry uncached in io |
 
@@ -424,6 +425,7 @@ superseded.
 |---|---|---|
 | 0326 advanced-IPC-serialization loud-gap + launch-plan `ipc: 'none' \| 'json'` clauses | 0448 / notes 2026-09-23, 2026-09-25 | fork `serialization: 'advanced'` rides the public lane as a native structured clone with Node's view/refusal rules; handles, callbacks/options, channel `ref()`/`unref()` stay gaps; launch plan `ipc` gains `'advanced'` |
 | 0416 active node-entry v4 version | 0448 / note 2026-09-23 | v5 carries program launch `ipc: 'advanced'`; SQLite absence semantics unchanged |
+| 0448 active node-entry v5 version | 0449 / note 2026-09-25 | v6 carries program and worker-thread `execArgv` (`-r`/`-C`/`--experimental-import-meta-resolve`); advanced IPC unchanged |
 | 0348 §2 link-only-placeholder clause | 0443 / note 2026-09-23 | an observed link/load-time edge whose real behavior rifty cannot supply ships as a named `NotImplementedError` member; called edges still need the real contract |
 | 0072 inherited COI + async-OPFS backend-selector clause | 0372 / note 2026-09-01 | dedicated-Worker sync-OPFS capability is authority; other 0072 decisions stand |
 | 0165 generic isolated-only detector description | 0372 / note 2026-09-01 | generic VFS may select OPFS no-COI; Playground COI gate/degradation contract unchanged |

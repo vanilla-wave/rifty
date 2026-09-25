@@ -11,7 +11,6 @@ import { ModuleLoadError } from './errors.ts';
 import {
   type FileDirResolutionOrder,
   IMPORT_RESOLUTION,
-  type ResolutionCondition,
   TSCONFIG_RESOLUTION,
   activeConditions,
   detectJavaScriptKind,
@@ -735,7 +734,7 @@ function resolveConditionTree(node: ExportsField, esm: boolean): string | null {
   // membership set, not a priority list: an earlier `default` intentionally
   // shadows a later `module-sync`, and import/require use this same chokepoint.
   for (const cond of Object.keys(conditional)) {
-    if (!conditions.includes(cond as ResolutionCondition)) continue;
+    if (!conditions.includes(cond)) continue;
     const sub = conditional[cond];
     if (sub === null) return null;
     if (sub !== undefined) {

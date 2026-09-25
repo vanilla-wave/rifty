@@ -4,8 +4,9 @@ import {
   readKernelEntryBootstrap,
 } from '@riftydev/kernel';
 import { isAbsolute, normalizePath } from '@riftydev/vfs';
+import { compileNodeStartupOptions } from '../internal/node-startup-options.ts';
 
-export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v5' as const;
+export const NODE_ENTRY_BOOTSTRAP_PROTOCOL = 'rifty.node-entry/v6' as const;
 
 export interface NodeEntryTerminalBootstrap {
   readonly stdinIsTTY: boolean;
@@ -33,6 +34,8 @@ export interface NodeEntryProgramLaunch {
   readonly previewScope?: string;
   readonly terminal?: NodeEntryTerminalBootstrap;
   readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
+  /** Exact Node startup tokens (ADR-0449); omitted ≡ `[]`. */
+  readonly execArgv?: readonly string[];
 }
 
 export interface NodeEntryEvalLaunch {
@@ -56,6 +59,8 @@ export interface NodeEntryWorkerThreadLaunch {
   readonly threadId: number;
   readonly workerDataJson?: string;
   readonly runtimeBindings?: readonly NodeEntryRuntimeBinding[];
+  /** Exact Node startup tokens (ADR-0449); omitted ≡ `[]`. */
+  readonly execArgv?: readonly string[];
 }
 
 export type NodeEntryLaunch =
@@ -165,6 +170,17 @@ function stringArrayOwnField(
     }
   }
   return Object.freeze([...value]);
+}
+
+/** A launch's startup tokens: re-compiled, so a token no child can honour is a protocol error. */
+function startupExecArgvValue(value: unknown): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return compileNodeStartupOptions(value, 'child_process.fork').execArgv;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new TypeError(`node-entry bootstrap launch.execArgv is not carriable: ${reason}`);
+  }
 }
 
 export function snapshotNodeEntryRuntimeBindings(
@@ -286,6 +302,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
         'previewScope',
         'terminal',
         'runtimeBindings',
+        'execArgv',
       ],
       'node-entry bootstrap program launch',
     );
@@ -300,6 +317,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     const previewScope = previewScopeValue(optionalOwnField(record, 'previewScope'));
     const terminal = optionalOwnField(record, 'terminal');
     const runtimeBindings = optionalOwnField(record, 'runtimeBindings');
+    const execArgv = startupExecArgvValue(optionalOwnField(record, 'execArgv'));
     return Object.freeze({
       kind: 'program',
       bin,
@@ -312,6 +330,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       ...(runtimeBindings === undefined
         ? {}
         : { runtimeBindings: snapshotNodeEntryRuntimeBindings(runtimeBindings) }),
+      ...(execArgv === undefined ? {} : { execArgv }),
     });
   }
   if (kind === 'eval') {
@@ -355,7 +374,15 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
   if (kind === 'worker-thread') {
     assertAllowedOwnFields(
       record,
-      ['kind', 'remoteFs', 'remoteFsRoot', 'threadId', 'workerDataJson', 'runtimeBindings'],
+      [
+        'kind',
+        'remoteFs',
+        'remoteFsRoot',
+        'threadId',
+        'workerDataJson',
+        'runtimeBindings',
+        'execArgv',
+      ],
       'node-entry bootstrap worker-thread launch',
     );
     const remoteFs = booleanOwnField(record, 'remoteFs', 'node-entry bootstrap launch');
@@ -366,6 +393,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
     );
     const workerDataJson = optionalOwnField(record, 'workerDataJson');
     const runtimeBindings = optionalOwnField(record, 'runtimeBindings');
+    const execArgv = startupExecArgvValue(optionalOwnField(record, 'execArgv'));
     if (workerDataJson !== undefined) {
       if (typeof workerDataJson !== 'string') {
         throw new TypeError('node-entry bootstrap launch.workerDataJson must be a string');
@@ -385,6 +413,7 @@ function snapshotLaunch(value: unknown): NodeEntryLaunch {
       ...(runtimeBindings === undefined
         ? {}
         : { runtimeBindings: snapshotNodeEntryRuntimeBindings(runtimeBindings) }),
+      ...(execArgv === undefined ? {} : { execArgv }),
     });
   }
   throw new TypeError('node-entry bootstrap launch.kind must be program, eval, or worker-thread');
