@@ -176,7 +176,8 @@ export function createWorkbenchOwnerController(
   const issuedTokens = new Set<string>();
   let operationTail = Promise.resolve();
   let active: ActiveProject | null = null;
-  let fencedProjectToken: OwnerProjectToken | null = null;
+  // The last closing project: a late close-project for its token gets its close outcome.
+  let lastFencedProject: ActiveProject | null = null;
   let poison: unknown;
   let shutdownRequested = false;
   let shutdownPromise: Promise<void> | null = null;
@@ -218,11 +219,11 @@ export function createWorkbenchOwnerController(
   const closedOwnerError = (): ClosedHandleError => new ClosedHandleError('Workbench owner');
   const inactiveTokenError = (): Error => new Error('Workbench project token is not active');
   const isExpectedPostFenceToken = (projectToken: OwnerProjectToken): boolean =>
-    fencedProjectToken === projectToken &&
+    lastFencedProject?.token === projectToken &&
     (active === null || (active.token === projectToken && !active.acceptingInput));
   const fenceProjectInput = (project: ActiveProject): void => {
     project.acceptingInput = false;
-    fencedProjectToken = project.token;
+    lastFencedProject = project;
   };
   const poisonedError = (): Error => {
     const detail = serializeWorkbenchOwnerError(poison).message;
@@ -338,7 +339,7 @@ export function createWorkbenchOwnerController(
         release: null,
       };
       active = project;
-      fencedProjectToken = null;
+      lastFencedProject = null;
 
       if (shutdownRequested) {
         fenceProjectInput(project);
@@ -433,7 +434,7 @@ export function createWorkbenchOwnerController(
         release,
       };
       active = project;
-      fencedProjectToken = null;
+      lastFencedProject = null;
 
       if (shutdownRequested) {
         fenceProjectInput(project);
@@ -695,7 +696,7 @@ export function createWorkbenchOwnerController(
     if (message.type === 'workbench:shutdown') return requestShutdown();
     if (message.type === 'workbench:close-project') {
       if (poison !== undefined) return rejectImmediately(poisonedError(), message.opId);
-      const project = active;
+      const project = active ?? lastFencedProject;
       if (project === null || project.token !== message.projectToken) {
         return rejectImmediately(inactiveTokenError(), message.opId);
       }
